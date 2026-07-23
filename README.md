@@ -7,7 +7,9 @@ can run anywhere the target language runs.
 
 Unlike existing single-target translators (wasm2c, w2c2, wasm2go, unwasm,
 wasm2lua, ...), dewasmify is built around one shared IR with pluggable
-language backends.
+language backends — see [docs/related-work.md](docs/related-work.md) for
+the full comparison with prior art (including bytecode compilers like
+asmble and wasm2cil) and what is new here.
 
 **Status: early development.** The Ruby backend is functional and passes
 the WebAssembly core spec testsuite (19,400+ assertions) for the supported
