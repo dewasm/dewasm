@@ -1,14 +1,38 @@
-//! End-to-end tests: convert .wat examples to Ruby and run them with the
-//! real interpreter.
+//! End-to-end tests: convert .wat examples to Ruby/Bash and run them with
+//! the real interpreters.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasmify_backend_bash::BashBackend;
 use dewasmify_backend_ruby::RubyBackend;
 
 fn ruby_available() -> bool {
     Command::new("ruby").arg("--version").output().is_ok()
+}
+
+/// A bash >= 5 interpreter, if one is installed (macOS system bash is 3.2).
+fn bash5() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
+        candidates.push(PathBuf::from(env));
+    }
+    candidates.push(PathBuf::from("bash"));
+    candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
+    candidates.push(PathBuf::from("/usr/local/bin/bash"));
+    for candidate in candidates {
+        let Ok(out) = Command::new(&candidate)
+            .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+            .output()
+        else {
+            continue;
+        };
+        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn convert(wat_path: &Path, mode: Mode, name: &str) -> String {
@@ -55,6 +79,48 @@ fn standalone_mode_wasi_hello() {
     let code = convert(&examples_dir().join("hello.wat"), Mode::Standalone, "hello");
     let out = run_ruby(&code, &[]);
     assert_eq!(out, "Hello, WASI!\n");
+}
+
+/// The bash equivalent of `library_mode_add`: an Embedded-linkage script
+/// is sourced, initialized, and invoked with results read from R0
+/// (ADR-11), including a masked-unsigned wraparound and a trap.
+#[test]
+fn library_mode_add_bash() {
+    let Some(bash) = bash5() else {
+        eprintln!("bash >= 5 not found; skipping");
+        return;
+    };
+    let bytes = wat::parse_file(examples_dir().join("add.wat")).expect("parse wat");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    let code = BashBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Library,
+                module_name: "add".to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate bash")
+        .remove(0)
+        .contents;
+    let script = format!(
+        "{code}\nadd_init || exit 1\n\
+         add_invoke add 2 3; echo $R0\n\
+         add_invoke add 4294967295 1; echo $R0\n\
+         add_invoke fib 10; echo $R0\n"
+    );
+    let path = std::env::temp_dir().join("dewasmify-e2e-add.sh");
+    std::fs::write(&path, &script).unwrap();
+    let output = Command::new(&bash).arg(&path).output().expect("run bash");
+    assert!(
+        output.status.success(),
+        "bash failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "5\n0\n55\n");
 }
 
 /// A module that imports WASI functions, for exercising the import

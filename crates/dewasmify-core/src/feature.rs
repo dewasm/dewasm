@@ -20,6 +20,10 @@ pub enum Feature {
     /// expression element items, table.init/copy, elem.drop. (The memory
     /// half is supported.)
     TableBulkOps,
+    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose
+    /// language has no usable floats (Bash, until the ADR-5 softfloat
+    /// lands) refuses float-using modules at conversion time.
+    Floats,
     // Post-1.0 proposals.
     ReferenceTypes,
     FunctionReferences,
@@ -43,6 +47,7 @@ impl Feature {
         Feature::ImportedTables,
         Feature::MultipleTables,
         Feature::TableBulkOps,
+        Feature::Floats,
         Feature::ReferenceTypes,
         Feature::FunctionReferences,
         Feature::Gc,
@@ -70,6 +75,7 @@ impl Feature {
             Feature::ImportedTables => "imported-tables",
             Feature::MultipleTables => "multiple-tables",
             Feature::TableBulkOps => "table-bulk-ops",
+            Feature::Floats => "floats",
             Feature::ReferenceTypes => "reference-types",
             Feature::FunctionReferences => "function-references",
             Feature::Gc => "gc",
@@ -93,6 +99,7 @@ impl Feature {
             Feature::ImportedTables => "Imported tables (wasm 1.0)",
             Feature::MultipleTables => "Multiple tables",
             Feature::TableBulkOps => "Bulk table ops / passive element segments",
+            Feature::Floats => "Floating-point (wasm 1.0)",
             Feature::ReferenceTypes => "Reference types",
             Feature::FunctionReferences => "Typed function references",
             Feature::Gc => "Garbage collection",

@@ -1,8 +1,10 @@
 //! Spec test harness (ADR-3, skip policy revised by ADR-8): parses every
 //! .wast file of the testsuite submodule (tests/spec, tracking upstream
-//! latest), translates each module with the Ruby backend, generates a Ruby
-//! script that runs all assertions, and executes it with the real `ruby`
-//! interpreter.
+//! latest), translates each module with a target-language backend,
+//! generates a script that runs all assertions, and executes it with the
+//! real interpreter for that language. The language-specific pieces live
+//! behind the `SpecLang` trait (one module per language); everything about
+//! directive iteration, skip attribution, and result accounting is shared.
 //!
 //! Skips must be *attributable*: a module that fails to convert carries an
 //! `UnsupportedError` naming the declared-unsupported features, and every
@@ -12,39 +14,87 @@
 //! are reported as `unknown-proposal` but tolerated (the converter refused
 //! cleanly, which is the ADR-0 contract).
 
+mod bash;
+mod ruby;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use dewasmify_backend::{Backend, RuntimeLinkage, SupportStatus};
-use dewasmify_backend_ruby::RubyBackend;
+use dewasmify_backend::Backend;
+use dewasmify_backend::SupportStatus;
 use dewasmify_core::feature::{Feature, UnsupportedError};
-use wast::core::{NanPattern, WastArgCore, WastRetCore};
+use dewasmify_core::ir;
 use wast::parser::{self, ParseBuffer};
 use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
 
-/// Known assertion-level failures with their attribution; the file still
-/// runs so regressions in the passing assertions are caught.
-///
-/// All current entries are cross-module linking: a later `register`ed
-/// module was supposed to write into the first module's shared
-/// table/memory, so assertions against the first module see stale state.
-/// The linking milestone clears this list.
-const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("elem", 5, "linking"),
-    ("linking", 10, "linking"),
-    ("linking0", 1, "linking"),
-    ("linking3", 2, "linking"),
-    ("load1", 5, "linking"),
-];
+#[test]
+fn spec_ruby() {
+    run_suite(&ruby::RubyLang);
+}
 
 #[test]
-fn spec() {
-    if Command::new("ruby").arg("--version").output().is_err() {
-        eprintln!("ruby not found in PATH; skipping spec tests");
+fn spec_bash() {
+    run_suite(&bash::BashLang);
+}
+
+/// A target language plugged into the shared harness: how to convert a
+/// module, how to phrase each assertion in that language, and how to run
+/// the resulting script. `emit_*` methods append to the script body;
+/// returning `Err(tag)` skips the directive under that attribution tag.
+trait SpecLang {
+    fn name(&self) -> &'static str;
+    fn backend(&self) -> &dyn Backend;
+    /// Interpreter to run generated scripts with, or None to skip the
+    /// whole suite (the implementation prints why).
+    fn interpreter(&self) -> Option<PathBuf>;
+    fn script_ext(&self) -> &'static str;
+    /// Known assertion-level failures: (file, count, attribution tag).
+    fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
+    /// Curated default file list for slow interpreters; None runs every
+    /// file. `DEWASMIFY_SPEC_ALL=1` overrides the curation.
+    fn default_files(&self) -> Option<&'static [&'static str]>;
+    /// Units the harness helpers themselves use.
+    fn seed_units(&self) -> &'static [&'static str];
+    /// Lower an IR module to source. Backend-level refusals (e.g. floats
+    /// on an integer-only backend) carry `UnsupportedError` in the chain.
+    fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted>;
+    /// Emit the module source plus its instantiation; returns the variable
+    /// (or prefix) later invocations use to reach the instance.
+    fn emit_instantiate(&self, script: &mut String, conv: &Converted, var_id: u32) -> String;
+    /// Emit the module source only, returning the call that performs the
+    /// (possibly trapping) instantiation, for assert_trap on a module.
+    fn instantiate_call(&self, script: &mut String, conv: &Converted) -> String;
+    fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String>;
+    fn global_get(&self, var: &str, global: &str) -> String;
+    fn emit_check(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+        results: &[WastRet<'_>],
+    ) -> Result<(), String>;
+    fn emit_check_trap(&self, script: &mut String, desc: &str, call: &str, message: &str);
+    fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str);
+    fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str);
+    /// Wrap the accumulated body into a runnable script: shared runtime
+    /// for `units`, harness helpers, body, result-line footer.
+    fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String>;
+}
+
+/// A converted module: its source text, the language-specific handle used
+/// to instantiate it (class name, function prefix, ...), and the runtime
+/// units it references.
+struct Converted {
+    source: String,
+    handle: String,
+    units: BTreeSet<String>,
+}
+
+fn run_suite(lang: &dyn SpecLang) {
+    let Some(interpreter) = lang.interpreter() else {
         return;
-    }
+    };
     let spec_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
     if !spec_dir.exists() {
         eprintln!("tests/spec not found (git submodule update --init); skipping");
@@ -63,6 +113,12 @@ fn spec() {
         })
         .collect();
     names.sort();
+    if let Some(curated) = lang.default_files() {
+        if std::env::var("DEWASMIFY_SPEC_ALL").is_err() {
+            let wanted: BTreeSet<&str> = curated.iter().copied().collect();
+            names.retain(|n| wanted.contains(n.as_str()));
+        }
+    }
     if let Ok(list) = std::env::var("DEWASMIFY_SPEC") {
         let wanted: BTreeSet<&str> = list.split(',').map(|s| s.trim()).collect();
         names.retain(|n| wanted.contains(n.as_str()));
@@ -72,7 +128,7 @@ fn spec() {
     let mut total = Stats::default();
     for name in &names {
         let path = spec_dir.join(format!("{name}.wast"));
-        match run_file(name, &path) {
+        match run_file(lang, &interpreter, name, &path) {
             Ok(stats) => {
                 if stats.pass + stats.fail > 0 || !stats.unsupported.is_empty() {
                     println!(
@@ -87,7 +143,8 @@ fn spec() {
                 for err in &stats.hard_errors {
                     failures.push(format!("{name}: {err}"));
                 }
-                let expected = EXPECTED_FAILURES
+                let expected = lang
+                    .expected_failures()
                     .iter()
                     .find(|(n, _, _)| n == name)
                     .map(|(_, count, _)| *count)
@@ -126,7 +183,7 @@ fn spec() {
         let ids: Vec<&str> = tag.split('+').collect();
         let all_supported = ids.iter().all(|id| {
             Feature::from_id(id)
-                .map(|f| RubyBackend.feature_status(f) == SupportStatus::Supported)
+                .map(|f| lang.backend().feature_status(f) == SupportStatus::Supported)
                 .unwrap_or(false)
         });
         if all_supported {
@@ -170,28 +227,12 @@ impl Stats {
     }
 }
 
-fn ruby_str(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '#' => out.push_str("\\#"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
-                let _ = write!(out, "\\u{{{:x}}}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
 struct ScriptGen<'a> {
+    lang: &'a dyn SpecLang,
     script: String,
     source: &'a str,
     file: &'a str,
-    /// Ruby global variable holding the most recent instance, or the
+    /// Variable/prefix holding the most recent instance, or the
     /// attribution tag when the most recent module failed to convert.
     current: Result<String, String>,
     /// Same, for named modules.
@@ -224,7 +265,7 @@ impl<'a> ScriptGen<'a> {
         }
     }
 
-    fn define_module(&mut self, mut qw: QuoteWat<'a>, desc: &str) {
+    fn define_module(&mut self, mut qw: QuoteWat<'_>, desc: &str) {
         let id = match &qw {
             QuoteWat::Wat(Wat::Module(m)) => m.id.map(|i| i.name().to_string()),
             _ => None,
@@ -232,15 +273,13 @@ impl<'a> ScriptGen<'a> {
         let converted = qw
             .encode()
             .map_err(|e| Attribution::Tag("unknown-proposal".to_string(), e.to_string()))
-            .and_then(|bytes| convert(&bytes, self.counter));
+            .and_then(|bytes| convert(self.lang, &bytes, self.counter));
         self.counter += 1;
         let result = match converted {
-            Ok((class_src, class_name, units)) => {
+            Ok(conv) => {
                 self.converted += 1;
-                let var = format!("$i{}", self.counter);
-                self.script.push_str(&class_src);
-                let _ = writeln!(self.script, "{var} = {class_name}.new($spectest)");
-                self.units.extend(units);
+                let var = self.lang.emit_instantiate(&mut self.script, &conv, self.counter);
+                self.units.extend(conv.units);
                 Ok(var)
             }
             Err(Attribution::Tag(tag, _detail)) => Err(tag),
@@ -259,11 +298,7 @@ impl<'a> ScriptGen<'a> {
 
     fn invoke_expr(&self, inv: &wast::WastInvoke<'_>) -> Result<String, String> {
         let var = self.instance_for(inv.module.map(|i| i.name()))?;
-        let mut args = vec![ruby_str(inv.name)];
-        for arg in &inv.args {
-            args.push(arg_rb(arg)?);
-        }
-        Ok(format!("{var}.invoke({})", args.join(", ")))
+        self.lang.invoke(&var, inv.name, &inv.args)
     }
 }
 
@@ -274,22 +309,23 @@ enum Attribution {
     Bug(String),
 }
 
-fn convert(
-    bytes: &[u8],
-    counter: u32,
-) -> Result<(String, String, BTreeSet<String>), Attribution> {
-    let module = dewasmify_core::build_module(bytes).map_err(|err| {
-        match err.chain().find_map(|e| e.downcast_ref::<UnsupportedError>()) {
-            Some(unsupported) if unsupported.features.is_empty() => {
-                Attribution::Tag("unknown-proposal".to_string(), unsupported.detail.clone())
-            }
-            Some(unsupported) => {
-                let ids: Vec<&str> = unsupported.features.iter().map(|f| f.id()).collect();
-                Attribution::Tag(ids.join("+"), unsupported.detail.clone())
-            }
-            None => Attribution::Bug(format!("{err:#}")),
+/// Map a conversion error to its attribution: `UnsupportedError` anywhere
+/// in the chain names the responsible features; anything else is a bug.
+fn attribute(err: &anyhow::Error) -> Attribution {
+    match err.chain().find_map(|e| e.downcast_ref::<UnsupportedError>()) {
+        Some(unsupported) if unsupported.features.is_empty() => {
+            Attribution::Tag("unknown-proposal".to_string(), unsupported.detail.clone())
         }
-    })?;
+        Some(unsupported) => {
+            let ids: Vec<&str> = unsupported.features.iter().map(|f| f.id()).collect();
+            Attribution::Tag(ids.join("+"), unsupported.detail.clone())
+        }
+        None => Attribution::Bug(format!("{err:#}")),
+    }
+}
+
+fn convert(lang: &dyn SpecLang, bytes: &[u8], counter: u32) -> Result<Converted, Attribution> {
+    let module = dewasmify_core::build_module(bytes).map_err(|err| attribute(&err))?;
     // The harness only provides the spectest host module; imports from
     // registered modules need cross-module linking.
     if module.imported_funcs.iter().any(|f| f.module != "spectest") {
@@ -298,71 +334,15 @@ fn convert(
             "imports from a registered module".to_string(),
         ));
     }
-    let class_name = format!("WastMod{counter}");
-    let (src, units) = dewasmify_backend_ruby::generate_class_with_units(
-        &module,
-        &class_name,
-        &RuntimeLinkage::Alias("::Rt".to_string()),
-        false, // spec modules import spectest, never WASI
-    )
-    .map_err(|e| Attribution::Bug(format!("{e:#}")))?;
-    Ok((src, class_name, units))
+    lang.generate(&module, counter).map_err(|err| attribute(&err))
 }
 
-fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
-    match arg {
-        WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
-        WastArg::Core(WastArgCore::I64(v)) => Ok((*v as u64).to_string()),
-        WastArg::Core(WastArgCore::F32(f)) => {
-            Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits))
-        }
-        WastArg::Core(WastArgCore::F64(f)) => {
-            Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits))
-        }
-        WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(_) => Err("reference-types".to_string()),
-        _ => Err("component-model".to_string()),
-    }
-}
-
-fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
-    match ret {
-        WastRet::Core(WastRetCore::I32(v)) => Ok(format!("{value} == {}", *v as u32)),
-        WastRet::Core(WastRetCore::I64(v)) => Ok(format!("{value} == {}", *v as u64)),
-        WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
-            NanPattern::CanonicalNan => {
-                format!("(Rt.f32_bits({value}) & 0x7fffffff) == 0x7fc00000")
-            }
-            NanPattern::ArithmeticNan => {
-                format!("(Rt.f32_bits({value}) & 0x7fc00000) == 0x7fc00000")
-            }
-            NanPattern::Value(f) => {
-                format!("Rt.f32_bits({value}) == 0x{:x}", f.bits)
-            }
-        }),
-        WastRet::Core(WastRetCore::F64(pattern)) => Ok(match pattern {
-            NanPattern::CanonicalNan => {
-                format!(
-                    "(Rt.f64_bits({value}) & 0x7fffffffffffffff) == 0x7ff8000000000000"
-                )
-            }
-            NanPattern::ArithmeticNan => {
-                format!(
-                    "(Rt.f64_bits({value}) & 0x7ff8000000000000) == 0x7ff8000000000000"
-                )
-            }
-            NanPattern::Value(f) => {
-                format!("Rt.f64_bits({value}) == 0x{:x}", f.bits)
-            }
-        }),
-        WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
-        WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        WastRet::Core(_) => Err("reference-types".to_string()),
-        _ => Err("component-model".to_string()),
-    }
-}
-
-fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
+fn run_file(
+    lang: &dyn SpecLang,
+    interpreter: &Path,
+    name: &str,
+    path: &Path,
+) -> anyhow::Result<Stats> {
     let source = std::fs::read_to_string(path)?;
     // A text-format construct newer than the wast crate is not our bug;
     // report it like an unknown proposal.
@@ -380,11 +360,18 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
         Ok(wast) => wast,
         Err(err) => return Ok(unparsable(&err)),
     };
-    run_directives(name, &source, wast)
+    run_directives(lang, interpreter, name, &source, wast)
 }
 
-fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<Stats> {
+fn run_directives(
+    lang: &dyn SpecLang,
+    interpreter: &Path,
+    name: &str,
+    source: &str,
+    wast: Wast<'_>,
+) -> anyhow::Result<Stats> {
     let mut gen = ScriptGen {
+        lang,
         script: String::new(),
         source,
         file: name,
@@ -393,11 +380,7 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
         counter: 0,
         converted: 0,
         stats: Stats::default(),
-        // Units the harness helpers themselves use.
-        units: ["rt/trap", "rt/f32_bits", "rt/f32_from_bits", "rt/f64_bits", "rt/f64_from_bits"]
-            .into_iter()
-            .map(String::from)
-            .collect(),
+        units: lang.seed_units().iter().map(|s| s.to_string()).collect(),
     };
 
     for directive in wast.directives {
@@ -410,31 +393,14 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
                     WastExecute::Invoke(inv) => gen.invoke_expr(inv),
                     WastExecute::Get { module, global, .. } => gen
                         .instance_for(module.map(|i| i.name()))
-                        .map(|var| format!("{var}.global_get({})", ruby_str(global))),
+                        .map(|var| lang.global_get(&var, global)),
                     WastExecute::Wat(_) => Err("linking".to_string()),
                 };
-                let cmp = (|| -> Result<String, String> {
-                    Ok(match results.len() {
-                        0 => "true".to_string(),
-                        1 => ret_cmp("__r", &results[0])?,
-                        _ => {
-                            let mut parts = Vec::new();
-                            for (i, r) in results.iter().enumerate() {
-                                parts.push(ret_cmp(&format!("__r[{i}]"), r)?);
-                            }
-                            parts.join(" && ")
-                        }
-                    })
-                })();
-                match (call, cmp) {
-                    (Ok(call), Ok(cmp)) => {
-                        let _ = writeln!(
-                            gen.script,
-                            "check({}) do\n  __r = {call}\n  [({cmp}), __r]\nend",
-                            ruby_str(&desc)
-                        );
-                    }
-                    (Err(tag), _) | (_, Err(tag)) => gen.skip(&tag),
+                let emitted = call.and_then(|call| {
+                    lang.emit_check(&mut gen.script, &desc, &call, &results)
+                });
+                if let Err(tag) = emitted {
+                    gen.skip(&tag);
                 }
             }
             WastDirective::AssertTrap { exec, message, .. } => {
@@ -450,13 +416,13 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
                             .map_err(|e| {
                                 Attribution::Tag("unknown-proposal".to_string(), e.to_string())
                             })
-                            .and_then(|bytes| convert(&bytes, counter));
+                            .and_then(|bytes| convert(lang, &bytes, counter));
                         match converted {
-                            Ok((class_src, class_name, units)) => {
+                            Ok(conv) => {
                                 gen.converted += 1;
-                                gen.script.push_str(&class_src);
-                                gen.units.extend(units);
-                                Ok(format!("{class_name}.new($spectest)"))
+                                let call = lang.instantiate_call(&mut gen.script, &conv);
+                                gen.units.extend(conv.units);
+                                Ok(call)
                             }
                             Err(Attribution::Tag(tag, _)) => Err(tag),
                             Err(Attribution::Bug(detail)) => {
@@ -470,35 +436,16 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
                     _ => Err("linking".to_string()),
                 };
                 match call {
-                    Ok(call) => {
-                        let _ = writeln!(
-                            gen.script,
-                            "check_trap({}, {}) do\n  {call}\nend",
-                            ruby_str(&desc),
-                            ruby_str(message)
-                        );
-                    }
+                    Ok(call) => lang.emit_check_trap(&mut gen.script, &desc, &call, message),
                     Err(tag) => gen.skip(&tag),
                 }
             }
             WastDirective::AssertExhaustion { call, .. } => match gen.invoke_expr(&call) {
-                Ok(call) => {
-                    let _ = writeln!(
-                        gen.script,
-                        "check_exhaust({}) do\n  {call}\nend",
-                        ruby_str(&desc)
-                    );
-                }
+                Ok(call) => lang.emit_check_exhaust(&mut gen.script, &desc, &call),
                 Err(tag) => gen.skip(&tag),
             },
             WastDirective::Invoke(inv) => match gen.invoke_expr(&inv) {
-                Ok(call) => {
-                    let _ = writeln!(
-                        gen.script,
-                        "check({}) do\n  {call}\n  [true, nil]\nend",
-                        ruby_str(&desc)
-                    );
-                }
+                Ok(call) => lang.emit_bare_invoke(&mut gen.script, &desc, &call),
                 Err(tag) => gen.skip(&tag),
             },
             WastDirective::AssertInvalid { mut module, .. }
@@ -532,18 +479,19 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
         return Ok(gen.stats);
     }
 
-    gen.script.push_str(POSTAMBLE);
-
     // One shared runtime bundle for the whole file, kept minimal so that
-    // undeclared unit dependencies surface as NoMethodError.
-    let mut script = dewasmify_backend_ruby::shared_runtime(&gen.units)
-        .map_err(|e| anyhow::anyhow!("bundling runtime: {e:#}"))?;
-    script.push_str(PREAMBLE);
-    script.push_str(&gen.script);
+    // undeclared unit dependencies surface as missing-method errors.
+    let script = lang
+        .assemble(&gen.units, &gen.script)
+        .map_err(|e| anyhow::anyhow!("assembling script: {e:#}"))?;
 
-    let script_path = std::env::temp_dir().join(format!("dewasmify-spec-{name}.rb"));
+    let script_path = std::env::temp_dir().join(format!(
+        "dewasmify-spec-{}-{name}.{}",
+        lang.name(),
+        lang.script_ext()
+    ));
     std::fs::write(&script_path, &script)?;
-    let output = Command::new("ruby").arg(&script_path).output()?;
+    let output = Command::new(interpreter).arg(&script_path).output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     let mut stats = gen.stats;
@@ -561,7 +509,8 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
     }
     if !found {
         anyhow::bail!(
-            "ruby did not report results (exit: {:?}):\n{}\n{}",
+            "{} did not report results (exit: {:?}):\n{}\n{}",
+            lang.name(),
             output.status,
             stdout.lines().take(20).collect::<Vec<_>>().join("\n"),
             String::from_utf8_lossy(&output.stderr)
@@ -573,61 +522,3 @@ fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<St
     }
     Ok(stats)
 }
-
-const PREAMBLE: &str = r#"
-$pass = 0
-$fail = 0
-
-def check(desc)
-  ok, actual = yield
-  if ok
-    $pass += 1
-  else
-    $fail += 1
-    puts "FAIL: #{desc} (got #{actual.inspect})"
-  end
-rescue => e
-  $fail += 1
-  puts "FAIL(#{e.class}: #{e.message}): #{desc}"
-end
-
-def check_trap(desc, msg)
-  yield
-  $fail += 1
-  puts "FAIL(no trap, want #{msg.inspect}): #{desc}"
-rescue Rt::Trap => e
-  if e.message.include?(msg) || msg.include?(e.message)
-    $pass += 1
-  else
-    $fail += 1
-    puts "FAIL(trap #{e.message.inspect}, want #{msg.inspect}): #{desc}"
-  end
-rescue => e
-  $fail += 1
-  puts "FAIL(#{e.class}: #{e.message}, want trap #{msg.inspect}): #{desc}"
-end
-
-def check_exhaust(desc)
-  yield
-  $fail += 1
-  puts "FAIL(no exhaustion): #{desc}"
-rescue SystemStackError
-  $pass += 1
-end
-
-$spectest = {
-  "spectest" => {
-    "print" => ->(*) { nil },
-    "print_i32" => ->(*) { nil },
-    "print_i64" => ->(*) { nil },
-    "print_f32" => ->(*) { nil },
-    "print_f64" => ->(*) { nil },
-    "print_i32_f32" => ->(*) { nil },
-    "print_f64_f64" => ->(*) { nil },
-  },
-}
-"#;
-
-const POSTAMBLE: &str = r#"
-puts "RESULT pass=#{$pass} fail=#{$fail}"
-"#;

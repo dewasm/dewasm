@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasmify_backend_bash::BashBackend;
 use dewasmify_backend_ruby::RubyBackend;
 
 /// Translate a WebAssembly binary into source code of various languages.
@@ -42,6 +43,7 @@ fn main() -> Result<()> {
 
     let backend: Box<dyn Backend> = match cli.target.as_str() {
         "ruby" => Box::new(RubyBackend),
+        "bash" => Box::new(BashBackend),
         other => bail!("unsupported target language: {other}"),
     };
 

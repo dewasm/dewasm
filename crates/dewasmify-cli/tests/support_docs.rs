@@ -8,11 +8,12 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use dewasmify_backend::{Backend, SupportStatus};
+use dewasmify_backend_bash::BashBackend;
 use dewasmify_backend_ruby::{bundler, RubyBackend, WASI_PREVIEW1_FUNCTIONS};
 use dewasmify_core::feature::Feature;
 
 fn render() -> String {
-    let backends: Vec<&dyn Backend> = vec![&RubyBackend];
+    let backends: Vec<&dyn Backend> = vec![&RubyBackend, &BashBackend];
 
     let mut out = String::new();
     out.push_str("# Backend Support Matrix\n\n");
@@ -33,7 +34,13 @@ fn render() -> String {
     }
 
     out.push_str("\n## Features\n\n");
-    out.push_str("| Feature | ruby |\n| --- | --- |\n");
+    let mut header = String::from("| Feature ");
+    let mut rule = String::from("| --- ");
+    for backend in &backends {
+        let _ = write!(header, "| {} ", backend.name());
+        rule.push_str("| --- ");
+    }
+    let _ = writeln!(out, "{header}|\n{rule}|");
     for feature in Feature::ALL {
         let mut row = format!("| {} ", feature.title());
         for backend in &backends {

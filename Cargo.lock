@@ -134,6 +134,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dewasmify-backend-bash"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasmify-backend",
+ "dewasmify-core",
+ "regex",
+]
+
+[[package]]
 name = "dewasmify-backend-ruby"
 version = "0.1.0"
 dependencies = [
@@ -150,6 +160,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dewasmify-backend",
+ "dewasmify-backend-bash",
  "dewasmify-backend-ruby",
  "dewasmify-core",
  "wast",

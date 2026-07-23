@@ -17,6 +17,7 @@ wat.workspace = true
 dewasmify-core.workspace = true
 dewasmify-backend.workspace = true
 dewasmify-backend-ruby.workspace = true
+dewasmify-backend-bash.workspace = true
 
 [dev-dependencies]
 wast.workspace = true

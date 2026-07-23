@@ -12,6 +12,7 @@ authors = ["TSUYUSATO Kitsune <make.just.on@gmail.com>"]
 dewasmify-core = { path = "crates/dewasmify-core" }
 dewasmify-backend = { path = "crates/dewasmify-backend" }
 dewasmify-backend-ruby = { path = "crates/dewasmify-backend-ruby" }
+dewasmify-backend-bash = { path = "crates/dewasmify-backend-bash" }
 anyhow = "1"
 wasmparser = "0.254"
 wat = "1"

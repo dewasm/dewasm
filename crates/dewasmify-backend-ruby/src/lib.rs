@@ -19,8 +19,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasmify_backend::{
     Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
-    RuntimeScope,
+    RuntimeScope, SupportStatus,
 };
+use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
     BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
 };
@@ -119,6 +120,15 @@ impl Backend for RubyBackend {
 
     fn file_extension(&self) -> &str {
         "rb"
+    }
+
+    fn feature_status(&self, feature: Feature) -> SupportStatus {
+        match feature {
+            // Part of the wasm 1.0 baseline for Ruby; the row exists for
+            // backends whose language lacks floats (ADR-5).
+            Feature::Floats => SupportStatus::Supported,
+            _ => SupportStatus::Unsupported,
+        }
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
