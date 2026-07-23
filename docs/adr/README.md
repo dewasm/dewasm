@@ -26,7 +26,7 @@ the consequences.
 | ADR-2 | [Numeric Semantics Strategy for Dynamically-Typed Targets](2-numeric-semantics.md) | Accepted |
 | ADR-3 | [Testing Strategy: Spec Testsuite on Real Interpreters](3-testing-strategy.md) | Accepted |
 | ADR-4 | [Ruby Backend Lowering Conventions](4-ruby-backend-lowering.md) | Accepted |
-| ADR-5 | [Bash Floats: Pure-Bash Softfloat](5-bash-softfloat.md) | Accepted (not yet implemented) |
+| ADR-5 | [Bash Floats: Pure-Bash Softfloat](5-bash-softfloat.md) | Accepted (implemented) |
 | ADR-6 | [Runtime as Per-Method Units with Selectable Linkage](6-runtime-units.md) | Accepted |
 | ADR-7 | [Import Providers and the Default WASI Fallback](7-import-providers.md) | Accepted |
 | ADR-8 | [Track the Latest Testsuite; Attribute Skips to a Support Matrix](8-latest-testsuite-support-matrix.md) | Accepted |
@@ -34,6 +34,7 @@ the consequences.
 | ADR-10 | [Add C# to the Target Languages, Paired with Java](10-csharp-target.md) | Accepted |
 | ADR-11 | [Bash Backend Lowering Conventions (Integer Subset)](11-bash-backend-lowering.md) | Accepted |
 | ADR-12 | [Bash WASI Conventions](12-bash-wasi.md) | Accepted |
+| ADR-13 | [Bash Softfloat Conventions](13-bash-softfloat-conventions.md) | Accepted |
 
 ## Adding a new ADR
 

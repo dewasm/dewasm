@@ -28,7 +28,7 @@ submodule — never edit it.
 | --- | --- |
 | `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). |
 | `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
-| `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~40 s); `cargo test` alone runs bash on a curated file list. |
+| `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
 | `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) into the gitignored cache; enables the `apps` e2e test. |
 
@@ -51,7 +51,10 @@ units change, regenerate the matrix: `DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewa
   lowering shapes live in [ADR-4](docs/adr/4-ruby-backend-lowering.md) (Ruby) and
   [ADR-11](docs/adr/11-bash-backend-lowering.md) (Bash — incl. the status-cascade trap
   protocol and the `return 0` discipline the units lint enforces); Bash WASI conventions
-  (status-133 proc_exit, byte-wise binary stdio) in [ADR-12](docs/adr/12-bash-wasi.md).
+  (status-133 proc_exit, byte-wise binary stdio) in [ADR-12](docs/adr/12-bash-wasi.md);
+  the Bash softfloat (bit-pattern floats, the round_pack contract, the Rust-oracle test
+  in `crates/dewasmify-backend-bash/tests/softfloat.rs`) in
+  [ADR-13](docs/adr/13-bash-softfloat-conventions.md).
 - Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:`
   headers, referenced as `Rt` ([ADR-6](docs/adr/6-runtime-units.md)); keep the headers in sync
   when editing a unit — the units lint test enforces most of it.

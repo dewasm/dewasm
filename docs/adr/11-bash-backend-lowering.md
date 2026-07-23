@@ -2,11 +2,12 @@
 
 Status: **Accepted, 2026-07-23.** Implemented in
 `crates/dewasmify-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers
-the integer subset; floats stay conversion-time errors attributed to
-`Feature::Floats` until the ADR-5 softfloat lands. WASI and standalone
-mode landed the same day under [ADR-12](12-bash-wasi.md). Requires
-bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2 and is
-out of scope.
+the integer subset; WASI and standalone mode landed the same day under
+[ADR-12](12-bash-wasi.md), and the ADR-5 softfloat (conventions in
+[ADR-13](13-bash-softfloat-conventions.md)) later removed the float
+conversion-time gate this ADR originally imposed. Requires bash >= 5
+(namerefs, associative arrays); macOS system bash is 3.2 and is out of
+scope.
 
 ## Context
 
@@ -95,11 +96,9 @@ cascade design forks only for exhaustion checks.
   (ADR-6, ADR-3) carried over unchanged except for per-language harness
   emitters — the multi-language design is validated. Runtime speed is a
   non-issue at spec scale.
-- Negative: float-using modules are refused (attributed `floats`,
-  ADR-8), which fully skips the classic control-flow files (`block`,
-  `if`, `br`, ...) whose single main module touches floats incidentally;
-  coverage comes from `labels`/`switch`/`stack`/`func_ptrs` until ADR-5
-  flips `Feature::Floats` to Supported.
+- Negative (resolved): float-using modules were refused (attributed
+  `floats`, ADR-8) until the ADR-5 softfloat landed under ADR-13; the
+  classic control-flow files and the pure-float suite are green since.
 - Deep recursion without `FUNCNEST` segfaults bash around 10–20k frames;
   exhaustion checks must stay inside `( FUNCNEST=...; ... )` subshells.
 - Bulk memory ops loop per byte; large `memory.copy`/`fill` will need

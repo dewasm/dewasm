@@ -11,7 +11,7 @@ turns its remaining skips into hard failures until the tests pass.
 ## Baseline
 
 - **ruby**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory (memory.copy/fill/init, passive data segments)
-- **bash**: Integer subset of wasm core 1.0 (f32/f64 are refused at conversion time until the pure-Bash softfloat lands, ADR-5) + mutable globals, sign-extension, multi-value, and the memory half of bulk memory; requires bash >= 5
+- **bash**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory; f32/f64 run on the pure-Bash softfloat (ADR-5/ADR-13); requires bash >= 5
 
 ## Features
 
@@ -22,7 +22,7 @@ turns its remaining skips into hard failures until the tests pass.
 | Imported tables (wasm 1.0) | ❌ | ❌ |
 | Multiple tables | ❌ | ❌ |
 | Bulk table ops / passive element segments | ❌ | ❌ |
-| Floating-point (wasm 1.0) | ✅ | ❌ |
+| Floating-point (wasm 1.0) | ✅ | ✅ |
 | Reference types | ❌ | ❌ |
 | Typed function references | ❌ | ❌ |
 | Garbage collection | ❌ | ❌ |

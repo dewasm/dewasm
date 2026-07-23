@@ -15,7 +15,7 @@ use std::process::Command;
 use dewasmify_backend::Backend;
 use dewasmify_backend_bash::BashBackend;
 use dewasmify_core::ir;
-use wast::core::{WastArgCore, WastRetCore};
+use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 use crate::{Converted, SpecLang};
@@ -51,7 +51,18 @@ const CURATED_FILES: &[&str] = &[
     "data1",
     "elem",
     "endianness",
+    "f32",
+    "f32_bitwise",
+    "f32_cmp",
+    "f64",
+    "f64_bitwise",
+    "f64_cmp",
     "fac",
+    "float_exprs",
+    "float_literals",
+    "float_memory",
+    "float_misc",
+    "conversions",
     "forward",
     "func_ptrs",
     "global",
@@ -250,11 +261,11 @@ fn bash_str(s: &str) -> String {
 fn arg_bash(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
-        // i64 arguments are passed as the signed-64 bit pattern (ADR-11).
+        // i64/f64 travel as the signed-64 bit pattern, f32 as its u32
+        // pattern (ADR-11/ADR-13).
         WastArg::Core(WastArgCore::I64(v)) => Ok(v.to_string()),
-        WastArg::Core(WastArgCore::F32(_)) | WastArg::Core(WastArgCore::F64(_)) => {
-            Err("floats".to_string())
-        }
+        WastArg::Core(WastArgCore::F32(f)) => Ok(f.bits.to_string()),
+        WastArg::Core(WastArgCore::F64(f)) => Ok((f.bits as i64).to_string()),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
         WastArg::Core(_) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
@@ -265,9 +276,27 @@ fn ret_cond(i: usize, ret: &WastRet<'_>) -> Result<String, String> {
     match ret {
         WastRet::Core(WastRetCore::I32(v)) => Ok(format!("R{i} == {}", *v as u32)),
         WastRet::Core(WastRetCore::I64(v)) => Ok(format!("R{i} == {v}")),
-        WastRet::Core(WastRetCore::F32(_)) | WastRet::Core(WastRetCore::F64(_)) => {
-            Err("floats".to_string())
-        }
+        // Floats are compared as bit patterns (they already are the
+        // R registers' representation); the NaN masks mirror ruby.rs's
+        // ret_cmp, as signed-64-safe integer constants.
+        WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
+            NanPattern::CanonicalNan => {
+                format!("(R{i} & 0x7fffffff) == 0x7fc00000")
+            }
+            NanPattern::ArithmeticNan => {
+                format!("(R{i} & 0x7fc00000) == 0x7fc00000")
+            }
+            NanPattern::Value(f) => format!("R{i} == {}", f.bits),
+        }),
+        WastRet::Core(WastRetCore::F64(pattern)) => Ok(match pattern {
+            NanPattern::CanonicalNan => {
+                format!("(R{i} & 0x7fffffffffffffff) == 0x7ff8000000000000")
+            }
+            NanPattern::ArithmeticNan => {
+                format!("(R{i} & 0x7ff8000000000000) == 0x7ff8000000000000")
+            }
+            NanPattern::Value(f) => format!("R{i} == {}", f.bits as i64),
+        }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
         WastRet::Core(_) => Err("reference-types".to_string()),

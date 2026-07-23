@@ -1,14 +1,16 @@
 //! End-to-end tests over real-world apps from the Wasmer registry
 //! (examples/apps/, ADR-9): convert each cached app to standalone Ruby
-//! and require byte-identical stdout and exit status against wasmtime.
+//! (and, for the fast cases, Bash) and require byte-identical stdout and
+//! exit status against wasmtime.
 //!
 //! Self-skips when the cache (populated by examples/apps/fetch.sh),
-//! `ruby`, or `wasmtime` is missing.
+//! the interpreter, or `wasmtime` is missing.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasmify_backend_bash::BashBackend;
 use dewasmify_backend_ruby::RubyBackend;
 
 struct AppCase {
@@ -108,5 +110,80 @@ fn apps_match_wasmtime() {
         );
         assert_eq!(ruby_code, wt_code, "{}: exit status differs", case.name);
         println!("{} {:?}: identical to wasmtime", case.name, case.args);
+    }
+}
+
+/// A bash >= 5 interpreter, if one is installed.
+fn bash5() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
+        candidates.push(PathBuf::from(env));
+    }
+    candidates.push(PathBuf::from("bash"));
+    candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
+    candidates.push(PathBuf::from("/usr/local/bin/bash"));
+    for candidate in candidates {
+        let Ok(out) = Command::new(&candidate)
+            .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+            .output()
+        else {
+            continue;
+        };
+        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// The Bash counterpart, cowsay only: QuickJS/SQLite run but take tens of
+/// seconds under bash — fine for demos, too slow for the gate.
+#[test]
+fn apps_match_wasmtime_bash() {
+    let Some(bash) = bash5() else {
+        eprintln!("bash >= 5 not found; skipping");
+        return;
+    };
+    if !tool_available("wasmtime") {
+        eprintln!("wasmtime not found; skipping");
+        return;
+    }
+    let wasm_path = cache_dir().join("cowsay.wasm");
+    if !wasm_path.exists() {
+        eprintln!("cowsay not cached (run examples/apps/fetch.sh); skipping");
+        return;
+    }
+    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    let bash_src = BashBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Standalone,
+                module_name: "cowsay".to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate bash")
+        .remove(0)
+        .contents;
+    let sh_path = std::env::temp_dir().join("dewasmify-app-cowsay.sh");
+    std::fs::write(&sh_path, bash_src).unwrap();
+
+    for (args, stdin) in
+        [(&["Hello", "from", "Bash!"][..], ""), (&[][..], "moo via stdin\n")]
+    {
+        let (bash_out, bash_code) =
+            run(Command::new(&bash).arg(&sh_path).args(args), stdin);
+        let (wt_out, wt_code) =
+            run(Command::new("wasmtime").arg(&wasm_path).args(args), stdin);
+        assert_eq!(
+            String::from_utf8_lossy(&bash_out),
+            String::from_utf8_lossy(&wt_out),
+            "cowsay {args:?}: stdout differs from wasmtime"
+        );
+        assert_eq!(bash_code, wt_code, "cowsay {args:?}: exit status differs");
+        println!("cowsay {args:?} under bash: identical to wasmtime");
     }
 }

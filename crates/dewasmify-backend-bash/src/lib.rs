@@ -5,8 +5,9 @@
 //! - i32 is a masked-unsigned value in [0, 2^32); i64 is stored as its
 //!   signed-64 two's-complement bit pattern (bash arithmetic is signed
 //!   64-bit only). Signed/unsigned views are derived inline.
-//! - f32/f64 are rejected at conversion time until the pure-Bash softfloat
-//!   lands (ADR-5); the refusal is attributed to `Feature::Floats`.
+//! - f32/f64 are their bit patterns (u32 / signed-64), computed by the
+//!   pure-Bash softfloat units (ADR-5/ADR-13); reinterprets and float
+//!   loads/stores are the identity over the integer paths.
 //! - Structured control flow maps to `while :; do ...; break; done`
 //!   wrappers; `br` becomes `break N`/`continue N` (bash counts only
 //!   loops, `if` adds no level). Unreferenced labels emit no wrapper.
@@ -28,10 +29,11 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasmify_backend::{
     Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope,
+    SupportStatus,
 };
-use dewasmify_core::feature::{Feature, UnsupportedError};
+use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
-    BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
+    BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -77,12 +79,6 @@ fn generate_module_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
-    if let Some(what) = find_floats(module) {
-        return Err(anyhow::Error::new(UnsupportedError::new(
-            Feature::Floats,
-            format!("{what}; the bash backend is integer-only until the ADR-5 softfloat"),
-        )));
-    }
     let gen = Gen {
         module,
         default_wasi,
@@ -109,9 +105,19 @@ impl Backend for BashBackend {
     }
 
     fn baseline(&self) -> &'static str {
-        "Integer subset of wasm core 1.0 (f32/f64 are refused at conversion time until \
-         the pure-Bash softfloat lands, ADR-5) + mutable globals, sign-extension, \
-         multi-value, and the memory half of bulk memory; requires bash >= 5"
+        "Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, \
+         sign-extension, saturating float-to-int, multi-value, and the memory half \
+         of bulk memory; f32/f64 run on the pure-Bash softfloat (ADR-5/ADR-13); \
+         requires bash >= 5"
+    }
+
+    fn feature_status(&self, feature: Feature) -> SupportStatus {
+        match feature {
+            // The ADR-5 softfloat covers the full float surface; the
+            // harness now treats any float skip as a hard failure (ADR-8).
+            Feature::Floats => SupportStatus::Supported,
+            _ => SupportStatus::Unsupported,
+        }
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
@@ -916,9 +922,11 @@ impl<'a> Gen<'a> {
             // an unsigned literal above INT64_MAX would be
             // implementation-defined in bash.
             Expr::I64Const(v) => Some(format!("{}", *v as i64)),
-            Expr::F32Const(_) | Expr::F64Const(_) => {
-                unreachable!("floats are rejected at conversion time")
-            }
+            // Floats are their bit patterns (ADR-13): f32 as u32, f64 as
+            // the signed-64 pattern (a u64 decimal >= 2^63 would wrap
+            // implementation-defined in bash).
+            Expr::F32Const(bits) => Some(bits.to_string()),
+            Expr::F64Const(bits) => Some(format!("{}", *bits as i64)),
             Expr::Temp(t) => Some(temp(*t)),
             Expr::LocalGet(idx) => Some(format!("l{idx}")),
             Expr::GlobalGet(idx) => Some(format!("{}g{idx}", self.prefix)),
@@ -984,6 +992,15 @@ fn un_inline(op: UnOp, a: &str) -> Option<String> {
         I64Extend8S => format!("(((({a}) & 0xff) ^ 0x80) - 0x80)"),
         I64Extend16S => format!("(((({a}) & 0xffff) ^ 0x8000) - 0x8000)"),
         I64Extend32S => format!("(((({a}) & 0xffffffff) ^ 0x80000000) - 0x80000000)"),
+        // Pure bit ops on the float patterns (payload-preserving, as the
+        // spec requires for the sign ops); reinterprets are the identity.
+        F32Abs => format!("(({a}) & 0x7fffffff)"),
+        F32Neg => format!("(({a}) ^ 0x80000000)"),
+        F64Abs => format!("(({a}) & 0x7fffffffffffffff)"),
+        F64Neg => format!("(({a}) ^ (1 << 63))"),
+        I32ReinterpretF32 | I64ReinterpretF64 | F32ReinterpretI32 | F64ReinterpretI64 => {
+            format!("({a})")
+        }
         _ => return None,
     })
 }
@@ -1001,7 +1018,43 @@ fn un_helper(op: UnOp) -> &'static str {
         I64Clz => "i64_clz",
         I64Ctz => "i64_ctz",
         I32Popcnt | I64Popcnt => "popcnt",
-        _ => unreachable!("float conversion reached the bash lowering"),
+        F32Ceil => "f32_ceil",
+        F32Floor => "f32_floor",
+        F32Trunc => "f32_trunc",
+        F32Nearest => "f32_nearest",
+        F32Sqrt => "f32_sqrt",
+        F64Ceil => "f64_ceil",
+        F64Floor => "f64_floor",
+        F64Trunc => "f64_trunc",
+        F64Nearest => "f64_nearest",
+        F64Sqrt => "f64_sqrt",
+        I32TruncF32S => "i32_trunc_f32_s",
+        I32TruncF32U => "i32_trunc_f32_u",
+        I32TruncF64S => "i32_trunc_f64_s",
+        I32TruncF64U => "i32_trunc_f64_u",
+        I64TruncF32S => "i64_trunc_f32_s",
+        I64TruncF32U => "i64_trunc_f32_u",
+        I64TruncF64S => "i64_trunc_f64_s",
+        I64TruncF64U => "i64_trunc_f64_u",
+        I32TruncSatF32S => "i32_trunc_sat_f32_s",
+        I32TruncSatF32U => "i32_trunc_sat_f32_u",
+        I32TruncSatF64S => "i32_trunc_sat_f64_s",
+        I32TruncSatF64U => "i32_trunc_sat_f64_u",
+        I64TruncSatF32S => "i64_trunc_sat_f32_s",
+        I64TruncSatF32U => "i64_trunc_sat_f32_u",
+        I64TruncSatF64S => "i64_trunc_sat_f64_s",
+        I64TruncSatF64U => "i64_trunc_sat_f64_u",
+        F32ConvertI32S => "f32_convert_i32_s",
+        F32ConvertI32U => "f32_convert_i32_u",
+        F32ConvertI64S => "f32_convert_i64_s",
+        F32ConvertI64U => "f32_convert_i64_u",
+        F64ConvertI32S => "f64_convert_i32_s",
+        F64ConvertI32U => "f64_convert_i32_u",
+        F64ConvertI64S => "f64_convert_i64_s",
+        F64ConvertI64U => "f64_convert_i64_u",
+        F32DemoteF64 => "f32_demote",
+        F64PromoteF32 => "f64_promote",
+        _ => unreachable!("op {op:?} has an inline lowering"),
     }
 }
 
@@ -1047,6 +1100,10 @@ fn bin_inline(op: BinOp, a: &str, b: &str) -> Option<String> {
         I64GtU => format!("({} > {})", u64_flip(a), u64_flip(b)),
         I64LeU => format!("({} <= {})", u64_flip(a), u64_flip(b)),
         I64GeU => format!("({} >= {})", u64_flip(a), u64_flip(b)),
+        F32Copysign => format!("((({a}) & 0x7fffffff) | (({b}) & 0x80000000))"),
+        F64Copysign => {
+            format!("((({a}) & 0x7fffffffffffffff) | (({b}) & (1 << 63)))")
+        }
         _ => return None,
     })
 }
@@ -1071,7 +1128,31 @@ fn bin_helper(op: BinOp) -> &'static str {
         I32Rotr => "i32_rotr",
         I64Rotl => "i64_rotl",
         I64Rotr => "i64_rotr",
-        _ => unreachable!("float op reached the bash lowering"),
+        F32Add => "f32_add",
+        F32Sub => "f32_sub",
+        F32Mul => "f32_mul",
+        F32Div => "f32_div",
+        F32Min => "f32_min",
+        F32Max => "f32_max",
+        F64Add => "f64_add",
+        F64Sub => "f64_sub",
+        F64Mul => "f64_mul",
+        F64Div => "f64_div",
+        F64Min => "f64_min",
+        F64Max => "f64_max",
+        F32Eq => "f32_eq",
+        F32Ne => "f32_ne",
+        F32Lt => "f32_lt",
+        F32Gt => "f32_gt",
+        F32Le => "f32_le",
+        F32Ge => "f32_ge",
+        F64Eq => "f64_eq",
+        F64Ne => "f64_ne",
+        F64Lt => "f64_lt",
+        F64Gt => "f64_gt",
+        F64Le => "f64_le",
+        F64Ge => "f64_ge",
+        _ => unreachable!("op {op:?} has an inline lowering"),
     }
 }
 
@@ -1080,7 +1161,10 @@ fn load_method(op: LoadOp) -> &'static str {
     match op {
         I32Load => "i32_load",
         I64Load => "i64_load",
-        F32Load | F64Load => unreachable!("float load reached the bash lowering"),
+        // Floats travel as bit patterns; the integer memory units are
+        // exact (ADR-13).
+        F32Load => "i32_load",
+        F64Load => "i64_load",
         I32Load8S => "i32_load8_s",
         I32Load8U => "i32_load8_u",
         I32Load16S => "i32_load16_s",
@@ -1099,160 +1183,12 @@ fn store_method(op: StoreOp) -> &'static str {
     match op {
         I32Store => "i32_store",
         I64Store => "i64_store",
-        F32Store | F64Store => unreachable!("float store reached the bash lowering"),
+        F32Store => "i32_store",
+        F64Store => "i64_store",
         I32Store8 => "i32_store8",
         I32Store16 => "i32_store16",
         I64Store8 => "i64_store8",
         I64Store16 => "i64_store16",
         I64Store32 => "i64_store32",
-    }
-}
-
-/// First float usage in the module, for the `Feature::Floats` refusal.
-fn find_floats(m: &Module) -> Option<String> {
-    let is_f = |t: &ValType| matches!(t, ValType::F32 | ValType::F64);
-    for (i, ty) in m.types.iter().enumerate() {
-        if ty.params.iter().any(is_f) || ty.results.iter().any(is_f) {
-            return Some(format!("function type {i} uses f32/f64"));
-        }
-    }
-    for (i, g) in m.globals.iter().enumerate() {
-        if is_f(&g.ty) || expr_has_float(&g.init) {
-            return Some(format!("global {i} uses f32/f64"));
-        }
-    }
-    for (i, f) in m.funcs.iter().enumerate() {
-        if f.locals.iter().any(is_f) || f.temps.iter().any(|t| is_f(&t.ty)) {
-            return Some(format!("function {i} uses f32/f64 values"));
-        }
-        if f.body.iter().any(stmt_has_float) {
-            return Some(format!("function {i} uses f32/f64 operations"));
-        }
-    }
-    None
-}
-
-fn un_is_float(op: UnOp) -> bool {
-    use UnOp::*;
-    !matches!(
-        op,
-        I32Clz
-            | I32Ctz
-            | I32Popcnt
-            | I32Eqz
-            | I64Clz
-            | I64Ctz
-            | I64Popcnt
-            | I64Eqz
-            | I32WrapI64
-            | I64ExtendI32S
-            | I64ExtendI32U
-            | I32Extend8S
-            | I32Extend16S
-            | I64Extend8S
-            | I64Extend16S
-            | I64Extend32S
-    )
-}
-
-fn bin_is_float(op: BinOp) -> bool {
-    use BinOp::*;
-    matches!(
-        op,
-        F32Add
-            | F32Sub
-            | F32Mul
-            | F32Div
-            | F32Min
-            | F32Max
-            | F32Copysign
-            | F32Eq
-            | F32Ne
-            | F32Lt
-            | F32Gt
-            | F32Le
-            | F32Ge
-            | F64Add
-            | F64Sub
-            | F64Mul
-            | F64Div
-            | F64Min
-            | F64Max
-            | F64Copysign
-            | F64Eq
-            | F64Ne
-            | F64Lt
-            | F64Gt
-            | F64Le
-            | F64Ge
-    )
-}
-
-fn expr_has_float(e: &Expr) -> bool {
-    match e {
-        Expr::F32Const(_) | Expr::F64Const(_) => true,
-        Expr::I32Const(_)
-        | Expr::I64Const(_)
-        | Expr::Temp(_)
-        | Expr::LocalGet(_)
-        | Expr::GlobalGet(_)
-        | Expr::MemorySize => false,
-        Expr::Un(op, a) => un_is_float(*op) || expr_has_float(a),
-        Expr::Bin(op, a, b) => bin_is_float(*op) || expr_has_float(a) || expr_has_float(b),
-        Expr::Load { op, addr, .. } => {
-            matches!(op, LoadOp::F32Load | LoadOp::F64Load) || expr_has_float(addr)
-        }
-        Expr::Select { cond, then, els } => {
-            expr_has_float(cond) || expr_has_float(then) || expr_has_float(els)
-        }
-    }
-}
-
-fn target_has_float(t: &BrTarget) -> bool {
-    match t {
-        BrTarget::Return { values } => values.iter().any(expr_has_float),
-        BrTarget::Label { .. } => false,
-    }
-}
-
-fn stmt_has_float(s: &Stmt) -> bool {
-    match s {
-        Stmt::Assign { expr, .. }
-        | Stmt::LocalSet { expr, .. }
-        | Stmt::GlobalSet { expr, .. } => expr_has_float(expr),
-        Stmt::Store { op, addr, value, .. } => {
-            matches!(op, StoreOp::F32Store | StoreOp::F64Store)
-                || expr_has_float(addr)
-                || expr_has_float(value)
-        }
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => body.iter().any(stmt_has_float),
-        Stmt::If { cond, then, els, .. } => {
-            expr_has_float(cond)
-                || then.iter().any(stmt_has_float)
-                || els.iter().any(stmt_has_float)
-        }
-        Stmt::Br(target) => target_has_float(target),
-        Stmt::BrIf { cond, target } => expr_has_float(cond) || target_has_float(target),
-        Stmt::BrTable { index, targets, default } => {
-            expr_has_float(index)
-                || targets.iter().any(target_has_float)
-                || target_has_float(default)
-        }
-        Stmt::Return { values } => values.iter().any(expr_has_float),
-        Stmt::Call { args, .. } => args.iter().any(expr_has_float),
-        Stmt::CallIndirect { index, args, .. } => {
-            expr_has_float(index) || args.iter().any(expr_has_float)
-        }
-        Stmt::MemoryGrow { delta, .. } => expr_has_float(delta),
-        Stmt::MemoryCopy { dst, src, len } => {
-            expr_has_float(dst) || expr_has_float(src) || expr_has_float(len)
-        }
-        Stmt::MemoryFill { dst, val, len } => {
-            expr_has_float(dst) || expr_has_float(val) || expr_has_float(len)
-        }
-        Stmt::MemoryInit { dst, src, len, .. } => {
-            expr_has_float(dst) || expr_has_float(src) || expr_has_float(len)
-        }
-        Stmt::DataDrop { .. } | Stmt::Unreachable => false,
     }
 }
