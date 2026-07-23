@@ -5,34 +5,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
-use dewasmify_backend_bash::BashBackend;
+use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::RubyBackend;
 
 fn ruby_available() -> bool {
     Command::new("ruby").arg("--version").output().is_ok()
-}
-
-/// A bash >= 5 interpreter, if one is installed (macOS system bash is 3.2).
-fn bash5() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
-        candidates.push(PathBuf::from(env));
-    }
-    candidates.push(PathBuf::from("bash"));
-    candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
-    candidates.push(PathBuf::from("/usr/local/bin/bash"));
-    for candidate in candidates {
-        let Ok(out) = Command::new(&candidate)
-            .args(["-c", "echo ${BASH_VERSINFO[0]}"])
-            .output()
-        else {
-            continue;
-        };
-        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
-            return Some(candidate);
-        }
-    }
-    None
 }
 
 fn convert(wat_path: &Path, mode: Mode, name: &str) -> String {
@@ -86,7 +63,7 @@ fn standalone_mode_wasi_hello() {
 /// (ADR-11), including a masked-unsigned wraparound and a trap.
 #[test]
 fn library_mode_add_bash() {
-    let Some(bash) = bash5() else {
+    let Some(bash) = find_bash5() else {
         eprintln!("bash >= 5 not found; skipping");
         return;
     };
@@ -128,7 +105,7 @@ fn library_mode_add_bash() {
 /// (ADR-12) must produce the same stdout and exit code.
 #[test]
 fn standalone_mode_wasi_hello_bash() {
-    let Some(bash) = bash5() else {
+    let Some(bash) = find_bash5() else {
         eprintln!("bash >= 5 not found; skipping");
         return;
     };
@@ -158,7 +135,7 @@ fn standalone_mode_wasi_hello_bash() {
 /// exit code via args_sizes_get + proc_exit.
 #[test]
 fn standalone_args_bash() {
-    let Some(bash) = bash5() else {
+    let Some(bash) = find_bash5() else {
         eprintln!("bash >= 5 not found; skipping");
         return;
     };
@@ -202,7 +179,7 @@ fn standalone_args_bash() {
 /// the bundled units.
 #[test]
 fn bash_imports_override_falls_back_to_bundled_wasi() {
-    let Some(bash) = bash5() else {
+    let Some(bash) = find_bash5() else {
         eprintln!("bash >= 5 not found; skipping");
         return;
     };

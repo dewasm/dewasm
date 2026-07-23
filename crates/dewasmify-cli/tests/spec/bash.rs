@@ -123,28 +123,11 @@ impl SpecLang for BashLang {
     }
 
     fn interpreter(&self) -> Option<PathBuf> {
-        let mut candidates: Vec<PathBuf> = Vec::new();
-        if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
-            candidates.push(PathBuf::from(env));
+        let found = dewasmify_backend_bash::find_bash5();
+        if found.is_none() {
+            eprintln!("bash >= 5 not found (checked $DEWASMIFY_BASH, PATH, homebrew); skipping");
         }
-        candidates.push(PathBuf::from("bash"));
-        candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
-        candidates.push(PathBuf::from("/usr/local/bin/bash"));
-        for candidate in candidates {
-            let out = Command::new(&candidate)
-                .args(["-c", "echo ${BASH_VERSINFO[0]}"])
-                .output();
-            let Ok(out) = out else { continue };
-            let major = String::from_utf8_lossy(&out.stdout)
-                .trim()
-                .parse::<u32>()
-                .unwrap_or(0);
-            if major >= 5 {
-                return Some(candidate);
-            }
-        }
-        eprintln!("bash >= 5 not found (checked $DEWASMIFY_BASH, PATH, homebrew); skipping");
-        None
+        found
     }
 
     fn script_ext(&self) -> &'static str {

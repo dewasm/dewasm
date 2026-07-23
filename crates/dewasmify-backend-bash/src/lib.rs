@@ -62,6 +62,32 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     bundler().bundle(seeds, 0)
 }
 
+/// Locate a bash >= 5 interpreter able to run generated scripts: tries
+/// `$DEWASMIFY_BASH`, then `bash` on PATH, then the common Homebrew/local
+/// install paths (macOS system bash is 3.2 and does not qualify).
+pub fn find_bash5() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
+        candidates.push(PathBuf::from(env));
+    }
+    candidates.push(PathBuf::from("bash"));
+    candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
+    candidates.push(PathBuf::from("/usr/local/bin/bash"));
+    for candidate in candidates {
+        let Ok(out) = std::process::Command::new(&candidate)
+            .args(["-c", "echo ${BASH_VERSINFO[0]}"])
+            .output()
+        else {
+            continue;
+        };
+        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 /// Generate one module for `module` with all names prefixed by `prefix`
 /// (e.g. `"m1_"`). Returns the source and the set of runtime units it
 /// needs; the caller decides whether to bundle them alongside.

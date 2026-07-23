@@ -1,7 +1,7 @@
 # ADR-5 — Bash Floats: Pure-Bash Softfloat
 
-Status: **Accepted (implemented), 2026-07-23.** Backfilled; the policy
-was fixed during initial planning. The implementation landed after the
+Status: **Accepted, 2026-07-23.** Backfilled; the policy was fixed
+during initial planning. The implementation landed after the
 integers/memory/WASI milestones, with its conventions recorded in
 [ADR-13](13-bash-softfloat-conventions.md); the spec float files are
 green and real binaries run under bash.

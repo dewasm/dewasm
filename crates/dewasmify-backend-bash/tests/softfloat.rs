@@ -7,33 +7,11 @@
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::path::PathBuf;
 use std::process::Command;
 
-const QNAN64: i64 = 0x7ff8000000000000u64 as i64;
+use dewasmify_backend_bash::find_bash5;
 
-/// A bash >= 5 interpreter, if one is installed (macOS system bash is 3.2).
-fn bash5() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(env) = std::env::var("DEWASMIFY_BASH") {
-        candidates.push(PathBuf::from(env));
-    }
-    candidates.push(PathBuf::from("bash"));
-    candidates.push(PathBuf::from("/opt/homebrew/bin/bash"));
-    candidates.push(PathBuf::from("/usr/local/bin/bash"));
-    for candidate in candidates {
-        let Ok(out) = Command::new(&candidate)
-            .args(["-c", "echo ${BASH_VERSINFO[0]}"])
-            .output()
-        else {
-            continue;
-        };
-        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
-            return Some(candidate);
-        }
-    }
-    None
-}
+const QNAN64: i64 = 0x7ff8000000000000u64 as i64;
 
 /// Deterministic vector source (constants from PCG's default stream).
 struct Lcg(u64);
@@ -150,7 +128,7 @@ fn f64_arith_cases(cases: &mut Cases) {
 }
 
 fn run_cases(cases: &Cases) {
-    let Some(bash) = bash5() else {
+    let Some(bash) = find_bash5() else {
         eprintln!("bash >= 5 not found; skipping softfloat oracle");
         return;
     };
