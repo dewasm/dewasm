@@ -1,4 +1,1 @@
 /target
-# WebAssembly spec testsuite, cloned by:
-#   git clone --depth 1 https://github.com/WebAssembly/testsuite tests/spec
-/tests/spec

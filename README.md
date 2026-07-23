@@ -90,7 +90,7 @@ testsuite's `.wast` files, converts every module with the Ruby backend, and
 generates a Ruby script that runs all assertions on the real interpreter:
 
 ```console
-$ git clone --depth 1 https://github.com/WebAssembly/testsuite tests/spec
+$ git submodule update --init   # fetches tests/spec (WebAssembly/testsuite)
 $ cargo test -p dewasmify-cli --test spec -- --nocapture
 ...
 TOTAL: pass=19446 fail=5 skip=894 (rust: invalid-ok=1563 invalid-bad=0)
