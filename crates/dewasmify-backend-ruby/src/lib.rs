@@ -228,7 +228,16 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("[\"{hex}\"].pack(\"H*\")")
 }
 
-const WASI_MODULE: &str = "wasi_snapshot_preview1";
+/// WASI import module names the bundled runtime answers for.
+/// `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything
+/// we implement except fd_seek's whence encoding (snapshot 0 modules that
+/// actually seek may misbehave; acceptable until snapshot 0 gets its own
+/// units).
+const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
+
+fn is_wasi_module(name: &str) -> bool {
+    WASI_MODULES.contains(&name)
+}
 
 /// The full WASI preview 1 surface, for the generated support docs; which
 /// of these are implemented is derived from the runtime units
@@ -253,7 +262,7 @@ pub const WASI_PREVIEW1_FUNCTIONS: &[&str] = &[
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
         && module.imported_funcs.iter().any(|f| {
-            f.module == WASI_MODULE && bundler().has_unit(&format!("wasi/{}", f.name))
+            is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name))
         })
 }
 
@@ -352,7 +361,7 @@ impl<'a> Gen<'a> {
                 // Fallback order: explicit import -> bundled WASI
                 // (constructed only when first needed) -> ENOSYS stub;
                 // non-WASI imports stay mandatory.
-                let fallback = if import.module == WASI_MODULE && self.default_wasi {
+                let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                     let unit = format!("wasi/{}", import.name);
                     if bundler().has_unit(&unit) {
                         self.use_unit(&unit);

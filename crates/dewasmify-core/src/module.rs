@@ -1,6 +1,6 @@
 //! Decode + validate a wasm binary and build the [`crate::ir::Module`].
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use wasmparser::{
     CompositeInnerType, ConstExpr, DataKind, ElementItems, ElementKind, ExternalKind, Operator,
     Parser, Payload, TypeRef, Validator, WasmFeatures,

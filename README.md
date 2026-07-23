@@ -76,7 +76,19 @@ inst = Prog.new({ "wasi_snapshot_preview1" => MyWasi.new })
 inst.invoke("_start")           # proc_exit raises Prog::Rt::Exit — rescue it
 ```
 
-A real example — a Rust program compiled for `wasm32-wasip1` (including
+Real-world binaries work too: [`examples/apps/`](examples/apps/) fetches
+prebuilt apps from the Wasmer registry (never committed here, ADR-9) —
+including QuickJS, a complete JavaScript engine that dewasmify turns into
+a single Ruby file:
+
+```console
+$ examples/apps/fetch.sh
+$ cargo run -q -p dewasmify-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
+$ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
+JS on Ruby: 42
+```
+
+Another example — a Rust program compiled for `wasm32-wasip1` (including
 `std`) converts to a single ~1.5 MB Ruby file and produces output identical
 to wasmtime:
 

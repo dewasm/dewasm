@@ -27,6 +27,7 @@ submodule — never edit it.
 | `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). |
 | `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. |
 | `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
+| `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) into the gitignored cache; enables the `apps` e2e test. |
 
 ## Verification
 
