@@ -1,14 +1,21 @@
 # requires: memory/i32_load, memory/i32_store, memory/init
-def wasi_fd_read(fd, iovs_ptr, iovs_len, nread_ptr)
+def wasi_fd_pread(fd, iovs_ptr, iovs_len, offset, nread_ptr)
   io = @fds[fd]
   return ERRNO_BADF unless io.is_a?(IO)
+  return ERRNO_SPIPE if [$stdin, $stdout, $stderr].include?(io)
   nread = 0
   iovs_len.times do |i|
     ptr = @memory.i32_load(iovs_ptr + i * 8)
     len = @memory.i32_load(iovs_ptr + i * 8 + 4)
     next if len == 0
-    chunk = io.read(len)
-    break if chunk.nil?
+    # IO#pread raises EOFError at end-of-file instead of returning a
+    # short/empty read like IO#read does.
+    chunk = begin
+      io.pread(len, offset + nread)
+    rescue EOFError
+      nil
+    end
+    break if chunk.nil? || chunk.empty?
     @memory.init(ptr, chunk, 0, chunk.bytesize)
     nread += chunk.bytesize
     break if chunk.bytesize < len

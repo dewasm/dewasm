@@ -6,12 +6,27 @@ ERRNO_NOSYS = 52
 ERRNO_NOTSUP = 58
 ERRNO_SPIPE = 70
 
+# A directory descriptor: either a preopen (`preopen_name` set to the
+# guest-visible path passed in `preopens:`) or a directory the guest
+# opened itself via path_open (`preopen_name` nil). `entries` is the
+# fd_readdir listing cache, populated lazily. Kept in the prelude (rather
+# than with the rest of the filesystem logic) because `initialize` builds
+# one per preopen unconditionally, so it must be available whenever any
+# WASI import is used, not only when a filesystem syscall is.
+WasiDir = Struct.new(:host_path, :preopen_name, :entries)
+
 attr_reader :memory
 
-def initialize(args: [], env: {})
+def initialize(args: [], env: {}, preopens: {})
   @args = args.map(&:to_s)
   @env = env.map { |k, v| "#{k}=#{v}" }
   @fds = { 0 => $stdin, 1 => $stdout, 2 => $stderr }
+  next_fd = 3
+  preopens.each do |guest, host|
+    @fds[next_fd] = WasiDir.new(File.realpath(host), guest, nil)
+    next_fd += 1
+  end
+  @next_fd = next_fd
   $stdout.binmode
   $stderr.binmode
   $stdin.binmode

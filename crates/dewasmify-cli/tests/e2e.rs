@@ -403,6 +403,186 @@ end
     assert_eq!(out, "3\n4294967293\ntrue\ntrap: integer divide by zero\n");
 }
 
+/// A fresh, empty directory for one WASI-fs test to preopen, so tests
+/// running in parallel never share state.
+fn wasi_fs_scratch_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("dewasmify-e2e-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn preopen_kwarg(guest: &str, host: &std::path::Path) -> String {
+    format!(
+        "preopens: {{ {:?} => {:?} }}",
+        guest,
+        host.to_string_lossy()
+    )
+}
+
+const WASI_PATH_OPEN_ROUNDTRIP_WAT: &str = r#"
+    (module
+      (import "wasi_snapshot_preview1" "path_open"
+        (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_write"
+        (func $fd_write (param i32 i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_read"
+        (func $fd_read (param i32 i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_close"
+        (func $fd_close (param i32) (result i32)))
+      (memory (export "memory") 1)
+      (data (i32.const 0) "hello.txt")
+      (data (i32.const 16) "hello, wasi fs!")
+      (func (export "_start")
+        ;; create + write
+        (drop (call $path_open (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 9)
+          (i32.const 9) (i64.const -1) (i64.const -1) (i32.const 0) (i32.const 100)))
+        (i32.store (i32.const 104) (i32.const 16))
+        (i32.store (i32.const 108) (i32.const 15))
+        (drop (call $fd_write (i32.load (i32.const 100)) (i32.const 104) (i32.const 1) (i32.const 116)))
+        (drop (call $fd_close (i32.load (i32.const 100))))
+        ;; reopen read-only, read back
+        (drop (call $path_open (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 9)
+          (i32.const 0) (i64.const -1) (i64.const -1) (i32.const 0) (i32.const 120)))
+        (i32.store (i32.const 240) (i32.const 200))
+        (i32.store (i32.const 244) (i32.const 32))
+        (drop (call $fd_read (i32.load (i32.const 120)) (i32.const 240) (i32.const 1) (i32.const 252)))
+        (drop (call $fd_close (i32.load (i32.const 120))))
+        ;; echo what was read back to stdout
+        (i32.store (i32.const 104) (i32.const 200))
+        (i32.store (i32.const 108) (i32.load (i32.const 252)))
+        (drop (call $fd_write (i32.const 1) (i32.const 104) (i32.const 1) (i32.const 116)))))
+"#;
+
+/// path_open (create+write, then reopen+read) round-trips real file
+/// content through a preopened host directory.
+#[test]
+fn wasi_fs_path_open_roundtrip() {
+    if !ruby_available() {
+        eprintln!("ruby not found; skipping");
+        return;
+    }
+    let dir = wasi_fs_scratch_dir("wasi-fs-roundtrip");
+    let script = format!(
+        "{}\ninst = Prog.new({{}}, {})\ninst.invoke(\"_start\")\n",
+        convert_str(WASI_PATH_OPEN_ROUNDTRIP_WAT, "prog"),
+        preopen_kwarg("/", &dir)
+    );
+    let out = run_ruby(&script, &[]);
+    assert_eq!(out, "hello, wasi fs!");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("hello.txt")).unwrap(),
+        "hello, wasi fs!"
+    );
+}
+
+const WASI_MKDIR_READDIR_UNLINK_WAT: &str = r#"
+    (module
+      (import "wasi_snapshot_preview1" "path_create_directory"
+        (func $mkdir (param i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "path_open"
+        (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_close"
+        (func $fd_close (param i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_readdir"
+        (func $fd_readdir (param i32 i32 i32 i64 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_write"
+        (func $fd_write (param i32 i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "path_unlink_file"
+        (func $unlink (param i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "path_remove_directory"
+        (func $rmdir (param i32 i32 i32) (result i32)))
+      (memory (export "memory") 1)
+      (data (i32.const 0) "sub")
+      (data (i32.const 16) "sub/file.txt")
+      (func (export "_start")
+        (drop (call $mkdir (i32.const 3) (i32.const 0) (i32.const 3)))
+        (drop (call $path_open (i32.const 3) (i32.const 0) (i32.const 16) (i32.const 12)
+          (i32.const 9) (i64.const -1) (i64.const -1) (i32.const 0) (i32.const 100)))
+        (drop (call $fd_close (i32.load (i32.const 100))))
+        ;; list the root directory, echo the raw dirent bytes to stdout
+        (drop (call $fd_readdir (i32.const 3) (i32.const 300) (i32.const 256) (i64.const 0) (i32.const 260)))
+        (i32.store (i32.const 104) (i32.const 300))
+        (i32.store (i32.const 108) (i32.load (i32.const 260)))
+        (drop (call $fd_write (i32.const 1) (i32.const 104) (i32.const 1) (i32.const 116)))
+        ;; clean up
+        (drop (call $unlink (i32.const 3) (i32.const 16) (i32.const 12)))
+        (drop (call $rmdir (i32.const 3) (i32.const 0) (i32.const 3)))))
+"#;
+
+/// path_create_directory + fd_readdir + path_unlink_file/path_remove_directory
+/// against a real host directory, verified from both sides: the dirent
+/// listing seen by the guest, and the host filesystem after cleanup.
+#[test]
+fn wasi_fs_mkdir_readdir_unlink() {
+    if !ruby_available() {
+        eprintln!("ruby not found; skipping");
+        return;
+    }
+    let dir = wasi_fs_scratch_dir("wasi-fs-mkdir-readdir-unlink");
+    let script = format!(
+        "{}\ninst = Prog.new({{}}, {})\ninst.invoke(\"_start\")\n",
+        convert_str(WASI_MKDIR_READDIR_UNLINK_WAT, "prog"),
+        preopen_kwarg("/", &dir)
+    );
+    let out = run_ruby(&script, &[]);
+    assert!(
+        out.contains("sub"),
+        "expected \"sub\" in dirent listing: {out:?}"
+    );
+    assert!(!dir.join("sub").exists(), "sub/ should have been removed");
+}
+
+const WASI_ESCAPE_REJECTED_WAT: &str = r#"
+    (module
+      (import "wasi_snapshot_preview1" "path_open"
+        (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "fd_write"
+        (func $fd_write (param i32 i32 i32 i32) (result i32)))
+      (memory (export "memory") 1)
+      (data (i32.const 0) "../escape-canary/canary.txt")
+      (data (i32.const 64) "ESCAPED\n")
+      (data (i32.const 80) "BLOCKED\n")
+      (func (export "_start")
+        (local $errno i32)
+        (local.set $errno (call $path_open (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 28)
+          (i32.const 0) (i64.const -1) (i64.const -1) (i32.const 0) (i32.const 100)))
+        (i32.store (i32.const 108) (i32.const 8))
+        (if (i32.eqz (local.get $errno))
+          (then (i32.store (i32.const 104) (i32.const 64)))
+          (else (i32.store (i32.const 104) (i32.const 80))))
+        (drop (call $fd_write (i32.const 1) (i32.const 104) (i32.const 1) (i32.const 116)))))
+"#;
+
+/// A `..`-escaping guest path must be rejected (ERRNO_NOTCAPABLE, not a
+/// host filesystem escape): a canary file sitting just outside the
+/// preopened directory must stay unreadable and untouched.
+#[test]
+fn wasi_fs_escape_rejected() {
+    if !ruby_available() {
+        eprintln!("ruby not found; skipping");
+        return;
+    }
+    let root = wasi_fs_scratch_dir("wasi-fs-escape");
+    let sandbox = root.join("sandbox");
+    std::fs::create_dir_all(&sandbox).unwrap();
+    let canary_dir = root.join("escape-canary");
+    std::fs::create_dir_all(&canary_dir).unwrap();
+    std::fs::write(canary_dir.join("canary.txt"), "secret").unwrap();
+
+    let script = format!(
+        "{}\ninst = Prog.new({{}}, {})\ninst.invoke(\"_start\")\n",
+        convert_str(WASI_ESCAPE_REJECTED_WAT, "prog"),
+        preopen_kwarg("/", &sandbox)
+    );
+    let out = run_ruby(&script, &[]);
+    assert_eq!(out, "BLOCKED\n");
+    assert_eq!(
+        std::fs::read_to_string(canary_dir.join("canary.txt")).unwrap(),
+        "secret"
+    );
+}
+
 fn run_ruby(script: &str, args: &[&str]) -> String {
     let path = std::env::temp_dir().join(format!(
         "dewasmify-e2e-{}.rb",

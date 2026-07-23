@@ -57,7 +57,9 @@ docs/support.md is stale).
   (status-133 proc_exit, byte-wise binary stdio) in [ADR-12](docs/adr/12-bash-wasi.md);
   the Bash softfloat (bit-pattern floats, the round_pack contract, the Rust-oracle test
   in `crates/dewasmify-backend-bash/tests/softfloat.rs`) in
-  [ADR-13](docs/adr/13-bash-softfloat-conventions.md).
+  [ADR-13](docs/adr/13-bash-softfloat-conventions.md); Ruby WASI filesystem support (the
+  `preopens:` provider kwarg, the fd-table model, and the accepted TOCTOU/symlink sandboxing
+  caveat) in [ADR-14](docs/adr/14-ruby-wasi-filesystem.md).
 - Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:`
   headers, referenced as `Rt` ([ADR-6](docs/adr/6-runtime-units.md)); keep the headers in sync
   when editing a unit — the units lint test enforces most of it.

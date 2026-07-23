@@ -1,6 +1,7 @@
 def wasi_fd_close(fd)
   io = @fds.delete(fd)
   return ERRNO_BADF unless io
+  return ERRNO_SUCCESS if io.is_a?(WasiDir) # no real OS handle to close
   io.close unless [$stdin, $stdout, $stderr].include?(io)
   ERRNO_SUCCESS
 end

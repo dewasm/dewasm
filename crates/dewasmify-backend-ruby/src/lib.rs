@@ -170,8 +170,14 @@ impl Backend for RubyBackend {
             w.line("");
             w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
                 if wasi_kwargs {
+                    // DEWASMIFY_PREOPEN maps guest paths to host directories
+                    // for standalone runs, e.g. "/=./data,/tmp=/tmp"; kept
+                    // out of ARGV since that mirrors the guest's own argv.
+                    w.line(
+                        "preopens = ENV.fetch(\"DEWASMIFY_PREOPEN\", \"\").split(\",\").filter_map { |kv| g, h = kv.split(\"=\", 2); [g, h] if h }.to_h",
+                    );
                     w.line(format!(
-                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *ARGV], env: ENV.to_h)"
+                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *ARGV], env: ENV.to_h, preopens: preopens)"
                     ));
                 } else {
                     w.line(format!("inst = {class_name}.new"));
@@ -335,7 +341,7 @@ impl<'a> Gen<'a> {
 
         let wasi_fallback = wasi_bundled(m, self.default_wasi);
         let header = if wasi_fallback {
-            "def initialize(imports = {}, args: [], env: {})"
+            "def initialize(imports = {}, args: [], env: {}, preopens: {})"
         } else {
             "def initialize(imports = {})"
         };
@@ -371,7 +377,7 @@ impl<'a> Gen<'a> {
                         self.use_unit(&unit);
                         self.use_unit("wasi/_class");
                         format!(
-                            "(@wasi ||= Rt::WASI.new(args: args, env: env)).method(:wasi_{})",
+                            "(@wasi ||= Rt::WASI.new(args: args, env: env, preopens: preopens)).method(:wasi_{})",
                             import.name
                         )
                     } else {

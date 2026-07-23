@@ -35,6 +35,7 @@ the consequences.
 | ADR-11 | [Bash Backend Lowering Conventions (Integer Subset)](11-bash-backend-lowering.md) | Accepted |
 | ADR-12 | [Bash WASI Conventions](12-bash-wasi.md) | Accepted |
 | ADR-13 | [Bash Softfloat Conventions](13-bash-softfloat-conventions.md) | Accepted |
+| ADR-14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
 
 ## Adding a new ADR
 

@@ -1,8 +1,7 @@
-# requires: memory/i64_store
-def wasi_fd_tell(fd, out_ptr)
+def wasi_fd_filestat_set_size(fd, size)
   io = @fds[fd]
   return ERRNO_BADF unless io.is_a?(IO)
-  @memory.i64_store(out_ptr, io.tell & Rt::M64)
+  io.truncate(size)
   ERRNO_SUCCESS
 rescue SystemCallError
   ERRNO_IO
