@@ -29,6 +29,12 @@ struct Cli {
     /// Output file path ("-" for stdout)
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
+
+    /// Do not bundle the built-in WASI implementation as a fallback for
+    /// wasi_snapshot_preview1 imports (all imports must then be provided
+    /// by the embedder). Incompatible with --mode standalone.
+    #[arg(long)]
+    no_default_wasi: bool,
 }
 
 fn main() -> Result<()> {
@@ -44,6 +50,9 @@ fn main() -> Result<()> {
         "standalone" => Mode::Standalone,
         other => bail!("unsupported mode: {other} (expected library or standalone)"),
     };
+    if cli.no_default_wasi && mode == Mode::Standalone {
+        bail!("--no-default-wasi cannot be combined with --mode standalone");
+    }
 
     let module_name = cli.module_name.unwrap_or_else(|| {
         cli.input
@@ -60,7 +69,12 @@ fn main() -> Result<()> {
     let module = dewasmify_core::build_module(&bytes)?;
     let files = backend.generate(
         &module,
-        &GenOptions { mode, module_name, runtime: RuntimeLinkage::Embedded },
+        &GenOptions {
+            mode,
+            module_name,
+            runtime: RuntimeLinkage::Embedded,
+            default_wasi: !cli.no_default_wasi,
+        },
     )?;
 
     for file in files {

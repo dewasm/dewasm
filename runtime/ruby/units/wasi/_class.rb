@@ -6,7 +6,7 @@ ERRNO_NOSYS = 52
 ERRNO_NOTSUP = 58
 ERRNO_SPIPE = 70
 
-attr_accessor :memory
+attr_reader :memory
 
 def initialize(args: [], env: {})
   @args = args.map(&:to_s)
@@ -15,4 +15,15 @@ def initialize(args: [], env: {})
   $stdout.binmode
   $stderr.binmode
   $stdin.binmode
+end
+
+# Import-provider protocol (ADR-7): a custom WASI runtime replaces this
+# class wholesale by implementing these two methods.
+def import(name)
+  meth = :"wasi_#{name}"
+  respond_to?(meth) ? method(meth) : nil
+end
+
+def attach(instance)
+  @memory = instance.memory
 end

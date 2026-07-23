@@ -50,9 +50,27 @@ $ cargo run -p dewasmify-cli -- add.wat -o add.rb   # .wat input also accepted
 
 ```ruby
 require_relative "add"
-inst = Add.new                  # pass an imports hash if the module needs one
+inst = Add.new                  # pass an imports table if the module needs one
 inst.invoke("add", 2, 3)        # => 5
 inst.memory                     # linear memory, if any
+```
+
+WASI imports work out of the box in library mode: functions the embedder
+does not provide fall back to the bundled WASI (constructed only if
+actually needed; disable with `--no-default-wasi`). An imports-table
+value is either a Hash of callables or a *provider* object — implement
+`import(name)` and optionally `attach(instance)` to replace a whole
+namespace, e.g. a custom WASI runtime:
+
+```ruby
+class MyWasi
+  def import(name) = respond_to?(name) ? method(name) : nil
+  def attach(instance) = @memory = instance.memory  # bound before wasm runs
+  def fd_write(fd, iovs, iovs_len, out_ptr) = ...   # @memory.bytes is a binary String
+end
+
+inst = Prog.new({ "wasi_snapshot_preview1" => MyWasi.new })
+inst.invoke("_start")           # proc_exit raises Prog::Rt::Exit — rescue it
 ```
 
 A real example — a Rust program compiled for `wasm32-wasip1` (including

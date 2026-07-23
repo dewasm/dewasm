@@ -21,6 +21,7 @@ fn convert(wat_path: &Path, mode: Mode, name: &str) -> String {
                 mode,
                 module_name: name.to_string(),
                 runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
             },
         )
         .expect("generate ruby");
@@ -56,6 +57,116 @@ fn standalone_mode_wasi_hello() {
     assert_eq!(out, "Hello, WASI!\n");
 }
 
+/// A module that imports WASI functions, for exercising the import
+/// provider protocol (ADR-7).
+const WASI_IMPORTS_WAT: &str = r#"
+    (module
+      (import "wasi_snapshot_preview1" "fd_write"
+        (func $fdw (param i32 i32 i32 i32) (result i32)))
+      (import "wasi_snapshot_preview1" "random_get"
+        (func $rnd (param i32 i32) (result i32)))
+      (memory (export "memory") 1)
+      (data (i32.const 8) "ok\n")
+      (func (export "_start")
+        (drop (call $rnd (i32.const 100) (i32.const 4)))
+        (i32.store (i32.const 0) (i32.const 8))
+        (i32.store (i32.const 4) (i32.const 3))
+        (drop (call $fdw (i32.const 1) (i32.const 0) (i32.const 1) (i32.const 20)))))
+"#;
+
+fn convert_str(wat: &str, name: &str) -> String {
+    let bytes = wat::parse_str(wat).expect("parse wat");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    RubyBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Library,
+                module_name: name.to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate ruby")
+        .remove(0)
+        .contents
+}
+
+/// A provider object under the wasi key replaces the bundled WASI
+/// wholesale: import(name) resolves functions, attach(instance) binds the
+/// memory. The bundled Rt::WASI must then never be constructed.
+#[test]
+fn custom_wasi_provider() {
+    if !ruby_available() {
+        eprintln!("ruby not found; skipping");
+        return;
+    }
+    let script = format!(
+        "{}\n{}",
+        convert_str(WASI_IMPORTS_WAT, "prog"),
+        r#"
+class MyWasi
+  attr_reader :out
+  def import(name)
+    case name
+    when "fd_write" then method(:fd_write)
+    when "random_get" then ->(_buf, _len) { 0 }
+    end
+  end
+  def attach(instance) = @memory = instance.memory
+  def fd_write(_fd, iovs, _iovs_len, out_ptr)
+    ptr = @memory.bytes.unpack1("L<", offset: iovs)
+    len = @memory.bytes.unpack1("L<", offset: iovs + 4)
+    (@out ||= +"") << @memory.bytes.byteslice(ptr, len)
+    @memory.bytes[out_ptr, 4] = [len].pack("L<")
+    0
+  end
+end
+
+wasi = MyWasi.new
+inst = Prog.new({ "wasi_snapshot_preview1" => wasi })
+inst.invoke("_start")
+print wasi.out
+print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\n"
+"#
+    );
+    let out = run_ruby(&script, &[]);
+    assert_eq!(out, "ok\nbundled wasi constructed: false\n");
+}
+
+/// A partial Hash override: provided names win, the rest falls back to
+/// the bundled WASI (constructed on demand).
+#[test]
+fn partial_override_falls_back_to_bundled_wasi() {
+    if !ruby_available() {
+        eprintln!("ruby not found; skipping");
+        return;
+    }
+    let script = format!(
+        "{}\n{}",
+        convert_str(WASI_IMPORTS_WAT, "prog"),
+        r#"
+captured = +""
+holder = {}
+fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
+  mem = holder[:inst].memory
+  ptr = mem.bytes.unpack1("L<", offset: iovs)
+  len = mem.bytes.unpack1("L<", offset: iovs + 4)
+  captured << mem.bytes.byteslice(ptr, len)
+  mem.bytes[out_ptr, 4] = [len].pack("L<")
+  0
+end
+inst = Prog.new({ "wasi_snapshot_preview1" => { "fd_write" => fd_write } })
+holder[:inst] = inst
+inst.invoke("_start") # random_get falls back to the bundled WASI
+print captured
+print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\n"
+"#
+    );
+    let out = run_ruby(&script, &[]);
+    assert_eq!(out, "ok\nbundled wasi constructed: true\n");
+}
+
 /// Two Embedded-linkage artifacts must coexist in one process: each
 /// carries its own nested `Rt`, so runtime classes (and even different
 /// runtime versions, eventually) never collide.
@@ -83,6 +194,7 @@ fn embedded_runtimes_coexist() {
                     mode: Mode::Library,
                     module_name: name.to_string(),
                     runtime: RuntimeLinkage::Embedded,
+                    default_wasi: true,
                 },
             )
             .expect("generate ruby")

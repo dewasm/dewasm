@@ -35,6 +35,10 @@ pub struct GenOptions {
     /// Class/package/module name for the generated code.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
+    /// Bundle the built-in WASI implementation as a fallback for
+    /// `wasi_snapshot_preview1` imports the embedder does not provide.
+    /// Disable to keep generated libraries free of ambient authority.
+    pub default_wasi: bool,
 }
 
 pub struct OutputFile {

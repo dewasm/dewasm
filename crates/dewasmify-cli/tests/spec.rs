@@ -211,6 +211,7 @@ fn convert(bytes: &[u8], counter: u32) -> Result<(String, String, BTreeSet<Strin
         &module,
         &class_name,
         &RuntimeLinkage::Alias("::Rt".to_string()),
+        false, // spec modules import spectest, never WASI
     )
     .map_err(|e| format!("{e:#}"))?;
     Ok((src, class_name, units))
