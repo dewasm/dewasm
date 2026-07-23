@@ -17,11 +17,11 @@ turns its remaining skips into hard failures until the tests pass.
 
 | Feature | ruby | bash |
 | --- | --- | --- |
-| Imported globals (wasm 1.0) | ❌ | ❌ |
-| Imported memories (wasm 1.0) | ❌ | ❌ |
-| Imported tables (wasm 1.0) | ❌ | ❌ |
-| Multiple tables | ❌ | ❌ |
-| Bulk table ops / passive element segments | ❌ | ❌ |
+| Imported globals (wasm 1.0) | ✅ | ❌ |
+| Imported memories (wasm 1.0) | ✅ | ❌ |
+| Imported tables (wasm 1.0) | ✅ | ❌ |
+| Multiple tables | ✅ | ❌ |
+| Bulk table ops / passive element segments | ✅ | ❌ |
 | Floating-point (wasm 1.0) | ✅ | ✅ |
 | Reference types | ❌ | ❌ |
 | Typed function references | ❌ | ❌ |

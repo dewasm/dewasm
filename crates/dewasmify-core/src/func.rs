@@ -496,12 +496,6 @@ impl<'a> FuncBuilder<'a> {
                 table_index,
                 ..
             } => {
-                if table_index != 0 {
-                    return Err(unsupported(
-                        Feature::MultipleTables,
-                        "call_indirect on a table other than 0",
-                    ));
-                }
                 let index = self.pop();
                 let ty = self.module.types[type_index as usize].clone();
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
@@ -511,6 +505,7 @@ impl<'a> FuncBuilder<'a> {
                 let results = ty.results.iter().map(|ty| self.push(*ty)).collect();
                 self.emit(Stmt::CallIndirect {
                     type_idx: type_index,
+                    table_index,
                     index: Expr::Temp(index),
                     args,
                     results,
@@ -554,7 +549,7 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             Operator::GlobalGet { global_index } => {
-                let ty = self.module.globals[global_index as usize].ty;
+                let ty = self.module.global_type(global_index);
                 self.push_assign(ty, Expr::GlobalGet(global_index));
             }
             Operator::GlobalSet { global_index } => {
@@ -631,6 +626,36 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::DataDrop { data_index } => {
                 self.emit(Stmt::DataDrop { seg: data_index });
+            }
+            Operator::TableInit { elem_index, table } => {
+                let len = self.pop();
+                let src = self.pop();
+                let dst = self.pop();
+                self.emit(Stmt::TableInit {
+                    seg: elem_index,
+                    table_index: table,
+                    dst: Expr::Temp(dst),
+                    src: Expr::Temp(src),
+                    len: Expr::Temp(len),
+                });
+            }
+            Operator::TableCopy {
+                dst_table,
+                src_table,
+            } => {
+                let len = self.pop();
+                let src = self.pop();
+                let dst = self.pop();
+                self.emit(Stmt::TableCopy {
+                    dst_table,
+                    src_table,
+                    dst: Expr::Temp(dst),
+                    src: Expr::Temp(src),
+                    len: Expr::Temp(len),
+                });
+            }
+            Operator::ElemDrop { elem_index } => {
+                self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
             // -- constants
@@ -809,9 +834,7 @@ impl<'a> FuncBuilder<'a> {
 /// spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
-    if starts(&["TableInit", "TableCopy", "ElemDrop"]) {
-        Some(Feature::TableBulkOps)
-    } else if starts(&[
+    if starts(&[
         "CallRef",
         "ReturnCallRef",
         "BrOnNull",

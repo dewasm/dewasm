@@ -35,8 +35,13 @@ pub struct Module {
     pub imported_funcs: Vec<ImportedFunc>,
     /// Defined functions. Function index space = imported_funcs ++ funcs.
     pub funcs: Vec<Func>,
-    pub table: Option<Table>,
+    pub imported_tables: Vec<ImportedTable>,
+    /// Defined tables. Table index space = imported_tables ++ tables.
+    pub tables: Vec<Table>,
+    pub imported_memory: Option<ImportedMemory>,
     pub memory: Option<MemoryDef>,
+    pub imported_globals: Vec<ImportedGlobal>,
+    /// Defined globals. Global index space = imported_globals ++ globals.
     pub globals: Vec<Global>,
     pub exports: Vec<Export>,
     pub elems: Vec<ElemSegment>,
@@ -58,6 +63,19 @@ impl Module {
     pub fn num_imported_funcs(&self) -> u32 {
         self.imported_funcs.len() as u32
     }
+
+    pub fn num_imported_tables(&self) -> u32 {
+        self.imported_tables.len() as u32
+    }
+
+    pub fn global_type(&self, global_idx: u32) -> ValType {
+        let idx = global_idx as usize;
+        if idx < self.imported_globals.len() {
+            self.imported_globals[idx].ty
+        } else {
+            self.globals[idx - self.imported_globals.len()].ty
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -65,6 +83,30 @@ pub struct ImportedFunc {
     pub module: String,
     pub name: String,
     pub type_idx: u32,
+}
+
+#[derive(Debug)]
+pub struct ImportedTable {
+    pub module: String,
+    pub name: String,
+    pub min: u32,
+    pub max: Option<u32>,
+}
+
+#[derive(Debug)]
+pub struct ImportedMemory {
+    pub module: String,
+    pub name: String,
+    pub min_pages: u64,
+    pub max_pages: Option<u64>,
+}
+
+#[derive(Debug)]
+pub struct ImportedGlobal {
+    pub module: String,
+    pub name: String,
+    pub ty: ValType,
+    pub mutable: bool,
 }
 
 #[derive(Debug)]
@@ -89,7 +131,7 @@ pub struct Global {
 #[derive(Debug)]
 pub enum ExportKind {
     Func(u32),
-    Table,
+    Table(u32),
     Memory,
     Global(u32),
 }
@@ -100,11 +142,22 @@ pub struct Export {
     pub kind: ExportKind,
 }
 
-/// Active element segment (passive/declared segments are not yet supported).
+#[derive(Debug)]
+pub enum ElemKind {
+    /// Eagerly copied into `table_index` at instantiation.
+    Active { table_index: u32, offset: Expr },
+    /// Retained for `table.init`; droppable.
+    Passive,
+    /// Never copied into a table (only makes `ref.func` targets valid
+    /// under reference-types validation); droppable, otherwise inert.
+    Declared,
+}
+
 #[derive(Debug)]
 pub struct ElemSegment {
-    pub offset: Expr,
-    pub func_indices: Vec<u32>,
+    pub kind: ElemKind,
+    /// `None` is a `ref.null` item: an intentionally-uninitialized slot.
+    pub items: Vec<Option<u32>>,
 }
 
 #[derive(Debug)]
@@ -202,6 +255,7 @@ pub enum Stmt {
     },
     CallIndirect {
         type_idx: u32,
+        table_index: u32,
         index: Expr,
         args: Vec<Expr>,
         results: Vec<Temp>,
@@ -227,6 +281,23 @@ pub enum Stmt {
         len: Expr,
     },
     DataDrop {
+        seg: u32,
+    },
+    TableInit {
+        seg: u32,
+        table_index: u32,
+        dst: Expr,
+        src: Expr,
+        len: Expr,
+    },
+    TableCopy {
+        dst_table: u32,
+        src_table: u32,
+        dst: Expr,
+        src: Expr,
+        len: Expr,
+    },
+    ElemDrop {
         seg: u32,
     },
     Unreachable,

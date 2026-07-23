@@ -37,6 +37,7 @@ the consequences.
 | ADR-13 | [Bash Softfloat Conventions](13-bash-softfloat-conventions.md) | Accepted |
 | ADR-14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
 | ADR-15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
+| ADR-16 | [Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking](16-ruby-wasm1-completion.md) | Accepted |
 
 ## Adding a new ADR
 

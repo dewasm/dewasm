@@ -3,6 +3,8 @@ PAGE_SIZE = 65536
 
 attr_reader :bytes
 
+def wasm_kind = :memory
+
 def initialize(min_pages, max_pages)
   @bytes = ("\x00" * (min_pages * PAGE_SIZE)).b
   @max_pages = max_pages && max_pages < 65536 ? max_pages : 65536

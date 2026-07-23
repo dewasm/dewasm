@@ -46,8 +46,11 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
         types: Vec::new(),
         imported_funcs: Vec::new(),
         funcs: Vec::new(),
-        table: None,
+        imported_tables: Vec::new(),
+        tables: Vec::new(),
+        imported_memory: None,
         memory: None,
+        imported_globals: Vec::new(),
         globals: Vec::new(),
         exports: Vec::new(),
         elems: Vec::new(),
@@ -101,14 +104,36 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                                 type_idx,
                             });
                         }
-                        TypeRef::Global(_) => {
-                            return Err(unsupported(Feature::ImportedGlobals, detail))
+                        TypeRef::Global(ty) => {
+                            module.imported_globals.push(ir::ImportedGlobal {
+                                module: import.module.to_string(),
+                                name: import.name.to_string(),
+                                ty: val_type(ty.content_type)?,
+                                mutable: ty.mutable,
+                            });
                         }
-                        TypeRef::Memory(_) => {
-                            return Err(unsupported(Feature::ImportedMemories, detail))
+                        TypeRef::Memory(ty) => {
+                            if module.imported_memory.is_some() || module.memory.is_some() {
+                                return Err(unsupported(Feature::MultiMemory, "second memory"));
+                            }
+                            module.imported_memory = Some(ir::ImportedMemory {
+                                module: import.module.to_string(),
+                                name: import.name.to_string(),
+                                min_pages: ty.initial,
+                                max_pages: ty.maximum,
+                            });
                         }
-                        TypeRef::Table(_) => {
-                            return Err(unsupported(Feature::ImportedTables, detail))
+                        TypeRef::Table(ty) => {
+                            module.imported_tables.push(ir::ImportedTable {
+                                module: import.module.to_string(),
+                                name: import.name.to_string(),
+                                min: ty.initial.try_into().context("table too large")?,
+                                max: ty
+                                    .maximum
+                                    .map(|m| m.try_into())
+                                    .transpose()
+                                    .context("table too large")?,
+                            });
                         }
                         TypeRef::Tag(_) => {
                             return Err(unsupported(Feature::ExceptionHandling, detail))
@@ -127,10 +152,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             Payload::TableSection(reader) => {
                 for table in reader {
                     let table = table?;
-                    if module.table.is_some() {
-                        return Err(unsupported(Feature::MultipleTables, "second table"));
-                    }
-                    module.table = Some(ir::Table {
+                    module.tables.push(ir::Table {
                         min: table.ty.initial.try_into().context("table too large")?,
                         max: table
                             .ty
@@ -144,7 +166,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             Payload::MemorySection(reader) => {
                 for mem in reader {
                     let mem = mem?;
-                    if module.memory.is_some() {
+                    if module.imported_memory.is_some() || module.memory.is_some() {
                         return Err(unsupported(Feature::MultiMemory, "second memory"));
                     }
                     module.memory = Some(ir::MemoryDef {
@@ -168,7 +190,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     let export = export?;
                     let kind = match export.kind {
                         ExternalKind::Func => ir::ExportKind::Func(export.index),
-                        ExternalKind::Table => ir::ExportKind::Table,
+                        ExternalKind::Table => ir::ExportKind::Table(export.index),
                         ExternalKind::Memory => ir::ExportKind::Memory,
                         ExternalKind::Global => ir::ExportKind::Global(export.index),
                         _ => {
@@ -190,41 +212,28 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             Payload::ElementSection(reader) => {
                 for elem in reader {
                     let elem = elem?;
-                    let offset = match elem.kind {
+                    let kind = match elem.kind {
                         ElementKind::Active {
                             table_index,
                             offset_expr,
-                        } => {
-                            if table_index.unwrap_or(0) != 0 {
-                                return Err(unsupported(
-                                    Feature::MultipleTables,
-                                    "element segment for a table other than 0",
-                                ));
-                            }
-                            const_expr(&offset_expr)?
-                        }
-                        _ => {
-                            return Err(unsupported(
-                                Feature::TableBulkOps,
-                                "passive/declared element segment",
-                            ))
-                        }
+                        } => ir::ElemKind::Active {
+                            table_index: table_index.unwrap_or(0),
+                            offset: const_expr(&offset_expr)?,
+                        },
+                        ElementKind::Passive => ir::ElemKind::Passive,
+                        ElementKind::Declared => ir::ElemKind::Declared,
                     };
-                    let func_indices = match elem.items {
-                        ElementItems::Functions(items) => {
-                            items.into_iter().collect::<Result<Vec<_>, _>>()?
-                        }
-                        ElementItems::Expressions(..) => {
-                            return Err(unsupported(
-                                Feature::TableBulkOps,
-                                "element segment with expression items",
-                            ))
-                        }
+                    let items = match elem.items {
+                        ElementItems::Functions(items) => items
+                            .into_iter()
+                            .map(|i| Ok(Some(i?)))
+                            .collect::<Result<Vec<_>>>()?,
+                        ElementItems::Expressions(_ref_ty, items) => items
+                            .into_iter()
+                            .map(|e| elem_item_expr(&e?))
+                            .collect::<Result<Vec<_>>>()?,
                     };
-                    module.elems.push(ir::ElemSegment {
-                        offset,
-                        func_indices,
-                    });
+                    module.elems.push(ir::ElemSegment { kind, items });
                 }
             }
             Payload::DataSection(reader) => {
@@ -319,8 +328,9 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     })
 }
 
-/// Evaluate a constant expression. Only plain constants are supported for
-/// now (imported globals are rejected at the import stage already).
+/// Evaluate a constant expression: a plain constant, or (MVP rule) a
+/// `global.get` of an imported immutable global — the validator already
+/// enforces that constraint, so the index is used as-is.
 fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {
@@ -328,6 +338,7 @@ fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
         Operator::I64Const { value } => ir::Expr::I64Const(value as u64),
         Operator::F32Const { value } => ir::Expr::F32Const(value.bits()),
         Operator::F64Const { value } => ir::Expr::F64Const(value.bits()),
+        Operator::GlobalGet { global_index } => ir::Expr::GlobalGet(global_index),
         op => return Err(const_expr_unsupported(&op)),
     };
     match reader.read()? {
@@ -339,10 +350,35 @@ fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
 
 fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
     let feature = match op {
-        // Valid only when referring to an imported global (MVP rule).
-        Operator::GlobalGet { .. } => Feature::ImportedGlobals,
         Operator::RefNull { .. } | Operator::RefFunc { .. } => Feature::ReferenceTypes,
         _ => Feature::ExtendedConst,
     };
     unsupported(feature, format!("constant expression operator {op:?}"))
+}
+
+/// One item of an expression-encoded element segment: `ref.func $i` (a
+/// function reference) or `ref.null func` (an intentionally-empty slot).
+/// Anything else is a genuine reference-types value and stays unsupported.
+fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<Option<u32>> {
+    let mut reader = expr.get_operators_reader();
+    let value = match reader.read()? {
+        Operator::RefFunc { function_index } => Some(function_index),
+        Operator::RefNull { .. } => None,
+        op => {
+            return Err(unsupported(
+                Feature::ReferenceTypes,
+                format!("element item operator {op:?}"),
+            ))
+        }
+    };
+    match reader.read()? {
+        Operator::End => {}
+        op => {
+            return Err(unsupported(
+                Feature::ReferenceTypes,
+                format!("element item operator {op:?}"),
+            ))
+        }
+    }
+    Ok(value)
 }

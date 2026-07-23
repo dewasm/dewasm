@@ -60,12 +60,35 @@ trait SpecLang {
     /// Lower an IR module to source. Backend-level refusals (e.g. floats
     /// on an integer-only backend) carry `UnsupportedError` in the chain.
     fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted>;
+    /// Whether `register`-directive linking is wired up for this language:
+    /// a `(register "Name" $id)`'d instance becomes resolvable as an
+    /// import source for later modules (`registered` below), and
+    /// `assert_unlinkable` is checked for real instead of always skipped.
+    /// Ruby: generated classes double as ADR-7 import providers for each
+    /// other. Bash's ambient global `IMPORTS` array has no per-instance
+    /// import object to extend this way yet.
+    fn supports_registered_imports(&self) -> bool {
+        false
+    }
     /// Emit the module source plus its instantiation; returns the variable
-    /// (or prefix) later invocations use to reach the instance.
-    fn emit_instantiate(&self, script: &mut String, conv: &Converted, var_id: u32) -> String;
+    /// (or prefix) later invocations use to reach the instance. `registered`
+    /// is the (name, instance-expr) pairs of currently `register`ed
+    /// modules with a live instance, for languages that support them.
+    fn emit_instantiate(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        var_id: u32,
+        registered: &[(String, String)],
+    ) -> String;
     /// Emit the module source only, returning the call that performs the
     /// (possibly trapping) instantiation, for assert_trap on a module.
-    fn instantiate_call(&self, script: &mut String, conv: &Converted) -> String;
+    fn instantiate_call(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        registered: &[(String, String)],
+    ) -> String;
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String>;
     fn global_get(&self, var: &str, global: &str) -> String;
     fn emit_check(
@@ -78,6 +101,13 @@ trait SpecLang {
     fn emit_check_trap(&self, script: &mut String, desc: &str, call: &str, message: &str);
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str);
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str);
+    /// Emit an `assert_unlinkable` check: `call` (the instantiation) must
+    /// raise/fail. Only invoked when `supports_registered_imports()` is
+    /// true.
+    fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
+        let _ = (script, desc, call);
+        unreachable!("only called when supports_registered_imports() is true")
+    }
     /// Wrap the accumulated body into a runnable script: shared runtime
     /// for `units`, harness helpers, body, result-line footer.
     fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String>;
@@ -240,6 +270,10 @@ struct ScriptGen<'a> {
     current: Result<String, String>,
     /// Same, for named modules.
     named: std::collections::HashMap<String, Result<String, String>>,
+    /// Same, keyed by the *registered* name from `(register "Name" $id)`
+    /// (a different namespace from `named`'s wast `$id`s) — what a later
+    /// module's `(import "Name" ...)` actually resolves against.
+    registered: std::collections::HashMap<String, Result<String, String>>,
     counter: u32,
     converted: u32,
     stats: Stats,
@@ -268,22 +302,52 @@ impl<'a> ScriptGen<'a> {
         }
     }
 
+    /// Module names a fresh `convert()` may treat as import sources:
+    /// always `spectest`, plus every successfully-registered module when
+    /// the language supports it.
+    fn resolvable_modules(&self) -> std::collections::HashSet<String> {
+        let mut set = std::collections::HashSet::new();
+        set.insert("spectest".to_string());
+        if self.lang.supports_registered_imports() {
+            set.extend(
+                self.registered
+                    .iter()
+                    .filter(|(_, r)| r.is_ok())
+                    .map(|(name, _)| name.clone()),
+            );
+        }
+        set
+    }
+
+    /// (name, instance-expr) pairs for `emit_instantiate`/`instantiate_call`.
+    fn registered_pairs(&self) -> Vec<(String, String)> {
+        if !self.lang.supports_registered_imports() {
+            return Vec::new();
+        }
+        self.registered
+            .iter()
+            .filter_map(|(name, r)| r.as_ref().ok().map(|var| (name.clone(), var.clone())))
+            .collect()
+    }
+
     fn define_module(&mut self, mut qw: QuoteWat<'_>, desc: &str) {
         let id = match &qw {
             QuoteWat::Wat(Wat::Module(m)) => m.id.map(|i| i.name().to_string()),
             _ => None,
         };
+        let resolvable = self.resolvable_modules();
         let converted = qw
             .encode()
             .map_err(|e| Attribution::Tag("unknown-proposal".to_string(), e.to_string()))
-            .and_then(|bytes| convert(self.lang, &bytes, self.counter));
+            .and_then(|bytes| convert(self.lang, &bytes, self.counter, &resolvable));
         self.counter += 1;
         let result = match converted {
             Ok(conv) => {
                 self.converted += 1;
-                let var = self
-                    .lang
-                    .emit_instantiate(&mut self.script, &conv, self.counter);
+                let registered = self.registered_pairs();
+                let var =
+                    self.lang
+                        .emit_instantiate(&mut self.script, &conv, self.counter, &registered);
                 self.units.extend(conv.units);
                 Ok(var)
             }
@@ -332,14 +396,31 @@ fn attribute(err: &anyhow::Error) -> Attribution {
     }
 }
 
-fn convert(lang: &dyn SpecLang, bytes: &[u8], counter: u32) -> Result<Converted, Attribution> {
+fn convert(
+    lang: &dyn SpecLang,
+    bytes: &[u8],
+    counter: u32,
+    resolvable: &std::collections::HashSet<String>,
+) -> Result<Converted, Attribution> {
     let module = dewasmify_core::build_module(bytes).map_err(|err| attribute(&err))?;
-    // The harness only provides the spectest host module; imports from
-    // registered modules need cross-module linking.
-    if module.imported_funcs.iter().any(|f| f.module != "spectest") {
+    // The harness only provides the spectest host module plus whatever is
+    // currently `register`ed and resolvable (ScriptGen::resolvable_modules);
+    // anything else needs cross-module linking this harness doesn't track.
+    let unresolved = |m: &str| !resolvable.contains(m);
+    let needs_linking = module.imported_funcs.iter().any(|f| unresolved(&f.module))
+        || module
+            .imported_globals
+            .iter()
+            .any(|g| unresolved(&g.module))
+        || module.imported_tables.iter().any(|t| unresolved(&t.module))
+        || module
+            .imported_memory
+            .as_ref()
+            .is_some_and(|m| unresolved(&m.module));
+    if needs_linking {
         return Err(Attribution::Tag(
             "linking".to_string(),
-            "imports from a registered module".to_string(),
+            "imports from an unresolvable module".to_string(),
         ));
     }
     lang.generate(&module, counter)
@@ -386,6 +467,7 @@ fn run_directives(
         file: name,
         current: Err("linking".to_string()),
         named: Default::default(),
+        registered: Default::default(),
         counter: 0,
         converted: 0,
         stats: Stats::default(),
@@ -419,16 +501,19 @@ fn run_directives(
                         let mut qw = QuoteWat::Wat(wat);
                         gen.counter += 1;
                         let counter = gen.counter;
+                        let resolvable = gen.resolvable_modules();
                         let converted = qw
                             .encode()
                             .map_err(|e| {
                                 Attribution::Tag("unknown-proposal".to_string(), e.to_string())
                             })
-                            .and_then(|bytes| convert(lang, &bytes, counter));
+                            .and_then(|bytes| convert(lang, &bytes, counter, &resolvable));
                         match converted {
                             Ok(conv) => {
                                 gen.converted += 1;
-                                let call = lang.instantiate_call(&mut gen.script, &conv);
+                                let registered = gen.registered_pairs();
+                                let call =
+                                    lang.instantiate_call(&mut gen.script, &conv, &registered);
                                 gen.units.extend(conv.units);
                                 Ok(call)
                             }
@@ -473,10 +558,48 @@ fn run_directives(
                     Err(_) => gen.stats.rust_pass += 1,
                 }
             }
-            WastDirective::Register { .. }
-            | WastDirective::ModuleDefinition(_)
-            | WastDirective::ModuleInstance { .. }
-            | WastDirective::AssertUnlinkable { .. } => gen.skip("linking"),
+            WastDirective::Register { name, module, .. } => {
+                let inst = gen.instance_for(module.map(|i| i.name()));
+                gen.registered.insert(name.to_string(), inst);
+            }
+            WastDirective::AssertUnlinkable {
+                module, message, ..
+            } => {
+                if !lang.supports_registered_imports() {
+                    gen.skip("linking");
+                } else {
+                    let mut qw = QuoteWat::Wat(module);
+                    gen.counter += 1;
+                    let counter = gen.counter;
+                    let resolvable = gen.resolvable_modules();
+                    let converted = qw
+                        .encode()
+                        .map_err(|e| {
+                            Attribution::Tag("unknown-proposal".to_string(), e.to_string())
+                        })
+                        .and_then(|bytes| convert(lang, &bytes, counter, &resolvable));
+                    match converted {
+                        Ok(conv) => {
+                            gen.converted += 1;
+                            let registered = gen.registered_pairs();
+                            let call = lang.instantiate_call(&mut gen.script, &conv, &registered);
+                            gen.units.extend(conv.units);
+                            let _ = message; // upstream wording never matches ours; any error counts
+                            lang.emit_check_unlinkable(&mut gen.script, &desc, &call);
+                        }
+                        Err(Attribution::Tag(tag, _)) => gen.skip(&tag),
+                        Err(Attribution::Bug(detail)) => {
+                            gen.stats.hard_errors.push(format!(
+                                "unattributed conversion failure at {desc}: {detail}"
+                            ));
+                            gen.skip("conversion-bug");
+                        }
+                    }
+                }
+            }
+            WastDirective::ModuleDefinition(_) | WastDirective::ModuleInstance { .. } => {
+                gen.skip("linking")
+            }
             WastDirective::Thread(_) | WastDirective::Wait { .. } => gen.skip("threads"),
             WastDirective::AssertException { .. } => gen.skip("exception-handling"),
             WastDirective::AssertSuspension { .. } => gen.skip("stack-switching"),

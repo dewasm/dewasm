@@ -18,12 +18,12 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasmify_backend::{
-    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
-    RuntimeScope, SupportStatus,
+    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
-    BinOp, BrTarget, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
+    BinOp, BrTarget, ElemKind, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -53,6 +53,12 @@ pub fn bundler() -> &'static RuntimeBundler {
                     open: "class Table",
                     close: "end",
                     prelude: Some("table/_class"),
+                },
+                RuntimeScope {
+                    prefix: "global",
+                    open: "class Global",
+                    close: "end",
+                    prelude: Some("global/_class"),
                 },
                 RuntimeScope {
                     prefix: "wasi",
@@ -104,6 +110,7 @@ fn generate_class_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
+    check_module_support(&RubyBackend, module)?;
     let gen = Gen {
         module,
         default_wasi,
@@ -149,6 +156,11 @@ impl Backend for RubyBackend {
             // Part of the wasm 1.0 baseline for Ruby; the row exists for
             // backends whose language lacks floats (ADR-5).
             Feature::Floats => SupportStatus::Supported,
+            Feature::ImportedGlobals
+            | Feature::ImportedMemories
+            | Feature::ImportedTables
+            | Feature::MultipleTables
+            | Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -313,6 +325,27 @@ impl<'a> Gen<'a> {
         name
     }
 
+    /// Resolve one import and validate its kind (ADR-7's mechanism,
+    /// generalized to every import kind): a present-but-wrong-kind value
+    /// raises immediately (a link error), a missing one returns nil so the
+    /// caller's `|| fallback` applies.
+    fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
+        format!(
+            "Rt.check_import_kind(Rt.resolve_import(imports, {}, {}), :{kind}, {}, {})",
+            ruby_string(module),
+            ruby_string(name),
+            ruby_string(module),
+            ruby_string(name)
+        )
+    }
+
+    fn missing_import_string(&self, module: &str, name: &str) -> String {
+        format!(
+            "raise(ArgumentError, {})",
+            ruby_string(&format!("missing import {module}.{name}"))
+        )
+    }
+
     /// Class body members, written at indent level 1.
     fn body(&self, w: &mut CodeWriter) {
         self.initialize(w);
@@ -324,7 +357,31 @@ impl<'a> Gen<'a> {
         });
         w.line("");
         w.block("def global_get(name)", "end", |w| {
+            w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name)).value");
+        });
+        w.line("");
+        // The boxed Rt::Global itself (not its current value), for a host
+        // embedder or another dewasmify instance to import as a shared
+        // mutable cell.
+        w.block("def global_export(name)", "end", |w| {
             w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name))");
+        });
+        w.line("");
+        w.block("def table_export(name)", "end", |w| {
+            w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
+        });
+        w.line("");
+        // ADR-7 provider protocol: an instance of a generated class is
+        // itself a valid value in another instance's `imports` table,
+        // exposing every export regardless of kind under its one
+        // (per-module) namespace — the mechanism the spec harness's
+        // `register` support (and any real cross-module linking) uses.
+        w.block("def import(name)", "end", |w| {
+            w.line("return @exports[name] if @exports.key?(name)");
+            w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
+            w.line("return table_export(name) if TABLE_EXPORTS.key?(name)");
+            w.line("return @memory if MEMORY_EXPORTS.include?(name)");
+            w.line("nil");
         });
         w.line("");
         w.line("private");
@@ -339,17 +396,34 @@ impl<'a> Gen<'a> {
         let m = self.module;
 
         let mut global_exports: Vec<(String, u32)> = Vec::new();
+        let mut table_exports: Vec<(String, u32)> = Vec::new();
+        let mut memory_export_names: Vec<String> = Vec::new();
         for export in &m.exports {
-            if let ExportKind::Global(idx) = export.kind {
-                global_exports.push((export.name.clone(), idx));
+            match export.kind {
+                ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
+                ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
+                ExportKind::Memory => memory_export_names.push(export.name.clone()),
+                ExportKind::Func(_) => {}
             }
         }
-        let entries = global_exports
+        let global_entries = global_exports
             .iter()
             .map(|(name, idx)| format!("{} => :@g{}", ruby_string(name), idx))
             .collect::<Vec<_>>()
             .join(", ");
-        w.line(format!("GLOBAL_EXPORTS = {{ {entries} }}.freeze"));
+        w.line(format!("GLOBAL_EXPORTS = {{ {global_entries} }}.freeze"));
+        let table_entries = table_exports
+            .iter()
+            .map(|(name, idx)| format!("{} => :@t{}", ruby_string(name), idx))
+            .collect::<Vec<_>>()
+            .join(", ");
+        w.line(format!("TABLE_EXPORTS = {{ {table_entries} }}.freeze"));
+        let memory_entries = memory_export_names
+            .iter()
+            .map(|name| ruby_string(name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        w.line(format!("MEMORY_EXPORTS = [{memory_entries}].freeze"));
         w.line("");
 
         let wasi_fallback = wasi_bundled(m, self.default_wasi);
@@ -359,6 +433,16 @@ impl<'a> Gen<'a> {
             "def initialize(imports = {})"
         };
         w.block(header, "end", |w| {
+            for (i, import) in m.imported_memory.iter().enumerate() {
+                let _ = i; // at most one memory ever exists
+                self.use_unit("rt/resolve_import");
+                self.use_unit("rt/check_import_kind");
+                w.line(format!(
+                    "@memory = {} || {}",
+                    self.resolve_import_string("memory", &import.module, &import.name),
+                    self.missing_import_string(&import.module, &import.name),
+                ));
+            }
             if let Some(mem) = &m.memory {
                 self.use_unit("memory/_class");
                 let max = mem
@@ -367,20 +451,27 @@ impl<'a> Gen<'a> {
                     .unwrap_or_else(|| "nil".to_string());
                 w.line(format!("@memory = Rt::Memory.new({}, {})", mem.min_pages, max));
             }
-            if let Some(table) = &m.table {
+            for (i, import) in m.imported_tables.iter().enumerate() {
+                self.use_unit("rt/resolve_import");
+                self.use_unit("rt/check_import_kind");
+                w.line(format!(
+                    "@t{i} = {} || {}",
+                    self.resolve_import_string("table", &import.module, &import.name),
+                    self.missing_import_string(&import.module, &import.name),
+                ));
+            }
+            let num_imported_tables = m.num_imported_tables();
+            for (i, table) in m.tables.iter().enumerate() {
                 self.use_unit("table/_class");
-                w.line(format!("@table = Rt::Table.new({})", table.min));
+                let idx = num_imported_tables as usize + i;
+                w.line(format!("@t{idx} = Rt::Table.new({})", table.min));
             }
             if wasi_fallback {
                 w.line("@wasi = nil");
             }
             for (i, import) in m.imported_funcs.iter().enumerate() {
                 self.use_unit("rt/resolve_import");
-                let resolve = format!(
-                    "Rt.resolve_import(imports, {}, {})",
-                    ruby_string(&import.module),
-                    ruby_string(&import.name)
-                );
+                self.use_unit("rt/check_import_kind");
                 // Fallback order: explicit import -> bundled WASI
                 // (constructed only when first needed) -> ENOSYS stub;
                 // non-WASI imports stay mandatory.
@@ -397,33 +488,59 @@ impl<'a> Gen<'a> {
                         "->(*) { 52 } # ENOSYS: not implemented yet".to_string()
                     }
                 } else {
-                    format!(
-                        "raise(ArgumentError, {})",
-                        ruby_string(&format!(
-                            "missing import {}.{}",
-                            import.module, import.name
-                        ))
-                    )
+                    self.missing_import_string(&import.module, &import.name)
                 };
-                w.line(format!("@if{i} = {resolve} || {fallback}"));
-            }
-            for (i, global) in m.globals.iter().enumerate() {
-                w.line(format!("@g{} = {}", i, self.expr(&global.init)));
-            }
-            for elem in &m.elems {
-                self.use_unit("table/check_range");
-                let offset = self.expr(&elem.offset);
                 w.line(format!(
-                    "@table.check_range({offset}, {})",
-                    elem.func_indices.len()
+                    "@if{i} = {} || {fallback}",
+                    self.resolve_import_string("func", &import.module, &import.name)
                 ));
-                for (i, func_idx) in elem.func_indices.iter().enumerate() {
-                    self.use_unit("table/set");
-                    let ty = self.func_type_idx(*func_idx);
-                    w.line(format!(
-                        "@table.set({offset} + {i}, {ty}, {})",
-                        self.func_ref(*func_idx)
-                    ));
+            }
+            for (i, import) in m.imported_globals.iter().enumerate() {
+                self.use_unit("rt/resolve_import");
+                self.use_unit("rt/check_import_kind");
+                w.line(format!(
+                    "@g{i} = {} || {}",
+                    self.resolve_import_string("global", &import.module, &import.name),
+                    self.missing_import_string(&import.module, &import.name),
+                ));
+            }
+            let num_imported_globals = m.imported_globals.len();
+            for (i, global) in m.globals.iter().enumerate() {
+                self.use_unit("global/_class");
+                let idx = num_imported_globals + i;
+                w.line(format!(
+                    "@g{idx} = Rt::Global.new({})",
+                    self.expr(&global.init)
+                ));
+            }
+            for (i, elem) in m.elems.iter().enumerate() {
+                let items = elem
+                    .items
+                    .iter()
+                    .map(|item| match item {
+                        Some(func_idx) => {
+                            format!("[{}, {}]", self.func_type_idx(*func_idx), self.func_ref(*func_idx))
+                        }
+                        None => "nil".to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                match &elem.kind {
+                    ElemKind::Declared => w.line(format!("@elem{i} = []")),
+                    ElemKind::Passive => w.line(format!("@elem{i} = [{items}]")),
+                    ElemKind::Active {
+                        table_index,
+                        offset,
+                    } => {
+                        self.use_unit("table/init");
+                        w.line(format!("@elem{i} = [{items}]"));
+                        let offset = self.expr(offset);
+                        w.line(format!(
+                            "@t{table_index}.init({offset}, @elem{i}, 0, {})",
+                            elem.items.len()
+                        ));
+                        w.line(format!("@elem{i} = []"));
+                    }
                 }
             }
             for (i, data) in m.datas.iter().enumerate() {
@@ -557,7 +674,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("l{idx} = {}", self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("@g{idx} = {}", self.expr(expr)));
+                w.line(format!("@g{idx}.value = {}", self.expr(expr)));
             }
             Stmt::Store {
                 op,
@@ -657,6 +774,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::CallIndirect {
                 type_idx,
+                table_index,
                 index,
                 args,
                 results,
@@ -665,7 +783,7 @@ impl<'a> Gen<'a> {
                 let mut call_args =
                     vec![self.expr(index), self.canonical_type(*type_idx).to_string()];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
-                let call = format!("@table.call({})", call_args.join(", "));
+                let call = format!("@t{table_index}.call({})", call_args.join(", "));
                 w.line(assign_results(results, call));
             }
             Stmt::MemoryGrow { dst, delta } => {
@@ -705,6 +823,39 @@ impl<'a> Gen<'a> {
             }
             Stmt::DataDrop { seg } => {
                 w.line(format!("@data{seg} = \"\".b"));
+            }
+            Stmt::TableInit {
+                seg,
+                table_index,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/init");
+                w.line(format!(
+                    "@t{table_index}.init({}, @elem{seg}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::TableCopy {
+                dst_table,
+                src_table,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/copy");
+                w.line(format!(
+                    "@t{dst_table}.copy({}, @t{src_table}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::ElemDrop { seg } => {
+                w.line(format!("@elem{seg} = []"));
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
@@ -777,7 +928,7 @@ impl<'a> Gen<'a> {
             }
             Expr::Temp(t) => temp(*t),
             Expr::LocalGet(idx) => format!("l{idx}"),
-            Expr::GlobalGet(idx) => format!("@g{idx}"),
+            Expr::GlobalGet(idx) => format!("@g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {

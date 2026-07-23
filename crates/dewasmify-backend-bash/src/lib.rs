@@ -28,11 +28,12 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasmify_backend::{
-    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
+    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeScope, SupportStatus,
 };
 use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
-    BinOp, BrTarget, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp,
+    BinOp, BrTarget, ElemKind, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -124,6 +125,7 @@ fn generate_module_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
+    check_module_support(&BashBackend, module)?;
     let gen = Gen {
         module,
         default_wasi,
@@ -350,7 +352,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}pages={}", mem.min_pages));
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
         }
-        if let Some(table) = &m.table {
+        if let Some(table) = m.tables.first() {
             w.line(format!("{p}tab=()"));
             w.line(format!("{p}tabty=()"));
             w.line(format!("{p}tab_size={}", table.min));
@@ -390,17 +392,23 @@ impl<'a> Gen<'a> {
             self.emit_assign(w, &format!("{p}g{i}"), &global.init);
         }
         for elem in &m.elems {
+            // check_module_support guarantees every segment reaching this
+            // backend is active with only `ref.func` items (no bulk ops).
+            let ElemKind::Active { offset, .. } = &elem.kind else {
+                unreachable!("passive/declared element segment reached the bash backend")
+            };
             self.scratch.set(0);
             self.use_unit("rt/trap");
-            let off = self.value(w, &elem.offset);
+            let off = self.value(w, offset);
             w.line(format!("(( __off = {off} ))"));
             w.line(format!(
                 "(( __off + {} <= {p}tab_size )) || {{ rt_trap 'out of bounds table access'; return $?; }}",
-                elem.func_indices.len()
+                elem.items.len()
             ));
-            for (i, func_idx) in elem.func_indices.iter().enumerate() {
-                let ty = self.func_type_idx(*func_idx);
-                w.line(format!("{p}tab[__off + {i}]={}", self.func_ref(*func_idx)));
+            for (i, func_idx) in elem.items.iter().enumerate() {
+                let func_idx = func_idx.expect("ref.null element item reached the bash backend");
+                let ty = self.func_type_idx(func_idx);
+                w.line(format!("{p}tab[__off + {i}]={}", self.func_ref(func_idx)));
                 w.line(format!("{p}tabty[__off + {i}]={ty}"));
             }
         }
@@ -712,6 +720,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::CallIndirect {
                 type_idx,
+                table_index: _,
                 index,
                 args,
                 results,
@@ -799,6 +808,9 @@ impl<'a> Gen<'a> {
             }
             Stmt::DataDrop { seg } => {
                 w.line(format!("{}data{seg}=()", self.prefix));
+            }
+            Stmt::TableInit { .. } | Stmt::TableCopy { .. } | Stmt::ElemDrop { .. } => {
+                unreachable!("table bulk ops reached the bash backend")
             }
             Stmt::Unreachable => {
                 self.use_unit("rt/trap");

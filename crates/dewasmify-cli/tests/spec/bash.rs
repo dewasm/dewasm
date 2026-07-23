@@ -155,7 +155,13 @@ impl SpecLang for BashLang {
         })
     }
 
-    fn emit_instantiate(&self, script: &mut String, conv: &Converted, _var_id: u32) -> String {
+    fn emit_instantiate(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        _var_id: u32,
+        _registered: &[(String, String)],
+    ) -> String {
         script.push_str(&conv.source);
         // A trap while instantiating a plain module directive aborts the
         // file, mirroring an uncaught Ruby exception at toplevel.
@@ -167,7 +173,12 @@ impl SpecLang for BashLang {
         conv.handle.clone()
     }
 
-    fn instantiate_call(&self, script: &mut String, conv: &Converted) -> String {
+    fn instantiate_call(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        _registered: &[(String, String)],
+    ) -> String {
         script.push_str(&conv.source);
         format!("{}init", conv.handle)
     }

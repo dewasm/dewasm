@@ -65,7 +65,11 @@ docs/support.md is stale).
 - A new backend is done when the shared spec harness passes for it — not before
   ([ADR-3](docs/adr/3-testing-strategy.md)).
 - Unsupported wasm features must fail at conversion time with a clear error, never at runtime
-  ([ADR-0](docs/adr/0-foundation.md)).
+  ([ADR-0](docs/adr/0-foundation.md)). Non-function imports, multiple tables, and table bulk ops
+  are accepted by the core IR unconditionally; a backend that hasn't implemented one must reject
+  it itself via `dewasmify_backend::check_module_support` ([ADR-16](docs/adr/16-ruby-wasm1-completion.md)),
+  which also covers the `Rt::Global` box, the import-kind check, and the spec harness's `register`
+  support.
 
 ## ADRs
 

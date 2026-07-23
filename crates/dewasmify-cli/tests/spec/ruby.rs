@@ -18,15 +18,22 @@ use crate::{Converted, SpecLang};
 /// Known assertion-level failures with their attribution; the file still
 /// runs so regressions in the passing assertions are caught.
 ///
-/// All current entries are cross-module linking: a later `register`ed
-/// module was supposed to write into the first module's shared
-/// table/memory, so assertions against the first module see stale state.
-/// The linking milestone clears this list.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved
+///   import is the right *kind* (func/global/table/memory) but not the
+///   finer-grained wasm type — a function's param/result types, a global's
+///   mutability, or a table/memory's min/max limits against the import
+///   site's declared bounds. Every `assert_unlinkable` case testing one of
+///   those (not a kind mismatch, which is caught) stays a known gap.
+/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated*
+///   declared-unsupported feature (multi-memory) inside a module that
+///   also happens to use `register`; that module never converts, so a
+///   later assertion against the module it would have written into
+///   observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("elem", 5, "linking"),
-    ("linking", 10, "linking"),
+    ("imports", 28, "import-limits"),
+    ("imports2", 2, "import-limits"),
+    ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
-    ("linking3", 2, "linking"),
     ("load1", 5, "linking"),
 ];
 
@@ -64,6 +71,12 @@ impl SpecLang for RubyLang {
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
+            // Referenced by the $spectest fixture (PREAMBLE below), not
+            // necessarily by the converted module itself.
+            "global/_class",
+            "table/_class",
+            "memory/_class",
+            "rt/f32",
         ]
     }
 
@@ -82,16 +95,36 @@ impl SpecLang for RubyLang {
         })
     }
 
-    fn emit_instantiate(&self, script: &mut String, conv: &Converted, var_id: u32) -> String {
+    fn supports_registered_imports(&self) -> bool {
+        true
+    }
+
+    fn emit_instantiate(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        var_id: u32,
+        registered: &[(String, String)],
+    ) -> String {
         let var = format!("$i{var_id}");
         script.push_str(&conv.source);
-        let _ = writeln!(script, "{var} = {}.new($spectest)", conv.handle);
+        let _ = writeln!(
+            script,
+            "{var} = {}.new({})",
+            conv.handle,
+            imports_expr(registered)
+        );
         var
     }
 
-    fn instantiate_call(&self, script: &mut String, conv: &Converted) -> String {
+    fn instantiate_call(
+        &self,
+        script: &mut String,
+        conv: &Converted,
+        registered: &[(String, String)],
+    ) -> String {
         script.push_str(&conv.source);
-        format!("{}.new($spectest)", conv.handle)
+        format!("{}.new({})", conv.handle, imports_expr(registered))
     }
 
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String> {
@@ -157,6 +190,14 @@ impl SpecLang for RubyLang {
         );
     }
 
+    fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
+        let _ = writeln!(
+            script,
+            "check_unlinkable({}) do\n  {call}\nend",
+            ruby_str(desc)
+        );
+    }
+
     fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String> {
         let mut script = dewasmify_backend_ruby::shared_runtime(units)
             .map_err(|e| anyhow::anyhow!("bundling runtime: {e:#}"))?;
@@ -165,6 +206,21 @@ impl SpecLang for RubyLang {
         script.push_str(POSTAMBLE);
         Ok(script)
     }
+}
+
+/// `$spectest`, plus any currently-`register`ed instances merged in under
+/// their registered name — each instance doubles as an ADR-7 import
+/// provider (`Gen::body`'s generated `import(name)` method).
+fn imports_expr(registered: &[(String, String)]) -> String {
+    if registered.is_empty() {
+        return "$spectest".to_string();
+    }
+    let entries = registered
+        .iter()
+        .map(|(name, var)| format!("{} => {var}", ruby_str(name)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("$spectest.merge({{ {entries} }})")
 }
 
 fn ruby_str(s: &str) -> String {
@@ -270,6 +326,17 @@ rescue SystemStackError
   $pass += 1
 end
 
+# Upstream's assert_unlinkable message text never matches ours (we don't
+# reproduce wasm engines' wording); any raised error confirms the import
+# was correctly rejected as unlinkable.
+def check_unlinkable(desc)
+  yield
+  $fail += 1
+  puts "FAIL(no error, want unlinkable): #{desc}"
+rescue
+  $pass += 1
+end
+
 $spectest = {
   "spectest" => {
     "print" => ->(*) { nil },
@@ -279,6 +346,12 @@ $spectest = {
     "print_f64" => ->(*) { nil },
     "print_i32_f32" => ->(*) { nil },
     "print_f64_f64" => ->(*) { nil },
+    "global_i32" => Rt::Global.new(666),
+    "global_i64" => Rt::Global.new(666),
+    "global_f32" => Rt::Global.new(Rt.f32(666.6)),
+    "global_f64" => Rt::Global.new(666.6),
+    "table" => Rt::Table.new(10),
+    "memory" => Rt::Memory.new(1, 2),
   },
 }
 "#;

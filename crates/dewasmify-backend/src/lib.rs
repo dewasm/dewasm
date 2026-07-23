@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{bail, Result};
-use dewasmify_core::feature::Feature;
+use dewasmify_core::feature::{Feature, UnsupportedError};
 use dewasmify_core::ir;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -73,6 +73,67 @@ pub trait Backend {
         let _ = feature;
         SupportStatus::Unsupported
     }
+}
+
+/// Reject, with the same `UnsupportedError` attribution the core converter
+/// uses (ADR-0), any construct the shared IR now represents but this
+/// specific `backend` has not declared `Supported` (ADR-8). The core
+/// builder is backend-agnostic and accepts every wasm-1.0-scoped
+/// construct; a backend that hasn't implemented one of them yet must
+/// refuse it itself, at conversion time, rather than mis-lower it.
+pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Result<()> {
+    let require = |feature: Feature, used: bool, detail: &str| -> Result<()> {
+        if used && backend.feature_status(feature) != SupportStatus::Supported {
+            return Err(UnsupportedError::new(feature, detail.to_string()).into());
+        }
+        Ok(())
+    };
+    require(
+        Feature::ImportedGlobals,
+        !module.imported_globals.is_empty(),
+        "imported global",
+    )?;
+    require(
+        Feature::ImportedMemories,
+        module.imported_memory.is_some(),
+        "imported memory",
+    )?;
+    require(
+        Feature::ImportedTables,
+        !module.imported_tables.is_empty(),
+        "imported table",
+    )?;
+    require(
+        Feature::MultipleTables,
+        module.imported_tables.len() + module.tables.len() > 1,
+        "more than one table",
+    )?;
+    let elem_needs_bulk_ops = module.elems.iter().any(|e| {
+        !matches!(e.kind, ir::ElemKind::Active { .. }) || e.items.iter().any(|i| i.is_none())
+    });
+    require(
+        Feature::TableBulkOps,
+        elem_needs_bulk_ops
+            || module
+                .funcs
+                .iter()
+                .any(|f| stmts_use_table_bulk_ops(&f.body)),
+        "passive/declared element segment, ref.null element item, or table.init/copy/elem.drop",
+    )?;
+    Ok(())
+}
+
+fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
+    stmts.iter().any(|stmt| match stmt {
+        ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
+        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
+            stmts_use_table_bulk_ops(body)
+        }
+        ir::Stmt::If { then, els, .. } => {
+            stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
+        }
+        _ => false,
+    })
 }
 
 /// The full WASI preview 1 surface, for the generated support docs; which
