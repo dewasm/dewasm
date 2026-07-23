@@ -83,6 +83,14 @@ args: ["foo", "bar"]
 - `runtime/<lang>/` holds the embedded runtime sources (linear memory,
   table + `call_indirect` type checks, numeric helpers, traps, WASI).
 
+## Design decisions
+
+Significant decisions are recorded as Architecture Decision Records in
+[`docs/adr/`](docs/adr/README.md) — start with
+[ADR-0](docs/adr/0-foundation.md) for the goal and architecture. The IR
+shape, the numeric semantics strategy, the testing approach, and the
+per-backend lowering conventions each have their own ADR.
+
 ## Testing
 
 The spec harness (`crates/dewasmify-cli/tests/spec.rs`) parses the official
@@ -98,7 +106,8 @@ TOTAL: pass=19446 fail=5 skip=894 (rust: invalid-ok=1563 invalid-bad=0)
 
 Directives that exercise unsupported features are skipped; the 5 expected
 failures come from cross-module table sharing (`register`), which is not
-supported yet. Adding a backend = making this harness pass for it.
+supported yet. Adding a backend = making this harness pass for it — the
+full policy is [ADR-3](docs/adr/3-testing-strategy.md).
 
 ## Roadmap
 
