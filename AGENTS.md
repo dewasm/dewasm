@@ -15,9 +15,7 @@ submodule — never edit it.
 
 ## Development environment
 
-- Rust toolchain is pinned by `rust-toolchain.toml` (stable). The shell environment may force an
-  old toolchain via `RUSTUP_TOOLCHAIN`; if builds fail with edition/dependency errors, run as
-  `RUSTUP_TOOLCHAIN=stable cargo ...`.
+- Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` commands pick it up.
 - First-time setup: `git submodule update --init` (fetches the spec testsuite into `tests/spec`).
 - The spec harness and e2e tests need `ruby` on `PATH`; they self-skip when it is missing, so a
   green run without Ruby proves less than it looks.
