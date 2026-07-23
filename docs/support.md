@@ -37,56 +37,57 @@ turns its remaining skips into hard failures until the tests pass.
 | Wide arithmetic | ❌ | ❌ |
 | Custom page sizes | ❌ | ❌ |
 
-## WASI preview 1 (ruby)
+## WASI preview 1
 
 Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS
-stub ([ADR-7](adr/7-import-providers.md)).
+stub ([ADR-7](adr/7-import-providers.md), bash conventions in
+[ADR-12](adr/12-bash-wasi.md)).
 
-| Function | ruby |
-| --- | --- |
-| args_get | ✅ |
-| args_sizes_get | ✅ |
-| environ_get | ✅ |
-| environ_sizes_get | ✅ |
-| clock_res_get | ✅ |
-| clock_time_get | ✅ |
-| fd_advise | ❌ (ENOSYS) |
-| fd_allocate | ❌ (ENOSYS) |
-| fd_close | ✅ |
-| fd_datasync | ❌ (ENOSYS) |
-| fd_fdstat_get | ✅ |
-| fd_fdstat_set_flags | ❌ (ENOSYS) |
-| fd_fdstat_set_rights | ❌ (ENOSYS) |
-| fd_filestat_get | ❌ (ENOSYS) |
-| fd_filestat_set_size | ❌ (ENOSYS) |
-| fd_filestat_set_times | ❌ (ENOSYS) |
-| fd_pread | ❌ (ENOSYS) |
-| fd_prestat_get | ✅ |
-| fd_prestat_dir_name | ❌ (ENOSYS) |
-| fd_pwrite | ❌ (ENOSYS) |
-| fd_read | ✅ |
-| fd_readdir | ❌ (ENOSYS) |
-| fd_renumber | ❌ (ENOSYS) |
-| fd_seek | ✅ |
-| fd_sync | ❌ (ENOSYS) |
-| fd_tell | ✅ |
-| fd_write | ✅ |
-| path_create_directory | ❌ (ENOSYS) |
-| path_filestat_get | ❌ (ENOSYS) |
-| path_filestat_set_times | ❌ (ENOSYS) |
-| path_link | ❌ (ENOSYS) |
-| path_open | ❌ (ENOSYS) |
-| path_readlink | ❌ (ENOSYS) |
-| path_remove_directory | ❌ (ENOSYS) |
-| path_rename | ❌ (ENOSYS) |
-| path_symlink | ❌ (ENOSYS) |
-| path_unlink_file | ❌ (ENOSYS) |
-| poll_oneoff | ❌ (ENOSYS) |
-| proc_exit | ✅ |
-| proc_raise | ❌ (ENOSYS) |
-| random_get | ✅ |
-| sched_yield | ✅ |
-| sock_accept | ❌ (ENOSYS) |
-| sock_recv | ❌ (ENOSYS) |
-| sock_send | ❌ (ENOSYS) |
-| sock_shutdown | ❌ (ENOSYS) |
+| Function | ruby | bash |
+| --- | --- | --- |
+| args_get | ✅ | ✅ |
+| args_sizes_get | ✅ | ✅ |
+| environ_get | ✅ | ✅ |
+| environ_sizes_get | ✅ | ✅ |
+| clock_res_get | ✅ | ✅ |
+| clock_time_get | ✅ | ✅ |
+| fd_advise | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_allocate | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_close | ✅ | ✅ |
+| fd_datasync | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_fdstat_get | ✅ | ✅ |
+| fd_fdstat_set_flags | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_fdstat_set_rights | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_filestat_get | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_filestat_set_size | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_filestat_set_times | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_pread | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_prestat_get | ✅ | ✅ |
+| fd_prestat_dir_name | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_pwrite | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_read | ✅ | ✅ |
+| fd_readdir | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_renumber | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_seek | ✅ | ✅ |
+| fd_sync | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_tell | ✅ | ✅ |
+| fd_write | ✅ | ✅ |
+| path_create_directory | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_filestat_get | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_filestat_set_times | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_link | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_open | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_readlink | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_remove_directory | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_rename | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_symlink | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_unlink_file | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| poll_oneoff | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| proc_exit | ✅ | ✅ |
+| proc_raise | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| random_get | ✅ | ✅ |
+| sched_yield | ✅ | ✅ |
+| sock_accept | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| sock_recv | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| sock_send | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| sock_shutdown | ❌ (ENOSYS) | ❌ (ENOSYS) |

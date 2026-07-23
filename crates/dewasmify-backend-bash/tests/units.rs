@@ -18,7 +18,7 @@ fn all_units_bundle() {
 fn declared_requires_cover_references() {
     let b = bundler();
     let unit_ids: BTreeSet<&str> = b.units().map(|u| u.id.as_str()).collect();
-    let call = Regex::new(r"\b(rt|mem)_([a-z0-9_]+)").unwrap();
+    let call = Regex::new(r"\b(rt|mem|wasi)_([a-z0-9_]+)").unwrap();
 
     let mut problems = Vec::new();
     for unit in b.units() {

@@ -50,7 +50,8 @@ units change, regenerate the matrix: `DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewa
   are fixed in [ADR-2](docs/adr/2-numeric-semantics.md); new backends follow them. Per-backend
   lowering shapes live in [ADR-4](docs/adr/4-ruby-backend-lowering.md) (Ruby) and
   [ADR-11](docs/adr/11-bash-backend-lowering.md) (Bash — incl. the status-cascade trap
-  protocol and the `return 0` discipline the units lint enforces).
+  protocol and the `return 0` discipline the units lint enforces); Bash WASI conventions
+  (status-133 proc_exit, byte-wise binary stdio) in [ADR-12](docs/adr/12-bash-wasi.md).
 - Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:`
   headers, referenced as `Rt` ([ADR-6](docs/adr/6-runtime-units.md)); keep the headers in sync
   when editing a unit — the units lint test enforces most of it.

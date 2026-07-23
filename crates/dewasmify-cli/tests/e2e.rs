@@ -123,6 +123,140 @@ fn library_mode_add_bash() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), "5\n0\n55\n");
 }
 
+/// The bash twin of `standalone_mode_wasi_hello`: the generated script is
+/// executed directly; fd_write and the status-133 proc_exit protocol
+/// (ADR-12) must produce the same stdout and exit code.
+#[test]
+fn standalone_mode_wasi_hello_bash() {
+    let Some(bash) = bash5() else {
+        eprintln!("bash >= 5 not found; skipping");
+        return;
+    };
+    let bytes = wat::parse_file(examples_dir().join("hello.wat")).expect("parse wat");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    let code = BashBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Standalone,
+                module_name: "hello".to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate bash")
+        .remove(0)
+        .contents;
+    let path = std::env::temp_dir().join("dewasmify-e2e-hello.sh");
+    std::fs::write(&path, &code).unwrap();
+    let output = Command::new(&bash).arg(&path).output().expect("run bash");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "Hello, WASI!\n");
+    assert_eq!(output.status.code(), Some(0));
+}
+
+/// Standalone argv wiring: argc (program name + arguments) becomes the
+/// exit code via args_sizes_get + proc_exit.
+#[test]
+fn standalone_args_bash() {
+    let Some(bash) = bash5() else {
+        eprintln!("bash >= 5 not found; skipping");
+        return;
+    };
+    let wat = r#"
+        (module
+          (import "wasi_snapshot_preview1" "args_sizes_get"
+            (func $asg (param i32 i32) (result i32)))
+          (import "wasi_snapshot_preview1" "proc_exit" (func $pe (param i32)))
+          (memory 1)
+          (func (export "_start")
+            (drop (call $asg (i32.const 0) (i32.const 4)))
+            (call $pe (i32.load (i32.const 0)))))
+    "#;
+    let bytes = wat::parse_str(wat).expect("parse wat");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    let code = BashBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Standalone,
+                module_name: "argc".to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate bash")
+        .remove(0)
+        .contents;
+    let path = std::env::temp_dir().join("dewasmify-e2e-argc.sh");
+    std::fs::write(&path, &code).unwrap();
+    let output = Command::new(&bash)
+        .arg(&path)
+        .args(["foo", "bar"])
+        .output()
+        .expect("run bash");
+    assert_eq!(output.status.code(), Some(3), "argc = program name + 2 args");
+}
+
+/// The bash analogue of `partial_override_falls_back_to_bundled_wasi`:
+/// an IMPORTS entry overrides fd_write while random_get falls through to
+/// the bundled units.
+#[test]
+fn bash_imports_override_falls_back_to_bundled_wasi() {
+    let Some(bash) = bash5() else {
+        eprintln!("bash >= 5 not found; skipping");
+        return;
+    };
+    let bytes = wat::parse_str(WASI_IMPORTS_WAT).expect("parse wat");
+    let module = dewasmify_core::build_module(&bytes).expect("build IR");
+    let code = BashBackend
+        .generate(
+            &module,
+            &GenOptions {
+                mode: Mode::Library,
+                module_name: "prog".to_string(),
+                runtime: RuntimeLinkage::Embedded,
+                default_wasi: true,
+            },
+        )
+        .expect("generate bash")
+        .remove(0)
+        .contents;
+    let script = format!(
+        "{code}\n{}",
+        r#"
+my_fd_write() {
+  # (fd, iovs, iovs_len, nwritten_ptr): prove we intercepted the call by
+  # reading the first iovec through the module's memory helpers.
+  mem_i32_load prog_ "$2" || return $?
+  local ptr=$R0
+  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  local len=$R0
+  echo "custom fd_write: fd=$1 len=$len"
+  mem_i32_store prog_ "$4" "$len" || return $?
+  R0=0
+  return 0
+}
+declare -A IMPORTS=(['wasi_snapshot_preview1.fd_write']=my_fd_write)
+prog_init || { echo "init failed" >&2; exit 1; }
+prog_invoke '_start'
+echo "status=$?"
+"#
+    );
+    let path = std::env::temp_dir().join("dewasmify-e2e-override.sh");
+    std::fs::write(&path, &script).unwrap();
+    let output = Command::new(&bash).arg(&path).output().expect("run bash");
+    assert!(
+        output.status.success(),
+        "bash failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "custom fd_write: fd=1 len=3\nstatus=0\n"
+    );
+}
+
 /// A module that imports WASI functions, for exercising the import
 /// provider protocol (ADR-7).
 const WASI_IMPORTS_WAT: &str = r#"

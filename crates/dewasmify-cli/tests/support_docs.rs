@@ -7,9 +7,9 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use dewasmify_backend::{Backend, SupportStatus};
+use dewasmify_backend::{Backend, SupportStatus, WASI_PREVIEW1_FUNCTIONS};
 use dewasmify_backend_bash::BashBackend;
-use dewasmify_backend_ruby::{bundler, RubyBackend, WASI_PREVIEW1_FUNCTIONS};
+use dewasmify_backend_ruby::RubyBackend;
 use dewasmify_core::feature::Feature;
 
 fn render() -> String {
@@ -54,15 +54,31 @@ fn render() -> String {
         let _ = writeln!(out, "{row}|");
     }
 
-    out.push_str("\n## WASI preview 1 (ruby)\n\n");
+    out.push_str("\n## WASI preview 1\n\n");
     out.push_str(
         "Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS\n\
-         stub ([ADR-7](adr/7-import-providers.md)).\n\n",
+         stub ([ADR-7](adr/7-import-providers.md), bash conventions in\n\
+         [ADR-12](adr/12-bash-wasi.md)).\n\n",
     );
-    out.push_str("| Function | ruby |\n| --- | --- |\n");
+    let wasi_backends: Vec<(&str, fn(&str) -> bool)> = vec![
+        ("ruby", |id| dewasmify_backend_ruby::bundler().has_unit(id)),
+        ("bash", |id| dewasmify_backend_bash::bundler().has_unit(id)),
+    ];
+    let mut header = String::from("| Function ");
+    let mut rule = String::from("| --- ");
+    for (name, _) in &wasi_backends {
+        let _ = write!(header, "| {name} ");
+        rule.push_str("| --- ");
+    }
+    let _ = writeln!(out, "{header}|\n{rule}|");
     for name in WASI_PREVIEW1_FUNCTIONS {
-        let status = if bundler().has_unit(&format!("wasi/{name}")) { "✅" } else { "❌ (ENOSYS)" };
-        let _ = writeln!(out, "| {name} | {status} |");
+        let mut row = format!("| {name} ");
+        for (_, has_unit) in &wasi_backends {
+            let status =
+                if has_unit(&format!("wasi/{name}")) { "✅" } else { "❌ (ENOSYS)" };
+            let _ = write!(row, "| {status} ");
+        }
+        let _ = writeln!(out, "{row}|");
     }
     out
 }

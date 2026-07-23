@@ -14,8 +14,9 @@ asmble and wasm2cil) and what is new here.
 **Status: early development.** The Ruby backend is functional and passes
 the WebAssembly core spec testsuite (19,400+ assertions) for the supported
 feature set; a useful subset of WASI preview 1 works end-to-end. The Bash
-backend covers the integer subset (9,900+ passing assertions; floats wait
-on the pure-bash softfloat, ADR-5).
+backend covers the integer subset (9,900+ passing assertions) plus the
+same WASI surface and standalone mode; floats wait on the pure-bash
+softfloat (ADR-5).
 
 ## Supported input
 
@@ -36,7 +37,7 @@ there ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 | Language | Status |
 |---|---|
 | Ruby | ✅ works, spec testsuite green |
-| Bash | ✅ integer subset, spec testsuite green (bash >= 5; f32/f64 wait on the ADR-5 softfloat) |
+| Bash | ✅ integer subset + WASI/standalone, spec testsuite green (bash >= 5; f32/f64 wait on the ADR-5 softfloat) |
 | Java | planned (paired with C#, ADR-10) |
 | C# | planned (paired with Java, ADR-10) |
 | Go | planned |
@@ -165,9 +166,9 @@ this harness pass for it — the policy is
 2. Wasm 1.0 completion: non-function imports + cross-module linking
    (clears the expected-failure ledger)
 3. WASI filesystem support (path_open + preopens), more real-world programs
-4. ~~Bash backend integer subset (integers/memory/control flow)~~ (done,
-   ADR-11); next: bash WASI + standalone mode, then pure-bash IEEE754
-   softfloat — no external commands (ADR-5)
+4. ~~Bash backend integer subset + WASI/standalone~~ (done, ADR-11 +
+   ADR-12); next: pure-bash IEEE754 softfloat — no external commands
+   (ADR-5) — which unlocks real C/Rust binaries under bash
 5. Java / C# backends (one design, two emitters — ADR-10)
 6. Go backend
 7. Python / PHP backends

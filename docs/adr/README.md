@@ -33,6 +33,7 @@ the consequences.
 | ADR-9 | [Example Apps Fetched from the Wasmer Registry, Never Committed](9-example-apps-from-registry.md) | Accepted |
 | ADR-10 | [Add C# to the Target Languages, Paired with Java](10-csharp-target.md) | Accepted |
 | ADR-11 | [Bash Backend Lowering Conventions (Integer Subset)](11-bash-backend-lowering.md) | Accepted |
+| ADR-12 | [Bash WASI Conventions](12-bash-wasi.md) | Accepted |
 
 ## Adding a new ADR
 

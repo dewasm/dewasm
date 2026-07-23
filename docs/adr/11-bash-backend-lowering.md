@@ -4,8 +4,9 @@ Status: **Accepted, 2026-07-23.** Implemented in
 `crates/dewasmify-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers
 the integer subset; floats stay conversion-time errors attributed to
 `Feature::Floats` until the ADR-5 softfloat lands. WASI and standalone
-mode are follow-ups. Requires bash >= 5 (namerefs, associative arrays);
-macOS system bash is 3.2 and is out of scope.
+mode landed the same day under [ADR-12](12-bash-wasi.md). Requires
+bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2 and is
+out of scope.
 
 ## Context
 
