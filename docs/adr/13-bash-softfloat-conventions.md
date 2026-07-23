@@ -7,7 +7,7 @@ conversions, f32 wrappers) plus the lowering tables in
 to Supported; the full-testsuite sweep now matches the Ruby backend's
 totals exactly (pass 24,338 / the same five linking-attributed failure
 groups), and cowsay/QuickJS run standalone under bash
-(`crates/dewasmify-cli/tests/apps.rs`).
+(`crates/dewasmify-cli/tests/e2e/apps.rs`).
 
 ## Context
 

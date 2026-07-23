@@ -15,12 +15,11 @@ submodule — never edit it.
 
 ## Development environment
 
-- Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` commands pick it up.
-- First-time setup: `git submodule update --init` (fetches the spec testsuite into `tests/spec`).
-- The spec harness and e2e tests need `ruby` on `PATH`; the bash suites need bash >= 5
-  (`$DEWASMIFY_BASH`, `PATH`, or the homebrew path — macOS system bash 3.2 does not count).
-  All of them self-skip when the interpreter is missing, so a green run without it proves less
-  than it looks.
+Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` commands pick it up.
+Required tools/setup for the test suite (ruby, bash >= 5, the spec submodule, the `apps` cache)
+and the fail-loud-not-skip policy behind it (ADR-15) are documented in
+[`docs/testing.md`](docs/testing.md) — read it before wondering why a test panics with a setup
+instruction instead of skipping.
 
 ## Common commands
 
@@ -32,7 +31,7 @@ submodule — never edit it.
 | `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
 | `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
 | `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
-| `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) into the gitignored cache; enables the `apps` e2e test. |
+| `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) into the gitignored cache; enables the `apps` cases of the `e2e` test. |
 
 ## Verification
 

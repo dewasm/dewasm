@@ -6,7 +6,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::process::Command;
 
 use dewasmify_backend::{Backend, RuntimeLinkage};
 use dewasmify_backend_ruby::RubyBackend;
@@ -42,12 +41,8 @@ impl SpecLang for RubyLang {
         &RubyBackend
     }
 
-    fn interpreter(&self) -> Option<PathBuf> {
-        if Command::new("ruby").arg("--version").output().is_err() {
-            eprintln!("ruby not found in PATH; skipping spec tests");
-            return None;
-        }
-        Some(PathBuf::from("ruby"))
+    fn interpreter(&self) -> PathBuf {
+        dewasmify_backend_ruby::find_ruby().expect("ruby not found on PATH — see docs/testing.md")
     }
 
     fn script_ext(&self) -> &'static str {

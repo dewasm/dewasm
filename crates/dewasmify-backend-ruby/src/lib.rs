@@ -73,6 +73,19 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
+/// Locate a ruby interpreter able to run generated scripts. Unlike
+/// `dewasmify_backend_bash::find_bash5`, there is no version floor or
+/// alternate-path search to do: ruby has no documented minimum version
+/// here, so this only confirms `ruby` on PATH actually runs.
+pub fn find_ruby() -> Option<std::path::PathBuf> {
+    std::process::Command::new("ruby")
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|_| std::path::PathBuf::from("ruby"))
+}
+
 /// Generate one class for `module`. Returns the class source and the set
 /// of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_class_with_units(

@@ -45,9 +45,10 @@ fn spec_bash() {
 trait SpecLang {
     fn name(&self) -> &'static str;
     fn backend(&self) -> &dyn Backend;
-    /// Interpreter to run generated scripts with, or None to skip the
-    /// whole suite (the implementation prints why).
-    fn interpreter(&self) -> Option<PathBuf>;
+    /// Interpreter to run generated scripts with. Per ADR-15, a missing
+    /// interpreter fails the suite rather than skipping it — the
+    /// implementation panics with a message pointing at docs/testing.md.
+    fn interpreter(&self) -> PathBuf;
     fn script_ext(&self) -> &'static str;
     /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
@@ -92,14 +93,12 @@ struct Converted {
 }
 
 fn run_suite(lang: &dyn SpecLang) {
-    let Some(interpreter) = lang.interpreter() else {
-        return;
-    };
+    let interpreter = lang.interpreter();
     let spec_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
-    if !spec_dir.exists() {
-        eprintln!("tests/spec not found (git submodule update --init); skipping");
-        return;
-    }
+    assert!(
+        spec_dir.exists(),
+        "tests/spec not found — run `git submodule update --init` (see docs/testing.md)"
+    );
 
     let mut names: Vec<String> = std::fs::read_dir(&spec_dir)
         .expect("read tests/spec")

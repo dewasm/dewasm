@@ -121,12 +121,10 @@ impl SpecLang for BashLang {
         &BashBackend
     }
 
-    fn interpreter(&self) -> Option<PathBuf> {
-        let found = dewasmify_backend_bash::find_bash5();
-        if found.is_none() {
-            eprintln!("bash >= 5 not found (checked $DEWASMIFY_BASH, PATH, homebrew); skipping");
-        }
-        found
+    fn interpreter(&self) -> PathBuf {
+        dewasmify_backend_bash::find_bash5().expect(
+            "bash >= 5 not found (checked $DEWASMIFY_BASH, PATH, homebrew) — see docs/testing.md",
+        )
     }
 
     fn script_ext(&self) -> &'static str {

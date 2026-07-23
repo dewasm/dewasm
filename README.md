@@ -82,9 +82,9 @@ inst.invoke("_start")           # proc_exit raises Prog::Rt::Exit — rescue it
 ```
 
 Real-world binaries work too: [`examples/apps/`](examples/apps/) fetches
-prebuilt apps from the Wasmer registry (never committed here, ADR-9) —
-including QuickJS, a complete JavaScript engine that dewasmify turns into
-a single Ruby file:
+prebuilt apps from each app's own upstream (never committed here,
+ADR-9) — including QuickJS, a complete JavaScript engine that dewasmify
+turns into a single Ruby file:
 
 ```console
 $ examples/apps/fetch.sh

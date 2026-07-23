@@ -30,12 +30,13 @@ the consequences.
 | ADR-6 | [Runtime as Per-Method Units with Selectable Linkage](6-runtime-units.md) | Accepted |
 | ADR-7 | [Import Providers and the Default WASI Fallback](7-import-providers.md) | Accepted |
 | ADR-8 | [Track the Latest Testsuite; Attribute Skips to a Support Matrix](8-latest-testsuite-support-matrix.md) | Accepted |
-| ADR-9 | [Example Apps Fetched from the Wasmer Registry, Never Committed](9-example-apps-from-registry.md) | Accepted |
+| ADR-9 | [Example Apps Fetched from Upstream, Never Committed](9-example-apps-from-registry.md) | Accepted |
 | ADR-10 | [Add C# to the Target Languages, Paired with Java](10-csharp-target.md) | Accepted |
 | ADR-11 | [Bash Backend Lowering Conventions (Integer Subset)](11-bash-backend-lowering.md) | Accepted |
 | ADR-12 | [Bash WASI Conventions](12-bash-wasi.md) | Accepted |
 | ADR-13 | [Bash Softfloat Conventions](13-bash-softfloat-conventions.md) | Accepted |
 | ADR-14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
+| ADR-15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
 
 ## Adding a new ADR
 
