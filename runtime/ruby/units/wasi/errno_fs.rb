@@ -11,3 +11,26 @@ ERRNO_NOTDIR = 54
 ERRNO_NOTEMPTY = 55
 ERRNO_PERM = 63
 ERRNO_NOTCAPABLE = 76
+
+# One SystemCallError-to-WASI-errno table shared by every filesystem
+# syscall, so the same host error never maps to different codes
+# depending on which syscall raised it.
+FS_ERRNO = {
+  Errno::EACCES => ERRNO_ACCES,
+  Errno::EBADF => ERRNO_BADF,
+  Errno::EEXIST => ERRNO_EXIST,
+  Errno::EINVAL => ERRNO_INVAL,
+  Errno::EISDIR => ERRNO_ISDIR,
+  Errno::ELOOP => ERRNO_LOOP,
+  Errno::ENAMETOOLONG => ERRNO_NAMETOOLONG,
+  Errno::ENOENT => ERRNO_NOENT,
+  Errno::ENOTDIR => ERRNO_NOTDIR,
+  Errno::ENOTEMPTY => ERRNO_NOTEMPTY,
+  Errno::EPERM => ERRNO_PERM,
+  Errno::ESPIPE => ERRNO_SPIPE,
+}.freeze
+
+def fs_errno(e)
+  FS_ERRNO.fetch(e.class, ERRNO_IO)
+end
+private :fs_errno

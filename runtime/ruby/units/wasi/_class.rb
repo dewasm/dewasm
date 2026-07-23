@@ -21,9 +21,18 @@ def initialize(args: [], env: {}, preopens: {})
   @args = args.map(&:to_s)
   @env = env.map { |k, v| "#{k}=#{v}" }
   @fds = { 0 => $stdin, 1 => $stdout, 2 => $stderr }
+  # The stdio special-cases (SPIPE on seek/tell/pread/pwrite, no close)
+  # key on the objects captured here, in lockstep with the fd table —
+  # not on whatever the globals point at when a syscall runs.
+  @std_ios = [$stdin, $stdout, $stderr].freeze
   next_fd = 3
   preopens.each do |guest, host|
-    @fds[next_fd] = WasiDir.new(File.realpath(host), guest, nil)
+    real = begin
+      File.realpath(host)
+    rescue SystemCallError => e
+      raise ArgumentError, "preopen #{guest.inspect} => #{host.inspect}: #{e.message}"
+    end
+    @fds[next_fd] = WasiDir.new(real, guest, nil)
     next_fd += 1
   end
   @next_fd = next_fd

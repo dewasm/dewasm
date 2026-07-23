@@ -1,16 +1,11 @@
 # requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 def wasi_path_create_directory(dirfd, path_ptr, path_len)
   rel = @memory.read_string(path_ptr, path_len)
-  host_path, err = resolve_path(dirfd, rel)
+  # mkdir(2) never follows a trailing symlink (an existing one is EEXIST).
+  host_path, err = resolve_path(dirfd, rel, follow_last: false)
   return err if err
   Dir.mkdir(host_path)
   ERRNO_SUCCESS
-rescue Errno::EEXIST
-  ERRNO_EXIST
-rescue Errno::ENOENT
-  ERRNO_NOENT
-rescue Errno::ENOTDIR
-  ERRNO_NOTDIR
-rescue SystemCallError
-  ERRNO_IO
+rescue SystemCallError => e
+  fs_errno(e)
 end

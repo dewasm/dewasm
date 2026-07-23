@@ -41,7 +41,8 @@ Survey of how real systems break the circularity:
 - **Resolution order per imported function**: explicit entry from the
   embedder → bundled WASI (for `wasi_snapshot_preview1`, when enabled) →
   ENOSYS stub for syscalls dewasmify has not implemented; non-WASI
-  imports remain mandatory (`ArgumentError`).
+  imports remain mandatory (`Rt::LinkError`, as is a present import of
+  the wrong kind).
 - **The bundled WASI is constructed only when needed**: the first
   fallback resolution runs `@wasi ||= Rt::WASI.new(args:, env:)`. If the
   embedder covers every WASI import, no instance is created and its side

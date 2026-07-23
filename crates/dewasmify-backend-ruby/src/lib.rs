@@ -330,6 +330,8 @@ impl<'a> Gen<'a> {
     /// raises immediately (a link error), a missing one returns nil so the
     /// caller's `|| fallback` applies.
     fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
+        self.use_unit("rt/resolve_import");
+        self.use_unit("rt/check_import_kind");
         format!(
             "Rt.check_import_kind(Rt.resolve_import(imports, {}, {}), :{kind}, {}, {})",
             ruby_string(module),
@@ -340,8 +342,9 @@ impl<'a> Gen<'a> {
     }
 
     fn missing_import_string(&self, module: &str, name: &str) -> String {
+        self.use_unit("rt/link_error");
         format!(
-            "raise(ArgumentError, {})",
+            "raise(Rt::LinkError, {})",
             ruby_string(&format!("missing import {module}.{name}"))
         )
     }
@@ -433,10 +436,7 @@ impl<'a> Gen<'a> {
             "def initialize(imports = {})"
         };
         w.block(header, "end", |w| {
-            for (i, import) in m.imported_memory.iter().enumerate() {
-                let _ = i; // at most one memory ever exists
-                self.use_unit("rt/resolve_import");
-                self.use_unit("rt/check_import_kind");
+            if let Some(import) = &m.imported_memory {
                 w.line(format!(
                     "@memory = {} || {}",
                     self.resolve_import_string("memory", &import.module, &import.name),
@@ -452,8 +452,6 @@ impl<'a> Gen<'a> {
                 w.line(format!("@memory = Rt::Memory.new({}, {})", mem.min_pages, max));
             }
             for (i, import) in m.imported_tables.iter().enumerate() {
-                self.use_unit("rt/resolve_import");
-                self.use_unit("rt/check_import_kind");
                 w.line(format!(
                     "@t{i} = {} || {}",
                     self.resolve_import_string("table", &import.module, &import.name),
@@ -470,8 +468,6 @@ impl<'a> Gen<'a> {
                 w.line("@wasi = nil");
             }
             for (i, import) in m.imported_funcs.iter().enumerate() {
-                self.use_unit("rt/resolve_import");
-                self.use_unit("rt/check_import_kind");
                 // Fallback order: explicit import -> bundled WASI
                 // (constructed only when first needed) -> ENOSYS stub;
                 // non-WASI imports stay mandatory.
@@ -496,8 +492,6 @@ impl<'a> Gen<'a> {
                 ));
             }
             for (i, import) in m.imported_globals.iter().enumerate() {
-                self.use_unit("rt/resolve_import");
-                self.use_unit("rt/check_import_kind");
                 w.line(format!(
                     "@g{i} = {} || {}",
                     self.resolve_import_string("global", &import.module, &import.name),
@@ -514,26 +508,33 @@ impl<'a> Gen<'a> {
                 ));
             }
             for (i, elem) in m.elems.iter().enumerate() {
-                let items = elem
-                    .items
-                    .iter()
-                    .map(|item| match item {
-                        Some(func_idx) => {
-                            format!("[{}, {}]", self.func_type_idx(*func_idx), self.func_ref(*func_idx))
-                        }
-                        None => "nil".to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                // Built lazily: Declared segments emit an empty array and
+                // never need the rendered items.
+                let items = || {
+                    elem.items
+                        .iter()
+                        .map(|item| match item {
+                            Some(func_idx) => {
+                                format!(
+                                    "[{}, {}]",
+                                    self.func_type_symbol(*func_idx),
+                                    self.func_ref(*func_idx)
+                                )
+                            }
+                            None => "nil".to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
                 match &elem.kind {
                     ElemKind::Declared => w.line(format!("@elem{i} = []")),
-                    ElemKind::Passive => w.line(format!("@elem{i} = [{items}]")),
+                    ElemKind::Passive => w.line(format!("@elem{i} = [{}]", items())),
                     ElemKind::Active {
                         table_index,
                         offset,
                     } => {
                         self.use_unit("table/init");
-                        w.line(format!("@elem{i} = [{items}]"));
+                        w.line(format!("@elem{i} = [{}]", items()));
                         let offset = self.expr(offset);
                         w.line(format!(
                             "@t{table_index}.init({offset}, @elem{i}, 0, {})",
@@ -585,7 +586,7 @@ impl<'a> Gen<'a> {
         });
     }
 
-    fn func_type_idx(&self, func_idx: u32) -> u32 {
+    fn func_type_symbol(&self, func_idx: u32) -> String {
         let idx = func_idx as usize;
         let imports = self.module.imported_funcs.len();
         let ty = if idx < imports {
@@ -593,19 +594,27 @@ impl<'a> Gen<'a> {
         } else {
             self.module.funcs[idx - imports].type_idx
         };
-        self.canonical_type(ty)
+        self.type_symbol(ty)
     }
 
-    /// call_indirect compares types structurally, so identical function
-    /// types declared at different indices must collapse to one id.
-    fn canonical_type(&self, type_idx: u32) -> u32 {
+    /// call_indirect compares types structurally, and a table can be shared
+    /// across modules (imported tables), so the runtime type id must not come
+    /// from any module-local index space: derive an interned symbol from the
+    /// type's shape instead.
+    fn type_symbol(&self, type_idx: u32) -> String {
         let ty = &self.module.types[type_idx as usize];
-        self.module
-            .types
-            .iter()
-            .position(|t| t == ty)
-            .map(|i| i as u32)
-            .unwrap_or(type_idx)
+        let names = |tys: &[ValType]| {
+            tys.iter()
+                .map(|t| match t {
+                    ValType::I32 => "i32",
+                    ValType::I64 => "i64",
+                    ValType::F32 => "f32",
+                    ValType::F64 => "f64",
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        format!(":\"{}->{}\"", names(&ty.params), names(&ty.results))
     }
 
     /// A callable object for the function (used in tables and exports).
@@ -780,8 +789,7 @@ impl<'a> Gen<'a> {
                 results,
             } => {
                 self.use_unit("table/call");
-                let mut call_args =
-                    vec![self.expr(index), self.canonical_type(*type_idx).to_string()];
+                let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
                 let call = format!("@t{table_index}.call({})", call_args.join(", "));
                 w.line(assign_results(results, call));

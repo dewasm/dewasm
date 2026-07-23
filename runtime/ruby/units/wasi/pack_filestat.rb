@@ -4,9 +4,9 @@
 def pack_filestat(stat)
   [
     stat.dev, stat.ino, wasi_filetype(stat), stat.nlink, stat.size,
-    (stat.atime.to_r * 1_000_000_000).to_i,
-    (stat.mtime.to_r * 1_000_000_000).to_i,
-    (stat.ctime.to_r * 1_000_000_000).to_i
+    stat.atime.tv_sec * 1_000_000_000 + stat.atime.tv_nsec,
+    stat.mtime.tv_sec * 1_000_000_000 + stat.mtime.tv_nsec,
+    stat.ctime.tv_sec * 1_000_000_000 + stat.ctime.tv_nsec
   ].pack("Q<Q<Cx7Q<Q<Q<Q<Q<")
 end
 private :pack_filestat

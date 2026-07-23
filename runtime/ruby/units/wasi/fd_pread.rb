@@ -1,8 +1,8 @@
 # requires: memory/i32_load, memory/i32_store, memory/init
 def wasi_fd_pread(fd, iovs_ptr, iovs_len, offset, nread_ptr)
   io = @fds[fd]
-  return ERRNO_BADF unless io.is_a?(IO)
-  return ERRNO_SPIPE if [$stdin, $stdout, $stderr].include?(io)
+  return ERRNO_BADF if io.nil? || io.is_a?(WasiDir)
+  return ERRNO_SPIPE if @std_ios.include?(io)
   nread = 0
   iovs_len.times do |i|
     ptr = @memory.i32_load(iovs_ptr + i * 8)

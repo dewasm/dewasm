@@ -1,6 +1,6 @@
 def wasi_fd_sync(fd)
   io = @fds[fd]
-  return ERRNO_BADF unless io.is_a?(IO)
+  return ERRNO_BADF if io.nil? || io.is_a?(WasiDir)
   io.fsync
   ERRNO_SUCCESS
 rescue SystemCallError

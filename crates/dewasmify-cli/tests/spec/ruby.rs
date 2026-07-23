@@ -67,6 +67,9 @@ impl SpecLang for RubyLang {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
+            // check_unlinkable's rescue clause references Rt::LinkError
+            // even when the converted modules themselves don't.
+            "rt/link_error",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
@@ -327,14 +330,18 @@ rescue SystemStackError
 end
 
 # Upstream's assert_unlinkable message text never matches ours (we don't
-# reproduce wasm engines' wording); any raised error confirms the import
-# was correctly rejected as unlinkable.
+# reproduce wasm engines' wording); a raised Rt::LinkError confirms the
+# import was correctly rejected as unlinkable. Any other error means the
+# module *linked* and then crashed — that must not count as a pass.
 def check_unlinkable(desc)
   yield
   $fail += 1
   puts "FAIL(no error, want unlinkable): #{desc}"
-rescue
+rescue Rt::LinkError
   $pass += 1
+rescue => e
+  $fail += 1
+  puts "FAIL(non-link error, want unlinkable): #{desc}: #{e.class}: #{e.message}"
 end
 
 $spectest = {

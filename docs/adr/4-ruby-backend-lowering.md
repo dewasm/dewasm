@@ -26,10 +26,13 @@ language facts drove the lowering shape.
   Ruby block is block-local, so without hoisting, values assigned inside
   `catch` blocks vanish at `end` (found by spec-harness NameErrors, not
   foreseen).
-- **`call_indirect` compares canonicalized type indices**: the backend
-  maps each type index to the first structurally-equal entry in the type
-  section, both when populating the table and at call sites, because wasm
-  compares function types structurally, not by index.
+- **`call_indirect` compares structural type symbols**: the backend
+  renders each type index as a symbol interned from the type's shape
+  (e.g. `:"i32,i64->i32"`), both when populating the table and at call
+  sites. Wasm compares function types structurally, not by index — and
+  any module-local id (even a canonicalized index) breaks once a table
+  is shared across modules via an imported table, whose index spaces
+  differ.
 - **Module = one class**: imports resolved in `initialize` (`@ifN`
   ivars), globals as `@gN`, exports in an `@exports` hash keyed by the
   raw export name with `invoke(name, *args)` as the entry point (export

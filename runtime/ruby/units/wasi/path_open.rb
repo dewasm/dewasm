@@ -6,6 +6,9 @@ def wasi_path_open(dirfd, _dirflags, path_ptr, path_len, oflags, fs_rights_base,
   return err if err
 
   if oflags & 0x2 != 0 # oflags::DIRECTORY
+    # File.directory? is false for both "missing" and "not a directory";
+    # POSIX O_DIRECTORY distinguishes them (ENOENT vs ENOTDIR).
+    return ERRNO_NOENT unless File.exist?(host_path)
     return ERRNO_NOTDIR unless File.directory?(host_path)
     @fds[@next_fd] = WasiDir.new(host_path, nil, nil)
   else
@@ -29,18 +32,6 @@ def wasi_path_open(dirfd, _dirflags, path_ptr, path_len, oflags, fs_rights_base,
   @memory.i32_store(opened_fd_ptr, @next_fd)
   @next_fd += 1
   ERRNO_SUCCESS
-rescue Errno::ENOENT
-  ERRNO_NOENT
-rescue Errno::EEXIST
-  ERRNO_EXIST
-rescue Errno::EISDIR
-  ERRNO_ISDIR
-rescue Errno::ENOTDIR
-  ERRNO_NOTDIR
-rescue Errno::EACCES
-  ERRNO_ACCES
-rescue Errno::ELOOP
-  ERRNO_LOOP
-rescue SystemCallError
-  ERRNO_IO
+rescue SystemCallError => e
+  fs_errno(e)
 end
