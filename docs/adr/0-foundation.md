@@ -3,6 +3,8 @@
 Status: **Accepted, 2026-07-23.** Backfilled; the decision was made during
 initial planning and implementation. The core pipeline, the Ruby backend,
 and the spec harness are implemented; other backends are planned.
+Amended by [ADR-10](10-csharp-target.md): C# joins the target list,
+paired with Java.
 
 ## Context
 

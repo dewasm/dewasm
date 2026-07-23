@@ -33,7 +33,8 @@ there ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 |---|---|
 | Ruby | ✅ works, spec testsuite green |
 | Bash | planned (pure-bash softfloat for f32/f64) |
-| Java | planned |
+| Java | planned (paired with C#, ADR-10) |
+| C# | planned (paired with Java, ADR-10) |
 | Go | planned |
 | Python | planned |
 | PHP | planned |
@@ -160,9 +161,10 @@ this harness pass for it — the policy is
 3. WASI filesystem support (path_open + preopens), more real-world programs
 4. Bash backend (integers/memory/WASI first, then pure-bash IEEE754
    softfloat — no external commands)
-5. Java / Go backends
-6. Python / PHP backends
-7. Readability pass (expression folding), self-hosting demo (dewasmify →
+5. Java / C# backends (one design, two emitters — ADR-10)
+6. Go backend
+7. Python / PHP backends
+8. Readability pass (expression folding), self-hosting demo (dewasmify →
    wasm → Ruby → run dewasmify on Ruby)
 
 North-star demos we are steering toward: a library-mode SQLite as a

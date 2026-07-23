@@ -31,6 +31,7 @@ the consequences.
 | ADR-7 | [Import Providers and the Default WASI Fallback](7-import-providers.md) | Accepted |
 | ADR-8 | [Track the Latest Testsuite; Attribute Skips to a Support Matrix](8-latest-testsuite-support-matrix.md) | Accepted |
 | ADR-9 | [Example Apps Fetched from the Wasmer Registry, Never Committed](9-example-apps-from-registry.md) | Accepted |
+| ADR-10 | [Add C# to the Target Languages, Paired with Java](10-csharp-target.md) | Accepted |
 
 ## Adding a new ADR
 
