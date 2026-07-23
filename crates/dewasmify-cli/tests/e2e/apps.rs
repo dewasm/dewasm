@@ -17,13 +17,13 @@
 //! not part of the default suite's required tools.
 
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasmify_backend::{Backend, Mode};
 use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::{find_ruby, RubyBackend};
 
-use crate::support::apps_cache_dir;
+use crate::support::{apps_cache_dir, convert_bytes, run_command, run_script};
 
 struct AppCase {
     name: &'static str,
@@ -79,24 +79,6 @@ const CASES: &[AppCase] = &[
     },
 ];
 
-fn run(cmd: &mut Command, stdin: &str) -> (Vec<u8>, Option<i32>) {
-    let mut child = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn");
-    use std::io::Write as _;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().expect("wait");
-    (out.stdout, out.status.code())
-}
-
 /// Convert every cached app with `backend`, run it with `interpreter`,
 /// and diff against the case's golden output. `run_heavy` gates the
 /// `heavy` cases.
@@ -119,46 +101,28 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
             case.name
         );
         let bytes = std::fs::read(&wasm_path).expect("read wasm");
-        let module = dewasmify_core::build_module(&bytes).expect("build IR");
         // Codegen recurses with the IR's control-flow nesting; SQLite's
         // deepest functions exceed the 2 MiB test-thread default stack.
         let src = std::thread::scope(|scope| {
             std::thread::Builder::new()
                 .stack_size(64 << 20)
                 .spawn_scoped(scope, || {
-                    backend
-                        .generate(
-                            &module,
-                            &GenOptions {
-                                mode: Mode::Standalone,
-                                module_name: case.name.to_string(),
-                                runtime: RuntimeLinkage::Embedded,
-                                default_wasi: true,
-                            },
-                        )
-                        .expect("generate")
-                        .remove(0)
-                        .contents
+                    convert_bytes(backend, &bytes, Mode::Standalone, case.name)
                 })
                 .expect("spawn codegen thread")
                 .join()
                 .expect("codegen thread")
         });
-        let out_path = std::env::temp_dir().join(format!(
-            "dewasmify-app-{}-{}.{}",
-            backend.name(),
-            case.name,
-            backend.file_extension()
-        ));
-        std::fs::write(&out_path, src).unwrap();
-
-        let (our_out, our_code) = run(
-            Command::new(interpreter).arg(&out_path).args(case.args),
+        let output = run_script(
+            interpreter,
+            &src,
+            backend.file_extension(),
+            case.args,
             case.stdin,
         );
 
         assert_eq!(
-            String::from_utf8_lossy(&our_out),
+            String::from_utf8_lossy(&output.stdout),
             case.expect_stdout,
             "{} {:?} under {}: stdout differs from the golden output",
             case.name,
@@ -166,7 +130,7 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
             backend.name()
         );
         assert_eq!(
-            our_code,
+            output.status.code(),
             Some(case.expect_code),
             "{} under {}: exit status differs",
             case.name,
@@ -226,19 +190,19 @@ fn apps_golden_matches_wasmtime() {
             "{} not cached — run examples/apps/fetch.sh (see docs/testing.md)",
             case.name
         );
-        let (wt_out, wt_code) = run(
+        let output = run_command(
             Command::new("wasmtime").arg(&wasm_path).args(case.args),
             case.stdin,
         );
         assert_eq!(
-            String::from_utf8_lossy(&wt_out),
+            String::from_utf8_lossy(&output.stdout),
             case.expect_stdout,
             "{} {:?}: golden stdout is stale — regenerate it (docs/testing.md)",
             case.name,
             case.args
         );
         assert_eq!(
-            wt_code,
+            output.status.code(),
             Some(case.expect_code),
             "{} {:?}: golden exit code is stale — regenerate it (docs/testing.md)",
             case.name,

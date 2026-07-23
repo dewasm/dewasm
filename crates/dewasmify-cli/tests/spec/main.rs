@@ -330,26 +330,23 @@ impl<'a> ScriptGen<'a> {
             .collect()
     }
 
-    fn define_module(&mut self, mut qw: QuoteWat<'_>, desc: &str) {
-        let id = match &qw {
-            QuoteWat::Wat(Wat::Module(m)) => m.id.map(|i| i.name().to_string()),
-            _ => None,
-        };
+    /// Encode `qw` and convert it, with the bookkeeping every conversion
+    /// site shares: the module counter, the converted count, the unit
+    /// union, and attribution (unknown-proposal mapping, hard errors).
+    /// `Err` carries the skip tag; emitting the instantiation is the
+    /// caller's job.
+    fn convert_quote_wat(&mut self, mut qw: QuoteWat<'_>, desc: &str) -> Result<Converted, String> {
         let resolvable = self.resolvable_modules();
+        self.counter += 1;
         let converted = qw
             .encode()
             .map_err(|e| Attribution::Tag("unknown-proposal".to_string(), e.to_string()))
             .and_then(|bytes| convert(self.lang, &bytes, self.counter, &resolvable));
-        self.counter += 1;
-        let result = match converted {
+        match converted {
             Ok(conv) => {
                 self.converted += 1;
-                let registered = self.registered_pairs();
-                let var =
-                    self.lang
-                        .emit_instantiate(&mut self.script, &conv, self.counter, &registered);
-                self.units.extend(conv.units);
-                Ok(var)
+                self.units.extend(conv.units.iter().cloned());
+                Ok(conv)
             }
             Err(Attribution::Tag(tag, _detail)) => Err(tag),
             Err(Attribution::Bug(detail)) => {
@@ -358,7 +355,19 @@ impl<'a> ScriptGen<'a> {
                 ));
                 Err("conversion-bug".to_string())
             }
+        }
+    }
+
+    fn define_module(&mut self, qw: QuoteWat<'_>, desc: &str) {
+        let id = match &qw {
+            QuoteWat::Wat(Wat::Module(m)) => m.id.map(|i| i.name().to_string()),
+            _ => None,
         };
+        let result = self.convert_quote_wat(qw, desc).map(|conv| {
+            let registered = self.registered_pairs();
+            self.lang
+                .emit_instantiate(&mut self.script, &conv, self.counter, &registered)
+        });
         if let Some(id) = id {
             self.named.insert(id, result.clone());
         }
@@ -498,33 +507,11 @@ fn run_directives(
                     WastExecute::Invoke(inv) => gen.invoke_expr(&inv),
                     WastExecute::Wat(wat) => {
                         // instantiation trap: convert the module inline
-                        let mut qw = QuoteWat::Wat(wat);
-                        gen.counter += 1;
-                        let counter = gen.counter;
-                        let resolvable = gen.resolvable_modules();
-                        let converted = qw
-                            .encode()
-                            .map_err(|e| {
-                                Attribution::Tag("unknown-proposal".to_string(), e.to_string())
-                            })
-                            .and_then(|bytes| convert(lang, &bytes, counter, &resolvable));
-                        match converted {
-                            Ok(conv) => {
-                                gen.converted += 1;
+                        gen.convert_quote_wat(QuoteWat::Wat(wat), &desc)
+                            .map(|conv| {
                                 let registered = gen.registered_pairs();
-                                let call =
-                                    lang.instantiate_call(&mut gen.script, &conv, &registered);
-                                gen.units.extend(conv.units);
-                                Ok(call)
-                            }
-                            Err(Attribution::Tag(tag, _)) => Err(tag),
-                            Err(Attribution::Bug(detail)) => {
-                                gen.stats.hard_errors.push(format!(
-                                    "unattributed conversion failure at {desc}: {detail}"
-                                ));
-                                Err("conversion-bug".to_string())
-                            }
-                        }
+                                lang.instantiate_call(&mut gen.script, &conv, &registered)
+                            })
                     }
                     _ => Err("linking".to_string()),
                 };
@@ -568,32 +555,16 @@ fn run_directives(
                 if !lang.supports_registered_imports() {
                     gen.skip("linking");
                 } else {
-                    let mut qw = QuoteWat::Wat(module);
-                    gen.counter += 1;
-                    let counter = gen.counter;
-                    let resolvable = gen.resolvable_modules();
-                    let converted = qw
-                        .encode()
-                        .map_err(|e| {
-                            Attribution::Tag("unknown-proposal".to_string(), e.to_string())
-                        })
-                        .and_then(|bytes| convert(lang, &bytes, counter, &resolvable));
-                    match converted {
+                    match gen.convert_quote_wat(QuoteWat::Wat(module), &desc) {
                         Ok(conv) => {
-                            gen.converted += 1;
                             let registered = gen.registered_pairs();
                             let call = lang.instantiate_call(&mut gen.script, &conv, &registered);
-                            gen.units.extend(conv.units);
-                            let _ = message; // upstream wording never matches ours; any error counts
+                            // Upstream wording never matches ours; only the
+                            // Rt::LinkError class is checked.
+                            let _ = message;
                             lang.emit_check_unlinkable(&mut gen.script, &desc, &call);
                         }
-                        Err(Attribution::Tag(tag, _)) => gen.skip(&tag),
-                        Err(Attribution::Bug(detail)) => {
-                            gen.stats.hard_errors.push(format!(
-                                "unattributed conversion failure at {desc}: {detail}"
-                            ));
-                            gen.skip("conversion-bug");
-                        }
+                        Err(tag) => gen.skip(&tag),
                     }
                 }
             }
