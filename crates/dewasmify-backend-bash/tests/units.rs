@@ -47,7 +47,11 @@ fn declared_requires_cover_references() {
             ));
         }
     }
-    assert!(problems.is_empty(), "unit dependency drift:\n{}", problems.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "unit dependency drift:\n{}",
+        problems.join("\n")
+    );
 }
 
 #[test]

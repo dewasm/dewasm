@@ -23,7 +23,7 @@ use dewasmify_backend::{
 };
 use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
-    BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
+    BinOp, BrTarget, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -36,7 +36,12 @@ pub fn bundler() -> &'static RuntimeBundler {
             "#",
             "  ",
             vec![
-                RuntimeScope { prefix: "rt", open: "", close: "", prelude: Some("rt/_module") },
+                RuntimeScope {
+                    prefix: "rt",
+                    open: "",
+                    close: "",
+                    prelude: Some("rt/_module"),
+                },
                 RuntimeScope {
                     prefix: "memory",
                     open: "class Memory",
@@ -86,7 +91,11 @@ fn generate_class_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
-    let gen = Gen { module, default_wasi, uses: RefCell::new(extra_seeds.clone()) };
+    let gen = Gen {
+        module,
+        default_wasi,
+        uses: RefCell::new(extra_seeds.clone()),
+    };
     let mut wb = CodeWriter::new("  ");
     wb.indent();
     gen.body(&mut wb);
@@ -255,9 +264,10 @@ pub use dewasmify_backend::WASI_PREVIEW1_FUNCTIONS;
 /// fallback (and therefore takes `args:`/`env:` keyword arguments).
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
-        && module.imported_funcs.iter().any(|f| {
-            is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name))
-        })
+        && module
+            .imported_funcs
+            .iter()
+            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
 struct Gen<'a> {
@@ -530,7 +540,12 @@ impl<'a> Gen<'a> {
             Stmt::GlobalSet { idx, expr } => {
                 w.line(format!("@g{idx} = {}", self.expr(expr)));
             }
-            Stmt::Store { op, addr, value, offset } => {
+            Stmt::Store {
+                op,
+                addr,
+                value,
+                offset,
+            } => {
                 w.line(format!(
                     "@memory.{}({}, {})",
                     self.mem(store_method(*op)),
@@ -552,7 +567,12 @@ impl<'a> Gen<'a> {
                     w.line("break if __b");
                 });
             }
-            Stmt::If { label, cond, then, els } => {
+            Stmt::If {
+                label,
+                cond,
+                then,
+                els,
+            } => {
                 let emit_if = |w: &mut CodeWriter, gen: &Self| {
                     w.line(format!("if {} != 0", gen.expr(cond)));
                     w.indent();
@@ -584,7 +604,11 @@ impl<'a> Gen<'a> {
                     self.branch(w, target);
                 });
             }
-            Stmt::BrTable { index, targets, default } => {
+            Stmt::BrTable {
+                index,
+                targets,
+                default,
+            } => {
                 if targets.is_empty() {
                     self.branch(w, default);
                     return;
@@ -603,12 +627,21 @@ impl<'a> Gen<'a> {
                 w.line("end");
             }
             Stmt::Return { values } => self.return_stmt(w, values),
-            Stmt::Call { func, args, results } => {
+            Stmt::Call {
+                func,
+                args,
+                results,
+            } => {
                 let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
                 let call = self.call_string(*func, &args);
                 w.line(assign_results(results, call));
             }
-            Stmt::CallIndirect { type_idx, index, args, results } => {
+            Stmt::CallIndirect {
+                type_idx,
+                index,
+                args,
+                results,
+            } => {
                 self.use_unit("table/call");
                 let mut call_args =
                     vec![self.expr(index), self.canonical_type(*type_idx).to_string()];
@@ -618,7 +651,11 @@ impl<'a> Gen<'a> {
             }
             Stmt::MemoryGrow { dst, delta } => {
                 self.use_unit("memory/grow");
-                w.line(format!("{} = @memory.grow({})", temp(*dst), self.expr(delta)));
+                w.line(format!(
+                    "{} = @memory.grow({})",
+                    temp(*dst),
+                    self.expr(delta)
+                ));
             }
             Stmt::MemoryCopy { dst, src, len } => {
                 self.use_unit("memory/copy");
@@ -661,7 +698,11 @@ impl<'a> Gen<'a> {
             [] => w.line("return"),
             [v] => w.line(format!("return {}", self.expr(v))),
             vs => {
-                let vs = vs.iter().map(|v| self.expr(v)).collect::<Vec<_>>().join(", ");
+                let vs = vs
+                    .iter()
+                    .map(|v| self.expr(v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 w.line(format!("return [{vs}]"));
             }
         }
@@ -670,7 +711,11 @@ impl<'a> Gen<'a> {
     fn branch(&self, w: &mut CodeWriter, target: &BrTarget) {
         match target {
             BrTarget::Return { values } => self.return_stmt(w, values),
-            BrTarget::Label { label, is_loop, assigns } => {
+            BrTarget::Label {
+                label,
+                is_loop,
+                assigns,
+            } => {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
@@ -818,7 +863,10 @@ impl<'a> Gen<'a> {
             I64Shl => format!("(({a} << ({b} & 63)) & 0xffffffffffffffff)"),
             I64ShrU => format!("({a} >> ({b} & 63))"),
             I64ShrS => {
-                format!("(({}({a}) >> ({b} & 63)) & 0xffffffffffffffff)", self.rt("s64"))
+                format!(
+                    "(({}({a}) >> ({b} & 63)) & 0xffffffffffffffff)",
+                    self.rt("s64")
+                )
             }
             I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),

@@ -28,12 +28,11 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasmify_backend::{
-    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope,
-    SupportStatus,
+    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
 };
 use dewasmify_core::feature::Feature;
 use dewasmify_core::ir::{
-    BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp,
+    BinOp, BrTarget, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp, UnOp,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -46,9 +45,24 @@ pub fn bundler() -> &'static RuntimeBundler {
             "#",
             "  ",
             vec![
-                RuntimeScope { prefix: "rt", open: "", close: "", prelude: Some("rt/_prelude") },
-                RuntimeScope { prefix: "mem", open: "", close: "", prelude: None },
-                RuntimeScope { prefix: "wasi", open: "", close: "", prelude: None },
+                RuntimeScope {
+                    prefix: "rt",
+                    open: "",
+                    close: "",
+                    prelude: Some("rt/_prelude"),
+                },
+                RuntimeScope {
+                    prefix: "mem",
+                    open: "",
+                    close: "",
+                    prelude: None,
+                },
+                RuntimeScope {
+                    prefix: "wasi",
+                    open: "",
+                    close: "",
+                    prelude: None,
+                },
             ],
             UNIT_SOURCES,
         )
@@ -81,7 +95,12 @@ pub fn find_bash5() -> Option<std::path::PathBuf> {
         else {
             continue;
         };
-        if String::from_utf8_lossy(&out.stdout).trim().parse::<u32>().unwrap_or(0) >= 5 {
+        if String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse::<u32>()
+            .unwrap_or(0)
+            >= 5
+        {
             return Some(candidate);
         }
     }
@@ -157,8 +176,7 @@ impl Backend for BashBackend {
             extra_seeds.insert("rt/exit".to_string());
         }
 
-        let (src, units) =
-            generate_module_inner(module, &prefix, opts.default_wasi, &extra_seeds)?;
+        let (src, units) = generate_module_inner(module, &prefix, opts.default_wasi, &extra_seeds)?;
 
         let mut out = String::new();
         if opts.mode == Mode::Standalone {
@@ -203,7 +221,10 @@ impl Backend for BashBackend {
             w.line("fi");
             out.push_str(&w.finish());
         }
-        Ok(vec![OutputFile { name: format!("{}.sh", opts.module_name), contents: out }])
+        Ok(vec![OutputFile {
+            name: format!("{}.sh", opts.module_name),
+            contents: out,
+        }])
     }
 }
 
@@ -239,9 +260,10 @@ fn is_wasi_module(name: &str) -> bool {
 /// fallback (and therefore consumes the WASI_ARGS/WASI_ENV arrays).
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
-        && module.imported_funcs.iter().any(|f| {
-            is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name))
-        })
+        && module
+            .imported_funcs
+            .iter()
+            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
 /// Single-quoted bash string; `'` is the only character needing an escape.
@@ -287,8 +309,7 @@ impl<'a> Gen<'a> {
                 .imported_funcs
                 .iter()
                 .filter(|f| {
-                    is_wasi_module(&f.module)
-                        && bundler().has_unit(&format!("wasi/{}", f.name))
+                    is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name))
                 })
                 .map(|f| f.name.as_str())
                 .collect();
@@ -358,8 +379,7 @@ impl<'a> Gen<'a> {
                     w.line(format!("[[ -n ${p}if{i} ]] || {p}if{i}=rt_enosys"));
                 }
             } else {
-                let msg =
-                    bash_str(&format!("missing import {}.{}", import.module, import.name));
+                let msg = bash_str(&format!("missing import {}.{}", import.module, import.name));
                 w.line(format!(
                     "[[ -n ${p}if{i} ]] || {{ echo {msg} >&2; return 1; }}"
                 ));
@@ -385,8 +405,12 @@ impl<'a> Gen<'a> {
             }
         }
         for (i, data) in m.datas.iter().enumerate() {
-            let bytes =
-                data.data.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" ");
+            let bytes = data
+                .data
+                .iter()
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
             match &data.offset {
                 Some(offset) => {
                     self.scratch.set(0);
@@ -406,7 +430,11 @@ impl<'a> Gen<'a> {
         let mut entries = Vec::new();
         for export in &m.exports {
             if let ExportKind::Func(idx) = export.kind {
-                entries.push(format!("[{}]={}", bash_str(&export.name), self.func_ref(idx)));
+                entries.push(format!(
+                    "[{}]={}",
+                    bash_str(&export.name),
+                    self.func_ref(idx)
+                ));
             }
         }
         w.line(format!("declare -gA {p}EXPORTS=({})", entries.join(" ")));
@@ -416,7 +444,10 @@ impl<'a> Gen<'a> {
                 gentries.push(format!("[{}]={p}g{idx}", bash_str(&export.name)));
             }
         }
-        w.line(format!("declare -gA {p}GLOBAL_EXPORTS=({})", gentries.join(" ")));
+        w.line(format!(
+            "declare -gA {p}GLOBAL_EXPORTS=({})",
+            gentries.join(" ")
+        ));
 
         if let Some(start) = m.start {
             w.line(format!("{} || return $?", self.call_cmd(start, &[])));
@@ -520,8 +551,9 @@ impl<'a> Gen<'a> {
 
         w.line(format!("{}f{idx}() {{", self.prefix));
         w.indent();
-        let mut decls: Vec<String> =
-            (0..ty.params.len()).map(|i| format!("l{i}=\"${{{}}}\"", i + 1)).collect();
+        let mut decls: Vec<String> = (0..ty.params.len())
+            .map(|i| format!("l{i}=\"${{{}}}\"", i + 1))
+            .collect();
         for i in 0..func.locals.len() {
             decls.push(format!("l{}=0", ty.params.len() + i));
         }
@@ -531,8 +563,11 @@ impl<'a> Gen<'a> {
         let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
         depths.dedup();
         if !depths.is_empty() {
-            let names =
-                depths.iter().map(|d| format!("s{d}")).collect::<Vec<_>>().join(" ");
+            let names = depths
+                .iter()
+                .map(|d| format!("s{d}"))
+                .collect::<Vec<_>>()
+                .join(" ");
             w.line(format!("local {names}"));
         }
         let mut extras = Vec::new();
@@ -565,7 +600,12 @@ impl<'a> Gen<'a> {
             Stmt::GlobalSet { idx, expr } => {
                 self.emit_assign(w, &format!("{}g{idx}", self.prefix), expr)
             }
-            Stmt::Store { op, addr, value, offset } => {
+            Stmt::Store {
+                op,
+                addr,
+                value,
+                offset,
+            } => {
                 let a = self.addr(w, addr, *offset);
                 let v = self.value(w, value);
                 let method = store_method(*op);
@@ -606,7 +646,12 @@ impl<'a> Gen<'a> {
                     self.stmts(w, body, f);
                 }
             }
-            Stmt::If { label, cond, then, els } => {
+            Stmt::If {
+                label,
+                cond,
+                then,
+                els,
+            } => {
                 if label.referenced {
                     f.stack.push(label.id);
                     w.line("while :; do");
@@ -629,7 +674,11 @@ impl<'a> Gen<'a> {
                 w.dedent();
                 w.line("fi");
             }
-            Stmt::BrTable { index, targets, default } => {
+            Stmt::BrTable {
+                index,
+                targets,
+                default,
+            } => {
                 if targets.is_empty() {
                     self.branch(w, default, f);
                     return;
@@ -652,19 +701,26 @@ impl<'a> Gen<'a> {
                 w.line("esac");
             }
             Stmt::Return { values } => self.return_stmt(w, values),
-            Stmt::Call { func, args, results } => {
-                let args: Vec<String> =
-                    args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
+            Stmt::Call {
+                func,
+                args,
+                results,
+            } => {
+                let args: Vec<String> = args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
                 w.line(format!("{} || return $?", self.call_cmd(*func, &args)));
                 self.assign_results(w, results);
             }
-            Stmt::CallIndirect { type_idx, index, args, results } => {
+            Stmt::CallIndirect {
+                type_idx,
+                index,
+                args,
+                results,
+            } => {
                 let p = self.prefix;
                 self.needs_ci.set(true);
                 self.use_unit("rt/trap");
                 let i = self.value(w, index);
-                let args: Vec<String> =
-                    args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
+                let args: Vec<String> = args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
                 w.line(format!("(( __x = {i} ))"));
                 w.line(format!(
                     "(( __x < {p}tab_size )) || {{ rt_trap 'undefined element'; return $?; }}"
@@ -790,7 +846,11 @@ impl<'a> Gen<'a> {
     fn branch(&self, w: &mut CodeWriter, target: &BrTarget, f: &Frames) {
         match target {
             BrTarget::Return { values } => self.return_stmt(w, values),
-            BrTarget::Label { label, is_loop, assigns } => {
+            BrTarget::Label {
+                label,
+                is_loop,
+                assigns,
+            } => {
                 for (dst, src) in assigns {
                     w.line(format!("(( {} = {} ))", temp(*dst), temp(*src)));
                 }
@@ -859,7 +919,11 @@ impl<'a> Gen<'a> {
                 let a = self.addr(w, addr, *offset);
                 let method = load_method(*op);
                 self.use_unit(&format!("mem/{method}"));
-                w.line(format!("mem_{method} {} {} || return $?", self.prefix, cmd_arg(&a)));
+                w.line(format!(
+                    "mem_{method} {} {} || return $?",
+                    self.prefix,
+                    cmd_arg(&a)
+                ));
                 self.grab_r0(w)
             }
             Expr::Select { cond, then, els } => {
@@ -896,11 +960,21 @@ impl<'a> Gen<'a> {
                 true
             }
             Expr::Load { op, addr, offset } => {
-                let Some(a) = self.arith(addr) else { return false };
-                let a = if *offset == 0 { a } else { format!("(({a}) + {offset})") };
+                let Some(a) = self.arith(addr) else {
+                    return false;
+                };
+                let a = if *offset == 0 {
+                    a
+                } else {
+                    format!("(({a}) + {offset})")
+                };
                 let method = load_method(*op);
                 self.use_unit(&format!("mem/{method}"));
-                w.line(format!("mem_{method} {} {} || return $?", self.prefix, cmd_arg(&a)));
+                w.line(format!(
+                    "mem_{method} {} {} || return $?",
+                    self.prefix,
+                    cmd_arg(&a)
+                ));
                 true
             }
             _ => false,

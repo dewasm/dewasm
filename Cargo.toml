@@ -19,3 +19,9 @@ wat = "1"
 wast = "254"
 clap = { version = "4", features = ["derive"] }
 regex = "1"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dewasmify_spec_all)'] }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

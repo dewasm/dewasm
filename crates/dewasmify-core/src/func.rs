@@ -106,7 +106,10 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn push(&mut self, ty: ValType) -> Temp {
-        let temp = Temp { depth: self.stack.len() as u32, ty };
+        let temp = Temp {
+            depth: self.stack.len() as u32,
+            ty,
+        };
         self.temps.insert(temp);
         self.stack.push(ty);
         temp
@@ -114,12 +117,18 @@ impl<'a> FuncBuilder<'a> {
 
     fn pop(&mut self) -> Temp {
         let ty = self.stack.pop().expect("value stack is not empty");
-        Temp { depth: self.stack.len() as u32, ty }
+        Temp {
+            depth: self.stack.len() as u32,
+            ty,
+        }
     }
 
     fn peek(&self) -> Temp {
         let ty = *self.stack.last().expect("value stack is not empty");
-        Temp { depth: self.stack.len() as u32 - 1, ty }
+        Temp {
+            depth: self.stack.len() as u32 - 1,
+            ty,
+        }
     }
 
     fn push_assign(&mut self, ty: ValType, expr: Expr) {
@@ -145,7 +154,11 @@ impl<'a> FuncBuilder<'a> {
         let addr = self.pop();
         self.push_assign(
             res,
-            Expr::Load { op, addr: Box::new(Expr::Temp(addr)), offset: memarg.offset },
+            Expr::Load {
+                op,
+                addr: Box::new(Expr::Temp(addr)),
+                offset: memarg.offset,
+            },
         );
     }
 
@@ -207,10 +220,20 @@ impl<'a> FuncBuilder<'a> {
             let frame = &self.frames[idx];
             match frame.kind {
                 FrameKind::Func => (frame.results.clone(), 0, false, true, 0),
-                FrameKind::Loop => {
-                    (frame.params.clone(), frame.base, true, false, frame.label_id)
-                }
-                _ => (frame.results.clone(), frame.base, false, false, frame.label_id),
+                FrameKind::Loop => (
+                    frame.params.clone(),
+                    frame.base,
+                    true,
+                    false,
+                    frame.label_id,
+                ),
+                _ => (
+                    frame.results.clone(),
+                    frame.base,
+                    false,
+                    false,
+                    frame.label_id,
+                ),
             }
         };
         let arity = arity_tys.len();
@@ -227,15 +250,25 @@ impl<'a> FuncBuilder<'a> {
         }
         let mut assigns = Vec::new();
         for (i, ty) in arity_tys.iter().enumerate() {
-            let src = Temp { depth: (self.stack.len() - arity + i) as u32, ty: *ty };
-            let dst = Temp { depth: (base + i) as u32, ty: *ty };
+            let src = Temp {
+                depth: (self.stack.len() - arity + i) as u32,
+                ty: *ty,
+            };
+            let dst = Temp {
+                depth: (base + i) as u32,
+                ty: *ty,
+            };
             if src != dst {
                 self.temps.insert(dst);
                 assigns.push((dst, src));
             }
         }
         self.frames[idx].referenced = true;
-        BrTarget::Label { label: label_id, is_loop, assigns }
+        BrTarget::Label {
+            label: label_id,
+            is_loop,
+            assigns,
+        }
     }
 
     fn handle_else(&mut self) {
@@ -243,7 +276,9 @@ impl<'a> FuncBuilder<'a> {
         let params = self.cur().params.clone();
         let then_body = std::mem::take(&mut self.cur().stmts);
         match &mut self.cur().kind {
-            FrameKind::If { then_body: slot, .. } => *slot = Some(then_body),
+            FrameKind::If {
+                then_body: slot, ..
+            } => *slot = Some(then_body),
             _ => unreachable!("else outside of if"),
         }
         self.stack.truncate(base);
@@ -275,7 +310,10 @@ impl<'a> FuncBuilder<'a> {
                     let arity = frame.results.len();
                     let values = (0..arity)
                         .map(|i| {
-                            Expr::Temp(Temp { depth: i as u32, ty: frame.results[i] })
+                            Expr::Temp(Temp {
+                                depth: i as u32,
+                                ty: frame.results[i],
+                            })
                         })
                         .collect();
                     body.push(Stmt::Return { values });
@@ -290,30 +328,50 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             FrameKind::Block => {
-                let label = Label { id: frame.label_id, referenced: frame.referenced };
+                let label = Label {
+                    id: frame.label_id,
+                    referenced: frame.referenced,
+                };
                 if frame.referenced {
-                    self.emit(Stmt::Block { label, body: frame.stmts });
+                    self.emit(Stmt::Block {
+                        label,
+                        body: frame.stmts,
+                    });
                 } else {
                     // Nobody branches here: splice the body into the parent.
                     self.cur().stmts.extend(frame.stmts);
                 }
             }
             FrameKind::Loop => {
-                let label = Label { id: frame.label_id, referenced: frame.referenced };
+                let label = Label {
+                    id: frame.label_id,
+                    referenced: frame.referenced,
+                };
                 if frame.referenced {
-                    self.emit(Stmt::Loop { label, body: frame.stmts });
+                    self.emit(Stmt::Loop {
+                        label,
+                        body: frame.stmts,
+                    });
                 } else {
                     // No back edge: the loop body runs exactly once.
                     self.cur().stmts.extend(frame.stmts);
                 }
             }
             FrameKind::If { cond, then_body } => {
-                let label = Label { id: frame.label_id, referenced: frame.referenced };
+                let label = Label {
+                    id: frame.label_id,
+                    referenced: frame.referenced,
+                };
                 let (then, els) = match then_body {
                     Some(then) => (then, frame.stmts),
                     None => (frame.stmts, Vec::new()),
                 };
-                self.emit(Stmt::If { label, cond, then, els });
+                self.emit(Stmt::If {
+                    label,
+                    cond,
+                    then,
+                    els,
+                });
             }
         }
     }
@@ -367,7 +425,10 @@ impl<'a> FuncBuilder<'a> {
                 let cond = self.pop();
                 let (params, results) = self.block_type(blockty)?;
                 self.push_frame(
-                    FrameKind::If { cond: Expr::Temp(cond), then_body: None },
+                    FrameKind::If {
+                        cond: Expr::Temp(cond),
+                        then_body: None,
+                    },
                     params,
                     results,
                 );
@@ -382,7 +443,10 @@ impl<'a> FuncBuilder<'a> {
             Operator::BrIf { relative_depth } => {
                 let cond = self.pop();
                 let target = self.branch_target(relative_depth);
-                self.emit(Stmt::BrIf { cond: Expr::Temp(cond), target });
+                self.emit(Stmt::BrIf {
+                    cond: Expr::Temp(cond),
+                    target,
+                });
             }
             Operator::BrTable { targets } => {
                 let index = self.pop();
@@ -421,9 +485,17 @@ impl<'a> FuncBuilder<'a> {
                     args[i] = Expr::Temp(self.pop());
                 }
                 let results = ty.results.iter().map(|ty| self.push(*ty)).collect();
-                self.emit(Stmt::Call { func: function_index, args, results });
+                self.emit(Stmt::Call {
+                    func: function_index,
+                    args,
+                    results,
+                });
             }
-            Operator::CallIndirect { type_index, table_index, .. } => {
+            Operator::CallIndirect {
+                type_index,
+                table_index,
+                ..
+            } => {
                 if table_index != 0 {
                     return Err(unsupported(
                         Feature::MultipleTables,
@@ -469,11 +541,17 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::LocalSet { local_index } => {
                 let value = self.pop();
-                self.emit(Stmt::LocalSet { idx: local_index, expr: Expr::Temp(value) });
+                self.emit(Stmt::LocalSet {
+                    idx: local_index,
+                    expr: Expr::Temp(value),
+                });
             }
             Operator::LocalTee { local_index } => {
                 let value = self.peek();
-                self.emit(Stmt::LocalSet { idx: local_index, expr: Expr::Temp(value) });
+                self.emit(Stmt::LocalSet {
+                    idx: local_index,
+                    expr: Expr::Temp(value),
+                });
             }
             Operator::GlobalGet { global_index } => {
                 let ty = self.module.globals[global_index as usize].ty;
@@ -481,7 +559,10 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::GlobalSet { global_index } => {
                 let value = self.pop();
-                self.emit(Stmt::GlobalSet { idx: global_index, expr: Expr::Temp(value) });
+                self.emit(Stmt::GlobalSet {
+                    idx: global_index,
+                    expr: Expr::Temp(value),
+                });
             }
 
             // -- memory
@@ -512,7 +593,10 @@ impl<'a> FuncBuilder<'a> {
             Operator::MemoryGrow { .. } => {
                 let delta = self.pop();
                 let dst = self.push(I32);
-                self.emit(Stmt::MemoryGrow { dst, delta: Expr::Temp(delta) });
+                self.emit(Stmt::MemoryGrow {
+                    dst,
+                    delta: Expr::Temp(delta),
+                });
             }
             Operator::MemoryCopy { .. } => {
                 let len = self.pop();
@@ -703,11 +787,13 @@ impl<'a> FuncBuilder<'a> {
 
             op => {
                 let name = format!("{op:?}");
-                let name = name.split_whitespace().next().unwrap_or(&name).trim_end_matches('{');
+                let name = name
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or(&name)
+                    .trim_end_matches('{');
                 return Err(match classify_op(name) {
-                    Some(feature) => {
-                        unsupported(feature, format!("instruction {name}"))
-                    }
+                    Some(feature) => unsupported(feature, format!("instruction {name}")),
                     None => anyhow::anyhow!("unsupported instruction: {op:?}"),
                 });
             }
@@ -725,16 +811,38 @@ fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&["TableInit", "TableCopy", "ElemDrop"]) {
         Some(Feature::TableBulkOps)
-    } else if starts(&["CallRef", "ReturnCallRef", "BrOnNull", "BrOnNonNull", "RefAsNonNull"]) {
+    } else if starts(&[
+        "CallRef",
+        "ReturnCallRef",
+        "BrOnNull",
+        "BrOnNonNull",
+        "RefAsNonNull",
+    ]) {
         Some(Feature::FunctionReferences)
     } else if starts(&["ReturnCall"]) {
         Some(Feature::TailCall)
     } else if starts(&["Table", "RefNull", "RefIsNull", "RefFunc"]) {
         Some(Feature::ReferenceTypes)
-    } else if starts(&["RefEq", "RefTest", "RefCast", "RefI31", "I31Get", "StructNew",
-        "StructGet", "StructSet", "ArrayNew", "ArrayGet", "ArraySet", "ArrayLen",
-        "ArrayFill", "ArrayCopy", "ArrayInit", "AnyConvert", "ExternConvert", "BrOnCast"])
-    {
+    } else if starts(&[
+        "RefEq",
+        "RefTest",
+        "RefCast",
+        "RefI31",
+        "I31Get",
+        "StructNew",
+        "StructGet",
+        "StructSet",
+        "ArrayNew",
+        "ArrayGet",
+        "ArraySet",
+        "ArrayLen",
+        "ArrayFill",
+        "ArrayCopy",
+        "ArrayInit",
+        "AnyConvert",
+        "ExternConvert",
+        "BrOnCast",
+    ]) {
         Some(Feature::Gc)
     } else if starts(&["Throw", "Rethrow", "Try", "Catch", "Delegate", "ThrowRef"]) {
         Some(Feature::ExceptionHandling)

@@ -43,7 +43,10 @@ fn declared_requires_cover_references() {
             if dep.ends_with("/_class") || dep.ends_with("/_module") {
                 return;
             }
-            problems.push(format!("{}: uses {what} but does not require {dep}", unit.id));
+            problems.push(format!(
+                "{}: uses {what} but does not require {dep}",
+                unit.id
+            ));
         };
 
         let code: String = unit
@@ -69,7 +72,10 @@ fn declared_requires_cover_references() {
             demand(dep, &format!("Rt::{}", &cap[1]));
         }
         for cap in memory_call.captures_iter(&code) {
-            demand(format!("memory/{}", &cap[1]), &format!("@memory.{}", &cap[1]));
+            demand(
+                format!("memory/{}", &cap[1]),
+                &format!("@memory.{}", &cap[1]),
+            );
         }
 
         // Bare sibling calls within the same scope (with parentheses; a
@@ -87,5 +93,9 @@ fn declared_requires_cover_references() {
             }
         }
     }
-    assert!(problems.is_empty(), "unit dependency drift:\n{}", problems.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "unit dependency drift:\n{}",
+        problems.join("\n")
+    );
 }

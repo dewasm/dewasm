@@ -60,7 +60,8 @@ fn render() -> String {
          stub ([ADR-7](adr/7-import-providers.md), bash conventions in\n\
          [ADR-12](adr/12-bash-wasi.md)).\n\n",
     );
-    let wasi_backends: Vec<(&str, fn(&str) -> bool)> = vec![
+    type SyscallCheck = fn(&str) -> bool;
+    let wasi_backends: Vec<(&str, SyscallCheck)> = vec![
         ("ruby", |id| dewasmify_backend_ruby::bundler().has_unit(id)),
         ("bash", |id| dewasmify_backend_bash::bundler().has_unit(id)),
     ];
@@ -74,8 +75,11 @@ fn render() -> String {
     for name in WASI_PREVIEW1_FUNCTIONS {
         let mut row = format!("| {name} ");
         for (_, has_unit) in &wasi_backends {
-            let status =
-                if has_unit(&format!("wasi/{name}")) { "✅" } else { "❌ (ENOSYS)" };
+            let status = if has_unit(&format!("wasi/{name}")) {
+                "✅"
+            } else {
+                "❌ (ENOSYS)"
+            };
             let _ = write!(row, "| {status} ");
         }
         let _ = writeln!(out, "{row}|");

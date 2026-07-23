@@ -155,7 +155,10 @@ pub struct UnsupportedError {
 
 impl UnsupportedError {
     pub fn new(feature: Feature, detail: impl Into<String>) -> Self {
-        UnsupportedError { features: vec![feature], detail: detail.into() }
+        UnsupportedError {
+            features: vec![feature],
+            detail: detail.into(),
+        }
     }
 }
 

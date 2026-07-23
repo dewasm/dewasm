@@ -171,7 +171,11 @@ fn standalone_args_bash() {
         .args(["foo", "bar"])
         .output()
         .expect("run bash");
-    assert_eq!(output.status.code(), Some(3), "argc = program name + 2 args");
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "argc = program name + 2 args"
+    );
 }
 
 /// The bash analogue of `partial_override_falls_back_to_bundled_wasi`:
@@ -405,7 +409,11 @@ fn run_ruby(script: &str, args: &[&str]) -> String {
         std::process::id() as u64 + script.len() as u64
     ));
     std::fs::write(&path, script).unwrap();
-    let output = Command::new("ruby").arg(&path).args(args).output().expect("run ruby");
+    let output = Command::new("ruby")
+        .arg(&path)
+        .args(args)
+        .output()
+        .expect("run ruby");
     assert!(
         output.status.success(),
         "ruby failed: {}\n{}",

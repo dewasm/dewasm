@@ -80,7 +80,11 @@ struct Cases {
 
 impl Cases {
     fn new() -> Cases {
-        Cases { input: String::new(), expected: Vec::new(), units: BTreeSet::new() }
+        Cases {
+            input: String::new(),
+            expected: Vec::new(),
+            units: BTreeSet::new(),
+        }
     }
 
     fn push(&mut self, op: &str, a: i64, b: i64, expect: String) {
@@ -132,8 +136,7 @@ fn run_cases(cases: &Cases) {
         eprintln!("bash >= 5 not found; skipping softfloat oracle");
         return;
     };
-    let runtime = dewasmify_backend_bash::shared_runtime(&cases.units)
-        .expect("bundle float units");
+    let runtime = dewasmify_backend_bash::shared_runtime(&cases.units).expect("bundle float units");
     let script = format!(
         "{runtime}\nwhile IFS=' ' read -r __op __a __b; do\n  \"rt_$__op\" \"$__a\" \"$__b\"\n  __st=$?\n  if (( __st == 134 )); then\n    echo \"T $TRAP_MSG\"\n  else\n    echo \"$(( R0 ))\"\n  fi\ndone < \"$1\"\n"
     );
@@ -194,14 +197,24 @@ fn run_cases(cases: &Cases) {
 fn diag(input: &str, got: &str, want: &str) -> String {
     let mut parts = input.split(' ');
     let _op = parts.next();
-    let a = parts.next().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-    let b = parts.next().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+    let a = parts
+        .next()
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    let b = parts
+        .next()
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
     format!(
         "a={:#018x} b={:#018x} got={} want={}",
         a,
         b,
-        got.parse::<i64>().map(|v| format!("{v:#018x}")).unwrap_or_else(|_| got.to_string()),
-        want.parse::<i64>().map(|v| format!("{v:#018x}")).unwrap_or_else(|_| want.to_string()),
+        got.parse::<i64>()
+            .map(|v| format!("{v:#018x}"))
+            .unwrap_or_else(|_| got.to_string()),
+        want.parse::<i64>()
+            .map(|v| format!("{v:#018x}"))
+            .unwrap_or_else(|_| want.to_string()),
     )
 }
 
@@ -252,8 +265,7 @@ const F32_EDGES: &[u32] = &[
     0x3fc00000, 0xbfc00000, // ±1.5
     0x40000000, 0x3f000000, // 2, 0.5
     0xbf000000, 0x40200000, // -0.5, 2.5
-    0xc0200000, 0x4affffff,
-    0x4b000000, 0x4b800000, // 2^23, 2^24
+    0xc0200000, 0x4affffff, 0x4b000000, 0x4b800000, // 2^23, 2^24
     0x7f800000, 0xff800000, // ±inf
     0x7fc00000, 0x7f800001, 0xffc0dead, // NaNs
 ];
@@ -403,15 +415,11 @@ const TRUNC_EDGES32: &[u32] = &[
     0x4effffff, // just under 2^31
     0x4f000000, // 2^31
     0xcf000000, // -2^31
-    0xcf000001,
-    0x4f7fffff, // just under 2^32
+    0xcf000001, 0x4f7fffff, // just under 2^32
     0x4f800000, // 2^32
-    0x5effffff,
-    0x5f000000, // 2^63
+    0x5effffff, 0x5f000000, // 2^63
     0xdf000000, // -2^63
-    0xdf000001,
-    0x5f7fffff,
-    0x5f800000, // 2^64
+    0xdf000001, 0x5f7fffff, 0x5f800000, // 2^64
     0xbf666666, // -0.9
     0xbf800000, // -1.0
     0x3f000000, // 0.5
@@ -472,8 +480,18 @@ fn push_trunc_cases(cases: &mut Cases, prefix: &str, a: i64, x: f64) {
         0,
         ((x as i32) as u32 as i64).to_string(),
     );
-    cases.push(&format!("i32_trunc_sat_{prefix}_u"), a, 0, ((x as u32) as i64).to_string());
-    cases.push(&format!("i64_trunc_sat_{prefix}_s"), a, 0, (x as i64).to_string());
+    cases.push(
+        &format!("i32_trunc_sat_{prefix}_u"),
+        a,
+        0,
+        ((x as u32) as i64).to_string(),
+    );
+    cases.push(
+        &format!("i64_trunc_sat_{prefix}_s"),
+        a,
+        0,
+        (x as i64).to_string(),
+    );
     cases.push(
         &format!("i64_trunc_sat_{prefix}_u"),
         a,
@@ -493,28 +511,48 @@ fn softfloat_conversions() {
     for &v in &ints {
         let u32v = v & 0xffffffff;
         let sv = u32v as u32 as i32;
-        cases.push("f64_convert_i32_s", u32v, 0, ((sv as f64).to_bits() as i64).to_string());
+        cases.push(
+            "f64_convert_i32_s",
+            u32v,
+            0,
+            ((sv as f64).to_bits() as i64).to_string(),
+        );
         cases.push(
             "f64_convert_i32_u",
             u32v,
             0,
             (((u32v as u32) as f64).to_bits() as i64).to_string(),
         );
-        cases.push("f64_convert_i64_s", v, 0, ((v as f64).to_bits() as i64).to_string());
+        cases.push(
+            "f64_convert_i64_s",
+            v,
+            0,
+            ((v as f64).to_bits() as i64).to_string(),
+        );
         cases.push(
             "f64_convert_i64_u",
             v,
             0,
             (((v as u64) as f64).to_bits() as i64).to_string(),
         );
-        cases.push("f32_convert_i32_s", u32v, 0, ((sv as f32).to_bits() as i64).to_string());
+        cases.push(
+            "f32_convert_i32_s",
+            u32v,
+            0,
+            ((sv as f32).to_bits() as i64).to_string(),
+        );
         cases.push(
             "f32_convert_i32_u",
             u32v,
             0,
             (((u32v as u32) as f32).to_bits() as i64).to_string(),
         );
-        cases.push("f32_convert_i64_s", v, 0, ((v as f32).to_bits() as i64).to_string());
+        cases.push(
+            "f32_convert_i64_s",
+            v,
+            0,
+            ((v as f32).to_bits() as i64).to_string(),
+        );
         cases.push(
             "f32_convert_i64_u",
             v,

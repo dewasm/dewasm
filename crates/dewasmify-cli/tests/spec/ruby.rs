@@ -63,7 +63,13 @@ impl SpecLang for RubyLang {
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
-        &["rt/trap", "rt/f32_bits", "rt/f32_from_bits", "rt/f64_bits", "rt/f64_from_bits"]
+        &[
+            "rt/trap",
+            "rt/f32_bits",
+            "rt/f32_from_bits",
+            "rt/f64_bits",
+            "rt/f64_from_bits",
+        ]
     }
 
     fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted> {
@@ -74,7 +80,11 @@ impl SpecLang for RubyLang {
             &RuntimeLinkage::Alias("::Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        Ok(Converted { source, handle: class_name, units })
+        Ok(Converted {
+            source,
+            handle: class_name,
+            units,
+        })
     }
 
     fn emit_instantiate(&self, script: &mut String, conv: &Converted, var_id: u32) -> String {
@@ -137,11 +147,19 @@ impl SpecLang for RubyLang {
     }
 
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str) {
-        let _ = writeln!(script, "check_exhaust({}) do\n  {call}\nend", ruby_str(desc));
+        let _ = writeln!(
+            script,
+            "check_exhaust({}) do\n  {call}\nend",
+            ruby_str(desc)
+        );
     }
 
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
-        let _ = writeln!(script, "check({}) do\n  {call}\n  [true, nil]\nend", ruby_str(desc));
+        let _ = writeln!(
+            script,
+            "check({}) do\n  {call}\n  [true, nil]\nend",
+            ruby_str(desc)
+        );
     }
 
     fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String> {
@@ -175,12 +193,8 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
         WastArg::Core(WastArgCore::I64(v)) => Ok((*v as u64).to_string()),
-        WastArg::Core(WastArgCore::F32(f)) => {
-            Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits))
-        }
-        WastArg::Core(WastArgCore::F64(f)) => {
-            Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits))
-        }
+        WastArg::Core(WastArgCore::F32(f)) => Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits)),
+        WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
         WastArg::Core(_) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
@@ -204,14 +218,10 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::F64(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
-                format!(
-                    "(Rt.f64_bits({value}) & 0x7fffffffffffffff) == 0x7ff8000000000000"
-                )
+                format!("(Rt.f64_bits({value}) & 0x7fffffffffffffff) == 0x7ff8000000000000")
             }
             NanPattern::ArithmeticNan => {
-                format!(
-                    "(Rt.f64_bits({value}) & 0x7ff8000000000000) == 0x7ff8000000000000"
-                )
+                format!("(Rt.f64_bits({value}) & 0x7ff8000000000000) == 0x7ff8000000000000")
             }
             NanPattern::Value(f) => {
                 format!("Rt.f64_bits({value}) == 0x{:x}", f.bits)

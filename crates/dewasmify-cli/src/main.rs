@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     )?;
 
     for file in files {
-        if cli.output == PathBuf::from("-") {
+        if cli.output == Path::new("-") {
             print!("{}", file.contents);
         } else {
             std::fs::write(&cli.output, &file.contents)

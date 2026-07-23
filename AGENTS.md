@@ -27,6 +27,8 @@ submodule — never edit it.
 | Command | What it does |
 | --- | --- |
 | `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). |
+| `cargo fmt --check` | Verify Rust code formatting. |
+| `cargo clippy --all-targets -- -D warnings` | Run linter on all targets, failing on any warnings. |
 | `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
 | `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
 | `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
@@ -34,12 +36,13 @@ submodule — never edit it.
 
 ## Verification
 
-After any non-trivial change, run `cargo test`. Spec-harness failures mean a semantics bug: fix
-the cause. Adding to a per-language `EXPECTED_FAILURES` ledger in
-`crates/dewasmify-cli/tests/spec/` is a last resort and requires an attribution tag plus a reason
-([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)). When support declarations or WASI
-units change, regenerate the matrix: `DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli
---test support_docs` (the test fails while docs/support.md is stale).
+After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+and `cargo test`. Spec-harness failures mean a semantics bug: fix the cause. Adding to a
+per-language `EXPECTED_FAILURES` ledger in `crates/dewasmify-cli/tests/spec/` is a last resort and
+requires an attribution tag plus a reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
+When support declarations or WASI units change, regenerate the matrix:
+`DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli --test support_docs` (the test fails while
+docs/support.md is stale).
 
 ## Implementation guidelines
 

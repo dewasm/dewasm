@@ -24,8 +24,18 @@ struct AppCase {
 }
 
 const CASES: &[AppCase] = &[
-    AppCase { name: "cowsay", args: &["Hello", "from", "dewasmify!"], stdin: "", heavy: false },
-    AppCase { name: "cowsay", args: &[], stdin: "moo via stdin\n", heavy: false },
+    AppCase {
+        name: "cowsay",
+        args: &["Hello", "from", "dewasmify!"],
+        stdin: "",
+        heavy: false,
+    },
+    AppCase {
+        name: "cowsay",
+        args: &[],
+        stdin: "moo via stdin\n",
+        heavy: false,
+    },
     AppCase {
         name: "qjs",
         args: &[
@@ -62,7 +72,12 @@ fn run(cmd: &mut Command, stdin: &str) -> (Vec<u8>, Option<i32>) {
         .spawn()
         .expect("spawn");
     use std::io::Write as _;
-    child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
     let out = child.wait_with_output().expect("wait");
     (out.stdout, out.status.code())
 }
@@ -83,7 +98,10 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
         }
         let wasm_path = cache.join(format!("{}.wasm", case.name));
         if !wasm_path.exists() {
-            eprintln!("{} not cached (run examples/apps/fetch.sh); skipping", case.name);
+            eprintln!(
+                "{} not cached (run examples/apps/fetch.sh); skipping",
+                case.name
+            );
             continue;
         }
         let bytes = std::fs::read(&wasm_path).expect("read wasm");
@@ -120,10 +138,14 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
         ));
         std::fs::write(&out_path, src).unwrap();
 
-        let (our_out, our_code) =
-            run(Command::new(interpreter).arg(&out_path).args(case.args), case.stdin);
-        let (wt_out, wt_code) =
-            run(Command::new("wasmtime").arg(&wasm_path).args(case.args), case.stdin);
+        let (our_out, our_code) = run(
+            Command::new(interpreter).arg(&out_path).args(case.args),
+            case.stdin,
+        );
+        let (wt_out, wt_code) = run(
+            Command::new("wasmtime").arg(&wasm_path).args(case.args),
+            case.stdin,
+        );
 
         assert_eq!(
             String::from_utf8_lossy(&our_out),
@@ -134,12 +156,18 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
             backend.name()
         );
         assert_eq!(
-            our_code, wt_code,
+            our_code,
+            wt_code,
             "{} under {}: exit status differs",
             case.name,
             backend.name()
         );
-        println!("{} {:?} under {}: identical to wasmtime", case.name, case.args, backend.name());
+        println!(
+            "{} {:?} under {}: identical to wasmtime",
+            case.name,
+            case.args,
+            backend.name()
+        );
     }
 }
 
@@ -162,5 +190,9 @@ fn apps_match_wasmtime_bash() {
         eprintln!("wasmtime not found; skipping");
         return;
     }
-    run_cases(&BashBackend, &bash, std::env::var("DEWASMIFY_APPS_ALL").is_ok());
+    run_cases(
+        &BashBackend,
+        &bash,
+        std::env::var("DEWASMIFY_APPS_ALL").is_ok(),
+    );
 }

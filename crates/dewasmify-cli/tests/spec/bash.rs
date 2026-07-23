@@ -150,7 +150,11 @@ impl SpecLang for BashLang {
         let (source, units) = dewasmify_backend_bash::generate_module_with_units(
             module, &prefix, false, // spec modules import spectest, never WASI
         )?;
-        Ok(Converted { source, handle: prefix, units })
+        Ok(Converted {
+            source,
+            handle: prefix,
+            units,
+        })
     }
 
     fn emit_instantiate(&self, script: &mut String, conv: &Converted, _var_id: u32) -> String {
@@ -199,7 +203,12 @@ impl SpecLang for BashLang {
                 parts.join(" && ")
             }
         };
-        let _ = writeln!(script, "{call}\nck $? {} {}", bash_str(desc), bash_str(&cond));
+        let _ = writeln!(
+            script,
+            "{call}\nck $? {} {}",
+            bash_str(desc),
+            bash_str(&cond)
+        );
         Ok(())
     }
 

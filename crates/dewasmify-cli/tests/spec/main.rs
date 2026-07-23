@@ -193,7 +193,11 @@ fn run_suite(lang: &dyn SpecLang) {
         }
     }
 
-    assert!(failures.is_empty(), "spec failures:\n{}", failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "spec failures:\n{}",
+        failures.join("\n")
+    );
 }
 
 #[derive(Default)]
@@ -278,15 +282,17 @@ impl<'a> ScriptGen<'a> {
         let result = match converted {
             Ok(conv) => {
                 self.converted += 1;
-                let var = self.lang.emit_instantiate(&mut self.script, &conv, self.counter);
+                let var = self
+                    .lang
+                    .emit_instantiate(&mut self.script, &conv, self.counter);
                 self.units.extend(conv.units);
                 Ok(var)
             }
             Err(Attribution::Tag(tag, _detail)) => Err(tag),
             Err(Attribution::Bug(detail)) => {
-                self.stats
-                    .hard_errors
-                    .push(format!("unattributed conversion failure at {desc}: {detail}"));
+                self.stats.hard_errors.push(format!(
+                    "unattributed conversion failure at {desc}: {detail}"
+                ));
                 Err("conversion-bug".to_string())
             }
         };
@@ -312,7 +318,10 @@ enum Attribution {
 /// Map a conversion error to its attribution: `UnsupportedError` anywhere
 /// in the chain names the responsible features; anything else is a bug.
 fn attribute(err: &anyhow::Error) -> Attribution {
-    match err.chain().find_map(|e| e.downcast_ref::<UnsupportedError>()) {
+    match err
+        .chain()
+        .find_map(|e| e.downcast_ref::<UnsupportedError>())
+    {
         Some(unsupported) if unsupported.features.is_empty() => {
             Attribution::Tag("unknown-proposal".to_string(), unsupported.detail.clone())
         }
@@ -334,7 +343,8 @@ fn convert(lang: &dyn SpecLang, bytes: &[u8], counter: u32) -> Result<Converted,
             "imports from a registered module".to_string(),
         ));
     }
-    lang.generate(&module, counter).map_err(|err| attribute(&err))
+    lang.generate(&module, counter)
+        .map_err(|err| attribute(&err))
 }
 
 fn run_file(
@@ -396,9 +406,8 @@ fn run_directives(
                         .map(|var| lang.global_get(&var, global)),
                     WastExecute::Wat(_) => Err("linking".to_string()),
                 };
-                let emitted = call.and_then(|call| {
-                    lang.emit_check(&mut gen.script, &desc, &call, &results)
-                });
+                let emitted =
+                    call.and_then(|call| lang.emit_check(&mut gen.script, &desc, &call, &results));
                 if let Err(tag) = emitted {
                     gen.skip(&tag);
                 }
@@ -498,7 +507,7 @@ fn run_directives(
     let mut found = false;
     for line in stdout.lines() {
         if let Some(rest) = line.strip_prefix("RESULT pass=") {
-            let mut parts = rest.split(|c| c == ' ' || c == '=');
+            let mut parts = rest.split([' ', '=']);
             stats.pass += parts.next().unwrap_or("0").parse().unwrap_or(0);
             let _ = parts.next(); // "fail"
             stats.fail += parts.next().unwrap_or("0").parse().unwrap_or(0);

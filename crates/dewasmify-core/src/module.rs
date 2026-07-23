@@ -67,8 +67,16 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                         match &sub_ty.composite_type.inner {
                             CompositeInnerType::Func(f) => {
                                 module.types.push(ir::FuncType {
-                                    params: f.params().iter().map(|t| val_type(*t)).collect::<Result<_>>()?,
-                                    results: f.results().iter().map(|t| val_type(*t)).collect::<Result<_>>()?,
+                                    params: f
+                                        .params()
+                                        .iter()
+                                        .map(|t| val_type(*t))
+                                        .collect::<Result<_>>()?,
+                                    results: f
+                                        .results()
+                                        .iter()
+                                        .map(|t| val_type(*t))
+                                        .collect::<Result<_>>()?,
                                 });
                             }
                             other => {
@@ -124,7 +132,12 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     }
                     module.table = Some(ir::Table {
                         min: table.ty.initial.try_into().context("table too large")?,
-                        max: table.ty.maximum.map(|m| m.try_into()).transpose().context("table too large")?,
+                        max: table
+                            .ty
+                            .maximum
+                            .map(|m| m.try_into())
+                            .transpose()
+                            .context("table too large")?,
                     });
                 }
             }
@@ -178,7 +191,10 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                 for elem in reader {
                     let elem = elem?;
                     let offset = match elem.kind {
-                        ElementKind::Active { table_index, offset_expr } => {
+                        ElementKind::Active {
+                            table_index,
+                            offset_expr,
+                        } => {
                             if table_index.unwrap_or(0) != 0 {
                                 return Err(unsupported(
                                     Feature::MultipleTables,
@@ -205,14 +221,20 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                             ))
                         }
                     };
-                    module.elems.push(ir::ElemSegment { offset, func_indices });
+                    module.elems.push(ir::ElemSegment {
+                        offset,
+                        func_indices,
+                    });
                 }
             }
             Payload::DataSection(reader) => {
                 for data in reader {
                     let data = data?;
                     let offset = match data.kind {
-                        DataKind::Active { memory_index, offset_expr } => {
+                        DataKind::Active {
+                            memory_index,
+                            offset_expr,
+                        } => {
                             if memory_index != 0 {
                                 return Err(unsupported(
                                     Feature::MultiMemory,
@@ -234,7 +256,12 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                 next_code_index += 1;
                 let func = FuncBuilder::new(&module, &defined_func_types, type_idx)
                     .translate(&body)
-                    .with_context(|| format!("in function #{}", module.imported_funcs.len() + next_code_index - 1))?;
+                    .with_context(|| {
+                        format!(
+                            "in function #{}",
+                            module.imported_funcs.len() + next_code_index - 1
+                        )
+                    })?;
                 module.funcs.push(func);
             }
             _ => {}
@@ -258,7 +285,9 @@ fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
             .iter()
             .filter_map(|f| f.validator_bits())
             .fold(features(), |a, b| a | b);
-        Validator::new_with_features(bits).validate_all(bytes).is_ok()
+        Validator::new_with_features(bits)
+            .validate_all(bytes)
+            .is_ok()
     };
     if !with(&candidates) {
         return None;
@@ -280,9 +309,7 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
         wasmparser::ValType::I64 => ir::ValType::I64,
         wasmparser::ValType::F32 => ir::ValType::F32,
         wasmparser::ValType::F64 => ir::ValType::F64,
-        wasmparser::ValType::V128 => {
-            return Err(unsupported(Feature::Simd, "value type v128"))
-        }
+        wasmparser::ValType::V128 => return Err(unsupported(Feature::Simd, "value type v128")),
         _ => {
             return Err(unsupported(
                 Feature::ReferenceTypes,

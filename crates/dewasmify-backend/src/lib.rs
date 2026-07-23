@@ -79,18 +79,52 @@ pub trait Backend {
 /// of these a backend implements is derived from its runtime units
 /// (`bundler().has_unit("wasi/<name>")`).
 pub const WASI_PREVIEW1_FUNCTIONS: &[&str] = &[
-    "args_get", "args_sizes_get", "environ_get", "environ_sizes_get",
-    "clock_res_get", "clock_time_get",
-    "fd_advise", "fd_allocate", "fd_close", "fd_datasync", "fd_fdstat_get",
-    "fd_fdstat_set_flags", "fd_fdstat_set_rights", "fd_filestat_get",
-    "fd_filestat_set_size", "fd_filestat_set_times", "fd_pread",
-    "fd_prestat_get", "fd_prestat_dir_name", "fd_pwrite", "fd_read",
-    "fd_readdir", "fd_renumber", "fd_seek", "fd_sync", "fd_tell", "fd_write",
-    "path_create_directory", "path_filestat_get", "path_filestat_set_times",
-    "path_link", "path_open", "path_readlink", "path_remove_directory",
-    "path_rename", "path_symlink", "path_unlink_file",
-    "poll_oneoff", "proc_exit", "proc_raise", "random_get", "sched_yield",
-    "sock_accept", "sock_recv", "sock_send", "sock_shutdown",
+    "args_get",
+    "args_sizes_get",
+    "environ_get",
+    "environ_sizes_get",
+    "clock_res_get",
+    "clock_time_get",
+    "fd_advise",
+    "fd_allocate",
+    "fd_close",
+    "fd_datasync",
+    "fd_fdstat_get",
+    "fd_fdstat_set_flags",
+    "fd_fdstat_set_rights",
+    "fd_filestat_get",
+    "fd_filestat_set_size",
+    "fd_filestat_set_times",
+    "fd_pread",
+    "fd_prestat_get",
+    "fd_prestat_dir_name",
+    "fd_pwrite",
+    "fd_read",
+    "fd_readdir",
+    "fd_renumber",
+    "fd_seek",
+    "fd_sync",
+    "fd_tell",
+    "fd_write",
+    "path_create_directory",
+    "path_filestat_get",
+    "path_filestat_set_times",
+    "path_link",
+    "path_open",
+    "path_readlink",
+    "path_remove_directory",
+    "path_rename",
+    "path_symlink",
+    "path_unlink_file",
+    "poll_oneoff",
+    "proc_exit",
+    "proc_raise",
+    "random_get",
+    "sched_yield",
+    "sock_accept",
+    "sock_recv",
+    "sock_send",
+    "sock_shutdown",
 ];
 
 /// One runtime unit: a single method (or an inseparable scope prelude),
@@ -166,7 +200,11 @@ impl RuntimeBundler {
                 bail!("duplicate runtime unit {id}");
             }
         }
-        let bundler = RuntimeBundler { scopes, units, indent_str };
+        let bundler = RuntimeBundler {
+            scopes,
+            units,
+            indent_str,
+        };
         for unit in bundler.units.values() {
             for dep in &unit.requires {
                 if !bundler.units.contains_key(dep) {
@@ -235,7 +273,7 @@ impl RuntimeBundler {
                 continue;
             }
             // Prelude first, the rest in sorted order.
-            ids.sort_by_key(|id| (Some(id.as_str()) != scope.prelude.map(|p| p), id.as_str()));
+            ids.sort_by_key(|id| (Some(id.as_str()) != scope.prelude, id.as_str()));
             let (open, body_indent) = if scope.open.is_empty() {
                 ("", base_indent)
             } else {
@@ -291,7 +329,11 @@ pub struct CodeWriter {
 
 impl CodeWriter {
     pub fn new(indent_str: &'static str) -> Self {
-        CodeWriter { buf: String::new(), indent: 0, indent_str }
+        CodeWriter {
+            buf: String::new(),
+            indent: 0,
+            indent_str,
+        }
     }
 
     pub fn line(&mut self, s: impl AsRef<str>) {
