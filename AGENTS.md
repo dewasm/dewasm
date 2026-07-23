@@ -32,8 +32,10 @@ submodule — never edit it.
 
 After any non-trivial change, run `cargo test`. Spec-harness failures mean a semantics bug: fix
 the cause. Adding to `EXPECTED_FAILURES` in `crates/dewasmify-cli/tests/spec.rs` is a last
-resort and requires a reason comment plus an ADR reference
-([ADR-3](docs/adr/3-testing-strategy.md)).
+resort and requires an attribution tag plus a reason
+([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)). When support declarations or WASI
+units change, regenerate the matrix: `DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli
+--test support_docs` (the test fails while docs/support.md is stale).
 
 ## Implementation guidelines
 

@@ -6,8 +6,13 @@ use wasmparser::{
     Parser, Payload, TypeRef, Validator, WasmFeatures,
 };
 
+use crate::feature::{Feature, UnsupportedError};
 use crate::func::FuncBuilder;
 use crate::ir;
+
+pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow::Error {
+    UnsupportedError::new(feature, detail).into()
+}
 
 /// Wasm feature set accepted by dewasmify's first release: Wasm 1.0 plus the
 /// extensions that C/Rust toolchains enable by default and that need no new
@@ -26,9 +31,16 @@ pub fn features() -> WasmFeatures {
 }
 
 pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
-    Validator::new_with_features(features())
-        .validate_all(bytes)
-        .context("wasm validation failed")?;
+    if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
+        // Attribute the refusal to the proposals whose validator features
+        // would make the module validate (ADR-8); an empty feature list
+        // means "newer than this toolchain knows".
+        let needed = classify_validation_failure(bytes).unwrap_or_default();
+        return Err(anyhow::Error::new(UnsupportedError {
+            features: needed,
+            detail: format!("wasm validation failed: {err}"),
+        }));
+    }
 
     let mut module = ir::Module {
         types: Vec::new(),
@@ -59,7 +71,12 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                                     results: f.results().iter().map(|t| val_type(*t)).collect::<Result<_>>()?,
                                 });
                             }
-                            _ => bail!("unsupported non-function type"),
+                            other => {
+                                return Err(unsupported(
+                                    Feature::Gc,
+                                    format!("non-function type {other:?}"),
+                                ))
+                            }
                         }
                     }
                 }
@@ -67,6 +84,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             Payload::ImportSection(reader) => {
                 for import in reader.into_imports() {
                     let import = import?;
+                    let detail = format!("import {}.{}", import.module, import.name);
                     match import.ty {
                         TypeRef::Func(type_idx) => {
                             module.imported_funcs.push(ir::ImportedFunc {
@@ -75,11 +93,21 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                                 type_idx,
                             });
                         }
-                        _ => bail!(
-                            "unsupported import kind for {}.{}: only function imports are supported",
-                            import.module,
-                            import.name
-                        ),
+                        TypeRef::Global(_) => {
+                            return Err(unsupported(Feature::ImportedGlobals, detail))
+                        }
+                        TypeRef::Memory(_) => {
+                            return Err(unsupported(Feature::ImportedMemories, detail))
+                        }
+                        TypeRef::Table(_) => {
+                            return Err(unsupported(Feature::ImportedTables, detail))
+                        }
+                        TypeRef::Tag(_) => {
+                            return Err(unsupported(Feature::ExceptionHandling, detail))
+                        }
+                        TypeRef::FuncExact(_) => {
+                            return Err(unsupported(Feature::FunctionReferences, detail))
+                        }
                     }
                 }
             }
@@ -92,7 +120,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                 for table in reader {
                     let table = table?;
                     if module.table.is_some() {
-                        bail!("multiple tables are not supported");
+                        return Err(unsupported(Feature::MultipleTables, "second table"));
                     }
                     module.table = Some(ir::Table {
                         min: table.ty.initial.try_into().context("table too large")?,
@@ -104,7 +132,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                 for mem in reader {
                     let mem = mem?;
                     if module.memory.is_some() {
-                        bail!("multiple memories are not supported");
+                        return Err(unsupported(Feature::MultiMemory, "second memory"));
                     }
                     module.memory = Some(ir::MemoryDef {
                         min_pages: mem.initial,
@@ -130,7 +158,12 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                         ExternalKind::Table => ir::ExportKind::Table,
                         ExternalKind::Memory => ir::ExportKind::Memory,
                         ExternalKind::Global => ir::ExportKind::Global(export.index),
-                        _ => bail!("unsupported export kind for {:?}", export.name),
+                        _ => {
+                            return Err(unsupported(
+                                Feature::ExceptionHandling,
+                                format!("export kind for {:?}", export.name),
+                            ))
+                        }
                     };
                     module.exports.push(ir::Export {
                         name: export.name.to_string(),
@@ -147,18 +180,29 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     let offset = match elem.kind {
                         ElementKind::Active { table_index, offset_expr } => {
                             if table_index.unwrap_or(0) != 0 {
-                                bail!("element segments for tables other than 0 are not supported");
+                                return Err(unsupported(
+                                    Feature::MultipleTables,
+                                    "element segment for a table other than 0",
+                                ));
                             }
                             const_expr(&offset_expr)?
                         }
-                        _ => bail!("passive/declared element segments are not supported"),
+                        _ => {
+                            return Err(unsupported(
+                                Feature::TableBulkOps,
+                                "passive/declared element segment",
+                            ))
+                        }
                     };
                     let func_indices = match elem.items {
                         ElementItems::Functions(items) => {
                             items.into_iter().collect::<Result<Vec<_>, _>>()?
                         }
                         ElementItems::Expressions(..) => {
-                            bail!("element segments with expressions are not supported")
+                            return Err(unsupported(
+                                Feature::TableBulkOps,
+                                "element segment with expression items",
+                            ))
                         }
                     };
                     module.elems.push(ir::ElemSegment { offset, func_indices });
@@ -170,7 +214,10 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     let offset = match data.kind {
                         DataKind::Active { memory_index, offset_expr } => {
                             if memory_index != 0 {
-                                bail!("data segments for memories other than 0 are not supported");
+                                return Err(unsupported(
+                                    Feature::MultiMemory,
+                                    "data segment for a memory other than 0",
+                                ));
                             }
                             Some(const_expr(&offset_expr)?)
                         }
@@ -197,13 +244,51 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
     Ok(module)
 }
 
+/// Find the minimal set of known proposals that makes `bytes` validate,
+/// or `None` if even all of them do not suffice (the module is newer than
+/// this toolchain, or genuinely malformed).
+fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
+    let candidates: Vec<Feature> = Feature::ALL
+        .iter()
+        .copied()
+        .filter(|f| f.validator_bits().is_some())
+        .collect();
+    let with = |feats: &[Feature]| {
+        let bits = feats
+            .iter()
+            .filter_map(|f| f.validator_bits())
+            .fold(features(), |a, b| a | b);
+        Validator::new_with_features(bits).validate_all(bytes).is_ok()
+    };
+    if !with(&candidates) {
+        return None;
+    }
+    let mut active = candidates;
+    for i in (0..active.len()).rev() {
+        let mut without: Vec<Feature> = active.clone();
+        without.remove(i);
+        if with(&without) {
+            active = without;
+        }
+    }
+    Some(active)
+}
+
 pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     Ok(match ty {
         wasmparser::ValType::I32 => ir::ValType::I32,
         wasmparser::ValType::I64 => ir::ValType::I64,
         wasmparser::ValType::F32 => ir::ValType::F32,
         wasmparser::ValType::F64 => ir::ValType::F64,
-        _ => bail!("unsupported value type {ty:?}"),
+        wasmparser::ValType::V128 => {
+            return Err(unsupported(Feature::Simd, "value type v128"))
+        }
+        _ => {
+            return Err(unsupported(
+                Feature::ReferenceTypes,
+                format!("value type {ty:?}"),
+            ))
+        }
     })
 }
 
@@ -216,11 +301,21 @@ fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
         Operator::I64Const { value } => ir::Expr::I64Const(value as u64),
         Operator::F32Const { value } => ir::Expr::F32Const(value.bits()),
         Operator::F64Const { value } => ir::Expr::F64Const(value.bits()),
-        op => bail!("unsupported constant expression operator {op:?}"),
+        op => return Err(const_expr_unsupported(&op)),
     };
     match reader.read()? {
         Operator::End => {}
-        op => bail!("unsupported constant expression operator {op:?}"),
+        op => return Err(const_expr_unsupported(&op)),
     }
     Ok(value)
+}
+
+fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
+    let feature = match op {
+        // Valid only when referring to an imported global (MVP rule).
+        Operator::GlobalGet { .. } => Feature::ImportedGlobals,
+        Operator::RefNull { .. } | Operator::RefFunc { .. } => Feature::ReferenceTypes,
+        _ => Feature::ExtendedConst,
+    };
+    unsupported(feature, format!("constant expression operator {op:?}"))
 }

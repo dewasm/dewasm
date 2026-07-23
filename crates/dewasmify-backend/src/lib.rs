@@ -4,7 +4,15 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{bail, Result};
+use dewasmify_core::feature::Feature;
 use dewasmify_core::ir;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SupportStatus {
+    Supported,
+    Partial(&'static str),
+    Unsupported,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -50,6 +58,21 @@ pub trait Backend {
     fn name(&self) -> &str;
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
+
+    /// The input scope every backend targets before any `Feature` rows.
+    fn baseline(&self) -> &'static str {
+        "Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, \
+         sign-extension, saturating float-to-int, multi-value, and the memory half \
+         of bulk memory (memory.copy/fill/init, passive data segments)"
+    }
+
+    /// Declared support level per feature (ADR-8). The spec harness only
+    /// tolerates skips attributable to features that are not `Supported`;
+    /// flipping a feature to `Supported` makes its skips hard failures.
+    fn feature_status(&self, feature: Feature) -> SupportStatus {
+        let _ = feature;
+        SupportStatus::Unsupported
+    }
 }
 
 /// One runtime unit: a single method (or an inseparable scope prelude),

@@ -1,46 +1,42 @@
-//! Spec test harness: parses .wast files from the official testsuite
-//! (tests/spec), translates each module with the Ruby backend, generates a
-//! Ruby script that runs all assertions, and executes it with the real
-//! `ruby` interpreter.
+//! Spec test harness (ADR-3, skip policy revised by ADR-8): parses every
+//! .wast file of the testsuite submodule (tests/spec, tracking upstream
+//! latest), translates each module with the Ruby backend, generates a Ruby
+//! script that runs all assertions, and executes it with the real `ruby`
+//! interpreter.
 //!
-//! Directives that exercise unsupported features (reference types, SIMD,
-//! multiple modules linking via `register`, ...) are counted as skipped:
-//! a module that fails to convert marks itself broken and all directives
-//! against it are skipped, so partial coverage per file is normal.
+//! Skips must be *attributable*: a module that fails to convert carries an
+//! `UnsupportedError` naming the declared-unsupported features, and every
+//! directive skipped because of it is counted under those feature ids. A
+//! conversion failure without attribution is a dewasmify bug and fails the
+//! suite. Validation failures beyond every proposal this toolchain knows
+//! are reported as `unknown-proposal` but tolerated (the converter refused
+//! cleanly, which is the ADR-0 contract).
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
-use std::collections::BTreeSet;
-
-use dewasmify_backend::RuntimeLinkage;
+use dewasmify_backend::{Backend, RuntimeLinkage, SupportStatus};
+use dewasmify_backend_ruby::RubyBackend;
+use dewasmify_core::feature::{Feature, UnsupportedError};
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::parser::{self, ParseBuffer};
 use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
 
-/// Files from the upstream testsuite that the Ruby backend is expected to
-/// handle (possibly with skipped directives for unsupported features).
-const FILES: &[&str] = &[
-    "address", "align", "block", "br", "br_if", "br_table", "call",
-    "call_indirect", "const", "conversions", "data", "elem", "endianness",
-    "f32", "f32_bitwise", "f32_cmp", "f64", "f64_bitwise", "f64_cmp", "fac",
-    "float_literals", "float_memory", "float_misc", "forward", "func",
-    "global", "i32", "i64", "if", "int_exprs", "int_literals",
-    "labels", "left-to-right", "load", "local_get", "local_set", "local_tee",
-    "loop", "memory", "memory_copy", "memory_fill", "memory_grow",
-    "memory_init", "memory_redundancy", "memory_size", "memory_trap", "nop",
-    "return", "select", "stack", "store", "switch", "traps", "unreachable",
-    "unwind",
-];
-
-/// Known failures with reasons; the file still runs so regressions in the
-/// passing assertions are caught.
-const EXPECTED_FAILURES: &[(&str, u32)] = &[
-    // Cross-module table sharing via `register` is not supported; modules 2
-    // and 3 fail to convert, so module 1's shared table never gets their
-    // element segments.
-    ("elem", 5),
+/// Known assertion-level failures with their attribution; the file still
+/// runs so regressions in the passing assertions are caught.
+///
+/// All current entries are cross-module linking: a later `register`ed
+/// module was supposed to write into the first module's shared
+/// table/memory, so assertions against the first module see stale state.
+/// The linking milestone clears this list.
+const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
+    ("elem", 5, "linking"),
+    ("linking", 10, "linking"),
+    ("linking0", 1, "linking"),
+    ("linking3", 2, "linking"),
+    ("load1", 5, "linking"),
 ];
 
 #[test]
@@ -51,34 +47,50 @@ fn spec() {
     }
     let spec_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
     if !spec_dir.exists() {
-        eprintln!("tests/spec not found (clone WebAssembly/testsuite there); skipping");
+        eprintln!("tests/spec not found (git submodule update --init); skipping");
         return;
     }
 
-    let selected: Vec<String> = match std::env::var("DEWASMIFY_SPEC") {
-        Ok(list) => list.split(',').map(|s| s.trim().to_string()).collect(),
-        Err(_) => FILES.iter().map(|s| s.to_string()).collect(),
-    };
+    let mut names: Vec<String> = std::fs::read_dir(&spec_dir)
+        .expect("read tests/spec")
+        .filter_map(|e| {
+            let path = e.ok()?.path();
+            if path.extension().and_then(|x| x.to_str()) == Some("wast") {
+                Some(path.file_stem()?.to_str()?.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    names.sort();
+    if let Ok(list) = std::env::var("DEWASMIFY_SPEC") {
+        let wanted: BTreeSet<&str> = list.split(',').map(|s| s.trim()).collect();
+        names.retain(|n| wanted.contains(n.as_str()));
+    }
 
     let mut failures = Vec::new();
     let mut total = Stats::default();
-    for name in &selected {
+    for name in &names {
         let path = spec_dir.join(format!("{name}.wast"));
         match run_file(name, &path) {
             Ok(stats) => {
-                println!(
-                    "{name}: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
-                    stats.pass, stats.fail, stats.skip, stats.rust_pass, stats.rust_fail
-                );
-                total.pass += stats.pass;
-                total.fail += stats.fail;
-                total.skip += stats.skip;
-                total.rust_pass += stats.rust_pass;
-                total.rust_fail += stats.rust_fail;
+                if stats.pass + stats.fail > 0 || !stats.unsupported.is_empty() {
+                    println!(
+                        "{name}: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
+                        stats.pass,
+                        stats.fail,
+                        stats.skipped(),
+                        stats.rust_pass,
+                        stats.rust_fail
+                    );
+                }
+                for err in &stats.hard_errors {
+                    failures.push(format!("{name}: {err}"));
+                }
                 let expected = EXPECTED_FAILURES
                     .iter()
-                    .find(|(n, _)| n == name)
-                    .map(|(_, count)| *count)
+                    .find(|(n, _, _)| n == name)
+                    .map(|(_, count, _)| *count)
                     .unwrap_or(0);
                 if stats.fail != expected {
                     failures.push(format!(
@@ -86,14 +98,44 @@ fn spec() {
                         stats.fail
                     ));
                 }
+                total.merge(stats);
             }
             Err(err) => failures.push(format!("{name}: {err:#}")),
         }
     }
+
     println!(
-        "TOTAL: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
-        total.pass, total.fail, total.skip, total.rust_pass, total.rust_fail
+        "\nTOTAL: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
+        total.pass,
+        total.fail,
+        total.skipped(),
+        total.rust_pass,
+        total.rust_fail
     );
+    let mut by_count: Vec<(&String, &u32)> = total.unsupported.iter().collect();
+    by_count.sort_by_key(|(tag, count)| (std::cmp::Reverse(**count), tag.as_str()));
+    println!("unsupported (declared, ADR-8):");
+    for (tag, count) in by_count {
+        println!("  {tag}: {count}");
+    }
+
+    // A skip is only legitimate while its feature is declared unsupported;
+    // once the backend flips a feature to Supported, remaining skips are
+    // regressions of the declaration.
+    for (tag, count) in &total.unsupported {
+        let ids: Vec<&str> = tag.split('+').collect();
+        let all_supported = ids.iter().all(|id| {
+            Feature::from_id(id)
+                .map(|f| RubyBackend.feature_status(f) == SupportStatus::Supported)
+                .unwrap_or(false)
+        });
+        if all_supported {
+            failures.push(format!(
+                "{count} directives skipped for {tag}, but the backend declares it supported"
+            ));
+        }
+    }
+
     assert!(failures.is_empty(), "spec failures:\n{}", failures.join("\n"));
 }
 
@@ -101,10 +143,31 @@ fn spec() {
 struct Stats {
     pass: u32,
     fail: u32,
-    skip: u32,
+    /// Skipped directives, attributed to declared-unsupported feature ids
+    /// (plus harness-level tags like "linking" and "unknown-proposal").
+    unsupported: BTreeMap<String, u32>,
+    /// Unattributed conversion errors: dewasmify bugs, fail the suite.
+    hard_errors: Vec<String>,
     /// assert_invalid / assert_malformed handled on the Rust side
     rust_pass: u32,
     rust_fail: u32,
+}
+
+impl Stats {
+    fn skipped(&self) -> u32 {
+        self.unsupported.values().sum()
+    }
+
+    fn merge(&mut self, other: Stats) {
+        self.pass += other.pass;
+        self.fail += other.fail;
+        self.rust_pass += other.rust_pass;
+        self.rust_fail += other.rust_fail;
+        for (tag, count) in other.unsupported {
+            *self.unsupported.entry(tag).or_default() += count;
+        }
+        self.hard_errors.extend(other.hard_errors);
+    }
 }
 
 fn ruby_str(s: &str) -> String {
@@ -128,16 +191,15 @@ struct ScriptGen<'a> {
     script: String,
     source: &'a str,
     file: &'a str,
-    /// Ruby global variable holding the most recent instance, or an error
-    /// message when the most recent module failed to convert.
+    /// Ruby global variable holding the most recent instance, or the
+    /// attribution tag when the most recent module failed to convert.
     current: Result<String, String>,
     /// Same, for named modules.
     named: std::collections::HashMap<String, Result<String, String>>,
     counter: u32,
+    converted: u32,
     stats: Stats,
-    /// Union of the runtime units needed by all converted modules; the
-    /// script gets one shared `module Rt` bundle (minimal, so undeclared
-    /// unit dependencies fail loudly).
+    /// Union of the runtime units needed by all converted modules.
     units: BTreeSet<String>,
 }
 
@@ -147,11 +209,8 @@ impl<'a> ScriptGen<'a> {
         format!("{}.wast:{}", self.file, line + 1)
     }
 
-    fn skip(&mut self) {
-        self.stats.skip += 1;
-        // Counted at script generation time, so add it to the script totals
-        // via a comment only; the Ruby-side skip counter is separate.
-        self.script.push_str("$skip += 1\n");
+    fn skip(&mut self, tag: &str) {
+        *self.stats.unsupported.entry(tag.to_string()).or_default() += 1;
     }
 
     fn instance_for(&self, module: Option<&str>) -> Result<String, String> {
@@ -160,32 +219,36 @@ impl<'a> ScriptGen<'a> {
                 .named
                 .get(name)
                 .cloned()
-                .unwrap_or_else(|| Err(format!("unknown module ${name}"))),
+                .unwrap_or_else(|| Err("linking".to_string())),
             None => self.current.clone(),
         }
     }
 
-    fn define_module(&mut self, mut qw: QuoteWat<'a>) {
+    fn define_module(&mut self, mut qw: QuoteWat<'a>, desc: &str) {
         let id = match &qw {
             QuoteWat::Wat(Wat::Module(m)) => m.id.map(|i| i.name().to_string()),
             _ => None,
         };
         let converted = qw
             .encode()
-            .map_err(|e| e.to_string())
+            .map_err(|e| Attribution::Tag("unknown-proposal".to_string(), e.to_string()))
             .and_then(|bytes| convert(&bytes, self.counter));
         self.counter += 1;
         let result = match converted {
             Ok((class_src, class_name, units)) => {
+                self.converted += 1;
                 let var = format!("$i{}", self.counter);
                 self.script.push_str(&class_src);
                 let _ = writeln!(self.script, "{var} = {class_name}.new($spectest)");
                 self.units.extend(units);
                 Ok(var)
             }
-            Err(err) => {
-                eprintln!("module at {}.wast (#{}) failed to convert: {err}", self.file, self.counter);
-                Err(err)
+            Err(Attribution::Tag(tag, _detail)) => Err(tag),
+            Err(Attribution::Bug(detail)) => {
+                self.stats
+                    .hard_errors
+                    .push(format!("unattributed conversion failure at {desc}: {detail}"));
+                Err("conversion-bug".to_string())
             }
         };
         if let Some(id) = id {
@@ -204,8 +267,37 @@ impl<'a> ScriptGen<'a> {
     }
 }
 
-fn convert(bytes: &[u8], counter: u32) -> Result<(String, String, BTreeSet<String>), String> {
-    let module = dewasmify_core::build_module(bytes).map_err(|e| format!("{e:#}"))?;
+enum Attribution {
+    /// Refusal attributed to a declared-unsupported tag.
+    Tag(String, String),
+    /// Unattributed refusal: a dewasmify bug.
+    Bug(String),
+}
+
+fn convert(
+    bytes: &[u8],
+    counter: u32,
+) -> Result<(String, String, BTreeSet<String>), Attribution> {
+    let module = dewasmify_core::build_module(bytes).map_err(|err| {
+        match err.chain().find_map(|e| e.downcast_ref::<UnsupportedError>()) {
+            Some(unsupported) if unsupported.features.is_empty() => {
+                Attribution::Tag("unknown-proposal".to_string(), unsupported.detail.clone())
+            }
+            Some(unsupported) => {
+                let ids: Vec<&str> = unsupported.features.iter().map(|f| f.id()).collect();
+                Attribution::Tag(ids.join("+"), unsupported.detail.clone())
+            }
+            None => Attribution::Bug(format!("{err:#}")),
+        }
+    })?;
+    // The harness only provides the spectest host module; imports from
+    // registered modules need cross-module linking.
+    if module.imported_funcs.iter().any(|f| f.module != "spectest") {
+        return Err(Attribution::Tag(
+            "linking".to_string(),
+            "imports from a registered module".to_string(),
+        ));
+    }
     let class_name = format!("WastMod{counter}");
     let (src, units) = dewasmify_backend_ruby::generate_class_with_units(
         &module,
@@ -213,7 +305,7 @@ fn convert(bytes: &[u8], counter: u32) -> Result<(String, String, BTreeSet<Strin
         &RuntimeLinkage::Alias("::Rt".to_string()),
         false, // spec modules import spectest, never WASI
     )
-    .map_err(|e| format!("{e:#}"))?;
+    .map_err(|e| Attribution::Bug(format!("{e:#}")))?;
     Ok((src, class_name, units))
 }
 
@@ -227,7 +319,9 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F64(f)) => {
             Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits))
         }
-        other => Err(format!("unsupported argument {other:?}")),
+        WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
+        WastArg::Core(_) => Err("reference-types".to_string()),
+        _ => Err("component-model".to_string()),
     }
 }
 
@@ -261,22 +355,43 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
                 format!("Rt.f64_bits({value}) == 0x{:x}", f.bits)
             }
         }),
-        other => Err(format!("unsupported result {other:?}")),
+        WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
+        WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
+        WastRet::Core(_) => Err("reference-types".to_string()),
+        _ => Err("component-model".to_string()),
     }
 }
 
 fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
     let source = std::fs::read_to_string(path)?;
-    let buf = ParseBuffer::new(&source)?;
-    let wast: Wast = parser::parse(&buf)?;
+    // A text-format construct newer than the wast crate is not our bug;
+    // report it like an unknown proposal.
+    let unparsable = |err: &dyn std::fmt::Display| {
+        eprintln!("{name}.wast does not parse ({err}); counted as unknown-proposal");
+        let mut stats = Stats::default();
+        stats.unsupported.insert("unknown-proposal".to_string(), 1);
+        stats
+    };
+    let buf = match ParseBuffer::new(&source) {
+        Ok(buf) => buf,
+        Err(err) => return Ok(unparsable(&err)),
+    };
+    let wast: Wast = match parser::parse(&buf) {
+        Ok(wast) => wast,
+        Err(err) => return Ok(unparsable(&err)),
+    };
+    run_directives(name, &source, wast)
+}
 
+fn run_directives(name: &str, source: &str, wast: Wast<'_>) -> anyhow::Result<Stats> {
     let mut gen = ScriptGen {
         script: String::new(),
-        source: &source,
+        source,
         file: name,
-        current: Err("no module defined yet".to_string()),
+        current: Err("linking".to_string()),
         named: Default::default(),
         counter: 0,
+        converted: 0,
         stats: Stats::default(),
         // Units the harness helpers themselves use.
         units: ["rt/trap", "rt/f32_bits", "rt/f32_from_bits", "rt/f64_bits", "rt/f64_from_bits"]
@@ -289,14 +404,14 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
         let span = directive.span();
         let desc = gen.desc(span);
         match directive {
-            WastDirective::Module(qw) => gen.define_module(qw),
+            WastDirective::Module(qw) => gen.define_module(qw, &desc),
             WastDirective::AssertReturn { exec, results, .. } => {
                 let call = match &exec {
                     WastExecute::Invoke(inv) => gen.invoke_expr(inv),
                     WastExecute::Get { module, global, .. } => gen
                         .instance_for(module.map(|i| i.name()))
                         .map(|var| format!("{var}.global_get({})", ruby_str(global))),
-                    WastExecute::Wat(_) => Err("assert_return with module".to_string()),
+                    WastExecute::Wat(_) => Err("linking".to_string()),
                 };
                 let cmp = (|| -> Result<String, String> {
                     Ok(match results.len() {
@@ -319,7 +434,7 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                             ruby_str(&desc)
                         );
                     }
-                    _ => gen.skip(),
+                    (Err(tag), _) | (_, Err(tag)) => gen.skip(&tag),
                 }
             }
             WastDirective::AssertTrap { exec, message, .. } => {
@@ -332,18 +447,27 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                         let counter = gen.counter;
                         let converted = qw
                             .encode()
-                            .map_err(|e| e.to_string())
+                            .map_err(|e| {
+                                Attribution::Tag("unknown-proposal".to_string(), e.to_string())
+                            })
                             .and_then(|bytes| convert(&bytes, counter));
                         match converted {
                             Ok((class_src, class_name, units)) => {
+                                gen.converted += 1;
                                 gen.script.push_str(&class_src);
                                 gen.units.extend(units);
                                 Ok(format!("{class_name}.new($spectest)"))
                             }
-                            Err(e) => Err(e),
+                            Err(Attribution::Tag(tag, _)) => Err(tag),
+                            Err(Attribution::Bug(detail)) => {
+                                gen.stats.hard_errors.push(format!(
+                                    "unattributed conversion failure at {desc}: {detail}"
+                                ));
+                                Err("conversion-bug".to_string())
+                            }
                         }
                     }
-                    _ => Err("unsupported assert_trap form".to_string()),
+                    _ => Err("linking".to_string()),
                 };
                 match call {
                     Ok(call) => {
@@ -354,7 +478,7 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                             ruby_str(message)
                         );
                     }
-                    Err(_) => gen.skip(),
+                    Err(tag) => gen.skip(&tag),
                 }
             }
             WastDirective::AssertExhaustion { call, .. } => match gen.invoke_expr(&call) {
@@ -365,7 +489,7 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                         ruby_str(&desc)
                     );
                 }
-                Err(_) => gen.skip(),
+                Err(tag) => gen.skip(&tag),
             },
             WastDirective::Invoke(inv) => match gen.invoke_expr(&inv) {
                 Ok(call) => {
@@ -375,10 +499,12 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                         ruby_str(&desc)
                     );
                 }
-                Err(_) => gen.skip(),
+                Err(tag) => gen.skip(&tag),
             },
             WastDirective::AssertInvalid { mut module, .. }
-            | WastDirective::AssertMalformed { mut module, .. } => {
+            | WastDirective::AssertMalformed { mut module, .. }
+            | WastDirective::AssertInvalidCustom { mut module, .. }
+            | WastDirective::AssertMalformedCustom { mut module, .. } => {
                 // Handled on the Rust side: the module must fail to decode,
                 // validate, or convert.
                 match module.encode() {
@@ -392,8 +518,18 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                     Err(_) => gen.stats.rust_pass += 1,
                 }
             }
-            _ => gen.skip(),
+            WastDirective::Register { .. }
+            | WastDirective::ModuleDefinition(_)
+            | WastDirective::ModuleInstance { .. }
+            | WastDirective::AssertUnlinkable { .. } => gen.skip("linking"),
+            WastDirective::Thread(_) | WastDirective::Wait { .. } => gen.skip("threads"),
+            WastDirective::AssertException { .. } => gen.skip("exception-handling"),
+            WastDirective::AssertSuspension { .. } => gen.skip("stack-switching"),
         }
+    }
+
+    if gen.converted == 0 {
+        return Ok(gen.stats);
     }
 
     gen.script.push_str(POSTAMBLE);
@@ -418,8 +554,6 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
             stats.pass += parts.next().unwrap_or("0").parse().unwrap_or(0);
             let _ = parts.next(); // "fail"
             stats.fail += parts.next().unwrap_or("0").parse().unwrap_or(0);
-            let _ = parts.next(); // "skip"
-            stats.skip += parts.next().unwrap_or("0").parse().unwrap_or(0);
             found = true;
         } else if line.starts_with("FAIL") {
             eprintln!("{line}");
@@ -443,7 +577,6 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
 const PREAMBLE: &str = r#"
 $pass = 0
 $fail = 0
-$skip = 0
 
 def check(desc)
   ok, actual = yield
@@ -496,5 +629,5 @@ $spectest = {
 "#;
 
 const POSTAMBLE: &str = r#"
-puts "RESULT pass=#{$pass} fail=#{$fail} skip=#{$skip}"
+puts "RESULT pass=#{$pass} fail=#{$fail}"
 "#;

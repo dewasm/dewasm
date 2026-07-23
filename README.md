@@ -21,8 +21,11 @@ feature set; a useful subset of WASI preview 1 works end-to-end.
   data segments)
 - WASI preview 1 (stdio, args, environ, clocks, random, proc_exit;
   filesystem APIs are not implemented yet)
-- Not yet: reference types, SIMD, threads, GC, multiple memories/tables,
-  cross-module linking
+
+The authoritative, generated feature/WASI matrix per backend is
+[`docs/support.md`](docs/support.md); the spec harness enforces that
+every skipped test is attributable to a feature declared unsupported
+there ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 
 ## Target languages
 
@@ -122,13 +125,20 @@ generates a Ruby script that runs all assertions on the real interpreter:
 $ git submodule update --init   # fetches tests/spec (WebAssembly/testsuite)
 $ cargo test -p dewasmify-cli --test spec -- --nocapture
 ...
-TOTAL: pass=19446 fail=5 skip=894 (rust: invalid-ok=1563 invalid-bad=0)
+TOTAL: pass=24338 fail=23 skip=33448 (rust: invalid-ok=4652 invalid-bad=0)
+unsupported (declared, ADR-8):
+  simd: 24275
+  ...
 ```
 
-Directives that exercise unsupported features are skipped; the 5 expected
-failures come from cross-module table sharing (`register`), which is not
-supported yet. Adding a backend = making this harness pass for it — the
-full policy is [ADR-3](docs/adr/3-testing-strategy.md).
+The testsuite submodule tracks upstream latest; every skipped directive
+must be attributable to a feature declared unsupported in
+[`docs/support.md`](docs/support.md), and unattributable failures fail
+the suite. The 23 expected failures are all cross-module linking
+(`register`), the first item on the roadmap. Adding a backend = making
+this harness pass for it — the policy is
+[ADR-3](docs/adr/3-testing-strategy.md) +
+[ADR-8](docs/adr/8-latest-testsuite-support-matrix.md).
 
 ## Roadmap
 

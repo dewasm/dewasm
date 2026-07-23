@@ -1,10 +1,12 @@
 # ADR-3 — Testing Strategy: Spec Testsuite on Real Interpreters
 
 Status: **Accepted, 2026-07-23.** Backfilled; implemented in
-`crates/dewasmify-cli/tests/spec.rs` for the Ruby backend
-(pass=19446, fail=5 expected, skip=894 at time of writing). Differential
-testing of WASI programs against wasmtime is done manually so far;
-automating it remains open.
+`crates/dewasmify-cli/tests/spec.rs` for the Ruby backend. The skip
+policy (curated file list, bare skip counts) was revised the same day by
+[ADR-8](8-latest-testsuite-support-matrix.md): the harness now runs every
+testsuite file and requires each skip to be attributable to a declared-
+unsupported feature. Differential testing of WASI programs against
+wasmtime is done manually so far; automating it remains open.
 
 ## Context
 

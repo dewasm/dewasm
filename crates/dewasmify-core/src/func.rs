@@ -7,11 +7,12 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use wasmparser::{BlockType, FunctionBody, Operator};
 
+use crate::feature::Feature;
 use crate::ir::{self, BinOp, BrTarget, Expr, Label, LoadOp, Stmt, StoreOp, Temp, UnOp, ValType};
-use crate::module::val_type;
+use crate::module::{unsupported, val_type};
 
 pub struct FuncBuilder<'a> {
     module: &'a ir::Module,
@@ -422,7 +423,13 @@ impl<'a> FuncBuilder<'a> {
                 let results = ty.results.iter().map(|ty| self.push(*ty)).collect();
                 self.emit(Stmt::Call { func: function_index, args, results });
             }
-            Operator::CallIndirect { type_index, .. } => {
+            Operator::CallIndirect { type_index, table_index, .. } => {
+                if table_index != 0 {
+                    return Err(unsupported(
+                        Feature::MultipleTables,
+                        "call_indirect on a table other than 0",
+                    ));
+                }
                 let index = self.pop();
                 let ty = self.module.types[type_index as usize].clone();
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
@@ -694,8 +701,48 @@ impl<'a> FuncBuilder<'a> {
             Operator::I64TruncSatF64S => self.un(UnOp::I64TruncSatF64S, I64),
             Operator::I64TruncSatF64U => self.un(UnOp::I64TruncSatF64U, I64),
 
-            op => bail!("unsupported instruction: {op:?}"),
+            op => {
+                let name = format!("{op:?}");
+                let name = name.split_whitespace().next().unwrap_or(&name).trim_end_matches('{');
+                return Err(match classify_op(name) {
+                    Some(feature) => {
+                        unsupported(feature, format!("instruction {name}"))
+                    }
+                    None => anyhow::anyhow!("unsupported instruction: {op:?}"),
+                });
+            }
         }
         Ok(())
+    }
+}
+
+/// Attribute an untranslated operator to a feature. Operators gated by
+/// validator features never reach this point; what does reach it are the
+/// families our base validation accepts (reference types encodings, bulk
+/// table ops) — an unclassified operator here is a dewasmify bug and the
+/// spec harness treats it as such.
+fn classify_op(name: &str) -> Option<Feature> {
+    let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
+    if starts(&["TableInit", "TableCopy", "ElemDrop"]) {
+        Some(Feature::TableBulkOps)
+    } else if starts(&["CallRef", "ReturnCallRef", "BrOnNull", "BrOnNonNull", "RefAsNonNull"]) {
+        Some(Feature::FunctionReferences)
+    } else if starts(&["ReturnCall"]) {
+        Some(Feature::TailCall)
+    } else if starts(&["Table", "RefNull", "RefIsNull", "RefFunc"]) {
+        Some(Feature::ReferenceTypes)
+    } else if starts(&["RefEq", "RefTest", "RefCast", "RefI31", "I31Get", "StructNew",
+        "StructGet", "StructSet", "ArrayNew", "ArrayGet", "ArraySet", "ArrayLen",
+        "ArrayFill", "ArrayCopy", "ArrayInit", "AnyConvert", "ExternConvert", "BrOnCast"])
+    {
+        Some(Feature::Gc)
+    } else if starts(&["Throw", "Rethrow", "Try", "Catch", "Delegate", "ThrowRef"]) {
+        Some(Feature::ExceptionHandling)
+    } else if name.contains("Atomic") {
+        Some(Feature::Threads)
+    } else if name.contains("128") || name.contains("MulWide") {
+        Some(Feature::WideArithmetic)
+    } else {
+        None
     }
 }

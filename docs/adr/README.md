@@ -29,6 +29,7 @@ the consequences.
 | ADR-5 | [Bash Floats: Pure-Bash Softfloat](5-bash-softfloat.md) | Accepted (not yet implemented) |
 | ADR-6 | [Runtime as Per-Method Units with Selectable Linkage](6-runtime-units.md) | Accepted |
 | ADR-7 | [Import Providers and the Default WASI Fallback](7-import-providers.md) | Accepted |
+| ADR-8 | [Track the Latest Testsuite; Attribute Skips to a Support Matrix](8-latest-testsuite-support-matrix.md) | Accepted |
 
 ## Adding a new ADR
 
