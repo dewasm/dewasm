@@ -4,8 +4,8 @@
 #
 # Third-party artifacts are never committed to this repository (ADR-9):
 # this script downloads version-pinned, checksum-verified files into
-# examples/apps/cache/ (gitignored). The apps e2e test self-skips when the
-# cache is absent.
+# examples/apps/cache/ (gitignored). The apps e2e test fails loudly when
+# the cache is absent (ADR-15).
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -21,9 +21,16 @@ APPS=(
 for app in "${APPS[@]}"; do
   IFS="|" read -r name url sha256 wasm_path <<<"$app"
   out="cache/$name.wasm"
-  if [ -f "$out" ]; then
+  # The stamp records which pinned source checksum the cached copy came
+  # from; a re-pinned app is refetched instead of silently kept stale
+  # (which would fail the golden-output comparison inscrutably).
+  stamp="cache/$name.src-sha256"
+  if [ -f "$out" ] && [ "$(cat "$stamp" 2>/dev/null || true)" = "$sha256" ]; then
     echo "$name: cached"
     continue
+  fi
+  if [ -f "$out" ]; then
+    echo "$name: cached copy predates the current pin — refetching"
   fi
   echo "$name: fetching $url"
   tmp=$(mktemp -d)
@@ -41,5 +48,6 @@ for app in "${APPS[@]}"; do
   fi
   rm -rf "$tmp"
   trap - EXIT
+  printf '%s\n' "$sha256" >"$stamp"
   echo "$name: -> $out"
 done

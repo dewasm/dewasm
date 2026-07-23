@@ -8,8 +8,10 @@ upstream, for demos and end-to-end tests.
 `cache/` (gitignored); licensing of the binaries stays entirely with
 their upstream distribution. The `apps` cases of the `e2e` test
 (`crates/dewasmify-cli/tests/e2e/apps.rs`) convert each cached app and
-compare its output against wasmtime; they self-skip when the cache,
-`ruby`, or `wasmtime` is missing.
+compare its output against the golden files in `golden/` (captured once
+from wasmtime; re-validated via `--features wasmtime_test`). A missing
+cache or `ruby` fails the test loudly rather than skipping (ADR-15) —
+run `./fetch.sh` first.
 
 | App | Source | What it demonstrates |
 | --- | --- | --- |
