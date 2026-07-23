@@ -14,6 +14,7 @@ mkdir -p cache
 APPS=(
   "cowsay|https://cdn.wasmer.io/packages/syrusakbary/cowsay/cowsay-0.3.0-b185348b-2e15-480b-96ac-216064a85e0d.tar.gz|44c990f3ceec797d6e90f54e2ba72789b9544be61ee4011aa7ac6c05252ca605|target/wasm32-wasi/release/cowsay.wasm"
   "qjs|https://cdn.wasmer.io/packages/_/quickjs/quickjs-0.0.3.tar.gz|8f2614b6efcf1c47923f0ce030da11622c1d72b8d6329653bc2cacb5b78e8bfb|build/qjs.wasm"
+  "sqlite|https://cdn.wasmer.io/packages/_/sqlite/sqlite-0.2.2.tar.gz|93d4c1f1b3625c311b431076fe071fa1a111472520fbcffd934fafee5e7cc2ed|build/sqlite.wasm"
 )
 
 for app in "${APPS[@]}"; do

@@ -15,6 +15,7 @@ compares its output against wasmtime; it self-skips when the cache,
 | --- | --- | --- |
 | cowsay | [syrusakbary/cowsay@0.3.0](https://wasmer.io/syrusakbary/cowsay) | args + stdout, the classic demo |
 | qjs | [quickjs@0.0.3](https://wasmer.io/quickjs) | a complete JavaScript engine (2.6 MB wasm, C via wasi-sdk, `wasi_unstable`) running on plain Ruby |
+| sqlite | [sqlite@0.2.2](https://wasmer.io/sqlite) | the full SQLite engine (in-memory databases via the CLI shell; the stepping stone toward a library-mode sqlite3 driver) |
 
 ```console
 $ ./fetch.sh

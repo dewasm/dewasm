@@ -155,10 +155,17 @@ this harness pass for it — the policy is
 ## Roadmap
 
 1. ~~Core pipeline + Ruby backend + spec harness~~ (done)
-2. WASI filesystem support (path_open + preopens), more real-world programs
-3. Bash backend (integers/memory/WASI first, then pure-bash IEEE754
+2. Wasm 1.0 completion: non-function imports + cross-module linking
+   (clears the expected-failure ledger)
+3. WASI filesystem support (path_open + preopens), more real-world programs
+4. Bash backend (integers/memory/WASI first, then pure-bash IEEE754
    softfloat — no external commands)
-4. Java / Go backends
-5. Python / PHP backends
-6. Readability pass (expression folding), self-hosting demo (dewasmify →
+5. Java / Go backends
+6. Python / PHP backends
+7. Readability pass (expression folding), self-hosting demo (dewasmify →
    wasm → Ruby → run dewasmify on Ruby)
+
+North-star demos we are steering toward: a library-mode SQLite as a
+pure-Ruby `sqlite3` driver (Ruby on Rails running on a dewasmified
+SQLite), PicoRuby and CRuby (`ruby.wasm`) converted back onto Ruby, and
+C/Rust tools running under plain Bash.

@@ -28,6 +28,14 @@ const CASES: &[AppCase] = &[
         ],
         stdin: "",
     },
+    AppCase {
+        name: "sqlite",
+        args: &[],
+        stdin: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);\n\
+                INSERT INTO users (name) VALUES (\"alice\"), (\"bob\"), (\"carol\");\n\
+                SELECT id, upper(name) FROM users WHERE id >= 2;\n\
+                SELECT count(*), avg(id) FROM users;\n",
+    },
 ];
 
 fn tool_available(name: &str) -> bool {
