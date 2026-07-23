@@ -1,0 +1,72 @@
+use std::path::PathBuf;
+
+use anyhow::{bail, Context, Result};
+use clap::Parser;
+use dewasmify_backend::{Backend, GenOptions, Mode};
+use dewasmify_backend_ruby::RubyBackend;
+
+/// Translate a WebAssembly binary into source code of various languages.
+#[derive(Parser)]
+#[command(name = "dewasmify", version)]
+struct Cli {
+    /// Input file (.wasm or .wat)
+    input: PathBuf,
+
+    /// Target language
+    #[arg(short, long, default_value = "ruby")]
+    target: String,
+
+    /// Output mode: "library" exposes exports to the host language,
+    /// "standalone" wires up WASI and runs _start.
+    #[arg(short, long, default_value = "library")]
+    mode: String,
+
+    /// Name used for the generated class/module (defaults to the input
+    /// file stem)
+    #[arg(long)]
+    module_name: Option<String>,
+
+    /// Output file path ("-" for stdout)
+    #[arg(short, long, default_value = "-")]
+    output: PathBuf,
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    let backend: Box<dyn Backend> = match cli.target.as_str() {
+        "ruby" => Box::new(RubyBackend),
+        other => bail!("unsupported target language: {other}"),
+    };
+
+    let mode = match cli.mode.as_str() {
+        "library" => Mode::Library,
+        "standalone" => Mode::Standalone,
+        other => bail!("unsupported mode: {other} (expected library or standalone)"),
+    };
+
+    let module_name = cli.module_name.unwrap_or_else(|| {
+        cli.input
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "module".to_string())
+    });
+
+    let input = std::fs::read(&cli.input)
+        .with_context(|| format!("failed to read {}", cli.input.display()))?;
+    // Accept .wat text input as well; wat::parse_bytes passes .wasm through.
+    let bytes = wat::parse_bytes(&input).context("failed to parse input")?;
+
+    let module = dewasmify_core::build_module(&bytes)?;
+    let files = backend.generate(&module, &GenOptions { mode, module_name })?;
+
+    for file in files {
+        if cli.output == PathBuf::from("-") {
+            print!("{}", file.contents);
+        } else {
+            std::fs::write(&cli.output, &file.contents)
+                .with_context(|| format!("failed to write {}", cli.output.display()))?;
+        }
+    }
+    Ok(())
+}

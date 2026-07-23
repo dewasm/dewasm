@@ -1,0 +1,11 @@
+[package]
+name = "dewasmify-backend"
+description = "Backend trait and code emission utilities for dewasmify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dewasmify-core.workspace = true

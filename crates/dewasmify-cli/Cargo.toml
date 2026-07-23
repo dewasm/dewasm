@@ -1,0 +1,22 @@
+[package]
+name = "dewasmify-cli"
+description = "dewasmify: translate WebAssembly binaries into source code of various languages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "dewasmify"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+wat.workspace = true
+dewasmify-core.workspace = true
+dewasmify-backend.workspace = true
+dewasmify-backend-ruby.workspace = true
+
+[dev-dependencies]
+wast.workspace = true

@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["TSUYUSATO Kitsune <make.just.on@gmail.com>"]
+
+[workspace.dependencies]
+dewasmify-core = { path = "crates/dewasmify-core" }
+dewasmify-backend = { path = "crates/dewasmify-backend" }
+dewasmify-backend-ruby = { path = "crates/dewasmify-backend-ruby" }
+anyhow = "1"
+wasmparser = "0.254"
+wat = "1"
+wast = "254"
+clap = { version = "4", features = ["derive"] }
