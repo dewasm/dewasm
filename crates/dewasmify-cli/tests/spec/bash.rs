@@ -10,7 +10,6 @@
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use std::process::Command;
 
 use dewasmify_backend::Backend;
 use dewasmify_backend_bash::BashBackend;

@@ -1,7 +1,7 @@
 //! End-to-end tests: convert .wat examples to Ruby/Bash and run them with
 //! the real interpreters.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
