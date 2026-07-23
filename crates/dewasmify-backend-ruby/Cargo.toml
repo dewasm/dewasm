@@ -10,3 +10,6 @@ authors.workspace = true
 anyhow.workspace = true
 dewasmify-core.workspace = true
 dewasmify-backend.workspace = true
+
+[dev-dependencies]
+regex.workspace = true

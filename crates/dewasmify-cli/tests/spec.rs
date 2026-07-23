@@ -12,6 +12,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
+use std::collections::BTreeSet;
+
+use dewasmify_backend::RuntimeLinkage;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::parser::{self, ParseBuffer};
 use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
@@ -132,6 +135,10 @@ struct ScriptGen<'a> {
     named: std::collections::HashMap<String, Result<String, String>>,
     counter: u32,
     stats: Stats,
+    /// Union of the runtime units needed by all converted modules; the
+    /// script gets one shared `module Rt` bundle (minimal, so undeclared
+    /// unit dependencies fail loudly).
+    units: BTreeSet<String>,
 }
 
 impl<'a> ScriptGen<'a> {
@@ -169,10 +176,11 @@ impl<'a> ScriptGen<'a> {
             .and_then(|bytes| convert(&bytes, self.counter));
         self.counter += 1;
         let result = match converted {
-            Ok((class_src, class_name)) => {
+            Ok((class_src, class_name, units)) => {
                 let var = format!("$i{}", self.counter);
                 self.script.push_str(&class_src);
                 let _ = writeln!(self.script, "{var} = {class_name}.new($spectest)");
+                self.units.extend(units);
                 Ok(var)
             }
             Err(err) => {
@@ -196,13 +204,16 @@ impl<'a> ScriptGen<'a> {
     }
 }
 
-fn convert(bytes: &[u8], counter: u32) -> Result<(String, String), String> {
+fn convert(bytes: &[u8], counter: u32) -> Result<(String, String, BTreeSet<String>), String> {
     let module = dewasmify_core::build_module(bytes).map_err(|e| format!("{e:#}"))?;
     let class_name = format!("WastMod{counter}");
-    Ok((
-        dewasmify_backend_ruby::generate_class(&module, &class_name),
-        class_name,
-    ))
+    let (src, units) = dewasmify_backend_ruby::generate_class_with_units(
+        &module,
+        &class_name,
+        &RuntimeLinkage::Alias("::Rt".to_string()),
+    )
+    .map_err(|e| format!("{e:#}"))?;
+    Ok((src, class_name, units))
 }
 
 fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
@@ -210,10 +221,10 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
         WastArg::Core(WastArgCore::I64(v)) => Ok((*v as u64).to_string()),
         WastArg::Core(WastArgCore::F32(f)) => {
-            Ok(format!("Dewasmify.f32_from_bits(0x{:x})", f.bits))
+            Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits))
         }
         WastArg::Core(WastArgCore::F64(f)) => {
-            Ok(format!("Dewasmify.f64_from_bits(0x{:x})", f.bits))
+            Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits))
         }
         other => Err(format!("unsupported argument {other:?}")),
     }
@@ -225,28 +236,28 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::I64(v)) => Ok(format!("{value} == {}", *v as u64)),
         WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
-                format!("(Dewasmify.f32_bits({value}) & 0x7fffffff) == 0x7fc00000")
+                format!("(Rt.f32_bits({value}) & 0x7fffffff) == 0x7fc00000")
             }
             NanPattern::ArithmeticNan => {
-                format!("(Dewasmify.f32_bits({value}) & 0x7fc00000) == 0x7fc00000")
+                format!("(Rt.f32_bits({value}) & 0x7fc00000) == 0x7fc00000")
             }
             NanPattern::Value(f) => {
-                format!("Dewasmify.f32_bits({value}) == 0x{:x}", f.bits)
+                format!("Rt.f32_bits({value}) == 0x{:x}", f.bits)
             }
         }),
         WastRet::Core(WastRetCore::F64(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
                 format!(
-                    "(Dewasmify.f64_bits({value}) & 0x7fffffffffffffff) == 0x7ff8000000000000"
+                    "(Rt.f64_bits({value}) & 0x7fffffffffffffff) == 0x7ff8000000000000"
                 )
             }
             NanPattern::ArithmeticNan => {
                 format!(
-                    "(Dewasmify.f64_bits({value}) & 0x7ff8000000000000) == 0x7ff8000000000000"
+                    "(Rt.f64_bits({value}) & 0x7ff8000000000000) == 0x7ff8000000000000"
                 )
             }
             NanPattern::Value(f) => {
-                format!("Dewasmify.f64_bits({value}) == 0x{:x}", f.bits)
+                format!("Rt.f64_bits({value}) == 0x{:x}", f.bits)
             }
         }),
         other => Err(format!("unsupported result {other:?}")),
@@ -266,10 +277,12 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
         named: Default::default(),
         counter: 0,
         stats: Stats::default(),
+        // Units the harness helpers themselves use.
+        units: ["rt/trap", "rt/f32_bits", "rt/f32_from_bits", "rt/f64_bits", "rt/f64_from_bits"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
     };
-
-    gen.script.push_str(dewasmify_backend_ruby::runtime_source());
-    gen.script.push_str(PREAMBLE);
 
     for directive in wast.directives {
         let span = directive.span();
@@ -321,8 +334,9 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
                             .map_err(|e| e.to_string())
                             .and_then(|bytes| convert(&bytes, counter));
                         match converted {
-                            Ok((class_src, class_name)) => {
+                            Ok((class_src, class_name, units)) => {
                                 gen.script.push_str(&class_src);
+                                gen.units.extend(units);
                                 Ok(format!("{class_name}.new($spectest)"))
                             }
                             Err(e) => Err(e),
@@ -383,8 +397,15 @@ fn run_file(name: &str, path: &Path) -> anyhow::Result<Stats> {
 
     gen.script.push_str(POSTAMBLE);
 
+    // One shared runtime bundle for the whole file, kept minimal so that
+    // undeclared unit dependencies surface as NoMethodError.
+    let mut script = dewasmify_backend_ruby::shared_runtime(&gen.units)
+        .map_err(|e| anyhow::anyhow!("bundling runtime: {e:#}"))?;
+    script.push_str(PREAMBLE);
+    script.push_str(&gen.script);
+
     let script_path = std::env::temp_dir().join(format!("dewasmify-spec-{name}.rb"));
-    std::fs::write(&script_path, &gen.script)?;
+    std::fs::write(&script_path, &script)?;
     let output = Command::new("ruby").arg(&script_path).output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -440,7 +461,7 @@ def check_trap(desc, msg)
   yield
   $fail += 1
   puts "FAIL(no trap, want #{msg.inspect}): #{desc}"
-rescue Dewasmify::Trap => e
+rescue Rt::Trap => e
   if e.message.include?(msg) || msg.include?(e.message)
     $pass += 1
   else

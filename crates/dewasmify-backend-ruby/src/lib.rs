@@ -1,35 +1,111 @@
-//! Ruby backend: translates dewasmify IR into a Ruby class plus an embedded
+//! Ruby backend: translates dewasmify IR into a Ruby class plus a bundled
 //! lightweight runtime.
 //!
-//! Lowering conventions (shared with the runtime in runtime/ruby/):
+//! Lowering conventions (ADR-4; numeric conventions ADR-2):
 //! - i32/i64 are unsigned (masked) Ruby Integers; signed views via
-//!   `Dewasmify.s32/s64` only where an instruction needs them.
-//! - f32/f64 are Ruby Floats; f32 results are re-rounded with
-//!   `Dewasmify.f32`.
+//!   `Rt.s32/s64` only where an instruction needs them.
+//! - f32/f64 are Ruby Floats; f32 results are re-rounded with `Rt.f32`.
 //! - Multi-level `br` uses catch/throw; loops become `while true` with a
-//!   catch whose value distinguishes continue (throw) from fallthrough.
+//!   catch whose value distinguishes continue from fallthrough.
+//!
+//! The runtime is composed from per-method units (ADR-6) and referenced by
+//! the relative name `Rt`, so linkage (embedded per class, shared, or a
+//! future gem) is the caller's choice.
+
+use std::cell::RefCell;
+use std::collections::BTreeSet;
+use std::sync::OnceLock;
 
 use anyhow::Result;
-use dewasmify_backend::{Backend, CodeWriter, GenOptions, Mode, OutputFile};
+use dewasmify_backend::{
+    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
+    RuntimeScope,
+};
 use dewasmify_core::ir::{
     BinOp, BrTarget, Expr, ExportKind, LoadOp, Module, Stmt, StoreOp, Temp, UnOp, ValType,
 };
 
-const RUNTIME_RB: &str = include_str!("../../../runtime/ruby/runtime.rb");
-const WASI_RB: &str = include_str!("../../../runtime/ruby/wasi.rb");
+include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The embedded runtime source (for embedders that emit several classes
-/// into one file, like the spec test harness).
-pub fn runtime_source() -> &'static str {
-    RUNTIME_RB
+/// The runtime unit bundler for Ruby (see runtime/ruby/units/).
+pub fn bundler() -> &'static RuntimeBundler {
+    static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
+    BUNDLER.get_or_init(|| {
+        RuntimeBundler::new(
+            "#",
+            "  ",
+            vec![
+                RuntimeScope { prefix: "rt", open: "", close: "", prelude: Some("rt/_module") },
+                RuntimeScope {
+                    prefix: "memory",
+                    open: "class Memory",
+                    close: "end",
+                    prelude: Some("memory/_class"),
+                },
+                RuntimeScope {
+                    prefix: "table",
+                    open: "class Table",
+                    close: "end",
+                    prelude: Some("table/_class"),
+                },
+                RuntimeScope {
+                    prefix: "wasi",
+                    open: "class WASI",
+                    close: "end",
+                    prelude: Some("wasi/_class"),
+                },
+            ],
+            UNIT_SOURCES,
+        )
+        .expect("runtime units are well-formed")
+    })
 }
 
-/// Generate only the class definition for a module, without the runtime
-/// prelude.
-pub fn generate_class(module: &Module, class_name: &str) -> String {
-    let mut w = CodeWriter::new("  ");
-    Gen { module }.class(&mut w, class_name);
-    w.finish()
+/// Emit a top-level shared runtime (`module Rt ... end`) for the closure
+/// of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
+pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
+    Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
+}
+
+/// Generate one class for `module`. Returns the class source and the set
+/// of runtime units it needs (already bundled inside for `Embedded`).
+pub fn generate_class_with_units(
+    module: &Module,
+    class_name: &str,
+    linkage: &RuntimeLinkage,
+) -> Result<(String, BTreeSet<String>)> {
+    generate_class_inner(module, class_name, linkage, &BTreeSet::new())
+}
+
+fn generate_class_inner(
+    module: &Module,
+    class_name: &str,
+    linkage: &RuntimeLinkage,
+    extra_seeds: &BTreeSet<String>,
+) -> Result<(String, BTreeSet<String>)> {
+    let gen = Gen { module, uses: RefCell::new(extra_seeds.clone()) };
+    let mut wb = CodeWriter::new("  ");
+    wb.indent();
+    gen.body(&mut wb);
+    let body = wb.finish();
+    let uses = gen.uses.into_inner();
+
+    let mut out = format!("class {class_name}\n");
+    match linkage {
+        RuntimeLinkage::Embedded => {
+            if !uses.is_empty() {
+                out.push_str("  module Rt\n");
+                out.push_str(&bundler().bundle(&uses, 2)?);
+                out.push_str("  end\n\n");
+            }
+        }
+        RuntimeLinkage::Alias(path) => {
+            out.push_str(&format!("  Rt = {path}\n\n"));
+        }
+    }
+    out.push_str(&body);
+    out.push_str("end\n");
+    Ok((out, uses))
 }
 
 pub struct RubyBackend;
@@ -45,36 +121,80 @@ impl Backend for RubyBackend {
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         let class_name = class_name(&opts.module_name);
-        let mut w = CodeWriter::new("  ");
 
+        // In standalone mode the WASI wiring is driven by the module's
+        // actual imports: implemented syscalls get their runtime unit,
+        // the rest get an ENOSYS stub.
+        let mut wasi_imports: Vec<(String, bool)> = Vec::new();
+        let mut extra_seeds = BTreeSet::new();
+        if opts.mode == Mode::Standalone {
+            for import in &module.imported_funcs {
+                if import.module != "wasi_snapshot_preview1" {
+                    continue;
+                }
+                if wasi_imports.iter().any(|(n, _)| *n == import.name) {
+                    continue;
+                }
+                let unit = format!("wasi/{}", import.name);
+                let implemented = bundler().has_unit(&unit);
+                if implemented {
+                    extra_seeds.insert(unit);
+                }
+                wasi_imports.push((import.name.clone(), implemented));
+            }
+            extra_seeds.insert("wasi/_class".to_string());
+            extra_seeds.insert("rt/trap".to_string());
+            extra_seeds.insert("rt/exit".to_string());
+        }
+
+        let (class_src, _) =
+            generate_class_inner(module, &class_name, &opts.runtime, &extra_seeds)?;
+
+        let mut w = CodeWriter::new("  ");
         w.line("# Generated by dewasmify. Do not edit.");
         w.line("# frozen_string_literal: false");
         w.line("");
-        w.raw(RUNTIME_RB);
-        w.line("");
-        if opts.mode == Mode::Standalone {
-            w.raw(WASI_RB);
-            w.line("");
-        }
-
-        let gen = Gen { module };
-        gen.class(&mut w, &class_name);
+        w.raw(&class_src);
 
         if opts.mode == Mode::Standalone {
             w.line("");
             w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
-                w.line("wasi = Dewasmify::WASI.new(args: [File.basename($PROGRAM_NAME), *ARGV], env: ENV.to_h)");
-                w.line(format!("inst = {class_name}.new(wasi.imports)"));
+                w.line(format!(
+                    "wasi = {class_name}::Rt::WASI.new(args: [File.basename($PROGRAM_NAME), *ARGV], env: ENV.to_h)"
+                ));
+                w.line("wasi_imports = {}");
+                for (name, implemented) in &wasi_imports {
+                    if *implemented {
+                        w.line(format!(
+                            "wasi_imports[{}] = wasi.method(:wasi_{name})",
+                            ruby_string(name)
+                        ));
+                    } else {
+                        w.line(format!(
+                            "wasi_imports[{}] = ->(*) {{ 52 }} # ENOSYS: not implemented yet",
+                            ruby_string(name)
+                        ));
+                    }
+                }
+                w.line(format!(
+                    "inst = {class_name}.new({{ \"wasi_snapshot_preview1\" => wasi_imports }})"
+                ));
                 w.line("wasi.memory = inst.memory");
-                w.block("begin", "end", |w| {
-                    w.line("inst.invoke(\"_start\")");
-                    w.line("exit 0");
-                    w.line("rescue Dewasmify::Exit => e");
-                    w.line("  exit e.code");
-                    w.line("rescue Dewasmify::Trap => e");
-                    w.line("  warn \"trap: #{e.message}\"");
-                    w.line("  exit 134");
-                });
+                w.line("begin");
+                w.indent();
+                w.line("inst.invoke(\"_start\")");
+                w.line("exit 0");
+                w.dedent();
+                w.line(format!("rescue {class_name}::Rt::Exit => e"));
+                w.indent();
+                w.line("exit e.code");
+                w.dedent();
+                w.line(format!("rescue {class_name}::Rt::Trap => e"));
+                w.indent();
+                w.line("warn \"trap: #{e.message}\"");
+                w.line("exit 134");
+                w.dedent();
+                w.line("end");
             });
         }
 
@@ -133,30 +253,47 @@ fn hex_bytes(data: &[u8]) -> String {
 
 struct Gen<'a> {
     module: &'a Module,
+    /// Runtime units the generated code references.
+    uses: RefCell<BTreeSet<String>>,
 }
 
 impl<'a> Gen<'a> {
-    fn class(&self, w: &mut CodeWriter, class_name: &str) {
-        w.block(format!("class {class_name}"), "end", |w| {
-            self.initialize(w);
-            w.line("");
-            w.line("attr_reader :memory, :exports");
-            w.line("");
-            w.block("def invoke(name, *args)", "end", |w| {
-                w.line("@exports.fetch(name).call(*args)");
-            });
-            w.line("");
-            w.block("def global_get(name)", "end", |w| {
-                w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name))");
-            });
-            w.line("");
-            w.line("private");
-            for (i, func) in self.module.funcs.iter().enumerate() {
-                w.line("");
-                let idx = self.module.num_imported_funcs() as usize + i;
-                self.function(w, idx as u32, func);
-            }
+    fn use_unit(&self, id: &str) {
+        self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// Reference a module-level runtime helper, recording its unit.
+    fn rt(&self, name: &str) -> String {
+        self.use_unit(&format!("rt/{name}"));
+        format!("Rt.{name}")
+    }
+
+    /// Reference a Memory method, recording its unit.
+    fn mem<'n>(&self, name: &'n str) -> &'n str {
+        self.use_unit(&format!("memory/{name}"));
+        name
+    }
+
+    /// Class body members, written at indent level 1.
+    fn body(&self, w: &mut CodeWriter) {
+        self.initialize(w);
+        w.line("");
+        w.line("attr_reader :memory, :exports");
+        w.line("");
+        w.block("def invoke(name, *args)", "end", |w| {
+            w.line("@exports.fetch(name).call(*args)");
         });
+        w.line("");
+        w.block("def global_get(name)", "end", |w| {
+            w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name))");
+        });
+        w.line("");
+        w.line("private");
+        for (i, func) in self.module.funcs.iter().enumerate() {
+            w.line("");
+            let idx = self.module.num_imported_funcs() as usize + i;
+            self.function(w, idx as u32, func);
+        }
     }
 
     fn initialize(&self, w: &mut CodeWriter) {
@@ -178,17 +315,16 @@ impl<'a> Gen<'a> {
 
         w.block("def initialize(imports = {})", "end", |w| {
             if let Some(mem) = &m.memory {
+                self.use_unit("memory/_class");
                 let max = mem
                     .max_pages
                     .map(|p| p.to_string())
                     .unwrap_or_else(|| "nil".to_string());
-                w.line(format!(
-                    "@memory = Dewasmify::Memory.new({}, {})",
-                    mem.min_pages, max
-                ));
+                w.line(format!("@memory = Rt::Memory.new({}, {})", mem.min_pages, max));
             }
             if let Some(table) = &m.table {
-                w.line(format!("@table = Dewasmify::Table.new({})", table.min));
+                self.use_unit("table/_class");
+                w.line(format!("@table = Rt::Table.new({})", table.min));
             }
             for (i, import) in m.imported_funcs.iter().enumerate() {
                 w.line(format!(
@@ -205,12 +341,14 @@ impl<'a> Gen<'a> {
                 w.line(format!("@g{} = {}", i, self.expr(&global.init)));
             }
             for elem in &m.elems {
+                self.use_unit("table/check_range");
                 let offset = self.expr(&elem.offset);
                 w.line(format!(
                     "@table.check_range({offset}, {})",
                     elem.func_indices.len()
                 ));
                 for (i, func_idx) in elem.func_indices.iter().enumerate() {
+                    self.use_unit("table/set");
                     let ty = self.func_type_idx(*func_idx);
                     w.line(format!(
                         "@table.set({offset} + {i}, {ty}, {})",
@@ -221,6 +359,7 @@ impl<'a> Gen<'a> {
             for (i, data) in m.datas.iter().enumerate() {
                 match &data.offset {
                     Some(offset) => {
+                        self.use_unit("memory/init");
                         w.line(format!(
                             "@memory.init({}, {}, 0, {})",
                             self.expr(offset),
@@ -344,7 +483,7 @@ impl<'a> Gen<'a> {
             Stmt::Store { op, addr, value, offset } => {
                 w.line(format!(
                     "@memory.{}({}, {})",
-                    store_method(*op),
+                    self.mem(store_method(*op)),
                     self.addr(addr, *offset),
                     self.expr(value)
                 ));
@@ -420,6 +559,7 @@ impl<'a> Gen<'a> {
                 w.line(assign_results(results, call));
             }
             Stmt::CallIndirect { type_idx, index, args, results } => {
+                self.use_unit("table/call");
                 let mut call_args =
                     vec![self.expr(index), self.canonical_type(*type_idx).to_string()];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
@@ -427,9 +567,11 @@ impl<'a> Gen<'a> {
                 w.line(assign_results(results, call));
             }
             Stmt::MemoryGrow { dst, delta } => {
+                self.use_unit("memory/grow");
                 w.line(format!("{} = @memory.grow({})", temp(*dst), self.expr(delta)));
             }
             Stmt::MemoryCopy { dst, src, len } => {
+                self.use_unit("memory/copy");
                 w.line(format!(
                     "@memory.copy({}, {}, {})",
                     self.expr(dst),
@@ -438,6 +580,7 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::MemoryFill { dst, val, len } => {
+                self.use_unit("memory/fill");
                 w.line(format!(
                     "@memory.fill({}, {}, {})",
                     self.expr(dst),
@@ -446,6 +589,7 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::MemoryInit { seg, dst, src, len } => {
+                self.use_unit("memory/init");
                 w.line(format!(
                     "@memory.init({}, @data{seg}, {}, {})",
                     self.expr(dst),
@@ -457,7 +601,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("@data{seg} = \"\".b"));
             }
             Stmt::Unreachable => {
-                w.line("Dewasmify.trap(\"unreachable\")");
+                w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
         }
     }
@@ -506,7 +650,7 @@ impl<'a> Gen<'a> {
                 if v.is_finite() {
                     format!("{:?}", v as f64)
                 } else {
-                    format!("Dewasmify.f32_from_bits(0x{bits:x})")
+                    format!("{}(0x{bits:x})", self.rt("f32_from_bits"))
                 }
             }
             Expr::F64Const(bits) => {
@@ -514,7 +658,7 @@ impl<'a> Gen<'a> {
                 if v.is_finite() {
                     format!("{v:?}")
                 } else {
-                    format!("Dewasmify.f64_from_bits(0x{bits:x})")
+                    format!("{}(0x{bits:x})", self.rt("f64_from_bits"))
                 }
             }
             Expr::Temp(t) => temp(*t),
@@ -523,7 +667,11 @@ impl<'a> Gen<'a> {
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
-                format!("@memory.{}({})", load_method(*op), self.addr(addr, *offset))
+                format!(
+                    "@memory.{}({})",
+                    self.mem(load_method(*op)),
+                    self.addr(addr, *offset)
+                )
             }
             Expr::Select { cond, then, els } => {
                 format!(
@@ -533,7 +681,10 @@ impl<'a> Gen<'a> {
                     self.expr(els)
                 )
             }
-            Expr::MemorySize => "@memory.size".to_string(),
+            Expr::MemorySize => {
+                self.use_unit("memory/size");
+                "@memory.size".to_string()
+            }
         }
     }
 
@@ -541,51 +692,51 @@ impl<'a> Gen<'a> {
         use UnOp::*;
         match op {
             I32Eqz | I64Eqz => format!("({a} == 0 ? 1 : 0)"),
-            I32Clz => format!("Dewasmify.i32_clz({a})"),
-            I32Ctz => format!("Dewasmify.i32_ctz({a})"),
-            I64Clz => format!("Dewasmify.i64_clz({a})"),
-            I64Ctz => format!("Dewasmify.i64_ctz({a})"),
-            I32Popcnt | I64Popcnt => format!("Dewasmify.popcnt({a})"),
-            F32Abs => format!("Dewasmify.f32_abs({a})"),
-            F32Neg => format!("Dewasmify.f32_neg({a})"),
-            F64Abs => format!("Dewasmify.f64_abs({a})"),
-            F64Neg => format!("Dewasmify.f64_neg({a})"),
-            F32Ceil | F64Ceil => format!("Dewasmify.fceil({a})"),
-            F32Floor | F64Floor => format!("Dewasmify.ffloor({a})"),
-            F32Trunc | F64Trunc => format!("Dewasmify.ftrunc({a})"),
-            F32Nearest | F64Nearest => format!("Dewasmify.fnearest({a})"),
-            F32Sqrt => format!("Dewasmify.f32(Dewasmify.fsqrt({a}))"),
-            F64Sqrt => format!("Dewasmify.fsqrt({a})"),
+            I32Clz => format!("{}({a})", self.rt("i32_clz")),
+            I32Ctz => format!("{}({a})", self.rt("i32_ctz")),
+            I64Clz => format!("{}({a})", self.rt("i64_clz")),
+            I64Ctz => format!("{}({a})", self.rt("i64_ctz")),
+            I32Popcnt | I64Popcnt => format!("{}({a})", self.rt("popcnt")),
+            F32Abs => format!("{}({a})", self.rt("f32_abs")),
+            F32Neg => format!("{}({a})", self.rt("f32_neg")),
+            F64Abs => format!("{}({a})", self.rt("f64_abs")),
+            F64Neg => format!("{}({a})", self.rt("f64_neg")),
+            F32Ceil | F64Ceil => format!("{}({a})", self.rt("fceil")),
+            F32Floor | F64Floor => format!("{}({a})", self.rt("ffloor")),
+            F32Trunc | F64Trunc => format!("{}({a})", self.rt("ftrunc")),
+            F32Nearest | F64Nearest => format!("{}({a})", self.rt("fnearest")),
+            F32Sqrt => format!("{}({}({a}))", self.rt("f32"), self.rt("fsqrt")),
+            F64Sqrt => format!("{}({a})", self.rt("fsqrt")),
             I32WrapI64 => format!("({a} & 0xffffffff)"),
-            I32TruncF32S | I32TruncF64S => format!("Dewasmify.i32_trunc_s({a})"),
-            I32TruncF32U | I32TruncF64U => format!("Dewasmify.i32_trunc_u({a})"),
-            I64TruncF32S | I64TruncF64S => format!("Dewasmify.i64_trunc_s({a})"),
-            I64TruncF32U | I64TruncF64U => format!("Dewasmify.i64_trunc_u({a})"),
-            I32TruncSatF32S | I32TruncSatF64S => format!("Dewasmify.i32_trunc_sat_s({a})"),
-            I32TruncSatF32U | I32TruncSatF64U => format!("Dewasmify.i32_trunc_sat_u({a})"),
-            I64TruncSatF32S | I64TruncSatF64S => format!("Dewasmify.i64_trunc_sat_s({a})"),
-            I64TruncSatF32U | I64TruncSatF64U => format!("Dewasmify.i64_trunc_sat_u({a})"),
-            I64ExtendI32S => format!("Dewasmify.i64_extend_i32_s({a})"),
+            I32TruncF32S | I32TruncF64S => format!("{}({a})", self.rt("i32_trunc_s")),
+            I32TruncF32U | I32TruncF64U => format!("{}({a})", self.rt("i32_trunc_u")),
+            I64TruncF32S | I64TruncF64S => format!("{}({a})", self.rt("i64_trunc_s")),
+            I64TruncF32U | I64TruncF64U => format!("{}({a})", self.rt("i64_trunc_u")),
+            I32TruncSatF32S | I32TruncSatF64S => format!("{}({a})", self.rt("i32_trunc_sat_s")),
+            I32TruncSatF32U | I32TruncSatF64U => format!("{}({a})", self.rt("i32_trunc_sat_u")),
+            I64TruncSatF32S | I64TruncSatF64S => format!("{}({a})", self.rt("i64_trunc_sat_s")),
+            I64TruncSatF32U | I64TruncSatF64U => format!("{}({a})", self.rt("i64_trunc_sat_u")),
+            I64ExtendI32S => format!("{}({a})", self.rt("i64_extend_i32_s")),
             I64ExtendI32U => a.to_string(),
-            F32ConvertI32S => format!("Dewasmify.f32(Dewasmify.s32({a}).to_f)"),
-            F32ConvertI32U => format!("Dewasmify.f32({a}.to_f)"),
-            F32ConvertI64S => format!("Dewasmify.cvt_f32_i(Dewasmify.s64({a}))"),
-            F32ConvertI64U => format!("Dewasmify.cvt_f32_i({a})"),
-            F64ConvertI32S => format!("Dewasmify.s32({a}).to_f"),
+            F32ConvertI32S => format!("{}({}({a}).to_f)", self.rt("f32"), self.rt("s32")),
+            F32ConvertI32U => format!("{}({a}.to_f)", self.rt("f32")),
+            F32ConvertI64S => format!("{}({}({a}))", self.rt("cvt_f32_i"), self.rt("s64")),
+            F32ConvertI64U => format!("{}({a})", self.rt("cvt_f32_i")),
+            F64ConvertI32S => format!("{}({a}).to_f", self.rt("s32")),
             F64ConvertI32U => format!("{a}.to_f"),
-            F64ConvertI64S => format!("Dewasmify.cvt_f64_i(Dewasmify.s64({a}))"),
-            F64ConvertI64U => format!("Dewasmify.cvt_f64_i({a})"),
-            F32DemoteF64 => format!("Dewasmify.f32_demote({a})"),
-            F64PromoteF32 => format!("Dewasmify.f64_promote({a})"),
-            I32ReinterpretF32 => format!("Dewasmify.i32_reinterpret_f32({a})"),
-            I64ReinterpretF64 => format!("Dewasmify.i64_reinterpret_f64({a})"),
-            F32ReinterpretI32 => format!("Dewasmify.f32_reinterpret_i32({a})"),
-            F64ReinterpretI64 => format!("Dewasmify.f64_reinterpret_i64({a})"),
-            I32Extend8S => format!("Dewasmify.i32_extend8_s({a})"),
-            I32Extend16S => format!("Dewasmify.i32_extend16_s({a})"),
-            I64Extend8S => format!("Dewasmify.i64_extend8_s({a})"),
-            I64Extend16S => format!("Dewasmify.i64_extend16_s({a})"),
-            I64Extend32S => format!("Dewasmify.i64_extend32_s({a})"),
+            F64ConvertI64S => format!("{}({}({a}))", self.rt("cvt_f64_i"), self.rt("s64")),
+            F64ConvertI64U => format!("{}({a})", self.rt("cvt_f64_i")),
+            F32DemoteF64 => format!("{}({a})", self.rt("f32_demote")),
+            F64PromoteF32 => format!("{}({a})", self.rt("f64_promote")),
+            I32ReinterpretF32 => format!("{}({a})", self.rt("i32_reinterpret_f32")),
+            I64ReinterpretF64 => format!("{}({a})", self.rt("i64_reinterpret_f64")),
+            F32ReinterpretI32 => format!("{}({a})", self.rt("f32_reinterpret_i32")),
+            F64ReinterpretI64 => format!("{}({a})", self.rt("f64_reinterpret_i64")),
+            I32Extend8S => format!("{}({a})", self.rt("i32_extend8_s")),
+            I32Extend16S => format!("{}({a})", self.rt("i32_extend16_s")),
+            I64Extend8S => format!("{}({a})", self.rt("i64_extend8_s")),
+            I64Extend16S => format!("{}({a})", self.rt("i64_extend16_s")),
+            I64Extend32S => format!("{}({a})", self.rt("i64_extend32_s")),
         }
     }
 
@@ -598,53 +749,57 @@ impl<'a> Gen<'a> {
             I64Add => format!("(({a} + {b}) & 0xffffffffffffffff)"),
             I64Sub => format!("(({a} - {b}) & 0xffffffffffffffff)"),
             I64Mul => format!("(({a} * {b}) & 0xffffffffffffffff)"),
-            I32DivS => format!("Dewasmify.i32_div_s({a}, {b})"),
-            I32DivU => format!("Dewasmify.i32_div_u({a}, {b})"),
-            I32RemS => format!("Dewasmify.i32_rem_s({a}, {b})"),
-            I32RemU => format!("Dewasmify.i32_rem_u({a}, {b})"),
-            I64DivS => format!("Dewasmify.i64_div_s({a}, {b})"),
-            I64DivU => format!("Dewasmify.i64_div_u({a}, {b})"),
-            I64RemS => format!("Dewasmify.i64_rem_s({a}, {b})"),
-            I64RemU => format!("Dewasmify.i64_rem_u({a}, {b})"),
+            I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
+            I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
+            I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
+            I32RemU => format!("{}({a}, {b})", self.rt("i32_rem_u")),
+            I64DivS => format!("{}({a}, {b})", self.rt("i64_div_s")),
+            I64DivU => format!("{}({a}, {b})", self.rt("i64_div_u")),
+            I64RemS => format!("{}({a}, {b})", self.rt("i64_rem_s")),
+            I64RemU => format!("{}({a}, {b})", self.rt("i64_rem_u")),
             I32And | I64And => format!("({a} & {b})"),
             I32Or | I64Or => format!("({a} | {b})"),
             I32Xor | I64Xor => format!("({a} ^ {b})"),
             I32Shl => format!("(({a} << ({b} & 31)) & 0xffffffff)"),
             I32ShrU => format!("({a} >> ({b} & 31))"),
-            I32ShrS => format!("((Dewasmify.s32({a}) >> ({b} & 31)) & 0xffffffff)"),
+            I32ShrS => {
+                format!("(({}({a}) >> ({b} & 31)) & 0xffffffff)", self.rt("s32"))
+            }
             I64Shl => format!("(({a} << ({b} & 63)) & 0xffffffffffffffff)"),
             I64ShrU => format!("({a} >> ({b} & 63))"),
-            I64ShrS => format!("((Dewasmify.s64({a}) >> ({b} & 63)) & 0xffffffffffffffff)"),
-            I32Rotl => format!("Dewasmify.i32_rotl({a}, {b})"),
-            I32Rotr => format!("Dewasmify.i32_rotr({a}, {b})"),
-            I64Rotl => format!("Dewasmify.i64_rotl({a}, {b})"),
-            I64Rotr => format!("Dewasmify.i64_rotr({a}, {b})"),
+            I64ShrS => {
+                format!("(({}({a}) >> ({b} & 63)) & 0xffffffffffffffff)", self.rt("s64"))
+            }
+            I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
+            I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
+            I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
+            I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
             I32Eq | I64Eq => format!("({a} == {b} ? 1 : 0)"),
             I32Ne | I64Ne => format!("({a} != {b} ? 1 : 0)"),
             I32LtU | I64LtU => format!("({a} < {b} ? 1 : 0)"),
             I32GtU | I64GtU => format!("({a} > {b} ? 1 : 0)"),
             I32LeU | I64LeU => format!("({a} <= {b} ? 1 : 0)"),
             I32GeU | I64GeU => format!("({a} >= {b} ? 1 : 0)"),
-            I32LtS => format!("(Dewasmify.s32({a}) < Dewasmify.s32({b}) ? 1 : 0)"),
-            I32GtS => format!("(Dewasmify.s32({a}) > Dewasmify.s32({b}) ? 1 : 0)"),
-            I32LeS => format!("(Dewasmify.s32({a}) <= Dewasmify.s32({b}) ? 1 : 0)"),
-            I32GeS => format!("(Dewasmify.s32({a}) >= Dewasmify.s32({b}) ? 1 : 0)"),
-            I64LtS => format!("(Dewasmify.s64({a}) < Dewasmify.s64({b}) ? 1 : 0)"),
-            I64GtS => format!("(Dewasmify.s64({a}) > Dewasmify.s64({b}) ? 1 : 0)"),
-            I64LeS => format!("(Dewasmify.s64({a}) <= Dewasmify.s64({b}) ? 1 : 0)"),
-            I64GeS => format!("(Dewasmify.s64({a}) >= Dewasmify.s64({b}) ? 1 : 0)"),
-            F32Add => format!("Dewasmify.f32({a} + {b})"),
-            F32Sub => format!("Dewasmify.f32({a} - {b})"),
-            F32Mul => format!("Dewasmify.f32({a} * {b})"),
-            F32Div => format!("Dewasmify.f32({a} / {b})"),
+            I32LtS => format!("({0}({a}) < {0}({b}) ? 1 : 0)", self.rt("s32")),
+            I32GtS => format!("({0}({a}) > {0}({b}) ? 1 : 0)", self.rt("s32")),
+            I32LeS => format!("({0}({a}) <= {0}({b}) ? 1 : 0)", self.rt("s32")),
+            I32GeS => format!("({0}({a}) >= {0}({b}) ? 1 : 0)", self.rt("s32")),
+            I64LtS => format!("({0}({a}) < {0}({b}) ? 1 : 0)", self.rt("s64")),
+            I64GtS => format!("({0}({a}) > {0}({b}) ? 1 : 0)", self.rt("s64")),
+            I64LeS => format!("({0}({a}) <= {0}({b}) ? 1 : 0)", self.rt("s64")),
+            I64GeS => format!("({0}({a}) >= {0}({b}) ? 1 : 0)", self.rt("s64")),
+            F32Add => format!("{}({a} + {b})", self.rt("f32")),
+            F32Sub => format!("{}({a} - {b})", self.rt("f32")),
+            F32Mul => format!("{}({a} * {b})", self.rt("f32")),
+            F32Div => format!("{}({a} / {b})", self.rt("f32")),
             F64Add => format!("({a} + {b})"),
             F64Sub => format!("({a} - {b})"),
             F64Mul => format!("({a} * {b})"),
             F64Div => format!("({a} / {b})"),
-            F32Min | F64Min => format!("Dewasmify.fmin({a}, {b})"),
-            F32Max | F64Max => format!("Dewasmify.fmax({a}, {b})"),
-            F32Copysign => format!("Dewasmify.f32_copysign({a}, {b})"),
-            F64Copysign => format!("Dewasmify.f64_copysign({a}, {b})"),
+            F32Min | F64Min => format!("{}({a}, {b})", self.rt("fmin")),
+            F32Max | F64Max => format!("{}({a}, {b})", self.rt("fmax")),
+            F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
+            F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
             F32Eq | F64Eq => format!("({a} == {b} ? 1 : 0)"),
             F32Ne | F64Ne => format!("({a} != {b} ? 1 : 0)"),
             F32Lt | F64Lt => format!("({a} < {b} ? 1 : 0)"),

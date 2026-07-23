@@ -1,6 +1,9 @@
 //! Backend trait and code emission utilities shared by all language
 //! backends.
 
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+use anyhow::{bail, Result};
 use dewasmify_core::ir;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -12,11 +15,26 @@ pub enum Mode {
     Standalone,
 }
 
+/// How generated code gets its runtime. Generated code always refers to
+/// the runtime by the relative name `Rt` (or the backend's equivalent);
+/// linkage only decides where that name is defined.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeLinkage {
+    /// Nest the needed runtime units inside the generated module itself
+    /// (single self-contained file; multiple generated artifacts never
+    /// collide).
+    Embedded,
+    /// Emit only an alias to a runtime defined elsewhere (a shared bundle
+    /// in the same program, or a future runtime package/gem).
+    Alias(String),
+}
+
 #[derive(Clone, Debug)]
 pub struct GenOptions {
     pub mode: Mode,
     /// Class/package/module name for the generated code.
     pub module_name: String,
+    pub runtime: RuntimeLinkage,
 }
 
 pub struct OutputFile {
@@ -28,6 +46,195 @@ pub trait Backend {
     fn name(&self) -> &str;
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
+}
+
+/// One runtime unit: a single method (or an inseparable scope prelude),
+/// with its dependencies declared in `<comment> requires:` header lines.
+pub struct RuntimeUnit {
+    pub id: String,
+    pub requires: Vec<String>,
+    pub body: String,
+}
+
+/// A named scope units can live in (e.g. a class nested in the runtime
+/// module). `prefix` is the unit-id path segment; `open`/`close` wrap the
+/// scope's units; the root scope uses empty wrappers.
+pub struct RuntimeScope {
+    pub prefix: &'static str,
+    pub open: &'static str,
+    pub close: &'static str,
+    /// Unit implicitly required by every unit of this scope (class
+    /// skeleton, constants); also force-included for the root scope.
+    pub prelude: Option<&'static str>,
+}
+
+/// Resolves `requires:` closures over runtime units and emits the bundle,
+/// grouped by scope in declaration order, deterministically sorted within
+/// a scope. Language-agnostic: syntax comes from the scopes and the
+/// caller-provided wrapper around the whole bundle.
+pub struct RuntimeBundler {
+    scopes: Vec<RuntimeScope>,
+    units: BTreeMap<String, RuntimeUnit>,
+    indent_str: &'static str,
+}
+
+impl RuntimeBundler {
+    pub fn new(
+        comment_prefix: &str,
+        indent_str: &'static str,
+        scopes: Vec<RuntimeScope>,
+        sources: &[(&str, &str)],
+    ) -> Result<Self> {
+        let requires_marker = format!("{comment_prefix} requires:");
+        let mut units = BTreeMap::new();
+        for (id, source) in sources {
+            let mut requires = Vec::new();
+            let mut body_lines = Vec::new();
+            let mut in_header = true;
+            for line in source.lines() {
+                if in_header {
+                    if let Some(rest) = line.strip_prefix(&requires_marker) {
+                        for dep in rest.split(',') {
+                            let dep = dep.trim();
+                            if !dep.is_empty() {
+                                requires.push(dep.to_string());
+                            }
+                        }
+                        continue;
+                    }
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    in_header = false;
+                }
+                body_lines.push(line);
+            }
+            while body_lines.last().is_some_and(|l| l.trim().is_empty()) {
+                body_lines.pop();
+            }
+            let unit = RuntimeUnit {
+                id: id.to_string(),
+                requires,
+                body: body_lines.join("\n"),
+            };
+            if units.insert(unit.id.clone(), unit).is_some() {
+                bail!("duplicate runtime unit {id}");
+            }
+        }
+        let bundler = RuntimeBundler { scopes, units, indent_str };
+        for unit in bundler.units.values() {
+            for dep in &unit.requires {
+                if !bundler.units.contains_key(dep) {
+                    bail!("unit {} requires unknown unit {dep}", unit.id);
+                }
+            }
+            bundler.scope_of(&unit.id)?;
+        }
+        Ok(bundler)
+    }
+
+    fn scope_of(&self, id: &str) -> Result<&RuntimeScope> {
+        let prefix = id.split('/').next().unwrap_or("");
+        self.scopes
+            .iter()
+            .find(|s| s.prefix == prefix)
+            .ok_or_else(|| anyhow::anyhow!("unit {id} has unknown scope {prefix}"))
+    }
+
+    pub fn has_unit(&self, id: &str) -> bool {
+        self.units.contains_key(id)
+    }
+
+    pub fn units(&self) -> impl Iterator<Item = &RuntimeUnit> {
+        self.units.values()
+    }
+
+    /// Compute the dependency closure of `seeds`, including scope preludes
+    /// and the root scope's prelude.
+    pub fn closure(&self, seeds: &BTreeSet<String>) -> Result<BTreeSet<String>> {
+        let mut closure = BTreeSet::new();
+        let mut queue: VecDeque<String> = seeds.iter().cloned().collect();
+        if let Some(root_prelude) = self.scopes.first().and_then(|s| s.prelude) {
+            queue.push_back(root_prelude.to_string());
+        }
+        while let Some(id) = queue.pop_front() {
+            let unit = self
+                .units
+                .get(&id)
+                .ok_or_else(|| anyhow::anyhow!("unknown runtime unit {id}"))?;
+            if !closure.insert(id.clone()) {
+                continue;
+            }
+            for dep in &unit.requires {
+                queue.push_back(dep.clone());
+            }
+            if let Some(prelude) = self.scope_of(&id)?.prelude {
+                queue.push_back(prelude.to_string());
+            }
+        }
+        Ok(closure)
+    }
+
+    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent
+    /// level of the bundle's root-scope members (the caller wraps the
+    /// result in the runtime module/namespace itself).
+    pub fn bundle(&self, seeds: &BTreeSet<String>, base_indent: usize) -> Result<String> {
+        let closure = self.closure(seeds)?;
+        let mut out = String::new();
+        for scope in &self.scopes {
+            let mut ids: Vec<&String> = closure
+                .iter()
+                .filter(|id| id.split('/').next() == Some(scope.prefix))
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            // Prelude first, the rest in sorted order.
+            ids.sort_by_key(|id| (Some(id.as_str()) != scope.prelude.map(|p| p), id.as_str()));
+            let (open, body_indent) = if scope.open.is_empty() {
+                ("", base_indent)
+            } else {
+                (scope.open, base_indent + 1)
+            };
+            if !open.is_empty() {
+                if !out.is_empty() {
+                    out.push('\n');
+                }
+                self.push_line(&mut out, base_indent, open);
+            }
+            let mut first = open.is_empty() && out.is_empty();
+            for id in ids {
+                if !first {
+                    out.push('\n');
+                }
+                first = false;
+                for line in self.units[id.as_str()].body.lines() {
+                    self.push_line(&mut out, body_indent, line);
+                }
+            }
+            if !scope.close.is_empty() {
+                self.push_line(&mut out, base_indent, scope.close);
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn bundle_all(&self, base_indent: usize) -> Result<String> {
+        let seeds: BTreeSet<String> = self.units.keys().cloned().collect();
+        self.bundle(&seeds, base_indent)
+    }
+
+    fn push_line(&self, out: &mut String, indent: usize, line: &str) {
+        if line.trim().is_empty() {
+            out.push('\n');
+            return;
+        }
+        for _ in 0..indent {
+            out.push_str(self.indent_str);
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
 }
 
 /// Indentation-aware line writer.

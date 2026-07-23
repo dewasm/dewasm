@@ -27,6 +27,7 @@ the consequences.
 | ADR-3 | [Testing Strategy: Spec Testsuite on Real Interpreters](3-testing-strategy.md) | Accepted |
 | ADR-4 | [Ruby Backend Lowering Conventions](4-ruby-backend-lowering.md) | Accepted |
 | ADR-5 | [Bash Floats: Pure-Bash Softfloat](5-bash-softfloat.md) | Accepted (not yet implemented) |
+| ADR-6 | [Runtime as Per-Method Units with Selectable Linkage](6-runtime-units.md) | Accepted |
 
 ## Adding a new ADR
 

@@ -80,8 +80,11 @@ args: ["foo", "bar"]
     canonicalize them
   - multi-level `br` becomes catch/throw; loops become `while true` +
     catch whose value distinguishes continue from fallthrough
-- `runtime/<lang>/` holds the embedded runtime sources (linear memory,
-  table + `call_indirect` type checks, numeric helpers, traps, WASI).
+- `runtime/<lang>/units/` holds the runtime as per-method units with
+  declared dependencies (linear memory, table + `call_indirect` type
+  checks, numeric helpers, traps, WASI); only the units a module actually
+  needs are bundled into the output, nested inside the generated class so
+  multiple generated files can coexist in one process.
 
 ## Design decisions
 

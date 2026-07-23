@@ -17,3 +17,4 @@ wasmparser = "0.254"
 wat = "1"
 wast = "254"
 clap = { version = "4", features = ["derive"] }
+regex = "1"

@@ -1,0 +1,13 @@
+# requires: rt/trap
+PAGE_SIZE = 65536
+
+attr_reader :bytes
+
+def initialize(min_pages, max_pages)
+  @bytes = ("\x00" * (min_pages * PAGE_SIZE)).b
+  @max_pages = max_pages && max_pages < 65536 ? max_pages : 65536
+end
+
+def check(addr, len)
+  Rt.trap("out of bounds memory access") if addr + len > @bytes.bytesize
+end

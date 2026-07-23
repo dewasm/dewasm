@@ -42,6 +42,9 @@ resort and requires a reason comment plus an ADR reference
   readability improvements go into optional passes, never into semantics-relevant lowering.
 - Numeric representation conventions (masked-unsigned integers, f32 re-rounding, NaN bit paths)
   are fixed in [ADR-2](docs/adr/2-numeric-semantics.md); new backends follow them.
+- Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:`
+  headers, referenced as `Rt` ([ADR-6](docs/adr/6-runtime-units.md)); keep the headers in sync
+  when editing a unit — the units lint test enforces most of it.
 - A new backend is done when the shared spec harness passes for it — not before
   ([ADR-3](docs/adr/3-testing-strategy.md)).
 - Unsupported wasm features must fail at conversion time with a clear error, never at runtime

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use dewasmify_backend::{Backend, GenOptions, Mode};
+use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use dewasmify_backend_ruby::RubyBackend;
 
 /// Translate a WebAssembly binary into source code of various languages.
@@ -58,7 +58,10 @@ fn main() -> Result<()> {
     let bytes = wat::parse_bytes(&input).context("failed to parse input")?;
 
     let module = dewasmify_core::build_module(&bytes)?;
-    let files = backend.generate(&module, &GenOptions { mode, module_name })?;
+    let files = backend.generate(
+        &module,
+        &GenOptions { mode, module_name, runtime: RuntimeLinkage::Embedded },
+    )?;
 
     for file in files {
         if cli.output == PathBuf::from("-") {
