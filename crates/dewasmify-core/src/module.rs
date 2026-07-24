@@ -14,20 +14,19 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by dewasmify's first release: Wasm 1.0 plus the
-/// extensions that C/Rust toolchains enable by default and that need no new
-/// runtime machinery (sign-extension, saturating truncation, multi-value,
-/// memory.copy/fill/init + passive data segments).
+/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the
+/// extensions the shared IR models (sign-extension, saturating truncation,
+/// multi-value, bulk memory, reference types). Whether a specific backend
+/// lowers a construct is its own declaration (`check_module_support`).
 pub fn features() -> WasmFeatures {
-    // REFERENCE_TYPES is enabled only because modern encoders (e.g. the
-    // wast crate) emit encodings gated on it even for MVP-shaped modules;
-    // actual reference-type constructs are rejected during IR building.
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION
         | WasmFeatures::SATURATING_FLOAT_TO_INT
         | WasmFeatures::MULTI_VALUE
         | WasmFeatures::BULK_MEMORY
         | WasmFeatures::REFERENCE_TYPES
+        | WasmFeatures::TAIL_CALL
+        | WasmFeatures::EXCEPTIONS
 }
 
 pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
@@ -52,6 +51,8 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
         memory: None,
         imported_globals: Vec::new(),
         globals: Vec::new(),
+        imported_tags: Vec::new(),
+        tags: Vec::new(),
         exports: Vec::new(),
         elems: Vec::new(),
         datas: Vec::new(),
@@ -127,6 +128,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                             module.imported_tables.push(ir::ImportedTable {
                                 module: import.module.to_string(),
                                 name: import.name.to_string(),
+                                ty: ref_val_type(&ty.element_type)?,
                                 min: ty.initial.try_into().context("table too large")?,
                                 max: ty
                                     .maximum
@@ -135,8 +137,12 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                                     .context("table too large")?,
                             });
                         }
-                        TypeRef::Tag(_) => {
-                            return Err(unsupported(Feature::ExceptionHandling, detail))
+                        TypeRef::Tag(ty) => {
+                            module.imported_tags.push(ir::ImportedTag {
+                                module: import.module.to_string(),
+                                name: import.name.to_string(),
+                                type_idx: ty.func_type_idx,
+                            });
                         }
                         TypeRef::FuncExact(_) => {
                             return Err(unsupported(Feature::FunctionReferences, detail))
@@ -152,7 +158,14 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             Payload::TableSection(reader) => {
                 for table in reader {
                     let table = table?;
+                    if !matches!(table.init, wasmparser::TableInit::RefNull) {
+                        return Err(unsupported(
+                            Feature::FunctionReferences,
+                            "table with an explicit init expression",
+                        ));
+                    }
                     module.tables.push(ir::Table {
+                        ty: ref_val_type(&table.ty.element_type)?,
                         min: table.ty.initial.try_into().context("table too large")?,
                         max: table
                             .ty
@@ -185,6 +198,14 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     });
                 }
             }
+            Payload::TagSection(reader) => {
+                for tag in reader {
+                    let tag = tag?;
+                    module.tags.push(ir::Tag {
+                        type_idx: tag.func_type_idx,
+                    });
+                }
+            }
             Payload::ExportSection(reader) => {
                 for export in reader {
                     let export = export?;
@@ -193,9 +214,10 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                         ExternalKind::Table => ir::ExportKind::Table(export.index),
                         ExternalKind::Memory => ir::ExportKind::Memory,
                         ExternalKind::Global => ir::ExportKind::Global(export.index),
+                        ExternalKind::Tag => ir::ExportKind::Tag(export.index),
                         _ => {
                             return Err(unsupported(
-                                Feature::ExceptionHandling,
+                                Feature::FunctionReferences,
                                 format!("export kind for {:?}", export.name),
                             ))
                         }
@@ -226,7 +248,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                     let items = match elem.items {
                         ElementItems::Functions(items) => items
                             .into_iter()
-                            .map(|i| Ok(Some(i?)))
+                            .map(|i| Ok(ir::ElemItem::Func(i?)))
                             .collect::<Result<Vec<_>>>()?,
                         ElementItems::Expressions(_ref_ty, items) => items
                             .into_iter()
@@ -319,18 +341,53 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
         wasmparser::ValType::F32 => ir::ValType::F32,
         wasmparser::ValType::F64 => ir::ValType::F64,
         wasmparser::ValType::V128 => return Err(unsupported(Feature::Simd, "value type v128")),
-        _ => {
-            return Err(unsupported(
-                Feature::ReferenceTypes,
-                format!("value type {ty:?}"),
-            ))
-        }
+        wasmparser::ValType::Ref(r) => return ref_val_type(&r),
     })
 }
 
-/// Evaluate a constant expression: a plain constant, or (MVP rule) a
-/// `global.get` of an imported immutable global — the validator already
-/// enforces that constraint, so the index is used as-is.
+/// Map a reference type to the IR: only the two nullable abstract types of
+/// the reference-types proposal are representable; everything else is
+/// attributed to the proposal that introduced it.
+pub(crate) fn ref_val_type(r: &wasmparser::RefType) -> Result<ir::ValType> {
+    if *r == wasmparser::RefType::FUNCREF {
+        return Ok(ir::ValType::FuncRef);
+    }
+    if *r == wasmparser::RefType::EXTERNREF {
+        return Ok(ir::ValType::ExternRef);
+    }
+    if *r == wasmparser::RefType::EXNREF {
+        return Ok(ir::ValType::ExnRef);
+    }
+    Err(unsupported(
+        heap_type_feature(&r.heap_type()),
+        format!("reference type {r:?}"),
+    ))
+}
+
+pub(crate) fn heap_type_feature(hty: &wasmparser::HeapType) -> Feature {
+    use wasmparser::AbstractHeapType as A;
+    match hty {
+        // Non-nullable/exact forms of these reach here (the nullable ones
+        // are handled before); those come from typed function references.
+        wasmparser::HeapType::Abstract {
+            ty: A::Func | A::Extern,
+            ..
+        } => Feature::FunctionReferences,
+        wasmparser::HeapType::Abstract {
+            ty: A::Exn | A::NoExn,
+            ..
+        } => Feature::ExceptionHandling,
+        wasmparser::HeapType::Abstract { .. } => Feature::Gc,
+        wasmparser::HeapType::Concrete(_) | wasmparser::HeapType::Exact(_) => {
+            Feature::FunctionReferences
+        }
+    }
+}
+
+/// Evaluate a constant expression: a plain constant, a reference constant
+/// (`ref.null`/`ref.func`), or (MVP rule) a `global.get` of an imported
+/// immutable global — the validator already enforces that constraint, so
+/// the index is used as-is.
 fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {
@@ -339,6 +396,8 @@ fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
         Operator::F32Const { value } => ir::Expr::F32Const(value.bits()),
         Operator::F64Const { value } => ir::Expr::F64Const(value.bits()),
         Operator::GlobalGet { global_index } => ir::Expr::GlobalGet(global_index),
+        Operator::RefNull { hty } => ir::Expr::RefNull(heap_val_type(&hty)?),
+        Operator::RefFunc { function_index } => ir::Expr::RefFunc(function_index),
         op => return Err(const_expr_unsupported(&op)),
     };
     match reader.read()? {
@@ -348,25 +407,50 @@ fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     Ok(value)
 }
 
-fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
-    let feature = match op {
-        Operator::RefNull { .. } | Operator::RefFunc { .. } => Feature::ReferenceTypes,
-        _ => Feature::ExtendedConst,
-    };
-    unsupported(feature, format!("constant expression operator {op:?}"))
+/// The `ref.null` variant of `ref_val_type`: heap types name the referenced
+/// hierarchy directly (nullability is implied by `ref.null`).
+pub(crate) fn heap_val_type(hty: &wasmparser::HeapType) -> Result<ir::ValType> {
+    use wasmparser::AbstractHeapType as A;
+    match hty {
+        wasmparser::HeapType::Abstract {
+            shared: false,
+            ty: A::Func,
+        } => Ok(ir::ValType::FuncRef),
+        wasmparser::HeapType::Abstract {
+            shared: false,
+            ty: A::Extern,
+        } => Ok(ir::ValType::ExternRef),
+        wasmparser::HeapType::Abstract {
+            shared: false,
+            ty: A::Exn,
+        } => Ok(ir::ValType::ExnRef),
+        _ => Err(unsupported(
+            heap_type_feature(hty),
+            format!("heap type {hty:?}"),
+        )),
+    }
 }
 
-/// One item of an expression-encoded element segment: `ref.func $i` (a
-/// function reference) or `ref.null func` (an intentionally-empty slot).
-/// Anything else is a genuine reference-types value and stays unsupported.
-fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<Option<u32>> {
+fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
+    unsupported(
+        Feature::ExtendedConst,
+        format!("constant expression operator {op:?}"),
+    )
+}
+
+/// One item of an expression-encoded element segment: `ref.func $i`,
+/// `ref.null` (an intentionally-empty slot), or `global.get $i` of a
+/// ref-typed immutable global. Anything else comes from extended constant
+/// expressions (or a proposal the validator would have refused first).
+fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<ir::ElemItem> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {
-        Operator::RefFunc { function_index } => Some(function_index),
-        Operator::RefNull { .. } => None,
+        Operator::RefFunc { function_index } => ir::ElemItem::Func(function_index),
+        Operator::RefNull { .. } => ir::ElemItem::Null,
+        Operator::GlobalGet { global_index } => ir::ElemItem::Global(global_index),
         op => {
             return Err(unsupported(
-                Feature::ReferenceTypes,
+                Feature::ExtendedConst,
                 format!("element item operator {op:?}"),
             ))
         }
@@ -375,7 +459,7 @@ fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<Option<u32>> {
         Operator::End => {}
         op => {
             return Err(unsupported(
-                Feature::ReferenceTypes,
+                Feature::ExtendedConst,
                 format!("element item operator {op:?}"),
             ))
         }

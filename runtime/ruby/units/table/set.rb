@@ -1,6 +1,5 @@
 # requires: rt/trap
-def set(i, type_key, func)
-  Rt.trap("out of bounds table access") if i >= @funcs.size
-  @types[i] = type_key
-  @funcs[i] = func
+def set(i, value)
+  Rt.trap("out of bounds table access") if i >= @slots.size
+  @slots[i] = value
 end

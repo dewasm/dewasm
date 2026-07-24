@@ -13,6 +13,26 @@ pub enum ValType {
     I64,
     F32,
     F64,
+    /// A nullable reference to a wasm function (reference types). Kept as
+    /// flat variants until typed function references/GC force a structured
+    /// `Ref(RefType)`; keep matches funnelled through `is_ref` and the
+    /// backends' `default_value` so that migration stays mechanical.
+    FuncRef,
+    /// A nullable reference to an arbitrary host value (reference types).
+    ExternRef,
+    /// A nullable reference to a caught exception (exception handling).
+    ExnRef,
+    /// An opaque host value crossing the canonical-ABI boundary (ADR-20):
+    /// strings, lists, records, variants as the host language's native
+    /// values. Only synthesized adapter modules use it; the host-boundary
+    /// Exprs/Stmts below are its entire vocabulary.
+    Host,
+}
+
+impl ValType {
+    pub fn is_ref(self) -> bool {
+        matches!(self, ValType::FuncRef | ValType::ExternRef)
+    }
 }
 
 /// A flattened stack slot. `depth` is the value-stack depth the value lives
@@ -43,6 +63,9 @@ pub struct Module {
     pub imported_globals: Vec<ImportedGlobal>,
     /// Defined globals. Global index space = imported_globals ++ globals.
     pub globals: Vec<Global>,
+    pub imported_tags: Vec<ImportedTag>,
+    /// Defined tags. Tag index space = imported_tags ++ tags.
+    pub tags: Vec<Tag>,
     pub exports: Vec<Export>,
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
@@ -76,6 +99,27 @@ impl Module {
             self.globals[idx - self.imported_globals.len()].ty
         }
     }
+
+    pub fn table_type(&self, table_idx: u32) -> ValType {
+        let idx = table_idx as usize;
+        if idx < self.imported_tables.len() {
+            self.imported_tables[idx].ty
+        } else {
+            self.tables[idx - self.imported_tables.len()].ty
+        }
+    }
+
+    /// The parameter types a tag's exceptions carry (results are empty by
+    /// validation).
+    pub fn tag_params(&self, tag_idx: u32) -> &[ValType] {
+        let idx = tag_idx as usize;
+        let type_idx = if idx < self.imported_tags.len() {
+            self.imported_tags[idx].type_idx
+        } else {
+            self.tags[idx - self.imported_tags.len()].type_idx
+        };
+        &self.types[type_idx as usize].params
+    }
 }
 
 #[derive(Debug)]
@@ -89,6 +133,7 @@ pub struct ImportedFunc {
 pub struct ImportedTable {
     pub module: String,
     pub name: String,
+    pub ty: ValType,
     pub min: u32,
     pub max: Option<u32>,
 }
@@ -111,6 +156,7 @@ pub struct ImportedGlobal {
 
 #[derive(Debug)]
 pub struct Table {
+    pub ty: ValType,
     pub min: u32,
     pub max: Option<u32>,
 }
@@ -129,11 +175,24 @@ pub struct Global {
 }
 
 #[derive(Debug)]
+pub struct ImportedTag {
+    pub module: String,
+    pub name: String,
+    pub type_idx: u32,
+}
+
+#[derive(Debug)]
+pub struct Tag {
+    pub type_idx: u32,
+}
+
+#[derive(Debug)]
 pub enum ExportKind {
     Func(u32),
     Table(u32),
     Memory,
     Global(u32),
+    Tag(u32),
 }
 
 #[derive(Debug)]
@@ -153,11 +212,21 @@ pub enum ElemKind {
     Declared,
 }
 
+/// One element-segment item, a constant reference expression.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElemItem {
+    /// `ref.func $i` (function index space).
+    Func(u32),
+    /// `ref.null`: an intentionally-uninitialized slot.
+    Null,
+    /// `global.get $i` of a ref-typed immutable global (global index space).
+    Global(u32),
+}
+
 #[derive(Debug)]
 pub struct ElemSegment {
     pub kind: ElemKind,
-    /// `None` is a `ref.null` item: an intentionally-uninitialized slot.
-    pub items: Vec<Option<u32>>,
+    pub items: Vec<ElemItem>,
 }
 
 #[derive(Debug)]
@@ -199,6 +268,28 @@ pub enum BrTarget {
         is_loop: bool,
         assigns: Vec<(Temp, Temp)>,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CatchKind {
+    Catch,
+    CatchRef,
+    CatchAll,
+    CatchAllRef,
+}
+
+/// One `try_table` catch clause. The exception's payload lands directly in
+/// the *target frame's* slots (`value_temps`, plus `exn_temp` for the
+/// `_ref` kinds) — computed like a branch's moves, but sourced from the
+/// exception instead of the stack — so `target`'s assigns are empty.
+#[derive(Debug)]
+pub struct CatchClause {
+    pub kind: CatchKind,
+    /// Tag index for `Catch`/`CatchRef`; `None` for the catch-all kinds.
+    pub tag: Option<u32>,
+    pub value_temps: Vec<Temp>,
+    pub exn_temp: Option<Temp>,
+    pub target: BrTarget,
 }
 
 #[derive(Debug)]
@@ -300,6 +391,61 @@ pub enum Stmt {
     ElemDrop {
         seg: u32,
     },
+    /// `try_table`: a block whose body's exceptions are dispatched to the
+    /// catch clauses, first match wins; an unmatched exception (and every
+    /// trap) propagates.
+    TryTable {
+        label: Label,
+        catches: Vec<CatchClause>,
+        body: Vec<Stmt>,
+    },
+    Throw {
+        tag: u32,
+        args: Vec<Expr>,
+    },
+    ThrowRef {
+        exn: Expr,
+    },
+    /// `return_call`: a terminator; the callee's results become the
+    /// caller's results without growing the stack.
+    ReturnCall {
+        func: u32,
+        args: Vec<Expr>,
+    },
+    ReturnCallIndirect {
+        type_idx: u32,
+        table_index: u32,
+        index: Expr,
+        args: Vec<Expr>,
+    },
+    TableSet {
+        table: u32,
+        index: Expr,
+        value: Expr,
+    },
+    TableGrow {
+        dst: Temp,
+        table: u32,
+        init: Expr,
+        delta: Expr,
+    },
+    TableFill {
+        table: u32,
+        dst: Expr,
+        val: Expr,
+        len: Expr,
+    },
+    // -- host-boundary vocabulary (ADR-20; adapter modules only) --------
+    /// Store a host string's / byte string's raw bytes at `addr`.
+    HostBytesStore {
+        addr: Expr,
+        value: Expr,
+    },
+    /// Append a value to a host list.
+    HostListPush {
+        list: Expr,
+        value: Expr,
+    },
     Unreachable,
 }
 
@@ -330,6 +476,101 @@ pub enum Expr {
         els: Box<Expr>,
     },
     MemorySize,
+    /// A null reference of the given (FuncRef/ExternRef) type.
+    RefNull(ValType),
+    /// A reference to the function at this index (function index space).
+    RefFunc(u32),
+    RefIsNull(Box<Expr>),
+    TableGet {
+        table: u32,
+        index: Box<Expr>,
+    },
+    TableSize(u32),
+    // -- host-boundary vocabulary (ADR-20; adapter modules only) --------
+    /// Lift a utf8 string from linear memory into a host string.
+    HostString {
+        ptr: Box<Expr>,
+        len: Box<Expr>,
+    },
+    /// Lift `len` raw bytes (a canonical `list<u8>`) into a host byte
+    /// string.
+    HostBytes {
+        ptr: Box<Expr>,
+        len: Box<Expr>,
+    },
+    /// Byte length of a host string / byte string.
+    HostByteLen(Box<Expr>),
+    /// A fresh, empty host list.
+    HostListNew,
+    /// Element `index` (i32 expr) of a host list.
+    HostListGet {
+        list: Box<Expr>,
+        index: Box<Expr>,
+    },
+    /// Length of a host list (i32).
+    HostListLen(Box<Expr>),
+    /// A host tuple from element values.
+    HostTuple(Vec<Expr>),
+    /// Element `index` (static) of a host tuple.
+    HostTupleGet {
+        value: Box<Expr>,
+        index: u32,
+    },
+    /// A host record from named fields.
+    HostRecord(Vec<(String, Expr)>),
+    /// Field `name` of a host record.
+    HostField {
+        value: Box<Expr>,
+        name: String,
+    },
+    /// A host variant value: `[case, payload]` in spirit; `payload` absent
+    /// for unit cases. Options and results are variants with case names
+    /// `"none"/"some"` and `"ok"/"err"`.
+    HostVariant {
+        case: String,
+        payload: Option<Box<Expr>>,
+    },
+    /// The case index (i32) of a host variant value, given the case order.
+    HostVariantCase {
+        cases: Vec<String>,
+        value: Box<Expr>,
+    },
+    /// The payload of a host variant value.
+    HostVariantPayload(Box<Expr>),
+    /// Lift an enum discriminant (i32) into a host enum value; the host
+    /// representation is the case name.
+    HostEnum {
+        cases: Vec<String>,
+        value: Box<Expr>,
+    },
+    /// Lower a host enum value back to its case index (i32).
+    HostEnumIndex {
+        cases: Vec<String>,
+        value: Box<Expr>,
+    },
+    /// Lift an i32 into a host boolean.
+    HostBool(Box<Expr>),
+    /// Lower a host boolean (or nil) to 0/1.
+    HostBoolToI32(Box<Expr>),
+    /// Lift an i32 code point into a host one-character string.
+    HostChar(Box<Expr>),
+    /// Lower a host one-character string to its code point.
+    HostCharToI32(Box<Expr>),
+    /// Whether a host option value is present (i32 0/1); the host null is
+    /// the absent option.
+    HostIsSome(Box<Expr>),
+    /// The host "absent" value (nil).
+    HostNone,
+    /// Lift a masked-unsigned core i32 into the host's natural signed
+    /// integer (ADR-2's signed view crossing the boundary).
+    HostSigned32(Box<Expr>),
+    /// Same for i64.
+    HostSigned64(Box<Expr>),
+    /// Lower a host integer (possibly negative) into the masked-unsigned
+    /// core i32 representation.
+    HostMask32(Box<Expr>),
+    /// Same for i64.
+    HostMask64(Box<Expr>),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

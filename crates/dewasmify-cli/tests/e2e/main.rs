@@ -11,6 +11,7 @@
 //! plumbing lives in `support`.
 
 mod apps;
+mod component;
 mod library;
 mod ruby;
 mod standalone;

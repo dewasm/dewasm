@@ -115,7 +115,7 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         &|| {
             module.elems.iter().any(|e| {
                 !matches!(e.kind, ir::ElemKind::Active { .. })
-                    || e.items.iter().any(|i| i.is_none())
+                    || e.items.iter().any(|i| !matches!(i, ir::ElemItem::Func(_)))
             }) || module
                 .funcs
                 .iter()
@@ -123,7 +123,255 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         },
         "passive/declared element segment, ref.null element item, or table.init/copy/elem.drop",
     )?;
+    require(
+        Feature::ReferenceTypes,
+        &|| module_uses_reference_types(module),
+        "reference-typed value, externref table, or reference/table instruction",
+    )?;
+    require(
+        Feature::TailCall,
+        &|| module.funcs.iter().any(|f| stmts_use_tail_calls(&f.body)),
+        "return_call/return_call_indirect",
+    )?;
+    require(
+        Feature::ExceptionHandling,
+        &|| module_uses_exception_handling(module),
+        "tag, exnref value, or try_table/throw instruction",
+    )?;
     Ok(())
+}
+
+/// Whether the module contains any exception-handling construct: a tag
+/// (defined or imported; exports imply one), an exnref-typed value
+/// anywhere, or the proposal's instructions. Same exhaustiveness contract
+/// as `stmts_use_table_bulk_ops`.
+fn module_uses_exception_handling(module: &ir::Module) -> bool {
+    let exn_ty = |ty: &ir::ValType| *ty == ir::ValType::ExnRef;
+    !module.imported_tags.is_empty()
+        || !module.tags.is_empty()
+        || module
+            .types
+            .iter()
+            .any(|t| t.params.iter().any(exn_ty) || t.results.iter().any(exn_ty))
+        || module.imported_globals.iter().any(|g| exn_ty(&g.ty))
+        || module.globals.iter().any(|g| exn_ty(&g.ty))
+        || module.imported_tables.iter().any(|t| exn_ty(&t.ty))
+        || module.tables.iter().any(|t| exn_ty(&t.ty))
+        || module.funcs.iter().any(|f| {
+            f.locals.iter().any(exn_ty)
+                || f.temps.iter().any(|t| exn_ty(&t.ty))
+                || stmts_use_exception_handling(&f.body)
+        })
+}
+
+fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    stmts.iter().any(|stmt| match stmt {
+        ir::Stmt::TryTable { .. } | ir::Stmt::Throw { .. } | ir::Stmt::ThrowRef { .. } => true,
+        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
+            stmts_use_exception_handling(body)
+        }
+        ir::Stmt::If { then, els, .. } => {
+            stmts_use_exception_handling(then) || stmts_use_exception_handling(els)
+        }
+        ir::Stmt::Assign { .. }
+        | ir::Stmt::LocalSet { .. }
+        | ir::Stmt::GlobalSet { .. }
+        | ir::Stmt::Store { .. }
+        | ir::Stmt::Br(_)
+        | ir::Stmt::BrIf { .. }
+        | ir::Stmt::BrTable { .. }
+        | ir::Stmt::Return { .. }
+        | ir::Stmt::Call { .. }
+        | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::MemoryGrow { .. }
+        | ir::Stmt::MemoryCopy { .. }
+        | ir::Stmt::MemoryFill { .. }
+        | ir::Stmt::MemoryInit { .. }
+        | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableInit { .. }
+        | ir::Stmt::TableCopy { .. }
+        | ir::Stmt::ElemDrop { .. }
+        | ir::Stmt::TableSet { .. }
+        | ir::Stmt::TableGrow { .. }
+        | ir::Stmt::TableFill { .. }
+        | ir::Stmt::ReturnCall { .. }
+        | ir::Stmt::ReturnCallIndirect { .. }
+        | ir::Stmt::HostBytesStore { .. }
+        | ir::Stmt::HostListPush { .. }
+        | ir::Stmt::Unreachable => false,
+    })
+}
+
+/// Whether a function body contains a tail call. Public because backends
+/// implementing tail calls also need it (e.g. Ruby's body/entry trampoline
+/// split, ADR-18).
+pub fn stmts_use_tail_calls(stmts: &[ir::Stmt]) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    stmts.iter().any(|stmt| match stmt {
+        ir::Stmt::ReturnCall { .. } | ir::Stmt::ReturnCallIndirect { .. } => true,
+        ir::Stmt::Block { body, .. }
+        | ir::Stmt::Loop { body, .. }
+        | ir::Stmt::TryTable { body, .. } => stmts_use_tail_calls(body),
+        ir::Stmt::If { then, els, .. } => stmts_use_tail_calls(then) || stmts_use_tail_calls(els),
+        ir::Stmt::Assign { .. }
+        | ir::Stmt::LocalSet { .. }
+        | ir::Stmt::GlobalSet { .. }
+        | ir::Stmt::Store { .. }
+        | ir::Stmt::Br(_)
+        | ir::Stmt::BrIf { .. }
+        | ir::Stmt::BrTable { .. }
+        | ir::Stmt::Return { .. }
+        | ir::Stmt::Call { .. }
+        | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::MemoryGrow { .. }
+        | ir::Stmt::MemoryCopy { .. }
+        | ir::Stmt::MemoryFill { .. }
+        | ir::Stmt::MemoryInit { .. }
+        | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableInit { .. }
+        | ir::Stmt::TableCopy { .. }
+        | ir::Stmt::ElemDrop { .. }
+        | ir::Stmt::TableSet { .. }
+        | ir::Stmt::TableGrow { .. }
+        | ir::Stmt::TableFill { .. }
+        | ir::Stmt::Throw { .. }
+        | ir::Stmt::ThrowRef { .. }
+        | ir::Stmt::HostBytesStore { .. }
+        | ir::Stmt::HostListPush { .. }
+        | ir::Stmt::Unreachable => false,
+    })
+}
+
+/// Whether the module contains any reference-types construct: a ref-typed
+/// value anywhere (function signatures, globals, locals, temps), an
+/// externref table (funcref tables are MVP), a reference constant in an
+/// initializer, or one of the proposal's instructions. Same exhaustiveness
+/// contract as `stmts_use_table_bulk_ops`.
+fn module_uses_reference_types(module: &ir::Module) -> bool {
+    let ref_ty = |ty: &ir::ValType| ty.is_ref();
+    module
+        .types
+        .iter()
+        .any(|t| t.params.iter().any(ref_ty) || t.results.iter().any(ref_ty))
+        || module.imported_globals.iter().any(|g| g.ty.is_ref())
+        || module.globals.iter().any(|g| g.ty.is_ref())
+        || module
+            .imported_tables
+            .iter()
+            .any(|t| t.ty == ir::ValType::ExternRef)
+        || module.tables.iter().any(|t| t.ty == ir::ValType::ExternRef)
+        || module
+            .globals
+            .iter()
+            .any(|g| expr_uses_reference_types(&g.init))
+        || module.elems.iter().any(|e| {
+            e.items.iter().any(|i| matches!(i, ir::ElemItem::Global(_)))
+                || match &e.kind {
+                    ir::ElemKind::Active { offset, .. } => expr_uses_reference_types(offset),
+                    ir::ElemKind::Passive | ir::ElemKind::Declared => false,
+                }
+        })
+        || module.funcs.iter().any(|f| {
+            f.locals.iter().any(ref_ty)
+                || f.temps.iter().any(|t| t.ty.is_ref())
+                || stmts_use_reference_types(&f.body)
+        })
+}
+
+fn stmts_use_reference_types(stmts: &[ir::Stmt]) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    let expr = expr_uses_reference_types;
+    let target = |t: &ir::BrTarget| match t {
+        ir::BrTarget::Return { values } => values.iter().any(expr),
+        ir::BrTarget::Label { .. } => false,
+    };
+    stmts.iter().any(|stmt| match stmt {
+        ir::Stmt::TableSet { .. } | ir::Stmt::TableGrow { .. } | ir::Stmt::TableFill { .. } => true,
+        ir::Stmt::Block { body, .. }
+        | ir::Stmt::Loop { body, .. }
+        | ir::Stmt::TryTable { body, .. } => stmts_use_reference_types(body),
+        ir::Stmt::If {
+            cond, then, els, ..
+        } => expr(cond) || stmts_use_reference_types(then) || stmts_use_reference_types(els),
+        ir::Stmt::Assign { expr: e, .. }
+        | ir::Stmt::LocalSet { expr: e, .. }
+        | ir::Stmt::GlobalSet { expr: e, .. } => expr(e),
+        ir::Stmt::Store { addr, value, .. } => expr(addr) || expr(value),
+        ir::Stmt::Br(t) => target(t),
+        ir::Stmt::BrIf { cond, target: t } => expr(cond) || target(t),
+        ir::Stmt::BrTable {
+            index,
+            targets,
+            default,
+        } => expr(index) || targets.iter().any(&target) || target(default),
+        ir::Stmt::Return { values } => values.iter().any(expr),
+        ir::Stmt::Call { args, .. }
+        | ir::Stmt::ReturnCall { args, .. }
+        | ir::Stmt::Throw { args, .. } => args.iter().any(expr),
+        ir::Stmt::ThrowRef { exn } => expr(exn),
+        ir::Stmt::CallIndirect { index, args, .. }
+        | ir::Stmt::ReturnCallIndirect { index, args, .. } => expr(index) || args.iter().any(expr),
+        ir::Stmt::MemoryGrow { delta, .. } => expr(delta),
+        ir::Stmt::MemoryCopy { dst, src, len }
+        | ir::Stmt::MemoryInit { dst, src, len, .. }
+        | ir::Stmt::TableInit { dst, src, len, .. }
+        | ir::Stmt::TableCopy { dst, src, len, .. } => expr(dst) || expr(src) || expr(len),
+        ir::Stmt::MemoryFill { dst, val, len } => expr(dst) || expr(val) || expr(len),
+        ir::Stmt::HostBytesStore { addr, value } => expr(addr) || expr(value),
+        ir::Stmt::HostListPush { list, value } => expr(list) || expr(value),
+        ir::Stmt::DataDrop { .. } | ir::Stmt::ElemDrop { .. } | ir::Stmt::Unreachable => false,
+    })
+}
+
+fn expr_uses_reference_types(expr: &ir::Expr) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    let rec = expr_uses_reference_types;
+    match expr {
+        ir::Expr::RefNull(_)
+        | ir::Expr::RefFunc(_)
+        | ir::Expr::RefIsNull(_)
+        | ir::Expr::TableGet { .. }
+        | ir::Expr::TableSize(_) => true,
+        ir::Expr::Un(_, a) => rec(a),
+        ir::Expr::Bin(_, a, b) => rec(a) || rec(b),
+        ir::Expr::Load { addr, .. } => rec(addr),
+        ir::Expr::Select { cond, then, els } => rec(cond) || rec(then) || rec(els),
+        ir::Expr::HostString { ptr, len } | ir::Expr::HostBytes { ptr, len } => {
+            rec(ptr) || rec(len)
+        }
+        ir::Expr::HostByteLen(a)
+        | ir::Expr::HostListLen(a)
+        | ir::Expr::HostTupleGet { value: a, .. }
+        | ir::Expr::HostField { value: a, .. }
+        | ir::Expr::HostVariantCase { value: a, .. }
+        | ir::Expr::HostVariantPayload(a)
+        | ir::Expr::HostEnum { value: a, .. }
+        | ir::Expr::HostEnumIndex { value: a, .. }
+        | ir::Expr::HostBool(a)
+        | ir::Expr::HostBoolToI32(a)
+        | ir::Expr::HostChar(a)
+        | ir::Expr::HostCharToI32(a)
+        | ir::Expr::HostIsSome(a)
+        | ir::Expr::HostSigned32(a)
+        | ir::Expr::HostSigned64(a)
+        | ir::Expr::HostMask32(a)
+        | ir::Expr::HostMask64(a) => rec(a),
+        ir::Expr::HostListGet { list, index } => rec(list) || rec(index),
+        ir::Expr::HostTuple(es) => es.iter().any(rec),
+        ir::Expr::HostRecord(fs) => fs.iter().any(|(_, e)| rec(e)),
+        ir::Expr::HostVariant { payload, .. } => payload.as_deref().is_some_and(rec),
+        ir::Expr::I32Const(_)
+        | ir::Expr::I64Const(_)
+        | ir::Expr::F32Const(_)
+        | ir::Expr::F64Const(_)
+        | ir::Expr::Temp(_)
+        | ir::Expr::LocalGet(_)
+        | ir::Expr::GlobalGet(_)
+        | ir::Expr::HostListNew
+        | ir::Expr::HostNone
+        | ir::Expr::MemorySize => false,
+    }
 }
 
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
@@ -133,9 +381,9 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     // rejecting at conversion time, violating ADR-0).
     stmts.iter().any(|stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
-        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
-            stmts_use_table_bulk_ops(body)
-        }
+        ir::Stmt::Block { body, .. }
+        | ir::Stmt::Loop { body, .. }
+        | ir::Stmt::TryTable { body, .. } => stmts_use_table_bulk_ops(body),
         ir::Stmt::If { then, els, .. } => {
             stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
         }
@@ -154,6 +402,15 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
         | ir::Stmt::MemoryFill { .. }
         | ir::Stmt::MemoryInit { .. }
         | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableSet { .. }
+        | ir::Stmt::TableGrow { .. }
+        | ir::Stmt::TableFill { .. }
+        | ir::Stmt::ReturnCall { .. }
+        | ir::Stmt::ReturnCallIndirect { .. }
+        | ir::Stmt::Throw { .. }
+        | ir::Stmt::ThrowRef { .. }
+        | ir::Stmt::HostBytesStore { .. }
+        | ir::Stmt::HostListPush { .. }
         | ir::Stmt::Unreachable => false,
     })
 }

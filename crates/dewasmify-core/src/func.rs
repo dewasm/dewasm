@@ -12,7 +12,7 @@ use wasmparser::{BlockType, FunctionBody, Operator};
 
 use crate::feature::Feature;
 use crate::ir::{self, BinOp, BrTarget, Expr, Label, LoadOp, Stmt, StoreOp, Temp, UnOp, ValType};
-use crate::module::{unsupported, val_type};
+use crate::module::{heap_val_type, unsupported, val_type};
 
 pub struct FuncBuilder<'a> {
     module: &'a ir::Module,
@@ -38,6 +38,12 @@ enum FrameKind {
         cond: Expr,
         /// Set when the `else` keyword is reached.
         then_body: Option<Vec<Stmt>>,
+    },
+    /// `try_table` with at least one catch clause (a catchless one is a
+    /// plain block). Clauses are resolved before the frame is pushed —
+    /// their labels are relative to the enclosing context.
+    TryTable {
+        catches: Vec<ir::CatchClause>,
     },
 }
 
@@ -211,6 +217,66 @@ impl<'a> FuncBuilder<'a> {
         &self.module.types[ty_idx as usize]
     }
 
+    /// Resolve one `try_table` catch clause: the exception payload (tag
+    /// params, plus the exnref for the `_ref` kinds) is written into the
+    /// target frame's slots directly — the same arithmetic as
+    /// `branch_target`, but sourced from the exception instead of the
+    /// stack, so the branch itself carries no assigns.
+    fn catch_clause(
+        &mut self,
+        kind: ir::CatchKind,
+        tag: Option<u32>,
+        relative_depth: u32,
+    ) -> ir::CatchClause {
+        let mut payload: Vec<ValType> = tag
+            .map(|t| self.module.tag_params(t).to_vec())
+            .unwrap_or_default();
+        if matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef) {
+            payload.push(ValType::ExnRef);
+        }
+        let idx = self.frames.len() - 1 - relative_depth as usize;
+        let (base, is_loop, is_func, label_id) = {
+            let frame = &self.frames[idx];
+            match frame.kind {
+                FrameKind::Func => (0, false, true, 0),
+                FrameKind::Loop => (frame.base, true, false, frame.label_id),
+                _ => (frame.base, false, false, frame.label_id),
+            }
+        };
+        let value_temps: Vec<Temp> = payload
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| Temp {
+                depth: (base + i) as u32,
+                ty: *ty,
+            })
+            .collect();
+        for t in &value_temps {
+            self.temps.insert(*t);
+        }
+        let exn_temp = matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef)
+            .then(|| *value_temps.last().expect("_ref payload has the exnref"));
+        let target = if is_func {
+            BrTarget::Return {
+                values: value_temps.iter().map(|t| Expr::Temp(*t)).collect(),
+            }
+        } else {
+            self.frames[idx].referenced = true;
+            BrTarget::Label {
+                label: label_id,
+                is_loop,
+                assigns: Vec::new(),
+            }
+        };
+        ir::CatchClause {
+            kind,
+            tag,
+            value_temps,
+            exn_temp,
+            target,
+        }
+    }
+
     /// Resolve a branch depth into a target, computing the moves from the
     /// current stack top into the target frame's result (or loop param)
     /// slots. Marks the target label as referenced.
@@ -373,6 +439,19 @@ impl<'a> FuncBuilder<'a> {
                     els,
                 });
             }
+            FrameKind::TryTable { catches } => {
+                let label = Label {
+                    id: frame.label_id,
+                    referenced: frame.referenced,
+                };
+                // Always emitted (never spliced): the catch clauses matter
+                // even when nothing branches to the try_table's own label.
+                self.emit(Stmt::TryTable {
+                    label,
+                    catches,
+                    body: frame.stmts,
+                });
+            }
         }
     }
 
@@ -384,7 +463,10 @@ impl<'a> FuncBuilder<'a> {
         // Skip dead code, only tracking block structure.
         if self.cur().unreachable {
             match op {
-                Operator::Block { .. } | Operator::Loop { .. } | Operator::If { .. } => {
+                Operator::Block { .. }
+                | Operator::Loop { .. }
+                | Operator::If { .. }
+                | Operator::TryTable { .. } => {
                     self.push_frame(FrameKind::Block, Vec::new(), Vec::new());
                     let frame = self.cur();
                     frame.entered_dead = true;
@@ -435,6 +517,53 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Else => self.handle_else(),
             Operator::End => self.handle_end(),
+            Operator::TryTable { try_table } => {
+                // A catchless try_table is exactly a block; with clauses,
+                // resolve them against the enclosing context first.
+                let (params, results) = self.block_type(try_table.ty)?;
+                if try_table.catches.is_empty() {
+                    self.push_frame(FrameKind::Block, params, results);
+                } else {
+                    let catches = try_table
+                        .catches
+                        .iter()
+                        .map(|c| match *c {
+                            wasmparser::Catch::One { tag, label } => {
+                                self.catch_clause(ir::CatchKind::Catch, Some(tag), label)
+                            }
+                            wasmparser::Catch::OneRef { tag, label } => {
+                                self.catch_clause(ir::CatchKind::CatchRef, Some(tag), label)
+                            }
+                            wasmparser::Catch::All { label } => {
+                                self.catch_clause(ir::CatchKind::CatchAll, None, label)
+                            }
+                            wasmparser::Catch::AllRef { label } => {
+                                self.catch_clause(ir::CatchKind::CatchAllRef, None, label)
+                            }
+                        })
+                        .collect();
+                    self.push_frame(FrameKind::TryTable { catches }, params, results);
+                }
+            }
+            Operator::Throw { tag_index } => {
+                let arity = self.module.tag_params(tag_index).len();
+                let mut args = vec![Expr::I32Const(0); arity];
+                for i in (0..arity).rev() {
+                    args[i] = Expr::Temp(self.pop());
+                }
+                self.emit(Stmt::Throw {
+                    tag: tag_index,
+                    args,
+                });
+                self.cur().unreachable = true;
+            }
+            Operator::ThrowRef => {
+                let exn = self.pop();
+                self.emit(Stmt::ThrowRef {
+                    exn: Expr::Temp(exn),
+                });
+                self.cur().unreachable = true;
+            }
             Operator::Br { relative_depth } => {
                 let target = self.branch_target(relative_depth);
                 self.emit(Stmt::Br(target));
@@ -490,6 +619,36 @@ impl<'a> FuncBuilder<'a> {
                     args,
                     results,
                 });
+            }
+            Operator::ReturnCall { function_index } => {
+                let ty = self.func_type_of(function_index).clone();
+                let mut args = vec![Expr::I32Const(0); ty.params.len()];
+                for i in (0..ty.params.len()).rev() {
+                    args[i] = Expr::Temp(self.pop());
+                }
+                self.emit(Stmt::ReturnCall {
+                    func: function_index,
+                    args,
+                });
+                self.cur().unreachable = true;
+            }
+            Operator::ReturnCallIndirect {
+                type_index,
+                table_index,
+            } => {
+                let index = self.pop();
+                let ty = self.module.types[type_index as usize].clone();
+                let mut args = vec![Expr::I32Const(0); ty.params.len()];
+                for i in (0..ty.params.len()).rev() {
+                    args[i] = Expr::Temp(self.pop());
+                }
+                self.emit(Stmt::ReturnCallIndirect {
+                    type_idx: type_index,
+                    table_index,
+                    index: Expr::Temp(index),
+                    args,
+                });
+                self.cur().unreachable = true;
             }
             Operator::CallIndirect {
                 type_index,
@@ -656,6 +815,64 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::ElemDrop { elem_index } => {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
+            }
+
+            // -- reference types
+            Operator::RefNull { hty } => {
+                let ty = heap_val_type(&hty)?;
+                self.push_assign(ty, Expr::RefNull(ty));
+            }
+            Operator::RefFunc { function_index } => {
+                self.push_assign(FuncRef, Expr::RefFunc(function_index));
+            }
+            Operator::RefIsNull => {
+                let a = self.pop();
+                self.push_assign(I32, Expr::RefIsNull(Box::new(Expr::Temp(a))));
+            }
+            Operator::TableGet { table } => {
+                let index = self.pop();
+                let ty = self.module.table_type(table);
+                self.push_assign(
+                    ty,
+                    Expr::TableGet {
+                        table,
+                        index: Box::new(Expr::Temp(index)),
+                    },
+                );
+            }
+            Operator::TableSet { table } => {
+                let value = self.pop();
+                let index = self.pop();
+                self.emit(Stmt::TableSet {
+                    table,
+                    index: Expr::Temp(index),
+                    value: Expr::Temp(value),
+                });
+            }
+            Operator::TableSize { table } => {
+                self.push_assign(I32, Expr::TableSize(table));
+            }
+            Operator::TableGrow { table } => {
+                let delta = self.pop();
+                let init = self.pop();
+                let dst = self.push(I32);
+                self.emit(Stmt::TableGrow {
+                    dst,
+                    table,
+                    init: Expr::Temp(init),
+                    delta: Expr::Temp(delta),
+                });
+            }
+            Operator::TableFill { table } => {
+                let len = self.pop();
+                let val = self.pop();
+                let dst = self.pop();
+                self.emit(Stmt::TableFill {
+                    table,
+                    dst: Expr::Temp(dst),
+                    val: Expr::Temp(val),
+                    len: Expr::Temp(len),
+                });
             }
 
             // -- constants
@@ -829,9 +1046,8 @@ impl<'a> FuncBuilder<'a> {
 
 /// Attribute an untranslated operator to a feature. Operators gated by
 /// validator features never reach this point; what does reach it are the
-/// families our base validation accepts (reference types encodings, bulk
-/// table ops) — an unclassified operator here is a dewasmify bug and the
-/// spec harness treats it as such.
+/// families our base validation accepts — an unclassified operator here is
+/// a dewasmify bug and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[
@@ -842,10 +1058,6 @@ fn classify_op(name: &str) -> Option<Feature> {
         "RefAsNonNull",
     ]) {
         Some(Feature::FunctionReferences)
-    } else if starts(&["ReturnCall"]) {
-        Some(Feature::TailCall)
-    } else if starts(&["Table", "RefNull", "RefIsNull", "RefFunc"]) {
-        Some(Feature::ReferenceTypes)
     } else if starts(&[
         "RefEq",
         "RefTest",
@@ -867,8 +1079,6 @@ fn classify_op(name: &str) -> Option<Feature> {
         "BrOnCast",
     ]) {
         Some(Feature::Gc)
-    } else if starts(&["Throw", "Rethrow", "Try", "Catch", "Delegate", "ThrowRef"]) {
-        Some(Feature::ExceptionHandling)
     } else if name.contains("Atomic") {
         Some(Feature::Threads)
     } else if name.contains("128") || name.contains("MulWide") {

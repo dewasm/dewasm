@@ -38,6 +38,9 @@ pub enum Feature {
     ExceptionHandling,
     WideArithmetic,
     CustomPageSizes,
+    /// The component model (and with it WASI preview 2): a layer-1 binary
+    /// wrapping core modules with canonical-ABI adapters.
+    ComponentModel,
 }
 
 impl Feature {
@@ -61,6 +64,7 @@ impl Feature {
         Feature::ExceptionHandling,
         Feature::WideArithmetic,
         Feature::CustomPageSizes,
+        Feature::ComponentModel,
     ];
 
     pub fn from_id(id: &str) -> Option<Feature> {
@@ -89,6 +93,7 @@ impl Feature {
             Feature::ExceptionHandling => "exception-handling",
             Feature::WideArithmetic => "wide-arithmetic",
             Feature::CustomPageSizes => "custom-page-sizes",
+            Feature::ComponentModel => "component-model",
         }
     }
 
@@ -113,6 +118,7 @@ impl Feature {
             Feature::ExceptionHandling => "Exception handling",
             Feature::WideArithmetic => "Wide arithmetic",
             Feature::CustomPageSizes => "Custom page sizes",
+            Feature::ComponentModel => "Component model / WASI preview 2",
         }
     }
 
@@ -133,6 +139,7 @@ impl Feature {
             Feature::ExceptionHandling => WasmFeatures::EXCEPTIONS,
             Feature::WideArithmetic => WasmFeatures::WIDE_ARITHMETIC,
             Feature::CustomPageSizes => WasmFeatures::CUSTOM_PAGE_SIZES,
+            Feature::ComponentModel => WasmFeatures::COMPONENT_MODEL,
             _ => return None,
         })
     }

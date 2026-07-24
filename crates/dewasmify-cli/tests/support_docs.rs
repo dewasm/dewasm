@@ -84,6 +84,22 @@ fn render() -> String {
         }
         let _ = writeln!(out, "{row}|");
     }
+
+    out.push_str("\n## WASI preview 2 (ruby, components only)\n\n");
+    out.push_str(
+        "The `Rt::WASIP2` host functions the runtime units implement\n\
+         ([ADR-21](adr/21-ruby-wasi-preview2.md)); a component importing an\n\
+         unimplemented `wasi:*` function still links but traps if it calls it.\n\n",
+    );
+    let mut p2_units: Vec<&str> = dewasmify_backend_ruby::bundler()
+        .units()
+        .filter_map(|u| u.id.strip_prefix("wasi_p2/"))
+        .filter(|n| !n.starts_with('_'))
+        .collect();
+    p2_units.sort_unstable();
+    for name in p2_units {
+        let _ = writeln!(out, "- `{name}`");
+    }
     out
 }
 

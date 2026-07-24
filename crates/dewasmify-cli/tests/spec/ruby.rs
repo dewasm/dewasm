@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use dewasmify_backend::{Backend, RuntimeLinkage};
 use dewasmify_backend_ruby::RubyBackend;
 use dewasmify_core::ir;
-use wast::core::{NanPattern, WastArgCore, WastRetCore};
+use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 use crate::{Converted, SpecLang};
@@ -19,18 +19,22 @@ use crate::{Converted, SpecLang};
 /// runs so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: `Rt.check_import_kind` validates that a resolved
-///   import is the right *kind* (func/global/table/memory) but not the
+///   import is the right *kind* (func/global/table/memory/tag) but not the
 ///   finer-grained wasm type — a function's param/result types, a global's
-///   mutability, or a table/memory's min/max limits against the import
-///   site's declared bounds. Every `assert_unlinkable` case testing one of
-///   those (not a kind mismatch, which is caught) stays a known gap.
+///   mutability, a tag's parameter types, or a table/memory's min/max
+///   limits against the import site's declared bounds. Every
+///   `assert_unlinkable` case testing one of those (not a kind mismatch,
+///   which is caught) stays a known gap. The imports.wast count grew
+///   28 → 59 when exception handling landed (ADR-19): its "test" fixture
+///   module exports tags, so it only started converting — and exposing the
+///   downstream type-mismatch checks — once tags were supported.
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated*
 ///   declared-unsupported feature (multi-memory) inside a module that
 ///   also happens to use `register`; that module never converts, so a
 ///   later assertion against the module it would have written into
 ///   observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
@@ -70,6 +74,8 @@ impl SpecLang for RubyLang {
             // check_unlinkable's rescue clause references Rt::LinkError
             // even when the converted modules themselves don't.
             "rt/link_error",
+            // check_exception's rescue clause references Rt::WasmException.
+            "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
@@ -185,6 +191,20 @@ impl SpecLang for RubyLang {
         );
     }
 
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = writeln!(
+            script,
+            "check_exception({}) do\n  {call}\nend",
+            ruby_str(desc)
+        );
+        Ok(())
+    }
+
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
         let _ = writeln!(
             script,
@@ -243,6 +263,36 @@ fn ruby_str(s: &str) -> String {
     out
 }
 
+/// Attribution for a null/ref heap type the harness cannot express as a
+/// Ruby value; the two reference-types hierarchies (and their bottoms,
+/// which are also just `nil`) are expressible.
+fn heap_type_tag(hty: &HeapType<'_>) -> String {
+    match hty {
+        HeapType::Abstract {
+            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
+            ..
+        } => "exception-handling".to_string(),
+        HeapType::Abstract { .. } => "gc".to_string(),
+        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
+    }
+}
+
+fn nullable_heap_type(hty: &HeapType<'_>) -> bool {
+    matches!(
+        hty,
+        HeapType::Abstract {
+            ty: AbstractHeapType::Func
+                | AbstractHeapType::Extern
+                | AbstractHeapType::Exn
+                | AbstractHeapType::NoFunc
+                | AbstractHeapType::NoExtern
+                | AbstractHeapType::NoExn
+                | AbstractHeapType::None,
+            ..
+        }
+    )
+}
+
 fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
@@ -250,7 +300,17 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F32(f)) => Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(_) => Err("reference-types".to_string()),
+        WastArg::Core(WastArgCore::RefNull(hty)) => {
+            if nullable_heap_type(hty) {
+                Ok("nil".to_string())
+            } else {
+                Err(heap_type_tag(hty))
+            }
+        }
+        // An externref (or legacy hostref) with identity `n`: the host
+        // value is the Integer itself (ADR-17: externref = raw host value).
+        WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
+        WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
     }
 }
@@ -283,7 +343,31 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        WastRet::Core(_) => Err("reference-types".to_string()),
+        WastRet::Core(WastRetCore::RefNull(hty)) => match hty {
+            None => Ok(format!("{value}.nil?")),
+            Some(hty) if nullable_heap_type(hty) => Ok(format!("{value}.nil?")),
+            Some(hty) => Err(heap_type_tag(hty)),
+        },
+        WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
+        // `(ref.extern)`: any non-null externref.
+        WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("!{value}.nil?")),
+        WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
+        // `(ref.func)`: any non-null funcref — in ADR-17's representation,
+        // a `[type_symbol, callable]` pair.
+        WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
+            "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
+        )),
+        // A specific function's identity: not expressible without an
+        // export map; no top-level testsuite file uses it.
+        WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
+        WastRet::Core(
+            WastRetCore::RefAny
+            | WastRetCore::RefEq
+            | WastRetCore::RefArray
+            | WastRetCore::RefStruct
+            | WastRetCore::RefI31
+            | WastRetCore::RefI31Shared,
+        ) => Err("gc".to_string()),
         _ => Err("component-model".to_string()),
     }
 }
@@ -329,6 +413,17 @@ rescue SystemStackError
   $pass += 1
 end
 
+def check_exception(desc)
+  yield
+  $fail += 1
+  puts "FAIL(no exception): #{desc}"
+rescue Rt::WasmException
+  $pass += 1
+rescue => e
+  $fail += 1
+  puts "FAIL(#{e.class}: #{e.message}, want exception): #{desc}"
+end
+
 # Upstream's assert_unlinkable message text never matches ours (we don't
 # reproduce wasm engines' wording); a raised Rt::LinkError confirms the
 # import was correctly rejected as unlinkable. Any other error means the
@@ -357,7 +452,7 @@ $spectest = {
     "global_i64" => Rt::Global.new(666),
     "global_f32" => Rt::Global.new(Rt.f32(666.6)),
     "global_f64" => Rt::Global.new(666.6),
-    "table" => Rt::Table.new(10),
+    "table" => Rt::Table.new(10, 20),
     "memory" => Rt::Memory.new(1, 2),
   },
 }

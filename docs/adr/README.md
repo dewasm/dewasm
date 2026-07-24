@@ -38,6 +38,11 @@ the consequences.
 | ADR-14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
 | ADR-15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
 | ADR-16 | [Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking](16-ruby-wasm1-completion.md) | Accepted |
+| ADR-17 | [Reference Types in the Ruby Backend: funcref = the Table Pair, externref = a Raw Host Value](17-ruby-reference-types.md) | Accepted |
+| ADR-18 | [Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split](18-ruby-tail-calls.md) | Accepted |
+| ADR-19 | [Exception Handling in the Ruby Backend: Tags as Identity Objects, Exceptions as Native Exceptions](19-ruby-exception-handling.md) | Accepted |
+| ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Accepted |
+| ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Accepted |
 
 ## Adding a new ADR
 

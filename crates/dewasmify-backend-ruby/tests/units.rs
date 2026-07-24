@@ -67,6 +67,7 @@ fn declared_requires_cover_references() {
                 "Memory" => "memory/_class".to_string(),
                 "Table" => "table/_class".to_string(),
                 "WASI" => "wasi/_class".to_string(),
+                "WASIP2" => "wasi_p2/_class".to_string(),
                 other => panic!("{}: unknown runtime constant Rt::{other}", unit.id),
             };
             demand(dep, &format!("Rt::{}", &cap[1]));

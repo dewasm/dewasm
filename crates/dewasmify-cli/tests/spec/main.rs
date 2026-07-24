@@ -100,6 +100,18 @@ trait SpecLang {
     ) -> Result<(), String>;
     fn emit_check_trap(&self, script: &mut String, desc: &str, call: &str, message: &str);
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str);
+    /// Emit an `assert_exception` check: `call` must raise an (uncaught)
+    /// wasm exception. The default keeps the directive an attributed skip
+    /// for backends that don't declare exception handling supported.
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = (script, desc, call);
+        Err("exception-handling".to_string())
+    }
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str);
     /// Emit an `assert_unlinkable` check: `call` (the instantiation) must
     /// raise/fail. Only invoked when `supports_registered_imports()` is
@@ -572,7 +584,17 @@ fn run_directives(
                 gen.skip("linking")
             }
             WastDirective::Thread(_) | WastDirective::Wait { .. } => gen.skip("threads"),
-            WastDirective::AssertException { .. } => gen.skip("exception-handling"),
+            WastDirective::AssertException { exec, .. } => {
+                let call = match &exec {
+                    WastExecute::Invoke(inv) => gen.invoke_expr(inv),
+                    _ => Err("linking".to_string()),
+                };
+                let emitted =
+                    call.and_then(|call| lang.emit_check_exception(&mut gen.script, &desc, &call));
+                if let Err(tag) = emitted {
+                    gen.skip(&tag);
+                }
+            }
             WastDirective::AssertSuspension { .. } => gen.skip("stack-switching"),
         }
     }

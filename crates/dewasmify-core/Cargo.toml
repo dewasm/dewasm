@@ -12,3 +12,6 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 wasmparser.workspace = true
+
+[dev-dependencies]
+wat.workspace = true

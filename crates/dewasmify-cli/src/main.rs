@@ -68,16 +68,29 @@ fn main() -> Result<()> {
     // Accept .wat text input as well; wat::parse_bytes passes .wasm through.
     let bytes = wat::parse_bytes(&input).context("failed to parse input")?;
 
-    let module = dewasmify_core::build_module(&bytes)?;
-    let files = backend.generate(
-        &module,
-        &GenOptions {
-            mode,
-            module_name,
-            runtime: RuntimeLinkage::Embedded,
-            default_wasi: !cli.no_default_wasi,
-        },
-    )?;
+    let opts = GenOptions {
+        mode,
+        module_name,
+        runtime: RuntimeLinkage::Embedded,
+        default_wasi: !cli.no_default_wasi,
+    };
+    // Components (layer 1) are auto-detected; only the Ruby backend
+    // implements them (ADR-20), everything else refuses at conversion
+    // time (ADR-0).
+    let files = if dewasmify_core::is_component(&bytes) {
+        if cli.target != "ruby" {
+            return Err(dewasmify_core::feature::UnsupportedError::new(
+                dewasmify_core::feature::Feature::ComponentModel,
+                format!("the {} backend does not implement components", cli.target),
+            )
+            .into());
+        }
+        let component = dewasmify_core::build_component(&bytes)?;
+        dewasmify_backend_ruby::generate_component(&component, &opts)?
+    } else {
+        let module = dewasmify_core::build_module(&bytes)?;
+        backend.generate(&module, &opts)?
+    };
 
     for file in files {
         if cli.output == Path::new("-") {

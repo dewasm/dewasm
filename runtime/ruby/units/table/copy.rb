@@ -3,7 +3,5 @@ def copy(dst, other, src, len)
   Rt.trap("out of bounds table access") if src + len > other.size
   check_range(dst, len)
   return if len == 0
-  types, funcs = other.slice(src, len)
-  @types[dst, len] = types
-  @funcs[dst, len] = funcs
+  @slots[dst, len] = other.slice(src, len)
 end
