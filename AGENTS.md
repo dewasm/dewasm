@@ -31,7 +31,7 @@ instruction instead of skipping.
 | `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
 | `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
 | `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
-| `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) into the gitignored cache; enables the `apps` cases of the `e2e` test. |
+| `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) and build the sqlite3 pair from pinned source (needs `zig`, ADR-22) into the gitignored cache; enables the `apps` cases of the `e2e` test. |
 
 ## Verification
 

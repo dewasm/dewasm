@@ -43,6 +43,7 @@ the consequences.
 | ADR-19 | [Exception Handling in the Ruby Backend: Tags as Identity Objects, Exceptions as Native Exceptions](19-ruby-exception-handling.md) | Accepted |
 | ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Accepted |
 | ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Accepted |
+| ADR-22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
 
 ## Adding a new ADR
 

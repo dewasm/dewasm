@@ -41,7 +41,12 @@ golden reference. Two things distinguish it from the rest of the suite:
   run `examples/apps/fetch.sh` once (needs network access) to populate
   the gitignored `examples/apps/cache/`. Per ADR-15 this is a hard
   prerequisite, not an optional extra — the `apps` tests fail with a
-  message naming the missing file until you run it.
+  message naming the missing file until you run it. The sqlite3 pair
+  (`sqlite3-shell.wasm` and the C-API-exporting `libsqlite3.wasm`) is
+  built locally from the pinned amalgamation source, so `fetch.sh`
+  additionally needs `zig` and `unzip` on PATH
+  ([ADR-22](adr/22-sqlite3-built-from-source.md)); `cargo test` itself
+  never needs them once the cache exists.
 - **No `wasmtime` install is needed to run these tests.** They used to
   diff live against `wasmtime run`; that comparison's result is fixed
   for a pinned binary and fixed input, so it's captured once and checked
