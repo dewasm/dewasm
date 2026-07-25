@@ -1,1 +1,0 @@
-def p2_cli_terminal_stdout_get_terminal_stdout = nil

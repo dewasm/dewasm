@@ -38,14 +38,14 @@ the consequences.
 | ADR-14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
 | ADR-15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
 | ADR-16 | [Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking](16-ruby-wasm1-completion.md) | Accepted |
-| ADR-17 | [Reference Types in the Ruby Backend: funcref = the Table Pair, externref = a Raw Host Value](17-ruby-reference-types.md) | Accepted |
-| ADR-18 | [Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split](18-ruby-tail-calls.md) | Accepted |
-| ADR-19 | [Exception Handling in the Ruby Backend: Tags as Identity Objects, Exceptions as Native Exceptions](19-ruby-exception-handling.md) | Accepted |
-| ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Accepted |
-| ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Accepted |
+| ADR-17 | [Reference Types in the Ruby Backend: funcref = the Table Pair, externref = a Raw Host Value](17-ruby-reference-types.md) | Superseded (ADR-24) |
+| ADR-18 | [Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split](18-ruby-tail-calls.md) | Superseded (ADR-24) |
+| ADR-19 | [Exception Handling in the Ruby Backend: Tags as Identity Objects, Exceptions as Native Exceptions](19-ruby-exception-handling.md) | Superseded (ADR-24) |
+| ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Superseded (ADR-24) |
+| ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (ADR-24) |
 | ADR-22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
 | ADR-23 | [Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-tiers.md) | Accepted |
-| ADR-24 | [0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals](24-01-scope-reset.md) | Accepted (not yet implemented) |
+| ADR-24 | [0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals](24-01-scope-reset.md) | Accepted |
 | ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted (not yet implemented) |
 | ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted (not yet implemented) |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted (not yet implemented) |

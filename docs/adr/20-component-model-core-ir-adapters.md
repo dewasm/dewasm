@@ -1,6 +1,8 @@
 # ADR-20 — Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary
 
-Status: **Accepted, 2026-07-24.** Implemented for the Ruby backend:
+Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
+
+Originally accepted 2026-07-24. Implemented for the Ruby backend:
 `crates/dewasmify-core/src/{component,canon}.rs`,
 `crates/dewasmify-backend-ruby/src/lib.rs` (`generate_component`), CLI auto-detection, and the
 component e2e fixtures (`examples/wat/component_*.wat`). Remaining: a real

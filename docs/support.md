@@ -48,7 +48,7 @@ Per-backend opt-ins, orthogonal to the tiers ([ADR-23](adr/23-backend-support-ti
 | --- | --- | --- |
 | Multiple tables | ✅ | ❌ |
 | Bulk table ops / passive element segments | ✅ | ❌ |
-| Reference types | ✅ | ❌ |
+| Reference types | ❌ | ❌ |
 | Typed function references | ❌ | ❌ |
 | Garbage collection | ❌ | ❌ |
 | Multiple memories | ❌ | ❌ |
@@ -56,12 +56,12 @@ Per-backend opt-ins, orthogonal to the tiers ([ADR-23](adr/23-backend-support-ti
 | SIMD | ❌ | ❌ |
 | Relaxed SIMD | ❌ | ❌ |
 | Threads and atomics | ❌ | ❌ |
-| Tail calls | ✅ | ❌ |
+| Tail calls | ❌ | ❌ |
 | 64-bit memory | ❌ | ❌ |
-| Exception handling | ✅ | ❌ |
+| Exception handling | ❌ | ❌ |
 | Wide arithmetic | ❌ | ❌ |
 | Custom page sizes | ❌ | ❌ |
-| Component model / WASI preview 2 | 🟡 single-world command components; .wast component directives not executed | ❌ |
+| Component model / WASI preview 2 | ❌ | ❌ |
 
 ## WASI preview 1
 
@@ -118,46 +118,3 @@ function; `—` marks the out-of-scope surface no tier requires (ADR-23).
 | sock_recv | — | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | sock_send | — | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | sock_shutdown | — | ❌ (ENOSYS) | ❌ (ENOSYS) |
-
-## WASI preview 2 (ruby, components only)
-
-The `Rt::WASIP2` host functions the runtime units implement
-([ADR-21](adr/21-ruby-wasi-preview2.md)); a component importing an
-unimplemented `wasi:*` function still links but traps if it calls it.
-
-- `cli_environment_get_arguments`
-- `cli_environment_get_environment`
-- `cli_exit_exit`
-- `cli_stderr_get_stderr`
-- `cli_stdin_get_stdin`
-- `cli_stdout_get_stdout`
-- `cli_terminal_stderr_get_terminal_stderr`
-- `cli_terminal_stdin_get_terminal_stdin`
-- `cli_terminal_stdout_get_terminal_stdout`
-- `clocks_monotonic_clock_now`
-- `clocks_monotonic_clock_resolution`
-- `clocks_monotonic_clock_subscribe_duration`
-- `clocks_monotonic_clock_subscribe_instant`
-- `clocks_wall_clock_now`
-- `filesystem_preopens_get_directories`
-- `filesystem_types_method_descriptor_append_via_stream`
-- `filesystem_types_method_descriptor_get_flags`
-- `filesystem_types_method_descriptor_get_type`
-- `filesystem_types_method_descriptor_metadata_hash`
-- `filesystem_types_method_descriptor_open_at`
-- `filesystem_types_method_descriptor_read_via_stream`
-- `filesystem_types_method_descriptor_stat`
-- `filesystem_types_method_descriptor_write_via_stream`
-- `io_error_method_error_to_debug_string`
-- `io_poll_method_pollable_block`
-- `io_poll_poll`
-- `io_streams_method_input_stream_blocking_read`
-- `io_streams_method_input_stream_read`
-- `io_streams_method_input_stream_subscribe`
-- `io_streams_method_output_stream_blocking_flush`
-- `io_streams_method_output_stream_blocking_write_and_flush`
-- `io_streams_method_output_stream_check_write`
-- `io_streams_method_output_stream_flush`
-- `io_streams_method_output_stream_subscribe`
-- `io_streams_method_output_stream_write`
-- `random_get_random_bytes`

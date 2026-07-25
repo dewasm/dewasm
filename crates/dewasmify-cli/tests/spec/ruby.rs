@@ -24,17 +24,18 @@ use crate::{Converted, SpecLang};
 ///   mutability, a tag's parameter types, or a table/memory's min/max
 ///   limits against the import site's declared bounds. Every
 ///   `assert_unlinkable` case testing one of those (not a kind mismatch,
-///   which is caught) stays a known gap. The imports.wast count grew
-///   28 → 59 when exception handling landed (ADR-19): its "test" fixture
-///   module exports tags, so it only started converting — and exposing the
-///   downstream type-mismatch checks — once tags were supported.
+///   which is caught) stays a known gap. The imports.wast count reverted
+///   59 → 28 when exception handling was removed (ADR-24): its "test"
+///   fixture module exports tags, so it no longer converts — the tag
+///   export is now rejected at conversion time — and the downstream
+///   type-mismatch checks it exposed are no longer reached.
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated*
 ///   declared-unsupported feature (multi-memory) inside a module that
 ///   also happens to use `register`; that module never converts, so a
 ///   later assertion against the module it would have written into
 ///   observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 59, "import-limits"),
+    ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
@@ -74,8 +75,6 @@ impl SpecLang for RubyLang {
             // check_unlinkable's rescue clause references Rt::LinkError
             // even when the converted modules themselves don't.
             "rt/link_error",
-            // check_exception's rescue clause references Rt::WasmException.
-            "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
@@ -189,20 +188,6 @@ impl SpecLang for RubyLang {
             "check_exhaust({}) do\n  {call}\nend",
             ruby_str(desc)
         );
-    }
-
-    fn emit_check_exception(
-        &self,
-        script: &mut String,
-        desc: &str,
-        call: &str,
-    ) -> Result<(), String> {
-        let _ = writeln!(
-            script,
-            "check_exception({}) do\n  {call}\nend",
-            ruby_str(desc)
-        );
-        Ok(())
     }
 
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
@@ -411,17 +396,6 @@ def check_exhaust(desc)
   puts "FAIL(no exhaustion): #{desc}"
 rescue SystemStackError
   $pass += 1
-end
-
-def check_exception(desc)
-  yield
-  $fail += 1
-  puts "FAIL(no exception): #{desc}"
-rescue Rt::WasmException
-  $pass += 1
-rescue => e
-  $fail += 1
-  puts "FAIL(#{e.class}: #{e.message}, want exception): #{desc}"
 end
 
 # Upstream's assert_unlinkable message text never matches ours (we don't

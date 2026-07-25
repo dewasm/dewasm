@@ -74,23 +74,17 @@ fn main() -> Result<()> {
         runtime: RuntimeLinkage::Embedded,
         default_wasi: !cli.no_default_wasi,
     };
-    // Components (layer 1) are auto-detected; only the Ruby backend
-    // implements them (ADR-20), everything else refuses at conversion
-    // time (ADR-0).
-    let files = if dewasmify_core::is_component(&bytes) {
-        if cli.target != "ruby" {
-            return Err(dewasmify_core::feature::UnsupportedError::new(
-                dewasmify_core::feature::Feature::ComponentModel,
-                format!("the {} backend does not implement components", cli.target),
-            )
-            .into());
-        }
-        let component = dewasmify_core::build_component(&bytes)?;
-        dewasmify_backend_ruby::generate_component(&component, &opts)?
-    } else {
-        let module = dewasmify_core::build_module(&bytes)?;
-        backend.generate(&module, &opts)?
-    };
+    // Component-model binaries (layer 1) are out of scope (ADR-24): reject
+    // them at conversion time with a clear, attributed error (ADR-0).
+    if dewasmify_core::is_component(&bytes) {
+        return Err(dewasmify_core::feature::UnsupportedError::new(
+            dewasmify_core::feature::Feature::ComponentModel,
+            "component-model binaries are not supported; convert the core module instead",
+        )
+        .into());
+    }
+    let module = dewasmify_core::build_module(&bytes)?;
+    let files = backend.generate(&module, &opts)?;
 
     for file in files {
         if cli.output == Path::new("-") {

@@ -1,7 +1,12 @@
 # ADR-24 — 0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals
 
-Status: **Accepted, 2026-07-25.** Decision recorded; implementation lands
-in follow-up commits (feature audit, then excision). Supersedes
+Status: **Accepted, 2026-07-25.** The feature-audit tool
+(`crates/dewasmify-core/src/bin/feature-audit.rs`) and the excision have
+landed: reference types, tail calls, exception handling, the component
+model, and WASI preview 2 are removed from the IR, backends, runtime
+units, harness, and docs, and their inputs are rejected at conversion time
+with attributed errors. The tier ladder's retirement and the rename land
+next ([ADR-25](25-retire-support-tiers.md)). Supersedes
 [ADR-17](17-ruby-reference-types.md), [ADR-18](18-ruby-tail-calls.md),
 [ADR-19](19-ruby-exception-handling.md),
 [ADR-20](20-component-model-core-ir-adapters.md),

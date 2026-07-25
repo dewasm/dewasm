@@ -1,6 +1,8 @@
 # ADR-18 — Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split
 
-Status: **Accepted, 2026-07-24.** Implemented: `crates/dewasmify-core/src/{ir,func,module}.rs`,
+Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
+
+Originally accepted 2026-07-24. Implemented: `crates/dewasmify-core/src/{ir,func,module}.rs`,
 `crates/dewasmify-backend/src/lib.rs` (`stmts_use_tail_calls`),
 `crates/dewasmify-backend-ruby/src/lib.rs`, `runtime/ruby/units/rt/tail_call.rb`,
 `runtime/ruby/units/table/tail_ref.rb`.

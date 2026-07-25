@@ -1,1 +1,0 @@
-def p2_cli_terminal_stderr_get_terminal_stderr = nil

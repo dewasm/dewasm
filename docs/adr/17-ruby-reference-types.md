@@ -1,6 +1,8 @@
 # ADR-17 — Reference Types in the Ruby Backend: funcref = the Table Pair, externref = a Raw Host Value
 
-Status: **Accepted, 2026-07-24.** Implemented: `crates/dewasmify-core/src/{ir,module,func}.rs`,
+Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
+
+Originally accepted 2026-07-24. Implemented: `crates/dewasmify-core/src/{ir,module,func}.rs`,
 `crates/dewasmify-backend/src/lib.rs`, `crates/dewasmify-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/table/*.rb`, and the spec harness's ref-valued arguments/results
 (`crates/dewasmify-cli/tests/spec/ruby.rs`).

@@ -826,18 +826,6 @@ impl<'a> Gen<'a> {
             Stmt::TableInit { .. } | Stmt::TableCopy { .. } | Stmt::ElemDrop { .. } => {
                 unreachable!("table bulk ops reached the bash backend")
             }
-            Stmt::TableSet { .. } | Stmt::TableGrow { .. } | Stmt::TableFill { .. } => {
-                unreachable!("reference types reached the bash backend")
-            }
-            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("tail calls reached the bash backend")
-            }
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling reached the bash backend")
-            }
-            Stmt::HostBytesStore { .. } | Stmt::HostListPush { .. } => {
-                unreachable!("component adapters reached the bash backend")
-            }
             Stmt::Unreachable => {
                 self.use_unit("rt/trap");
                 w.line("rt_trap 'unreachable' || return $?");
@@ -1078,40 +1066,6 @@ impl<'a> Gen<'a> {
                 Some(format!("((({c}) != 0 ? ({t}) : ({e})))"))
             }
             Expr::MemorySize => Some(format!("{}pages", self.prefix)),
-            Expr::RefNull(_)
-            | Expr::RefFunc(_)
-            | Expr::RefIsNull(_)
-            | Expr::TableGet { .. }
-            | Expr::TableSize(_) => {
-                unreachable!("reference types reached the bash backend")
-            }
-            Expr::HostString { .. }
-            | Expr::HostBytes { .. }
-            | Expr::HostByteLen(_)
-            | Expr::HostListNew
-            | Expr::HostListGet { .. }
-            | Expr::HostListLen(_)
-            | Expr::HostTuple(_)
-            | Expr::HostTupleGet { .. }
-            | Expr::HostRecord(_)
-            | Expr::HostField { .. }
-            | Expr::HostVariant { .. }
-            | Expr::HostVariantCase { .. }
-            | Expr::HostVariantPayload(_)
-            | Expr::HostEnum { .. }
-            | Expr::HostEnumIndex { .. }
-            | Expr::HostBool(_)
-            | Expr::HostBoolToI32(_)
-            | Expr::HostChar(_)
-            | Expr::HostCharToI32(_)
-            | Expr::HostIsSome(_)
-            | Expr::HostNone
-            | Expr::HostSigned32(_)
-            | Expr::HostSigned64(_)
-            | Expr::HostMask32(_)
-            | Expr::HostMask64(_) => {
-                unreachable!("component adapters reached the bash backend")
-            }
         }
     }
 }

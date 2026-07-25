@@ -1,6 +1,8 @@
 # ADR-21 — WASI Preview 2 Host for Ruby (CLI World)
 
-Status: **Accepted, 2026-07-24.** Implemented: `runtime/ruby/units/wasi_p2/` (`Rt::WASIP2`),
+Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
+
+Originally accepted 2026-07-24. Implemented: `runtime/ruby/units/wasi_p2/` (`Rt::WASIP2`),
 bundled by `generate_component` when `default_wasi` is on; the function list is rendered into
 `docs/support.md` from the units.
 
