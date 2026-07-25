@@ -1,7 +1,12 @@
 # ADR-27 — Shared Test-Helper Crate with Per-Feature Test Macros
 
-Status: **Accepted, 2026-07-25.** Decision recorded; the crate and the
-test moves land after the rename commit. Builds on
+Status: **Accepted, 2026-07-25; landed 2026-07-26.** The
+`dewasm-test-helper` crate and the two-layer `BackendUnderTest` /
+`SpecBackend` traits, shared case tables, and per-feature macros
+(`spec_suite!`, `standalone_e2e!`, `library_e2e!`, `wasi_suite!`,
+`apps_e2e!`) are in place; each backend crate owns its spec and e2e
+suites, and only the two cross-backend tests (`support_docs`,
+`apps_golden_matches_wasmtime`) remain in `dewasm-cli`. Builds on
 [ADR-3](3-testing-strategy.md) (the spec harness binds),
 [ADR-8](8-latest-testsuite-support-matrix.md) (skip attribution and
 per-file failure ledgers), and [ADR-15](15-tests-fail-not-skip.md).

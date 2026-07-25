@@ -1,0 +1,19 @@
+[package]
+name = "dewasm-test-helper"
+description = "Shared test harness, case tables, and per-feature test macros for the dewasm backend crates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+# Test-only support code, never published.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+wast.workspace = true
+wat.workspace = true
+dewasm-core.workspace = true
+dewasm-backend.workspace = true

@@ -1,0 +1,94 @@
+//! The base backend-under-test abstraction (ADR-27) and the process
+//! plumbing every suite shares. `BackendUnderTest` is the layer that even a
+//! pre-spec backend (the "cowsay first" bring-up path of ADR-24) can
+//! implement: name it, hand back its `Backend`, and say how to run generated
+//! output. Interpreted backends get `run` for free from `interpreter`;
+//! compiled targets override `run` itself.
+
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
+
+use dewasm_backend::Backend;
+
+/// A target backend wired into the shared case tables and the spec harness.
+/// The spec layer ([`crate::SpecBackend`]) extends this with the
+/// script-phrasing surface; everything a backend needs to run app/e2e suites
+/// is here.
+pub trait BackendUnderTest: Sync {
+    fn name(&self) -> &'static str;
+    /// The backend itself. `+ Sync` so app conversion can run on a scoped
+    /// worker thread (`convert_on_big_stack`).
+    fn backend(&self) -> &'static (dyn Backend + Sync);
+
+    /// Interpreter used by `run`'s default implementation. Per ADR-15 a
+    /// missing interpreter must panic (fail loud), never skip. Compiled
+    /// backends override `run` directly and need not implement this.
+    fn interpreter(&self) -> PathBuf {
+        unimplemented!(
+            "an interpreted backend must implement interpreter(); \
+             a compiled backend must override run()"
+        )
+    }
+
+    /// Run generated `source` with `args` and `stdin`, returning the raw
+    /// process `Output`. The default writes `source` to a temp file (keyed
+    /// by pid + counter so parallel test threads and concurrent `cargo test`
+    /// processes never collide) and execs `interpreter`.
+    fn run(&self, source: &str, args: &[&str], stdin: &str) -> Output {
+        run_script(
+            &self.interpreter(),
+            source,
+            self.backend().file_extension(),
+            args,
+            stdin,
+        )
+    }
+
+    /// Whether the `apps` suite should run its `heavy` cases (QuickJS,
+    /// SQLite) for this backend even without `DEWASM_APPS_ALL`. Fast
+    /// interpreters (Ruby) run them by default; slow ones (Bash softfloat)
+    /// opt out unless the env var forces them on.
+    fn run_heavy_apps(&self) -> bool {
+        true
+    }
+}
+
+/// Spawn `cmd` with `stdin` piped in and both output streams captured,
+/// returning the raw `Output`.
+pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    use std::io::Write as _;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    child.wait_with_output().expect("wait")
+}
+
+/// Write `script` to a temp file (extension `ext`) and run it under
+/// `interpreter`, returning the raw `Output`. The pid + counter pair keeps
+/// paths unique across both parallel test threads and concurrent `cargo
+/// test` processes.
+pub fn run_script(
+    interpreter: &Path,
+    script: &str,
+    ext: &str,
+    args: &[&str],
+    stdin: &str,
+) -> Output {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "dewasm-test-{}-{}.{ext}",
+        std::process::id(),
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    std::fs::write(&path, script).unwrap();
+    run_command(Command::new(interpreter).arg(&path).args(args), stdin)
+}

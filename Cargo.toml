@@ -13,6 +13,7 @@ dewasm-core = { path = "crates/dewasm-core" }
 dewasm-backend = { path = "crates/dewasm-backend" }
 dewasm-backend-ruby = { path = "crates/dewasm-backend-ruby" }
 dewasm-backend-bash = { path = "crates/dewasm-backend-bash" }
+dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 anyhow = "1"
 wasmparser = "0.254"
 wat = "1"

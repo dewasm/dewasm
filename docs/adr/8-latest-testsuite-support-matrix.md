@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-07-23.** Implemented: `Feature` +
 `UnsupportedError` (`crates/dewasm-core/src/feature.rs`), attribution
-in the harness (`crates/dewasm-cli/tests/spec.rs`, now running every
+in the harness (`crates/dewasm-test-helper/src/spec.rs`, now running every
 top-level `.wast`), and the generated matrix (`docs/support.md`, gated by
 the `support_docs` test). Revises ADR-3's skip policy.
 

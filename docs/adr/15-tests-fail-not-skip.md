@@ -3,7 +3,7 @@
 Status: **Accepted, 2026-07-23.** Implemented across
 `crates/dewasm-cli/tests/{e2e,spec}/`, `crates/dewasm-backend-bash/tests/softfloat.rs`,
 and `docs/testing.md` (the setup reference these failures point to). The
-`apps` e2e cases (`crates/dewasm-cli/tests/e2e/apps.rs`) additionally
+`apps` e2e cases (`crates/dewasm-test-helper/src/apps.rs`) additionally
 dropped their `wasmtime` dependency entirely, in favor of golden files
 captured once and checked into `examples/apps/golden/`, with an opt-in
 `apps_golden_matches_wasmtime` test (the `wasmtime_test` Cargo feature

@@ -3,7 +3,8 @@
 Status: **Accepted, 2026-07-24.** Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`,
 `crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/{global,table,rt}/*.rb`, and the spec harness
-(`crates/dewasm-cli/tests/spec/{main,ruby,bash}.rs`).
+(`crates/dewasm-test-helper/src/spec.rs` plus the per-backend
+`crates/dewasm-backend-{ruby,bash}/tests/spec.rs`).
 
 ## Context
 
@@ -38,7 +39,7 @@ free (per-backend gating).
   silently substitutes. **Accepted narrower gap:** only the *kind* is checked, not the full wasm
   type — function param/result types, global mutability, and table/memory min/max limits against
   the import site's declared bounds are not compared. This surfaces as the `import-limits`-tagged
-  entries in `crates/dewasm-cli/tests/spec/ruby.rs`'s `EXPECTED_FAILURES`; implementing it fully
+  entries in `crates/dewasm-backend-ruby/tests/spec.rs`'s `EXPECTED_FAILURES`; implementing it fully
   would mean carrying `FuncType`/limit metadata into generated code purely for a check with no
   runtime-correctness payoff beyond `assert_unlinkable` conformance.
 - **Table index space is `imported_tables ++ tables`**, matching how functions already worked
@@ -70,7 +71,7 @@ free (per-backend gating).
   one instance is directly usable as another's import source (`imports["M"] = other_instance`) —
   applying ADR-7 symmetrically, not a new mechanism. This is what let the spec harness implement
   the wast testsuite's `(register "Name" $id)` directive for real:
-  `crates/dewasm-cli/tests/spec/main.rs`'s `ScriptGen` tracks registered-name → live instance,
+  `crates/dewasm-test-helper/src/spec.rs`'s `ScriptGen` tracks registered-name → live instance,
   `convert()` takes the set of module names it may treat as import sources, and `assert_unlinkable`
   is checked for real (any raised error during instantiation counts — upstream's exact wording
   never matches ours) instead of always skipped. `SpecLang::supports_registered_imports()` gates

@@ -5,7 +5,8 @@ Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a 
 Originally accepted 2026-07-24. Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`,
 `crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/rt/{tag,wasm_exception,throw_ref}.rb`, and the spec harness's
-`assert_exception` support (`crates/dewasm-cli/tests/spec/{main,ruby}.rs`).
+`assert_exception` support (`crates/dewasm-test-helper/src/spec.rs` plus
+`crates/dewasm-backend-ruby/tests/spec.rs`).
 
 ## Context
 

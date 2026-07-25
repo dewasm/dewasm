@@ -28,4 +28,4 @@ dewasm-backend-ruby.workspace = true
 dewasm-backend-bash.workspace = true
 
 [dev-dependencies]
-wast.workspace = true
+dewasm-test-helper.workspace = true

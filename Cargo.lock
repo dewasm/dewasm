@@ -140,7 +140,9 @@ dependencies = [
  "anyhow",
  "dewasm-backend",
  "dewasm-core",
+ "dewasm-test-helper",
  "regex",
+ "wast",
 ]
 
 [[package]]
@@ -150,7 +152,10 @@ dependencies = [
  "anyhow",
  "dewasm-backend",
  "dewasm-core",
+ "dewasm-test-helper",
  "regex",
+ "wast",
+ "wat",
 ]
 
 [[package]]
@@ -163,7 +168,7 @@ dependencies = [
  "dewasm-backend-bash",
  "dewasm-backend-ruby",
  "dewasm-core",
- "wast",
+ "dewasm-test-helper",
  "wat",
 ]
 
@@ -173,6 +178,17 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "wasmparser",
+ "wat",
+]
+
+[[package]]
+name = "dewasm-test-helper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-core",
+ "wast",
  "wat",
 ]
 

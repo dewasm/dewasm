@@ -1,11 +1,11 @@
-//! Bash side of the spec harness: converts modules with the Bash backend,
-//! phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn
-//! result globals and the status-134 trap protocol), and runs the script
-//! with a discovered bash >= 5 (macOS system bash is 3.2).
+//! Bash side of the shared spec harness (ADR-3, ADR-27): converts modules
+//! with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke`
+//! helpers over the R0..Rn result globals and the status-134 trap protocol),
+//! and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
-//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo
-//! test` runs a curated file list (ADR-3 pre-accepts this);
-//! `DEWASM_SPEC_ALL=1` sweeps everything.
+//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test`
+//! runs a curated file list (ADR-3 pre-accepts this); `DEWASM_SPEC_ALL=1`
+//! sweeps everything. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -14,15 +14,14 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::BashBackend;
 use dewasm_core::ir;
+use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-use crate::{Converted, SpecLang};
-
-/// Identical to the Ruby ledger: the same stale-state cross-module
-/// linking failures (a `register`ed module was supposed to write into the
-/// first module's shared table/memory, so assertions see stale state).
-/// The linking milestone clears these.
+/// Identical to the Ruby ledger: the same stale-state cross-module linking
+/// failures (a `register`ed module was supposed to write into the first
+/// module's shared table/memory, so assertions see stale state). The linking
+/// milestone clears these.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("elem", 5, "linking"),
     ("linking", 10, "linking"),
@@ -110,14 +109,14 @@ const CURATED_FILES: &[&str] = &[
     "unwind",
 ];
 
-pub struct BashLang;
+pub struct BashSpec;
 
-impl SpecLang for BashLang {
+impl BackendUnderTest for BashSpec {
     fn name(&self) -> &'static str {
         "bash"
     }
 
-    fn backend(&self) -> &dyn Backend {
+    fn backend(&self) -> &'static (dyn Backend + Sync) {
         &BashBackend
     }
 
@@ -126,11 +125,9 @@ impl SpecLang for BashLang {
             "bash >= 5 not found (checked $DEWASM_BASH, PATH, homebrew) — see docs/testing.md",
         )
     }
+}
 
-    fn script_ext(&self) -> &'static str {
-        "sh"
-    }
-
+impl SpecBackend for BashSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
@@ -163,8 +160,8 @@ impl SpecLang for BashLang {
         _registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
-        // A trap while instantiating a plain module directive aborts the
-        // file, mirroring an uncaught Ruby exception at toplevel.
+        // A trap while instantiating a plain module directive aborts the file,
+        // mirroring an uncaught Ruby exception at toplevel.
         let _ = writeln!(
             script,
             "{}init || {{ echo \"toplevel init failed (status $?): $TRAP_MSG\" >&2; exit 1; }}",
@@ -231,8 +228,8 @@ impl SpecLang for BashLang {
     }
 
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str) {
-        // FUNCNEST overflow kills the shell it happens in, so exhaustion
-        // must run in a subshell; nothing else needs one.
+        // FUNCNEST overflow kills the shell it happens in, so exhaustion must
+        // run in a subshell; nothing else needs one.
         let _ = writeln!(
             script,
             "( FUNCNEST=1000; {call} ) 2>/dev/null\ncke $? {}",
@@ -261,8 +258,8 @@ fn bash_str(s: &str) -> String {
 fn arg_bash(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
-        // i64/f64 travel as the signed-64 bit pattern, f32 as its u32
-        // pattern (ADR-11/ADR-13).
+        // i64/f64 travel as the signed-64 bit pattern, f32 as its u32 pattern
+        // (ADR-11/ADR-13).
         WastArg::Core(WastArgCore::I64(v)) => Ok(v.to_string()),
         WastArg::Core(WastArgCore::F32(f)) => Ok(f.bits.to_string()),
         WastArg::Core(WastArgCore::F64(f)) => Ok((f.bits as i64).to_string()),
@@ -276,8 +273,8 @@ fn ret_cond(i: usize, ret: &WastRet<'_>) -> Result<String, String> {
     match ret {
         WastRet::Core(WastRetCore::I32(v)) => Ok(format!("R{i} == {}", *v as u32)),
         WastRet::Core(WastRetCore::I64(v)) => Ok(format!("R{i} == {v}")),
-        // Floats are compared as bit patterns (they already are the
-        // R registers' representation); the NaN masks mirror ruby.rs's
+        // Floats are compared as bit patterns (they already are the R
+        // registers' representation); the NaN masks mirror the ruby side's
         // ret_cmp, as signed-64-safe integer constants.
         WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
@@ -371,3 +368,5 @@ declare -A IMPORTS=(
 const POSTAMBLE: &str = r#"
 echo "RESULT pass=$PASS fail=$FAIL"
 "#;
+
+spec_suite!(BashSpec);

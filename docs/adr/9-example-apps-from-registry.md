@@ -3,7 +3,7 @@
 Status: **Accepted, 2026-07-23.** Implemented: `examples/apps/fetch.sh`
 (version-pinned, sha256-verified downloads into the gitignored
 `examples/apps/cache/`) and the `apps` cases of the `e2e` test
-(`crates/dewasm-cli/tests/e2e/apps.rs`) comparing converted output
+(`crates/dewasm-test-helper/src/apps.rs`) comparing converted output
 against a golden reference (originally a live `wasmtime` diff; ADR-15
 replaced that with golden files checked into `examples/apps/golden/`,
 dropping the `wasmtime` dependency — the fetch/pin/checksum decision
@@ -72,4 +72,4 @@ differs; none of the current apps seek).
   green. Upstream availability is a fetch-time dependency, mitigated by
   pinning and checksums.
 - Adding an app = one line in `fetch.sh` + a case in
-  `crates/dewasm-cli/tests/e2e/apps.rs` + a row in the README table.
+  `crates/dewasm-test-helper/src/apps.rs` + a row in the README table.

@@ -25,11 +25,11 @@ instruction instead of skipping.
 
 | Command | What it does |
 | --- | --- |
-| `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). |
+| `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). Each backend crate owns its own conformance suites (ADR-27); only cross-backend tests live in `dewasm-cli`. |
 | `cargo fmt --check` | Verify Rust code formatting. |
 | `cargo clippy --all-targets -- -D warnings` | Run linter on all targets, failing on any warnings. |
-| `DEWASM_SPEC=i32,br cargo test -p dewasm-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
-| `DEWASM_SPEC_ALL=1 cargo test -p dewasm-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
+| `DEWASM_SPEC=i32,br cargo test -p dewasm-backend-ruby --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Swap the crate (`-p dewasm-backend-bash`) to switch language. |
+| `DEWASM_SPEC_ALL=1 cargo test -p dewasm-backend-bash --test spec -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
 | `cargo run -p dewasm-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) and build the sqlite3 pair from pinned source (needs `zig`, ADR-22) into the gitignored cache; enables the `apps` cases of the `e2e` test. |
 
@@ -37,7 +37,7 @@ instruction instead of skipping.
 
 After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
 and `cargo test`. Spec-harness failures mean a semantics bug: fix the cause. Adding to a
-per-language `EXPECTED_FAILURES` ledger in `crates/dewasm-cli/tests/spec/` is a last resort and
+per-backend `EXPECTED_FAILURES` ledger in `crates/dewasm-backend-<lang>/tests/spec.rs` is a last resort and
 requires an attribution tag plus a reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 When support declarations or WASI units change, regenerate the matrix:
 `DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs` (the test fails while

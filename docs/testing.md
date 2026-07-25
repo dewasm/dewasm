@@ -16,8 +16,8 @@ message below is something this document explains how to fix.
   commands pick it up automatically.
 - **`git submodule update --init`**: fetches the wasm spec testsuite into
   `tests/spec/` (an upstream submodule — never edit it). Without this,
-  the spec harness (`cargo test -p dewasm-cli --test spec`) fails
-  immediately.
+  the spec harness (`cargo test -p dewasm-backend-ruby --test spec`, and
+  likewise `-p dewasm-backend-bash`) fails immediately.
 - **`ruby` on `PATH`**: needed by the spec harness and most of the `e2e`
   test (both the Ruby backend's own tests and, indirectly, anything
   comparing Ruby's output). No specific version is required.
@@ -33,9 +33,11 @@ the `apps` cases specifically — see below.
 
 ## The `apps` end-to-end cases
 
-`crates/dewasm-cli/tests/e2e/apps.rs` converts real-world wasm
-binaries (cowsay, quickjs-ng, SQLite) and checks the output against a
-golden reference. Two things distinguish it from the rest of the suite:
+The `apps` case table (`crates/dewasm-test-helper/src/apps.rs`, run per
+backend as `cargo test -p dewasm-backend-<lang> --test e2e apps`) converts
+real-world wasm binaries (cowsay, quickjs-ng, SQLite) and checks the output
+against a golden reference. Two things distinguish it from the rest of the
+suite:
 
 - **The binaries themselves are fetched, not committed** ([ADR-9](adr/9-example-apps-from-registry.md)):
   run `examples/apps/fetch.sh` once (needs network access) to populate
@@ -66,13 +68,13 @@ feature, and `#[ignore]`d when that feature is off, so a plain
 run it:
 
 ```console
-$ cargo test -p dewasm-cli --test e2e --features wasmtime_test apps_golden_matches_wasmtime
+$ cargo test -p dewasm-cli --test apps_golden --features wasmtime_test apps_golden_matches_wasmtime
 ```
 
 This re-runs every `apps` case through a live `wasmtime run` and
 compares its output against the checked-in golden file (independent of
-whether dewasm's own generated output also matches — the always-on
-`apps_ruby`/`apps_bash` tests already cover that half). Run it whenever
+whether dewasm's own generated output also matches — the always-on per-backend
+`apps` tests already cover that half). Run it whenever
 you doubt a golden file, or as part of regenerating one after bumping a
 pin in `examples/apps/fetch.sh`:
 
@@ -82,19 +84,40 @@ $ wasmtime run examples/apps/cache/<name>.wasm <args...> < <stdin-fixture> \
     > examples/apps/golden/<case>.stdout
 ```
 
-Then update the matching `AppCase` in `apps.rs` (`expect_code` too, if
-the exit status changed), and confirm with the `wasmtime_test` command
-above before running the normal `cargo test --test e2e`.
+Then update the matching `AppCase` in `crates/dewasm-test-helper/src/apps.rs`
+(`expect_code` too, if the exit status changed), and confirm with the
+`wasmtime_test` command above before running the normal per-backend
+`cargo test -p dewasm-backend-<lang> --test e2e`.
 
-## e2e case tables
+## Test layout
 
-`standalone.rs`/`library.rs`/`apps.rs` each drive one case table across
-every backend instead of duplicating tests per language. Onboarding a new
-backend to this suite is implementing the `E2eLang` trait
-(`e2e/support.rs`), adding a `glues` entry to each `LibraryCase` it should
-run, and writing that language's own `#[test]` functions; a missing
-`glues` entry for a case the language should run fails loudly rather than
-silently skipping (ADR-15).
+Tests live with the one backend they exercise; only a test that needs *every*
+backend lives centrally (ADR-27). The shared harness, case tables, and the
+per-feature test macros are in `crates/dewasm-test-helper`, which depends only
+on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
+
+- **`crates/dewasm-backend-<lang>/tests/spec.rs`** — that backend's spec
+  conformance suite: its `SpecBackend` impl, its `EXPECTED_FAILURES` ledger
+  (and, for bash, the curated file list), wired up with `spec_suite!`. Run it
+  with `cargo test -p dewasm-backend-<lang> --test spec`.
+- **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's standalone
+  / library / WASI / apps suites, declared by invoking `standalone_e2e!`,
+  `library_e2e!`, `wasi_suite!`, and `apps_e2e!` over the shared tables in
+  `dewasm-test-helper`. Library glue and (for the WASI filesystem cases) the
+  per-backend instantiation glue live here; a case a backend is wired to run
+  but has no glue for fails loudly (ADR-15). Ruby's file also holds the
+  Ruby-only scenarios (provider objects, embedded coexistence, the sqlite3 C
+  API drive, WASI-model internals).
+- **`crates/dewasm-backend-<lang>/tests/units.rs`** (both) and
+  **`softfloat.rs`** (bash) — backend-local lints/oracles, unchanged.
+- **`crates/dewasm-cli/tests/`** — only the cross-backend tests:
+  `support_docs.rs` (the `docs/support.md` golden gate over all backends) and
+  `apps_golden.rs` (`apps_golden_matches_wasmtime`, behind the `wasmtime_test`
+  feature).
+
+Onboarding a new backend to the e2e suites is: implement `BackendUnderTest`
+(and `SpecBackend` for the spec harness) in the new crate, then invoke the
+macros for the suites it participates in.
 
 ## Useful environment variables
 

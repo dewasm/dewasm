@@ -60,7 +60,7 @@ per-module state prefix, but imports are bound as bare command names.
 
 - Positive: `hello.wat` runs standalone under bash with the same stdout
   and exit code as Ruby; the ADR-7 override/fallback semantics carry over
-  (`crates/dewasm-cli/tests/e2e.rs`).
+  (`crates/dewasm-backend-bash/tests/e2e.rs`).
 - Negative: byte-wise stdio is slow for large payloads; batching rides on
   ADR-11's bulk-memory scaling work when real apps (post-softfloat, ADR-5)
   demand it.

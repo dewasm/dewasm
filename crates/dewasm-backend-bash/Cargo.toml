@@ -16,3 +16,5 @@ dewasm-backend.workspace = true
 
 [dev-dependencies]
 regex.workspace = true
+wast.workspace = true
+dewasm-test-helper.workspace = true

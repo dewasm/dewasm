@@ -5,7 +5,7 @@ Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a 
 Originally accepted 2026-07-24. Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`,
 `crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/table/*.rb`, and the spec harness's ref-valued arguments/results
-(`crates/dewasm-cli/tests/spec/ruby.rs`).
+(`crates/dewasm-backend-ruby/tests/spec.rs`).
 
 ## Context
 
@@ -52,10 +52,10 @@ new construct at conversion time.
   future `Stmt`/`Expr` variant is a compile error, not a silent mis-lowering. Bash's only
   change is `unreachable!` match arms.
 - **The harness expresses ref-valued directives in the same representation**
-  (`crates/dewasm-cli/tests/spec/ruby.rs`): `(ref.extern n)` args/results are the Integer
+  (`crates/dewasm-backend-ruby/tests/spec.rs`): `(ref.extern n)` args/results are the Integer
   `n`, nulls are `nil`, `(ref.func)` results check for the pair shape. This had to land in the
   same change as the `Supported` flip — the harness's anti-regression check
-  (`tests/spec/main.rs`) turns any leftover `reference-types`-tagged skip into a suite failure.
+  (`crates/dewasm-test-helper/src/spec.rs`) turns any leftover `reference-types`-tagged skip into a suite failure.
 
 ## Rejected alternatives
 
