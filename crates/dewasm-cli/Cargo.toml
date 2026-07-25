@@ -1,0 +1,31 @@
+[package]
+name = "dewasm-cli"
+description = "dewasm: translate WebAssembly binaries into source code of various languages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Opt-in: gates tests that need a real `wasmtime` install (ADR-15 keeps
+# the default suite free of that dependency). See docs/testing.md.
+wasmtime_test = []
+
+[[bin]]
+name = "dewasm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+wat.workspace = true
+dewasm-core.workspace = true
+dewasm-backend.workspace = true
+dewasm-backend-ruby.workspace = true
+dewasm-backend-bash.workspace = true
+
+[dev-dependencies]
+wast.workspace = true

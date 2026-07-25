@@ -1,13 +1,13 @@
 # ADR-15 — Tests Fail Loud on Missing Environment, Never Skip
 
 Status: **Accepted, 2026-07-23.** Implemented across
-`crates/dewasmify-cli/tests/{e2e,spec}/`, `crates/dewasmify-backend-bash/tests/softfloat.rs`,
+`crates/dewasm-cli/tests/{e2e,spec}/`, `crates/dewasm-backend-bash/tests/softfloat.rs`,
 and `docs/testing.md` (the setup reference these failures point to). The
-`apps` e2e cases (`crates/dewasmify-cli/tests/e2e/apps.rs`) additionally
+`apps` e2e cases (`crates/dewasm-cli/tests/e2e/apps.rs`) additionally
 dropped their `wasmtime` dependency entirely, in favor of golden files
 captured once and checked into `examples/apps/golden/`, with an opt-in
 `apps_golden_matches_wasmtime` test (the `wasmtime_test` Cargo feature
-on `dewasmify-cli`, `#[ignore]`d otherwise) to re-validate those golden
+on `dewasm-cli`, `#[ignore]`d otherwise) to re-validate those golden
 files against a live `wasmtime` on demand.
 
 ## Context

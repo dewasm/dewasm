@@ -1,8 +1,8 @@
 # ADR-8 — Track the Latest Testsuite; Attribute Skips to a Support Matrix
 
 Status: **Accepted, 2026-07-23.** Implemented: `Feature` +
-`UnsupportedError` (`crates/dewasmify-core/src/feature.rs`), attribution
-in the harness (`crates/dewasmify-cli/tests/spec.rs`, now running every
+`UnsupportedError` (`crates/dewasm-core/src/feature.rs`), attribution
+in the harness (`crates/dewasm-cli/tests/spec.rs`, now running every
 top-level `.wast`), and the generated matrix (`docs/support.md`, gated by
 the `support_docs` test). Revises ADR-3's skip policy.
 
@@ -44,7 +44,7 @@ existed).
 - **`docs/support.md` is generated from those declarations** (features ×
   backends, plus the WASI preview 1 table derived from the runtime
   units), gated by a golden-file test; regenerate with
-  `DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli --test support_docs`.
+  `DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs`.
 
 ## Rejected alternatives
 

@@ -10,7 +10,7 @@ context:
 
 # AGENTS.md
 
-Agent contract for dewasmify. Project docs are written in English; `tests/spec` is an upstream
+Agent contract for dewasm. Project docs are written in English; `tests/spec` is an upstream
 submodule — never edit it.
 
 ## Development environment
@@ -28,19 +28,19 @@ instruction instead of skipping.
 | `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). |
 | `cargo fmt --check` | Verify Rust code formatting. |
 | `cargo clippy --all-targets -- -D warnings` | Run linter on all targets, failing on any warnings. |
-| `DEWASMIFY_SPEC=i32,br cargo test -p dewasmify-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
-| `DEWASMIFY_SPEC_ALL=1 cargo test -p dewasmify-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
-| `cargo run -p dewasmify-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
+| `DEWASM_SPEC=i32,br cargo test -p dewasm-cli --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Add a test-name filter (`spec_ruby`/`spec_bash`) for one language. |
+| `DEWASM_SPEC_ALL=1 cargo test -p dewasm-cli --test spec spec_bash -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
+| `cargo run -p dewasm-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `examples/apps/fetch.sh` | Fetch pinned real-world apps (cowsay, QuickJS) and build the sqlite3 pair from pinned source (needs `zig`, ADR-22) into the gitignored cache; enables the `apps` cases of the `e2e` test. |
 
 ## Verification
 
 After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
 and `cargo test`. Spec-harness failures mean a semantics bug: fix the cause. Adding to a
-per-language `EXPECTED_FAILURES` ledger in `crates/dewasmify-cli/tests/spec/` is a last resort and
+per-language `EXPECTED_FAILURES` ledger in `crates/dewasm-cli/tests/spec/` is a last resort and
 requires an attribution tag plus a reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 When support declarations or WASI units change, regenerate the matrix:
-`DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli --test support_docs` (the test fails while
+`DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs` (the test fails while
 docs/support.md is stale).
 
 ## Implementation guidelines
@@ -55,7 +55,7 @@ docs/support.md is stale).
   protocol and the `return 0` discipline the units lint enforces); Bash WASI conventions
   (status-133 proc_exit, byte-wise binary stdio) in [ADR-12](docs/adr/12-bash-wasi.md);
   the Bash softfloat (bit-pattern floats, the round_pack contract, the Rust-oracle test
-  in `crates/dewasmify-backend-bash/tests/softfloat.rs`) in
+  in `crates/dewasm-backend-bash/tests/softfloat.rs`) in
   [ADR-13](docs/adr/13-bash-softfloat-conventions.md); Ruby WASI filesystem support (the
   `preopens:` provider kwarg, the fd-table model, and the accepted TOCTOU/symlink sandboxing
   caveat) in [ADR-14](docs/adr/14-ruby-wasi-filesystem.md).
@@ -73,7 +73,7 @@ docs/support.md is stale).
 - Unsupported wasm features must fail at conversion time with a clear error, never at runtime
   ([ADR-0](docs/adr/0-foundation.md)). Non-function imports, multiple tables, and table bulk ops
   are accepted by the core IR unconditionally; a backend that hasn't implemented one must reject
-  it itself via `dewasmify_backend::check_module_support` ([ADR-16](docs/adr/16-ruby-wasm1-completion.md)),
+  it itself via `dewasm_backend::check_module_support` ([ADR-16](docs/adr/16-ruby-wasm1-completion.md)),
   which also covers the `Rt::Global` box, the import-kind check, and the spec harness's `register`
   support.
 

@@ -2,10 +2,10 @@
 
 Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
 
-Originally accepted 2026-07-24. Implemented: `crates/dewasmify-core/src/{ir,module,func}.rs`,
-`crates/dewasmify-backend/src/lib.rs`, `crates/dewasmify-backend-ruby/src/lib.rs`,
+Originally accepted 2026-07-24. Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`,
+`crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/table/*.rb`, and the spec harness's ref-valued arguments/results
-(`crates/dewasmify-cli/tests/spec/ruby.rs`).
+(`crates/dewasm-cli/tests/spec/ruby.rs`).
 
 ## Context
 
@@ -22,7 +22,7 @@ new construct at conversion time.
 
 - **A funcref value *is* the table slot: the `[type_symbol, callable]` pair** that element
   segments already built for `Rt::Table` (ADR-16). `ref.func` emits the same pair
-  (`Gen::func_pair`, `crates/dewasmify-backend-ruby/src/lib.rs`), so `ref.func` → `table.set` →
+  (`Gen::func_pair`, `crates/dewasm-backend-ruby/src/lib.rs`), so `ref.func` → `table.set` →
   `call_indirect` round-trips with no conversion anywhere. **Criterion: one representation per
   wasm value type, chosen so the most semantics-critical consumer (`call_indirect`'s structural
   type check, ADR-4) needs no adaptation.** The callable alone was rejected because the type
@@ -46,13 +46,13 @@ new construct at conversion time.
   which `Option<u32>` could not express. Ruby renders `Global(i)` as `@g{i}.value`.
 - **Gating: `check_module_support` grew a `ReferenceTypes` require backed by the first
   exhaustive `Expr` walk** (`module_uses_reference_types`,
-  `crates/dewasmify-backend/src/lib.rs`) — ref-typed values anywhere (signatures, globals,
+  `crates/dewasm-backend/src/lib.rs`) — ref-typed values anywhere (signatures, globals,
   locals, temps), externref tables (funcref tables are MVP and must *not* trigger it), and the
   new instructions. Like `stmts_use_table_bulk_ops`, both walks are exhaustive on purpose so a
   future `Stmt`/`Expr` variant is a compile error, not a silent mis-lowering. Bash's only
   change is `unreachable!` match arms.
 - **The harness expresses ref-valued directives in the same representation**
-  (`crates/dewasmify-cli/tests/spec/ruby.rs`): `(ref.extern n)` args/results are the Integer
+  (`crates/dewasm-cli/tests/spec/ruby.rs`): `(ref.extern n)` args/results are the Integer
   `n`, nulls are `nil`, `(ref.func)` results check for the pair shape. This had to land in the
   same change as the `Supported` flip — the harness's anti-regression check
   (`tests/spec/main.rs`) turns any leftover `reference-types`-tagged skip into a suite failure.

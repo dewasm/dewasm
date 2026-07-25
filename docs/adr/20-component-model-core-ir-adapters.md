@@ -3,8 +3,8 @@
 Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.** Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive. The original acceptance note and implementation pointers below are retained as history.
 
 Originally accepted 2026-07-24. Implemented for the Ruby backend:
-`crates/dewasmify-core/src/{component,canon}.rs`,
-`crates/dewasmify-backend-ruby/src/lib.rs` (`generate_component`), CLI auto-detection, and the
+`crates/dewasm-core/src/{component,canon}.rs`,
+`crates/dewasm-backend-ruby/src/lib.rs` (`generate_component`), CLI auto-detection, and the
 component e2e fixtures (`examples/wat/component_*.wat`). Remaining: a real
 `wasm32-wasip2`-binary e2e (its fetch/build sourcing is an open ADR-15 question) and the Bash
 side, which stays rejected.
@@ -23,7 +23,7 @@ wrapping the lifted `run` into an instance export, plus core-level import names 
 
 ## Decision
 
-- **The canonical ABI is compiled away in `dewasmify-core`, not interpreted per backend.**
+- **The canonical ABI is compiled away in `dewasm-core`, not interpreted per backend.**
   `component.rs` parses the binary into core modules (via the ordinary `build_module`), typed
   interface imports, an ordered instantiation plan, and lift/lower definitions; `canon.rs`
   synthesizes each adapter as a function of a **regular `ir::Module`** whose body does all

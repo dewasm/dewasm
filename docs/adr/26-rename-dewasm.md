@@ -1,9 +1,10 @@
 # ADR-26 — Rename the Project: dewasmify → dewasm
 
-Status: **Accepted, 2026-07-25.** Decision recorded; the mechanical
-rename (crate names, binary, env vars, docs) lands as a single
-behavior-free commit after the reset excision. Amends the naming note
-in [ADR-0](0-foundation.md).
+Status: **Accepted, 2026-07-25.** Landed 2026-07-26: crates are
+`dewasm-*`, the binary is `dewasm`, env vars are `DEWASM_*`, and docs
+are swept (superseded ADR bodies keep the historical name). The GitHub
+repository rename remains a manual step. Amends the naming note in
+[ADR-0](0-foundation.md).
 
 ## Context
 

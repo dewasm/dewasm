@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 This directory contains the Architecture Decision Records (ADRs) for
-dewasmify. Each document captures a significant design decision: its
+dewasm. Each document captures a significant design decision: its
 context, the decision with its rationale, the rejected alternatives, and
 the consequences.
 
@@ -47,7 +47,7 @@ the consequences.
 | ADR-23 | [Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-tiers.md) | Superseded (ADR-25) |
 | ADR-24 | [0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals](24-01-scope-reset.md) | Accepted |
 | ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted |
-| ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted (not yet implemented) |
+| ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted (not yet implemented) |
 
 ## Adding a new ADR

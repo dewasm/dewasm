@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-07-23.** Implemented for Ruby: the runtime lives
 in `runtime/ruby/units/` (118 units), the generic bundler in
-`crates/dewasmify-backend/src/lib.rs` (`RuntimeBundler`), and generated
+`crates/dewasm-backend/src/lib.rs` (`RuntimeBundler`), and generated
 code references the runtime via the relative name `Rt`. The external/gem
 linkage is designed for but not shipped.
 
@@ -32,13 +32,13 @@ Two orthogonal mechanisms:
   `Embedded` nests `module Rt` inside the generated class (self-contained
   file, `A::Rt` and `B::Rt` fully independent — naive multi-require is
   safe), `Alias(path)` emits one `Rt = <path>` line for a shared bundle
-  (the spec harness) or, later, a `dewasmify-runtime` gem dependency for
+  (the spec harness) or, later, a `dewasm-runtime` gem dependency for
   programs using many modules. Criterion: *the runtime's location must be
   a one-line concern of the generated code.* Ruby's lexical constant
   resolution makes the same unit source work in every placement.
 
 The declared-dependency drift risk (edit the code, forget the header) is
-mitigated twice: a lint test (`crates/dewasmify-backend-ruby/tests/units.rs`)
+mitigated twice: a lint test (`crates/dewasm-backend-ruby/tests/units.rs`)
 extracts `Rt.x` / `Rt::X` / `@memory.x` / bare sibling-call references
 from unit bodies and checks them against the header, and the spec harness
 runs its 19k assertions against minimal bundles, so an undeclared

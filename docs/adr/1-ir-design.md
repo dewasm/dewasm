@@ -1,7 +1,7 @@
 # ADR-1 — IR Design: Structured Control Flow + Stack-Slot Temps
 
 Status: **Accepted, 2026-07-23.** Backfilled; implemented in
-`crates/dewasmify-core/src/ir.rs` and `func.rs`. The expression-folding
+`crates/dewasm-core/src/ir.rs` and `func.rs`. The expression-folding
 readability pass remains future work.
 
 ## Context

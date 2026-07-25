@@ -1,9 +1,9 @@
 # ADR-16 — Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking
 
-Status: **Accepted, 2026-07-24.** Implemented: `crates/dewasmify-core/src/{ir,module,func}.rs`,
-`crates/dewasmify-backend/src/lib.rs`, `crates/dewasmify-backend-ruby/src/lib.rs`,
+Status: **Accepted, 2026-07-24.** Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`,
+`crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`,
 `runtime/ruby/units/{global,table,rt}/*.rb`, and the spec harness
-(`crates/dewasmify-cli/tests/spec/{main,ruby,bash}.rs`).
+(`crates/dewasm-cli/tests/spec/{main,ruby,bash}.rs`).
 
 ## Context
 
@@ -28,7 +28,7 @@ free (per-backend gating).
 - **Imports beyond functions reuse ADR-7's mechanism as-is.** `Rt.resolve_import(imports, mod,
   name)` already returns whatever object the embedder supplied; nothing about it was
   function-specific. Imported memory/table/global codegen calls it exactly like imported functions
-  do (`crates/dewasmify-backend-ruby/src/lib.rs`'s `resolve_import_string`), just assigning into
+  do (`crates/dewasm-backend-ruby/src/lib.rs`'s `resolve_import_string`), just assigning into
   `@memory`, `@t{N}`, or `@g{N}` instead of `@if{N}`.
 - **A present-but-wrong-*kind* import is now a link error.** `Rt.check_import_kind(value, kind,
   mod, name)` (`runtime/ruby/units/rt/check_import_kind.rb`) checks a resolved import before
@@ -38,7 +38,7 @@ free (per-backend gating).
   silently substitutes. **Accepted narrower gap:** only the *kind* is checked, not the full wasm
   type — function param/result types, global mutability, and table/memory min/max limits against
   the import site's declared bounds are not compared. This surfaces as the `import-limits`-tagged
-  entries in `crates/dewasmify-cli/tests/spec/ruby.rs`'s `EXPECTED_FAILURES`; implementing it fully
+  entries in `crates/dewasm-cli/tests/spec/ruby.rs`'s `EXPECTED_FAILURES`; implementing it fully
   would mean carrying `FuncType`/limit metadata into generated code purely for a check with no
   runtime-correctness payoff beyond `assert_unlinkable` conformance.
 - **Table index space is `imported_tables ++ tables`**, matching how functions already worked
@@ -58,19 +58,19 @@ free (per-backend gating).
   `table.get`/`set`/`grow`/`size`/`fill` stay rejected under `Feature::ReferenceTypes`: confirmed
   these were never part of wasm 1.0's MVP instruction set — they, table.get/set in particular,
   shipped later alongside reference types — so this is scope, not a partial implementation.
-- **A shared `check_module_support(backend, module)`** (`crates/dewasmify-backend/src/lib.rs`)
+- **A shared `check_module_support(backend, module)`** (`crates/dewasm-backend/src/lib.rs`)
   replaces the gating the core builder used to do unconditionally. Because the core IR is now
   backend-agnostic about all five constructs, each backend must refuse what it hasn't implemented
   itself, at conversion time (ADR-0's contract), with the same `UnsupportedError` attribution the
-  core used to produce. Called first thing in both `dewasmify-backend-ruby::generate_class_inner`
-  and `dewasmify-backend-bash::generate_module_inner` — this is the entire reason Bash's declared
+  core used to produce. Called first thing in both `dewasm-backend-ruby::generate_class_inner`
+  and `dewasm-backend-bash::generate_module_inner` — this is the entire reason Bash's declared
   support didn't have to move.
 - **Generated classes are their own ADR-7 import providers.** Every class gets a public
   `import(name)` (checks `@exports`, then `GLOBAL_EXPORTS`, `TABLE_EXPORTS`, `MEMORY_EXPORTS`) so
   one instance is directly usable as another's import source (`imports["M"] = other_instance`) —
   applying ADR-7 symmetrically, not a new mechanism. This is what let the spec harness implement
   the wast testsuite's `(register "Name" $id)` directive for real:
-  `crates/dewasmify-cli/tests/spec/main.rs`'s `ScriptGen` tracks registered-name → live instance,
+  `crates/dewasm-cli/tests/spec/main.rs`'s `ScriptGen` tracks registered-name → live instance,
   `convert()` takes the set of module names it may treat as import sources, and `assert_unlinkable`
   is checked for real (any raised error during instantiation counts — upstream's exact wording
   never matches ours) instead of always skipped. `SpecLang::supports_registered_imports()` gates
@@ -95,7 +95,7 @@ free (per-backend gating).
 - **Keep the core builder rejecting these constructs per-backend (a `Backend` parameter threaded
   into `build_module`)** — would leak backend concerns into the shared, backend-agnostic IR builder
   (ADR-0's "adding a language must not require touching the core"). A post-hoc gate in the shared
-  backend-trait crate keeps `dewasmify-core` untouched and gives every future backend the same
+  backend-trait crate keeps `dewasm-core` untouched and gives every future backend the same
   free gating Bash uses here.
 
 ## Consequences
@@ -106,7 +106,7 @@ free (per-backend gating).
   byte-identical to the pre-milestone baseline (pass=24,338, fail=23) — `check_module_support`
   contained the blast radius entirely.
 - Positive: the `import(name)` provider method is a real capability for any Ruby embedder linking
-  two dewasmify-generated classes by hand, not just the spec harness.
+  two dewasm-generated classes by hand, not just the spec harness.
 - Negative / carry-over: `import-limits` stays open debt until (if ever) function/global/table/
   memory type metadata is worth carrying at runtime purely for stricter unlinkable detection.
   Bash gaining any of these five features later is a separate, symmetric milestone — its own

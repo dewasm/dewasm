@@ -1,4 +1,4 @@
-# Testing dewasmify
+# Testing dewasm
 
 What `cargo test` actually needs, and what happens when it's missing.
 
@@ -16,24 +16,24 @@ message below is something this document explains how to fix.
   commands pick it up automatically.
 - **`git submodule update --init`**: fetches the wasm spec testsuite into
   `tests/spec/` (an upstream submodule — never edit it). Without this,
-  the spec harness (`cargo test -p dewasmify-cli --test spec`) fails
+  the spec harness (`cargo test -p dewasm-cli --test spec`) fails
   immediately.
 - **`ruby` on `PATH`**: needed by the spec harness and most of the `e2e`
   test (both the Ruby backend's own tests and, indirectly, anything
   comparing Ruby's output). No specific version is required.
-- **`bash` >= 5 on `PATH`, `$DEWASMIFY_BASH`, or a common Homebrew
+- **`bash` >= 5 on `PATH`, `$DEWASM_BASH`, or a common Homebrew
   install path**: needed by the Bash backend's spec/e2e/softfloat tests.
   macOS's system `/bin/bash` is 3.2 and does not qualify (no associative
   arrays / namerefs); install a newer one (e.g. `brew install bash`) and
   either put it on `PATH` ahead of the system one or point
-  `$DEWASMIFY_BASH` at it directly.
+  `$DEWASM_BASH` at it directly.
 
 Nothing else is required for `cargo test` to pass in full, **except** for
 the `apps` cases specifically — see below.
 
 ## The `apps` end-to-end cases
 
-`crates/dewasmify-cli/tests/e2e/apps.rs` converts real-world wasm
+`crates/dewasm-cli/tests/e2e/apps.rs` converts real-world wasm
 binaries (cowsay, quickjs-ng, SQLite) and checks the output against a
 golden reference. Two things distinguish it from the rest of the suite:
 
@@ -66,12 +66,12 @@ feature, and `#[ignore]`d when that feature is off, so a plain
 run it:
 
 ```console
-$ cargo test -p dewasmify-cli --test e2e --features wasmtime_test apps_golden_matches_wasmtime
+$ cargo test -p dewasm-cli --test e2e --features wasmtime_test apps_golden_matches_wasmtime
 ```
 
 This re-runs every `apps` case through a live `wasmtime run` and
 compares its output against the checked-in golden file (independent of
-whether dewasmify's own generated output also matches — the always-on
+whether dewasm's own generated output also matches — the always-on
 `apps_ruby`/`apps_bash` tests already cover that half). Run it whenever
 you doubt a golden file, or as part of regenerating one after bumping a
 pin in `examples/apps/fetch.sh`:
@@ -100,9 +100,9 @@ silently skipping (ADR-15).
 
 | Variable | Effect |
 | --- | --- |
-| `DEWASMIFY_BASH` | Path to a bash >= 5 interpreter, checked before `PATH`/Homebrew fallbacks. |
-| `DEWASMIFY_SPEC=i32,br` | Restrict the spec harness to specific `.wast` files (comma-separated stems). |
-| `DEWASMIFY_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash defaults to a curated subset for speed). |
-| `DEWASMIFY_APPS_ALL=1` | Run the `apps` cases marked `heavy` (QuickJS, SQLite) under Bash too; skipped there by default since bash's softfloat makes them slow (this is a deliberate perf-based opt-out, not a missing-environment one — see ADR-15's scope). |
+| `DEWASM_BASH` | Path to a bash >= 5 interpreter, checked before `PATH`/Homebrew fallbacks. |
+| `DEWASM_SPEC=i32,br` | Restrict the spec harness to specific `.wast` files (comma-separated stems). |
+| `DEWASM_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash defaults to a curated subset for speed). |
+| `DEWASM_APPS_ALL=1` | Run the `apps` cases marked `heavy` (QuickJS, SQLite) under Bash too; skipped there by default since bash's softfloat makes them slow (this is a deliberate perf-based opt-out, not a missing-environment one — see ADR-15's scope). |
 
 See `AGENTS.md`'s Common commands table for the exact invocations.

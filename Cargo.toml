@@ -9,10 +9,10 @@ license = "MIT"
 authors = ["TSUYUSATO Kitsune <make.just.on@gmail.com>"]
 
 [workspace.dependencies]
-dewasmify-core = { path = "crates/dewasmify-core" }
-dewasmify-backend = { path = "crates/dewasmify-backend" }
-dewasmify-backend-ruby = { path = "crates/dewasmify-backend-ruby" }
-dewasmify-backend-bash = { path = "crates/dewasmify-backend-bash" }
+dewasm-core = { path = "crates/dewasm-core" }
+dewasm-backend = { path = "crates/dewasm-backend" }
+dewasm-backend-ruby = { path = "crates/dewasm-backend-ruby" }
+dewasm-backend-bash = { path = "crates/dewasm-backend-bash" }
 anyhow = "1"
 wasmparser = "0.254"
 wat = "1"

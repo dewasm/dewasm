@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-07-23.** Implemented in `runtime/bash/units/wasi/`
 (the same 16-syscall surface as Ruby, plus the `write_string_list` helper)
-and the standalone emitter in `crates/dewasmify-backend-bash/src/lib.rs`.
+and the standalone emitter in `crates/dewasm-backend-bash/src/lib.rs`.
 Filesystem syscalls remain ENOSYS, as on Ruby.
 
 ## Context
@@ -60,7 +60,7 @@ per-module state prefix, but imports are bound as bare command names.
 
 - Positive: `hello.wat` runs standalone under bash with the same stdout
   and exit code as Ruby; the ADR-7 override/fallback semantics carry over
-  (`crates/dewasmify-cli/tests/e2e.rs`).
+  (`crates/dewasm-cli/tests/e2e.rs`).
 - Negative: byte-wise stdio is slow for large payloads; batching rides on
   ADR-11's bulk-memory scaling work when real apps (post-softfloat, ADR-5)
   demand it.

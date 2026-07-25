@@ -1,7 +1,7 @@
 # ADR-25 — Retire the Support-Tier Ladder for Plain Capability Declarations
 
 Status: **Accepted, 2026-07-25.** The removal of `Tier` and its
-derivation functions (`crates/dewasmify-backend/src/tier.rs`),
+derivation functions (`crates/dewasm-backend/src/tier.rs`),
 `Backend::target_tier`, and tier gating on the e2e case tables has
 landed; `docs/support.md` now renders a flat `## Features` table (the
 in-scope subset) plus the `## WASI preview 1` table. Supersedes

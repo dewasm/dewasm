@@ -1,7 +1,7 @@
 # ADR-22 — Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library
 
 Status: **Accepted, 2026-07-24.** Implemented: `examples/apps/fetch.sh` (amalgamation download
-+ two `zig cc` builds), `crates/dewasmify-cli/tests/e2e/apps.rs` (`sqlite3-shell` case,
++ two `zig cc` builds), `crates/dewasm-cli/tests/e2e/apps.rs` (`sqlite3-shell` case,
 `libsqlite3_c_api_ruby`), `examples/apps/golden/sqlite3_shell.stdout`.
 
 ## Context

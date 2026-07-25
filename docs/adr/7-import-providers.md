@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-07-23.** Implemented for Ruby: the provider
 protocol and resolution order in generated `initialize`
-(`crates/dewasmify-backend-ruby/src/lib.rs`), `Rt.resolve_import`
+(`crates/dewasm-backend-ruby/src/lib.rs`), `Rt.resolve_import`
 (`runtime/ruby/units/rt/resolve_import.rb`), and `Rt::WASI` implementing
 the protocol itself (`runtime/ruby/units/wasi/_class.rb`). Generalized to
 non-function imports and to generated classes implementing the protocol

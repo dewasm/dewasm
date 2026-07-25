@@ -1,7 +1,7 @@
 # Backend Support Matrix
 
 <!-- AUTO-GENERATED from the backend declarations; do not edit by hand.
-     Regenerate: DEWASMIFY_UPDATE_DOCS=1 cargo test -p dewasmify-cli --test support_docs -->
+     Regenerate: DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs -->
 
 The spec harness only tolerates test skips attributable to a feature that is
 not `Supported` here ([ADR-8](adr/8-latest-testsuite-support-matrix.md)); an

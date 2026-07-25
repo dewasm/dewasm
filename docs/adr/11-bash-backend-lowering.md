@@ -1,7 +1,7 @@
 # ADR-11 — Bash Backend Lowering Conventions (Integer Subset)
 
 Status: **Accepted, 2026-07-23.** Implemented in
-`crates/dewasmify-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers
+`crates/dewasm-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers
 the integer subset; WASI and standalone mode landed the same day under
 [ADR-12](12-bash-wasi.md), and the ADR-5 softfloat (conventions in
 [ADR-13](13-bash-softfloat-conventions.md)) later removed the float

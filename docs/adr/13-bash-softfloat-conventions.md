@@ -3,11 +3,11 @@
 Status: **Accepted, 2026-07-23.** Implements ADR-5. ~60 units under
 `runtime/bash/units/rt/` (round-pack cores, f64 arithmetic, pattern ops,
 conversions, f32 wrappers) plus the lowering tables in
-`crates/dewasmify-backend-bash/src/lib.rs`. `Feature::Floats` is flipped
+`crates/dewasm-backend-bash/src/lib.rs`. `Feature::Floats` is flipped
 to Supported; the full-testsuite sweep now matches the Ruby backend's
 totals exactly (pass 24,338 / the same five linking-attributed failure
 groups), and cowsay/QuickJS run standalone under bash
-(`crates/dewasmify-cli/tests/e2e/apps.rs`).
+(`crates/dewasm-cli/tests/e2e/apps.rs`).
 
 ## Context
 
@@ -52,7 +52,7 @@ results bit-exactly including NaN patterns (ADR-8/ADR-3).
   canonical/arithmetic NaN masks are satisfied by canonical always;
   abs/neg/copysign stay payload-preserving bit ops in the codegen.
 - **A Rust-oracle test harness is the development net**
-  (`crates/dewasmify-backend-bash/tests/softfloat.rs`): ~100k edge and
+  (`crates/dewasm-backend-bash/tests/softfloat.rs`): ~100k edge and
   seeded-random vectors per run, expected values from host IEEE-754
   adjusted to wasm semantics (wasm min/max, canonical NaNs, the Ruby
   trunc trap table). The spec harness remains the bar (ADR-3); the

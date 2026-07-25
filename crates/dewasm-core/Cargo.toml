@@ -1,0 +1,17 @@
+[package]
+name = "dewasm-core"
+description = "WebAssembly decoding, validation, and IR construction for dewasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+wasmparser.workspace = true
+
+[dev-dependencies]
+wat.workspace = true

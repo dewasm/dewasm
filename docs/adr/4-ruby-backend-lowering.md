@@ -1,7 +1,7 @@
 # ADR-4 — Ruby Backend Lowering Conventions
 
 Status: **Accepted, 2026-07-23.** Backfilled; implemented in
-`crates/dewasmify-backend-ruby/src/lib.rs` + `runtime/ruby/`. Numeric
+`crates/dewasm-backend-ruby/src/lib.rs` + `runtime/ruby/`. Numeric
 conventions are ADR-2's; this ADR covers control flow and object shape.
 
 ## Context

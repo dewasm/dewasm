@@ -1,7 +1,7 @@
 # ADR-24 — 0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals
 
 Status: **Accepted, 2026-07-25.** The feature-audit tool
-(`crates/dewasmify-core/src/bin/feature-audit.rs`) and the excision have
+(`crates/dewasm-core/src/bin/feature-audit.rs`) and the excision have
 landed: reference types, tail calls, exception handling, the component
 model, and WASI preview 2 are removed from the IR, backends, runtime
 units, harness, and docs, and their inputs are rejected at conversion time
@@ -44,7 +44,7 @@ immediates as overlong LEBs when the reference-types *target feature*
 is on (their default), so real wasip1 binaries — including the already
 shipping qjs and sqlite3 — only validate with the reference-types
 feature bit enabled. The bit therefore stays on in
-`dewasmify-core::module::features()` as a pure **encoding relaxation**;
+`dewasm-core::module::features()` as a pure **encoding relaxation**;
 every actual reference-types construct (externref, table instructions,
 `ref.*`, non-zero table indices) is rejected during IR building with
 the usual attributed error.

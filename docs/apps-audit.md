@@ -3,7 +3,7 @@
 The ADR-24 gate: before an app binary becomes a conversion target, run
 
 ```sh
-cargo run -p dewasmify-core --bin feature-audit -- examples/apps/cache/*.wasm
+cargo run -p dewasm-core --bin feature-audit -- examples/apps/cache/*.wasm
 ```
 
 and record the verdict here. An app that needs a proposal outside the 0.1

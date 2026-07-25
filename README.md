@@ -1,12 +1,12 @@
-# dewasmify
+# dewasm
 
-dewasmify translates WebAssembly binaries into **source code** of various
+dewasm translates WebAssembly binaries into **source code** of various
 programming languages. The generated code embeds a lightweight runtime and
 needs no wasm runtime at all — a program compiled from C/C++/Rust to wasm
 can run anywhere the target language runs.
 
 Unlike existing single-target translators (wasm2c, w2c2, wasm2go, unwasm,
-wasm2lua, ...), dewasmify is built around one shared IR with pluggable
+wasm2lua, ...), dewasm is built around one shared IR with pluggable
 language backends — see [docs/related-work.md](docs/related-work.md) for
 the full comparison with prior art (including bytecode compilers like
 asmble and wasm2cil) and what is new here.
@@ -46,14 +46,14 @@ there ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
 ## Usage
 
 ```console
-$ cargo run -p dewasmify-cli -- input.wasm --target ruby --mode standalone -o out.rb
+$ cargo run -p dewasm-cli -- input.wasm --target ruby --mode standalone -o out.rb
 $ ruby out.rb            # runs _start with WASI wired up
 ```
 
 Library mode exposes the module as a class instead:
 
 ```console
-$ cargo run -p dewasmify-cli -- add.wat -o add.rb   # .wat input also accepted
+$ cargo run -p dewasm-cli -- add.wat -o add.rb   # .wat input also accepted
 ```
 
 ```ruby
@@ -83,12 +83,12 @@ inst.invoke("_start")           # proc_exit raises Prog::Rt::Exit — rescue it
 
 Real-world binaries work too: [`examples/apps/`](examples/apps/) fetches
 prebuilt apps from each app's own upstream (never committed here,
-ADR-9) — including QuickJS, a complete JavaScript engine that dewasmify
+ADR-9) — including QuickJS, a complete JavaScript engine that dewasm
 turns into a single Ruby file:
 
 ```console
 $ examples/apps/fetch.sh
-$ cargo run -q -p dewasmify-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
+$ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
 $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42
 ```
@@ -98,7 +98,7 @@ wasmtime, and QuickJS works too (slowly; every float operation is
 softfloat integer arithmetic):
 
 ```console
-$ cargo run -q -p dewasmify-cli -- examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
+$ cargo run -q -p dewasm-cli -- examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
 $ echo "Hello from Bash" | bash cowsay.sh
  _________________
 < Hello from Bash >
@@ -116,7 +116,7 @@ to wasmtime:
 
 ```console
 $ rustc --target wasm32-wasip1 -O main.rs -o demo.wasm
-$ cargo run -p dewasmify-cli -- demo.wasm --mode standalone -o demo.rb
+$ cargo run -p dewasm-cli -- demo.wasm --mode standalone -o demo.rb
 $ ruby demo.rb foo bar
 Hello from Rust compiled to wasm!
 args: ["foo", "bar"]
@@ -124,11 +124,11 @@ args: ["foo", "bar"]
 
 ## How it works
 
-- `crates/dewasmify-core` decodes and validates the binary (wasmparser) and
+- `crates/dewasm-core` decodes and validates the binary (wasmparser) and
   builds a structured IR: wasm's control flow (block/loop/if/br) is kept
   as-is — no relooper needed — and the value stack is flattened into
   variables per (depth, type) slot, wasm2c-style.
-- `crates/dewasmify-backend-*` lower the IR per language. For Ruby:
+- `crates/dewasm-backend-*` lower the IR per language. For Ruby:
   - i32/i64 are masked unsigned Integers; signed views only where needed
   - f32 results are re-rounded to single precision; NaN bit patterns are
     preserved with software bit conversions where MRI's `pack` would
@@ -151,7 +151,7 @@ per-backend lowering conventions each have their own ADR.
 
 ## Testing
 
-The spec harness (`crates/dewasmify-cli/tests/spec/`) parses the official
+The spec harness (`crates/dewasm-cli/tests/spec/`) parses the official
 testsuite's `.wast` files, converts every module with a backend, and
 generates a script in that language that runs all assertions on the real
 interpreter (`ruby`, `bash`); the per-language pieces plug into a shared
@@ -159,7 +159,7 @@ interpreter (`ruby`, `bash`); the per-language pieces plug into a shared
 
 ```console
 $ git submodule update --init   # fetches tests/spec (WebAssembly/testsuite)
-$ cargo test -p dewasmify-cli --test spec -- --nocapture
+$ cargo test -p dewasm-cli --test spec -- --nocapture
 ...
 TOTAL: pass=24338 fail=23 skip=33448 (rust: invalid-ok=4652 invalid-bad=0)
 unsupported (declared, ADR-8):
@@ -188,8 +188,8 @@ this harness pass for it — the policy is
 5. Java / C# backends (one design, two emitters — ADR-10)
 6. Go backend
 7. Python / PHP backends
-8. Readability pass (expression folding), self-hosting demo (dewasmify →
-   wasm → Ruby → run dewasmify on Ruby)
+8. Readability pass (expression folding), self-hosting demo (dewasm →
+   wasm → Ruby → run dewasm on Ruby)
 
 North-star demos we are steering toward: a library-mode SQLite as a
 pure-Ruby `sqlite3` driver (Ruby on Rails running on a dewasmified

@@ -29,7 +29,7 @@ speculative target or make Tier 1 a moving one.
 ## Decision
 
 **The tier ladder covers wasm 1.0 + WASI p1 only**, best-first
-(`Tier::ALL`, `crates/dewasmify-backend/src/tier.rs`):
+(`Tier::ALL`, `crates/dewasm-backend/src/tier.rs`):
 
 - **Tier 1 (Full)** — wasm 1.0 handled completely (imported
   globals/memories/tables + floats all `Supported`) and WASI p1 handled

@@ -43,7 +43,8 @@ environment.
   hardware-specific binary at all); Ruby went first to validate the
   pipeline (implemented). JavaScript is deliberately absent.
 - **Name: `dewasmify`** — the tool strips ("de-") the wasm out of a
-  program. Crate, CLI, and repository share the name.
+  program. Crate, CLI, and repository share the name. *Amended by
+  [ADR-26](26-rename-dewasm.md) (2026-07-25): renamed to `dewasm`.*
 
 ## Rejected alternatives
 

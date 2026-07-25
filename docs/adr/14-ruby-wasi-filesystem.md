@@ -5,7 +5,7 @@ Status: **Accepted, 2026-07-23.** Implemented in `runtime/ruby/units/wasi/`
 `path_filestat_get`, `fd_readdir`, `path_create_directory`,
 `path_remove_directory`, `path_unlink_file`, `path_rename`, `fd_sync`,
 `fd_datasync`, `fd_filestat_set_size`, `fd_prestat_dir_name`) and the
-`preopens:` provider kwarg in `crates/dewasmify-backend-ruby/src/lib.rs`.
+`preopens:` provider kwarg in `crates/dewasm-backend-ruby/src/lib.rs`.
 Symlink and rights-narrowing syscalls remain ENOSYS.
 
 ## Context
@@ -29,7 +29,7 @@ acceptable even in a demo runtime.
   `initialize` gained `preopens: {}` alongside them, so the fallback
   construction stays `@wasi ||= Rt::WASI.new(args:, env:, preopens:)`
   with no change to the provider protocol itself. Standalone mode reads
-  a `DEWASMIFY_PREOPEN` env var (`guest=host,...`) into the same kwarg,
+  a `DEWASM_PREOPEN` env var (`guest=host,...`) into the same kwarg,
   kept separate from `ARGV` because `ARGV` already mirrors the guest's
   own argv one-to-one.
 - **One fd table, two kinds of entry.** `@fds` keeps mapping fd → Ruby

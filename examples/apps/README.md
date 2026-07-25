@@ -7,7 +7,7 @@ upstream, for demos and end-to-end tests.
 `./fetch.sh` downloads version-pinned, sha256-verified files into
 `cache/` (gitignored); licensing of the binaries stays entirely with
 their upstream distribution. The `apps` cases of the `e2e` test
-(`crates/dewasmify-cli/tests/e2e/apps.rs`) convert each cached app and
+(`crates/dewasm-cli/tests/e2e/apps.rs`) convert each cached app and
 compare its output against the golden files in `golden/` (captured once
 from wasmtime; re-validated via `--features wasmtime_test`). A missing
 cache or `ruby` fails the test loudly rather than skipping (ADR-15) —
@@ -21,7 +21,7 @@ run `./fetch.sh` first.
 
 ```console
 $ ./fetch.sh
-$ cargo run -q -p dewasmify-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
+$ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
 $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42
 ```
