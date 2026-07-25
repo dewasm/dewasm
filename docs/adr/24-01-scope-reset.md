@@ -33,6 +33,17 @@ frozen: IR variants, lowering, feature gates, runtime units, harness
 support, and docs rows all go. Unsupported input keeps failing at
 conversion time with a clear error (ADR-0).
 
+One validator-level nuance, found by the app audit
+(`docs/apps-audit.md`): LLVM-based toolchains encode `call_indirect`
+immediates as overlong LEBs when the reference-types *target feature*
+is on (their default), so real wasip1 binaries — including the already
+shipping qjs and sqlite3 — only validate with the reference-types
+feature bit enabled. The bit therefore stays on in
+`dewasmify-core::module::features()` as a pure **encoding relaxation**;
+every actual reference-types construct (externref, table instructions,
+`ref.*`, non-zero table indices) is rejected during IR building with
+the usual attributed error.
+
 The discriminating criterion: **a feature stays only if a pinned target
 app needs it or every 0.1 backend is expected to implement it.** Code
 kept "just in case" is code paid for in every exhaustive match, every
