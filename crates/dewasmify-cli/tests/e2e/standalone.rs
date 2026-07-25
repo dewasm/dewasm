@@ -2,15 +2,15 @@
 //! (`examples/wat/`): the compiled program *is* the runnable artifact,
 //! so no host-language glue is needed at all and one data table
 //! (`STANDALONE_CASES`) is exercised by both languages, checked against
-//! fixed expected output.
+//! fixed expected output. Every case here only needs Tier 3 (WASI core,
+//! ADR-23); a case requiring more would be skipped for a backend that
+//! hasn't reached it.
 
-use std::process::Output;
+use dewasmify_backend::{Mode, Tier};
 
-use dewasmify_backend::{Backend, Mode};
-use dewasmify_backend_bash::{find_bash5, BashBackend};
-use dewasmify_backend_ruby::RubyBackend;
-
-use crate::support::{convert, examples_dir, run_bash, run_ruby_capture};
+use crate::support::{
+    convert, examples_dir, print_tier_skip, run_lang, tier_ok, BashLang, E2eLang, RubyLang,
+};
 
 struct StandaloneCase {
     name: &'static str,
@@ -18,6 +18,7 @@ struct StandaloneCase {
     args: &'static [&'static str],
     expect_stdout: &'static str,
     expect_code: i32,
+    tier: Tier,
 }
 
 const STANDALONE_CASES: &[StandaloneCase] = &[
@@ -27,6 +28,7 @@ const STANDALONE_CASES: &[StandaloneCase] = &[
         args: &[],
         expect_stdout: "Hello, WASI!\n",
         expect_code: 0,
+        tier: Tier::Tier3,
     },
     // argc (program name + arguments) becomes the exit code via
     // args_sizes_get + proc_exit.
@@ -36,21 +38,22 @@ const STANDALONE_CASES: &[StandaloneCase] = &[
         args: &["foo", "bar"],
         expect_stdout: "",
         expect_code: 3,
+        tier: Tier::Tier3,
     },
 ];
 
-fn check_standalone_case(
-    backend: &dyn Backend,
-    case: &StandaloneCase,
-    run: impl Fn(&str, &[&str]) -> Output,
-) {
+fn check_standalone_case(lang: &dyn E2eLang, case: &StandaloneCase) {
+    if !tier_ok(lang, case.tier) {
+        print_tier_skip(case.name, lang, case.tier);
+        return;
+    }
     let code = convert(
-        backend,
+        lang.backend(),
         &examples_dir().join(case.wat),
         Mode::Standalone,
         case.name,
     );
-    let output = run(&code, case.args);
+    let output = run_lang(lang, &code, case.args, "");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         case.expect_stdout,
@@ -68,14 +71,13 @@ fn check_standalone_case(
 #[test]
 fn standalone_cases_ruby() {
     for case in STANDALONE_CASES {
-        check_standalone_case(&RubyBackend, case, run_ruby_capture);
+        check_standalone_case(&RubyLang, case);
     }
 }
 
 #[test]
 fn standalone_cases_bash() {
-    let bash = find_bash5().expect("bash >= 5 not found — see docs/testing.md");
     for case in STANDALONE_CASES {
-        check_standalone_case(&BashBackend, case, |code, args| run_bash(&bash, code, args));
+        check_standalone_case(&BashLang, case);
     }
 }

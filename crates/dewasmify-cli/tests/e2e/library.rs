@@ -6,7 +6,10 @@
 //! than a language-specific diagnostic), so one table (`LIBRARY_CASES`)
 //! can still pin one `expect` per scenario instead of one per language
 //! that could quietly drift apart. Adding a scenario is one row instead
-//! of two hand-rolled `#[test]` functions.
+//! of two hand-rolled `#[test]` functions; a case's `glues` list names
+//! which languages run it, so a language missing a glue entry for a case
+//! its tier requires fails loudly instead of silently not being tested
+//! (ADR-23).
 //!
 //! Scenarios with no counterpart in the other language live in `ruby`
 //! instead (Bash has no object-provider model and no WASI filesystem
@@ -14,18 +17,22 @@
 
 use std::path::Path;
 
-use dewasmify_backend::Mode;
+use dewasmify_backend::{Mode, Tier};
 use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::RubyBackend;
 
-use crate::support::{convert, examples_dir, run_bash, run_ruby};
+use crate::support::{
+    convert, examples_dir, print_tier_skip, run_bash, run_ruby, tier_ok, BashLang, RubyLang,
+};
 
 struct LibraryCase {
     name: &'static str,
     wat: &'static str,
     module_name: &'static str,
-    ruby_glue: &'static str,
-    bash_glue: &'static str,
+    tier: Tier,
+    /// (language name, glue source) pairs; `glue_for` panics if a
+    /// language whose tier covers this case has no entry here.
+    glues: &'static [(&'static str, &'static str)],
     /// Both sides are engineered to produce this same string — the glue
     /// captures and prints the actual bytes the wasm module wrote,
     /// rather than a language-specific diagnostic, so there is exactly
@@ -34,20 +41,37 @@ struct LibraryCase {
     expect: &'static str,
 }
 
+fn glue_for(case: &LibraryCase, lang: &str) -> &'static str {
+    case.glues
+        .iter()
+        .find(|(l, _)| *l == lang)
+        .unwrap_or_else(|| panic!("{}: no glue for {lang}", case.name))
+        .1
+}
+
 const LIBRARY_CASES: &[LibraryCase] = &[
     LibraryCase {
         name: "add",
         wat: "add.wat",
         module_name: "add",
-        ruby_glue: "inst = Add.new\n\
-                    print inst.invoke(\"add\", 2, 3), \"\\n\"\n\
-                    print inst.invoke(\"add\", 0xffffffff, 1), \"\\n\"\n\
-                    print inst.invoke(\"fib\", 10), \"\\n\"",
-        // ADR-11: results come back through the global R0.
-        bash_glue: "add_init || exit 1\n\
-                    add_invoke add 2 3; echo $R0\n\
-                    add_invoke add 4294967295 1; echo $R0\n\
-                    add_invoke fib 10; echo $R0\n",
+        tier: Tier::Tier3,
+        glues: &[
+            (
+                "ruby",
+                "inst = Add.new\n\
+                 print inst.invoke(\"add\", 2, 3), \"\\n\"\n\
+                 print inst.invoke(\"add\", 0xffffffff, 1), \"\\n\"\n\
+                 print inst.invoke(\"fib\", 10), \"\\n\"",
+            ),
+            // ADR-11: results come back through the global R0.
+            (
+                "bash",
+                "add_init || exit 1\n\
+                 add_invoke add 2 3; echo $R0\n\
+                 add_invoke add 4294967295 1; echo $R0\n\
+                 add_invoke fib 10; echo $R0\n",
+            ),
+        ],
         expect: "5\n0\n55\n",
     },
     // The ADR-7 override/fallback semantics: an explicit import wins,
@@ -55,13 +79,15 @@ const LIBRARY_CASES: &[LibraryCase] = &[
     // intercept fd_write and print the actual bytes the module wrote
     // (rather than a fd/len diagnostic) — that's the one observable
     // both languages can produce identically, so there's a single
-    // `expect` instead of a per-language one.
+    // `expect` instead of a per-language one. Both sides only touch
+    // fd_write/random_get (Tier 3 WASI), so the override *mechanism*
+    // itself doesn't need anything beyond Tier 3.
     LibraryCase {
         name: "wasi_import_override",
         wat: "wasi_imports.wat",
         module_name: "prog",
-        ruby_glue: RUBY_OVERRIDE_GLUE,
-        bash_glue: BASH_OVERRIDE_GLUE,
+        tier: Tier::Tier3,
+        glues: &[("ruby", RUBY_OVERRIDE_GLUE), ("bash", BASH_OVERRIDE_GLUE)],
         expect: "ok\n",
     },
 ];
@@ -110,24 +136,32 @@ prog_invoke '_start'
 "#;
 
 fn check_library_case_ruby(case: &LibraryCase) {
+    if !tier_ok(&RubyLang, case.tier) {
+        print_tier_skip(case.name, &RubyLang, case.tier);
+        return;
+    }
     let code = convert(
         &RubyBackend,
         &examples_dir().join(case.wat),
         Mode::Library,
         case.module_name,
     );
-    let out = run_ruby(&format!("{code}\n{}", case.ruby_glue), &[]);
+    let out = run_ruby(&format!("{code}\n{}", glue_for(case, "ruby")), &[]);
     assert_eq!(out, case.expect, "{}: ruby stdout", case.name);
 }
 
 fn check_library_case_bash(bash: &Path, case: &LibraryCase) {
+    if !tier_ok(&BashLang, case.tier) {
+        print_tier_skip(case.name, &BashLang, case.tier);
+        return;
+    }
     let code = convert(
         &BashBackend,
         &examples_dir().join(case.wat),
         Mode::Library,
         case.module_name,
     );
-    let output = run_bash(bash, &format!("{code}\n{}", case.bash_glue), &[]);
+    let output = run_bash(bash, &format!("{code}\n{}", glue_for(case, "bash")), &[]);
     assert!(
         output.status.success(),
         "{}: bash failed: {}\n{}",

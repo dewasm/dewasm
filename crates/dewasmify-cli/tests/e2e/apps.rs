@@ -19,7 +19,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use dewasmify_backend::{Backend, Mode};
+use dewasmify_backend::{achieved_tier, Backend, Mode, Tier};
 use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::{find_ruby, RubyBackend};
 
@@ -36,6 +36,11 @@ struct AppCase {
     /// Too slow for the gate on slow interpreters (bash); opt in with
     /// `DEWASMIFY_APPS_ALL=1`.
     heavy: bool,
+    /// The tier this scenario needs (ADR-23) — all four below only
+    /// exercise WASI core (stdio/args/env/clock/random), verified by
+    /// each passing under bash (Tier 3) today, even sqlite3-shell (no
+    /// db-file argument, so no filesystem syscalls).
+    tier: Tier,
 }
 
 const CASES: &[AppCase] = &[
@@ -46,6 +51,7 @@ const CASES: &[AppCase] = &[
         expect_stdout: include_str!("../../../../examples/apps/golden/cowsay_args.stdout"),
         expect_code: 0,
         heavy: false,
+        tier: Tier::Tier3,
     },
     AppCase {
         name: "cowsay",
@@ -54,6 +60,7 @@ const CASES: &[AppCase] = &[
         expect_stdout: include_str!("../../../../examples/apps/golden/cowsay_stdin.stdout"),
         expect_code: 0,
         heavy: false,
+        tier: Tier::Tier3,
     },
     AppCase {
         name: "qjs",
@@ -65,6 +72,7 @@ const CASES: &[AppCase] = &[
         expect_stdout: include_str!("../../../../examples/apps/golden/qjs.stdout"),
         expect_code: 0,
         heavy: true,
+        tier: Tier::Tier3,
     },
     AppCase {
         name: "sqlite3-shell",
@@ -76,6 +84,7 @@ const CASES: &[AppCase] = &[
         expect_stdout: include_str!("../../../../examples/apps/golden/sqlite3_shell.stdout"),
         expect_code: 0,
         heavy: true,
+        tier: Tier::Tier3,
     },
 ];
 
@@ -109,6 +118,18 @@ fn run_cases(backend: &(dyn Backend + Sync), interpreter: &Path, run_heavy: bool
                 case.name,
                 case.args,
                 backend.name()
+            );
+            continue;
+        }
+        if achieved_tier(backend) > case.tier {
+            println!(
+                "{} {:?}: skipped for {} (requires {}, {} is at {})",
+                case.name,
+                case.args,
+                backend.name(),
+                case.tier,
+                backend.name(),
+                achieved_tier(backend)
             );
             continue;
         }

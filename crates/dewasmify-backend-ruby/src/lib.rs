@@ -467,6 +467,17 @@ impl Backend for RubyBackend {
         "rb"
     }
 
+    // The flagship backend aims for Tier 1 (ADR-23); what remains is the
+    // Tier-1 WASI p1 surface and clearing the import-limits ledger
+    // (ADR-16), which is why `wasm10_ledger_clean` stays at the default.
+    fn target_tier(&self) -> dewasmify_backend::Tier {
+        dewasmify_backend::Tier::Tier1
+    }
+
+    fn has_wasi_p1(&self, name: &str) -> bool {
+        bundler().has_unit(&format!("wasi/{name}"))
+    }
+
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
             // Part of the wasm 1.0 baseline for Ruby; the row exists for

@@ -7,6 +7,10 @@ use anyhow::{bail, Result};
 use dewasmify_core::feature::{Feature, UnsupportedError};
 use dewasmify_core::ir;
 
+pub mod tier;
+
+pub use tier::{achieved_tier, feature_tier, is_extension, tier_gaps, Tier};
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SupportStatus {
     Supported,
@@ -72,6 +76,29 @@ pub trait Backend {
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
+    }
+
+    /// The support tier this backend aims for (ADR-23). The default is
+    /// the standard goal for new backends; `tier::achieved_tier` derives
+    /// where the backend currently stands.
+    fn target_tier(&self) -> Tier {
+        Tier::Tier2
+    }
+
+    /// Whether the backend bundles a WASI preview 1 runtime unit for
+    /// `name` (e.g. `"fd_write"`). Feeds the tier derivation and the
+    /// generated support docs.
+    fn has_wasi_p1(&self, name: &str) -> bool {
+        let _ = name;
+        false
+    }
+
+    /// Whether the backend's spec EXPECTED_FAILURES ledger holds no
+    /// wasm-1.0-attributable entries. Tier 1 requires this; the ledger
+    /// lives in the harness crate, so the backend states it explicitly
+    /// (ADR-23).
+    fn wasm10_ledger_clean(&self) -> bool {
+        false
     }
 }
 
@@ -417,54 +444,57 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
 
 /// The full WASI preview 1 surface, for the generated support docs; which
 /// of these a backend implements is derived from its runtime units
-/// (`bundler().has_unit("wasi/<name>")`).
-pub const WASI_PREVIEW1_FUNCTIONS: &[&str] = &[
-    "args_get",
-    "args_sizes_get",
-    "environ_get",
-    "environ_sizes_get",
-    "clock_res_get",
-    "clock_time_get",
-    "fd_advise",
-    "fd_allocate",
-    "fd_close",
-    "fd_datasync",
-    "fd_fdstat_get",
-    "fd_fdstat_set_flags",
-    "fd_fdstat_set_rights",
-    "fd_filestat_get",
-    "fd_filestat_set_size",
-    "fd_filestat_set_times",
-    "fd_pread",
-    "fd_prestat_get",
-    "fd_prestat_dir_name",
-    "fd_pwrite",
-    "fd_read",
-    "fd_readdir",
-    "fd_renumber",
-    "fd_seek",
-    "fd_sync",
-    "fd_tell",
-    "fd_write",
-    "path_create_directory",
-    "path_filestat_get",
-    "path_filestat_set_times",
-    "path_link",
-    "path_open",
-    "path_readlink",
-    "path_remove_directory",
-    "path_rename",
-    "path_symlink",
-    "path_unlink_file",
-    "poll_oneoff",
-    "proc_exit",
-    "proc_raise",
-    "random_get",
-    "sched_yield",
-    "sock_accept",
-    "sock_recv",
-    "sock_send",
-    "sock_shutdown",
+/// (`bundler().has_unit("wasi/<name>")`). The tier is the one whose
+/// requirements include the unit (ADR-23); `None` marks the out-of-scope
+/// surface (sockets, `proc_raise`) that no toolchain output exercises and
+/// even wasmtime leaves unimplemented.
+pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, Option<Tier>)] = &[
+    ("args_get", Some(Tier::Tier3)),
+    ("args_sizes_get", Some(Tier::Tier3)),
+    ("environ_get", Some(Tier::Tier3)),
+    ("environ_sizes_get", Some(Tier::Tier3)),
+    ("clock_res_get", Some(Tier::Tier3)),
+    ("clock_time_get", Some(Tier::Tier3)),
+    ("fd_advise", Some(Tier::Tier1)),
+    ("fd_allocate", Some(Tier::Tier1)),
+    ("fd_close", Some(Tier::Tier3)),
+    ("fd_datasync", Some(Tier::Tier2)),
+    ("fd_fdstat_get", Some(Tier::Tier3)),
+    ("fd_fdstat_set_flags", Some(Tier::Tier1)),
+    ("fd_fdstat_set_rights", Some(Tier::Tier1)),
+    ("fd_filestat_get", Some(Tier::Tier2)),
+    ("fd_filestat_set_size", Some(Tier::Tier2)),
+    ("fd_filestat_set_times", Some(Tier::Tier1)),
+    ("fd_pread", Some(Tier::Tier2)),
+    ("fd_prestat_get", Some(Tier::Tier3)),
+    ("fd_prestat_dir_name", Some(Tier::Tier2)),
+    ("fd_pwrite", Some(Tier::Tier2)),
+    ("fd_read", Some(Tier::Tier3)),
+    ("fd_readdir", Some(Tier::Tier2)),
+    ("fd_renumber", Some(Tier::Tier1)),
+    ("fd_seek", Some(Tier::Tier3)),
+    ("fd_sync", Some(Tier::Tier2)),
+    ("fd_tell", Some(Tier::Tier3)),
+    ("fd_write", Some(Tier::Tier3)),
+    ("path_create_directory", Some(Tier::Tier2)),
+    ("path_filestat_get", Some(Tier::Tier2)),
+    ("path_filestat_set_times", Some(Tier::Tier1)),
+    ("path_link", Some(Tier::Tier1)),
+    ("path_open", Some(Tier::Tier2)),
+    ("path_readlink", Some(Tier::Tier1)),
+    ("path_remove_directory", Some(Tier::Tier2)),
+    ("path_rename", Some(Tier::Tier2)),
+    ("path_symlink", Some(Tier::Tier1)),
+    ("path_unlink_file", Some(Tier::Tier2)),
+    ("poll_oneoff", Some(Tier::Tier1)),
+    ("proc_exit", Some(Tier::Tier3)),
+    ("proc_raise", None),
+    ("random_get", Some(Tier::Tier3)),
+    ("sched_yield", Some(Tier::Tier3)),
+    ("sock_accept", None),
+    ("sock_recv", None),
+    ("sock_send", None),
+    ("sock_shutdown", None),
 ];
 
 /// One runtime unit: a single method (or an inseparable scope prelude),
