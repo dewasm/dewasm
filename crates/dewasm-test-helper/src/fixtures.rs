@@ -17,6 +17,27 @@ pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }
 
+/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures
+/// (the QuickJS `.js` scripts the Phase 5a filesystem app cases run).
+pub fn apps_fixtures_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")
+}
+
+/// `examples/apps/golden/`, the checked-in golden outputs captured from
+/// `wasmtime` (ADR-15).
+pub fn apps_golden_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/golden")
+}
+
+/// A fresh, empty scratch directory under the temp dir keyed by `name`, so
+/// cases running in parallel never share host state.
+pub fn fresh_scratch_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("dewasm-app-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 /// Convert raw wasm bytes with `backend`.
 pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str) -> String {
     let module = dewasm_core::build_module(bytes).expect("build IR");

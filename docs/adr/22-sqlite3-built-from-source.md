@@ -2,7 +2,12 @@
 
 Status: **Accepted, 2026-07-24.** Implemented: `examples/apps/fetch.sh` (amalgamation download
 + two `zig cc` builds), `crates/dewasm-test-helper/src/apps.rs` (`sqlite3-shell` case,
-`libsqlite3_c_api_ruby`), `examples/apps/golden/sqlite3_shell.stdout`.
+`libsqlite3_c_api_ruby`), `examples/apps/golden/sqlite3_shell.stdout`. Extended (Phase 5a,
+2026-07-26) with a third `zig cc` build, `sqlite3-binding.wasm`, compiled from the same pinned
+source plus our own `examples/apps/src/sqlite3_binding.c` (an exported `run_query` that calls
+`sqlite3_exec` with a C callback forwarding each row to an imported `env.host_row`), which
+exercises the guest→host `sqlite3_exec` function-pointer callback the two original artifacts
+left untested — driven from Ruby's `sqlite3_callback_binding_ruby`.
 
 ## Context
 
@@ -51,8 +56,9 @@ program behavior, which the pinned source fixes.
   (e.g. `SQLITE_OMIT_LOAD_EXTENSION`, future VFS experiments).
 - Negative / carry-over: one more tool in `fetch.sh`'s requirements; the golden for the shell
   changed shape (batch-mode output — the 3.26 wasmer build printed interactive prompts).
-  `sqlite3_exec`-style function-pointer callbacks remain unexercised (the prepare/step flow
-  avoids them; funcref-table wiring exists if a shim needs them).
+  `sqlite3_exec`-style function-pointer callbacks were unexercised by the two original
+  artifacts (the prepare/step flow avoids them); the Phase 5a `sqlite3-binding.wasm` artifact
+  now covers exactly that guest→host callback path.
 
 See also: [ADR-9](9-example-apps-from-registry.md) (the fetch policy this extends),
 [ADR-15](15-tests-fail-not-skip.md) (fail-loud tooling), [ADR-16](16-ruby-wasm1-completion.md)

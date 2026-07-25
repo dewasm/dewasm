@@ -54,12 +54,16 @@ done
 
 # --- sqlite3: built from the pinned amalgamation source with zig (ADR-22).
 #
-# One pinned source release yields two artifacts:
-#   cache/sqlite3-shell.wasm — the CLI shell (standalone: _start, stdio)
-#   cache/libsqlite3.wasm    — a reactor library exporting the sqlite3 C
-#                              API, driven from Ruby in the apps e2e
+# One pinned source release yields three artifacts:
+#   cache/sqlite3-shell.wasm   — the CLI shell (standalone: _start, stdio)
+#   cache/libsqlite3.wasm      — a reactor library exporting the sqlite3 C
+#                                API, driven from Ruby in the apps e2e
+#   cache/sqlite3-binding.wasm — the same reactor library plus our own
+#                                src/sqlite3_binding.c (run_query), which
+#                                calls back into an imported env.host_row:
+#                                a guest->host callback round-trip proof
 # No upstream distributes a C-API-exporting wasm32-wasi build, which is
-# why this one is compiled locally rather than downloaded.
+# why these are compiled locally rather than downloaded.
 SQLITE_URL="https://sqlite.org/2026/sqlite-amalgamation-3530300.zip"
 SQLITE_SHA256="646421e12aac110282ef8cc68f1a62d4bb15fc7b8f09da0b53e29ee690500431"
 SQLITE_DIR="sqlite-amalgamation-3530300"
@@ -78,6 +82,7 @@ SQLITE_EXPORTS=(
 
 sqlite_stamp="cache/sqlite3.src-sha256"
 if [ -f cache/sqlite3-shell.wasm ] && [ -f cache/libsqlite3.wasm ] \
+  && [ -f cache/sqlite3-binding.wasm ] \
   && [ "$(cat "$sqlite_stamp" 2>/dev/null || true)" = "$SQLITE_SHA256" ]; then
   echo "sqlite3: cached"
 else
@@ -107,8 +112,26 @@ else
     "$tmp/$SQLITE_DIR/sqlite3.c" \
     "${exports[@]}" \
     -o cache/libsqlite3.wasm
+  # The binding artifact: the reactor library plus our own run_query, which
+  # forwards each result row to the imported env.host_row (ADR-22). Only the
+  # symbols this callback flow needs are exported; the import lands via the
+  # import_module/import_name attributes in src/sqlite3_binding.c.
+  echo "sqlite3: building sqlite3-binding.wasm (zig cc, reactor + host callback)"
+  BINDING_EXPORTS=(
+    run_query
+    sqlite3_open sqlite3_close sqlite3_exec sqlite3_errmsg
+    sqlite3_malloc sqlite3_free
+  )
+  binding_exports=()
+  for e in "${BINDING_EXPORTS[@]}"; do binding_exports+=("-Wl,--export=$e"); done
+  zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
+    -DSQLITE_OMIT_LOAD_EXTENSION \
+    -I "$tmp/$SQLITE_DIR" \
+    "$tmp/$SQLITE_DIR/sqlite3.c" src/sqlite3_binding.c \
+    "${binding_exports[@]}" \
+    -o cache/sqlite3-binding.wasm
   rm -rf "$tmp"
   trap - EXIT
   printf '%s\n' "$SQLITE_SHA256" >"$sqlite_stamp"
-  echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm"
+  echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"
 fi

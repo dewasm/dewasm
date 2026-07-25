@@ -17,8 +17,8 @@ returns.
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
 | cowsay 0.3.0 | pinned in `fetch.sh` | none | ✅ in scope (shipping) |
-| quickjs-ng v0.15.1 | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping) |
-| sqlite3 3.53.3 (both shapes) | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping) |
+| quickjs-ng v0.15.1 | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
+| sqlite3 3.53.3 (three shapes) | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**⁴) |
 | CPython 3.14.6 | pinned in `fetch-candidates.sh` | none | ✅ in scope (candidate, e2e wiring pending) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch-candidates.sh` | none | ✅ in scope (candidate, e2e wiring pending) |
 | pandoc | see below | **simd** | ⛔ deferred |
@@ -38,6 +38,49 @@ would otherwise be uniformly rejected, which would defeat the project.
 
 ² Apps we compile ourselves get their feature surface from our own build
 flags; run the audit on the built artifact before wiring its e2e case.
+
+³ **QuickJS deepened (Phase 5a).** Beyond the one-shot `-e` eval case, two
+Ruby-only e2e cases now exercise real WASI filesystem use (only Ruby has
+it, ADR-14) against a preopened scratch dir, both byte-identical to
+`wasmtime --dir`:
+
+- *File I/O* (`qjs_file_io_ruby`): the `qjs:std` module writes a file,
+  reads it back, and prints it; the test asserts the guest stdout golden
+  **and** the host-side file content. Fixture:
+  `examples/apps/fixtures/qjs_file_io.js`.
+- *REPL* (`qjs_repl_ruby`): **ground-truth finding — QuickJS's built-in
+  interactive REPL is not usable over a pipe.** Under `wasmtime`, piping a
+  scripted session (`1+2\n\q`) into bare `qjs` or `qjs -i` drives a
+  terminal line editor: it emits ANSI escape sequences (cursor moves,
+  syntax-highlight colors), mis-parses `1+2\q` as one line, and — the
+  decisive part — never terminates on stdin EOF (it hung until a 2-minute
+  timeout). So the byte-stable, pipe-friendly equivalent that is pinned
+  instead is a read-eval-print loop *fixture*
+  (`examples/apps/fixtures/qjs_repl.js`) reading lines from `std.in` and
+  printing `std.evalScript` results — the same stdin-read + eval path a
+  REPL exercises, minus the tty-only line editor. Neither case needed a
+  new WASI unit; `fd_read` on stdin and the ADR-14 filesystem stack
+  already cover them.
+
+⁴ **sqlite3 deepened (Phase 5a).** The pinned source now yields **three**
+artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
+now covered, all Ruby-only and on the existing ADR-14 syscall set (no new
+WASI unit):
+
+- *Shell DB file* (`sqlite3_shell_dbfile_ruby`): one invocation creates
+  and populates `/db/test.db`, a second reopens it and SELECTs; asserts
+  the second run's stdout (golden vs. `wasmtime --dir`) and a nonzero DB
+  file on the host.
+- *Library DB file* (`sqlite3_file_c_api_ruby`): the same file
+  create/close/reopen/select through the sqlite3 C API, proving the C-API
+  path hits the same fs stack (fixed-string expectation — a C-API flow
+  `wasmtime` cannot drive).
+- *Callback binding* (`sqlite3_callback_binding_ruby`): the new
+  `sqlite3-binding.wasm` (our own `examples/apps/src/sqlite3_binding.c`)
+  exports `run_query`, which calls `sqlite3_exec` with a C callback
+  forwarding each row to an imported `env.host_row`; the Ruby side
+  provides `host_row` via the ADR-7 import-provider mechanism and collects
+  the rows (fixed-string expectation).
 
 ## Deferred: pandoc
 

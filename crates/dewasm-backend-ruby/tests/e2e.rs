@@ -19,8 +19,9 @@ use std::path::{Path, PathBuf};
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
-    apps_e2e, convert, examples_dir, library_e2e, run_script, standalone_e2e, wasi_suite,
-    BackendUnderTest, LibraryCase, WasiCase,
+    apps_cache_dir, apps_e2e, apps_fixtures_dir, convert, convert_on_big_stack, examples_dir,
+    fresh_scratch_dir, library_e2e, run_script, standalone_e2e, wasi_suite, BackendUnderTest,
+    LibraryCase, WasiCase,
 };
 
 pub struct Ruby;
@@ -375,4 +376,314 @@ end
 db_mod.invoke("sqlite3_finalize", stmt)
 db_mod.invoke("sqlite3_close", db)
 puts "C-API-OK"
+"##;
+
+// ---------------------------------------------------------------------
+// Phase 5a app deepening: filesystem-exercising app cases. These are
+// Ruby-only because only Ruby has WASI filesystem support (ADR-14) — expressed
+// by living in the Ruby crate rather than the shared `APP_CASES` table (which
+// both backends iterate). Their goldens are still ground-truthed against
+// `wasmtime` (crates/dewasm-cli/tests/apps_golden.rs, `apps_golden_fs_matches_wasmtime`);
+// here the generated Ruby must match the same bytes. Every fs flow below runs
+// on the syscall set ADR-14 already ships — no new WASI unit was needed.
+
+/// Convert a cached app binary to a library-mode Ruby class (roomy stack for
+/// SQLite's deep functions, `convert_on_big_stack`).
+fn convert_app_library(wasm: &str, class: &str) -> String {
+    let path = apps_cache_dir().join(format!("{wasm}.wasm"));
+    assert!(
+        path.exists(),
+        "{wasm} not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let bytes = std::fs::read(&path).expect("read wasm");
+    convert_on_big_stack(&RubyBackend, &bytes, Mode::Library, class)
+}
+
+/// Run `script` under `ruby` with `stdin`, returning the raw `Output`.
+fn run_ruby_io(script: &str, stdin: &str) -> std::process::Output {
+    let ruby = find_ruby().expect("ruby not found on PATH — see docs/testing.md");
+    run_script(&ruby, script, "rb", &[], stdin)
+}
+
+/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file
+/// into a preopened scratch dir, reads it back, and prints it. Asserts both
+/// the guest stdout (golden, captured from wasmtime) and the host-side file
+/// content. The `.js` is our own fixture (examples/apps/fixtures/).
+#[test]
+fn qjs_file_io_ruby() {
+    let work = fresh_scratch_dir("ruby-qjs-file-io");
+    std::fs::copy(
+        apps_fixtures_dir().join("qjs_file_io.js"),
+        work.join("qjs_file_io.js"),
+    )
+    .unwrap();
+    let class = convert_app_library("qjs", "Qjs");
+    let glue = format!(
+        "inst = Qjs.new({{}}, args: [\"qjs\", \"/work/qjs_file_io.js\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Qjs::Rt::Exit\nend\n",
+        work.to_string_lossy()
+    );
+    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
+    assert!(
+        output.status.success(),
+        "qjs_file_io under ruby failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        include_str!("../../../examples/apps/golden/qjs_file_io.stdout"),
+        "qjs_file_io: guest stdout differs from the wasmtime golden"
+    );
+    assert_eq!(
+        std::fs::read_to_string(work.join("io_out.txt")).unwrap(),
+        "hello from qjs file io\n",
+        "qjs_file_io: the host file the guest wrote is wrong"
+    );
+}
+
+/// QuickJS scripted REPL over piped stdin (Phase 5a #1b). The built-in
+/// interactive REPL needs a tty — over a pipe it emits ANSI escapes and never
+/// terminates on EOF (docs/apps-audit.md) — so the pinned equivalent is a
+/// read-eval-print loop fixture that exercises the same stdin-read + evalScript
+/// path byte-identically to wasmtime.
+#[test]
+fn qjs_repl_ruby() {
+    let work = fresh_scratch_dir("ruby-qjs-repl");
+    std::fs::copy(
+        apps_fixtures_dir().join("qjs_repl.js"),
+        work.join("qjs_repl.js"),
+    )
+    .unwrap();
+    let class = convert_app_library("qjs", "Qjs");
+    let glue = format!(
+        "inst = Qjs.new({{}}, args: [\"qjs\", \"/work/qjs_repl.js\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Qjs::Rt::Exit\nend\n",
+        work.to_string_lossy()
+    );
+    let output = run_ruby_io(
+        &format!("{class}\n{glue}"),
+        "1+2\n[3,1,2].sort()\nMath.max(4,9)\n\\q\n",
+    );
+    assert!(
+        output.status.success(),
+        "qjs_repl under ruby failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        include_str!("../../../examples/apps/golden/qjs_repl.stdout"),
+        "qjs_repl: guest stdout differs from the wasmtime golden"
+    );
+}
+
+/// sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation
+/// creates and populates `/db/test.db`, a second reopens it and SELECTs.
+/// Asserts the second run's stdout (golden) and that the DB file exists on the
+/// host with nonzero size. `env: {}` mirrors wasmtime's empty guest env so the
+/// `.sqliterc` warning stays on stderr in both.
+#[test]
+fn sqlite3_shell_dbfile_ruby() {
+    let db = fresh_scratch_dir("ruby-sqlite3-dbfile");
+    let class = convert_app_library("sqlite3-shell", "Sqlite3Shell");
+    let glue = format!(
+        "inst = Sqlite3Shell.new({{}}, args: [\"sqlite3\"], env: {{}}, preopens: {{ \"/db\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Sqlite3Shell::Rt::Exit\nend\n",
+        db.to_string_lossy()
+    );
+    let program = format!("{class}\n{glue}");
+
+    let create = run_ruby_io(
+        &program,
+        ".open /db/test.db\n\
+         CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT);\n\
+         INSERT INTO t(v) VALUES ('alpha'),('beta');\n\
+         .exit\n",
+    );
+    assert!(
+        create.status.success(),
+        "sqlite3 dbfile create under ruby failed: {}\n{}",
+        create.status,
+        String::from_utf8_lossy(&create.stderr)
+    );
+    let db_file = db.join("test.db");
+    assert!(
+        db_file.metadata().map(|m| m.len() > 0).unwrap_or(false),
+        "sqlite3 dbfile: the first run left no nonzero DB file"
+    );
+
+    let select = run_ruby_io(
+        &program,
+        ".open /db/test.db\nSELECT id, v FROM t ORDER BY id;\n.exit\n",
+    );
+    assert!(
+        select.status.success(),
+        "sqlite3 dbfile select under ruby failed: {}\n{}",
+        select.status,
+        String::from_utf8_lossy(&select.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&select.stdout),
+        include_str!("../../../examples/apps/golden/sqlite3_shell_dbfile.stdout"),
+        "sqlite3_shell_dbfile: reopened SELECT stdout differs from the wasmtime golden"
+    );
+}
+
+/// The library-shape counterpart to `sqlite3_shell_dbfile_ruby` (Phase 5a #2b):
+/// the sqlite3 C API opening a *file* under a preopen — open, insert, close,
+/// reopen, select — proving the C-API path hits the same ADR-14 fs stack as the
+/// shell. No wasmtime golden (the CLI cannot drive a C-API flow whose results
+/// live in guest memory); the expectation is a fixed string pinned by the
+/// amalgamation version in examples/apps/fetch.sh.
+#[test]
+fn sqlite3_file_c_api_ruby() {
+    let db = fresh_scratch_dir("ruby-libsqlite3-file");
+    let class = convert_app_library("libsqlite3", "Libsqlite3");
+    let glue = format!(
+        "{}\n{}",
+        format_args!(
+            "DB_MOD = Libsqlite3.new({{}}, preopens: {{ \"/db\" => {:?} }})",
+            db.to_string_lossy()
+        ),
+        LIBSQLITE3_FILE_GLUE
+    );
+    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "10|x\n20|y\nFILE-OK\n",
+        "libsqlite3 file C API drive under ruby: output differs\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        db.join("data.db")
+            .metadata()
+            .map(|m| m.len() > 0)
+            .unwrap_or(false),
+        "libsqlite3 file: no nonzero DB file left on the host"
+    );
+}
+
+/// Ruby glue driving the sqlite3 C API against a file preopen: create+insert,
+/// close, then reopen the same file and select — the file lifecycle the shell
+/// case exercises, but through the C API.
+const LIBSQLITE3_FILE_GLUE: &str = r##"
+DB_MOD.invoke("_initialize")
+mem = DB_MOD.memory
+
+def read_cstr(mem, ptr)
+  return nil if ptr.zero?
+  fin = mem.bytes.index("\0".b, ptr)
+  mem.read_string(ptr, fin - ptr)
+end
+
+def cstr(mem, s)
+  p = DB_MOD.invoke("sqlite3_malloc", s.bytesize + 1)
+  mem.init(p, "#{s}\0", 0, s.bytesize + 1)
+  p
+end
+
+def open_db(mem, path)
+  pp = DB_MOD.invoke("sqlite3_malloc", 4)
+  rc = DB_MOD.invoke("sqlite3_open", cstr(mem, path), pp)
+  raise "open rc=#{rc}" unless rc.zero?
+  mem.i32_load(pp)
+end
+
+# create + insert, then close so the file is fully flushed
+db = open_db(mem, "/db/data.db")
+rc = DB_MOD.invoke("sqlite3_exec", db, cstr(mem, "create table t(a,b); insert into t values (1,'x'),(2,'y');"), 0, 0, 0)
+raise "exec rc=#{rc}: #{read_cstr(mem, DB_MOD.invoke('sqlite3_errmsg', db))}" unless rc.zero?
+DB_MOD.invoke("sqlite3_close", db)
+
+# reopen the same file and read it back
+db = open_db(mem, "/db/data.db")
+pp_stmt = DB_MOD.invoke("sqlite3_malloc", 4)
+rc = DB_MOD.invoke("sqlite3_prepare_v2", db, cstr(mem, "select a*10, b from t order by a"), 0xffffffff, pp_stmt, 0)
+raise "prepare rc=#{rc}" unless rc.zero?
+stmt = mem.i32_load(pp_stmt)
+while DB_MOD.invoke("sqlite3_step", stmt) == 100 # SQLITE_ROW
+  row = (0...DB_MOD.invoke("sqlite3_column_count", stmt)).map do |i|
+    read_cstr(mem, DB_MOD.invoke("sqlite3_column_text", stmt, i))
+  end
+  puts row.join("|")
+end
+DB_MOD.invoke("sqlite3_finalize", stmt)
+DB_MOD.invoke("sqlite3_close", db)
+puts "FILE-OK"
+"##;
+
+/// Guest->host callback round trip in library mode (Phase 5a #2c): our own
+/// committed C (examples/apps/src/sqlite3_binding.c, built into
+/// sqlite3-binding.wasm by fetch.sh) exports `run_query`, which calls
+/// `sqlite3_exec` with a C callback forwarding each row to the *imported*
+/// `env.host_row`. The Ruby side provides `host_row` via the ADR-7
+/// import-provider mechanism and collects the rows. No wasmtime golden (a pure
+/// in-memory C-API flow); the expectation is a fixed string.
+#[test]
+fn sqlite3_callback_binding_ruby() {
+    let class = convert_app_library("sqlite3-binding", "Sqlite3Binding");
+    let output = run_ruby_io(&format!("{class}\n{SQLITE3_BINDING_GLUE}"), "");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "row: 2|y\nrow: 3|z\nCALLBACK-OK\n",
+        "sqlite3 callback binding drive under ruby: output differs\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.status.code(), Some(0));
+}
+
+/// Ruby glue for the callback-binding artifact: provide `env.host_row` (ADR-7),
+/// set up an in-memory table via the C API, then call the guest `run_query`,
+/// which drives `host_row` once per result row. `host_row` reads each row's
+/// column-text pointers straight out of guest memory and collects them.
+const SQLITE3_BINDING_GLUE: &str = r##"
+ROWS = []
+MEM_HOLDER = {}
+host_row = lambda do |argc, argv_ptr|
+  mem = MEM_HOLDER[:mem]
+  row = (0...argc).map do |i|
+    p = mem.i32_load(argv_ptr + i * 4)
+    next nil if p.zero?
+    fin = mem.bytes.index("\0".b, p)
+    mem.read_string(p, fin - p)
+  end
+  ROWS << row
+end
+
+db_mod = Sqlite3Binding.new({ "env" => { "host_row" => host_row } })
+db_mod.invoke("_initialize")
+mem = db_mod.memory
+MEM_HOLDER[:mem] = mem
+
+def read_cstr(mem, ptr)
+  return nil if ptr.zero?
+  fin = mem.bytes.index("\0".b, ptr)
+  mem.read_string(ptr, fin - ptr)
+end
+
+def cstr(db_mod, mem, s)
+  p = db_mod.invoke("sqlite3_malloc", s.bytesize + 1)
+  mem.init(p, "#{s}\0", 0, s.bytesize + 1)
+  p
+end
+
+pp_db = db_mod.invoke("sqlite3_malloc", 4)
+rc = db_mod.invoke("sqlite3_open", cstr(db_mod, mem, ":memory:"), pp_db)
+raise "open rc=#{rc}" unless rc.zero?
+db = mem.i32_load(pp_db)
+
+rc = db_mod.invoke("sqlite3_exec", db,
+                   cstr(db_mod, mem, "create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"),
+                   0, 0, 0)
+raise "exec rc=#{rc}: #{read_cstr(mem, db_mod.invoke('sqlite3_errmsg', db))}" unless rc.zero?
+
+# guest -> host: run_query calls back into env.host_row once per row
+rc = db_mod.invoke("run_query", db, cstr(db_mod, mem, "select a, b from t where a >= 2 order by a"))
+raise "run_query rc=#{rc}" unless rc.zero?
+db_mod.invoke("sqlite3_close", db)
+
+ROWS.each { |r| puts "row: #{r.join('|')}" }
+puts "CALLBACK-OK"
 "##;

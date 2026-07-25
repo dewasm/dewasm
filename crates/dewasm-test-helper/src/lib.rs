@@ -15,7 +15,10 @@ mod wasi;
 
 pub use apps::{run_app_cases, AppCase, APP_CASES};
 pub use backend::{run_command, run_script, BackendUnderTest};
-pub use fixtures::{apps_cache_dir, convert, convert_bytes, convert_on_big_stack, examples_dir};
+pub use fixtures::{
+    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
+    convert_on_big_stack, examples_dir, fresh_scratch_dir,
+};
 pub use library::{run_library_case, GlueResolver, LibraryCase, LIBRARY_CASES};
 pub use spec::{run_spec_suite, Converted, SpecBackend};
 pub use standalone::{run_standalone_case, StandaloneCase, STANDALONE_CASES};

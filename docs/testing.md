@@ -43,12 +43,22 @@ suite:
   run `examples/apps/fetch.sh` once (needs network access) to populate
   the gitignored `examples/apps/cache/`. Per ADR-15 this is a hard
   prerequisite, not an optional extra — the `apps` tests fail with a
-  message naming the missing file until you run it. The sqlite3 pair
-  (`sqlite3-shell.wasm` and the C-API-exporting `libsqlite3.wasm`) is
+  message naming the missing file until you run it. The three sqlite3
+  shapes (`sqlite3-shell.wasm`, the C-API-exporting `libsqlite3.wasm`, and
+  `sqlite3-binding.wasm` — the latter compiled together with our own
+  `examples/apps/src/sqlite3_binding.c`, a guest→host callback proof) are
   built locally from the pinned amalgamation source, so `fetch.sh`
   additionally needs `zig` and `unzip` on PATH
   ([ADR-22](adr/22-sqlite3-built-from-source.md)); `cargo test` itself
   never needs them once the cache exists.
+- **Some app cases are Ruby-only and filesystem-exercising** (Phase 5a): the
+  QuickJS file-I/O and scripted-REPL cases and the sqlite3 DB-file / C-API /
+  callback cases live in the Ruby crate's e2e (`crates/dewasm-backend-ruby/tests/e2e.rs`,
+  e.g. `qjs_file_io_ruby`, `sqlite3_callback_binding_ruby`) rather than the
+  shared `apps.rs` table, because only Ruby has WASI filesystem support
+  (ADR-14). Their own committed driver fixtures (the `.js` scripts) live in
+  `examples/apps/fixtures/`; their goldens are still captured from `wasmtime`
+  (see below).
 - **No `wasmtime` install is needed to run these tests.** They used to
   diff live against `wasmtime run`; that comparison's result is fixed
   for a pinned binary and fixed input, so it's captured once and checked
@@ -74,7 +84,13 @@ $ cargo test -p dewasm-cli --test apps_golden --features wasmtime_test apps_gold
 This re-runs every `apps` case through a live `wasmtime run` and
 compares its output against the checked-in golden file (independent of
 whether dewasm's own generated output also matches — the always-on per-backend
-`apps` tests already cover that half). Run it whenever
+`apps` tests already cover that half). The sibling
+`apps_golden_fs_matches_wasmtime` (same feature gate) does the same for the
+filesystem cases, driving them under `wasmtime --dir <scratch>::<guest>` —
+QuickJS file I/O (`--dir <scratch>::/work`, arg `/work/qjs_file_io.js`), the
+QuickJS scripted REPL (same, `qjs_repl.js`, the scripted session on stdin),
+and the sqlite3 shell writing then reopening a DB file (`--dir <scratch>::/db`,
+two invocations). Run either whenever
 you doubt a golden file, or as part of regenerating one after bumping a
 pin in `examples/apps/fetch.sh`:
 
