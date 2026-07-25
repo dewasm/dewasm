@@ -3,6 +3,9 @@
 Status: **Accepted, 2026-07-23.** Amends ADR-0's target list; no backend
 work has started. Planned order: Ruby → Bash → Java → C# → Go → Python →
 PHP, with Java and C# designed as one "managed static languages" pair.
+*Revised by [ADR-24](24-01-scope-reset.md) (2026-07-25): the 0.1 backends
+are Python, Go, and Java; C# moves to the future list (the Java/C#
+pairing argument below still applies when C# is picked up).*
 
 ## Context
 
