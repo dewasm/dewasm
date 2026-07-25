@@ -1,10 +1,9 @@
 # ADR-23 — Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1
 
-Status: **Accepted, 2026-07-24.** Implemented: `Tier` and the derivation
-functions (`crates/dewasmify-backend/src/tier.rs`), `Backend::target_tier`
-/ `has_wasi_p1` / `wasm10_ledger_clean`, the generated `## Tiers` section
-of `docs/support.md`, and tier gating on the shared e2e case tables
-(`crates/dewasmify-cli/tests/e2e/{standalone,library,apps}.rs`).
+Status: **Superseded by [ADR-25](25-retire-support-tiers.md), 2026-07-26.**
+Originally accepted 2026-07-24 and implemented as described below; kept
+here as history of the tier ladder's design and rationale. ADR-25 removes
+`Tier` and everything derived from it.
 
 ## Context
 

@@ -64,11 +64,12 @@ docs/support.md is stale).
   when editing a unit — the units lint test enforces most of it.
 - A new backend is done when the shared spec harness passes for it — not before
   ([ADR-3](docs/adr/3-testing-strategy.md)).
-- Backends are ranked on a wasm-1.0-+-WASI-p1 support tier ladder (Tier 1 best, `Backend::
-  target_tier`/`achieved_tier` in `crates/dewasmify-backend/src/tier.rs`); Tier 2 is the standard
-  goal for a new backend. Wasm 2.0+ proposals and the component model are separate per-backend
-  extension badges (the `Feature` matrix), not part of the ladder — see
-  [ADR-23](docs/adr/23-backend-support-tiers.md).
+- Backends declare their capabilities directly — feature support (`Backend::feature_status`) and
+  per-function WASI p1 coverage (`Backend::has_wasi_p1`) — rendered flat into `docs/support.md`;
+  the standard goal for a new backend is wasm 1.0 + full WASI p1. Wasm 2.0+ proposals and the
+  component model are rejected outright, not a backend opt-in (ADR-24) — see
+  [ADR-25](docs/adr/25-retire-support-tiers.md) for why the former per-backend tier ladder was
+  retired.
 - Unsupported wasm features must fail at conversion time with a clear error, never at runtime
   ([ADR-0](docs/adr/0-foundation.md)). Non-function imports, multiple tables, and table bulk ops
   are accepted by the core IR unconditionally; a backend that hasn't implemented one must reject

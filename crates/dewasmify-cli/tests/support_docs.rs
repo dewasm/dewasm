@@ -7,13 +7,25 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use dewasmify_backend::{
-    achieved_tier, feature_tier, is_extension, Backend, SupportStatus, Tier,
-    WASI_PREVIEW1_FUNCTIONS,
-};
+use dewasmify_backend::{Backend, SupportStatus, WASI_PREVIEW1_FUNCTIONS};
 use dewasmify_backend_bash::BashBackend;
 use dewasmify_backend_ruby::RubyBackend;
 use dewasmify_core::feature::Feature;
+
+/// The features a backend can meaningfully differ on post-excision
+/// (ADR-25): everything the core IR accepts unconditionally and leaves to
+/// each backend to reject or implement. The remaining `Feature` variants
+/// (SIMD, reference types, the component model, ...) are rejected by the
+/// core for every backend (ADR-24), so a per-backend row for them would
+/// always read "unsupported" and says nothing.
+const IN_SCOPE_FEATURES: &[Feature] = &[
+    Feature::ImportedGlobals,
+    Feature::ImportedMemories,
+    Feature::ImportedTables,
+    Feature::MultipleTables,
+    Feature::TableBulkOps,
+    Feature::Floats,
+];
 
 fn render() -> String {
     let backends: Vec<&dyn Backend> = vec![&RubyBackend, &BashBackend];
@@ -31,29 +43,7 @@ fn render() -> String {
          turns its remaining skips into hard failures until the tests pass.\n\n",
     );
 
-    out.push_str("## Tiers\n\n");
-    out.push_str(
-        "Zig-style support tiers specialized to wasm 1.0 + WASI preview 1\n\
-         ([ADR-23](adr/23-backend-support-tiers.md) has the requirement\n\
-         checklists); post-1.0 proposals and the component model are the\n\
-         extension badges below and never affect a tier. `Current` is derived\n\
-         from the declarations on this page.\n\n",
-    );
-    for tier in Tier::ALL {
-        let _ = writeln!(out, "- **{tier}** — {}", tier.summary());
-    }
-    out.push_str("\n| Backend | Current | Target |\n| --- | --- | --- |\n");
-    for backend in &backends {
-        let _ = writeln!(
-            out,
-            "| {} | {} | {} |",
-            backend.name(),
-            achieved_tier(*backend),
-            backend.target_tier()
-        );
-    }
-
-    out.push_str("\n## Baseline\n\n");
+    out.push_str("## Baseline\n\n");
     for backend in &backends {
         let _ = writeln!(out, "- **{}**: {}", backend.name(), backend.baseline());
     }
@@ -65,26 +55,10 @@ fn render() -> String {
             SupportStatus::Unsupported => "❌".to_string(),
         };
 
-    out.push_str("\n## Wasm 1.0 features (tiered)\n\n");
-    let mut header = String::from("| Feature | Tier ");
-    let mut rule = String::from("| --- | --- ");
-    for backend in &backends {
-        let _ = write!(header, "| {} ", backend.name());
-        rule.push_str("| --- ");
-    }
-    let _ = writeln!(out, "{header}|\n{rule}|");
-    for feature in Feature::ALL.iter().filter(|f| !is_extension(**f)) {
-        let tier = feature_tier(*feature).expect("tiered feature");
-        let mut row = format!("| {} | {} ", feature.title(), tier);
-        for backend in &backends {
-            let _ = write!(row, "| {} ", feature_cell(backend, *feature));
-        }
-        let _ = writeln!(out, "{row}|");
-    }
-
-    out.push_str("\n## Extensions (badges)\n\n");
+    out.push_str("\n## Features\n\n");
     out.push_str(
-        "Per-backend opt-ins, orthogonal to the tiers ([ADR-23](adr/23-backend-support-tiers.md)).\n\n",
+        "The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-tiers.md));\n\
+         every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).\n\n",
     );
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");
@@ -93,7 +67,7 @@ fn render() -> String {
         rule.push_str("| --- ");
     }
     let _ = writeln!(out, "{header}|\n{rule}|");
-    for feature in Feature::ALL.iter().filter(|f| is_extension(**f)) {
+    for feature in IN_SCOPE_FEATURES {
         let mut row = format!("| {} ", feature.title());
         for backend in &backends {
             let _ = write!(row, "| {} ", feature_cell(backend, *feature));
@@ -105,22 +79,26 @@ fn render() -> String {
     out.push_str(
         "Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS\n\
          stub ([ADR-7](adr/7-import-providers.md), bash conventions in\n\
-         [ADR-12](adr/12-bash-wasi.md)). The tier is the one that requires the\n\
-         function; `—` marks the out-of-scope surface no tier requires (ADR-23).\n\n",
+         [ADR-12](adr/12-bash-wasi.md)). `—` marks the out-of-scope surface (sockets,\n\
+         `proc_raise`) no toolchain output exercises (ADR-25).\n\n",
     );
-    let mut header = String::from("| Function | Tier ");
-    let mut rule = String::from("| --- | --- ");
+    let mut header = String::from("| Function ");
+    let mut rule = String::from("| --- ");
     for backend in &backends {
         let _ = write!(header, "| {} ", backend.name());
         rule.push_str("| --- ");
     }
     let _ = writeln!(out, "{header}|\n{rule}|");
-    for (name, tier) in WASI_PREVIEW1_FUNCTIONS {
-        let tier_cell = match tier {
-            Some(tier) => tier.to_string(),
-            None => "—".to_string(),
-        };
-        let mut row = format!("| {name} | {tier_cell} ");
+    for (name, in_scope) in WASI_PREVIEW1_FUNCTIONS {
+        if !in_scope {
+            let mut row = format!("| {name} ");
+            for _ in &backends {
+                row.push_str("| — ");
+            }
+            let _ = writeln!(out, "{row}|");
+            continue;
+        }
+        let mut row = format!("| {name} ");
         for backend in &backends {
             let status = if backend.has_wasi_p1(name) {
                 "✅"
@@ -130,6 +108,21 @@ fn render() -> String {
             let _ = write!(row, "| {status} ");
         }
         let _ = writeln!(out, "{row}|");
+    }
+
+    out.push_str("\n## Spec testsuite ledger\n\n");
+    out.push_str(
+        "Whether the backend's spec `EXPECTED_FAILURES` ledger holds any wasm-1.0-\n\
+         attributable entries ([ADR-16](adr/16-ruby-wasm1-completion.md) is the current\n\
+         example).\n\n",
+    );
+    for backend in &backends {
+        let clean = if backend.wasm10_ledger_clean() {
+            "yes"
+        } else {
+            "no"
+        };
+        let _ = writeln!(out, "- **{}**: Spec ledger clean: {clean}", backend.name());
     }
 
     out

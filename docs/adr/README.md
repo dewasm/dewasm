@@ -44,9 +44,9 @@ the consequences.
 | ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Superseded (ADR-24) |
 | ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (ADR-24) |
 | ADR-22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
-| ADR-23 | [Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-tiers.md) | Accepted |
+| ADR-23 | [Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-tiers.md) | Superseded (ADR-25) |
 | ADR-24 | [0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals](24-01-scope-reset.md) | Accepted |
-| ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted (not yet implemented) |
+| ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted |
 | ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted (not yet implemented) |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted (not yet implemented) |
 

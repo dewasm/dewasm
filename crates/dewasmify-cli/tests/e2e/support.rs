@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use dewasmify_backend::{achieved_tier, Backend, GenOptions, Mode, RuntimeLinkage, Tier};
+use dewasmify_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::{find_ruby, RubyBackend};
 
@@ -115,12 +115,10 @@ pub fn run_bash(bash: &Path, script: &str, args: &[&str]) -> Output {
 
 /// A target language wired into the shared e2e case tables
 /// (`StandaloneCase`/`LibraryCase`/`AppCase`) so cases only need to be
-/// written once and gated per language by tier, not hand-duplicated.
-/// Onboarding a new backend is: implement this trait for a unit struct,
-/// give each applicable `LibraryCase` a `glues` entry, and write the
-/// language's own `#[test]` functions (a few lines each, see
-/// `standalone.rs`/`library.rs`) — the tier field on each case then
-/// decides which cases the new backend is expected to pass (ADR-23).
+/// written once instead of hand-duplicated per language. Onboarding a new
+/// backend is: implement this trait for a unit struct, give each
+/// applicable `LibraryCase` a `glues` entry, and write the language's own
+/// `#[test]` functions (a few lines each, see `standalone.rs`/`library.rs`).
 pub trait E2eLang: Sync {
     fn name(&self) -> &'static str;
     fn backend(&self) -> &'static dyn Backend;
@@ -167,23 +165,4 @@ pub fn run_lang(lang: &dyn E2eLang, script: &str, args: &[&str], stdin: &str) ->
         args,
         stdin,
     )
-}
-
-/// Whether `lang`'s backend has reached the tier a shared case requires
-/// (ADR-23; tiers are ordered best-first, so meeting a requirement means
-/// being at or above it).
-pub fn tier_ok(lang: &dyn E2eLang, required: Tier) -> bool {
-    achieved_tier(lang.backend()) <= required
-}
-
-/// Standard "this case doesn't apply to this language yet" skip line —
-/// a declared-tier gap, not a missing-tool failure, so ADR-15 doesn't
-/// apply (see `tier_ok`).
-pub fn print_tier_skip(case_name: &str, lang: &dyn E2eLang, required: Tier) {
-    println!(
-        "{case_name}: skipped for {} (requires {required}, {} is at {})",
-        lang.name(),
-        lang.name(),
-        achieved_tier(lang.backend())
-    );
 }

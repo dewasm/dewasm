@@ -86,19 +86,15 @@ Then update the matching `AppCase` in `apps.rs` (`expect_code` too, if
 the exit status changed), and confirm with the `wasmtime_test` command
 above before running the normal `cargo test --test e2e`.
 
-## e2e case tables and support tiers
+## e2e case tables
 
 `standalone.rs`/`library.rs`/`apps.rs` each drive one case table across
-every backend instead of duplicating tests per language. Each case
-declares the wasm-1.0-+-WASI-p1 support tier it needs
-([ADR-23](adr/23-backend-support-tiers.md)); a backend whose
-`achieved_tier` doesn't reach it gets a skip line for that case, not a
-failure — this is a declared-tier gap, not a missing-tool problem, so it
-doesn't fall under the ADR-15 policy above. Onboarding a new backend to
-this suite is implementing the `E2eLang` trait (`e2e/support.rs`), adding
-a `glues` entry to each `LibraryCase` it should run, and writing that
-language's own `#[test]` functions; the tier field on each case then
-decides what it's expected to pass without further per-case wiring.
+every backend instead of duplicating tests per language. Onboarding a new
+backend to this suite is implementing the `E2eLang` trait
+(`e2e/support.rs`), adding a `glues` entry to each `LibraryCase` it should
+run, and writing that language's own `#[test]` functions; a missing
+`glues` entry for a case the language should run fails loudly rather than
+silently skipping (ADR-15).
 
 ## Useful environment variables
 

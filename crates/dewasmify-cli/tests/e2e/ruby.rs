@@ -4,14 +4,15 @@
 //! (no duck-typed provider objects, no fs syscalls; ADR-11/ADR-12).
 //! Each test notes why it is Ruby-only where the reason is specific.
 //!
-//! Two kinds of "Ruby-only" mix here (ADR-23). `shared_table_call_indirect_across_modules`
-//! (imported tables) and the WASI-filesystem block are genuine Tier 2
-//! gaps — Bash would pick these up automatically if it ever reached
-//! Tier 2. `custom_wasi_provider`, `partial_override_falls_back_to_bundled_wasi`,
-//! and `embedded_runtimes_coexist` are Ruby language-model capabilities
+//! Two kinds of "Ruby-only" mix here. `shared_table_call_indirect_across_modules`
+//! (imported tables) and the WASI-filesystem block are genuine capability
+//! gaps — Bash would pick these up automatically if it ever implemented
+//! imported tables / a WASI filesystem. `custom_wasi_provider`,
+//! `partial_override_falls_back_to_bundled_wasi`, and
+//! `embedded_runtimes_coexist` are Ruby language-model capabilities
 //! (duck-typed provider objects, nested runtime classes) with no wasm
-//! feature behind them at all — they'd stay Ruby-only regardless of
-//! Bash's tier.
+//! feature behind them at all — they'd stay Ruby-only regardless of what
+//! Bash implements.
 
 use std::path::{Path, PathBuf};
 

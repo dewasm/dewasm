@@ -8,8 +8,7 @@
 //! that could quietly drift apart. Adding a scenario is one row instead
 //! of two hand-rolled `#[test]` functions; a case's `glues` list names
 //! which languages run it, so a language missing a glue entry for a case
-//! its tier requires fails loudly instead of silently not being tested
-//! (ADR-23).
+//! it should run fails loudly instead of silently not being tested.
 //!
 //! Scenarios with no counterpart in the other language live in `ruby`
 //! instead (Bash has no object-provider model and no WASI filesystem
@@ -17,21 +16,18 @@
 
 use std::path::Path;
 
-use dewasmify_backend::{Mode, Tier};
+use dewasmify_backend::Mode;
 use dewasmify_backend_bash::{find_bash5, BashBackend};
 use dewasmify_backend_ruby::RubyBackend;
 
-use crate::support::{
-    convert, examples_dir, print_tier_skip, run_bash, run_ruby, tier_ok, BashLang, RubyLang,
-};
+use crate::support::{convert, examples_dir, run_bash, run_ruby};
 
 struct LibraryCase {
     name: &'static str,
     wat: &'static str,
     module_name: &'static str,
-    tier: Tier,
     /// (language name, glue source) pairs; `glue_for` panics if a
-    /// language whose tier covers this case has no entry here.
+    /// language expected to run this case has no entry here.
     glues: &'static [(&'static str, &'static str)],
     /// Both sides are engineered to produce this same string — the glue
     /// captures and prints the actual bytes the wasm module wrote,
@@ -54,7 +50,6 @@ const LIBRARY_CASES: &[LibraryCase] = &[
         name: "add",
         wat: "add.wat",
         module_name: "add",
-        tier: Tier::Tier3,
         glues: &[
             (
                 "ruby",
@@ -80,13 +75,11 @@ const LIBRARY_CASES: &[LibraryCase] = &[
     // (rather than a fd/len diagnostic) — that's the one observable
     // both languages can produce identically, so there's a single
     // `expect` instead of a per-language one. Both sides only touch
-    // fd_write/random_get (Tier 3 WASI), so the override *mechanism*
-    // itself doesn't need anything beyond Tier 3.
+    // fd_write/random_get (WASI core).
     LibraryCase {
         name: "wasi_import_override",
         wat: "wasi_imports.wat",
         module_name: "prog",
-        tier: Tier::Tier3,
         glues: &[("ruby", RUBY_OVERRIDE_GLUE), ("bash", BASH_OVERRIDE_GLUE)],
         expect: "ok\n",
     },
@@ -136,10 +129,6 @@ prog_invoke '_start'
 "#;
 
 fn check_library_case_ruby(case: &LibraryCase) {
-    if !tier_ok(&RubyLang, case.tier) {
-        print_tier_skip(case.name, &RubyLang, case.tier);
-        return;
-    }
     let code = convert(
         &RubyBackend,
         &examples_dir().join(case.wat),
@@ -151,10 +140,6 @@ fn check_library_case_ruby(case: &LibraryCase) {
 }
 
 fn check_library_case_bash(bash: &Path, case: &LibraryCase) {
-    if !tier_ok(&BashLang, case.tier) {
-        print_tier_skip(case.name, &BashLang, case.tier);
-        return;
-    }
     let code = convert(
         &BashBackend,
         &examples_dir().join(case.wat),

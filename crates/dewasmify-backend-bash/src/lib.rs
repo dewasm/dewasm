@@ -159,13 +159,6 @@ impl Backend for BashBackend {
          requires bash >= 5"
     }
 
-    // Tier 3 is the settled goal (ADR-23): the north-star use case
-    // (self-contained C/Rust CLI tools on Bash) is met there, and no use
-    // case justifies the cost of the Tier-2 import/linking surface.
-    fn target_tier(&self) -> dewasmify_backend::Tier {
-        dewasmify_backend::Tier::Tier3
-    }
-
     fn has_wasi_p1(&self, name: &str) -> bool {
         bundler().has_unit(&format!("wasi/{name}"))
     }
