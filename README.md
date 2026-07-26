@@ -1,104 +1,19 @@
 # dewasm
 
-dewasm translates WebAssembly binaries into **source code** of various
-programming languages. The generated code embeds a lightweight runtime and
-needs no wasm runtime at all — a program compiled from C/C++/Rust to wasm
-can run anywhere the target language runs.
+dewasm translates a WebAssembly binary into the **source code** of an
+ordinary programming language. The generated file embeds a small runtime and
+needs no wasm engine at all: a program compiled from C, C++, Rust, or Zig to
+`wasm32-wasip1` becomes a single `.rb`, `.sh`, `.py`, `.go`, or `.java` file
+that runs anywhere that language runs. One shared IR feeds every backend, so
+each new target is a lowering table plus runtime units rather than a fresh
+translator ([docs/related-work.md](docs/related-work.md) compares the prior
+art).
 
-Unlike existing single-target translators (wasm2c, w2c2, wasm2go, unwasm,
-wasm2lua, ...), dewasm is built around one shared IR with pluggable
-language backends — see [docs/related-work.md](docs/related-work.md) for
-the full comparison with prior art (including bytecode compilers like
-asmble and wasm2cil) and what is new here.
-
-**Status: early development.** The Ruby and Bash backends both pass the
-WebAssembly core spec testsuite for the supported feature set — with
-identical totals (24,000+ assertions each), Bash running f32/f64 on a
-pure-bash IEEE-754 softfloat (ADR-5/ADR-13) with no external commands.
-A useful subset of WASI preview 1 works end-to-end on both.
-
-## Supported input
-
-- Wasm core spec 1.0 (MVP), plus the extensions that C/Rust toolchains
-  enable by default: mutable globals, sign-extension operators, saturating
-  float-to-int, multi-value, bulk memory (`memory.copy/fill/init`, passive
-  data segments)
-- WASI preview 1 (stdio, args, environ, clocks, random, proc_exit;
-  filesystem APIs are not implemented yet)
-
-The authoritative, generated feature/WASI matrix per backend is
-[`docs/support.md`](docs/support.md); the spec harness enforces that
-every skipped test is attributable to a feature declared unsupported
-there ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
-
-## Target languages
-
-| Language | Status |
-|---|---|
-| Ruby | ✅ works, spec testsuite green |
-| Bash | ✅ works, spec testsuite green incl. the pure-bash softfloat (bash >= 5, no external commands) |
-| Java | planned (paired with C#, ADR-10) |
-| C# | planned (paired with Java, ADR-10) |
-| Go | planned |
-| Python | planned |
-| PHP | planned |
-
-## Usage
+Here is `cowsay`, a C program, converted to a **pure Bash script** and run
+with nothing but a shell:
 
 ```console
-$ cargo run -p dewasm-cli -- input.wasm --target ruby --mode standalone -o out.rb
-$ ruby out.rb            # runs _start with WASI wired up
-```
-
-Library mode exposes the module as a class instead:
-
-```console
-$ cargo run -p dewasm-cli -- add.wat -o add.rb   # .wat input also accepted
-```
-
-```ruby
-require_relative "add"
-inst = Add.new                  # pass an imports table if the module needs one
-inst.invoke("add", 2, 3)        # => 5
-inst.memory                     # linear memory, if any
-```
-
-WASI imports work out of the box in library mode: functions the embedder
-does not provide fall back to the bundled WASI (constructed only if
-actually needed; disable with `--no-default-wasi`). An imports-table
-value is either a Hash of callables or a *provider* object — implement
-`import(name)` and optionally `attach(instance)` to replace a whole
-namespace, e.g. a custom WASI runtime:
-
-```ruby
-class MyWasi
-  def import(name) = respond_to?(name) ? method(name) : nil
-  def attach(instance) = @memory = instance.memory  # bound before wasm runs
-  def fd_write(fd, iovs, iovs_len, out_ptr) = ...   # @memory.bytes is a binary String
-end
-
-inst = Prog.new({ "wasi_snapshot_preview1" => MyWasi.new })
-inst.invoke("_start")           # proc_exit raises Prog::Rt::Exit — rescue it
-```
-
-Real-world binaries work too: [`examples/apps/`](examples/apps/) fetches
-prebuilt apps from each app's own upstream (never committed here,
-ADR-9) — including QuickJS, a complete JavaScript engine that dewasm
-turns into a single Ruby file:
-
-```console
-$ examples/apps/fetch.sh
-$ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
-$ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
-JS on Ruby: 42
-```
-
-The same binaries run under **plain Bash** — cowsay is byte-identical to
-wasmtime, and QuickJS works too (slowly; every float operation is
-softfloat integer arithmetic):
-
-```console
-$ cargo run -q -p dewasm-cli -- examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
+$ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
 $ echo "Hello from Bash" | bash cowsay.sh
  _________________
 < Hello from Bash >
@@ -110,88 +25,180 @@ $ echo "Hello from Bash" | bash cowsay.sh
                 ||     ||
 ```
 
-Another example — a Rust program compiled for `wasm32-wasip1` (including
-`std`) converts to a single ~1.5 MB Ruby file and produces output identical
-to wasmtime:
+The same binary — and much larger ones, up to SQLite and CPython — convert to
+Ruby, Python, Go, and Java just as well.
+
+## Status
+
+**Early development, heading toward 0.1.** All five backends pass the
+WebAssembly core spec testsuite for the supported feature set (~29,000
+assertions each) and implement WASI preview 1. This is real, tested output,
+not a demo: real-world binaries are proven byte-identical to `wasmtime` (see
+[what it can convert](#what-it-can-convert)).
+
+## Target languages
+
+`--target <name>`; every backend shares the same input dialect and the same
+spec gate.
+
+| Target | Character | Spec status |
+| --- | --- | --- |
+| `ruby` | The most complete backend; full WASI p1 incl. the filesystem; the SQLite/CRuby north-star host | spec-green |
+| `bash` | Runs where the only dependency is a shell; integer + a pure-Bash IEEE-754 softfloat, no external commands; WASI core, no filesystem | spec-green |
+| `python` | A plain importable module; full WASI p1 incl. the filesystem | spec-green |
+| `go` | One self-contained `package main` compiled with `go build`; full WASI p1 | spec-green |
+| `java` | One `.java` compiled with `javac`; splits huge modules across classes; full WASI p1 | spec-green |
+
+The authoritative, generated feature/WASI matrix per backend is
+[`docs/support.md`](docs/support.md). Bash is the deliberate outlier: no WASI
+filesystem, and non-function imports / multiple tables / table bulk ops are
+rejected at conversion time.
+
+Later target languages, deliberately out of 0.1 scope: Haskell, OCaml, C#,
+and PHP ([ADR-24](docs/adr/24-01-scope-reset.md),
+[ADR-10](docs/adr/10-csharp-target.md)).
+
+## Install
+
+Build from source with the pinned Rust toolchain (picked up automatically
+from `rust-toolchain.toml`):
 
 ```console
-$ rustc --target wasm32-wasip1 -O main.rs -o demo.wasm
-$ cargo run -p dewasm-cli -- demo.wasm --mode standalone -o demo.rb
-$ ruby demo.rb foo bar
-Hello from Rust compiled to wasm!
-args: ["foo", "bar"]
+$ cargo install --git https://github.com/makenowjust-sandbox/dewasm dewasm-cli
 ```
+
+or clone and build locally:
+
+```console
+$ git clone https://github.com/makenowjust-sandbox/dewasm
+$ cd dewasm
+$ cargo build --release        # binary at target/release/dewasm
+```
+
+dewasm itself has no runtime dependency beyond Rust. *Running* the generated
+code needs only that language's own interpreter or toolchain — `ruby`,
+`bash` 5+, `python3` 3.9+, `go` 1.18+, or a JDK 11+. Per-target details are in
+[docs/backends/](docs/backends/).
+
+## Usage
+
+```console
+$ dewasm input.wasm --target <ruby|bash|python|go|java> --mode <standalone|library> -o out
+```
+
+- `--target` selects the language (default `ruby`).
+- `--mode standalone` wires up WASI and runs the module's `_start`;
+  `--mode library` (default) exposes the module's exports to the host
+  language.
+- `.wat` text input is accepted directly (no separate assembler step).
+- `-o -` writes to stdout.
+
+Standalone is the "run this program" shape:
+
+```console
+$ dewasm hello.wat --target python --mode standalone -o hello.py
+$ python3 hello.py
+Hello, WASI!
+```
+
+Library mode hands you the module as a class/type to call from your own code:
+
+```console
+$ dewasm add.wat --target ruby --mode library -o add.rb
+```
+
+```ruby
+require_relative "add"
+inst = Add.new                 # pass an imports table if the module needs one
+inst.invoke("add", 2, 3)       # => 5
+inst.memory                    # linear memory, if any
+```
+
+WASI imports work out of the box in library mode: any import the embedder does
+not supply falls back to a bundled WASI implementation (built only if actually
+used; disable with `--no-default-wasi`). You can also override individual
+imports or replace a whole namespace with a *provider* object — see the
+[getting-started guide](docs/getting-started.md) and
+[ADR-7](docs/adr/7-import-providers.md).
+
+A full walkthrough — standalone and library, with a provider override —
+lives in [docs/getting-started.md](docs/getting-started.md).
+
+## What it can convert
+
+Every app below is a pinned, real-world binary; the byte-for-byte comparison
+against `wasmtime` is a checked-in test gate ([docs/apps-audit.md](docs/apps-audit.md)).
+`examples/apps/fetch.sh` fetches or builds them into a local cache
+([ADR-9](docs/adr/9-example-apps-from-registry.md)).
+
+- **cowsay** — the C classic, byte-identical to `wasmtime` on **all five
+  backends**.
+- **minigzip** (zlib) — a binary-stdio gzip CLI, byte-exact compression on
+  **all five backends** (including Bash — it has no floats).
+- **QuickJS** — a complete JavaScript engine as one generated file: one-shot
+  `-e` eval on all backends, plus file I/O and a scripted REPL against a
+  preopened directory on the filesystem-capable backends.
+- **SQLite** — the shell (in-memory and on a real DB file) plus a C-API
+  library drive and a guest→host callback binding.
+- **ripgrep** — a recursive directory search, byte-identical to
+  `wasmtime --dir`.
+- **CPython** and **CRuby** — both language runtimes convert *and execute* on
+  the Ruby backend, each reading its stdlib from a preopened directory.
+  Converting a runtime and running it back on Ruby is the **"Ruby on Ruby"**
+  north-star, achieved.
+
+Honest caveats: the heavy apps (QuickJS, SQLite, CPython, CRuby) are gated
+behind `DEWASM_APPS_ALL` in the test suite because they are slow and large —
+CRuby is a ~335 MB Ruby source file that runs in ~60 s — and Bash skips them
+by default because its softfloat makes float-heavy programs slow. These are
+deliberate performance opt-outs, not correctness gaps ([ADR-15](docs/adr/15-tests-fail-not-skip.md)).
+
+The north-star demos we steer toward: a library-mode SQLite as a pure-Ruby
+`sqlite3` driver (Ruby on Rails on a dewasmified SQLite), and C/Rust tools
+running under plain Bash.
+
+## Scope
+
+0.1 targets exactly **wasm core 1.0 + WASI preview 1**, plus the extensions
+every C/Rust/Zig toolchain enables by default: mutable globals,
+sign-extension operators, saturating float-to-int, multi-value, and bulk
+memory (`memory.copy`/`fill`/`init`, passive data segments). Wasm 2.0+
+proposals (SIMD, reference types as *constructs*, tail calls, exception
+handling) and the component model are deliberately **out of scope** and
+rejected at conversion time with a clear error, never a runtime surprise
+([ADR-0](docs/adr/0-foundation.md), [ADR-24](docs/adr/24-01-scope-reset.md)).
 
 ## How it works
 
 - `crates/dewasm-core` decodes and validates the binary (wasmparser) and
   builds a structured IR: wasm's control flow (block/loop/if/br) is kept
-  as-is — no relooper needed — and the value stack is flattened into
-  variables per (depth, type) slot, wasm2c-style.
-- `crates/dewasm-backend-*` lower the IR per language. For Ruby:
-  - i32/i64 are masked unsigned Integers; signed views only where needed
-  - f32 results are re-rounded to single precision; NaN bit patterns are
-    preserved with software bit conversions where MRI's `pack` would
-    canonicalize them
-  - multi-level `br` becomes catch/throw; loops become `while true` +
-    catch whose value distinguishes continue from fallthrough
-- `runtime/<lang>/units/` holds the runtime as per-method units with
-  declared dependencies (linear memory, table + `call_indirect` type
-  checks, numeric helpers, traps, WASI); only the units a module actually
-  needs are bundled into the output, nested inside the generated class so
-  multiple generated files can coexist in one process.
+  as-is — no relooper — and the value stack is flattened into per-slot
+  variables, wasm2c-style ([ADR-1](docs/adr/1-ir-design.md)).
+- `crates/dewasm-backend-*` lower that IR per language. The numeric strategy
+  (masked-unsigned integers, f32 re-rounding, NaN bit exactness) is decided
+  once and shared ([ADR-2](docs/adr/2-numeric-semantics.md)); per-backend
+  lowering shapes have their own ADRs, linked from
+  [docs/backends/](docs/backends/).
+- `runtime/<lang>/units/` holds the runtime as per-method units with declared
+  dependencies; only the units a module actually needs are bundled into the
+  output ([ADR-6](docs/adr/6-runtime-units.md)).
 
-## Design decisions
+## Documentation
 
-Significant decisions are recorded as Architecture Decision Records in
-[`docs/adr/`](docs/adr/README.md) — start with
-[ADR-0](docs/adr/0-foundation.md) for the goal and architecture. The IR
-shape, the numeric semantics strategy, the testing approach, and the
-per-backend lowering conventions each have their own ADR.
+- [docs/getting-started.md](docs/getting-started.md) — a hands-on walkthrough.
+- [docs/backends/](docs/backends/) — per-target reference (output shape, how
+  to run it, requirements, caveats).
+- [docs/support.md](docs/support.md) — the generated feature/WASI matrix.
+- [docs/apps-audit.md](docs/apps-audit.md) — the real-world app gate record.
+- [docs/testing.md](docs/testing.md) — for contributors: what `cargo test`
+  needs.
+- [docs/adr/](docs/adr/README.md) — the design decisions; start at
+  [ADR-0](docs/adr/0-foundation.md).
+- [docs/docs-policy.md](docs/docs-policy.md) — what goes where.
 
-## Testing
+## Toward 0.1
 
-The spec harness (`crates/dewasm-cli/tests/spec/`) parses the official
-testsuite's `.wast` files, converts every module with a backend, and
-generates a script in that language that runs all assertions on the real
-interpreter (`ruby`, `bash`); the per-language pieces plug into a shared
-`SpecLang` trait:
+The backends and the app gate are in place. Remaining before tagging 0.1:
 
-```console
-$ git submodule update --init   # fetches tests/spec (WebAssembly/testsuite)
-$ cargo test -p dewasm-cli --test spec -- --nocapture
-...
-TOTAL: pass=24338 fail=23 skip=33448 (rust: invalid-ok=4652 invalid-bad=0)
-unsupported (declared, ADR-8):
-  simd: 24275
-  ...
-```
-
-The testsuite submodule tracks upstream latest; every skipped directive
-must be attributable to a feature declared unsupported in
-[`docs/support.md`](docs/support.md), and unattributable failures fail
-the suite. The 23 expected failures are all cross-module linking
-(`register`), the first item on the roadmap. Adding a backend = making
-this harness pass for it — the policy is
-[ADR-3](docs/adr/3-testing-strategy.md) +
-[ADR-8](docs/adr/8-latest-testsuite-support-matrix.md).
-
-## Roadmap
-
-1. ~~Core pipeline + Ruby backend + spec harness~~ (done)
-2. Wasm 1.0 completion: non-function imports + cross-module linking
-   (clears the expected-failure ledger)
-3. WASI filesystem support (path_open + preopens), more real-world programs
-4. ~~Bash backend: integer subset + WASI/standalone + pure-bash IEEE754
-   softfloat~~ (done, ADR-11/12/13 — spec parity with Ruby; cowsay and
-   QuickJS run under plain bash)
-5. Java / C# backends (one design, two emitters — ADR-10)
-6. Go backend
-7. Python / PHP backends
-8. Readability pass (expression folding), self-hosting demo (dewasm →
-   wasm → Ruby → run dewasm on Ruby)
-
-North-star demos we are steering toward: a library-mode SQLite as a
-pure-Ruby `sqlite3` driver (Ruby on Rails running on a dewasmified
-SQLite), PicoRuby and CRuby (`ruby.wasm`) converted back onto Ruby, and
-C/Rust tools running under plain Bash.
+1. Rename the GitHub repository to `dewasm` ([ADR-26](docs/adr/26-rename-dewasm.md)).
+2. Cut and tag the 0.1 release.

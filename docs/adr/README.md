@@ -87,3 +87,9 @@ Quality bar:
   working in this repository; cites ADRs where a rule needs its why.
 - **`README.md`** — user-facing overview; links here for design
   rationale.
+- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial
+  and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30)
+  for design rationale rather than restating it.
+- **`docs/docs-policy.md`** — the doc taxonomy (which file each kind of
+  content belongs in, and why `docs/support.md` is generated, never
+  hand-edited).
