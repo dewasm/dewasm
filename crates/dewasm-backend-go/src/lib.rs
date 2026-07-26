@@ -1,0 +1,1431 @@
+//! Go backend: translates dewasm IR into a single self-contained Go source
+//! file (`package main` plus a bundled runtime).
+//!
+//! Lowering conventions (ADR-29; numeric conventions ADR-2):
+//! - i32/i64 are native `uint32`/`uint64` (masking is free — arithmetic wraps);
+//!   signed views are `int32(x)`/`int64(x)` casts. f32/f64 are native
+//!   `float32`/`float64`, so f32 re-rounding and IEEE float division need no
+//!   helper (Go floats trap-free, unlike Python/Ruby/Bash).
+//! - NaN bit paths go through `math.Float32bits`/`Float64bits`, which are
+//!   bit-preserving on native floats; only demote/promote reconstruct NaN
+//!   payloads explicitly.
+//! - Control flow maps onto Go's labeled loops: a referenced block/if becomes
+//!   `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }`
+//!   with back-edges as `continue L`. Unreferenced structures are spliced
+//!   inline. Unused labels/variables are Go compile errors, so labels are
+//!   emitted only when referenced and locals/temps only when used (a pre-pass
+//!   over the body computes the read/used sets, blanking the rest with `_ =`).
+//!
+//! The runtime is composed from per-method units (ADR-6) referenced as
+//! `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level
+//! constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
+
+use std::cell::RefCell;
+use std::collections::BTreeSet;
+use std::sync::OnceLock;
+
+use anyhow::Result;
+use dewasm_backend::{
+    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeScope, SupportStatus,
+};
+use dewasm_core::feature::Feature;
+use dewasm_core::ir::{
+    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, LoadOp, Module, Stmt, StoreOp,
+    Temp, UnOp, ValType,
+};
+
+include!(concat!(env!("OUT_DIR"), "/units.rs"));
+
+/// The runtime unit bundler for Go (see runtime/go/units/). Every scope has
+/// empty wrappers: Go methods and types are package-level regardless of the
+/// struct they belong to, so the bundle is a flat list of declarations
+/// (unlike Python's nested classes).
+pub fn bundler() -> &'static RuntimeBundler {
+    static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
+    BUNDLER.get_or_init(|| {
+        RuntimeBundler::new(
+            "//",
+            "\t",
+            vec![
+                RuntimeScope {
+                    prefix: "rt",
+                    open: "",
+                    close: "",
+                    prelude: Some("rt/_prelude"),
+                },
+                RuntimeScope {
+                    prefix: "memory",
+                    open: "",
+                    close: "",
+                    prelude: Some("memory/_class"),
+                },
+                RuntimeScope {
+                    prefix: "table",
+                    open: "",
+                    close: "",
+                    prelude: Some("table/_class"),
+                },
+                RuntimeScope {
+                    prefix: "wasi",
+                    open: "",
+                    close: "",
+                    prelude: Some("wasi/_class"),
+                },
+            ],
+            UNIT_SOURCES,
+        )
+        .expect("runtime units are well-formed")
+    })
+}
+
+/// Locate a `go` toolchain able to compile generated programs. Honors
+/// `$DEWASM_GO`, then `go` on `PATH` (ADR-15: a missing toolchain is a loud
+/// failure at the call site, not here — this only reports what qualifies).
+pub fn find_go() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env) = std::env::var("DEWASM_GO") {
+        candidates.push(PathBuf::from(env));
+    }
+    candidates.push(PathBuf::from("go"));
+    candidates.into_iter().find(|candidate| {
+        std::process::Command::new(candidate)
+            .arg("version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    })
+}
+
+/// A complete, compilable Go file bundling *every* runtime unit (with a dummy
+/// `main`), for the units lint's `go build` check that all units — not just
+/// the subset any one module uses — are valid Go.
+pub fn full_bundle_go() -> Result<String> {
+    let bundle = bundler().bundle_all(0)?;
+    let imports = scan_imports(&bundle, false);
+    let mut out = String::from("package main\n\n");
+    out.push_str(&import_block(&imports));
+    out.push_str("\nfunc main() {}\n\n");
+    out.push_str(&bundle);
+    out.push('\n');
+    Ok(out)
+}
+
+pub struct GoBackend;
+
+impl Backend for GoBackend {
+    fn name(&self) -> &str {
+        "go"
+    }
+
+    fn file_extension(&self) -> &str {
+        "go"
+    }
+
+    fn has_wasi_p1(&self, name: &str) -> bool {
+        bundler().has_unit(&format!("wasi/{name}"))
+    }
+
+    fn feature_status(&self, feature: Feature) -> SupportStatus {
+        match feature {
+            // Go floats are native IEEE float32/float64; the NaN paths follow
+            // ADR-2 (ADR-29).
+            Feature::Floats => SupportStatus::Supported,
+            // The wasm-1.0 completion (imported globals/memories/tables,
+            // multiple tables, table bulk ops) is a later milestone; the core
+            // IR accepts these but this backend rejects them via
+            // check_module_support until then.
+            _ => SupportStatus::Unsupported,
+        }
+    }
+
+    fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
+        check_module_support(&GoBackend, module)?;
+        let contents = generate_source(module, opts)?;
+        Ok(vec![OutputFile {
+            name: format!("{}.go", opts.module_name),
+            contents,
+        }])
+    }
+}
+
+fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
+    let type_name = type_name(&opts.module_name);
+    let gen = Gen {
+        module,
+        default_wasi: opts.default_wasi,
+        type_name: type_name.clone(),
+        uses: RefCell::new(BTreeSet::new()),
+        cur_locals: RefCell::new(Vec::new()),
+    };
+
+    // Body: the generated struct + constructor + methods, into its own writer
+    // so the `uses` set is fully populated before we bundle the runtime.
+    let mut body = CodeWriter::new("\t");
+    gen.emit_program(&mut body);
+
+    let standalone = opts.mode == Mode::Standalone;
+    if standalone {
+        // main's recover arm references these runtime types.
+        gen.use_unit("rt/trap");
+        gen.use_unit("rt/exit");
+    }
+    let uses = gen.uses.borrow().clone();
+    let bundle = bundler().bundle(&uses, 0)?;
+
+    let mut imports = scan_imports(&bundle, standalone);
+    // Library mode concatenates host glue after the generated declarations
+    // (mirroring Ruby/Bash). Go requires all imports before other
+    // declarations, so the glue cannot carry its own `import`; the generated
+    // file imports `fmt` up front (marked used below) so glue can print
+    // without one (ADR-29).
+    if !standalone && !imports.iter().any(|i| i == "fmt") {
+        imports.push("fmt".to_string());
+        imports.sort();
+    }
+
+    let mut out = String::from("// Generated by dewasm. Do not edit.\n");
+    out.push_str("package main\n\n");
+    out.push_str(&import_block(&imports));
+    out.push('\n');
+    out.push_str(&bundle);
+    out.push_str("\n\n");
+    out.push_str(&body.finish());
+
+    if standalone {
+        out.push('\n');
+        out.push_str(&main_func(&type_name));
+    } else {
+        // Mark the always-present `fmt` import used, so appended glue can rely
+        // on it (see above).
+        out.push_str("\nvar _ = fmt.Sprint\n");
+    }
+    Ok(out)
+}
+
+/// The external packages a bundle references, plus `os` for a standalone main.
+/// Only the runtime bundle (controlled code) is scanned; generated program
+/// code emits no package-qualified selectors and data blobs are hex literals,
+/// so no user string can inject a false import (ADR-29).
+fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
+    let candidates = [
+        ("binary.", "encoding/binary"),
+        ("bits.", "math/bits"),
+        ("math.", "math"),
+        ("rand.", "crypto/rand"),
+        ("os.", "os"),
+    ];
+    let mut set: BTreeSet<&'static str> = BTreeSet::new();
+    for (sel, path) in candidates {
+        if bundle.contains(sel) {
+            set.insert(path);
+        }
+    }
+    if standalone {
+        set.insert("os");
+    }
+    set.into_iter().map(|s| s.to_string()).collect()
+}
+
+fn import_block(imports: &[String]) -> String {
+    if imports.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("import (\n");
+    for path in imports {
+        out.push_str(&format!("\t{:?}\n", path));
+    }
+    out.push_str(")\n");
+    out
+}
+
+fn main_func(type_name: &str) -> String {
+    format!(
+        "func main() {{\n\
+         \tp := New{type_name}(nil, os.Args, os.Environ())\n\
+         \tdefer func() {{\n\
+         \t\tif r := recover(); r != nil {{\n\
+         \t\t\tswitch e := r.(type) {{\n\
+         \t\t\tcase *rtExit:\n\
+         \t\t\t\tos.Exit(e.code)\n\
+         \t\t\tcase *rtTrap:\n\
+         \t\t\t\tos.Stderr.WriteString(\"trap: \" + e.msg + \"\\n\")\n\
+         \t\t\t\tos.Exit(134)\n\
+         \t\t\tdefault:\n\
+         \t\t\t\tpanic(r)\n\
+         \t\t\t}}\n\
+         \t\t}}\n\
+         \t}}()\n\
+         \tp.Exports[\"_start\"].(func())()\n\
+         }}\n"
+    )
+}
+
+/// Derive a Go exported type name (PascalCase) from the module name, mirroring
+/// the Python backend's class_name.
+fn type_name(module_name: &str) -> String {
+    let mut out = String::new();
+    let mut upper = true;
+    for c in module_name.chars() {
+        if c.is_ascii_alphanumeric() {
+            if upper {
+                out.extend(c.to_uppercase());
+                upper = false;
+            } else {
+                out.push(c);
+            }
+        } else {
+            upper = true;
+        }
+    }
+    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
+        out.insert_str(0, "Wasm");
+    }
+    out
+}
+
+/// Go double-quoted string literal.
+fn go_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn hex_bytes(data: &[u8]) -> String {
+    let mut hex = String::with_capacity(data.len() * 2);
+    for b in data {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    format!("Rt.unhex(\"{hex}\")")
+}
+
+const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
+
+fn is_wasi_module(name: &str) -> bool {
+    WASI_MODULES.contains(&name)
+}
+
+pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
+
+/// Whether the generated code bundles the built-in WASI as an import fallback
+/// (and therefore takes `args`/`env` and constructs a `WASI`).
+fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
+    default_wasi
+        && module
+            .imported_funcs
+            .iter()
+            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
+}
+
+fn go_type(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I32 => "uint32",
+        ValType::I64 => "uint64",
+        ValType::F32 => "float32",
+        ValType::F64 => "float64",
+        ValType::FuncRef => "*funcref",
+    }
+}
+
+fn ty_suffix(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I32 => "i32",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
+        ValType::F64 => "f64",
+        ValType::FuncRef => "fr",
+    }
+}
+
+fn zero_value(ty: ValType) -> &'static str {
+    match ty {
+        ValType::FuncRef => "nil",
+        _ => "0",
+    }
+}
+
+fn temp(t: Temp) -> String {
+    format!("s{}_{}", t.depth, ty_suffix(t.ty))
+}
+
+/// Go result clause for a function's result types: "" / " T" / " (T, U)".
+fn go_results(tys: &[ValType]) -> String {
+    match tys {
+        [] => String::new(),
+        [t] => format!(" {}", go_type(*t)),
+        ts => format!(
+            " ({})",
+            ts.iter()
+                .map(|t| go_type(*t))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
+    let ps = params
+        .iter()
+        .map(|t| go_type(*t))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("func({}){}", ps, go_results(results))
+}
+
+struct Gen<'a> {
+    module: &'a Module,
+    default_wasi: bool,
+    type_name: String,
+    uses: RefCell<BTreeSet<String>>,
+    /// Param+local types of the function currently being emitted.
+    cur_locals: RefCell<Vec<ValType>>,
+}
+
+impl<'a> Gen<'a> {
+    fn use_unit(&self, id: &str) {
+        self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// Reference a runtime helper method, recording its unit.
+    fn rt(&self, name: &str) -> String {
+        self.use_unit(&format!("rt/{name}"));
+        format!("Rt.{name}")
+    }
+
+    /// Reference a Memory method, recording its unit.
+    fn mem<'n>(&self, name: &'n str) -> &'n str {
+        self.use_unit(&format!("memory/{name}"));
+        name
+    }
+
+    fn emit_program(&self, w: &mut CodeWriter) {
+        self.struct_def(w);
+        w.line("");
+        self.constructor(w);
+        for (i, func) in self.module.funcs.iter().enumerate() {
+            w.line("");
+            let idx = self.module.num_imported_funcs() as usize + i;
+            self.function(w, idx as u32, func);
+        }
+    }
+
+    fn struct_def(&self, w: &mut CodeWriter) {
+        let m = self.module;
+        w.line(format!("type {} struct {{", self.type_name));
+        w.indent();
+        if m.memory.is_some() {
+            w.line("memory *Memory");
+        }
+        for i in 0..m.tables.len() {
+            w.line(format!("t{i} *Table"));
+        }
+        for (i, g) in m.globals.iter().enumerate() {
+            w.line(format!("g{i} {}", go_type(g.ty)));
+        }
+        for (i, imp) in m.imported_funcs.iter().enumerate() {
+            let ty = &m.types[imp.type_idx as usize];
+            w.line(format!("if{i} {}", go_func_type(&ty.params, &ty.results)));
+        }
+        if wasi_bundled(m, self.default_wasi) {
+            w.line("wasi *WASI");
+        }
+        for i in 0..m.datas.len() {
+            w.line(format!("data{i} []byte"));
+        }
+        w.line("Exports map[string]any");
+        w.dedent();
+        w.line("}");
+    }
+
+    fn constructor(&self, w: &mut CodeWriter) {
+        let m = self.module;
+        let name = &self.type_name;
+        w.line(format!(
+            "func New{name}(imports Imports, args []string, env []string) *{name} {{"
+        ));
+        w.indent();
+        w.line(format!("p := &{name}{{}}"));
+
+        if let Some(mem) = &m.memory {
+            self.use_unit("memory/_class");
+            let max = mem.max_pages.map(|p| p as u32).unwrap_or(65536);
+            w.line(format!(
+                "p.memory = newMemory({}, {})",
+                mem.min_pages as u32, max
+            ));
+        }
+        for (i, table) in m.tables.iter().enumerate() {
+            self.use_unit("table/_class");
+            w.line(format!("p.t{i} = newTable({})", table.min));
+        }
+        for (i, global) in m.globals.iter().enumerate() {
+            w.line(format!("p.g{i} = {}", self.expr(&global.init)));
+        }
+
+        let wasi = wasi_bundled(m, self.default_wasi);
+        if wasi {
+            self.use_unit("wasi/_class");
+            w.line("p.wasi = newWASI(args, env)");
+            if m.memory.is_some() {
+                w.line("p.wasi.memory = p.memory");
+            }
+        } else if !m.imported_funcs.is_empty() {
+            // args/env unused when no WASI is bundled.
+            w.line("_ = args");
+            w.line("_ = env");
+        } else {
+            w.line("_ = imports");
+            w.line("_ = args");
+            w.line("_ = env");
+        }
+
+        for (i, import) in m.imported_funcs.iter().enumerate() {
+            self.emit_import(w, i, import);
+        }
+
+        for (i, elem) in m.elems.iter().enumerate() {
+            if let ElemKind::Active {
+                table_index,
+                offset,
+            } = &elem.kind
+            {
+                self.use_unit("table/init");
+                let items = elem
+                    .items
+                    .iter()
+                    .map(|item| self.elem_item(item))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                w.line(format!("_elem{i} := []*funcref{{{items}}}"));
+                w.line(format!(
+                    "p.t{table_index}.init({}, _elem{i}, 0, {})",
+                    self.expr(offset),
+                    elem.items.len()
+                ));
+            }
+        }
+
+        for (i, data) in m.datas.iter().enumerate() {
+            self.use_unit("rt/unhex");
+            match &data.offset {
+                Some(offset) => {
+                    self.use_unit("memory/init");
+                    w.line(format!(
+                        "p.memory.init(uint64({}), {}, 0, {})",
+                        self.expr(offset),
+                        hex_bytes(&data.data),
+                        data.data.len()
+                    ));
+                }
+                None => {
+                    w.line(format!("p.data{i} = {}", hex_bytes(&data.data)));
+                }
+            }
+        }
+
+        let mut export_entries = Vec::new();
+        for export in &m.exports {
+            if let ExportKind::Func(idx) = export.kind {
+                export_entries.push(format!(
+                    "{}: {}",
+                    go_string(&export.name),
+                    self.func_ref(idx)
+                ));
+            }
+        }
+        if export_entries.is_empty() {
+            w.line("p.Exports = map[string]any{}");
+        } else {
+            w.line(format!(
+                "p.Exports = map[string]any{{{}}}",
+                export_entries.join(", ")
+            ));
+        }
+
+        if let Some(start) = m.start {
+            w.line(self.call_string(start, &[]));
+        }
+
+        w.line("return p");
+        w.dedent();
+        w.line("}");
+    }
+
+    fn emit_import(&self, w: &mut CodeWriter, i: usize, import: &dewasm_core::ir::ImportedFunc) {
+        let m = self.module;
+        let ty = &m.types[import.type_idx as usize];
+        let go_ft = go_func_type(&ty.params, &ty.results);
+
+        // The fallback used when the embedder provides no explicit import.
+        let fallback = if is_wasi_module(&import.module) && self.default_wasi {
+            let unit = format!("wasi/{}", import.name);
+            if bundler().has_unit(&unit) {
+                self.use_unit(&unit);
+                Some(format!("p.wasi.wasi_{}", import.name))
+            } else {
+                // ENOSYS: unimplemented WASI call.
+                Some(self.enosys_stub(ty))
+            }
+        } else {
+            // A missing non-WASI import is a link error.
+            None
+        };
+
+        w.line(format!(
+            "if v := {}; v != nil {{",
+            self.resolve_import_string(&import.module, &import.name)
+        ));
+        w.indent();
+        w.line(format!("f, ok := v.({go_ft})"));
+        w.line("if !ok {");
+        w.indent();
+        w.line(format!(
+            "{}({})",
+            self.rt("link_error"),
+            go_string(&format!(
+                "incompatible import type for {}.{}",
+                import.module, import.name
+            ))
+        ));
+        w.dedent();
+        w.line("}");
+        w.line(format!("p.if{i} = f"));
+        w.dedent();
+        w.line("} else {");
+        w.indent();
+        match fallback {
+            Some(f) => w.line(format!("p.if{i} = {f}")),
+            None => w.line(format!("p.if{i} = {}", self.link_error_stub(import, ty))),
+        }
+        w.dedent();
+        w.line("}");
+    }
+
+    fn resolve_import_string(&self, module: &str, name: &str) -> String {
+        self.use_unit("rt/resolve_import");
+        format!(
+            "Rt.resolve_import(imports, {}, {})",
+            go_string(module),
+            go_string(name)
+        )
+    }
+
+    /// An ENOSYS stub for an unimplemented WASI import: single-i32-result
+    /// syscalls return errno 52, everything else returns zero values.
+    fn enosys_stub(&self, ty: &dewasm_core::ir::FuncType) -> String {
+        let params = ty
+            .params
+            .iter()
+            .map(|t| go_type(*t))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if ty.results == [ValType::I32] {
+            format!("func({params}) uint32 {{ return 52 }}")
+        } else {
+            format!(
+                "func({params}){} {{{} }}",
+                go_results(&ty.results),
+                self.return_zeros(&ty.results)
+            )
+        }
+    }
+
+    fn link_error_stub(
+        &self,
+        import: &dewasm_core::ir::ImportedFunc,
+        ty: &dewasm_core::ir::FuncType,
+    ) -> String {
+        let params = ty
+            .params
+            .iter()
+            .map(|t| go_type(*t))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let msg = go_string(&format!("missing import {}.{}", import.module, import.name));
+        format!(
+            "func({params}){} {{ {}({msg}){} }}",
+            go_results(&ty.results),
+            self.rt("link_error"),
+            self.return_zeros(&ty.results)
+        )
+    }
+
+    fn return_zeros(&self, results: &[ValType]) -> String {
+        if results.is_empty() {
+            String::new()
+        } else {
+            let zeros = results
+                .iter()
+                .map(|t| zero_value(*t))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" return {zeros}")
+        }
+    }
+
+    /// A funcref value for a table slot / element.
+    fn elem_item(&self, item: &ElemItem) -> String {
+        match item {
+            ElemItem::Func(func_idx) => {
+                format!(
+                    "&funcref{{ty: {}, fn: {}}}",
+                    go_string(&self.func_type_symbol(*func_idx)),
+                    self.func_ref(*func_idx)
+                )
+            }
+            ElemItem::Null => "nil".to_string(),
+            // ref-typed globals are reference types (rejected at conversion).
+            ElemItem::Global(_) => "nil".to_string(),
+        }
+    }
+
+    fn func_ref(&self, func_idx: u32) -> String {
+        if (func_idx as usize) < self.module.imported_funcs.len() {
+            format!("p.if{func_idx}")
+        } else {
+            format!("p.f{func_idx}")
+        }
+    }
+
+    fn call_string(&self, func_idx: u32, args: &[String]) -> String {
+        format!("{}({})", self.func_ref(func_idx), args.join(", "))
+    }
+
+    fn func_type_symbol(&self, func_idx: u32) -> String {
+        let idx = func_idx as usize;
+        let imports = self.module.imported_funcs.len();
+        let ty_idx = if idx < imports {
+            self.module.imported_funcs[idx].type_idx
+        } else {
+            self.module.funcs[idx - imports].type_idx
+        };
+        self.type_symbol(ty_idx)
+    }
+
+    /// A structural key for a function type (not a module-local index), so a
+    /// table shared across modules stays consistent.
+    fn type_symbol(&self, type_idx: u32) -> String {
+        let ty = &self.module.types[type_idx as usize];
+        let names = |tys: &[ValType]| {
+            tys.iter()
+                .map(|t| ty_suffix(*t))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        format!("{}->{}", names(&ty.params), names(&ty.results))
+    }
+
+    fn function(&self, w: &mut CodeWriter, idx: u32, func: &Func) {
+        let ty = &self.module.types[func.type_idx as usize];
+        let nparams = ty.params.len();
+
+        let mut local_types = ty.params.clone();
+        local_types.extend(func.locals.iter().copied());
+        *self.cur_locals.borrow_mut() = local_types.clone();
+
+        let params_str = ty
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, t)| format!("l{i} {}", go_type(*t)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        w.line(format!(
+            "func (p *{}) f{idx}({params_str}){} {{",
+            self.type_name,
+            go_results(&ty.results)
+        ));
+        w.indent();
+
+        let mut read_locals = BTreeSet::new();
+        let mut used_locals = BTreeSet::new();
+        let mut read_temps = BTreeSet::new();
+        collect_reads_seq(
+            &func.body,
+            &mut read_locals,
+            &mut used_locals,
+            &mut read_temps,
+        );
+
+        for (i, ty) in local_types.iter().enumerate().skip(nparams) {
+            let idx = i as u32;
+            if used_locals.contains(&idx) {
+                w.line(format!("var l{i} {}", go_type(*ty)));
+                if !read_locals.contains(&idx) {
+                    w.line(format!("_ = l{i}"));
+                }
+            }
+        }
+        for t in &func.temps {
+            let name = temp(*t);
+            w.line(format!("var {name} {}", go_type(t.ty)));
+            if !read_temps.contains(&name) {
+                w.line(format!("_ = {name}"));
+            }
+        }
+
+        self.emit_seq(w, &func.body);
+
+        if !ty.results.is_empty() {
+            // A trailing terminator so Go's "missing return" is satisfied even
+            // when the body's own terminator is not the syntactic last stmt
+            // (unreachable code is not a Go error, ADR-29).
+            let zeros = ty
+                .results
+                .iter()
+                .map(|t| zero_value(*t))
+                .collect::<Vec<_>>()
+                .join(", ");
+            w.line(format!("return {zeros}"));
+        }
+        w.dedent();
+        w.line("}");
+    }
+
+    fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
+        for stmt in stmts {
+            self.emit_stmt(w, stmt);
+        }
+    }
+
+    fn emit_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
+        match stmt {
+            Stmt::Block { label, body } => {
+                if label.referenced {
+                    w.line(format!("L{}:", label.id));
+                    w.line("for {");
+                    w.indent();
+                    self.emit_seq(w, body);
+                    w.line(format!("break L{}", label.id));
+                    w.dedent();
+                    w.line("}");
+                } else {
+                    self.emit_seq(w, body);
+                }
+            }
+            Stmt::Loop { label, body } => {
+                if label.referenced {
+                    w.line(format!("L{}:", label.id));
+                    w.line("for {");
+                    w.indent();
+                    self.emit_seq(w, body);
+                    w.line(format!("break L{}", label.id));
+                    w.dedent();
+                    w.line("}");
+                } else {
+                    // No back-edge, so the loop body runs exactly once.
+                    self.emit_seq(w, body);
+                }
+            }
+            Stmt::If {
+                label,
+                cond,
+                then,
+                els,
+            } => {
+                if label.referenced {
+                    w.line(format!("L{}:", label.id));
+                    w.line("for {");
+                    w.indent();
+                    self.emit_if(w, cond, then, els);
+                    w.line(format!("break L{}", label.id));
+                    w.dedent();
+                    w.line("}");
+                } else {
+                    self.emit_if(w, cond, then, els);
+                }
+            }
+            _ => self.simple_stmt(w, stmt),
+        }
+    }
+
+    fn emit_if(&self, w: &mut CodeWriter, cond: &Expr, then: &[Stmt], els: &[Stmt]) {
+        w.line(format!("if {} != 0 {{", self.expr(cond)));
+        w.indent();
+        self.emit_seq(w, then);
+        w.dedent();
+        if els.is_empty() {
+            w.line("}");
+        } else {
+            w.line("} else {");
+            w.indent();
+            self.emit_seq(w, els);
+            w.dedent();
+            w.line("}");
+        }
+    }
+
+    fn simple_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
+        match stmt {
+            Stmt::Assign { dst, expr } => {
+                w.line(format!("{} = {}", temp(*dst), self.expr(expr)));
+            }
+            Stmt::LocalSet { idx, expr } => {
+                w.line(format!("l{idx} = {}", self.expr(expr)));
+            }
+            Stmt::GlobalSet { idx, expr } => {
+                w.line(format!("p.g{idx} = {}", self.expr(expr)));
+            }
+            Stmt::Store {
+                op,
+                addr,
+                value,
+                offset,
+            } => {
+                w.line(format!(
+                    "p.memory.{}({}, {})",
+                    self.mem(store_method(*op)),
+                    self.addr(addr, *offset),
+                    self.expr(value)
+                ));
+            }
+            Stmt::Br(target) => self.branch(w, target),
+            Stmt::BrIf { cond, target } => {
+                w.line(format!("if {} != 0 {{", self.expr(cond)));
+                w.indent();
+                self.branch(w, target);
+                w.dedent();
+                w.line("}");
+            }
+            Stmt::BrTable {
+                index,
+                targets,
+                default,
+            } => {
+                if targets.is_empty() {
+                    self.branch(w, default);
+                    return;
+                }
+                w.line(format!("switch {} {{", self.expr(index)));
+                for (n, target) in targets.iter().enumerate() {
+                    w.line(format!("case {n}:"));
+                    w.indent();
+                    self.branch(w, target);
+                    w.dedent();
+                }
+                w.line("default:");
+                w.indent();
+                self.branch(w, default);
+                w.dedent();
+                w.line("}");
+            }
+            Stmt::Return { values } => self.return_stmt(w, values),
+            Stmt::Call {
+                func,
+                args,
+                results,
+            } => {
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(assign_results(results, self.call_string(*func, &args)));
+            }
+            Stmt::CallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+                results,
+            } => {
+                self.use_unit("table/call");
+                let ft = &self.module.types[*type_idx as usize];
+                let go_ft = go_func_type(&ft.params, &ft.results);
+                let call_args = args
+                    .iter()
+                    .map(|a| self.expr(a))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let call = format!(
+                    "p.t{table_index}.call({}, {}).({go_ft})({call_args})",
+                    self.expr(index),
+                    go_string(&self.type_symbol(*type_idx)),
+                );
+                w.line(assign_results(results, call));
+            }
+            Stmt::MemoryGrow { dst, delta } => {
+                self.use_unit("memory/grow");
+                w.line(format!(
+                    "{} = p.memory.grow({})",
+                    temp(*dst),
+                    self.expr(delta)
+                ));
+            }
+            Stmt::MemoryCopy { dst, src, len } => {
+                self.use_unit("memory/copy");
+                w.line(format!(
+                    "p.memory.copy(uint64({}), uint64({}), uint64({}))",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::MemoryFill { dst, val, len } => {
+                self.use_unit("memory/fill");
+                w.line(format!(
+                    "p.memory.fill(uint64({}), uint64({}), uint64({}))",
+                    self.expr(dst),
+                    self.expr(val),
+                    self.expr(len)
+                ));
+            }
+            Stmt::MemoryInit { seg, dst, src, len } => {
+                self.use_unit("memory/init");
+                w.line(format!(
+                    "p.memory.init(uint64({}), p.data{seg}, uint64({}), uint64({}))",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::DataDrop { seg } => {
+                w.line(format!("p.data{seg} = nil"));
+            }
+            Stmt::Unreachable => {
+                w.line(format!("{}(\"unreachable\")", self.rt("trap")));
+            }
+            Stmt::TableInit {
+                seg,
+                table_index,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/init");
+                w.line(format!(
+                    "p.t{table_index}.init({}, p.elem{seg}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::TableCopy {
+                dst_table,
+                src_table,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/copy");
+                w.line(format!(
+                    "p.t{dst_table}.copy({}, p.t{src_table}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::ElemDrop { seg } => {
+                w.line(format!("p.elem{seg} = nil"));
+            }
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+                unreachable!("structured statement routed to simple_stmt")
+            }
+        }
+    }
+
+    fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
+        match values {
+            [] => w.line("return"),
+            vs => {
+                let vs = vs
+                    .iter()
+                    .map(|v| self.expr(v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                w.line(format!("return {vs}"));
+            }
+        }
+    }
+
+    fn branch(&self, w: &mut CodeWriter, target: &BrTarget) {
+        match target {
+            BrTarget::Return { values } => self.return_stmt(w, values),
+            BrTarget::Label {
+                label,
+                is_loop,
+                assigns,
+            } => {
+                for (dst, src) in assigns {
+                    w.line(format!("{} = {}", temp(*dst), temp(*src)));
+                }
+                if *is_loop {
+                    w.line(format!("continue L{label}"));
+                } else {
+                    w.line(format!("break L{label}"));
+                }
+            }
+        }
+    }
+
+    fn addr(&self, addr: &Expr, offset: u64) -> String {
+        if offset == 0 {
+            format!("uint64({})", self.expr(addr))
+        } else {
+            format!("uint64({}) + {offset}", self.expr(addr))
+        }
+    }
+
+    fn expr(&self, expr: &Expr) -> String {
+        match expr {
+            Expr::I32Const(v) => format!("uint32({v})"),
+            Expr::I64Const(v) => format!("uint64({v})"),
+            Expr::F32Const(bits) => format!("{}(0x{bits:x})", self.rt("f32_from_bits")),
+            Expr::F64Const(bits) => format!("{}(0x{bits:x})", self.rt("f64_from_bits")),
+            Expr::Temp(t) => temp(*t),
+            Expr::LocalGet(idx) => format!("l{idx}"),
+            Expr::GlobalGet(idx) => format!("p.g{idx}"),
+            Expr::Un(op, a) => self.un(*op, &self.expr(a)),
+            Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
+            Expr::Load { op, addr, offset } => {
+                format!(
+                    "p.memory.{}({})",
+                    self.mem(load_method(*op)),
+                    self.addr(addr, *offset)
+                )
+            }
+            Expr::Select { cond, then, els } => {
+                self.use_unit("rt/select");
+                format!(
+                    "rtSelect({}, {}, {})",
+                    self.expr(cond),
+                    self.expr(then),
+                    self.expr(els)
+                )
+            }
+            Expr::MemorySize => {
+                self.use_unit("memory/size");
+                "p.memory.size()".to_string()
+            }
+        }
+    }
+
+    fn un(&self, op: UnOp, a: &str) -> String {
+        use UnOp::*;
+        match op {
+            I32Eqz | I64Eqz => format!("{}({a} == 0)", self.rt("b2i")),
+            I32Clz => format!("{}({a})", self.rt("i32_clz")),
+            I32Ctz => format!("{}({a})", self.rt("i32_ctz")),
+            I32Popcnt => format!("{}({a})", self.rt("i32_popcnt")),
+            I64Clz => format!("{}({a})", self.rt("i64_clz")),
+            I64Ctz => format!("{}({a})", self.rt("i64_ctz")),
+            I64Popcnt => format!("{}({a})", self.rt("i64_popcnt")),
+            F32Abs => format!("{}({a})", self.rt("f32_abs")),
+            F32Neg => format!("{}({a})", self.rt("f32_neg")),
+            F64Abs => format!("{}({a})", self.rt("f64_abs")),
+            F64Neg => format!("{}({a})", self.rt("f64_neg")),
+            F32Ceil => format!("{}({a})", self.rt("f32_ceil")),
+            F32Floor => format!("{}({a})", self.rt("f32_floor")),
+            F32Trunc => format!("{}({a})", self.rt("f32_trunc")),
+            F32Nearest => format!("{}({a})", self.rt("f32_nearest")),
+            F32Sqrt => format!("{}({a})", self.rt("f32_sqrt")),
+            F64Ceil => format!("{}({a})", self.rt("f64_ceil")),
+            F64Floor => format!("{}({a})", self.rt("f64_floor")),
+            F64Trunc => format!("{}({a})", self.rt("f64_trunc")),
+            F64Nearest => format!("{}({a})", self.rt("f64_nearest")),
+            F64Sqrt => format!("{}({a})", self.rt("f64_sqrt")),
+            I32WrapI64 => format!("uint32({a})"),
+            I32TruncF32S => format!("{}(float64({a}))", self.rt("i32_trunc_s")),
+            I32TruncF64S => format!("{}({a})", self.rt("i32_trunc_s")),
+            I32TruncF32U => format!("{}(float64({a}))", self.rt("i32_trunc_u")),
+            I32TruncF64U => format!("{}({a})", self.rt("i32_trunc_u")),
+            I64TruncF32S => format!("{}(float64({a}))", self.rt("i64_trunc_s")),
+            I64TruncF64S => format!("{}({a})", self.rt("i64_trunc_s")),
+            I64TruncF32U => format!("{}(float64({a}))", self.rt("i64_trunc_u")),
+            I64TruncF64U => format!("{}({a})", self.rt("i64_trunc_u")),
+            I32TruncSatF32S => format!("{}(float64({a}))", self.rt("i32_trunc_sat_s")),
+            I32TruncSatF64S => format!("{}({a})", self.rt("i32_trunc_sat_s")),
+            I32TruncSatF32U => format!("{}(float64({a}))", self.rt("i32_trunc_sat_u")),
+            I32TruncSatF64U => format!("{}({a})", self.rt("i32_trunc_sat_u")),
+            I64TruncSatF32S => format!("{}(float64({a}))", self.rt("i64_trunc_sat_s")),
+            I64TruncSatF64S => format!("{}({a})", self.rt("i64_trunc_sat_s")),
+            I64TruncSatF32U => format!("{}(float64({a}))", self.rt("i64_trunc_sat_u")),
+            I64TruncSatF64U => format!("{}({a})", self.rt("i64_trunc_sat_u")),
+            I64ExtendI32S => format!("uint64(int32({a}))"),
+            I64ExtendI32U => format!("uint64({a})"),
+            F32ConvertI32S => format!("float32(int32({a}))"),
+            F32ConvertI32U => format!("float32({a})"),
+            F32ConvertI64S => format!("float32(int64({a}))"),
+            F32ConvertI64U => format!("float32({a})"),
+            F64ConvertI32S => format!("float64(int32({a}))"),
+            F64ConvertI32U => format!("float64({a})"),
+            F64ConvertI64S => format!("float64(int64({a}))"),
+            F64ConvertI64U => format!("float64({a})"),
+            F32DemoteF64 => format!("{}({a})", self.rt("f32_demote")),
+            F64PromoteF32 => format!("{}({a})", self.rt("f64_promote")),
+            I32ReinterpretF32 => format!("{}({a})", self.rt("f32_bits")),
+            I64ReinterpretF64 => format!("{}({a})", self.rt("f64_bits")),
+            F32ReinterpretI32 => format!("{}({a})", self.rt("f32_from_bits")),
+            F64ReinterpretI64 => format!("{}({a})", self.rt("f64_from_bits")),
+            I32Extend8S => format!("uint32(int32(int8({a})))"),
+            I32Extend16S => format!("uint32(int32(int16({a})))"),
+            I64Extend8S => format!("uint64(int64(int8({a})))"),
+            I64Extend16S => format!("uint64(int64(int16({a})))"),
+            I64Extend32S => format!("uint64(int64(int32({a})))"),
+        }
+    }
+
+    fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
+        use BinOp::*;
+        match op {
+            I32Add | I64Add => format!("({a} + {b})"),
+            I32Sub | I64Sub => format!("({a} - {b})"),
+            I32Mul | I64Mul => format!("({a} * {b})"),
+            I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
+            I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
+            I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
+            I32RemU => format!("{}({a}, {b})", self.rt("i32_rem_u")),
+            I64DivS => format!("{}({a}, {b})", self.rt("i64_div_s")),
+            I64DivU => format!("{}({a}, {b})", self.rt("i64_div_u")),
+            I64RemS => format!("{}({a}, {b})", self.rt("i64_rem_s")),
+            I64RemU => format!("{}({a}, {b})", self.rt("i64_rem_u")),
+            I32And | I64And => format!("({a} & {b})"),
+            I32Or | I64Or => format!("({a} | {b})"),
+            I32Xor | I64Xor => format!("({a} ^ {b})"),
+            I32Shl => format!("({a} << ({b} & 31))"),
+            I32ShrU => format!("({a} >> ({b} & 31))"),
+            I32ShrS => format!("uint32(int32({a}) >> ({b} & 31))"),
+            I64Shl => format!("({a} << ({b} & 63))"),
+            I64ShrU => format!("({a} >> ({b} & 63))"),
+            I64ShrS => format!("uint64(int64({a}) >> ({b} & 63))"),
+            I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
+            I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
+            I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
+            I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
+            I32Eq | I64Eq | F32Eq | F64Eq => format!("{}({a} == {b})", self.rt("b2i")),
+            I32Ne | I64Ne | F32Ne | F64Ne => format!("{}({a} != {b})", self.rt("b2i")),
+            I32LtU | I64LtU | F32Lt | F64Lt => format!("{}({a} < {b})", self.rt("b2i")),
+            I32GtU | I64GtU | F32Gt | F64Gt => format!("{}({a} > {b})", self.rt("b2i")),
+            I32LeU | I64LeU | F32Le | F64Le => format!("{}({a} <= {b})", self.rt("b2i")),
+            I32GeU | I64GeU | F32Ge | F64Ge => format!("{}({a} >= {b})", self.rt("b2i")),
+            I32LtS => format!("{}(int32({a}) < int32({b}))", self.rt("b2i")),
+            I32GtS => format!("{}(int32({a}) > int32({b}))", self.rt("b2i")),
+            I32LeS => format!("{}(int32({a}) <= int32({b}))", self.rt("b2i")),
+            I32GeS => format!("{}(int32({a}) >= int32({b}))", self.rt("b2i")),
+            I64LtS => format!("{}(int64({a}) < int64({b}))", self.rt("b2i")),
+            I64GtS => format!("{}(int64({a}) > int64({b}))", self.rt("b2i")),
+            I64LeS => format!("{}(int64({a}) <= int64({b}))", self.rt("b2i")),
+            I64GeS => format!("{}(int64({a}) >= int64({b}))", self.rt("b2i")),
+            F32Add | F64Add => format!("({a} + {b})"),
+            F32Sub | F64Sub => format!("({a} - {b})"),
+            F32Mul | F64Mul => format!("({a} * {b})"),
+            F32Div | F64Div => format!("({a} / {b})"),
+            F32Min => format!("{}({a}, {b})", self.rt("f32_min")),
+            F64Min => format!("{}({a}, {b})", self.rt("f64_min")),
+            F32Max => format!("{}({a}, {b})", self.rt("f32_max")),
+            F64Max => format!("{}({a}, {b})", self.rt("f64_max")),
+            F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
+            F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
+        }
+    }
+}
+
+fn assign_results(results: &[Temp], call: String) -> String {
+    match results {
+        [] => call,
+        rs => {
+            let names = rs.iter().map(|r| temp(*r)).collect::<Vec<_>>().join(", ");
+            format!("{names} = {call}")
+        }
+    }
+}
+
+fn load_method(op: LoadOp) -> &'static str {
+    use LoadOp::*;
+    match op {
+        I32Load => "i32_load",
+        I64Load => "i64_load",
+        F32Load => "f32_load",
+        F64Load => "f64_load",
+        I32Load8S => "i32_load8_s",
+        I32Load8U => "i32_load8_u",
+        I32Load16S => "i32_load16_s",
+        I32Load16U => "i32_load16_u",
+        I64Load8S => "i64_load8_s",
+        I64Load8U => "i64_load8_u",
+        I64Load16S => "i64_load16_s",
+        I64Load16U => "i64_load16_u",
+        I64Load32S => "i64_load32_s",
+        I64Load32U => "i64_load32_u",
+    }
+}
+
+fn store_method(op: StoreOp) -> &'static str {
+    use StoreOp::*;
+    match op {
+        I32Store => "i32_store",
+        I64Store => "i64_store",
+        F32Store => "f32_store",
+        F64Store => "f64_store",
+        I32Store8 => "i32_store8",
+        I32Store16 => "i32_store16",
+        I64Store8 => "i64_store8",
+        I64Store16 => "i64_store16",
+        I64Store32 => "i64_store32",
+    }
+}
+
+// --- read/use pre-pass (drives Go's unused-variable discipline) ------------
+
+fn collect_reads_seq(
+    stmts: &[Stmt],
+    read_locals: &mut BTreeSet<u32>,
+    used_locals: &mut BTreeSet<u32>,
+    read_temps: &mut BTreeSet<String>,
+) {
+    for stmt in stmts {
+        collect_reads_stmt(stmt, read_locals, used_locals, read_temps);
+    }
+}
+
+fn collect_reads_stmt(
+    stmt: &Stmt,
+    read_locals: &mut BTreeSet<u32>,
+    used_locals: &mut BTreeSet<u32>,
+    read_temps: &mut BTreeSet<String>,
+) {
+    let e = |expr: &Expr,
+             rl: &mut BTreeSet<u32>,
+             ul: &mut BTreeSet<u32>,
+             rt: &mut BTreeSet<String>| collect_reads_expr(expr, rl, ul, rt);
+    match stmt {
+        Stmt::Assign { expr, .. } => e(expr, read_locals, used_locals, read_temps),
+        Stmt::LocalSet { idx, expr } => {
+            used_locals.insert(*idx);
+            e(expr, read_locals, used_locals, read_temps);
+        }
+        Stmt::GlobalSet { expr, .. } => e(expr, read_locals, used_locals, read_temps),
+        Stmt::Store { addr, value, .. } => {
+            e(addr, read_locals, used_locals, read_temps);
+            e(value, read_locals, used_locals, read_temps);
+        }
+        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => {
+            collect_reads_seq(body, read_locals, used_locals, read_temps)
+        }
+        Stmt::If {
+            cond, then, els, ..
+        } => {
+            e(cond, read_locals, used_locals, read_temps);
+            collect_reads_seq(then, read_locals, used_locals, read_temps);
+            collect_reads_seq(els, read_locals, used_locals, read_temps);
+        }
+        Stmt::Br(t) => collect_reads_target(t, read_locals, used_locals, read_temps),
+        Stmt::BrIf { cond, target } => {
+            e(cond, read_locals, used_locals, read_temps);
+            collect_reads_target(target, read_locals, used_locals, read_temps);
+        }
+        Stmt::BrTable {
+            index,
+            targets,
+            default,
+        } => {
+            e(index, read_locals, used_locals, read_temps);
+            for t in targets {
+                collect_reads_target(t, read_locals, used_locals, read_temps);
+            }
+            collect_reads_target(default, read_locals, used_locals, read_temps);
+        }
+        Stmt::Return { values } => {
+            for v in values {
+                e(v, read_locals, used_locals, read_temps);
+            }
+        }
+        Stmt::Call { args, .. } => {
+            for a in args {
+                e(a, read_locals, used_locals, read_temps);
+            }
+        }
+        Stmt::CallIndirect { index, args, .. } => {
+            e(index, read_locals, used_locals, read_temps);
+            for a in args {
+                e(a, read_locals, used_locals, read_temps);
+            }
+        }
+        Stmt::MemoryGrow { delta, .. } => e(delta, read_locals, used_locals, read_temps),
+        Stmt::MemoryCopy { dst, src, len } => {
+            e(dst, read_locals, used_locals, read_temps);
+            e(src, read_locals, used_locals, read_temps);
+            e(len, read_locals, used_locals, read_temps);
+        }
+        Stmt::MemoryFill { dst, val, len } => {
+            e(dst, read_locals, used_locals, read_temps);
+            e(val, read_locals, used_locals, read_temps);
+            e(len, read_locals, used_locals, read_temps);
+        }
+        Stmt::MemoryInit { dst, src, len, .. } => {
+            e(dst, read_locals, used_locals, read_temps);
+            e(src, read_locals, used_locals, read_temps);
+            e(len, read_locals, used_locals, read_temps);
+        }
+        Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
+            e(dst, read_locals, used_locals, read_temps);
+            e(src, read_locals, used_locals, read_temps);
+            e(len, read_locals, used_locals, read_temps);
+        }
+        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable => {}
+    }
+}
+
+fn collect_reads_target(
+    t: &BrTarget,
+    read_locals: &mut BTreeSet<u32>,
+    used_locals: &mut BTreeSet<u32>,
+    read_temps: &mut BTreeSet<String>,
+) {
+    match t {
+        BrTarget::Return { values } => {
+            for v in values {
+                collect_reads_expr(v, read_locals, used_locals, read_temps);
+            }
+        }
+        BrTarget::Label { assigns, .. } => {
+            for (_dst, src) in assigns {
+                read_temps.insert(temp(*src));
+            }
+        }
+    }
+}
+
+fn collect_reads_expr(
+    expr: &Expr,
+    read_locals: &mut BTreeSet<u32>,
+    used_locals: &mut BTreeSet<u32>,
+    read_temps: &mut BTreeSet<String>,
+) {
+    match expr {
+        Expr::I32Const(_)
+        | Expr::I64Const(_)
+        | Expr::F32Const(_)
+        | Expr::F64Const(_)
+        | Expr::GlobalGet(_)
+        | Expr::MemorySize => {}
+        Expr::Temp(t) => {
+            read_temps.insert(temp(*t));
+        }
+        Expr::LocalGet(idx) => {
+            read_locals.insert(*idx);
+            used_locals.insert(*idx);
+        }
+        Expr::Un(_, a) => collect_reads_expr(a, read_locals, used_locals, read_temps),
+        Expr::Bin(_, a, b) => {
+            collect_reads_expr(a, read_locals, used_locals, read_temps);
+            collect_reads_expr(b, read_locals, used_locals, read_temps);
+        }
+        Expr::Load { addr, .. } => collect_reads_expr(addr, read_locals, used_locals, read_temps),
+        Expr::Select { cond, then, els } => {
+            collect_reads_expr(cond, read_locals, used_locals, read_temps);
+            collect_reads_expr(then, read_locals, used_locals, read_temps);
+            collect_reads_expr(els, read_locals, used_locals, read_temps);
+        }
+    }
+}

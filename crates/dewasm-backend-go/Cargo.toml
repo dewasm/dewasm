@@ -1,0 +1,21 @@
+[package]
+name = "dewasm-backend-go"
+description = "Go backend for dewasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dewasm-core.workspace = true
+dewasm-backend.workspace = true
+
+[dev-dependencies]
+regex.workspace = true
+wast.workspace = true
+wat.workspace = true
+dewasm-test-helper.workspace = true

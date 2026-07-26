@@ -50,6 +50,7 @@ the consequences.
 | ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted |
 | ADR-28 | [Python Backend Lowering Conventions](28-python-backend-lowering.md) | Accepted |
+| ADR-29 | [Go Backend Lowering Conventions](29-go-backend-lowering.md) | Accepted |
 
 ## Adding a new ADR
 

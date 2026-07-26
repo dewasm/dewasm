@@ -9,6 +9,7 @@ use std::path::Path;
 
 use dewasm_backend::{Backend, SupportStatus, WASI_PREVIEW1_FUNCTIONS};
 use dewasm_backend_bash::BashBackend;
+use dewasm_backend_go::GoBackend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 use dewasm_core::feature::Feature;
@@ -29,7 +30,7 @@ const IN_SCOPE_FEATURES: &[Feature] = &[
 ];
 
 fn render() -> String {
-    let backends: Vec<&dyn Backend> = vec![&RubyBackend, &BashBackend, &PythonBackend];
+    let backends: Vec<&dyn Backend> = vec![&RubyBackend, &BashBackend, &PythonBackend, &GoBackend];
 
     let mut out = String::new();
     out.push_str("# Backend Support Matrix\n\n");

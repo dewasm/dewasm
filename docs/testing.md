@@ -32,6 +32,11 @@ message below is something this document explains how to fix.
   arrays / namerefs); install a newer one (e.g. `brew install bash`) and
   either put it on `PATH` ahead of the system one or point
   `$DEWASM_BASH` at it directly.
+- **`go` on `PATH` (or `$DEWASM_GO`)**: needed by the Go backend's e2e and
+  units tests. Go is compiled, so those tests `go build` the generated code
+  (to a content-addressed cache binary) and run the binary; a units test also
+  `go build`s the whole runtime bundle. Any recent Go (generics, i.e. >= 1.18)
+  qualifies.
 
 Nothing else is required for `cargo test` to pass in full, **except** for
 the `apps` cases specifically — see below.

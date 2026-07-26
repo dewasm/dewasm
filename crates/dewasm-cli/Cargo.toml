@@ -27,6 +27,7 @@ dewasm-backend.workspace = true
 dewasm-backend-ruby.workspace = true
 dewasm-backend-bash.workspace = true
 dewasm-backend-python.workspace = true
+dewasm-backend-go.workspace = true
 
 [dev-dependencies]
 dewasm-test-helper.workspace = true

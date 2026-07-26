@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use dewasm_backend_bash::BashBackend;
+use dewasm_backend_go::GoBackend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 
@@ -46,6 +47,7 @@ fn main() -> Result<()> {
         "ruby" => Box::new(RubyBackend),
         "bash" => Box::new(BashBackend),
         "python" => Box::new(PythonBackend),
+        "go" => Box::new(GoBackend),
         other => bail!("unsupported target language: {other}"),
     };
 
