@@ -28,7 +28,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use dewasm_backend::{
     check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
     RuntimeScope, SupportStatus,
@@ -82,6 +82,12 @@ pub fn bundler() -> &'static RuntimeBundler {
                     open: "final class Table {",
                     close: "}",
                     prelude: Some("table/_class"),
+                },
+                RuntimeScope {
+                    prefix: "global",
+                    open: "final class Global {",
+                    close: "}",
+                    prelude: Some("global/_class"),
                 },
                 RuntimeScope {
                     prefix: "wasi",
@@ -153,9 +159,16 @@ impl Backend for JavaBackend {
         match feature {
             // Java floats are native IEEE float/double; NaN paths follow ADR-2.
             Feature::Floats => SupportStatus::Supported,
-            // Everything else is rejected at conversion time in the cowsay
-            // milestone (ADR-30): non-function imports, multiple tables, and
-            // table bulk ops are out of scope for milestone 1.
+            // Wasm-1.0 completion (ADR-16, mirrored from Go's ADR-29): imported
+            // globals/memories/tables through the provider map with an
+            // `instanceof` kind check, multiple tables, and the table half of
+            // bulk memory (passive/declared element segments, table.init/copy,
+            // elem.drop).
+            Feature::ImportedGlobals
+            | Feature::ImportedMemories
+            | Feature::ImportedTables
+            | Feature::MultipleTables
+            | Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -186,27 +199,54 @@ fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
             .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
-fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
-    // Multi-value function results have no native Java mapping (a method returns
-    // one value); reject at conversion time (ADR-0). cowsay has none.
-    for ty in &module.types {
-        if ty.results.len() > 1 {
-            bail!("multi-value function results are not supported by the Java backend yet");
-        }
+/// Emit just the module class (constructor, functions, and the spec-harness
+/// `invoke`/`globalGet` dispatch methods), for the shared spec harness (ADR-3):
+/// the harness bundles one runtime for every module in a `.wast` file, so
+/// per-module output carries no runtime classes / `Main`. Multi-value results,
+/// wasm-1.0 imports, and trapping conversions are all exercised here. Returns
+/// the class source and the runtime units it references.
+pub fn generate_program_with_units(
+    module: &Module,
+    type_name: &str,
+) -> Result<(String, BTreeSet<String>)> {
+    check_module_support(&JavaBackend, module)?;
+    let gen = new_gen(module, type_name.to_string(), false);
+    let mut body = CodeWriter::new("    ");
+    gen.constructor(&mut body);
+    for (i, func) in module.funcs.iter().enumerate() {
+        body.line("");
+        let idx = module.num_imported_funcs() as usize + i;
+        gen.function(&mut body, idx as u32, func);
     }
+    body.line("");
+    gen.emit_invoke_method(&mut body);
+    body.line("");
+    gen.emit_global_get_method(&mut body);
 
-    let type_name = type_name(&opts.module_name);
-    let gen = Gen {
+    let mut out = format!("final class {type_name} {{\n");
+    out.push_str(&reindent(&body.finish(), 1));
+    out.push_str("}\n");
+    Ok((out, gen.uses.into_inner()))
+}
+
+fn new_gen(module: &Module, type_name: String, default_wasi: bool) -> Gen<'_> {
+    Gen {
         module,
-        default_wasi: opts.default_wasi,
-        type_name: type_name.clone(),
+        default_wasi,
+        type_name,
         uses: RefCell::new(BTreeSet::new()),
         split: Cell::new(false),
         next_part: Cell::new(0),
+        mv_counter: Cell::new(0),
         cur_base: RefCell::new(String::new()),
         cur_frame_ty: RefCell::new(String::new()),
         part_defs: RefCell::new(Vec::new()),
-    };
+    }
+}
+
+fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
+    let type_name = type_name(&opts.module_name);
+    let gen = new_gen(module, type_name.clone(), opts.default_wasi);
 
     // Emit the module class body into its own writer so `uses` is populated
     // before the runtime bundle is assembled.
@@ -382,6 +422,8 @@ struct Gen<'a> {
     split: Cell<bool>,
     /// Part-method counter for the current function.
     next_part: Cell<usize>,
+    /// Monotonic counter for multi-value result destructuring temps (`__mvN`).
+    mv_counter: Cell<usize>,
     /// Base name (`f47`) and frame type (`Frame47`) of the current function.
     cur_base: RefCell<String>,
     cur_frame_ty: RefCell<String>,
@@ -466,6 +508,10 @@ impl<'a> Gen<'a> {
         ));
         w.indent();
 
+        // Memory: imported or locally defined (index space has at most one).
+        if let Some(import) = &m.imported_memory {
+            self.emit_typed_import(w, "this.memory", "Memory", &import.module, &import.name);
+        }
         if let Some(mem) = &m.memory {
             self.use_unit("memory/_class");
             let max = mem.max_pages.map(|p| p as u32).unwrap_or(65536);
@@ -474,16 +520,33 @@ impl<'a> Gen<'a> {
                 mem.min_pages as u32, max
             ));
         }
+
+        // Tables: imported first, then defined (index space is
+        // imported_tables ++ tables, ADR-16).
+        for (i, import) in m.imported_tables.iter().enumerate() {
+            self.emit_typed_import(
+                w,
+                &format!("this.t{i}"),
+                "Table",
+                &import.module,
+                &import.name,
+            );
+        }
+        let num_imported_tables = m.imported_tables.len();
         for (i, table) in m.tables.iter().enumerate() {
             self.use_unit("table/_class");
-            w.line(format!("this.t{i} = new Table({});", table.min));
+            w.line(format!(
+                "this.t{} = new Table({});",
+                num_imported_tables + i,
+                table.min
+            ));
         }
 
         let wasi = wasi_bundled(m, self.default_wasi);
         if wasi {
             self.use_unit("wasi/_class");
             w.line("this.wasi = new WASI(args, env);");
-            if m.memory.is_some() {
+            if m.memory.is_some() || m.imported_memory.is_some() {
                 w.line("this.wasi.memory = this.memory;");
             }
         }
@@ -492,33 +555,56 @@ impl<'a> Gen<'a> {
             self.emit_import(w, i, import);
         }
 
+        // Globals: imported first, then defined; every global is a boxed
+        // `Global` (ADR-16). Defined-global inits may read imported globals, so
+        // they resolve after the imported ones.
+        for (i, import) in m.imported_globals.iter().enumerate() {
+            self.emit_typed_import(
+                w,
+                &format!("this.g{i}"),
+                "Global",
+                &import.module,
+                &import.name,
+            );
+        }
+        let num_imported_globals = m.imported_globals.len();
         for (i, global) in m.globals.iter().enumerate() {
-            w.line(format!("this.g{i} = {};", self.expr(&global.init)));
+            self.use_unit("global/_class");
+            w.line(format!(
+                "this.g{} = new Global({});",
+                num_imported_globals + i,
+                self.expr(&global.init)
+            ));
         }
 
         for (i, elem) in m.elems.iter().enumerate() {
-            if let ElemKind::Active {
-                table_index,
-                offset,
-            } = &elem.kind
-            {
-                let items = elem
-                    .items
+            let items = || {
+                elem.items
                     .iter()
                     .map(|item| self.elem_item(item))
                     .collect::<Vec<_>>()
-                    .join(", ");
-                self.use_unit("table/init");
-                w.line(format!(
-                    "Rt.Funcref[] elem{i} = new Rt.Funcref[]{{{items}}};"
-                ));
-                w.line(format!(
-                    "this.t{table_index}.init({}, elem{i}, 0, {});",
-                    self.expr(offset),
-                    elem.items.len()
-                ));
+                    .join(", ")
+            };
+            match &elem.kind {
+                ElemKind::Declared => w.line(format!("this.elem{i} = new Rt.Funcref[0];")),
+                ElemKind::Passive => {
+                    w.line(format!("this.elem{i} = new Rt.Funcref[]{{{}}};", items()))
+                }
+                ElemKind::Active {
+                    table_index,
+                    offset,
+                } => {
+                    self.use_unit("table/init");
+                    w.line(format!("this.elem{i} = new Rt.Funcref[]{{{}}};", items()));
+                    w.line(format!(
+                        "this.t{table_index}.init({}, this.elem{i}, 0, {});",
+                        self.expr(offset),
+                        elem.items.len()
+                    ));
+                    // Active segments are dropped after instantiation.
+                    w.line(format!("this.elem{i} = new Rt.Funcref[0];"));
+                }
             }
-            // Passive/declared element segments are rejected (TableBulkOps).
         }
 
         for (i, data) in m.datas.iter().enumerate() {
@@ -532,6 +618,9 @@ impl<'a> Gen<'a> {
                         self.expr(offset),
                         data.data.len()
                     ));
+                    // Active segments are dropped after instantiation, but stay
+                    // addressable (as empty) by memory.init/data.drop.
+                    w.line(format!("this.data{i} = new byte[0];"));
                 }
                 None => {
                     w.line(format!("this.data{i} = {blob};"));
@@ -563,14 +652,17 @@ impl<'a> Gen<'a> {
 
     fn struct_fields(&self, w: &mut CodeWriter) {
         let m = self.module;
-        if m.memory.is_some() {
+        if m.imported_memory.is_some() || m.memory.is_some() {
             w.line("Memory memory;");
         }
-        for i in 0..m.tables.len() {
+        // Table index space = imported_tables ++ tables (ADR-16).
+        for i in 0..(m.imported_tables.len() + m.tables.len()) {
             w.line(format!("Table t{i};"));
         }
-        for (i, g) in m.globals.iter().enumerate() {
-            w.line(format!("{} g{i};", jtype(g.ty)));
+        // Global index space = imported_globals ++ globals; each is a boxed
+        // `Global` (ADR-16).
+        for i in 0..(m.imported_globals.len() + m.globals.len()) {
+            w.line(format!("Global g{i};"));
         }
         for i in 0..m.imported_funcs.len() {
             w.line(format!("Rt.Fn if{i};"));
@@ -578,12 +670,57 @@ impl<'a> Gen<'a> {
         if wasi_bundled(m, self.default_wasi) {
             w.line("WASI wasi;");
         }
-        for (i, data) in m.datas.iter().enumerate() {
-            if data.offset.is_none() {
-                w.line(format!("byte[] data{i};"));
-            }
+        // Element segments retained for table.init (active ones are emptied
+        // after instantiation).
+        for i in 0..m.elems.len() {
+            w.line(format!("Rt.Funcref[] elem{i};"));
+        }
+        // Every data segment is addressable by memory.init/data.drop (active
+        // ones become empty after instantiation), so all get a field.
+        for i in 0..m.datas.len() {
+            w.line(format!("byte[] data{i};"));
         }
         w.line("java.util.Map<String, Object> Exports;");
+    }
+
+    /// Resolve a non-function import (memory/table/global) into `target`,
+    /// checking its *kind* via `instanceof` (ADR-16). A wrong-kind or missing
+    /// value is a link error; the finer wasm type (a global's value type and
+    /// mutability, a table/memory's limits) is not checked — the import-limits
+    /// gap, wider for Java than Go since these carry no static type (ADR-30).
+    fn emit_typed_import(
+        &self,
+        w: &mut CodeWriter,
+        target: &str,
+        java_ty: &str,
+        module: &str,
+        name: &str,
+    ) {
+        w.line(format!(
+            "{{ Object v = {}; if (v != null) {{",
+            self.resolve_import_string(module, name)
+        ));
+        w.indent();
+        w.line(format!("if (!(v instanceof {java_ty})) {{"));
+        w.indent();
+        w.line(format!(
+            "{}({});",
+            self.rt("link_error"),
+            java_string(&format!("incompatible import type for {module}.{name}"))
+        ));
+        w.dedent();
+        w.line("}");
+        w.line(format!("{target} = ({java_ty}) v;"));
+        w.dedent();
+        w.line("} else {");
+        w.indent();
+        w.line(format!(
+            "{}({});",
+            self.rt("link_error"),
+            java_string(&format!("missing import {module}.{name}"))
+        ));
+        w.dedent();
+        w.line("} }");
     }
 
     fn emit_import(&self, w: &mut CodeWriter, i: usize, import: &dewasm_core::ir::ImportedFunc) {
@@ -685,8 +822,9 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "null".to_string(),
-            // ref-typed global element items imply reference types (rejected).
-            ElemItem::Global(idx) => format!("g{idx}"),
+            // ref-typed global element items imply reference types (rejected at
+            // conversion); unreachable, but must type-check as a Funcref.
+            ElemItem::Global(idx) => format!("(Rt.Funcref) g{idx}.value"),
         }
     }
 
@@ -726,8 +864,13 @@ impl<'a> Gen<'a> {
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &Func) {
         let ty = &self.module.types[func.type_idx as usize];
         let nparams = ty.params.len();
-        let result = ty.results.first().copied();
-        let ret_ty = result.map(jtype).unwrap_or("void");
+        let results = &ty.results;
+        let has_result = !results.is_empty();
+        // A method returns one value; multi-value signatures return a boxed
+        // `Object[]` (ADR-30). The result register (`_ret` / frame `ret`) takes
+        // the same shape.
+        let ret_ty = ret_slot_ty(results);
+        let ret_init = ret_slot_init(results);
 
         let mut local_types = ty.params.clone();
         local_types.extend(func.locals.iter().copied());
@@ -750,8 +893,8 @@ impl<'a> Gen<'a> {
                 w.line(format!("{} {};", jtype(t.ty), temp_name(*t)));
             }
             w.line("int br;");
-            if let Some(rt) = result {
-                w.line(format!("{} ret;", jtype(rt)));
+            if has_result {
+                w.line(format!("{ret_ty} ret;"));
             }
             w.dedent();
             w.line("}");
@@ -766,8 +909,11 @@ impl<'a> Gen<'a> {
             for i in 0..nparams {
                 w.line(format!("f.l{i} = p{i};"));
             }
+            if has_result {
+                w.line(format!("f.ret = {ret_init};"));
+            }
             self.emit_body(w, &func.body, false);
-            if result.is_some() {
+            if has_result {
                 w.line("return f.ret;");
             }
             w.dedent();
@@ -794,19 +940,90 @@ impl<'a> Gen<'a> {
                 ));
             }
             w.line("int _br = 0;");
-            if let Some(rt) = result {
-                w.line(format!("{} _ret = {};", jtype(rt), zero_value(rt)));
+            if has_result {
+                w.line(format!("{ret_ty} _ret = {ret_init};"));
             }
             let mut guarded = false;
             for stmt in &func.body {
                 self.emit_stmt(w, stmt, &mut guarded);
             }
-            if result.is_some() {
+            if has_result {
                 w.line("return _ret;");
             }
             w.dedent();
             w.line("}");
         }
+    }
+
+    /// The spec-harness reflective dispatcher: `invoke(name, args)` boxes every
+    /// result into an `Object[]` (empty for a void export, one element for a
+    /// single result, the function's own `Object[]` for multi-value). Mirrors
+    /// Go's reflective invoke under Java's static typing.
+    fn emit_invoke_method(&self, w: &mut CodeWriter) {
+        w.line("Object[] invoke(String name, Object[] a) {");
+        w.indent();
+        w.line("switch (name) {");
+        w.indent();
+        for export in &self.module.exports {
+            let ExportKind::Func(idx) = export.kind else {
+                continue;
+            };
+            let ty = self.func_type(idx);
+            w.line(format!("case {}: {{", java_string(&export.name)));
+            w.indent();
+            let args: Vec<String> = ty
+                .params
+                .iter()
+                .enumerate()
+                .map(|(k, t)| unbox(*t, &format!("a[{k}]")))
+                .collect();
+            match ty.results.len() {
+                0 => {
+                    w.line(format!("{};", self.call_string(idx, &args)));
+                    w.line("return new Object[0];");
+                }
+                1 => {
+                    w.line(format!(
+                        "return new Object[]{{ {} }};",
+                        self.call_string(idx, &args)
+                    ));
+                }
+                _ => {
+                    w.line(format!("return {};", self.call_multi_array(idx, &args)));
+                }
+            }
+            w.dedent();
+            w.line("}");
+        }
+        w.line("default: throw new RuntimeException(\"no export \" + name);");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("}");
+    }
+
+    /// The spec-harness global reader: the exported boxed global's current
+    /// value in a one-element `Object[]`, so the harness treats it exactly like
+    /// a single-result `invoke`.
+    fn emit_global_get_method(&self, w: &mut CodeWriter) {
+        w.line("Object[] globalGet(String name) {");
+        w.indent();
+        w.line("switch (name) {");
+        w.indent();
+        for export in &self.module.exports {
+            let ExportKind::Global(idx) = export.kind else {
+                continue;
+            };
+            w.line(format!(
+                "case {}: return new Object[]{{ g{idx}.value }};",
+                java_string(&export.name)
+            ));
+        }
+        w.line("default: throw new RuntimeException(\"no global \" + name);");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("}");
     }
 
     /// Emit a statement sequence as the body of a construct (loop/if/block body
@@ -954,7 +1171,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("{} = {};", self.local_ref(*idx), self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("g{idx} = {};", self.expr(expr)));
+                w.line(format!("g{idx}.value = {};", self.expr(expr)));
             }
             Stmt::Store {
                 op,
@@ -1009,7 +1226,12 @@ impl<'a> Gen<'a> {
                 results,
             } => {
                 let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
-                w.line(self.assign_results(results, self.call_string(*func, &args)));
+                if self.func_type(*func).results.len() > 1 {
+                    let arr = self.call_multi_array(*func, &args);
+                    self.emit_multi_results(w, results, &arr);
+                } else {
+                    w.line(self.assign_results(results, self.call_string(*func, &args)));
+                }
             }
             Stmt::CallIndirect {
                 type_idx,
@@ -1030,8 +1252,13 @@ impl<'a> Gen<'a> {
                     java_string(&self.type_symbol(*type_idx))
                 );
                 let ty = &self.module.types[*type_idx as usize];
-                let call = self.invoke_string(&fnv, &boxed, ty.results.first().copied());
-                w.line(self.assign_results(results, call));
+                if ty.results.len() > 1 {
+                    let arr = format!("(Object[]) {}", self.invoke_string(&fnv, &boxed, None));
+                    self.emit_multi_results(w, results, &arr);
+                } else {
+                    let call = self.invoke_string(&fnv, &boxed, ty.results.first().copied());
+                    w.line(self.assign_results(results, call));
+                }
             }
             Stmt::MemoryGrow { dst, delta } => {
                 self.use_unit("memory/grow");
@@ -1076,8 +1303,38 @@ impl<'a> Gen<'a> {
                 // `throw`) avoids an "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
             }
-            Stmt::TableInit { .. } | Stmt::TableCopy { .. } | Stmt::ElemDrop { .. } => {
-                unreachable!("table bulk ops are rejected by check_module_support");
+            Stmt::TableInit {
+                seg,
+                table_index,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/init");
+                w.line(format!(
+                    "t{table_index}.init({}, elem{seg}, {}, {});",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::TableCopy {
+                dst_table,
+                src_table,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/copy");
+                w.line(format!(
+                    "t{dst_table}.copy({}, t{src_table}, {}, {});",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::ElemDrop { seg } => {
+                w.line(format!("elem{seg} = new Rt.Funcref[0];"));
             }
             Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
                 unreachable!("structured statement routed to simple_stmt");
@@ -1086,8 +1343,18 @@ impl<'a> Gen<'a> {
     }
 
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
-        if let Some(v) = values.first() {
-            w.line(format!("{} = {};", self.ret(), self.expr(v)));
+        match values.len() {
+            0 => {}
+            1 => w.line(format!("{} = {};", self.ret(), self.expr(&values[0]))),
+            _ => {
+                // Multi-value: box each into the function's `Object[]` register.
+                let vs = values
+                    .iter()
+                    .map(|v| self.expr(v))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                w.line(format!("{} = new Object[]{{{vs}}};", self.ret()));
+            }
         }
         w.line(format!("{} = -1;", self.br()));
     }
@@ -1115,6 +1382,36 @@ impl<'a> Gen<'a> {
         match results.first() {
             None => format!("{call};"),
             Some(t) => format!("{} = {call};", self.temp_ref(*t)),
+        }
+    }
+
+    /// The `Object[]` a multi-value call produces: a defined method returns one
+    /// directly; an imported `Fn.invoke` returns `Object`, cast to `Object[]`.
+    fn call_multi_array(&self, func_idx: u32, args: &[String]) -> String {
+        if (func_idx as usize) < self.module.imported_funcs.len() {
+            let boxed = args.join(", ");
+            format!(
+                "(Object[]) {}",
+                self.invoke_string(&format!("if{func_idx}"), &boxed, None)
+            )
+        } else {
+            format!("f{func_idx}({})", args.join(", "))
+        }
+    }
+
+    /// Destructure a multi-value call's `Object[]` into the result temps,
+    /// unboxing each slot to its wasm type (ADR-30).
+    fn emit_multi_results(&self, w: &mut CodeWriter, results: &[Temp], arr: &str) {
+        let n = self.mv_counter.get();
+        self.mv_counter.set(n + 1);
+        let mv = format!("__mv{n}");
+        w.line(format!("Object[] {mv} = {arr};"));
+        for (i, t) in results.iter().enumerate() {
+            w.line(format!(
+                "{} = {};",
+                self.temp_ref(*t),
+                unbox(t.ty, &format!("{mv}[{i}]"))
+            ));
         }
     }
 
@@ -1160,7 +1457,7 @@ impl<'a> Gen<'a> {
             Expr::F64Const(bits) => format!("Double.longBitsToDouble(0x{bits:x}L)"),
             Expr::Temp(t) => self.temp_ref(*t),
             Expr::LocalGet(idx) => self.local_ref(*idx),
-            Expr::GlobalGet(idx) => format!("g{idx}"),
+            Expr::GlobalGet(idx) => unbox(self.module.global_type(*idx), &format!("g{idx}.value")),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
@@ -1195,48 +1492,59 @@ impl<'a> Gen<'a> {
             I64Clz => format!("(long) Long.numberOfLeadingZeros({a})"),
             I64Ctz => format!("(long) Long.numberOfTrailingZeros({a})"),
             I64Popcnt => format!("(long) Long.bitCount({a})"),
-            F32Abs => format!("Math.abs({a})"),
-            F32Neg => format!("(-({a}))"),
-            F64Abs => format!("Math.abs({a})"),
-            F64Neg => format!("(-({a}))"),
-            F32Ceil => format!("((float) Math.ceil({a}))"),
-            F32Floor => format!("((float) Math.floor({a}))"),
-            F32Trunc => format!("((float) (({a}) < 0 ? Math.ceil({a}) : Math.floor({a})))"),
-            F32Nearest => format!("((float) Math.rint({a}))"),
-            F32Sqrt => format!("((float) Math.sqrt({a}))"),
-            F64Ceil => format!("Math.ceil({a})"),
-            F64Floor => format!("Math.floor({a})"),
-            F64Trunc => format!("(({a}) < 0 ? Math.ceil({a}) : Math.floor({a}))"),
-            F64Nearest => format!("Math.rint({a})"),
-            F64Sqrt => format!("Math.sqrt({a})"),
+            // abs/neg are bit ops on the sign bit: they must NOT quiet a NaN
+            // (Math.abs would leave a negative NaN's sign set) (ADR-2).
+            F32Abs => format!("Float.intBitsToFloat(Float.floatToRawIntBits({a}) & 0x7fffffff)"),
+            F32Neg => format!("Float.intBitsToFloat(Float.floatToRawIntBits({a}) ^ 0x80000000)"),
+            F64Abs => format!(
+                "Double.longBitsToDouble(Double.doubleToRawLongBits({a}) & 0x7fffffffffffffffL)"
+            ),
+            F64Neg => format!(
+                "Double.longBitsToDouble(Double.doubleToRawLongBits({a}) ^ 0x8000000000000000L)"
+            ),
+            // ceil/floor/nearest/sqrt canonicalize a NaN result to wasm's
+            // arithmetic NaN (Java's Math.* may pass a signaling operand through
+            // unquieted); trunc is a helper (single operand eval) (ADR-2).
+            F32Ceil => format!("{}((float) Math.ceil({a}))", self.rt("f32_canon")),
+            F32Floor => format!("{}((float) Math.floor({a}))", self.rt("f32_canon")),
+            F32Trunc => format!("{}({a})", self.rt("f32_trunc")),
+            F32Nearest => format!("{}((float) Math.rint({a}))", self.rt("f32_canon")),
+            F32Sqrt => format!("{}((float) Math.sqrt({a}))", self.rt("f32_canon")),
+            F64Ceil => format!("{}(Math.ceil({a}))", self.rt("f64_canon")),
+            F64Floor => format!("{}(Math.floor({a}))", self.rt("f64_canon")),
+            F64Trunc => format!("{}({a})", self.rt("f64_trunc")),
+            F64Nearest => format!("{}(Math.rint({a}))", self.rt("f64_canon")),
+            F64Sqrt => format!("{}(Math.sqrt({a}))", self.rt("f64_canon")),
             I32WrapI64 => format!("((int) ({a}))"),
-            // Trapping float->int conversions saturate in the milestone (a
-            // documented gap; the trapping form is a spec-milestone task,
-            // ADR-30). The saturating forms are exactly Java's cast semantics.
-            I32TruncF32S | I32TruncF64S | I32TruncSatF32S | I32TruncSatF64S => {
-                format!("((int) ({a}))")
+            // Trapping float->int conversions go through helpers that trap on
+            // NaN/overflow; the source is widened to double first (exact for
+            // f32). The saturating signed forms are exactly Java's cast; the
+            // saturating unsigned forms need helpers (Java's cast wraps past the
+            // unsigned range) (ADR-2).
+            I32TruncF32S | I32TruncF64S => format!("{}((double)({a}))", self.rt("i32_trunc_s")),
+            I32TruncF32U | I32TruncF64U => format!("{}((double)({a}))", self.rt("i32_trunc_u")),
+            I64TruncF32S | I64TruncF64S => format!("{}((double)({a}))", self.rt("i64_trunc_s")),
+            I64TruncF32U | I64TruncF64U => format!("{}((double)({a}))", self.rt("i64_trunc_u")),
+            I32TruncSatF32S | I32TruncSatF64S => format!("((int) ({a}))"),
+            I32TruncSatF32U | I32TruncSatF64U => {
+                format!("{}((double)({a}))", self.rt("i32_trunc_sat_u"))
             }
-            I32TruncF32U | I32TruncF64U | I32TruncSatF32U | I32TruncSatF64U => {
-                format!("((int) (long) ({a}))")
-            }
-            I64TruncF32S | I64TruncF64S | I64TruncSatF32S | I64TruncSatF64S => {
-                format!("((long) ({a}))")
-            }
-            I64TruncF32U | I64TruncF64U | I64TruncSatF32U | I64TruncSatF64U => {
-                format!("((long) ({a}))")
+            I64TruncSatF32S | I64TruncSatF64S => format!("((long) ({a}))"),
+            I64TruncSatF32U | I64TruncSatF64U => {
+                format!("{}((double)({a}))", self.rt("i64_trunc_sat_u"))
             }
             I64ExtendI32S => format!("((long) ({a}))"),
             I64ExtendI32U => format!("Integer.toUnsignedLong({a})"),
             F32ConvertI32S => format!("((float) ({a}))"),
             F32ConvertI32U => format!("((float) Integer.toUnsignedLong({a}))"),
             F32ConvertI64S => format!("((float) ({a}))"),
-            F32ConvertI64U => format!("((float) ({a}))"),
+            F32ConvertI64U => format!("{}({a})", self.rt("f32_convert_i64_u")),
             F64ConvertI32S => format!("((double) ({a}))"),
             F64ConvertI32U => format!("((double) Integer.toUnsignedLong({a}))"),
             F64ConvertI64S => format!("((double) ({a}))"),
-            F64ConvertI64U => format!("((double) ({a}))"),
-            F32DemoteF64 => format!("((float) ({a}))"),
-            F64PromoteF32 => format!("((double) ({a}))"),
+            F64ConvertI64U => format!("{}({a})", self.rt("f64_convert_i64_u")),
+            F32DemoteF64 => format!("{}({a})", self.rt("f32_demote")),
+            F64PromoteF32 => format!("{}({a})", self.rt("f64_promote")),
             I32ReinterpretF32 => format!("Float.floatToRawIntBits({a})"),
             I64ReinterpretF64 => format!("Double.doubleToRawLongBits({a})"),
             F32ReinterpretI32 => format!("Float.intBitsToFloat({a})"),
@@ -1294,9 +1602,48 @@ impl<'a> Gen<'a> {
             F32Sub | F64Sub => format!("(({a}) - ({b}))"),
             F32Mul | F64Mul => format!("(({a}) * ({b}))"),
             F32Div | F64Div => format!("(({a}) / ({b}))"),
-            F32Min | F64Min => format!("Math.min({a}, {b})"),
-            F32Max | F64Max => format!("Math.max({a}, {b})"),
-            F32Copysign | F64Copysign => format!("Math.copySign({a}, {b})"),
+            // Java's Math.min/max pass a signaling NaN operand through
+            // unquieted and Math.copySign may treat NaN's sign inconsistently;
+            // wasm min/max return an arithmetic NaN and copysign is a pure sign
+            // bit op, so both go through explicit code (ADR-2).
+            F32Min => format!("{}({a}, {b})", self.rt("f32_min")),
+            F32Max => format!("{}({a}, {b})", self.rt("f32_max")),
+            F64Min => format!("{}({a}, {b})", self.rt("f64_min")),
+            F64Max => format!("{}({a}, {b})", self.rt("f64_max")),
+            F32Copysign => format!(
+                "Float.intBitsToFloat((Float.floatToRawIntBits({a}) & 0x7fffffff) | (Float.floatToRawIntBits({b}) & 0x80000000))"
+            ),
+            F64Copysign => format!(
+                "Double.longBitsToDouble((Double.doubleToRawLongBits({a}) & 0x7fffffffffffffffL) | (Double.doubleToRawLongBits({b}) & 0x8000000000000000L))"
+            ),
+        }
+    }
+}
+
+/// The Java type of a function's result register (`_ret` / frame `ret` / the
+/// method return): the single value type, `Object[]` for multi-value, or
+/// `void` for no result (ADR-30).
+fn ret_slot_ty(results: &[ValType]) -> String {
+    match results {
+        [] => "void".to_string(),
+        [t] => jtype(*t).to_string(),
+        _ => "Object[]".to_string(),
+    }
+}
+
+/// The initial value of the result register: the value type's zero, or an
+/// `Object[]` of boxed zeros for multi-value.
+fn ret_slot_init(results: &[ValType]) -> String {
+    match results {
+        [] => String::new(),
+        [t] => zero_value(*t).to_string(),
+        ts => {
+            let zeros = ts
+                .iter()
+                .map(|t| zero_value(*t))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("new Object[]{{{zeros}}}")
         }
     }
 }
