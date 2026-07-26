@@ -39,6 +39,12 @@ message below is something this document explains how to fix.
   per `.wast` file, so it defaults to a curated list (like bash/python);
   `DEWASM_SPEC_ALL=1` sweeps every file. Any recent Go (generics, i.e. >= 1.18)
   qualifies.
+- **`java` and `javac` on `PATH` (or `$DEWASM_JAVA`/`$DEWASM_JAVAC`)**: needed by
+  the Java backend's e2e and units tests. Java is compiled, so those tests
+  `javac` the generated `Main.java` (to a content-addressed class-dir cache) and
+  run `java -cp <dir> Main`; a units test also `javac`s the whole runtime bundle.
+  JDK 11+ qualifies (the backend uses only standard APIs). The Java backend is at
+  the "cowsay runs" milestone (ADR-30): it has no spec harness yet.
 
 Nothing else is required for `cargo test` to pass in full, **except** for
 the `apps` cases specifically — see below.
