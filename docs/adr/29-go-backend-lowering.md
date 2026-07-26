@@ -1,9 +1,10 @@
 # ADR-29 — Go Backend Lowering Conventions
 
-Status: **Accepted, 2026-07-26.** First milestone ("cowsay runs", ADR-24) and
-second milestone (spec-harness green + wasm-1.0 completion, ADR-3/ADR-16)
+Status: **Accepted, 2026-07-26.** First milestone ("cowsay runs", ADR-24),
+second milestone (spec-harness green + wasm-1.0 completion, ADR-3/ADR-16), and
+third milestone (full WASI preview 1 incl. filesystem, adopting ADR-14's model)
 implemented in `crates/dewasm-backend-go/src/lib.rs`, `runtime/go/units/`, and
-`crates/dewasm-backend-go/tests/spec.rs`. Numeric conventions are ADR-2's; this
+`crates/dewasm-backend-go/tests/{spec,e2e}.rs`. Numeric conventions are ADR-2's; this
 ADR covers where Go — statically typed, with native fixed-width integers and
 floats — forced a different shape from the dynamically-typed backends (Ruby
 ADR-4, Python ADR-28). Go is also the first *compiled* backend, so it is the
@@ -87,9 +88,9 @@ hand, and add work they never face:
   "exit status N" and itself exits 1 rather than propagating the guest exit
   code, which the WASI args/env case asserts exactly. `$DEWASM_GO` overrides the
   toolchain; a missing one fails loud (ADR-15).
-- **Feature scope.** `Floats` is `Supported`. WASI is the eight core syscalls
-  (stdio + args/env + `random_get` + `proc_exit`); the filesystem waits for a
-  later milestone.
+- **Feature scope.** `Floats` is `Supported`. WASI began as the eight core
+  syscalls (stdio + args/env + `random_get` + `proc_exit`); the third milestone
+  below completes preview 1 including the filesystem.
 
 ## Second milestone: spec harness + wasm-1.0 completion
 
@@ -144,6 +145,62 @@ hand, and add work they never face:
   mantissa bit is set), so the units build the canonical pattern explicitly.
   f32 `sqrt` via `float32(math.Sqrt(float64(x)))` was *validated* correctly
   rounded against `f32.wast` (double-rounding through float64 is safe for sqrt).
+
+## Third milestone: full WASI preview 1 (filesystem)
+
+The fd-table model, `preopens` provider kwarg, prefix-containment sandboxing,
+and the deliberate ENOSYS gaps (rights narrowing, symlink create/read,
+`fd_renumber`/`fd_advise`/`fd_allocate`, `path_filestat_set_times`,
+`poll_oneoff`) are **ADR-14's**, mirrored one-for-one into `runtime/go/units/
+wasi/` (36 units, matching the Ruby/Python set). Only where Go's standard
+library or type system forced a different shape from the interpreted backends
+is recorded here.
+
+- **The fd table is `map[uint32]any`** holding either an `*os.File` (stdio and
+  files) or a `*wasiDir` (a preopen, or a directory the guest opened via
+  `path_open`); every fd-taking syscall type-asserts. Files use `*os.File`'s
+  `ReadAt`/`WriteAt`/`Seek`/`Truncate`/`Sync` for `fd_pread`/`fd_pwrite`/
+  `fd_seek`/`fd_filestat_set_size`/`fd_sync`. Stdio special-cases (SPIPE on
+  seek/tell/pread/pwrite, no close) key on pointer identity with
+  `os.Stdin`/`Stdout`/`Stderr` rather than a captured tuple.
+- **Preopens are the constructor's fourth parameter**, `New<T>(imports, args,
+  env, preopens map[string]string)` — the Go analogue of Ruby/Python's
+  `preopens:` kwarg (Go has no keyword args). Standalone `main` reads
+  `DEWASM_PREOPEN` ("guest=host,…") into it, exactly as the other backends do;
+  preopen fds are assigned in sorted key order so Go's random map iteration adds
+  no nondeterminism.
+- **`filestat` times come from the portable `os.FileInfo.ModTime`** for atim/
+  mtim/ctim; only dev/ino/nlink read the unix `syscall.Stat_t` (via
+  `FileInfo.Sys()`, cast through `uint64`, which compiles on both darwin and
+  linux — unlike the `Atim`/`Atimespec` timespec fields, whose names differ
+  per platform and would need build tags). This keeps the whole runtime a
+  single build-tag-free `.go` file (ADR-29's compile model). `fd_datasync`
+  falls back to a full `fsync` (`*os.File.Sync`) — Go exposes no portable
+  `fdatasync`, and it is absent on macOS anyway (mirroring Python).
+- **`resolve_path` derives the final path component from the raw guest string,
+  not `filepath.Base(filepath.Join(base, rel))`.** Go's `filepath.Join` *Cleans*
+  its result, folding a trailing `.`/`..` away, so `Base` of `join(dir, ".")`
+  returns `dir`'s own name and the AT_SYMLINK_NOFOLLOW branch would wrongly
+  resolve (and reject, ERRNO_NOTCAPABLE) the parent. Python's `os.path.join`
+  keeps the trailing `.`, so its `basename` is `"."` and it falls through to
+  full resolution. Computing `last` from the substring after the final `/`
+  restores that behavior (a `.`/`..`/empty final component is never a symlink).
+- **Library-mode WASI output always seeds `rt/exit`.** The host glue that
+  drives a library instance catches a `proc_exit` (`*rtExit`) to read the exit
+  code, exactly as the standalone `main` does; because Go type-asserts the
+  concrete type at compile time, `*rtExit` must be defined even for a fixture
+  that never imports `proc_exit` itself. (Python gets this for free — its
+  `except Rt.Exit` is evaluated lazily.)
+- **`scan_imports` strips line comments before matching.** With `time`,
+  `strings`, `sort`, etc. now candidate imports, a prose comment ("at
+  instantiation time.") must not pull in the `time` package and trip Go's
+  unused-import error; `//go:` directives are unaffected in the emitted bundle
+  (stripping only computes the import set).
+
+Result: the shared WASI `Fs` suite (five fixtures incl. the escape/symlink-
+nofollow cases), `gzip_e2e!` (byte-stdio through compiled output), and the
+filesystem app cases (qjs file-I/O + REPL, sqlite3 DB-file, ripgrep) are all
+byte-identical to the same wasmtime goldens the Ruby/Python cases use.
 
 ## Rejected alternatives
 

@@ -203,15 +203,29 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     gen.emit_program(&mut body);
 
     let standalone = opts.mode == Mode::Standalone;
+    let wasi = wasi_bundled(module, opts.default_wasi);
     if standalone {
         // main's recover arm references these runtime types.
         gen.use_unit("rt/trap");
+        gen.use_unit("rt/exit");
+    } else if wasi {
+        // Library-mode WASI output is driven by host glue that instantiates
+        // and calls `_start`; that glue needs to catch a `proc_exit` (rtExit)
+        // to read the exit code, exactly as the standalone main does. Seed
+        // rt/exit so the type is always defined even for a module that never
+        // imports proc_exit itself (ADR-29).
         gen.use_unit("rt/exit");
     }
     let uses = gen.uses.borrow().clone();
     let bundle = bundler().bundle(&uses, 0)?;
 
     let mut imports = scan_imports(&bundle, standalone);
+    // The standalone WASI main parses DEWASM_PREOPEN with `strings`; that code
+    // lives in main_func (not the scanned bundle), so add the import here.
+    if standalone && wasi && !imports.iter().any(|i| i == "strings") {
+        imports.push("strings".to_string());
+        imports.sort();
+    }
     // Library mode concatenates host glue after the generated declarations
     // (mirroring Ruby/Bash). Go requires all imports before other
     // declarations, so the glue cannot carry its own `import`; the generated
@@ -232,7 +246,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
 
     if standalone {
         out.push('\n');
-        out.push_str(&main_func(&type_name));
+        out.push_str(&main_func(&type_name, wasi));
     } else {
         // Mark the always-present `fmt` import used, so appended glue can rely
         // on it (see above).
@@ -244,18 +258,35 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
 /// The external packages a bundle references, plus `os` for a standalone main.
 /// Only the runtime bundle (controlled code) is scanned; generated program
 /// code emits no package-qualified selectors and data blobs are hex literals,
-/// so no user string can inject a false import (ADR-29).
+/// so no user string can inject a false import (ADR-29). Line comments are
+/// stripped first: a prose "at instantiation time." must not pull in the `time`
+/// package (`//go:` directives survive in the emitted bundle regardless — this
+/// stripping only computes the import set).
 fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     let candidates = [
         ("binary.", "encoding/binary"),
         ("bits.", "math/bits"),
+        ("errors.", "errors"),
+        ("filepath.", "path/filepath"),
         ("math.", "math"),
         ("rand.", "crypto/rand"),
         ("os.", "os"),
+        ("sort.", "sort"),
+        ("strings.", "strings"),
+        ("syscall.", "syscall"),
+        ("time.", "time"),
     ];
+    let code: String = bundle
+        .lines()
+        .map(|line| match line.find("//") {
+            Some(i) => &line[..i],
+            None => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {
-        if bundle.contains(sel) {
+        if code.contains(sel) {
             set.insert(path);
         }
     }
@@ -277,10 +308,27 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-fn main_func(type_name: &str) -> String {
+fn main_func(type_name: &str, wasi: bool) -> String {
+    // Standalone WASI reads DEWASM_PREOPEN ("guest=host,...") into the preopens
+    // kwarg, kept separate from os.Args since argv already mirrors the guest's
+    // own argv (ADR-14). Without WASI there is nothing to preopen.
+    let (preopen_setup, preopen_arg) = if wasi {
+        (
+            "\tpreopens := map[string]string{}\n\
+             \tfor _, kv := range strings.Split(os.Getenv(\"DEWASM_PREOPEN\"), \",\") {\n\
+             \t\tif i := strings.IndexByte(kv, '='); i >= 0 {\n\
+             \t\t\tpreopens[kv[:i]] = kv[i+1:]\n\
+             \t\t}\n\
+             \t}\n",
+            "preopens",
+        )
+    } else {
+        ("", "nil")
+    };
     format!(
         "func main() {{\n\
-         \tp := New{type_name}(nil, os.Args, os.Environ())\n\
+         {preopen_setup}\
+         \tp := New{type_name}(nil, os.Args, os.Environ(), {preopen_arg})\n\
          \tdefer func() {{\n\
          \t\tif r := recover(); r != nil {{\n\
          \t\t\tswitch e := r.(type) {{\n\
@@ -621,7 +669,7 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let name = &self.type_name;
         w.line(format!(
-            "func New{name}(imports Imports, args []string, env []string) *{name} {{"
+            "func New{name}(imports Imports, args []string, env []string, preopens map[string]string) *{name} {{"
         ));
         w.indent();
         w.line(format!("p := &{name}{{}}"));
@@ -666,14 +714,15 @@ impl<'a> Gen<'a> {
             || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
-            w.line("p.wasi = newWASI(args, env)");
+            w.line("p.wasi = newWASI(args, env, preopens)");
             if m.memory.is_some() || m.imported_memory.is_some() {
                 w.line("p.wasi.memory = p.memory");
             }
         } else {
-            // args/env unused when no WASI is bundled.
+            // args/env/preopens unused when no WASI is bundled.
             w.line("_ = args");
             w.line("_ = env");
+            w.line("_ = preopens");
         }
         if !has_imports {
             w.line("_ = imports");

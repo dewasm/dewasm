@@ -262,7 +262,7 @@ impl SpecBackend for GoSpec {
         let var = format!("_i{var_id}");
         let _ = writeln!(
             script,
-            "{var} := New{}({}, nil, nil)",
+            "{var} := New{}({}, nil, nil, nil)",
             conv.handle,
             imports_expr(registered)
         );
@@ -280,7 +280,11 @@ impl SpecBackend for GoSpec {
     ) -> String {
         let _ = script;
         self.decls.lock().unwrap().push_str(&conv.source);
-        format!("New{}({}, nil, nil)", conv.handle, imports_expr(registered))
+        format!(
+            "New{}({}, nil, nil, nil)",
+            conv.handle,
+            imports_expr(registered)
+        )
     }
 
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String> {

@@ -42,44 +42,44 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | args_sizes_get | ✅ | ✅ | ✅ | ✅ |
 | environ_get | ✅ | ✅ | ✅ | ✅ |
 | environ_sizes_get | ✅ | ✅ | ✅ | ✅ |
-| clock_res_get | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
-| clock_time_get | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
+| clock_res_get | ✅ | ✅ | ✅ | ✅ |
+| clock_time_get | ✅ | ✅ | ✅ | ✅ |
 | fd_advise | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | fd_allocate | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_close | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
-| fd_datasync | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| fd_fdstat_get | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
+| fd_close | ✅ | ✅ | ✅ | ✅ |
+| fd_datasync | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| fd_fdstat_get | ✅ | ✅ | ✅ | ✅ |
 | fd_fdstat_set_flags | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | fd_fdstat_set_rights | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_filestat_get | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| fd_filestat_set_size | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| fd_filestat_get | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| fd_filestat_set_size | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | fd_filestat_set_times | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_pread | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| fd_prestat_get | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
-| fd_prestat_dir_name | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| fd_pwrite | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| fd_pread | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| fd_prestat_get | ✅ | ✅ | ✅ | ✅ |
+| fd_prestat_dir_name | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| fd_pwrite | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | fd_read | ✅ | ✅ | ✅ | ✅ |
-| fd_readdir | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| fd_readdir | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | fd_renumber | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_seek | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
-| fd_sync | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| fd_tell | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
+| fd_seek | ✅ | ✅ | ✅ | ✅ |
+| fd_sync | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| fd_tell | ✅ | ✅ | ✅ | ✅ |
 | fd_write | ✅ | ✅ | ✅ | ✅ |
-| path_create_directory | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| path_filestat_get | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| path_create_directory | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| path_filestat_get | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | path_filestat_set_times | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | path_link | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| path_open | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| path_open | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | path_readlink | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| path_remove_directory | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
-| path_rename | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| path_remove_directory | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
+| path_rename | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | path_symlink | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| path_unlink_file | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) |
+| path_unlink_file | ✅ | ❌ (ENOSYS) | ✅ | ✅ |
 | poll_oneoff | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | proc_exit | ✅ | ✅ | ✅ | ✅ |
 | proc_raise | — | — | — | — |
 | random_get | ✅ | ✅ | ✅ | ✅ |
-| sched_yield | ✅ | ✅ | ✅ | ❌ (ENOSYS) |
+| sched_yield | ✅ | ✅ | ✅ | ✅ |
 | sock_accept | — | — | — | — |
 | sock_recv | — | — | — | — |
 | sock_send | — | — | — | — |
