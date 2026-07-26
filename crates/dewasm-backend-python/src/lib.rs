@@ -62,6 +62,12 @@ pub fn bundler() -> &'static RuntimeBundler {
                     prelude: Some("table/_class"),
                 },
                 RuntimeScope {
+                    prefix: "global",
+                    open: "class Global:",
+                    close: "",
+                    prelude: Some("global/_class"),
+                },
+                RuntimeScope {
                     prefix: "wasi",
                     open: "class WASI:",
                     close: "",
@@ -175,9 +181,14 @@ impl Backend for PythonBackend {
             // Python floats are IEEE doubles; f32 re-rounding and the NaN
             // paths follow ADR-2 (mirroring Ruby).
             Feature::Floats => SupportStatus::Supported,
-            // Everything else (imported globals/memories/tables, multiple
-            // tables, table bulk ops) is not yet implemented and is rejected
-            // at conversion time by `check_module_support` (ADR-16/ADR-0).
+            // The wasm-1.0 completion (ADR-16 model): boxed globals, imported
+            // globals/memories/tables, multiple tables, and the table half of
+            // bulk memory.
+            Feature::ImportedGlobals
+            | Feature::ImportedMemories
+            | Feature::ImportedTables
+            | Feature::MultipleTables
+            | Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -456,7 +467,14 @@ impl<'a> Gen<'a> {
             w.line("self._wasi_preopens = preopens if preopens is not None else {}");
         }
 
-        if let Some(mem) = &m.memory {
+        if let Some(import) = &m.imported_memory {
+            w.line(format!(
+                "self.memory = {} or self._missing({}, {})",
+                self.resolve_import_string("memory", &import.module, &import.name),
+                py_string(&import.module),
+                py_string(&import.name),
+            ));
+        } else if let Some(mem) = &m.memory {
             self.use_unit("memory/_class");
             let max = mem
                 .max_pages
@@ -470,6 +488,14 @@ impl<'a> Gen<'a> {
             w.line("self.memory = None");
         }
 
+        for (i, import) in m.imported_tables.iter().enumerate() {
+            w.line(format!(
+                "self.t{i} = {} or self._missing({}, {})",
+                self.resolve_import_string("table", &import.module, &import.name),
+                py_string(&import.module),
+                py_string(&import.name),
+            ));
+        }
         let num_imported_tables = m.num_imported_tables();
         for (i, table) in m.tables.iter().enumerate() {
             self.use_unit("table/_class");
@@ -508,10 +534,22 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        for (i, import) in m.imported_globals.iter().enumerate() {
+            w.line(format!(
+                "self.g{i} = {} or self._missing({}, {})",
+                self.resolve_import_string("global", &import.module, &import.name),
+                py_string(&import.module),
+                py_string(&import.name),
+            ));
+        }
         let num_imported_globals = m.imported_globals.len();
         for (i, global) in m.globals.iter().enumerate() {
+            self.use_unit("global/_class");
             let idx = num_imported_globals + i;
-            w.line(format!("self.g{idx} = {}", self.expr(&global.init)));
+            w.line(format!(
+                "self.g{idx} = Rt.Global({})",
+                self.expr(&global.init)
+            ));
         }
 
         for (i, elem) in m.elems.iter().enumerate() {
@@ -521,7 +559,7 @@ impl<'a> Gen<'a> {
                     .map(|item| match item {
                         ElemItem::Func(func_idx) => self.func_pair(*func_idx),
                         ElemItem::Null => "None".to_string(),
-                        ElemItem::Global(idx) => format!("self.g{idx}"),
+                        ElemItem::Global(idx) => format!("self.g{idx}.value"),
                     })
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -605,6 +643,14 @@ impl<'a> Gen<'a> {
         w.dedent();
         w.line("");
         w.line("def global_get(self, name):");
+        w.indent();
+        w.line("return getattr(self, self.GLOBAL_EXPORTS[name]).value");
+        w.dedent();
+        w.line("");
+        // The boxed Rt.Global itself (not its current value), for a host
+        // embedder or another dewasm instance to import as a shared mutable
+        // cell (ADR-16).
+        w.line("def global_export(self, name):");
         w.indent();
         w.line("return getattr(self, self.GLOBAL_EXPORTS[name])");
         w.dedent();
@@ -852,7 +898,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("l{idx} = {}", self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("self.g{idx} = {}", self.expr(expr)));
+                w.line(format!("self.g{idx}.value = {}", self.expr(expr)));
             }
             Stmt::Store {
                 op,
@@ -960,9 +1006,38 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
-            // Rejected by check_module_support (TableBulkOps unsupported).
-            Stmt::TableInit { .. } | Stmt::TableCopy { .. } | Stmt::ElemDrop { .. } => {
-                unreachable!("table bulk ops reached the python backend")
+            Stmt::TableInit {
+                seg,
+                table_index,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/init");
+                w.line(format!(
+                    "self.t{table_index}.init({}, self.elem{seg}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::TableCopy {
+                dst_table,
+                src_table,
+                dst,
+                src,
+                len,
+            } => {
+                self.use_unit("table/copy");
+                w.line(format!(
+                    "self.t{dst_table}.copy({}, self.t{src_table}, {}, {})",
+                    self.expr(dst),
+                    self.expr(src),
+                    self.expr(len)
+                ));
+            }
+            Stmt::ElemDrop { seg } => {
+                w.line(format!("self.elem{seg} = []"));
             }
             // Handled in emit_seq, never routed here.
             Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
@@ -1037,7 +1112,7 @@ impl<'a> Gen<'a> {
             }
             Expr::Temp(t) => temp(*t),
             Expr::LocalGet(idx) => format!("l{idx}"),
-            Expr::GlobalGet(idx) => format!("self.g{idx}"),
+            Expr::GlobalGet(idx) => format!("self.g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {

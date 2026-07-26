@@ -2,9 +2,13 @@
 
 Status: **Accepted, 2026-07-26.** First milestone ("cowsay runs", ADR-24)
 implemented in `crates/dewasm-backend-python/src/lib.rs` + `runtime/python/`.
-Numeric conventions are ADR-2's; this ADR covers the two places Python forced
-a different shape from Ruby (ADR-4): control flow and float division. The spec
-harness and the remaining WASI surface are a later milestone.
+**Second milestone (spec-harness green) landed 2026-07-26**: the wasm-1.0
+completion (ADR-16's model — boxed globals, imported globals/memories/tables,
+multiple tables, the table half of bulk memory) plus the shared spec harness
+(`crates/dewasm-backend-python/tests/spec.rs`). Numeric conventions are ADR-2's;
+this ADR covers the places Python forced a different shape from Ruby (ADR-4):
+control flow, float division, and (below) the harness's recursion/exhaustion
+handling. The remaining WASI surface is a later milestone.
 
 ## Context
 
@@ -57,6 +61,27 @@ bit paths). Three language facts did *not* transfer:
   in a `self.exports` dict with `invoke(name, *args)` as the entry point.
 - **`call_indirect` compares structural type strings** (`"i32,i64->i32"`),
   like Ruby's symbols and for the same reason (shared tables, ADR-4).
+- **Every global is a boxed `Rt.Global`** (`value` attribute), not a plain
+  `self.gN` attribute holding the value — reversing the first milestone's
+  choice now that imported globals are supported (ADR-16). A global crossing
+  an instantiation boundary must be a shared mutable cell, and `Memory`/`Table`
+  are already objects for the same reason, so one representation keeps
+  `GlobalGet`/`GlobalSet` a single rule. `global_get` reads `.value`;
+  `global_export`/`wasm_import` hand out the box itself.
+- **The spec harness runs the whole assertion body inside `def _main()` on a
+  large-stack thread.** Python's default 1000 recursion limit is far below
+  what call/fac-style deep guest recursion needs, but simply raising
+  `sys.setrecursionlimit` on the main thread risks a C-stack overflow (a
+  segfault, not a catchable error) before the Python limit trips. So the
+  harness sets a generous recursion limit *and* launches `_main` on a thread
+  with a 512 MiB `threading.stack_size` — the guest-side analogue of the
+  build's `convert_on_big_stack`. A runaway recursion then surfaces as a
+  `RecursionError` well inside that stack, which `check_exhaust` maps to wasm's
+  `call stack exhausted` (mirroring Ruby's `SystemStackError` and Bash's
+  `FUNCNEST` subshell). Because the class definitions live inside `_main` as
+  local classes whose methods still resolve the module-level `Rt`, the
+  generated `Rt = Rt` alias line is dropped for the harness (it would rebind
+  `Rt` as a `_main` local).
 
 ## Rejected alternatives
 
@@ -67,9 +92,12 @@ bit paths). Three language facts did *not* transfer:
 - **Mirror Ruby's `catch`/`throw` shape with single-iteration `while` loops
   for blocks.** Correct, but every block then costs a loop, so cowsay's
   38-deep block+loop nesting blows the 20-loop cap immediately.
-- **Box own globals in an `Rt.Global` cell (as Ruby does).** Only needed for
-  sharing a mutable global across modules via an *imported* global, which this
-  backend rejects at conversion time (ADR-16); plain attributes suffice.
+- **Keep own globals as plain `self.gN` attributes (the first-milestone
+  choice).** Adopted while imported globals were rejected at conversion time;
+  reversed in the second milestone (see the boxing decision above), because
+  supporting imported/exported-shared globals reintroduces exactly the
+  cross-boundary-sharing need that made plain attributes insufficient, and two
+  representations would fork every global read/write/export site.
 
 ## Consequences
 

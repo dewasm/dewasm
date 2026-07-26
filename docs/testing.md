@@ -17,10 +17,15 @@ message below is something this document explains how to fix.
 - **`git submodule update --init`**: fetches the wasm spec testsuite into
   `tests/spec/` (an upstream submodule — never edit it). Without this,
   the spec harness (`cargo test -p dewasm-backend-ruby --test spec`, and
-  likewise `-p dewasm-backend-bash`) fails immediately.
+  likewise `-p dewasm-backend-bash` / `-p dewasm-backend-python`) fails
+  immediately.
 - **`ruby` on `PATH`**: needed by the spec harness and most of the `e2e`
   test (both the Ruby backend's own tests and, indirectly, anything
   comparing Ruby's output). No specific version is required.
+- **`python3` >= 3.9 on `PATH` (or `$DEWASM_PYTHON`)**: needed by the
+  Python backend's spec/e2e tests. Like Bash, the Python spec harness runs
+  a curated `.wast` subset by default (the full sweep is ~2 min); pass
+  `DEWASM_SPEC_ALL=1` to run every file.
 - **`bash` >= 5 on `PATH`, `$DEWASM_BASH`, or a common Homebrew
   install path**: needed by the Bash backend's spec/e2e/softfloat tests.
   macOS's system `/bin/bash` is 3.2 and does not qualify (no associative
@@ -149,8 +154,9 @@ macros for the suites it participates in.
 | Variable | Effect |
 | --- | --- |
 | `DEWASM_BASH` | Path to a bash >= 5 interpreter, checked before `PATH`/Homebrew fallbacks. |
+| `DEWASM_PYTHON` | Path to a python3 >= 3.9 interpreter, checked before `python3`/`python` on `PATH`. |
 | `DEWASM_SPEC=i32,br` | Restrict the spec harness to specific `.wast` files (comma-separated stems). |
-| `DEWASM_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash defaults to a curated subset for speed). |
+| `DEWASM_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash and python both default to a curated subset for speed). |
 | `DEWASM_APPS_ALL=1` | Run the `apps` cases marked `heavy` (QuickJS, SQLite) under Bash too; skipped there by default since bash's softfloat makes them slow (this is a deliberate perf-based opt-out, not a missing-environment one — see ADR-15's scope). |
 
 See `AGENTS.md`'s Common commands table for the exact invocations.
