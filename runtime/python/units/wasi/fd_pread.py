@@ -1,8 +1,10 @@
 # requires: memory/i32_load, memory/i32_store, memory/init
-def wasi_fd_read(self, fd, iovs_ptr, iovs_len, nread_ptr):
+def wasi_fd_pread(self, fd, iovs_ptr, iovs_len, offset, nread_ptr):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
         return self.ERRNO_BADF
+    if io in self.std_ios:
+        return self.ERRNO_SPIPE
     nread = 0
     try:
         for i in range(iovs_len):
@@ -10,7 +12,8 @@ def wasi_fd_read(self, fd, iovs_ptr, iovs_len, nread_ptr):
             length = self.memory.i32_load(iovs_ptr + i * 8 + 4)
             if length == 0:
                 continue
-            chunk = io.read(length)
+            # os.pread returns b"" at end-of-file (a short/empty read).
+            chunk = os.pread(io.fileno(), length, offset + nread)
             if not chunk:
                 break
             self.memory.init(ptr, chunk, 0, len(chunk))

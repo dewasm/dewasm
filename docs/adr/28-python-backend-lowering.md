@@ -8,7 +8,21 @@ multiple tables, the table half of bulk memory) plus the shared spec harness
 (`crates/dewasm-backend-python/tests/spec.rs`). Numeric conventions are ADR-2's;
 this ADR covers the places Python forced a different shape from Ruby (ADR-4):
 control flow, float division, and (below) the harness's recursion/exhaustion
-handling. The remaining WASI surface is a later milestone.
+handling. **Third milestone (full WASI preview 1, incl. the filesystem) landed
+2026-07-26**: `runtime/python/units/wasi/` mirrors the Ruby WASI unit set
+one-for-one, adopting ADR-14's filesystem model wholesale — the `preopens=`
+provider kwarg, the single fd-table with a `WasiDir` entry kind, the
+realpath-plus-prefix-containment sandboxing (with the same accepted
+TOCTOU/symlink caveat), and the ENOSYS gaps
+(`fd_fdstat_set_flags`/`fd_fdstat_set_rights`, symlink and
+`path_filestat_set_times` syscalls). The Python fd model diverges only in
+mechanics forced by the host stdlib, not in policy: files are unbuffered
+`os.fdopen(..., buffering=0)` handles (so `os.pread`/`os.pwrite` stay coherent
+with `read`/`write`/`seek`, which sqlite mixes on one fd), directory listing
+uses `os.listdir`, and the errno map keys on `OSError.errno` (the `errno`
+module) rather than exception classes. With this, `has_wasi_p1` reports the
+same surface as Ruby, and the shared WASI `Fs` suite plus the gzip byte-stdio
+and heavy filesystem app cases (QuickJS, SQLite, ripgrep) run under Python.
 
 ## Context
 
@@ -108,8 +122,9 @@ bit paths). Three language facts did *not* transfer:
   statement — more lines and a small per-statement cost versus Ruby's
   `catch`/`throw`. `_br` is a whole-function register, so it serializes
   control flow textually rather than structurally.
-- Carry-over: this milestone bundles only the eight WASI syscalls cowsay
-  needs (args/environ, fd_read/fd_write, proc_exit, random_get); the spec
-  harness, the full WASI surface, and the filesystem are later work. gzip
-  (minigzip) needs fd_fdstat_get/fd_prestat_*/fd_seek/path_open and so is not
-  yet wired.
+- Carry-over: the first milestone bundled only the eight WASI syscalls cowsay
+  needs; the second added the spec harness; the third (above) fills in the full
+  WASI preview 1 surface and the filesystem, so gzip, QuickJS, SQLite, and
+  ripgrep now run under Python. What remains ENOSYS matches Ruby (ADR-14):
+  rights narrowing, symlink creation/read, `fd_renumber`/`fd_advise`/
+  `fd_allocate`, `path_filestat_set_times`, and `poll_oneoff`.

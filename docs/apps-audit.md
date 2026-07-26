@@ -22,8 +22,8 @@ returns.
 | CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
-| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby-only fs⁶) |
-| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **both backends**⁷) |
+| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python fs⁶) |
+| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all three backends**⁷) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains
 (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index
@@ -40,9 +40,11 @@ would otherwise be uniformly rejected, which would defeat the project.
 flags; run the audit on the built artifact before wiring its e2e case.
 
 ³ **QuickJS deepened (Phase 5a).** Beyond the one-shot `-e` eval case, two
-Ruby-only e2e cases now exercise real WASI filesystem use (only Ruby has
-it, ADR-14) against a preopened scratch dir, both byte-identical to
-`wasmtime --dir`:
+e2e cases now exercise real WASI filesystem use against a preopened scratch
+dir, both byte-identical to `wasmtime --dir`. Originally Ruby-only (ADR-14);
+Python now mirrors both (`qjs_file_io_python`, `qjs_repl_python`, ADR-28's
+third milestone adopting ADR-14's fs model) against the same fixtures and
+goldens, gated behind `DEWASM_APPS_ALL` in the Python crate:
 
 - *File I/O* (`qjs_file_io_ruby`): the `qjs:std` module writes a file,
   reads it back, and prints it; the test asserts the guest stdout golden
@@ -64,8 +66,10 @@ it, ADR-14) against a preopened scratch dir, both byte-identical to
 
 ⁴ **sqlite3 deepened (Phase 5a).** The pinned source now yields **three**
 artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
-now covered, all Ruby-only and on the existing ADR-14 syscall set (no new
-WASI unit):
+now covered on the existing ADR-14 syscall set (no new WASI unit). The
+shell DB-file case is also mirrored under Python (`sqlite3_shell_dbfile_python`,
+same fixture/golden, `DEWASM_APPS_ALL`-gated); the C-API/callback cases stay
+Ruby-only (they exercise Ruby's provider/guest-memory idioms, not new WASI fs):
 
 - *Shell DB file* (`sqlite3_shell_dbfile_ruby`): one invocation creates
   and populates `/db/test.db`, a second reopens it and SELECTs; asserts
@@ -111,21 +115,23 @@ skip-with-a-note when unset. CRuby is the "Ruby on Ruby" north-star demo.
 ⁶ **ripgrep (Phase 5b).** ripgrep 14.1.1 built from the pinned source
 release with `cargo build --release --target wasm32-wasip1` (default
 features — which already exclude pcre2; no tweaks needed). Audit:
-reference-types *encoding only*¹, in scope. Ruby-only (`rg_search_ruby`): a
-recursive directory search over the committed fixture tree
-(`examples/apps/fixtures/rg/`) staged into a scratch dir and preopened at
-`/work`, asserting the guest stdout is byte-identical to the `wasmtime --dir`
-golden. `--sort path` forces ripgrep's otherwise-parallel walk into a single
-deterministic order (without it the file order varies run-to-run). ripgrep
-imports `poll_oneoff`/`path_readlink` but does not call them on this path, so
-no new WASI unit was needed. Convert ~1.4 s, run ~1.7 s.
+reference-types *encoding only*¹, in scope. A recursive directory search over
+the committed fixture tree (`examples/apps/fixtures/rg/`) staged into a scratch
+dir and preopened at `/work`, asserting the guest stdout is byte-identical to
+the `wasmtime --dir` golden. `--sort path` forces ripgrep's otherwise-parallel
+walk into a single deterministic order (without it the file order varies
+run-to-run). ripgrep imports `poll_oneoff`/`path_readlink` but does not call
+them on this path, so no new WASI unit was needed. Ruby (`rg_search_ruby`):
+convert ~1.4 s, run ~1.7 s. Python now mirrors it (`rg_search_python`, same
+fixture/golden, `DEWASM_APPS_ALL`-gated): ~10 s convert+run for the 22 MB wasm.
 
 ⁷ **minigzip / zlib (Phase 5b compression CLI).** zlib 1.3.1's `minigzip`
 built from the pinned source release with `zig cc -target wasm32-wasi` (the
 zlib translation units + `test/minigzip.c`; `-DZ_HAVE_UNISTD_H` so the
 shipped `zconf.h` declares `lseek`). Integer-only and tiny, with **binary**
-stdin/stdout — the byte-exact-stdio stress that runs under **both** backends
-(`run_gzip_cases`, wired via `gzip_e2e!` in both crates). Two cases: *compress*
+stdin/stdout — the byte-exact-stdio stress that runs under **all three**
+backends (`run_gzip_cases`, wired via `gzip_e2e!` in the Ruby, Bash, and
+Python crates). Two cases: *compress*
 (stdin text → gz stdout byte-identical to the `wasmtime` golden
 `examples/apps/golden/minigzip_compress.gz`) and *round trip* (compress then
 `-d` decompress → original, self-checking). zlib's gz stream is deterministic
