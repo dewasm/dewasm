@@ -50,6 +50,30 @@ const SPLIT_THRESHOLD: usize = 900;
 /// 64KB (65535-byte) string-literal limit (ADR-30).
 const DATA_CHUNK: usize = 32768;
 
+/// Element-segment size above which the funcref table is built by the nested
+/// `Elem` helper class instead of inline in the constructor. A big table's
+/// thousands of funcref lambdas overflow both `<init>`'s 64KB limit and the
+/// module class's 65535-entry constant pool; the nested class has its own pool
+/// (ADR-30 third milestone). Tuned so qjs/sqlite (~550 entries) stay inline and
+/// only rg-scale tables (~4900) split.
+const ELEM_SPLIT: usize = 1024;
+
+/// Funcref entries per `elem{i}_pK` part method (each ~20 bytes of bytecode per
+/// entry stays well under the 64KB method limit).
+const ELEM_PART: usize = 512;
+
+/// Defined-function count above which the module's functions are split across
+/// nested `P{k}` helper classes, each with its own 65535-entry constant pool
+/// (ADR-30 third milestone). A single class holding thousands of functions
+/// (their numeric literals, method refs, and names) overflows the pool: qjs
+/// (~1500) and sqlite (~1970) fit, but rg (~7300) does not. Kept above sqlite's
+/// proven single-class size so only rg-scale modules partition.
+const FN_PARTITION_THRESHOLD: usize = 3000;
+
+/// Defined functions per partition class. Kept under sqlite's proven
+/// single-class function count so no partition's pool overflows.
+const FN_PER_PARTITION: usize = 1500;
+
 /// A branch-register sentinel for "return from the function", distinct from any
 /// real label id (which are small). Emitted as `-1`.
 const RETURN_SENTINEL: u32 = u32::MAX;
@@ -241,21 +265,34 @@ fn new_gen(module: &Module, type_name: String, default_wasi: bool) -> Gen<'_> {
         cur_base: RefCell::new(String::new()),
         cur_frame_ty: RefCell::new(String::new()),
         part_defs: RefCell::new(Vec::new()),
+        elem_capture: Cell::new(false),
+        partitioned: Cell::new(false),
+        in_partition: Cell::new(false),
     }
 }
 
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let type_name = type_name(&opts.module_name);
     let gen = new_gen(module, type_name.clone(), opts.default_wasi);
+    // A module whose function count crosses the threshold is split across nested
+    // `P{k}` classes, each with its own constant pool (ADR-30). Set before the
+    // constructor: its exports/start emit function calls through `defined_call`,
+    // which qualifies them by partition.
+    gen.partitioned
+        .set(module.funcs.len() > FN_PARTITION_THRESHOLD);
 
     // Emit the module class body into its own writer so `uses` is populated
     // before the runtime bundle is assembled.
     let mut body = CodeWriter::new("    ");
     gen.constructor(&mut body);
-    for (i, func) in module.funcs.iter().enumerate() {
-        body.line("");
-        let idx = module.num_imported_funcs() as usize + i;
-        gen.function(&mut body, idx as u32, func);
+    let num_imported = module.num_imported_funcs() as usize;
+    if gen.partitioned.get() {
+        gen.emit_partition_classes(&mut body, num_imported);
+    } else {
+        for (i, func) in module.funcs.iter().enumerate() {
+            body.line("");
+            gen.function(&mut body, (num_imported + i) as u32, func);
+        }
     }
 
     let standalone = opts.mode == Mode::Standalone;
@@ -304,11 +341,25 @@ fn reindent(src: &str, levels: usize) -> String {
 /// (a trap prints to stderr and exits 134, mirroring Ruby/Python/Go).
 fn main_class(type_name: &str, wasi: bool) -> String {
     let args = if wasi { "wasiArgs" } else { "null" };
+    let preopens = if wasi { "preopens" } else { "null" };
+    // Standalone WASI reads DEWASM_PREOPEN ("guest=host,...") into the preopens
+    // argument, kept separate from argv since argv already mirrors the guest's
+    // own argv (ADR-14). Without WASI there is nothing to preopen.
     let arg_setup = if wasi {
         format!(
             "        String[] wasiArgs = new String[argv.length + 1];\n\
              {ind}wasiArgs[0] = {name};\n\
-             {ind}System.arraycopy(argv, 0, wasiArgs, 1, argv.length);\n",
+             {ind}System.arraycopy(argv, 0, wasiArgs, 1, argv.length);\n\
+             {ind}java.util.Map<String, String> preopens = new java.util.HashMap<>();\n\
+             {ind}String preopenEnv = System.getenv(\"DEWASM_PREOPEN\");\n\
+             {ind}if (preopenEnv != null) {{\n\
+             {ind}    for (String kv : preopenEnv.split(\",\")) {{\n\
+             {ind}        int eq = kv.indexOf('=');\n\
+             {ind}        if (eq >= 0) {{\n\
+             {ind}            preopens.put(kv.substring(0, eq), kv.substring(eq + 1));\n\
+             {ind}        }}\n\
+             {ind}    }}\n\
+             {ind}}}\n",
             ind = "        ",
             name = java_string(type_name),
         )
@@ -320,7 +371,7 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     out.push_str("    public static void main(String[] argv) {\n");
     out.push_str(&arg_setup);
     out.push_str(&format!(
-        "        {type_name} p = new {type_name}(null, {args}, new String[0]);\n"
+        "        {type_name} p = new {type_name}(null, {args}, new String[0], {preopens});\n"
     ));
     out.push_str("        try {\n");
     out.push_str("            ((Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{});\n");
@@ -430,6 +481,19 @@ struct Gen<'a> {
     /// Part-method definitions produced while emitting the current function,
     /// flushed after its entry method.
     part_defs: RefCell<Vec<String>>,
+    /// When true, a function value (`func_value`) captures the module instance
+    /// as `inst.` rather than referencing `this` implicitly. Set while emitting
+    /// the nested `Elem` helper class's static methods, whose funcref lambdas
+    /// live in a separate constant pool (ADR-30 third milestone).
+    elem_capture: Cell<bool>,
+    /// Whether this module's functions are split across nested `P{k}` classes
+    /// (its function count crosses `FN_PARTITION_THRESHOLD`). When set, defined
+    /// functions are `static` methods taking the module instance, called
+    /// class-qualified (ADR-30 third milestone).
+    partitioned: Cell<bool>,
+    /// True while emitting a function body inside a `P{k}` partition class, so
+    /// instance references resolve through the passed `inst` parameter.
+    in_partition: Cell<bool>,
 }
 
 impl<'a> Gen<'a> {
@@ -445,6 +509,78 @@ impl<'a> Gen<'a> {
     fn mem<'n>(&self, name: &'n str) -> &'n str {
         self.use_unit(&format!("memory/{name}"));
         name
+    }
+
+    // --- instance-reference prefixing (function partitioning, ADR-30) --------
+
+    /// Whether the code being emitted reaches the module's instance fields
+    /// through a passed `inst` parameter (a `P{k}` function body or the `Elem`
+    /// helper class) rather than an implicit `this`.
+    fn via_inst(&self) -> bool {
+        self.in_partition.get() || self.elem_capture.get()
+    }
+
+    /// Reference an instance field (`memory`, `g3`, `t0`, `if5`, `data2`,
+    /// `elem0`): `inst.<name>` when reached via a passed instance, else the bare
+    /// name (implicit `this`).
+    fn iref(&self, name: &str) -> String {
+        if self.via_inst() {
+            format!("inst.{name}")
+        } else {
+            name.to_string()
+        }
+    }
+
+    /// The instance to pass as the first argument of a partitioned static
+    /// function call: `inst` inside a `P{k}`/`Elem` method, else `this`.
+    fn self_arg(&self) -> &'static str {
+        if self.via_inst() {
+            "inst"
+        } else {
+            "this"
+        }
+    }
+
+    /// The `P{k}` partition class holding defined function `func_idx`.
+    fn partition_of(&self, func_idx: u32) -> usize {
+        (func_idx as usize - self.module.imported_funcs.len()) / FN_PER_PARTITION
+    }
+
+    /// A function/part method head. In a partitioned module the method is
+    /// `static` and takes the module instance as its first parameter, so it can
+    /// live in a `P{k}` class with its own constant pool (ADR-30 third
+    /// milestone); otherwise it is a plain instance method.
+    fn method_head(&self, ret_ty: &str, name: &str, params: &str) -> String {
+        if self.partitioned.get() {
+            let inst = &self.type_name;
+            if params.is_empty() {
+                format!("static {ret_ty} {name}({inst} inst) {{")
+            } else {
+                format!("static {ret_ty} {name}({inst} inst, {params}) {{")
+            }
+        } else {
+            format!("{ret_ty} {name}({params}) {{")
+        }
+    }
+
+    /// A call to a *defined* function by index, honoring partitioning: a
+    /// partitioned module calls `P{k}.f{idx}(<inst>, args)`; otherwise
+    /// `[inst.]f{idx}(args)` (the `inst.` form serves the non-partitioned `Elem`
+    /// class). `args_joined` is the already-formatted argument list.
+    fn defined_call(&self, func_idx: u32, args_joined: &str) -> String {
+        if self.partitioned.get() {
+            let k = self.partition_of(func_idx);
+            let s = self.self_arg();
+            if args_joined.is_empty() {
+                format!("P{k}.f{func_idx}({s})")
+            } else {
+                format!("P{k}.f{func_idx}({s}, {args_joined})")
+            }
+        } else if self.via_inst() {
+            format!("inst.f{func_idx}({args_joined})")
+        } else {
+            format!("f{func_idx}({args_joined})")
+        }
     }
 
     // --- slot references (frame fields when split, else locals) -------------
@@ -490,7 +626,17 @@ impl<'a> Gen<'a> {
 
     fn push_part(&self, name: &str, body: String) {
         let frame = self.cur_frame_ty.borrow().clone();
-        let mut out = format!("private void {name}({frame} f) {{\n");
+        // A partitioned module's parts are static and take the module instance
+        // alongside the frame, so instance references resolve through `inst`.
+        let head = if self.partitioned.get() {
+            format!(
+                "static void {name}({} inst, {frame} f) {{\n",
+                self.type_name
+            )
+        } else {
+            format!("private void {name}({frame} f) {{\n")
+        };
+        let mut out = head;
         out.push_str(&reindent(&body, 1));
         out.push_str("}\n");
         self.part_defs.borrow_mut().push(out);
@@ -504,7 +650,7 @@ impl<'a> Gen<'a> {
         self.struct_fields(w);
         w.line("");
         w.line(format!(
-            "{name}(java.util.Map<String, java.util.Map<String, Object>> imports, String[] args, String[] env) {{"
+            "{name}(java.util.Map<String, java.util.Map<String, Object>> imports, String[] args, String[] env, java.util.Map<String, String> preopens) {{"
         ));
         w.indent();
 
@@ -545,7 +691,7 @@ impl<'a> Gen<'a> {
         let wasi = wasi_bundled(m, self.default_wasi);
         if wasi {
             self.use_unit("wasi/_class");
-            w.line("this.wasi = new WASI(args, env);");
+            w.line("this.wasi = new WASI(args, env, preopens);");
             if m.memory.is_some() || m.imported_memory.is_some() {
                 w.line("this.wasi.memory = this.memory;");
             }
@@ -577,25 +723,37 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        // Element segments. A segment over ELEM_SPLIT is built by the nested
+        // `Elem` helper class (its own constant pool, chunked part methods),
+        // else inline (ADR-30 third milestone).
+        let mut split_elems: Vec<usize> = Vec::new();
         for (i, elem) in m.elems.iter().enumerate() {
-            let items = || {
-                elem.items
-                    .iter()
-                    .map(|item| self.elem_item(item))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+            let large = elem.items.len() > ELEM_SPLIT;
+            if large {
+                split_elems.push(i);
+            }
+            let build = || {
+                if large {
+                    format!("Elem.elem{i}(this)")
+                } else {
+                    let items = elem
+                        .items
+                        .iter()
+                        .map(|item| self.elem_item(item))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("new Rt.Funcref[]{{{items}}}")
+                }
             };
             match &elem.kind {
                 ElemKind::Declared => w.line(format!("this.elem{i} = new Rt.Funcref[0];")),
-                ElemKind::Passive => {
-                    w.line(format!("this.elem{i} = new Rt.Funcref[]{{{}}};", items()))
-                }
+                ElemKind::Passive => w.line(format!("this.elem{i} = {};", build())),
                 ElemKind::Active {
                     table_index,
                     offset,
                 } => {
                     self.use_unit("table/init");
-                    w.line(format!("this.elem{i} = new Rt.Funcref[]{{{}}};", items()));
+                    w.line(format!("this.elem{i} = {};", build()));
                     w.line(format!(
                         "this.t{table_index}.init({}, this.elem{i}, 0, {});",
                         self.expr(offset),
@@ -607,25 +765,14 @@ impl<'a> Gen<'a> {
             }
         }
 
-        for (i, data) in m.datas.iter().enumerate() {
-            self.use_unit("rt/data_from_b64");
-            let blob = data_blob(&data.data);
-            match &data.offset {
-                Some(offset) => {
-                    self.use_unit("memory/init");
-                    w.line(format!(
-                        "this.memory.init(Integer.toUnsignedLong({}), {blob}, 0, {});",
-                        self.expr(offset),
-                        data.data.len()
-                    ));
-                    // Active segments are dropped after instantiation, but stay
-                    // addressable (as empty) by memory.init/data.drop.
-                    w.line(format!("this.data{i} = new byte[0];"));
-                }
-                None => {
-                    w.line(format!("this.data{i} = {blob};"));
-                }
-            }
+        // Each data segment is materialized in its own `initData{i}()` method,
+        // not inline in the constructor. A multi-MB segment lowers to a
+        // chunked-Base64 array whose initializer (plus the `memory.init` copy)
+        // would otherwise accumulate toward the 64KB `<init>` limit ADR-30
+        // predicted; splitting one method per segment keeps the constructor
+        // bounded regardless of how large or how many the segments are.
+        for i in 0..m.datas.len() {
+            w.line(format!("this.initData{i}();"));
         }
 
         w.line("this.Exports = new java.util.HashMap<>();");
@@ -648,6 +795,117 @@ impl<'a> Gen<'a> {
 
         w.dedent();
         w.line("}");
+
+        // Per-segment data initializers, called in order from the constructor
+        // (see above). Each is a self-contained method so an oversized segment
+        // never bloats `<init>` past the 64KB method limit (ADR-30).
+        for (i, data) in m.datas.iter().enumerate() {
+            self.use_unit("rt/data_from_b64");
+            let blob = data_blob(&data.data);
+            w.line("");
+            w.line(format!("private void initData{i}() {{"));
+            w.indent();
+            match &data.offset {
+                Some(offset) => {
+                    self.use_unit("memory/init");
+                    w.line(format!(
+                        "this.memory.init(Integer.toUnsignedLong({}), {blob}, 0, {});",
+                        self.expr(offset),
+                        data.data.len()
+                    ));
+                    // Active segments are dropped after instantiation, but stay
+                    // addressable (as empty) by memory.init/data.drop.
+                    w.line(format!("this.data{i} = new byte[0];"));
+                }
+                None => {
+                    w.line(format!("this.data{i} = {blob};"));
+                }
+            }
+            w.dedent();
+            w.line("}");
+        }
+
+        // The nested `Elem` helper class builds any oversized funcref table
+        // (see the element-segment loop above). It is a separate class, so its
+        // thousands of funcref lambdas land in their own 65535-entry constant
+        // pool instead of the module class's; each table is filled by chunked
+        // `elem{i}_pK` part methods to stay under the 64KB method limit (ADR-30
+        // third milestone).
+        if !split_elems.is_empty() {
+            self.emit_elem_class(w, &split_elems);
+        }
+    }
+
+    /// Emit the nested `Elem` helper class for the oversized element segments in
+    /// `split_elems`. Each segment `i` gets an `elem{i}(inst)` factory that
+    /// allocates the array and calls chunked `elem{i}_pK(inst, a)` fillers.
+    fn emit_elem_class(&self, w: &mut CodeWriter, split_elems: &[usize]) {
+        self.elem_capture.set(true);
+        w.line("");
+        w.line("static final class Elem {");
+        w.indent();
+        let ty = &self.type_name;
+        for (n, &i) in split_elems.iter().enumerate() {
+            if n > 0 {
+                w.line("");
+            }
+            let elem = &self.module.elems[i];
+            let len = elem.items.len();
+            let parts = len.div_ceil(ELEM_PART);
+            w.line(format!("static Rt.Funcref[] elem{i}({ty} inst) {{"));
+            w.indent();
+            w.line(format!("Rt.Funcref[] a = new Rt.Funcref[{len}];"));
+            for p in 0..parts {
+                w.line(format!("elem{i}_p{p}(inst, a);"));
+            }
+            w.line("return a;");
+            w.dedent();
+            w.line("}");
+            for p in 0..parts {
+                w.line("");
+                w.line(format!(
+                    "static void elem{i}_p{p}({ty} inst, Rt.Funcref[] a) {{"
+                ));
+                w.indent();
+                let start = p * ELEM_PART;
+                let end = (start + ELEM_PART).min(len);
+                for (k, item) in elem.items[start..end].iter().enumerate() {
+                    w.line(format!("a[{}] = {};", start + k, self.elem_item(item)));
+                }
+                w.dedent();
+                w.line("}");
+            }
+        }
+        w.dedent();
+        w.line("}");
+        self.elem_capture.set(false);
+    }
+
+    /// Emit the module's defined functions grouped into nested `P{k}` classes of
+    /// up to `FN_PER_PARTITION` functions each, so no single class's constant
+    /// pool overflows Java's 65535-entry limit (ADR-30 third milestone). The
+    /// functions are `static` and take the module instance; call sites reach
+    /// them class-qualified via `defined_call`.
+    fn emit_partition_classes(&self, w: &mut CodeWriter, num_imported: usize) {
+        self.in_partition.set(true);
+        let n = self.module.funcs.len();
+        let parts = n.div_ceil(FN_PER_PARTITION);
+        for k in 0..parts {
+            w.line("");
+            w.line(format!("static final class P{k} {{"));
+            w.indent();
+            let start = k * FN_PER_PARTITION;
+            let end = (start + FN_PER_PARTITION).min(n);
+            for (offset, func) in self.module.funcs[start..end].iter().enumerate() {
+                if offset > 0 {
+                    w.line("");
+                }
+                self.function(w, (num_imported + start + offset) as u32, func);
+            }
+            w.dedent();
+            w.line("}");
+        }
+        self.in_partition.set(false);
     }
 
     fn struct_fields(&self, w: &mut CodeWriter) {
@@ -792,10 +1050,13 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// The `Rt.Fn` value for a function export / table element.
+    /// The `Rt.Fn` value for a function export / table element. When emitting
+    /// the nested `Elem` helper class, functions are reached through the passed
+    /// module instance (`inst.`), so the lambdas can live in that class's own
+    /// constant pool (ADR-30 third milestone).
     fn func_value(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
-            return format!("(Rt.Fn) if{func_idx}");
+            return format!("(Rt.Fn) {}", self.iref(&format!("if{func_idx}")));
         }
         let ty = self.func_type(func_idx);
         let call_args = ty
@@ -805,10 +1066,11 @@ impl<'a> Gen<'a> {
             .map(|(k, t)| unbox(*t, &format!("__a[{k}]")))
             .collect::<Vec<_>>()
             .join(", ");
+        let call = self.defined_call(func_idx, &call_args);
         if ty.results.is_empty() {
-            format!("(Rt.Fn)(__a -> {{ f{func_idx}({call_args}); return null; }})")
+            format!("(Rt.Fn)(__a -> {{ {call}; return null; }})")
         } else {
-            format!("(Rt.Fn)(__a -> f{func_idx}({call_args}))")
+            format!("(Rt.Fn)(__a -> {call})")
         }
     }
 
@@ -824,7 +1086,9 @@ impl<'a> Gen<'a> {
             ElemItem::Null => "null".to_string(),
             // ref-typed global element items imply reference types (rejected at
             // conversion); unreachable, but must type-check as a Funcref.
-            ElemItem::Global(idx) => format!("(Rt.Funcref) g{idx}.value"),
+            ElemItem::Global(idx) => {
+                format!("(Rt.Funcref) {}.value", self.iref(&format!("g{idx}")))
+            }
         }
     }
 
@@ -903,7 +1167,7 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("{} p{i}", jtype(local_types[i])))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(format!("{ret_ty} f{idx}({params_str}) {{"));
+            w.line(self.method_head(&ret_ty, &format!("f{idx}"), &params_str));
             w.indent();
             w.line(format!("Frame{idx} f = new Frame{idx}();"));
             for i in 0..nparams {
@@ -926,7 +1190,7 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("{} l{i}", jtype(local_types[i])))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(format!("{ret_ty} f{idx}({params_str}) {{"));
+            w.line(self.method_head(&ret_ty, &format!("f{idx}"), &params_str));
             w.indent();
             for (i, lt) in local_types.iter().enumerate().skip(nparams) {
                 w.line(format!("{} l{i} = {};", jtype(*lt), zero_value(*lt)));
@@ -1031,8 +1295,13 @@ impl<'a> Gen<'a> {
     /// methods when the function is split and the sub-body is large.
     fn emit_body(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded_in: bool) {
         if self.split.get() && seq_cost(stmts) > SPLIT_THRESHOLD {
+            let part_args = if self.partitioned.get() {
+                "inst, f"
+            } else {
+                "f"
+            };
             for name in self.emit_parts(stmts, guarded_in) {
-                w.line(format!("{name}(f);"));
+                w.line(format!("{name}({part_args});"));
             }
         } else {
             let mut guarded = guarded_in;
@@ -1171,7 +1440,11 @@ impl<'a> Gen<'a> {
                 w.line(format!("{} = {};", self.local_ref(*idx), self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("g{idx}.value = {};", self.expr(expr)));
+                w.line(format!(
+                    "{}.value = {};",
+                    self.iref(&format!("g{idx}")),
+                    self.expr(expr)
+                ));
             }
             Stmt::Store {
                 op,
@@ -1180,7 +1453,8 @@ impl<'a> Gen<'a> {
                 offset,
             } => {
                 w.line(format!(
-                    "memory.{}({}, {});",
+                    "{}.{}({}, {});",
+                    self.iref("memory"),
                     self.mem(store_method(*op)),
                     self.addr(addr, *offset),
                     self.expr(value)
@@ -1247,7 +1521,8 @@ impl<'a> Gen<'a> {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let fnv = format!(
-                    "t{table_index}.call({}, {})",
+                    "{}.call({}, {})",
+                    self.iref(&format!("t{table_index}")),
                     self.expr(index),
                     java_string(&self.type_symbol(*type_idx))
                 );
@@ -1263,15 +1538,17 @@ impl<'a> Gen<'a> {
             Stmt::MemoryGrow { dst, delta } => {
                 self.use_unit("memory/grow");
                 w.line(format!(
-                    "{} = memory.grow({});",
+                    "{} = {}.grow({});",
                     self.temp_ref(*dst),
+                    self.iref("memory"),
                     self.expr(delta)
                 ));
             }
             Stmt::MemoryCopy { dst, src, len } => {
                 self.use_unit("memory/copy");
                 w.line(format!(
-                    "memory.copy(Integer.toUnsignedLong({}), Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    "{}.copy(Integer.toUnsignedLong({}), Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    self.iref("memory"),
                     self.expr(dst),
                     self.expr(src),
                     self.expr(len)
@@ -1280,7 +1557,8 @@ impl<'a> Gen<'a> {
             Stmt::MemoryFill { dst, val, len } => {
                 self.use_unit("memory/fill");
                 w.line(format!(
-                    "memory.fill(Integer.toUnsignedLong({}), Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    "{}.fill(Integer.toUnsignedLong({}), Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    self.iref("memory"),
                     self.expr(dst),
                     self.expr(val),
                     self.expr(len)
@@ -1289,14 +1567,19 @@ impl<'a> Gen<'a> {
             Stmt::MemoryInit { seg, dst, src, len } => {
                 self.use_unit("memory/init");
                 w.line(format!(
-                    "memory.init(Integer.toUnsignedLong({}), data{seg}, Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    "{}.init(Integer.toUnsignedLong({}), {}, Integer.toUnsignedLong({}), Integer.toUnsignedLong({}));",
+                    self.iref("memory"),
                     self.expr(dst),
+                    self.iref(&format!("data{seg}")),
                     self.expr(src),
                     self.expr(len)
                 ));
             }
             Stmt::DataDrop { seg } => {
-                w.line(format!("data{seg} = new byte[0];"));
+                w.line(format!(
+                    "{} = new byte[0];",
+                    self.iref(&format!("data{seg}"))
+                ));
             }
             Stmt::Unreachable => {
                 // Void method that throws: emitting it as a statement (not a
@@ -1312,8 +1595,10 @@ impl<'a> Gen<'a> {
             } => {
                 self.use_unit("table/init");
                 w.line(format!(
-                    "t{table_index}.init({}, elem{seg}, {}, {});",
+                    "{}.init({}, {}, {}, {});",
+                    self.iref(&format!("t{table_index}")),
                     self.expr(dst),
+                    self.iref(&format!("elem{seg}")),
                     self.expr(src),
                     self.expr(len)
                 ));
@@ -1327,14 +1612,19 @@ impl<'a> Gen<'a> {
             } => {
                 self.use_unit("table/copy");
                 w.line(format!(
-                    "t{dst_table}.copy({}, t{src_table}, {}, {});",
+                    "{}.copy({}, {}, {}, {});",
+                    self.iref(&format!("t{dst_table}")),
                     self.expr(dst),
+                    self.iref(&format!("t{src_table}")),
                     self.expr(src),
                     self.expr(len)
                 ));
             }
             Stmt::ElemDrop { seg } => {
-                w.line(format!("elem{seg} = new Rt.Funcref[0];"));
+                w.line(format!(
+                    "{} = new Rt.Funcref[0];",
+                    self.iref(&format!("elem{seg}"))
+                ));
             }
             Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
                 unreachable!("structured statement routed to simple_stmt");
@@ -1392,10 +1682,10 @@ impl<'a> Gen<'a> {
             let boxed = args.join(", ");
             format!(
                 "(Object[]) {}",
-                self.invoke_string(&format!("if{func_idx}"), &boxed, None)
+                self.invoke_string(&self.iref(&format!("if{func_idx}")), &boxed, None)
             )
         } else {
-            format!("f{func_idx}({})", args.join(", "))
+            self.defined_call(func_idx, &args.join(", "))
         }
     }
 
@@ -1422,12 +1712,12 @@ impl<'a> Gen<'a> {
             let ty = self.func_type(func_idx);
             let boxed = args.join(", ");
             self.invoke_string(
-                &format!("if{func_idx}"),
+                &self.iref(&format!("if{func_idx}")),
                 &boxed,
                 ty.results.first().copied(),
             )
         } else {
-            format!("f{func_idx}({})", args.join(", "))
+            self.defined_call(func_idx, &args.join(", "))
         }
     }
 
@@ -1457,12 +1747,16 @@ impl<'a> Gen<'a> {
             Expr::F64Const(bits) => format!("Double.longBitsToDouble(0x{bits:x}L)"),
             Expr::Temp(t) => self.temp_ref(*t),
             Expr::LocalGet(idx) => self.local_ref(*idx),
-            Expr::GlobalGet(idx) => unbox(self.module.global_type(*idx), &format!("g{idx}.value")),
+            Expr::GlobalGet(idx) => unbox(
+                self.module.global_type(*idx),
+                &format!("{}.value", self.iref(&format!("g{idx}"))),
+            ),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
                 format!(
-                    "memory.{}({})",
+                    "{}.{}({})",
+                    self.iref("memory"),
                     self.mem(load_method(*op)),
                     self.addr(addr, *offset)
                 )
@@ -1477,7 +1771,7 @@ impl<'a> Gen<'a> {
             }
             Expr::MemorySize => {
                 self.use_unit("memory/size");
-                "memory.size()".to_string()
+                format!("{}.size()", self.iref("memory"))
             }
         }
     }

@@ -5,7 +5,11 @@ implemented in `crates/dewasm-backend-java/src/lib.rs`, `runtime/java/units/`,
 and `crates/dewasm-backend-java/tests/{e2e,units}.rs`. **Second milestone
 ("spec-harness green", 2026-07-26)** added `tests/spec.rs`, the wasm-1.0
 completion set, trapping conversions, spec-grade NaN conformance, and
-multi-value results — see "Milestone 2" below. Numeric conventions are ADR-2's;
+multi-value results — see "Milestone 2" below. **Third milestone ("full WASI
+preview 1 incl. the filesystem", 2026-07-26)** ported the 36 WASI units
+one-for-one from the Go/Python/Ruby backends (ADR-14's fs model) and added the
+class-splitting scheme that lets qjs/sqlite/rg convert and run — see
+"Milestone 3" below. Numeric conventions are ADR-2's;
 this ADR records where Java — statically typed with native fixed-width integers
 and floats, but carrying a hard **64KB-per-method bytecode limit** — forced a
 different shape from the other compiled backend (Go, ADR-29) and from the
@@ -145,14 +149,13 @@ Two more Java facts shaped the design:
 - Negative: the generated file is large and verbose (frame classes, part
   methods, per-statement `_br` guards); the boxed `Fn` boundary autoboxes at
   every import/indirect/export call.
-- Deferred, recorded for later milestones (milestone 2 closed the first four):
+- Deferred, recorded for later milestones (milestone 2 closed the first four,
+  milestone 3 below closed the rest):
   ~~trapping float→int conversions and spec-grade NaN/rounding conformance;
   multi-value function results; wasm-1.0 completion (imported globals/memories/
   tables, multiple tables, table bulk ops)~~ — all landed in milestone 2 below.
-  Still deferred: the full WASI preview 1 surface incl. the filesystem, and
-  multi-MB data segments (qjs/sqlite), which will need the chunked-Base64 *array
-  initialiser* itself split across methods — the `<clinit>`/`<init>` 64KB limit —
-  which cowsay's three chunks (and every spec file) do not reach.
+  ~~The full WASI preview 1 surface incl. the filesystem, and multi-MB data
+  segments (qjs/sqlite)~~ — landed in milestone 3 below.
 
 ## Milestone 2 — spec-harness green
 
@@ -236,3 +239,111 @@ compiled `SpecBackend` (content-addressed class-dir cache, curated
   would still not close the func-signature gap (the `Rt.Fn` boundary), so it
   would only partially narrow an already-documented, Ruby-parity import-limits
   gap; deferred as not worth the per-global complexity.
+
+## Milestone 3 — full WASI preview 1 (incl. the filesystem)
+
+The 36 WASI units under `runtime/java/units/wasi/` now match the Go/Python/Ruby
+backends one-for-one (ADR-14's model), and the whole-program `Fs` WASI suite,
+`gzip_e2e!` byte-stdio, and the mirrored filesystem app cases
+(`qjs_file_io_java`/`qjs_repl_java`/`sqlite3_shell_dbfile_java`/`rg_search_java`,
+`DEWASM_APPS_ALL`-gated) all pass byte-identically to the wasmtime goldens.
+`has_wasi_p1` now derives `true` for the full surface; `docs/support.md` shows
+Java at parity with the other native backends, carrying the **same deliberate
+ENOSYS gaps** (`fd_advise`/`fd_allocate`/`fd_fdstat_set_flags`/
+`fd_filestat_set_times`/`path_link`/`path_readlink`/`path_symlink`/`poll_oneoff`/
+`fd_renumber`/`fd_fdstat_set_rights`). `run_heavy_apps` is now `true`: qjs and
+sqlite3-shell pass in the default `cargo test`.
+
+- **The fd table and the stdlib mapping.** The `WASI` class holds a
+  `Map<Integer, Object>` fd table whose entries are an `InputStream`/
+  `OutputStream` (the inherited stdio, fds 0/1/2), a `Handle` (a guest-opened
+  regular file over a **seekable `FileChannel`**), or a `Dir` (a preopen or a
+  directory the guest opened via `path_open`). One `FileChannel` per open file
+  gives coherent `read`/`write`/`seek`/`tell` plus positional `pread`/`pwrite`
+  (`read`/`write(ByteBuffer, position)`, which do not move the channel's own
+  position); `O_APPEND` is reproduced by seeking to end before each write
+  (FileChannel's APPEND option forbids combining with READ/TRUNCATE). Preopens
+  arrive as a new constructor kwarg `java.util.Map<String, String> preopens`
+  (guest→host), assigned fds in sorted guest-path order for determinism; the
+  standalone `main` parses `DEWASM_PREOPEN` ("guest=host,...") into it, kept
+  separate from argv (ADR-14). Directory listings use `DirectoryStream` sorted by
+  name; `pack_filestat` reads dev/ino/nlink from the `"unix:*"` attribute view
+  (falling back to zeros/nlink=1 off unix) and size/mtime from
+  `BasicFileAttributes`.
+- **The errno map is exception-typed, not errno-typed.** Java's NIO raises typed
+  `IOException` subclasses, so `fs_errno` maps `NoSuchFileException`→ENOENT,
+  `FileAlreadyExistsException`→EEXIST, `AccessDeniedException`→EACCES,
+  `DirectoryNotEmptyException`→ENOTEMPTY, `NotDirectoryException`→ENOTDIR, and
+  everything else→EIO. The honest deviations from the Go/Python backends (which
+  read the raw `errno`): Java exposes no distinct exception for EISDIR, ELOOP, or
+  ENAMETOOLONG at open/stat time, so those surface as EIO unless a syscall
+  detects them itself. `path_remove_directory`/`path_unlink_file` therefore
+  pre-check `isDirectory` to reproduce rmdir's ENOTDIR and unlink's EISDIR
+  (Java's `Files.delete` would otherwise delete either). The sandboxing
+  discipline is ADR-14's, expressed with `Path`: `resolve_path` joins as Go's
+  `filepath.Join` does (so an absolute `rel` stays confined), `normalize()`s,
+  `toRealPath()`s the parent, and re-validates containment with `Path.startsWith`
+  on every call. `wasi_filetype` collapses block/char devices and sockets to
+  "unknown" (BasicFileAttributes cannot distinguish them); a piped stdin reports
+  filetype 4 (regular) and a tty reports 2, via `System.console()`, so a guest's
+  `isatty` stays false under the piped test harness — matching the wasmtime
+  golden.
+
+### The class-splitting scheme (data segments, function tables, functions)
+
+ADR-10 and milestone 1 predicted the JVM's **65535-entry constant pool** and the
+64KB `<init>` limit would bite the heavy apps. Measured on the pinned binaries,
+the picture is more nuanced than "multi-MB data segments overflow", and the
+scheme splits along three axes, gated so cowsay/spec and even qjs/sqlite keep
+their milestone-1/2 single-class shape:
+
+- **Data segments → per-segment `initData{i}()` methods.** Each segment's
+  chunked-Base64 array (`Rt.data_from_b64(new String[]{…})`) plus its
+  `memory.init` copy is materialized in its own method called from the
+  constructor, so `<init>` never accumulates data-init bytecode. *Honest
+  finding:* the predicted multi-MB single-segment overflow does **not** occur for
+  the pinned binaries — qjs's largest data segment is ~6 Base64 chunks, sqlite's
+  ~4, rg's ~36 (~1.15 MB); the array-initializer bytecode is compact (~8 bytes
+  per chunk), so a single method would in fact have sufficed. The per-segment
+  split is the honest general bound (a 10 MB segment is ~312 chunks, still tiny),
+  kept because it is always exercised and costs nothing.
+- **Oversized element segments → a nested `Elem` class.** rg's active element
+  segment is a **4915-entry funcref table**; inline in the constructor its 4915
+  lambdas blew both `<init>`'s 64KB limit and the module class's constant pool.
+  A segment over `ELEM_SPLIT` (1024 entries) is built by a nested `static final
+  class Elem` — its own constant pool — via chunked `elem{i}_pK(inst, a)` part
+  methods (`ELEM_PART` = 512 entries each, under the method limit). qjs (~580)
+  and sqlite (~550) stay inline.
+- **Oversized modules → nested `P{k}` function-partition classes.** Moving the
+  element lambdas out was necessary but **not sufficient** for rg: its ~7300
+  functions' own numeric literals, method refs, and names still overflow one
+  class's pool (qjs ~1500 and sqlite ~1970 functions fit; rg ~7300 does not). A
+  module with more than `FN_PARTITION_THRESHOLD` (3000) defined functions has
+  them emitted as `static` methods split across nested `P{k}` classes of
+  `FN_PER_PARTITION` (1500) each — kept under sqlite's proven single-class count
+  — each class with its own constant pool. Static methods take the module
+  instance `inst` as their first parameter; instance references (`memory`,
+  `g{i}`, `t{i}`, `if{i}`, `data{i}`, `elem{i}`) resolve through it (`iref`), and
+  call sites reach a defined function class-qualified (`P{k}.f{idx}(inst, …)`,
+  via `defined_call`). Frame classes and part methods nest inside their owning
+  `P{k}`. The gate is load-bearing for safety: with partitioning **off** the
+  emitter output is byte-identical to milestone 2, so the 29k-assertion spec
+  suite and qjs/sqlite are on their proven path; only rg-scale modules exercise
+  the partitioned path, validated end-to-end by `rg_search_java`'s byte-identical
+  golden. Measured on rg: convert ~2 s, `javac` ~10 s (5 partition classes), run
+  warm.
+
+## Rejected alternatives (milestone 3)
+
+- **A big `switch` indirect-dispatch method instead of the `Elem` class** — would
+  reintroduce the 64KB-method hazard milestone 1 already rejected for the funcref
+  boundary, and does not by itself address the whole-class pool.
+- **Inheritance (`Rg extends RgP1 extends RgP0`) to distribute functions across
+  class files without call-site qualification** — a base class cannot call a
+  subclass's methods, so mutual recursion across partitions (the common case)
+  would not resolve; declaring every function abstract in the base reinstates the
+  pool pressure it was meant to relieve.
+- **Always partitioning / always routing elems through `Elem`** — would change
+  the generated code for the already-passing cowsay/qjs/sqlite/spec outputs for
+  no benefit; gating on size keeps those on their proven single-class path and
+  confines the new machinery's risk to the one module that needs it.

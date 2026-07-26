@@ -22,8 +22,8 @@ returns.
 | CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
-| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go fs⁶) |
-| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all four backends**⁷) |
+| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
+| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains
 (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index
@@ -42,8 +42,9 @@ flags; run the audit on the built artifact before wiring its e2e case.
 ³ **QuickJS deepened (Phase 5a).** Beyond the one-shot `-e` eval case, two
 e2e cases now exercise real WASI filesystem use against a preopened scratch
 dir, both byte-identical to `wasmtime --dir`. Originally Ruby-only (ADR-14);
-Python (`qjs_file_io_python`, `qjs_repl_python`, ADR-28) and Go
-(`qjs_file_io_go`, `qjs_repl_go`, ADR-29's third milestone, both adopting
+Python (`qjs_file_io_python`, `qjs_repl_python`, ADR-28), Go
+(`qjs_file_io_go`, `qjs_repl_go`, ADR-29's third milestone), and Java
+(`qjs_file_io_java`, `qjs_repl_java`, ADR-30's third milestone, all adopting
 ADR-14's fs model) now mirror both against the same fixtures and goldens,
 gated behind `DEWASM_APPS_ALL` in each crate:
 
@@ -68,8 +69,9 @@ gated behind `DEWASM_APPS_ALL` in each crate:
 ⁴ **sqlite3 deepened (Phase 5a).** The pinned source now yields **three**
 artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
 now covered on the existing ADR-14 syscall set (no new WASI unit). The
-shell DB-file case is also mirrored under Python (`sqlite3_shell_dbfile_python`)
-and Go (`sqlite3_shell_dbfile_go`), same fixture/golden, `DEWASM_APPS_ALL`-gated;
+shell DB-file case is also mirrored under Python (`sqlite3_shell_dbfile_python`),
+Go (`sqlite3_shell_dbfile_go`), and Java (`sqlite3_shell_dbfile_java`), same
+fixture/golden, `DEWASM_APPS_ALL`-gated;
 the C-API/callback cases stay Ruby-only (they exercise Ruby's provider/guest-
 memory idioms, not new WASI fs):
 
@@ -124,24 +126,29 @@ the `wasmtime --dir` golden. `--sort path` forces ripgrep's otherwise-parallel
 walk into a single deterministic order (without it the file order varies
 run-to-run). ripgrep imports `poll_oneoff`/`path_readlink` but does not call
 them on this path, so no new WASI unit was needed. Ruby (`rg_search_ruby`):
-convert ~1.4 s, run ~1.7 s. Python (`rg_search_python`) and Go
-(`rg_search_go`, ADR-29) now mirror it against the same fixture/golden,
-`DEWASM_APPS_ALL`-gated: Python ~10 s convert+run for the 22 MB wasm; Go
-convert+`go build`+run cold likewise dominated by the compile.
+convert ~1.4 s, run ~1.7 s. Python (`rg_search_python`), Go
+(`rg_search_go`, ADR-29), and Java (`rg_search_java`, ADR-30) now mirror it
+against the same fixture/golden, `DEWASM_APPS_ALL`-gated: Python ~10 s
+convert+run for the 22 MB wasm; Go convert+`go build`+run cold likewise
+dominated by the compile. Java is the class-split stress case: rg's ~7300
+functions and ~4900-entry function table overflow a single class's 65535-entry
+constant pool, so its functions are partitioned across five nested `P{k}`
+classes and the table is built in a nested `Elem` class (ADR-30), each with its
+own pool; convert ~2 s, `javac` ~10 s, run warm.
 
 ⁷ **minigzip / zlib (Phase 5b compression CLI).** zlib 1.3.1's `minigzip`
 built from the pinned source release with `zig cc -target wasm32-wasi` (the
 zlib translation units + `test/minigzip.c`; `-DZ_HAVE_UNISTD_H` so the
 shipped `zconf.h` declares `lseek`). Integer-only and tiny, with **binary**
-stdin/stdout — the byte-exact-stdio stress that runs under **all four**
+stdin/stdout — the byte-exact-stdio stress that runs under **all five**
 backends (`run_gzip_cases`, wired via `gzip_e2e!` in the Ruby, Bash,
-Python, and Go crates; Go — the first *compiled* backend — proves the
-byte-stdio path is exact through compiled output too, ADR-29). Two cases:
+Python, Go, and Java crates; Go and Java — the compiled backends — prove the
+byte-stdio path is exact through compiled output too, ADR-29/ADR-30). Two cases:
 *compress*
 (stdin text → gz stdout byte-identical to the `wasmtime` golden
 `examples/apps/golden/minigzip_compress.gz`) and *round trip* (compress then
 `-d` decompress → original, self-checking). zlib's gz stream is deterministic
-here — mtime 0, OS byte 3 — so wasmtime and both backends agree byte-for-byte.
+here — mtime 0, OS byte 3 — so wasmtime and every backend agree byte-for-byte.
 Not marked heavy: no softfloat, so Bash runs it too (compress ~0.9 s + round
 trip ~0.3 s under Bash). The binary stdin/golden cannot travel through the
 `&str`/`include_str!` `APP_CASES` path, so these live in a dedicated

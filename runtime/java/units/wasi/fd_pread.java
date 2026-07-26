@@ -1,13 +1,15 @@
 // requires: memory/i32_load, memory/i32_store, memory/init
-// Scatter read from stdin (an InputStream) or a guest-opened file (a
-// FileChannel, advancing its position). A short read (or EOF) ends the scatter.
-int wasi_fd_read(int fd, int iovsPtr, int iovsLen, int nreadPtr) {
+// Positional scatter read: reads at an absolute file offset without moving the
+// channel's own position. Stdio is not seekable (SPIPE).
+int wasi_fd_pread(int fd, int iovsPtr, int iovsLen, long offset, int nreadPtr) {
     Object e = fds.get(fd);
-    java.nio.channels.FileChannel ch = (e instanceof Handle) ? ((Handle) e).ch : null;
-    java.io.InputStream in = (e instanceof java.io.InputStream) ? (java.io.InputStream) e : null;
-    if (ch == null && in == null) {
+    if (isStdio(e)) {
+        return WASI_SPIPE;
+    }
+    if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    java.nio.channels.FileChannel ch = ((Handle) e).ch;
     int nread = 0;
     try {
         for (int i = 0; i < iovsLen; i++) {
@@ -18,11 +20,12 @@ int wasi_fd_read(int fd, int iovsPtr, int iovsLen, int nreadPtr) {
                 continue;
             }
             byte[] buf = new byte[len];
-            int n = (in != null) ? in.read(buf) : ch.read(java.nio.ByteBuffer.wrap(buf));
+            int n = ch.read(java.nio.ByteBuffer.wrap(buf), offset + Integer.toUnsignedLong(nread));
             if (n > 0) {
                 memory.init(Integer.toUnsignedLong(ptr), buf, 0, n);
                 nread += n;
             }
+            // read returns -1 (a short read) at end of file; either ends the scatter.
             if (n < len) {
                 break;
             }

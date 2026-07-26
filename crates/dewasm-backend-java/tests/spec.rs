@@ -264,7 +264,7 @@ impl SpecBackend for JavaSpec {
         let var = format!("_i{var_id}");
         let _ = writeln!(
             script,
-            "{ty} {var} = new {ty}({}, null, null);",
+            "{ty} {var} = new {ty}({}, null, null, null);",
             imports_expr(registered),
             ty = conv.handle
         );
@@ -280,7 +280,7 @@ impl SpecBackend for JavaSpec {
         let _ = script;
         self.decls.lock().unwrap().push_str(&conv.source);
         format!(
-            "new {}({}, null, null)",
+            "new {}({}, null, null, null)",
             conv.handle,
             imports_expr(registered)
         )
