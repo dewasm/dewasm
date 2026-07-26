@@ -49,6 +49,7 @@ the consequences.
 | ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted |
 | ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted |
+| ADR-28 | [Python Backend Lowering Conventions](28-python-backend-lowering.md) | Accepted |
 
 ## Adding a new ADR
 

@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use dewasm_backend_bash::BashBackend;
+use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 
 /// Translate a WebAssembly binary into source code of various languages.
@@ -44,6 +45,7 @@ fn main() -> Result<()> {
     let backend: Box<dyn Backend> = match cli.target.as_str() {
         "ruby" => Box::new(RubyBackend),
         "bash" => Box::new(BashBackend),
+        "python" => Box::new(PythonBackend),
         other => bail!("unsupported target language: {other}"),
     };
 
