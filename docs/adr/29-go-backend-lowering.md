@@ -1,11 +1,13 @@
 # ADR-29 — Go Backend Lowering Conventions
 
-Status: **Accepted, 2026-07-26.** First milestone ("cowsay runs", ADR-24)
-implemented in `crates/dewasm-backend-go/src/lib.rs` + `runtime/go/units/`.
-Numeric conventions are ADR-2's; this ADR covers where Go — statically typed,
-with native fixed-width integers and floats — forced a different shape from the
-dynamically-typed backends (Ruby ADR-4, Python ADR-28). Go is also the first
-*compiled* backend, so it is the first to use ADR-27's `run()` override.
+Status: **Accepted, 2026-07-26.** First milestone ("cowsay runs", ADR-24) and
+second milestone (spec-harness green + wasm-1.0 completion, ADR-3/ADR-16)
+implemented in `crates/dewasm-backend-go/src/lib.rs`, `runtime/go/units/`, and
+`crates/dewasm-backend-go/tests/spec.rs`. Numeric conventions are ADR-2's; this
+ADR covers where Go — statically typed, with native fixed-width integers and
+floats — forced a different shape from the dynamically-typed backends (Ruby
+ADR-4, Python ADR-28). Go is also the first *compiled* backend, so it is the
+first to use ADR-27's `run()` override.
 
 ## Context
 
@@ -85,12 +87,63 @@ hand, and add work they never face:
   "exit status N" and itself exits 1 rather than propagating the guest exit
   code, which the WASI args/env case asserts exactly. `$DEWASM_GO` overrides the
   toolchain; a missing one fails loud (ADR-15).
-- **Feature scope.** `Floats` is `Supported`; the wasm-1.0 completion set
-  (imported globals/memories/tables, multiple tables, table bulk ops) is a later
-  milestone and rejected at conversion time via `check_module_support`. Globals
-  are plain typed fields (no `Rt::Global` box needed until imported globals
-  land). WASI is the eight core syscalls (stdio + args/env + `random_get` +
-  `proc_exit`); the filesystem waits for a later milestone.
+- **Feature scope.** `Floats` is `Supported`. WASI is the eight core syscalls
+  (stdio + args/env + `random_get` + `proc_exit`); the filesystem waits for a
+  later milestone.
+
+## Second milestone: spec harness + wasm-1.0 completion
+
+- **Boxed globals are a generic `*global[T]`** (`runtime/go/units/global/`), the
+  Go analogue of Ruby's `Rt::Global` box (ADR-16): every global is a
+  pointer-shared cell so one that crosses an instantiation boundary is shared,
+  not copied. Generics keep it statically typed — `p.g0.value` needs no
+  assertion, and an imported global resolves by asserting `v.(*global[uint32])`.
+- **Imports beyond functions** resolve through the same provider map, with the
+  ADR-16 kind check performed *by the Go type assertion itself*: `v.(*Memory)` /
+  `v.(*Table)` / `v.(*global[T])` (and the existing func-signature assertion)
+  reject a wrong-kind — and, for funcs and globals, wrong-*type* — import as a
+  `link_error`. A missing non-WASI import is a `link_error` at instantiation
+  (ADR-0), not a deferred call-time stub. **Consequence for the ledger:** Go's
+  `import-limits` gap is *narrower* than Ruby/Python's kind-only check — only
+  global mutability and table/memory min/max limits stay unchecked — so its spec
+  `EXPECTED_FAILURES` counts are lower (the two `linking` failures are both
+  global-mutability mismatches). Exports are a `map[string]any` over every kind
+  (funcs, the global box, table, memory), so a generated instance's `Exports`
+  doubles as another module's import object — what powers the harness's
+  `register` support.
+- **The spec harness compiles Go** (ADR-3). Each `.wast` file becomes one
+  `package main` program: the runtime bundle, harness helpers, every module's
+  package-level declarations, then a `func main` of instantiations and
+  assertions. Because Go has no dynamic dispatch, each generated type carries a
+  reflective `invoke(name, args...) []any` / `globalGet(name) []any` built where
+  the export signatures are known; the harness asserts the boxed results
+  bit-exactly (`math.Float32bits`). Module declarations cannot sit inside
+  `main`, so they are accumulated at package scope and prepended at assembly.
+- **Exhaustion is a generation-time recursion guard** (spec build only). A
+  runaway recursion overflows Go's goroutine stack *fatally* — the runtime
+  aborts the process uncatchably, and the harness needs the script to continue
+  after the check. Of the alternatives — lowering `debug.SetMaxStack` (still
+  process-fatal), or a subprocess per exhaustion assertion — the chosen one
+  instruments each generated function to add its frame's slot count
+  (`1 + params + locals + temps`) to a global `rtStack`, `defer`-decrement it,
+  and trap `"call stack exhausted"` past a fixed budget (1024). It is
+  deterministic, needs no extra process, and — sized by the slot *cost*, not raw
+  depth — also trips on `skip-stack-guard-page.wast`'s `function-with-many-locals`
+  (1056 locals, the only >50-slot function in the suite) even at shallow depth,
+  so that file passes with no ledger entry. The guard is **off** for shipped
+  standalone/library output, whose deep-but-valid recursions must not falsely
+  trap.
+- **Two Go-compiler float hazards** the spec suite exposed (ADR-2):
+  `float_exprs.wast` requires *no contraction* (each op rounds independently),
+  but Go fuses `x*y+z` into a hardware FMA on arm64; and it folds `x*1.0`→`x` /
+  `x/1.0`→`x`, skipping the signaling-NaN quieting the `no_fold_*` tests demand.
+  Both are defeated by routing f32/f64 **mul and div through `//go:noinline`
+  runtime helpers**, so a constant operand never reaches the op and no add can
+  fuse across the call boundary. Separately, min/max NaN results must be the
+  *wasm* canonical NaN — Go's `math.NaN()` is not bit-canonical (its low
+  mantissa bit is set), so the units build the canonical pattern explicitly.
+  f32 `sqrt` via `float32(math.Sqrt(float64(x)))` was *validated* correctly
+  rounded against `f32.wast` (double-rounding through float64 is safe for sqrt).
 
 ## Rejected alternatives
 
@@ -116,11 +169,13 @@ hand, and add work they never face:
   a few seconds; a warm content-cache hit runs in well under 0.1 s.
 - Negative: library-mode output always imports `fmt`; the generated file is
   verbose (fully-parenthesised, fully-cast expressions), per ADR-1.
-- Carry-over for the spec milestone: `emit_*` phrasing must compile Go
-  assertions and the harness generates one file per `.wast`, so each file is one
-  `go build`+run — feasible given per-file compile latency, but the curated-file
-  approach (as Bash/Python use) is the likely default. Float NaN-payload
-  conformance, correctly-rounded f32 `sqrt` (currently double-rounded through
-  float64), and int→float rounding (relies on the platform FPU's
-  round-to-nearest-even, which is what wasm mandates on the targeted platforms)
-  are to be validated and refined against the spec suite then.
+- Spec milestone (done): the curated default gate is green; the full
+  `DEWASM_SPEC_ALL=1` sweep is green at pass=29235 fail=38 (every failure in the
+  attributed `import-limits`/`linking` ledger), slightly *ahead* of Ruby/Python
+  (29233/40) because the Go type assertion catches two unlinkable cases their
+  kind-only import check misses. Per-file `go build` dominates the sweep, but a
+  content-addressed binary cache (shared with e2e) keeps a warm re-run to well
+  under a minute. The flagged bring-up gaps were resolved, not deferred:
+  NaN-payload conformance (min/max canonical NaN; `no_fold_*` sNaN quieting via
+  the noinline mul/div helpers), no-contraction FMA, and f32 `sqrt` (validated
+  correctly rounded) all pass.

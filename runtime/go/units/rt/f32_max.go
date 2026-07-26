@@ -1,6 +1,8 @@
 func (rt) f32_max(a, b float32) float32 {
+    // A NaN operand yields the wasm canonical NaN (see f32_min); Go's
+    // math.NaN() is not bit-canonical (ADR-2).
     if math.IsNaN(float64(a)) || math.IsNaN(float64(b)) {
-        return float32(math.NaN())
+        return math.Float32frombits(0x7fc00000)
     }
     if a > b {
         return a

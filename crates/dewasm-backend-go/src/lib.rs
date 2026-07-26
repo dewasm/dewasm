@@ -67,6 +67,12 @@ pub fn bundler() -> &'static RuntimeBundler {
                     prelude: Some("table/_class"),
                 },
                 RuntimeScope {
+                    prefix: "global",
+                    open: "",
+                    close: "",
+                    prelude: Some("global/_class"),
+                },
+                RuntimeScope {
                     prefix: "wasi",
                     open: "",
                     close: "",
@@ -132,10 +138,16 @@ impl Backend for GoBackend {
             // Go floats are native IEEE float32/float64; the NaN paths follow
             // ADR-2 (ADR-29).
             Feature::Floats => SupportStatus::Supported,
-            // The wasm-1.0 completion (imported globals/memories/tables,
-            // multiple tables, table bulk ops) is a later milestone; the core
-            // IR accepts these but this backend rejects them via
-            // check_module_support until then.
+            // Wasm-1.0 completion (ADR-16 for Ruby, mirrored here): imported
+            // globals/memories/tables through the provider map with a Go
+            // type-assertion kind+type check, multiple tables, and the table
+            // half of bulk memory (passive/declared element segments,
+            // table.init/copy, elem.drop).
+            Feature::ImportedGlobals
+            | Feature::ImportedMemories
+            | Feature::ImportedTables
+            | Feature::MultipleTables
+            | Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -150,6 +162,30 @@ impl Backend for GoBackend {
     }
 }
 
+/// Emit just the package-level declarations for `module` (the struct, its
+/// constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and
+/// the recursion guard), for the spec harness (ADR-3): the harness bundles one
+/// shared runtime for every module in a `.wast` file, so per-module output
+/// carries no `package`/`import`/`main`. Returns the declarations and the
+/// runtime units they reference.
+pub fn generate_program_with_units(
+    module: &Module,
+    type_name: &str,
+) -> Result<(String, BTreeSet<String>)> {
+    check_module_support(&GoBackend, module)?;
+    let gen = Gen {
+        module,
+        default_wasi: false,
+        type_name: type_name.to_string(),
+        uses: RefCell::new(BTreeSet::new()),
+        cur_locals: RefCell::new(Vec::new()),
+        spec: true,
+    };
+    let mut body = CodeWriter::new("\t");
+    gen.emit_program(&mut body);
+    Ok((body.finish(), gen.uses.into_inner()))
+}
+
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let type_name = type_name(&opts.module_name);
     let gen = Gen {
@@ -158,6 +194,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         type_name: type_name.clone(),
         uses: RefCell::new(BTreeSet::new()),
         cur_locals: RefCell::new(Vec::new()),
+        spec: false,
     };
 
     // Body: the generated struct + constructor + methods, into its own writer
@@ -341,6 +378,11 @@ fn go_type(ty: ValType) -> &'static str {
     }
 }
 
+/// The boxed-global field/assertion type for a value type: `*global[uint32]`.
+fn global_field_type(ty: ValType) -> String {
+    format!("*global[{}]", go_type(ty))
+}
+
 fn ty_suffix(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 => "i32",
@@ -386,6 +428,17 @@ fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
     format!("func({}){}", ps, go_results(results))
 }
 
+/// The recursion-guard budget (spec-harness builds only): each generated
+/// function adds its frame's slot count (`1 + params + locals + temps`) to the
+/// global `rtStack` on entry and traps once the running total exceeds this. It
+/// bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts
+/// the process fatally, ADR-29) into a catchable "call stack exhausted" trap
+/// the spec harness can observe. Sized so every runaway/huge recursion and the
+/// one >50-slot function in the testsuite (`function-with-many-locals`, 1056
+/// locals, `skip-stack-guard-page.wast`) trip it, while every legitimately
+/// terminating recursion in the suite stays under it.
+const SPEC_STACK_LIMIT: usize = 1024;
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
@@ -393,6 +446,10 @@ struct Gen<'a> {
     uses: RefCell<BTreeSet<String>>,
     /// Param+local types of the function currently being emitted.
     cur_locals: RefCell<Vec<ValType>>,
+    /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch
+    /// methods and the recursion guard. Off for the shipped standalone/library
+    /// output, whose deep-but-valid recursions must not falsely trap.
+    spec: bool,
 }
 
 impl<'a> Gen<'a> {
@@ -421,20 +478,126 @@ impl<'a> Gen<'a> {
             let idx = self.module.num_imported_funcs() as usize + i;
             self.function(w, idx as u32, func);
         }
+        if self.spec {
+            w.line("");
+            self.emit_invoke_method(w);
+            w.line("");
+            self.emit_global_get_method(w);
+        }
+    }
+
+    /// The type of a function (defined or imported) by function index.
+    fn func_type(&self, func_idx: u32) -> &dewasm_core::ir::FuncType {
+        let idx = func_idx as usize;
+        let imports = self.module.imported_funcs.len();
+        let ty_idx = if idx < imports {
+            self.module.imported_funcs[idx].type_idx
+        } else {
+            self.module.funcs[idx - imports].type_idx
+        };
+        &self.module.types[ty_idx as usize]
+    }
+
+    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any`
+    /// asserts each arg to its wasm param type and boxes every result into
+    /// `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static
+    /// typing (ADR-29). The harness compares the boxed results bit-exactly.
+    fn emit_invoke_method(&self, w: &mut CodeWriter) {
+        w.line(format!(
+            "func (p *{}) invoke(name string, args ...any) []any {{",
+            self.type_name
+        ));
+        w.indent();
+        w.line("switch name {");
+        for export in &self.module.exports {
+            let ExportKind::Func(idx) = export.kind else {
+                continue;
+            };
+            let ty = self.func_type(idx);
+            w.line(format!("case {}:", go_string(&export.name)));
+            w.indent();
+            let call_args = ty
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!("args[{i}].({})", go_type(*t)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let call = format!("{}({call_args})", self.func_ref(idx));
+            match ty.results.len() {
+                0 => {
+                    w.line(call);
+                    w.line("return nil");
+                }
+                n => {
+                    let names = (0..n).map(|i| format!("r{i}")).collect::<Vec<_>>();
+                    w.line(format!("{} := {call}", names.join(", ")));
+                    w.line(format!("return []any{{{}}}", names.join(", ")));
+                }
+            }
+            w.dedent();
+        }
+        w.line("default:");
+        w.indent();
+        w.line("panic(\"no export \" + name)");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("}");
+    }
+
+    /// The spec-harness global reader: returns the boxed global's current value
+    /// boxed in a one-element `[]any`, so the harness treats it exactly like a
+    /// single-result `invoke` (`__r[0]`).
+    fn emit_global_get_method(&self, w: &mut CodeWriter) {
+        w.line(format!(
+            "func (p *{}) globalGet(name string) []any {{",
+            self.type_name
+        ));
+        w.indent();
+        w.line("switch name {");
+        for export in &self.module.exports {
+            let ExportKind::Global(idx) = export.kind else {
+                continue;
+            };
+            w.line(format!("case {}:", go_string(&export.name)));
+            w.indent();
+            w.line(format!("return []any{{p.g{idx}.value}}"));
+            w.dedent();
+        }
+        w.line("default:");
+        w.indent();
+        w.line("panic(\"no global \" + name)");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("}");
     }
 
     fn struct_def(&self, w: &mut CodeWriter) {
         let m = self.module;
         w.line(format!("type {} struct {{", self.type_name));
         w.indent();
-        if m.memory.is_some() {
+        if m.imported_memory.is_some() || m.memory.is_some() {
             w.line("memory *Memory");
         }
-        for i in 0..m.tables.len() {
+        // Table index space = imported_tables ++ tables (ADR-16).
+        let num_tables = m.imported_tables.len() + m.tables.len();
+        for i in 0..num_tables {
             w.line(format!("t{i} *Table"));
         }
+        // Global index space = imported_globals ++ globals; every global is a
+        // boxed *global[T] (ADR-16).
+        for (i, imp) in m.imported_globals.iter().enumerate() {
+            w.line(format!("g{i} {}", global_field_type(imp.ty)));
+        }
+        let num_imported_globals = m.imported_globals.len();
         for (i, g) in m.globals.iter().enumerate() {
-            w.line(format!("g{i} {}", go_type(g.ty)));
+            w.line(format!(
+                "g{} {}",
+                num_imported_globals + i,
+                global_field_type(g.ty)
+            ));
         }
         for (i, imp) in m.imported_funcs.iter().enumerate() {
             let ty = &m.types[imp.type_idx as usize];
@@ -442,6 +605,9 @@ impl<'a> Gen<'a> {
         }
         if wasi_bundled(m, self.default_wasi) {
             w.line("wasi *WASI");
+        }
+        for i in 0..m.elems.len() {
+            w.line(format!("elem{i} []*funcref"));
         }
         for i in 0..m.datas.len() {
             w.line(format!("data{i} []byte"));
@@ -460,6 +626,10 @@ impl<'a> Gen<'a> {
         w.indent();
         w.line(format!("p := &{name}{{}}"));
 
+        // Memory: imported or locally defined.
+        if let Some(import) = &m.imported_memory {
+            self.emit_typed_import(w, "p.memory", "*Memory", &import.module, &import.name);
+        }
         if let Some(mem) = &m.memory {
             self.use_unit("memory/_class");
             let max = mem.max_pages.map(|p| p as u32).unwrap_or(65536);
@@ -468,54 +638,98 @@ impl<'a> Gen<'a> {
                 mem.min_pages as u32, max
             ));
         }
+        // Tables: imported first, then defined (index space is
+        // imported_tables ++ tables, ADR-16).
+        for (i, import) in m.imported_tables.iter().enumerate() {
+            self.emit_typed_import(
+                w,
+                &format!("p.t{i}"),
+                "*Table",
+                &import.module,
+                &import.name,
+            );
+        }
+        let num_imported_tables = m.imported_tables.len();
         for (i, table) in m.tables.iter().enumerate() {
             self.use_unit("table/_class");
-            w.line(format!("p.t{i} = newTable({})", table.min));
-        }
-        for (i, global) in m.globals.iter().enumerate() {
-            w.line(format!("p.g{i} = {}", self.expr(&global.init)));
+            w.line(format!(
+                "p.t{} = newTable({})",
+                num_imported_tables + i,
+                table.min
+            ));
         }
 
         let wasi = wasi_bundled(m, self.default_wasi);
+        let has_imports = !m.imported_funcs.is_empty()
+            || !m.imported_globals.is_empty()
+            || !m.imported_tables.is_empty()
+            || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
             w.line("p.wasi = newWASI(args, env)");
-            if m.memory.is_some() {
+            if m.memory.is_some() || m.imported_memory.is_some() {
                 w.line("p.wasi.memory = p.memory");
             }
-        } else if !m.imported_funcs.is_empty() {
+        } else {
             // args/env unused when no WASI is bundled.
             w.line("_ = args");
             w.line("_ = env");
-        } else {
+        }
+        if !has_imports {
             w.line("_ = imports");
-            w.line("_ = args");
-            w.line("_ = env");
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
             self.emit_import(w, i, import);
         }
 
+        // Globals: imported first, then defined; every global is a boxed
+        // *global[T] (ADR-16). Defined globals' init exprs may read imported
+        // globals, so they must resolve after the imported ones.
+        for (i, import) in m.imported_globals.iter().enumerate() {
+            self.emit_typed_import(
+                w,
+                &format!("p.g{i}"),
+                &global_field_type(import.ty),
+                &import.module,
+                &import.name,
+            );
+        }
+        let num_imported_globals = m.imported_globals.len();
+        for (i, global) in m.globals.iter().enumerate() {
+            self.use_unit("global/_class");
+            w.line(format!(
+                "p.g{} = newGlobal({})",
+                num_imported_globals + i,
+                self.expr(&global.init)
+            ));
+        }
+
         for (i, elem) in m.elems.iter().enumerate() {
-            if let ElemKind::Active {
-                table_index,
-                offset,
-            } = &elem.kind
-            {
-                self.use_unit("table/init");
-                let items = elem
-                    .items
+            let items = || {
+                elem.items
                     .iter()
                     .map(|item| self.elem_item(item))
                     .collect::<Vec<_>>()
-                    .join(", ");
-                w.line(format!("_elem{i} := []*funcref{{{items}}}"));
-                w.line(format!(
-                    "p.t{table_index}.init({}, _elem{i}, 0, {})",
-                    self.expr(offset),
-                    elem.items.len()
-                ));
+                    .join(", ")
+            };
+            match &elem.kind {
+                ElemKind::Declared => w.line(format!("p.elem{i} = nil")),
+                ElemKind::Passive => w.line(format!("p.elem{i} = []*funcref{{{}}}", items())),
+                ElemKind::Active {
+                    table_index,
+                    offset,
+                } => {
+                    self.use_unit("table/init");
+                    w.line(format!("_elem{i} := []*funcref{{{}}}", items()));
+                    w.line(format!(
+                        "p.t{table_index}.init({}, _elem{i}, 0, {})",
+                        self.expr(offset),
+                        elem.items.len()
+                    ));
+                    // Active segments are dropped after instantiation.
+                    w.line(format!("p.elem{i} = nil"));
+                }
             }
         }
 
@@ -537,15 +751,19 @@ impl<'a> Gen<'a> {
             }
         }
 
+        // Exports map holds every export kind as `any` so a generated instance
+        // doubles as another module's import provider (`imports["M"] =
+        // inst.Exports`) — the mechanism the spec harness's `register` support
+        // uses (ADR-16). Globals export the shared box, not its value.
         let mut export_entries = Vec::new();
         for export in &m.exports {
-            if let ExportKind::Func(idx) = export.kind {
-                export_entries.push(format!(
-                    "{}: {}",
-                    go_string(&export.name),
-                    self.func_ref(idx)
-                ));
-            }
+            let val = match export.kind {
+                ExportKind::Func(idx) => self.func_ref(idx),
+                ExportKind::Global(idx) => format!("p.g{idx}"),
+                ExportKind::Table(idx) => format!("p.t{idx}"),
+                ExportKind::Memory => "p.memory".to_string(),
+            };
+            export_entries.push(format!("{}: {}", go_string(&export.name), val));
         }
         if export_entries.is_empty() {
             w.line("p.Exports = map[string]any{}");
@@ -609,8 +827,57 @@ impl<'a> Gen<'a> {
         w.indent();
         match fallback {
             Some(f) => w.line(format!("p.if{i} = {f}")),
-            None => w.line(format!("p.if{i} = {}", self.link_error_stub(import, ty))),
+            // A missing non-WASI import is a link error at instantiation, not a
+            // deferred call-time failure (ADR-0; mirrors Ruby/Python).
+            None => w.line(format!(
+                "{}({})",
+                self.rt("link_error"),
+                go_string(&format!("missing import {}.{}", import.module, import.name))
+            )),
         }
+        w.dedent();
+        w.line("}");
+    }
+
+    /// Resolve a non-function import (memory/table/global) into `target`,
+    /// asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`). A present
+    /// wrong-kind (or wrong-type) value is a link error; a missing one is a
+    /// link error too (there is no fallback for these, unlike WASI funcs).
+    /// The Go type assertion performs the ADR-16 kind check — and, for globals,
+    /// the value-type check — inherently; mutability and min/max limits stay
+    /// unchecked (the import-limits gap).
+    fn emit_typed_import(
+        &self,
+        w: &mut CodeWriter,
+        target: &str,
+        go_ty: &str,
+        module: &str,
+        name: &str,
+    ) {
+        w.line(format!(
+            "if v := {}; v != nil {{",
+            self.resolve_import_string(module, name)
+        ));
+        w.indent();
+        w.line(format!("x, ok := v.({go_ty})"));
+        w.line("if !ok {");
+        w.indent();
+        w.line(format!(
+            "{}({})",
+            self.rt("link_error"),
+            go_string(&format!("incompatible import type for {module}.{name}"))
+        ));
+        w.dedent();
+        w.line("}");
+        w.line(format!("{target} = x"));
+        w.dedent();
+        w.line("} else {");
+        w.indent();
+        w.line(format!(
+            "{}({})",
+            self.rt("link_error"),
+            go_string(&format!("missing import {module}.{name}"))
+        ));
         w.dedent();
         w.line("}");
     }
@@ -644,26 +911,6 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn link_error_stub(
-        &self,
-        import: &dewasm_core::ir::ImportedFunc,
-        ty: &dewasm_core::ir::FuncType,
-    ) -> String {
-        let params = ty
-            .params
-            .iter()
-            .map(|t| go_type(*t))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let msg = go_string(&format!("missing import {}.{}", import.module, import.name));
-        format!(
-            "func({params}){} {{ {}({msg}){} }}",
-            go_results(&ty.results),
-            self.rt("link_error"),
-            self.return_zeros(&ty.results)
-        )
-    }
-
     fn return_zeros(&self, results: &[ValType]) -> String {
         if results.is_empty() {
             String::new()
@@ -688,8 +935,9 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "nil".to_string(),
-            // ref-typed globals are reference types (rejected at conversion).
-            ElemItem::Global(_) => "nil".to_string(),
+            // A `global.get` element item needs a ref-typed immutable global,
+            // i.e. reference types (rejected at conversion); unreachable here.
+            ElemItem::Global(idx) => format!("p.g{idx}.value"),
         }
     }
 
@@ -750,6 +998,20 @@ impl<'a> Gen<'a> {
             go_results(&ty.results)
         ));
         w.indent();
+
+        if self.spec {
+            // Recursion guard (spec-harness only, ADR-29): bound otherwise-fatal
+            // Go stack overflow into a catchable "call stack exhausted" trap.
+            // The defer is registered before the check so the trapping frame's
+            // own cost is unwound too.
+            let cost = 1 + local_types.len() + func.temps.len();
+            w.line(format!("rtStack += {cost}"));
+            w.line(format!("defer func() {{ rtStack -= {cost} }}()"));
+            w.line(format!(
+                "if rtStack > {SPEC_STACK_LIMIT} {{ {}(\"call stack exhausted\") }}",
+                self.rt("trap")
+            ));
+        }
 
         let mut read_locals = BTreeSet::new();
         let mut used_locals = BTreeSet::new();
@@ -878,7 +1140,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("l{idx} = {}", self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("p.g{idx} = {}", self.expr(expr)));
+                w.line(format!("p.g{idx}.value = {}", self.expr(expr)));
             }
             Stmt::Store {
                 op,
@@ -1084,7 +1346,7 @@ impl<'a> Gen<'a> {
             Expr::F64Const(bits) => format!("{}(0x{bits:x})", self.rt("f64_from_bits")),
             Expr::Temp(t) => temp(*t),
             Expr::LocalGet(idx) => format!("l{idx}"),
-            Expr::GlobalGet(idx) => format!("p.g{idx}"),
+            Expr::GlobalGet(idx) => format!("p.g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
@@ -1218,8 +1480,14 @@ impl<'a> Gen<'a> {
             I64GeS => format!("{}(int64({a}) >= int64({b}))", self.rt("b2i")),
             F32Add | F64Add => format!("({a} + {b})"),
             F32Sub | F64Sub => format!("({a} - {b})"),
-            F32Mul | F64Mul => format!("({a} * {b})"),
-            F32Div | F64Div => format!("({a} / {b})"),
+            // mul/div route through //go:noinline helpers so Go's compiler
+            // cannot fuse a following add/sub into an FMA, nor fold `x * 1.0` /
+            // `x / 1.0` to `x` (which would skip the sNaN quieting wasm
+            // mandates) — see the units (ADR-2).
+            F32Mul => format!("{}({a}, {b})", self.rt("f32_mul")),
+            F64Mul => format!("{}({a}, {b})", self.rt("f64_mul")),
+            F32Div => format!("{}({a}, {b})", self.rt("f32_div")),
+            F64Div => format!("{}({a}, {b})", self.rt("f64_div")),
             F32Min => format!("{}({a}, {b})", self.rt("f32_min")),
             F64Min => format!("{}({a}, {b})", self.rt("f64_min")),
             F32Max => format!("{}({a}, {b})", self.rt("f32_max")),
@@ -1329,7 +1597,13 @@ fn collect_reads_stmt(
             targets,
             default,
         } => {
-            e(index, read_locals, used_locals, read_temps);
+            // Matches the emitter: with no case targets it collapses to the
+            // default branch and never evaluates the (already side-effect-free,
+            // hoisted) index, so counting it read here would leave a declared
+            // temp Go rejects as unused.
+            if !targets.is_empty() {
+                e(index, read_locals, used_locals, read_temps);
+            }
             for t in targets {
                 collect_reads_target(t, read_locals, used_locals, read_temps);
             }
