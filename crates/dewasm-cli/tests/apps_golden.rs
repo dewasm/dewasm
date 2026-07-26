@@ -11,11 +11,28 @@
 //! required tools (ADR-15). The always-on per-backend `apps` tests already
 //! cover the other half (generated output vs. golden).
 
+use std::path::Path;
 use std::process::Command;
 
 use dewasm_test_helper::{
-    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, fresh_scratch_dir, run_command, APP_CASES,
+    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, fresh_scratch_dir, run_command,
+    run_command_bytes, APP_CASES,
 };
+
+/// Recursively copy `src` into `dst`, to stage the committed ripgrep fixture
+/// tree into a scratch dir before the `wasmtime --dir` golden run.
+fn copy_tree(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let to = dst.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &to);
+        } else {
+            std::fs::copy(entry.path(), &to).unwrap();
+        }
+    }
+}
 
 /// Golden-file freshness check: does `examples/apps/golden/*.stdout` still
 /// match what the currently-cached binary actually produces under a real
@@ -139,6 +156,30 @@ fn apps_golden_fs_matches_wasmtime() {
         assert_eq!(output.status.code(), Some(0), "qjs_repl: exit code");
     }
 
+    // ripgrep (Phase 5b): stage the committed fixture tree into a scratch dir,
+    // preopen it at /work, search recursively with a deterministic --sort path.
+    {
+        let work = fresh_scratch_dir("golden-rg-search");
+        copy_tree(&fixtures.join("rg"), &work);
+        let output = run_command(
+            Command::new("wasmtime")
+                .arg("--dir")
+                .arg(format!("{}::/work", work.display()))
+                .arg(cache.join("rg.wasm"))
+                .arg("--sort")
+                .arg("path")
+                .arg("needle")
+                .arg("/work"),
+            "",
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            std::fs::read_to_string(golden.join("rg_search.stdout")).unwrap(),
+            "rg_search: golden stdout is stale — regenerate it (docs/testing.md)"
+        );
+        assert_eq!(output.status.code(), Some(0), "rg_search: exit code");
+    }
+
     // sqlite3 shell writing a DB file, then a second invocation reopening it:
     // only the second run's SELECT output is the golden; the first run just
     // has to leave a nonzero-size DB file behind.
@@ -176,4 +217,42 @@ fn apps_golden_fs_matches_wasmtime() {
     }
 
     println!("filesystem app goldens match wasmtime");
+}
+
+/// The minigzip byte-stdio golden (Phase 5b compression CLI): a binary gz
+/// stream, so it lives as `examples/apps/golden/minigzip_compress.gz` (bytes)
+/// rather than a `.stdout` text file, and is checked here with `cmp`-style
+/// byte equality against a live `wasmtime run`. Same `wasmtime_test` gate and
+/// ignore-by-default policy (ADR-15). The round-trip half is self-checking in
+/// the per-backend gzip cases and needs no golden.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn apps_golden_gzip_matches_wasmtime() {
+    assert!(
+        Command::new("wasmtime").arg("--version").output().is_ok(),
+        "wasmtime not found on PATH — required when running with --features wasmtime_test"
+    );
+    let cache = apps_cache_dir();
+    let wasm = cache.join("minigzip.wasm");
+    assert!(
+        wasm.exists(),
+        "minigzip not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let input =
+        std::fs::read(apps_fixtures_dir().join("gzip").join("input.txt")).expect("read fixture");
+    let output = run_command_bytes(Command::new("wasmtime").arg(&wasm), &input);
+    assert_eq!(output.status.code(), Some(0), "minigzip compress: exit");
+    let golden =
+        std::fs::read(apps_golden_dir().join("minigzip_compress.gz")).expect("read golden");
+    assert_eq!(
+        output.stdout, golden,
+        "minigzip_compress.gz: golden is stale — regenerate it (docs/testing.md)"
+    );
+    // The golden must also decompress back to the original under wasmtime.
+    let restored = run_command_bytes(
+        Command::new("wasmtime").arg(&wasm).arg("-d"),
+        &output.stdout,
+    );
+    assert_eq!(restored.stdout, input, "minigzip round trip under wasmtime");
+    println!("minigzip byte-stdio golden matches wasmtime");
 }

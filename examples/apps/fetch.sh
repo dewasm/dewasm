@@ -135,3 +135,146 @@ else
   printf '%s\n' "$SQLITE_SHA256" >"$sqlite_stamp"
   echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"
 fi
+
+# --- minigzip: zlib's stdio (de)compression demo, built from the pinned
+# zlib source release with zig (ADR-22). Integer-only and tiny, with binary
+# stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.
+# No upstream distributes a wasm32-wasi minigzip, so it is compiled locally.
+# The gz stream zlib writes here is fully deterministic (mtime 0, OS byte 3),
+# so wasmtime's output and the converted backends' output are byte-identical.
+ZLIB_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
+ZLIB_SHA256="9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+ZLIB_DIR="zlib-1.3.1"
+# The zlib translation units minigzip.c needs. Z_HAVE_UNISTD_H makes the
+# shipped zconf.h include <unistd.h> so lseek is declared (wasi-libc has it;
+# without the define, clang errors on the implicit declaration).
+ZLIB_SRCS=(
+  adler32.c compress.c crc32.c deflate.c gzclose.c gzlib.c gzread.c gzwrite.c
+  infback.c inffast.c inflate.c inftrees.c trees.c uncompr.c zutil.c
+)
+
+minigzip_stamp="cache/minigzip.src-sha256"
+if [ -f cache/minigzip.wasm ] \
+  && [ "$(cat "$minigzip_stamp" 2>/dev/null || true)" = "$ZLIB_SHA256" ]; then
+  echo "minigzip: cached"
+else
+  command -v zig >/dev/null || {
+    echo "minigzip: zig not found — install zig (e.g. brew install zig) to build the minigzip app" >&2
+    exit 1
+  }
+  echo "minigzip: fetching $ZLIB_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/zlib.tar.gz" "$ZLIB_URL"
+  echo "$ZLIB_SHA256  $tmp/zlib.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/zlib.tar.gz" -C "$tmp"
+  echo "minigzip: building minigzip.wasm (zig cc)"
+  srcs=()
+  for s in "${ZLIB_SRCS[@]}"; do srcs+=("$tmp/$ZLIB_DIR/$s"); done
+  zig cc -target wasm32-wasi -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" \
+    "${srcs[@]}" "$tmp/$ZLIB_DIR/test/minigzip.c" \
+    -o cache/minigzip.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$ZLIB_SHA256" >"$minigzip_stamp"
+  echo "minigzip: -> cache/minigzip.wasm"
+fi
+
+# --- ripgrep: built from the pinned source release with cargo for
+# wasm32-wasip1. Default features (which already exclude pcre2); no tweaks
+# needed — ripgrep 14.1.1 builds clean for wasip1 as-is. A Ruby-only
+# filesystem demo (recursive directory search over a preopened tree).
+RG_URL="https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.1.tar.gz"
+RG_SHA256="4dad02a2f9c8c3c8d89434e47337aa654cb0e2aa50e806589132f186bf5c2b66"
+RG_DIR="ripgrep-14.1.1"
+
+rg_stamp="cache/rg.src-sha256"
+if [ -f cache/rg.wasm ] && [ "$(cat "$rg_stamp" 2>/dev/null || true)" = "$RG_SHA256" ]; then
+  echo "rg: cached"
+else
+  command -v cargo >/dev/null || {
+    echo "rg: cargo not found — install the Rust toolchain to build ripgrep" >&2
+    exit 1
+  }
+  rustup target list --installed 2>/dev/null | grep -qx wasm32-wasip1 || {
+    echo "rg: wasm32-wasip1 target not installed — run: rustup target add wasm32-wasip1" >&2
+    exit 1
+  }
+  echo "rg: fetching $RG_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/rg.tar.gz" "$RG_URL"
+  echo "$RG_SHA256  $tmp/rg.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/rg.tar.gz" -C "$tmp"
+  echo "rg: building rg.wasm (cargo build --release --target wasm32-wasip1)"
+  ( cd "$tmp/$RG_DIR" && cargo build --release --target wasm32-wasip1 )
+  cp "$tmp/$RG_DIR/target/wasm32-wasip1/release/rg.wasm" cache/rg.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$RG_SHA256" >"$rg_stamp"
+  echo "rg: -> cache/rg.wasm"
+fi
+
+# --- CPython 3.14.6: promoted from fetch-candidates.sh (Phase 5b). The
+# official wasm32-wasip1 build (brettcannon/cpython-wasi-build). Beyond
+# python.wasm we also extract the stdlib tree (lib/python3.14) the interpreter
+# reads at startup from a preopened directory: the e2e case preopens
+# cache/cpython-lib/lib at guest /lib (PYTHONHOME=/, PYTHONPATH=/lib/python3.14).
+# Ruby-only, heavy — execution behind DEWASM_APPS_ALL (docs/apps-audit.md).
+CPYTHON_URL="https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip"
+CPYTHON_SHA256="73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6"
+
+cpython_stamp="cache/cpython.src-sha256"
+if [ -f cache/cpython.wasm ] && [ -d cache/cpython-lib/lib/python3.14 ] \
+  && [ "$(cat "$cpython_stamp" 2>/dev/null || true)" = "$CPYTHON_SHA256" ]; then
+  echo "cpython: cached"
+else
+  command -v unzip >/dev/null || { echo "cpython: unzip not found" >&2; exit 1; }
+  echo "cpython: fetching $CPYTHON_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/py.zip" "$CPYTHON_URL"
+  echo "$CPYTHON_SHA256  $tmp/py.zip" | shasum -a 256 -c - >/dev/null
+  unzip -qo "$tmp/py.zip" python.wasm -d "$tmp"
+  cp "$tmp/python.wasm" cache/cpython.wasm
+  rm -rf cache/cpython-lib
+  mkdir -p cache/cpython-lib
+  unzip -qo "$tmp/py.zip" 'lib/python3.14/*' -d cache/cpython-lib
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$CPYTHON_SHA256" >"$cpython_stamp"
+  echo "cpython: -> cache/cpython.wasm, cache/cpython-lib/lib/python3.14"
+fi
+
+# --- CRuby 3.4 (ruby.wasm 2.9.4): promoted from fetch-candidates.sh (Phase
+# 5b). The official ruby.wasm wasm32-wasip1 full build. Beyond ruby.wasm we
+# extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at
+# startup; the multi-hundred-MB libruby-static.a and the rest of the tree are
+# not needed at run time and are left out. The e2e case preopens
+# cache/ruby-lib/usr at guest /usr. Ruby-only, heavy — execution behind
+# DEWASM_APPS_ALL. The "Ruby on Ruby" north-star demo (docs/apps-audit.md).
+CRUBY_URL="https://github.com/ruby/ruby.wasm/releases/download/2.9.4/ruby-3.4-wasm32-unknown-wasip1-full.tar.gz"
+CRUBY_SHA256="ccda86a375a4fe09849846d3b03a370172a4902a0c571087f48457388a2762c7"
+CRUBY_DIR="ruby-3.4-wasm32-unknown-wasip1-full"
+
+cruby_stamp="cache/ruby.src-sha256"
+if [ -f cache/ruby.wasm ] && [ -d cache/ruby-lib/usr/local/lib/ruby ] \
+  && [ "$(cat "$cruby_stamp" 2>/dev/null || true)" = "$CRUBY_SHA256" ]; then
+  echo "ruby: cached"
+else
+  echo "ruby: fetching $CRUBY_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/ruby.tar.gz" "$CRUBY_URL"
+  echo "$CRUBY_SHA256  $tmp/ruby.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/ruby.tar.gz" -C "$tmp" "$CRUBY_DIR/usr/local/bin/ruby"
+  cp "$tmp/$CRUBY_DIR/usr/local/bin/ruby" cache/ruby.wasm
+  rm -rf cache/ruby-lib
+  mkdir -p cache/ruby-lib
+  tar xzf "$tmp/ruby.tar.gz" -C cache/ruby-lib --strip-components=1 \
+    "$CRUBY_DIR/usr/local/lib/ruby"
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$CRUBY_SHA256" >"$cruby_stamp"
+  echo "ruby: -> cache/ruby.wasm, cache/ruby-lib/usr/local/lib/ruby"
+fi

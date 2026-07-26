@@ -35,7 +35,15 @@ pub trait BackendUnderTest: Sync {
     /// by pid + counter so parallel test threads and concurrent `cargo test`
     /// processes never collide) and execs `interpreter`.
     fn run(&self, source: &str, args: &[&str], stdin: &str) -> Output {
-        run_script(
+        self.run_bytes(source, args, stdin.as_bytes())
+    }
+
+    /// Like `run`, but with raw-byte `stdin` (and a raw-byte stdout in the
+    /// returned `Output`). Needed by the binary-stdio app cases (minigzip),
+    /// whose input and output are not valid UTF-8 and so cannot travel
+    /// through the `&str`-typed `run`/`APP_CASES` path.
+    fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
+        run_script_bytes(
             &self.interpreter(),
             source,
             self.backend().file_extension(),
@@ -56,6 +64,11 @@ pub trait BackendUnderTest: Sync {
 /// Spawn `cmd` with `stdin` piped in and both output streams captured,
 /// returning the raw `Output`.
 pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {
+    run_command_bytes(cmd, stdin.as_bytes())
+}
+
+/// Like `run_command`, but pipes raw bytes to stdin (binary-stdio cases).
+pub fn run_command_bytes(cmd: &mut Command, stdin: &[u8]) -> Output {
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -63,12 +76,7 @@ pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {
         .spawn()
         .expect("spawn");
     use std::io::Write as _;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    child.stdin.take().unwrap().write_all(stdin).unwrap();
     child.wait_with_output().expect("wait")
 }
 
@@ -83,6 +91,17 @@ pub fn run_script(
     args: &[&str],
     stdin: &str,
 ) -> Output {
+    run_script_bytes(interpreter, script, ext, args, stdin.as_bytes())
+}
+
+/// Like `run_script`, but pipes raw bytes to stdin (binary-stdio cases).
+pub fn run_script_bytes(
+    interpreter: &Path,
+    script: &str,
+    ext: &str,
+    args: &[&str],
+    stdin: &[u8],
+) -> Output {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
         "dewasm-test-{}-{}.{ext}",
@@ -90,5 +109,5 @@ pub fn run_script(
         COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::write(&path, script).unwrap();
-    run_command(Command::new(interpreter).arg(&path).args(args), stdin)
+    run_command_bytes(Command::new(interpreter).arg(&path).args(args), stdin)
 }

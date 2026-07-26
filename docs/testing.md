@@ -43,14 +43,23 @@ suite:
   run `examples/apps/fetch.sh` once (needs network access) to populate
   the gitignored `examples/apps/cache/`. Per ADR-15 this is a hard
   prerequisite, not an optional extra — the `apps` tests fail with a
-  message naming the missing file until you run it. The three sqlite3
-  shapes (`sqlite3-shell.wasm`, the C-API-exporting `libsqlite3.wasm`, and
-  `sqlite3-binding.wasm` — the latter compiled together with our own
-  `examples/apps/src/sqlite3_binding.c`, a guest→host callback proof) are
-  built locally from the pinned amalgamation source, so `fetch.sh`
-  additionally needs `zig` and `unzip` on PATH
-  ([ADR-22](adr/22-sqlite3-built-from-source.md)); `cargo test` itself
-  never needs them once the cache exists.
+  message naming the missing file until you run it. Several apps are built
+  locally from pinned source, so `fetch.sh` needs a few extra tools on PATH
+  (only for `fetch.sh` — `cargo test` itself never needs them once the cache
+  exists):
+    - the three sqlite3 shapes and `minigzip` (zlib) need **`zig`** and
+      **`unzip`** ([ADR-22](adr/22-sqlite3-built-from-source.md); `minigzip`
+      is `zig cc`'d from the pinned zlib 1.3.1 source, the byte-exact-stdio
+      compression CLI that runs under both backends);
+    - **ripgrep** is built with `cargo build --release --target
+      wasm32-wasip1` from the pinned 14.1.1 source, so it needs the
+      **`wasm32-wasip1`** rustup target (`rustup target add wasm32-wasip1`);
+      `fetch.sh` fails loudly if the target is not installed;
+    - **CPython** and **CRuby** are downloaded prebuilt (official
+      wasm32-wasip1 releases); `fetch.sh` additionally extracts each one's
+      stdlib tree (`cache/cpython-lib/lib/python3.14`,
+      `cache/ruby-lib/usr/local/lib/ruby`) that the interpreters read at
+      startup, which the heavy e2e cases preopen.
 - **Some app cases are Ruby-only and filesystem-exercising** (Phase 5a): the
   QuickJS file-I/O and scripted-REPL cases and the sqlite3 DB-file / C-API /
   callback cases live in the Ruby crate's e2e (`crates/dewasm-backend-ruby/tests/e2e.rs`,

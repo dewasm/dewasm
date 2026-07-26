@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    apps_e2e, library_e2e, standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase,
+    apps_e2e, gzip_e2e, library_e2e, standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase,
 };
 
 pub struct Bash;
@@ -80,3 +80,6 @@ library_e2e!(Bash, bash_glue);
 wasi_suite!(Bash, Stdio);
 wasi_suite!(Bash, ArgsEnv);
 apps_e2e!(Bash);
+// minigzip is integer-only (no softfloat), so it runs under Bash by default,
+// unlike the heavy floating-point apps (QuickJS/SQLite).
+gzip_e2e!(Bash);

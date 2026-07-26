@@ -7,10 +7,13 @@
 # Same rules as fetch.sh: version-pinned, checksum-verified, cached into
 # the gitignored examples/apps/cache/, never committed (ADR-9).
 #
-# Note for the e2e wiring (Phase 5): both runtimes also need their stdlib
-# trees from the same archives at run time (cpython: lib/python3.14,
-# ruby: usr/local/lib/ruby) via a preopened directory — extract those
-# alongside the .wasm when the cases land; the audit only needs the module.
+# There are currently no pending candidates: CPython and CRuby both
+# graduated to fetch.sh in Phase 5b (with their stdlib trees extracted for
+# the e2e cases). The scaffold below is kept for the next candidate — add a
+# `fetch <name> <url> <sha256> <zip|tar.gz> <path-inside-archive>` call, run
+# the feature audit on cache/<name>.wasm, and record the verdict in
+# docs/apps-audit.md; move the entry here into fetch.sh once its e2e case and
+# golden land.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -45,14 +48,4 @@ fetch() {
   echo "$name: -> $out"
 }
 
-# CPython 3.14.6, official wasm32-wasip1 build (audit: baseline only).
-fetch cpython \
-  "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip" \
-  "73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6" \
-  zip python.wasm
-
-# CRuby 3.4, official ruby.wasm wasm32-wasip1 full build (audit: baseline only).
-fetch ruby \
-  "https://github.com/ruby/ruby.wasm/releases/download/2.9.4/ruby-3.4-wasm32-unknown-wasip1-full.tar.gz" \
-  "ccda86a375a4fe09849846d3b03a370172a4902a0c571087f48457388a2762c7" \
-  tar.gz ruby-3.4-wasm32-unknown-wasip1-full/usr/local/bin/ruby
+echo "no pending candidates (CPython and CRuby graduated to fetch.sh in Phase 5b)"

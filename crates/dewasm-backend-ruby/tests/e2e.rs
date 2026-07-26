@@ -20,8 +20,8 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
     apps_cache_dir, apps_e2e, apps_fixtures_dir, convert, convert_on_big_stack, examples_dir,
-    fresh_scratch_dir, library_e2e, run_script, standalone_e2e, wasi_suite, BackendUnderTest,
-    LibraryCase, WasiCase,
+    fresh_scratch_dir, gzip_e2e, library_e2e, run_script, standalone_e2e, wasi_suite,
+    BackendUnderTest, LibraryCase, WasiCase,
 };
 
 pub struct Ruby;
@@ -74,6 +74,7 @@ wasi_suite!(Ruby, Stdio);
 wasi_suite!(Ruby, ArgsEnv);
 wasi_suite!(Ruby, Fs, ruby_fs_glue);
 apps_e2e!(Ruby);
+gzip_e2e!(Ruby);
 
 // ---------------------------------------------------------------------
 // Ruby-only scenarios.
@@ -687,3 +688,159 @@ db_mod.invoke("sqlite3_close", db)
 ROWS.each { |r| puts "row: #{r.join('|')}" }
 puts "CALLBACK-OK"
 "##;
+
+// ---------------------------------------------------------------------
+// Phase 5b: ripgrep (pinned-source cargo build, examples/apps/fetch.sh).
+// Ruby-only because it exercises the WASI filesystem — recursive directory
+// walking (fd_readdir, path_open, path_filestat_get) over a preopened tree —
+// which only Ruby has (ADR-14). Runs on the syscall set ADR-14 already ships:
+// ripgrep imports poll_oneoff/path_readlink but does not call them on this
+// search path, so no new WASI unit was needed. `--sort path` forces ripgrep's
+// otherwise-parallel directory walk into a single deterministic order, so the
+// golden (captured from `wasmtime --dir`) is stable.
+
+/// Recursively copy `src` into `dst` (both directories), used to stage the
+/// committed ripgrep fixture tree into a fresh scratch dir before the run.
+fn copy_tree(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let to = dst.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &to);
+        } else {
+            std::fs::copy(entry.path(), &to).unwrap();
+        }
+    }
+}
+
+/// ripgrep searching a small fixture directory tree (Phase 5b). Stages the
+/// committed `examples/apps/fixtures/rg/` tree into a scratch dir, preopens it
+/// at guest `/work`, and searches recursively for `needle`; asserts the guest
+/// stdout is byte-identical to the `wasmtime --dir` golden.
+#[test]
+fn rg_search_ruby() {
+    let work = fresh_scratch_dir("ruby-rg-search");
+    copy_tree(&apps_fixtures_dir().join("rg"), &work);
+    let class = convert_app_library("rg", "Rg");
+    let glue = format!(
+        "inst = Rg.new({{}}, args: [\"rg\", \"--sort\", \"path\", \"needle\", \"/work\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Rg::Rt::Exit\nend\n",
+        work.to_string_lossy()
+    );
+    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
+    assert!(
+        output.status.success(),
+        "rg_search under ruby failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        include_str!("../../../examples/apps/golden/rg_search.stdout"),
+        "rg_search: guest stdout differs from the wasmtime golden"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Phase 5b: language-runtime binaries — CPython and CRuby — converted and
+// *executed* on the Ruby backend, each reading its stdlib tree from a
+// preopened directory (Ruby-only, ADR-14). These are the heaviest cases in
+// the suite: converting the 30–35 MB wasm yields a ~200–335 MB Ruby source
+// file, and running it means Ruby parsing that file and then interpreting a
+// whole language runtime. Both complete well under the ADR-24 5-minute bar
+// (measured in docs/apps-audit.md: CPython ~1.4 s convert + ~12 s run; CRuby
+// ~2.8 s convert + ~60 s run) and neither needs a WASI unit beyond the ADR-14
+// set (their fd_renumber/poll_oneoff/path_readlink/sock_* imports are never
+// called on the boot path), so both genuinely execute rather than being
+// conversion-only smokes.
+//
+// They are gated behind DEWASM_APPS_ALL — the same deliberate perf opt-out the
+// `apps` heavy cases use (ADR-15's documented scope: a perf gate, not a
+// missing-environment skip) — because a ~335 MB temp file and ~1 GB of RSS on
+// every `cargo test` is too costly for the default gate. The task's own gate
+// list runs them via `DEWASM_APPS_ALL=1 cargo test -p dewasm-backend-ruby
+// --test e2e`.
+
+/// Whether the heavy language-runtime cases should actually run. Mirrors the
+/// `run_app_cases` heavy-skip contract: skip-with-a-note, never fail, when the
+/// opt-in env var is unset (ADR-15's perf-gate scope).
+fn apps_all() -> bool {
+    std::env::var("DEWASM_APPS_ALL").is_ok()
+}
+
+/// CPython 3.14.6 executing a one-liner on the Ruby backend (Phase 5b),
+/// reading its stdlib from the preopened `cache/cpython-lib/lib` tree.
+/// Ground truth (wasmtime):
+///   wasmtime --dir cache/cpython-lib/lib::/lib --env PYTHONHOME=/ \
+///     --env PYTHONPATH=/lib/python3.14 cache/cpython.wasm \
+///     -c 'print("hello from cpython", 6 * 7)'
+#[test]
+fn cpython_hello_ruby() {
+    if !apps_all() {
+        println!("cpython_hello: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
+        return;
+    }
+    let lib = apps_cache_dir().join("cpython-lib").join("lib");
+    assert!(
+        lib.join("python3.14").is_dir(),
+        "cpython stdlib not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let class = convert_app_library("cpython", "Cpython");
+    let glue = format!(
+        "inst = Cpython.new({{}}, args: [\"python\", \"-c\", \"print('hello from cpython', 6 * 7)\"], \
+         env: {{ \"PYTHONHOME\" => \"/\", \"PYTHONPATH\" => \"/lib/python3.14\" }}, \
+         preopens: {{ \"/lib\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Cpython::Rt::Exit\nend\n",
+        lib.to_string_lossy()
+    );
+    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
+    assert!(
+        output.status.success(),
+        "cpython_hello under ruby failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "hello from cpython 42\n",
+        "cpython_hello: guest stdout differs from the wasmtime ground truth"
+    );
+}
+
+/// CRuby 3.4 executing a one-liner on the Ruby backend (Phase 5b) — the
+/// "Ruby on Ruby" north-star demo — reading its stdlib from the preopened
+/// `cache/ruby-lib/usr` tree. Ground truth (wasmtime):
+///   wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \
+///     -e 'puts "hello from cruby #{6*7}"'
+#[test]
+fn cruby_hello_ruby() {
+    if !apps_all() {
+        println!("cruby_hello: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
+        return;
+    }
+    let usr = apps_cache_dir().join("ruby-lib").join("usr");
+    assert!(
+        usr.join("local").join("lib").join("ruby").is_dir(),
+        "cruby stdlib not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let class = convert_app_library("ruby", "Cruby");
+    let glue = format!(
+        "inst = Cruby.new({{}}, args: [\"ruby\", \"-e\", \"puts \\\"hello from cruby #{{6*7}}\\\"\"], \
+         env: {{}}, preopens: {{ \"/usr\" => {:?} }})\n\
+         begin\n  inst.invoke(\"_start\")\nrescue Cruby::Rt::Exit\nend\n",
+        usr.to_string_lossy()
+    );
+    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
+    assert!(
+        output.status.success(),
+        "cruby_hello under ruby failed: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "hello from cruby 42\n",
+        "cruby_hello: guest stdout differs from the wasmtime ground truth"
+    );
+}

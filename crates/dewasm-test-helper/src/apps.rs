@@ -13,7 +13,7 @@
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, convert_on_big_stack};
+use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert_on_big_stack};
 
 pub struct AppCase {
     pub name: &'static str,
@@ -117,4 +117,67 @@ pub fn run_app_cases(lang: &dyn BackendUnderTest) {
             lang.name()
         );
     }
+}
+
+/// The gzip byte-stdio stress cases (minigzip, the Phase 5b compression CLI):
+/// binary stdin/stdout the text-only `APP_CASES` table cannot carry (its
+/// `&str` stdin and `include_str!` goldens require valid UTF-8; a gz stream is
+/// neither). Runs under *every* backend — Ruby and Bash both — since it is
+/// integer-only (no softfloat) and therefore fast even under Bash. Two cases:
+///
+///   * *compress* — feed a fixed text input on stdin, require the compressed
+///     stdout to be byte-identical to the golden captured from `wasmtime`
+///     (`examples/apps/golden/minigzip_compress.gz`). zlib's gz stream is
+///     deterministic here (mtime 0, OS byte 3), so this is a stable equality.
+///   * *round trip* — compress, then decompress that output with `-d`, and
+///     require the result to equal the original input (self-checking; proves
+///     both directions of the binary stdio path).
+pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
+    let wasm_path = apps_cache_dir().join("minigzip.wasm");
+    assert!(
+        wasm_path.exists(),
+        "minigzip not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let src = convert_on_big_stack(lang.backend(), &bytes, Mode::Standalone, "minigzip");
+
+    let input = std::fs::read(apps_fixtures_dir().join("gzip").join("input.txt"))
+        .expect("read gzip input fixture");
+    let golden = std::fs::read(apps_golden_dir().join("minigzip_compress.gz"))
+        .expect("read minigzip golden");
+
+    // compress: stdout must be byte-identical to the wasmtime golden.
+    let compressed = lang.run_bytes(&src, &[], &input);
+    assert!(
+        compressed.status.success(),
+        "minigzip compress under {}: nonzero exit {}\n{}",
+        lang.name(),
+        compressed.status,
+        String::from_utf8_lossy(&compressed.stderr)
+    );
+    assert_eq!(
+        compressed.stdout,
+        golden,
+        "minigzip compress under {}: stdout differs from the wasmtime golden (byte count {} vs {})",
+        lang.name(),
+        compressed.stdout.len(),
+        golden.len()
+    );
+
+    // round trip: decompress the just-produced stream back to the original.
+    let restored = lang.run_bytes(&src, &["-d"], &compressed.stdout);
+    assert!(
+        restored.status.success(),
+        "minigzip decompress under {}: nonzero exit {}\n{}",
+        lang.name(),
+        restored.status,
+        String::from_utf8_lossy(&restored.stderr)
+    );
+    assert_eq!(
+        restored.stdout,
+        input,
+        "minigzip round trip under {}: decompressed output differs from the original input",
+        lang.name()
+    );
+    println!("minigzip compress + round trip under {}: ok", lang.name());
 }

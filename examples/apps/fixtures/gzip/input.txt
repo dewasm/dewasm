@@ -1,0 +1,4 @@
+dewasm minigzip byte-stdio stress
+repeat repeat repeat repeat repeat
+lorem ipsum dolor sit amet consectetur
+0123456789 0123456789 0123456789

@@ -13,8 +13,8 @@ mod spec;
 mod standalone;
 mod wasi;
 
-pub use apps::{run_app_cases, AppCase, APP_CASES};
-pub use backend::{run_command, run_script, BackendUnderTest};
+pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
+pub use backend::{run_command, run_command_bytes, run_script, run_script_bytes, BackendUnderTest};
 pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
@@ -106,6 +106,19 @@ macro_rules! apps_e2e {
         #[test]
         fn apps() {
             $crate::run_app_cases(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` running the gzip byte-stdio stress cases (minigzip) for
+/// `$lang`. Separate from `apps_e2e!` because those cases carry binary
+/// stdin/stdout the `APP_CASES` table cannot represent (`run_gzip_cases`).
+#[macro_export]
+macro_rules! gzip_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn gzip() {
+            $crate::run_gzip_cases(&$lang);
         }
     };
 }
