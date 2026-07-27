@@ -33,7 +33,7 @@ const MAX_FOLD_SIZE: u32 = 32;
 /// Whether values fold. Kept as a knob so the pending-stack machinery can be
 /// introduced without behavioral change (every push materializes immediately),
 /// then flipped on once verified. Always `true` in shipped builds.
-const FOLD: bool = false;
+const FOLD: bool = true;
 
 /// Side effects a pending expression carries, used to decide when it must be
 /// spilled before a later statement so it cannot observe that statement's
@@ -794,7 +794,12 @@ impl<'a> FuncBuilder<'a> {
             // -- locals and globals
             Operator::LocalGet { local_index } => {
                 let ty = self.all_locals[local_index as usize];
-                self.push_pending(ty, Expr::LocalGet(local_index), Effects::local(local_index), 1);
+                self.push_pending(
+                    ty,
+                    Expr::LocalGet(local_index),
+                    Effects::local(local_index),
+                    1,
+                );
             }
             Operator::LocalSet { local_index } => {
                 let (value, _, _) = self.pop_expr();
@@ -816,7 +821,12 @@ impl<'a> FuncBuilder<'a> {
                 });
                 // The value stays on the stack; a later `local.set` on the
                 // same local spills this via the reads-local rule.
-                self.push_pending(ty, Expr::LocalGet(local_index), Effects::local(local_index), 1);
+                self.push_pending(
+                    ty,
+                    Expr::LocalGet(local_index),
+                    Effects::local(local_index),
+                    1,
+                );
             }
             Operator::GlobalGet { global_index } => {
                 let ty = self.module.global_type(global_index);
