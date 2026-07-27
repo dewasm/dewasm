@@ -171,8 +171,7 @@ impl Backend for BashBackend {
             // harness now treats any float skip as a hard failure (ADR-8).
             Feature::Floats => SupportStatus::Supported,
             // Defined tables now live in per-index array families keyed by
-            // structural type keys, so more than one table lowers directly
-            // (table bulk ops are still gated).
+            // structural type keys, so more than one table lowers directly.
             Feature::MultipleTables => SupportStatus::Supported,
             // Imported globals alias the provider's cell via a `declare -gn`
             // nameref (ADR-33); mutable and immutable both work through it.
@@ -188,6 +187,12 @@ impl Backend for BashBackend {
             // and active element segments into a shared table all work
             // unchanged through the nameref.
             Feature::ImportedTables => SupportStatus::Supported,
+            // Passive/declared element segments, ref.null items, and
+            // table.init/copy/elem.drop all lower onto the same
+            // `<p>t<i>`/`<p>t<i>ty` table arrays and `<p>elem<n>`/
+            // `<p>elem<n>ty` staging arrays as the active-segment path
+            // (tab/init.sh, tab/copy.sh).
+            Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -510,39 +515,68 @@ impl<'a> Gen<'a> {
             self.emit_assign(w, &format!("{p}g{idx}"), &global.init);
         }
         for (n, elem) in m.elems.iter().enumerate() {
-            // check_module_support guarantees every segment reaching this
-            // backend is active with only `ref.func` items (no bulk ops).
-            let ElemKind::Active {
-                table_index,
-                offset,
-            } = &elem.kind
-            else {
-                unreachable!("passive/declared element segment reached the bash backend")
-            };
-            self.scratch.set(0);
-            self.use_unit("tab/init");
             // Stage the segment as a temporary element array (function
-            // command names) plus its structural type keys, then copy it
-            // into the table through tab_init (the elem analogue of the
-            // data-segment mem_init path).
+            // command names, `''` for a `ref.null` item) plus its
+            // structural type keys (same convention, `''` for the null
+            // items), mirroring the data-segment mem_init staging below.
+            // `ElemItem::Global` never reaches here: a ref-typed global
+            // (the only kind `global.get` could target inside an elem
+            // expression) is rejected by dewasm-core's `val_type` as soon
+            // as the Global/Import section is parsed (module.rs), which
+            // happens before the Element section — so a module containing
+            // one never makes it past conversion in the first place.
             let mut names = Vec::new();
             let mut keys = Vec::new();
             for item in &elem.items {
-                let ElemItem::Func(func_idx) = *item else {
-                    unreachable!("non-ref.func element item reached the bash backend")
-                };
-                names.push(self.func_ref(func_idx));
-                keys.push(format!("'{}'", self.func_type_key(func_idx)));
+                match item {
+                    ElemItem::Func(func_idx) => {
+                        names.push(self.func_ref(*func_idx));
+                        keys.push(format!("'{}'", self.func_type_key(*func_idx)));
+                    }
+                    ElemItem::Null => {
+                        names.push("''".to_string());
+                        keys.push("''".to_string());
+                    }
+                    ElemItem::Global(_) => {
+                        unreachable!("ref-typed global element item reached the bash backend")
+                    }
+                }
             }
-            w.line(format!("{p}elem{n}=({})", names.join(" ")));
-            w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
-            let off = self.value(w, offset);
-            w.line(format!(
-                "tab_init {p}t{table_index} {p}elem{n} $(( {off} )) 0 {} || return $?",
-                elem.items.len()
-            ));
-            w.line(format!("{p}elem{n}=()"));
-            w.line(format!("{p}elem{n}ty=()"));
+            match &elem.kind {
+                ElemKind::Declared => {
+                    // Never copied into a table; keep the pair of arrays
+                    // empty so a stray table.init/elem.drop against this
+                    // index is a harmless no-op-shaped array.
+                    w.line(format!("{p}elem{n}=()"));
+                    w.line(format!("{p}elem{n}ty=()"));
+                }
+                ElemKind::Passive => {
+                    w.line(format!("{p}elem{n}=({})", names.join(" ")));
+                    w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
+                }
+                ElemKind::Active {
+                    table_index,
+                    offset,
+                } => {
+                    self.scratch.set(0);
+                    self.use_unit("tab/init");
+                    w.line(format!("{p}elem{n}=({})", names.join(" ")));
+                    w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
+                    let off = self.value(w, offset);
+                    w.line(format!(
+                        "tab_init {p}t{table_index} {p}elem{n} $(( {off} )) 0 {} || return $?",
+                        elem.items.len()
+                    ));
+                    // Active segments are auto-dropped right after
+                    // instantiation (spec: table.init then an implicit
+                    // elem.drop), so clear the staging array the same way
+                    // an explicit ElemDrop would — a later table.init
+                    // against this segment then traps 'out of bounds
+                    // table access' like a genuinely dropped one.
+                    w.line(format!("{p}elem{n}=()"));
+                    w.line(format!("{p}elem{n}ty=()"));
+                }
+            }
         }
         for (i, data) in m.datas.iter().enumerate() {
             let bytes = data
@@ -1002,8 +1036,48 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("{}data{seg}=()", self.prefix));
             }
-            Stmt::TableInit { .. } | Stmt::TableCopy { .. } | Stmt::ElemDrop { .. } => {
-                unreachable!("table bulk ops reached the bash backend")
+            Stmt::TableInit {
+                seg,
+                table_index,
+                dst,
+                src,
+                len,
+            } => {
+                let p = self.prefix;
+                let d = self.value(w, dst);
+                let s = self.value(w, src);
+                let n = self.value(w, len);
+                self.use_unit("tab/init");
+                w.line(format!(
+                    "tab_init {p}t{table_index} {p}elem{seg} {} {} {} || return $?",
+                    cmd_arg(&d),
+                    cmd_arg(&s),
+                    cmd_arg(&n)
+                ));
+            }
+            Stmt::TableCopy {
+                dst_table,
+                src_table,
+                dst,
+                src,
+                len,
+            } => {
+                let p = self.prefix;
+                let d = self.value(w, dst);
+                let s = self.value(w, src);
+                let n = self.value(w, len);
+                self.use_unit("tab/copy");
+                w.line(format!(
+                    "tab_copy {p}t{dst_table} {p}t{src_table} {} {} {} || return $?",
+                    cmd_arg(&d),
+                    cmd_arg(&s),
+                    cmd_arg(&n)
+                ));
+            }
+            Stmt::ElemDrop { seg } => {
+                let p = self.prefix;
+                w.line(format!("{p}elem{seg}=()"));
+                w.line(format!("{p}elem{seg}ty=()"));
             }
             Stmt::Unreachable => {
                 self.use_unit("rt/trap");
