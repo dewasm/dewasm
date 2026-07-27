@@ -1422,8 +1422,28 @@ impl<'a> Gen<'a> {
 
     fn expr(&self, expr: &Expr) -> String {
         match expr {
-            Expr::I32Const(v) => format!("uint32({v})"),
-            Expr::I64Const(v) => format!("uint64({v})"),
+            // A folded constant may land directly inside a signed cast
+            // (int32/int64); Go rejects that conversion for a compile-time
+            // constant beyond the signed range, so launder large values
+            // through a call to keep the conversion a runtime one.
+            Expr::I32Const(v) => {
+                if *v > i32::MAX as u32 {
+                    format!("{}(0x{v:x})", self.rt("i32c"))
+                } else {
+                    format!("uint32({v})")
+                }
+            }
+            // An i64 constant is cast both to int64 (signed views) and, via
+            // i32.wrap_i64, to uint32; either conversion rejects a compile-time
+            // constant beyond its range, so launder anything above u32::MAX
+            // (the wrap target — a superset of the int64 overflow threshold).
+            Expr::I64Const(v) => {
+                if *v > u32::MAX as u64 {
+                    format!("{}(0x{v:x})", self.rt("i64c"))
+                } else {
+                    format!("uint64({v})")
+                }
+            }
             Expr::F32Const(bits) => format!("{}(0x{bits:x})", self.rt("f32_from_bits")),
             Expr::F64Const(bits) => format!("{}(0x{bits:x})", self.rt("f64_from_bits")),
             Expr::Temp(t) => temp(*t),

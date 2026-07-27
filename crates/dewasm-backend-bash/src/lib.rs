@@ -759,12 +759,16 @@ impl<'a> Gen<'a> {
             Stmt::MemoryGrow { dst, delta } => {
                 let p = self.prefix;
                 let d = self.value(w, delta);
-                w.line(format!("if (( ({d}) <= {p}max_pages - {p}pages )); then"));
+                // Evaluate the delta exactly once by snapshotting the candidate
+                // page count: a folded `memory.size` delta reads `pages`, which
+                // the grow mutates, so a second textual use of the fragment
+                // would see the already-updated value. The destination then
+                // takes the old size before `pages` is overwritten.
+                let cand = self.as_var(w, &format!("{p}pages + ({d})"));
+                w.line(format!("if (( {cand} <= {p}max_pages )); then"));
                 w.indent();
-                // The delta operand may alias the destination temp, so
-                // grow first and derive the old size afterwards.
                 w.line(format!(
-                    "(( {p}pages += ({d}), {} = {p}pages - ({d}) ))",
+                    "(( {} = {p}pages, {p}pages = {cand} ))",
                     temp(*dst)
                 ));
                 w.dedent();
@@ -929,6 +933,12 @@ impl<'a> Gen<'a> {
             Expr::Bin(op, a, b) => {
                 let a = self.value(w, a);
                 let b = self.value(w, b);
+                // Several inline lowerings textually repeat an operand (e.g.
+                // I64ShrU references `b` four times); with folded operands that
+                // would blow up geometrically. Snapshot non-trivial operands
+                // into a scratch var first (as_var is a no-op for a bare var).
+                let a = self.as_var(w, &a);
+                let b = self.as_var(w, &b);
                 if let Some(frag) = bin_inline(*op, &a, &b) {
                     return frag;
                 }
