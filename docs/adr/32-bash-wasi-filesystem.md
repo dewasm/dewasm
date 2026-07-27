@@ -88,9 +88,18 @@ multi-tenant sandbox host.
 Implemented in a later step, summarized here so the shape is on record: an
 `fd_read`-on-stdin subscription waits with `read -t <deadline> -n 1`, and if
 a byte arrives it is held in a one-byte pushback slot (`<p>wpush`) for the
-next `fd_read` to consume; a clock-only subscription sleeps with
-`read -rt <secs> <> <(:)`. Every other subscription (regular files,
-stdout/stderr, `fd_write`) is immediately ready, as on Ruby.
+next `fd_read` to consume; a clock-only subscription sleeps via a bash-only
+`coproc` timer (`coproc __slp { read _; }` then `read -rt <secs> -u
+"${__slp[0]}"`) rather than the process-substitution idiom
+`read -t <secs> <> <(:)` — the latter is rejected (`Permission denied`) on
+some hosts (macOS), so the coproc is the portable one. Every other
+subscription (regular files, stdout/stderr, `fd_write`) is immediately
+ready, as on Ruby. One deviation: when a stdin wait hits real EOF (not a
+timeout), this unit reports each waiting `fd_read` ready with `nbytes` 0,
+where Ruby's `IO.select`-based equivalent instead reports the closed fd
+itself as readable and lets the subsequent `fd_read` discover EOF — both
+converge on the guest's next `fd_read` returning 0 bytes, so the observable
+behavior matches even though the intermediate event differs.
 
 ### D5 — fd-table shape
 
