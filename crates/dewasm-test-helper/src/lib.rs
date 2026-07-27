@@ -16,10 +16,12 @@ mod multimodule;
 mod pty;
 mod qjs_repl;
 mod spec;
-mod standalone;
 mod wasi;
 
-pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
+pub use apps::{
+    run_app_case, run_gzip_cases, run_heavy_app_case, run_heavy_app_case_forced, AppCase,
+    COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL, SQLITE3_SHELL,
+};
 pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, SQLITE3_CALLBACK_BINDING, SQLITE3_FILE_C_API,
 };
@@ -46,7 +48,6 @@ pub use qjs_repl::{
     qjs_repl_golden_path, run_qjs_repl_pty, QJS_REPL_SESSION,
 };
 pub use spec::{run_spec_suite, Converted, SpecBackend};
-pub use standalone::{run_standalone_case, StandaloneCase, STANDALONE_CASES};
 pub use wasi::{
     run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiKind,
     WASI_CASES,
@@ -60,20 +61,6 @@ macro_rules! spec_suite {
         #[test]
         fn spec() {
             $crate::run_spec_suite(&$lang);
-        }
-    };
-}
-
-/// One `#[test]` iterating [`STANDALONE_CASES`] for `$lang` (a
-/// [`BackendUnderTest`]).
-#[macro_export]
-macro_rules! standalone_e2e {
-    ($lang:expr) => {
-        #[test]
-        fn standalone() {
-            for case in $crate::STANDALONE_CASES {
-                $crate::run_standalone_case(&$lang, case);
-            }
         }
     };
 }
@@ -193,20 +180,62 @@ macro_rules! wasi_root_containment_e2e {
     };
 }
 
-/// One `#[test]` iterating [`APP_CASES`] for `$lang` (a [`BackendUnderTest`]).
+/// Per-case app macros (ADR-27 revision): each expands to one
+/// `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a
+/// [`BackendUnderTest`]). No glue argument — these are standalone-mode
+/// stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!`
+/// and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and
+/// `sqlite3_shell_e2e!` are heavy (gated on `run_heavy_apps()` or
+/// `DEWASM_APPS_ALL` inside [`run_heavy_app_case`](crate::run_heavy_app_case)).
+///
+/// [`AppCase`]: crate::AppCase
 #[macro_export]
-macro_rules! apps_e2e {
+macro_rules! cowsay_args_e2e {
     ($lang:expr) => {
         #[test]
-        fn apps() {
-            $crate::run_app_cases(&$lang);
+        fn cowsay_args() {
+            $crate::run_app_case(&$lang, &$crate::COWSAY_ARGS);
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`]. Runs [`COWSAY_STDIN`](crate::COWSAY_STDIN).
+#[macro_export]
+macro_rules! cowsay_stdin_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn cowsay_stdin() {
+            $crate::run_app_case(&$lang, &$crate::COWSAY_STDIN);
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`]. Runs the heavy [`QJS_EVAL`](crate::QJS_EVAL) case.
+#[macro_export]
+macro_rules! qjs_eval_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn qjs_eval() {
+            $crate::run_heavy_app_case(&$lang, &$crate::QJS_EVAL);
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`]. Runs the heavy [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case.
+#[macro_export]
+macro_rules! sqlite3_shell_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn sqlite3_shell() {
+            $crate::run_heavy_app_case(&$lang, &$crate::SQLITE3_SHELL);
         }
     };
 }
 
 /// One `#[test]` running the gzip byte-stdio stress cases (minigzip) for
-/// `$lang`. Separate from `apps_e2e!` because those cases carry binary
-/// stdin/stdout the `APP_CASES` table cannot represent (`run_gzip_cases`).
+/// `$lang`. Separate from the app macros above because those cases carry
+/// binary stdin/stdout an `&str`/`include_str!` `AppCase` cannot represent
+/// (`run_gzip_cases`).
 #[macro_export]
 macro_rules! gzip_e2e {
     ($lang:expr) => {

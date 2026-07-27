@@ -43,7 +43,7 @@ pub trait BackendUnderTest: Sync {
     /// Like `run`, but with raw-byte `stdin` (and a raw-byte stdout in the
     /// returned `Output`). Needed by the binary-stdio app cases (minigzip),
     /// whose input and output are not valid UTF-8 and so cannot travel
-    /// through the `&str`-typed `run`/`APP_CASES` path.
+    /// through the `&str`-typed `run`/`AppCase` path.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         run_script_bytes(
             &self.interpreter(),

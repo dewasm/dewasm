@@ -1,6 +1,6 @@
-//! Bash end-to-end suites (ADR-27): the shared standalone / library / WASI /
-//! apps case consts (`dewasm-test-helper`) wired up for the Bash backend. Per
-//! the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
+//! Bash end-to-end suites (ADR-27): the shared library / WASI / apps case
+//! consts (`dewasm-test-helper`) wired up for the Bash backend. Per the
+//! ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
 //! glue string constants, and per-case macro invocations. Bash has no WASI
 //! filesystem support and no host-language object model (ADR-12), so it invokes
 //! only the two always-available library cases (glue is Bash function calls over
@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    apps_e2e, gzip_e2e, library_add_e2e, standalone_e2e, wasi_import_override_e2e, wasi_suite,
-    BackendUnderTest,
+    cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, sqlite3_shell_e2e,
+    wasi_import_override_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -80,8 +80,6 @@ prog_invoke '_start'
 // ---------------------------------------------------------------------
 // Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-standalone_e2e!(Bash);
-
 library_add_e2e!(Bash, BASH_ADD_GLUE);
 wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 // custom_wasi_provider_e2e! / partial_override_e2e! / stdio_capture_e2e!: not
@@ -95,7 +93,13 @@ wasi_suite!(Bash, ArgsEnv);
 // not invoked — Bash resolves poll_oneoff to ENOSYS and has no WASI filesystem
 // (ADR-12/ADR-14).
 
-apps_e2e!(Bash);
+cowsay_args_e2e!(Bash);
+cowsay_stdin_e2e!(Bash);
+// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but `run_heavy_apps` (above)
+// skips them by default — Bash's softfloat makes QuickJS/SQLite take tens of
+// seconds. DEWASM_APPS_ALL=1 runs them anyway.
+qjs_eval_e2e!(Bash);
+sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
 // unlike the heavy floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);

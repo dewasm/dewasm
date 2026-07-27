@@ -179,3 +179,27 @@ The behavioural contract is unchanged: the same generated programs run against
 the same goldens and assertions on the same backends. Only the wiring is more
 readable — each `#[test]` name is now the case name, and each callsite shows
 exactly one case with exactly one glue.
+
+## Revision (2026-07-27): standalone scaffolding deleted, apps dissolved into per-case macros
+
+Two leftovers from the prior revision are cleaned up, no behavioural change:
+
+- **`standalone_e2e!`/`STANDALONE_CASES`/`StandaloneCase` deleted.** Every
+  standalone fixture (hello, argc) was reclassified into `WASI_CASES`
+  (`Stdio`/`ArgsEnv`, already run in `Mode::Standalone`) during the Phase-4
+  reorg, leaving `STANDALONE_CASES` an empty table with no callers of its
+  runner beyond the aggregate macro. The module, the struct, the runner, the
+  macro, and its five callsite invocations are removed outright; a per-case
+  macro will be added if a genuine non-WASI standalone case ever appears.
+- **`apps_e2e!`/`APP_CASES` dissolved into four per-case macros**
+  (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`,
+  `sqlite3_shell_e2e!`), matching the per-case shape the previous revision
+  already gave the filesystem/C-API/multi-module tables. The cases take no
+  glue (they are standalone-mode stdin/args cases). The `heavy: bool` field is
+  dropped from `AppCase`; the two heavy cases (`QJS_EVAL`, `SQLITE3_SHELL`) get
+  their own gated runner (`run_heavy_app_case`, checking
+  `run_heavy_apps()`/`DEWASM_APPS_ALL`, same as before) plus an ungated
+  `run_heavy_app_case_forced` for wasmtime, mirroring the
+  `run_fs_app_case`/`run_fs_app_case_forced` split. `gzip_e2e!` still covers
+  minigzip's compress + round-trip pair as one macro (binary stdio does not fit
+  the `&str` `AppCase` shape) and is unchanged.

@@ -27,8 +27,9 @@ use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
-    qjs_repl_golden_path, run_app_cases, run_command_bytes, run_fs_app_case_forced, run_gzip_cases,
-    BackendUnderTest, PtyCommand, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL, RG_SEARCH,
+    qjs_repl_golden_path, run_app_case, run_command_bytes, run_fs_app_case_forced, run_gzip_cases,
+    run_heavy_app_case_forced, BackendUnderTest, PtyCommand, COWSAY_ARGS, COWSAY_STDIN,
+    CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL,
     SQLITE3_SHELL_DBFILE,
 };
 
@@ -162,17 +163,38 @@ impl BackendUnderTest for Wasmtime {
     }
 }
 
-// Hand-written `#[test]` fns rather than `apps_e2e!`/`gzip_e2e!`: those macros
-// take a bare `$lang:expr` and forwarding an optional leading attribute onto
-// the generated fn is a local macro-parsing ambiguity (`#` can begin an expr
-// fragment). Calling the shared runners directly is the simplest honest way to
-// attach the `wasmtime_test` ignore gate while still routing through the exact
-// same `run_app_cases`/`run_gzip_cases` the real backends use.
+// Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros: those
+// macros take a bare `$lang:expr` and forwarding an optional leading attribute
+// onto the generated fn is a local macro-parsing ambiguity (`#` can begin an
+// expr fragment). Calling the shared runners directly is the simplest honest
+// way to attach the `wasmtime_test` ignore gate while still routing through
+// the exact same runners the real backends use. The heavy cases (qjs eval,
+// sqlite3 shell) use the `_forced` entry point so wasmtime always runs all
+// four under the feature flag, rather than also requiring `DEWASM_APPS_ALL`
+// (the same choice `fs_apps` below makes).
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
-fn apps() {
-    run_app_cases(&Wasmtime);
+fn cowsay_args() {
+    run_app_case(&Wasmtime, &COWSAY_ARGS);
+}
+
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn cowsay_stdin() {
+    run_app_case(&Wasmtime, &COWSAY_STDIN);
+}
+
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn qjs_eval() {
+    run_heavy_app_case_forced(&Wasmtime, &QJS_EVAL);
+}
+
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn sqlite3_shell() {
+    run_heavy_app_case_forced(&Wasmtime, &SQLITE3_SHELL);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]

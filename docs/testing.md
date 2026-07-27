@@ -155,13 +155,17 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   with `cargo test -p dewasm-backend-<lang> --test spec`.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's suites,
   declared by invoking the shared macros. The zero-glue aggregate macros
-  (`standalone_e2e!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`,
-  `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`) take just the backend; the
-  per-case macros (the library cases, the filesystem apps `qjs_file_io_e2e!` …
-  `cruby_hello_e2e!`, the C-API `libsqlite3_c_api_e2e!` …, the multi-module
-  `shared_table_e2e!`/`embedded_coexist_e2e!`, `wasi_root_containment_e2e!`) and
-  the WASI-filesystem template `wasi_suite!(Fs, …)` take one named glue-string
-  constant as their only glue argument. Per the ADR-27 revision this file
+  (`gzip_e2e!`, `qjs_repl_pty_e2e!`, `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`)
+  take just the backend; the per-case macros (the library cases, the apps
+  `cowsay_args_e2e!`/`cowsay_stdin_e2e!`/`qjs_eval_e2e!`/`sqlite3_shell_e2e!`,
+  the filesystem apps `qjs_file_io_e2e!` … `cruby_hello_e2e!`, the C-API
+  `libsqlite3_c_api_e2e!` …, the multi-module
+  `shared_table_e2e!`/`embedded_coexist_e2e!`, `wasi_root_containment_e2e!`) take
+  no glue (the apps macros) or one named glue-string constant as their only
+  glue argument; the WASI-filesystem template `wasi_suite!(Fs, …)` likewise
+  takes one glue constant. `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are heavy —
+  gated on `run_heavy_apps()`/`DEWASM_APPS_ALL` inside the shared runner. Per
+  the ADR-27 revision this file
   contains **only** the `BackendUnderTest` impl, named glue string constants
   (library glue, the WASI-filesystem template, the filesystem-app instantiation
   glue, the C-API driver glue, the multi-module driver glue, and the

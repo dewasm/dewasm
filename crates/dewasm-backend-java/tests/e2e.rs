@@ -1,5 +1,5 @@
-//! Java end-to-end suites (ADR-27): the shared standalone / library / WASI /
-//! apps case consts (`dewasm-test-helper`) wired up for the Java backend. Per
+//! Java end-to-end suites (ADR-27): the shared library / WASI / apps case
+//! consts (`dewasm-test-helper`) wired up for the Java backend. Per
 //! the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
 //! glue string constants, and per-case macro invocations; glue is a plain `&str`
 //! argument at the callsite, and which macros this file invokes is the
@@ -19,11 +19,11 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
-    apps_e2e, examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, qjs_file_io_e2e,
-    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
-    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, standalone_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest, PtyCommand,
+    cowsay_args_e2e, cowsay_stdin_e2e, examples_dir, gzip_e2e, library_add_e2e,
+    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
+    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
+    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, stdio_capture_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Java;
@@ -552,8 +552,6 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 // ---------------------------------------------------------------------
 // Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-standalone_e2e!(Java);
-
 library_add_e2e!(Java, JAVA_ADD_GLUE);
 wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
 stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
@@ -567,7 +565,10 @@ wasi_suite!(Java, Poll);
 wasi_suite!(Java, Fs, JAVA_FS_GLUE);
 wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
 
-apps_e2e!(Java);
+cowsay_args_e2e!(Java);
+cowsay_stdin_e2e!(Java);
+qjs_eval_e2e!(Java);
+sqlite3_shell_e2e!(Java);
 gzip_e2e!(Java);
 
 qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
