@@ -8,14 +8,6 @@ not `Supported` here ([ADR-8](adr/8-latest-testsuite-support-matrix.md)); an
 unattributable failure is treated as a bug. Flipping a feature to supported
 turns its remaining skips into hard failures until the tests pass.
 
-## Baseline
-
-- **ruby**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory (memory.copy/fill/init, passive data segments)
-- **bash**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory; f32/f64 run on the pure-Bash softfloat (ADR-5/ADR-13); requires bash >= 5
-- **python**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory (memory.copy/fill/init, passive data segments)
-- **go**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory (memory.copy/fill/init, passive data segments)
-- **java**: Wasm core 1.0 (minus the wasm 1.0 gaps listed below) + mutable globals, sign-extension, saturating float-to-int, multi-value, and the memory half of bulk memory (memory.copy/fill/init, passive data segments)
-
 ## Features
 
 The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-tiers.md));

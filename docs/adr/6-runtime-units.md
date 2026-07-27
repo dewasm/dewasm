@@ -38,8 +38,9 @@ Two orthogonal mechanisms:
   resolution makes the same unit source work in every placement.
 
 The declared-dependency drift risk (edit the code, forget the header) is
-mitigated twice: a lint test (`crates/dewasm-backend-ruby/tests/units.rs`)
-extracts `Rt.x` / `Rt::X` / `@memory.x` / bare sibling-call references
+mitigated twice: a lint test (a `#[cfg(test)] mod units` at the bottom of
+`crates/dewasm-backend-ruby/src/lib.rs`) extracts `Rt.x` / `Rt::X` /
+`@memory.x` / bare sibling-call references
 from unit bodies and checks them against the header, and the spec harness
 runs its 19k assertions against minimal bundles, so an undeclared
 dependency fails as a NoMethodError at the exact assertion.

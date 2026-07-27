@@ -152,8 +152,11 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   but has no glue for fails loudly (ADR-15). Ruby's file also holds the
   Ruby-only scenarios (provider objects, embedded coexistence, the sqlite3 C
   API drive, WASI-model internals).
-- **`crates/dewasm-backend-<lang>/tests/units.rs`** (both) and
-  **`softfloat.rs`** (bash) — backend-local lints/oracles, unchanged.
+- The units lint (`declared_requires_cover_references`, `all_units_bundle`, and
+  the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units`
+  unit tests at the bottom of each backend's `src/lib.rs`, run with
+  `cargo test -p dewasm-backend-<lang> --lib`. **`softfloat.rs`** (bash) is the
+  one remaining backend-local integration oracle, unchanged.
 - **`crates/dewasm-cli/tests/`** — only the cross-backend tests:
   `support_docs.rs` (the `docs/support.md` golden gate over all backends) and
   `apps_golden.rs` (`apps_golden_matches_wasmtime`, behind the `wasmtime_test`
