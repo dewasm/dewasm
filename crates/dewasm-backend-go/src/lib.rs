@@ -1433,8 +1433,12 @@ impl<'a> Gen<'a> {
                     format!("uint32({v})")
                 }
             }
+            // An i64 constant is cast both to int64 (signed views) and, via
+            // i32.wrap_i64, to uint32; either conversion rejects a compile-time
+            // constant beyond its range, so launder anything above u32::MAX
+            // (the wrap target — a superset of the int64 overflow threshold).
             Expr::I64Const(v) => {
-                if *v > i64::MAX as u64 {
+                if *v > u32::MAX as u64 {
                     format!("{}(0x{v:x})", self.rt("i64c"))
                 } else {
                     format!("uint64({v})")
