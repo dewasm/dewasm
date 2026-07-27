@@ -16,7 +16,8 @@
 //!   Every generated function ends with an explicit `return 0` because a
 //!   trailing arithmetic statement would leak status 1.
 //! - One module instance per generation-time prefix: functions `<p>f<i>`,
-//!   state `<p>g<i>`/`<p>mem`/`<p>tab`, entry points `<p>init`,
+//!   state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space
+//!   table), entry points `<p>init`,
 //!   `<p>invoke`, `<p>global_get`. Imports resolve from the caller's
 //!   `IMPORTS` associative array (`[module.name]=function`).
 //!
@@ -34,7 +35,7 @@ use dewasm_backend::{
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
     BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp,
-    UnOp,
+    UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -61,6 +62,12 @@ pub fn bundler() -> &'static RuntimeBundler {
                 },
                 RuntimeScope {
                     prefix: "wasi",
+                    open: "",
+                    close: "",
+                    prelude: None,
+                },
+                RuntimeScope {
+                    prefix: "tab",
                     open: "",
                     close: "",
                     prelude: None,
@@ -161,6 +168,10 @@ impl Backend for BashBackend {
             // The ADR-5 softfloat covers the full float surface; the
             // harness now treats any float skip as a hard failure (ADR-8).
             Feature::Floats => SupportStatus::Supported,
+            // Defined tables now live in per-index array families keyed by
+            // structural type keys, so more than one table lowers directly
+            // (imported tables and table bulk ops are still gated).
+            Feature::MultipleTables => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -341,9 +352,6 @@ impl<'a> Gen<'a> {
         let p = self.prefix;
         w.line(format!("{p}init() {{"));
         w.indent();
-        if !m.elems.is_empty() || m.datas.iter().any(|d| d.offset.is_some()) {
-            w.line("local __off");
-        }
         if wasi_bundled(m, self.default_wasi) {
             // Callers set the WASI_ARGS/WASI_ENV arrays before init (the
             // bash analogue of Ruby's args:/env: keywords); stdio fds are
@@ -358,10 +366,14 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}pages={}", mem.min_pages));
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
         }
-        if let Some(table) = m.tables.first() {
-            w.line(format!("{p}tab=()"));
-            w.line(format!("{p}tabty=()"));
-            w.line(format!("{p}tab_size={}", table.min));
+        // Per unified-index-space table (imported ++ defined). This step
+        // only lowers defined tables; the index base keeps room for the
+        // imported ones a later linking step adds.
+        for (i, table) in m.tables.iter().enumerate() {
+            let idx = m.num_imported_tables() as usize + i;
+            w.line(format!("{p}t{idx}=()"));
+            w.line(format!("{p}t{idx}ty=()"));
+            w.line(format!("{p}t{idx}sz={}", table.min));
         }
         if !m.imported_funcs.is_empty() {
             // Without this an unset IMPORTS would be treated as an indexed
@@ -397,28 +409,40 @@ impl<'a> Gen<'a> {
             self.scratch.set(0);
             self.emit_assign(w, &format!("{p}g{i}"), &global.init);
         }
-        for elem in &m.elems {
+        for (n, elem) in m.elems.iter().enumerate() {
             // check_module_support guarantees every segment reaching this
             // backend is active with only `ref.func` items (no bulk ops).
-            let ElemKind::Active { offset, .. } = &elem.kind else {
+            let ElemKind::Active {
+                table_index,
+                offset,
+            } = &elem.kind
+            else {
                 unreachable!("passive/declared element segment reached the bash backend")
             };
             self.scratch.set(0);
-            self.use_unit("rt/trap");
-            let off = self.value(w, offset);
-            w.line(format!("(( __off = {off} ))"));
-            w.line(format!(
-                "(( __off + {} <= {p}tab_size )) || {{ rt_trap 'out of bounds table access'; return $?; }}",
-                elem.items.len()
-            ));
-            for (i, item) in elem.items.iter().enumerate() {
+            self.use_unit("tab/init");
+            // Stage the segment as a temporary element array (function
+            // command names) plus its structural type keys, then copy it
+            // into the table through tab_init (the elem analogue of the
+            // data-segment mem_init path).
+            let mut names = Vec::new();
+            let mut keys = Vec::new();
+            for item in &elem.items {
                 let ElemItem::Func(func_idx) = *item else {
                     unreachable!("non-ref.func element item reached the bash backend")
                 };
-                let ty = self.func_type_idx(func_idx);
-                w.line(format!("{p}tab[__off + {i}]={}", self.func_ref(func_idx)));
-                w.line(format!("{p}tabty[__off + {i}]={ty}"));
+                names.push(self.func_ref(func_idx));
+                keys.push(format!("'{}'", self.func_type_key(func_idx)));
             }
+            w.line(format!("{p}elem{n}=({})", names.join(" ")));
+            w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
+            let off = self.value(w, offset);
+            w.line(format!(
+                "tab_init {p}t{table_index} {p}elem{n} $(( {off} )) 0 {} || return $?",
+                elem.items.len()
+            ));
+            w.line(format!("{p}elem{n}=()"));
+            w.line(format!("{p}elem{n}ty=()"));
         }
         for (i, data) in m.datas.iter().enumerate() {
             let bytes = data
@@ -508,7 +532,7 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    fn func_type_idx(&self, func_idx: u32) -> u32 {
+    fn func_type_key(&self, func_idx: u32) -> String {
         let idx = func_idx as usize;
         let imports = self.module.imported_funcs.len();
         let ty = if idx < imports {
@@ -516,19 +540,30 @@ impl<'a> Gen<'a> {
         } else {
             self.module.funcs[idx - imports].type_idx
         };
-        self.canonical_type(ty)
+        self.type_key(ty)
     }
 
-    /// call_indirect compares types structurally, so identical function
-    /// types declared at different indices must collapse to one id.
-    fn canonical_type(&self, type_idx: u32) -> u32 {
+    /// A structural key for a function type, e.g. `i32,i64->f32`.
+    /// call_indirect compares types structurally, and a table can be shared
+    /// across independently generated modules (imported tables), so the
+    /// runtime type tag must not be a module-local numeric index — those
+    /// disagree across modules. Deriving the tag from the type's shape
+    /// makes it match regardless of each module's type section.
+    fn type_key(&self, type_idx: u32) -> String {
         let ty = &self.module.types[type_idx as usize];
-        self.module
-            .types
-            .iter()
-            .position(|t| t == ty)
-            .map(|i| i as u32)
-            .unwrap_or(type_idx)
+        let names = |tys: &[ValType]| {
+            tys.iter()
+                .map(|t| match t {
+                    ValType::I32 => "i32",
+                    ValType::I64 => "i64",
+                    ValType::F32 => "f32",
+                    ValType::F64 => "f64",
+                    ValType::FuncRef => "funcref",
+                })
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        format!("{}->{}", names(&ty.params), names(&ty.results))
     }
 
     /// The command name for the function (used in tables and exports).
@@ -728,25 +763,28 @@ impl<'a> Gen<'a> {
             }
             Stmt::CallIndirect {
                 type_idx,
-                table_index: _,
+                table_index,
                 index,
                 args,
                 results,
             } => {
                 let p = self.prefix;
+                let ti = *table_index;
                 self.needs_ci.set(true);
                 self.use_unit("rt/trap");
                 let i = self.value(w, index);
                 let args: Vec<String> = args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
                 w.line(format!("(( __x = {i} ))"));
                 w.line(format!(
-                    "(( __x < {p}tab_size )) || {{ rt_trap 'undefined element'; return $?; }}"
+                    "(( __x < {p}t{ti}sz )) || {{ rt_trap 'undefined element'; return $?; }}"
                 ));
-                w.line(format!("__fn=${{{p}tab[__x]-}}"));
+                w.line(format!("__fn=${{{p}t{ti}[__x]-}}"));
                 w.line("[[ -n $__fn ]] || { rt_trap 'uninitialized element'; return $?; }");
+                // Structural string compare (see type_key): a numeric type
+                // id would not survive a table shared across modules.
                 w.line(format!(
-                    "(( {p}tabty[__x] == {} )) || {{ rt_trap 'indirect call type mismatch'; return $?; }}",
-                    self.canonical_type(*type_idx)
+                    "[[ ${{{p}t{ti}ty[__x]}} == '{}' ]] || {{ rt_trap 'indirect call type mismatch'; return $?; }}",
+                    self.type_key(*type_idx)
                 ));
                 let cmd = if args.is_empty() {
                     "\"$__fn\"".to_string()
@@ -1334,7 +1372,7 @@ mod units {
     fn declared_requires_cover_references() {
         let b = bundler();
         let unit_ids: BTreeSet<&str> = b.units().map(|u| u.id.as_str()).collect();
-        let call = Regex::new(r"\b(rt|mem|wasi)_([a-z0-9_]+)").unwrap();
+        let call = Regex::new(r"\b(rt|mem|wasi|tab)_([a-z0-9_]+)").unwrap();
 
         let mut problems = Vec::new();
         for unit in b.units() {
