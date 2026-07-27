@@ -13,7 +13,7 @@
 //! future gem) is the caller's choice.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -125,6 +125,8 @@ fn generate_class_inner(
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
+        break_only: RefCell::new(HashMap::new()),
+        frame_stack: RefCell::new(Vec::new()),
     };
     let mut wb = CodeWriter::new("  ");
     wb.indent();
@@ -343,16 +345,110 @@ fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
             .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
+/// Pre-pass (ADR-4's `break`/`next` optimization): for every capturing
+/// frame's label id in `body` (a `Block`, a `Loop`, or an `If` whose
+/// `label.referenced` is set — the forms that emit `catch`/`throw`; a
+/// plain `if`, `BrIf`'s wrapper `if`, and `BrTable`'s `case` do not
+/// capture), record whether *every* `br`/`br_if`/`br_table` target that
+/// names it does so from the innermost capturing frame enclosing the
+/// branch. If so, that frame's own `catch`/`throw` machinery is provably
+/// dead: nothing ever `throw`s to it from a nested frame, so the simpler
+/// `begin...end while false` / `while true...end` rendering (`stmt()`)
+/// is equivalent.
+fn compute_break_only(body: &[Stmt]) -> HashMap<u32, bool> {
+    let mut result = HashMap::new();
+    let mut stack: Vec<u32> = Vec::new();
+    walk_break_only(body, &mut stack, &mut result);
+    result
+}
+
+fn walk_break_only(stmts: &[Stmt], stack: &mut Vec<u32>, result: &mut HashMap<u32, bool>) {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Block { label, body } => {
+                result.entry(label.id).or_insert(true);
+                stack.push(label.id);
+                walk_break_only(body, stack, result);
+                stack.pop();
+            }
+            Stmt::Loop { label, body } => {
+                result.entry(label.id).or_insert(true);
+                stack.push(label.id);
+                walk_break_only(body, stack, result);
+                stack.pop();
+            }
+            Stmt::If {
+                label, then, els, ..
+            } => {
+                if label.referenced {
+                    result.entry(label.id).or_insert(true);
+                    stack.push(label.id);
+                }
+                walk_break_only(then, stack, result);
+                walk_break_only(els, stack, result);
+                if label.referenced {
+                    stack.pop();
+                }
+            }
+            Stmt::Br(target) => record_break_only_target(target, stack, result),
+            Stmt::BrIf { target, .. } => record_break_only_target(target, stack, result),
+            Stmt::BrTable {
+                targets, default, ..
+            } => {
+                for target in targets {
+                    record_break_only_target(target, stack, result);
+                }
+                record_break_only_target(default, stack, result);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn record_break_only_target(target: &BrTarget, stack: &[u32], result: &mut HashMap<u32, bool>) {
+    if let BrTarget::Label { label, .. } = target {
+        let innermost = stack.last() == Some(label);
+        let entry = result.entry(*label).or_insert(true);
+        *entry = *entry && innermost;
+    }
+}
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
+    /// Per-function, set by `function()` before emitting its body: for each
+    /// capturing frame's label id (`Block`/`Loop`/referenced-`If`), whether
+    /// every `br` that targets it does so from the innermost capturing frame
+    /// at the branch site — i.e. always as a `break`/`next`, never a
+    /// `throw` from a nested frame. Such a frame needs no `catch`/`throw`
+    /// machinery at all (see `compute_break_only`).
+    break_only: RefCell<HashMap<u32, bool>>,
+    /// Emission-time stack of capturing frames currently open (label id,
+    /// is_loop), pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
+    /// `branch()` uses the top of this stack to decide whether a `br` can
+    /// become a plain `break`/`next` (target is the innermost frame) or must
+    /// stay a `throw` (target is an outer frame) — correct either way the
+    /// target frame chose to render itself, since `break`/`next` inside a
+    /// `catch(...) do ... end` block already terminates/short-circuits it
+    /// with the same effect as a `throw`.
+    frame_stack: RefCell<Vec<(u32, bool)>>,
 }
 
 impl<'a> Gen<'a> {
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// Whether `label_id`'s capturing frame needs no `catch`/`throw` at all
+    /// (see `compute_break_only`, populated per-function by `function()`).
+    fn is_break_only(&self, label_id: u32) -> bool {
+        self.break_only
+            .borrow()
+            .get(&label_id)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Reference a module-level runtime helper, recording its unit.
@@ -690,6 +786,8 @@ impl<'a> Gen<'a> {
     }
 
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
+        *self.break_only.borrow_mut() = compute_break_only(&func.body);
+        self.frame_stack.borrow_mut().clear();
         let ty = &self.module.types[func.type_idx as usize];
         let params = (0..ty.params.len())
             .map(|i| format!("l{i}"))
@@ -751,18 +849,42 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::Block { label, body } => {
-                w.block(format!("catch(:l{}) do", label.id), "end", |w| {
-                    self.stmts(w, body);
-                });
+                let break_only = self.is_break_only(label.id);
+                self.frame_stack.borrow_mut().push((label.id, false));
+                if break_only {
+                    w.block("begin", "end while false", |w| {
+                        self.stmts(w, body);
+                    });
+                } else {
+                    w.block(format!("catch(:l{}) do", label.id), "end", |w| {
+                        self.stmts(w, body);
+                    });
+                }
+                self.frame_stack.borrow_mut().pop();
             }
             Stmt::Loop { label, body } => {
-                w.block("while true", "end", |w| {
-                    w.block(format!("__b = catch(:l{}) do", label.id), "end", |w| {
+                let break_only = self.is_break_only(label.id);
+                self.frame_stack.borrow_mut().push((label.id, true));
+                if break_only {
+                    // No throw ever targets this loop from a nested frame,
+                    // so back-edges (a br at the innermost position, see
+                    // `branch()`) are plain `next`; a fallthrough at the end
+                    // of the body must still exit the loop, hence the
+                    // trailing `break`.
+                    w.block("while true", "end", |w| {
                         self.stmts(w, body);
-                        w.line("true");
+                        w.line("break");
                     });
-                    w.line("break if __b");
-                });
+                } else {
+                    w.block("while true", "end", |w| {
+                        w.block(format!("__b = catch(:l{}) do", label.id), "end", |w| {
+                            self.stmts(w, body);
+                            w.line("true");
+                        });
+                        w.line("break if __b");
+                    });
+                }
+                self.frame_stack.borrow_mut().pop();
             }
             Stmt::If {
                 label,
@@ -788,9 +910,18 @@ impl<'a> Gen<'a> {
                     w.line("end");
                 };
                 if label.referenced {
-                    w.block(format!("catch(:l{}) do", label.id), "end", |w| {
-                        emit_if(w, self);
-                    });
+                    let break_only = self.is_break_only(label.id);
+                    self.frame_stack.borrow_mut().push((label.id, false));
+                    if break_only {
+                        w.block("begin", "end while false", |w| {
+                            emit_if(w, self);
+                        });
+                    } else {
+                        w.block(format!("catch(:l{}) do", label.id), "end", |w| {
+                            emit_if(w, self);
+                        });
+                    }
+                    self.frame_stack.borrow_mut().pop();
                 } else {
                     emit_if(w, self);
                 }
@@ -949,7 +1080,18 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                if *is_loop {
+                // A br at the innermost capturing frame is always a plain
+                // break/next, whether or not that frame kept its
+                // catch/throw rendering: break inside a `catch(...) do ...
+                // end` block terminates the catch (same effect as
+                // throwing to it), and next makes the block evaluate to
+                // nil, which the loop's `break if __b` reads as "continue"
+                // — see `compute_break_only`'s doc comment. Only a target
+                // outside the innermost frame still needs a real throw.
+                let innermost = self.frame_stack.borrow().last().map(|(id, _)| id) == Some(label);
+                if innermost {
+                    w.line(if *is_loop { "next" } else { "break" });
+                } else if *is_loop {
                     w.line(format!("throw :l{label}, false"));
                 } else {
                     w.line(format!("throw :l{label}"));

@@ -21,6 +21,27 @@ language facts drove the lowering shape.
   continue vs. exit**: the body falls through to `true` (break the while)
   and a back-edge `throw`s `false` (next iteration). One shape covers
   branches to the loop head from any nesting depth.
+- **A `br`/`br_if`/`br_table` at the innermost capturing frame — depth 1
+  — lowers to a plain `break`/`next` instead of `throw`, and a frame every
+  one of whose incoming branches is depth-1 drops `catch`/`throw`
+  entirely** (`Block` renders as `begin ... end while false`, `Loop` as a
+  bare `while true ... end` with an appended trailing `break` for
+  fallthrough). This was the Consequences section's candidate
+  optimization below, now adopted: `break`/`next` inside a `catch(...) do
+  ... end` block still terminates/short-circuits it exactly like a
+  `throw` would (Ruby block semantics), so the branch-site simplification
+  is correct regardless of whether the target frame kept its `catch`
+  wrapper — only frames with *zero* deeper incoming throws can drop the
+  wrapper itself. A per-function pre-pass
+  (`compute_break_only` in `crates/dewasm-backend-ruby/src/lib.rs`)
+  computes, per label, whether every branch to it is depth-1; `plain if`,
+  `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they
+  don't count as a frame boundary for this analysis. Measured in
+  isolation (20M-iteration loop back-edge, MRI 4.0.4): `catch`/`throw`
+  2.59s vs. `break`/`next` 0.45s, ~5.7x; (5M-call block-exit, same
+  benchmark): `catch`/`throw` 0.69s vs. `begin...end while false` 0.17s,
+  ~4.1x. `catch` and `throw` are genuinely expensive in MRI — this is the
+  actual driver of hot-loop overhead in generated code, not incidental.
 - **All stack temps are hoisted to method scope** with a single
   `s0 = s1 = ... = nil` line at function entry. First assignment inside a
   Ruby block is block-local, so without hoisting, values assigned inside
@@ -57,7 +78,9 @@ language facts drove the lowering shape.
   spec harness (ADR-3) is green including `br_table`, `unwind`, and
   `labels`.
 - Negative: `catch` allocates and `throw` unwinds — hot loops pay for
-  labels they rarely take. Candidate optimization: use `break`/`next`
-  when the branch depth is 1, measured before adopted.
+  labels they rarely take. Mitigated for the common depth-1 case (see
+  the `break`/`next` decision above); a multi-level `br` (depth > 1)
+  still pays the full `catch`/`throw` cost, unavoidably — Ruby has no
+  labeled `break`.
 - Deep wasm recursion maps to Ruby stack frames; `SystemStackError` is
   the (accepted) analogue of "call stack exhausted".
