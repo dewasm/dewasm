@@ -25,7 +25,9 @@ free (per-backend gating).
   exported and later imported by another instance) must be a shared mutable cell, not a copied
   value — `Memory`/`Table` are already always objects for the same reason, so making `Global`
   follow suit keeps one representation instead of two paths through every place a global is read,
-  written, or exported.
+  written, or exported. **Superseded for performance:** only globals that actually cross a
+  boundary (imported, or `ExportKind::Global`) are boxed now; the criterion above is unchanged; see
+  the "Rejected alternatives" entry below, now adopted.
 - **Imports beyond functions reuse ADR-7's mechanism as-is.** `Rt.resolve_import(imports, mod,
   name)` already returns whatever object the embedder supplied; nothing about it was
   function-specific. Imported memory/table/global codegen calls it exactly like imported functions
@@ -87,8 +89,14 @@ free (per-backend gating).
 - **Box only imported/exported-mutable globals, keep plain ivars for purely-local ones** — saves
   an allocation and a `.value` indirection on the common case, at the cost of two codegen paths for
   every global read/write/export site and a runtime decision (is this global ever imported
-  elsewhere?) that the generator can't always know locally. Rejected for the `Memory`/`Table`
-  precedent and for keeping `GlobalGet`/`GlobalSet` lowering a single rule.
+  elsewhere?) that the generator can't always know locally. Rejected at the time for the
+  `Memory`/`Table` precedent and for keeping `GlobalGet`/`GlobalSet` lowering a single rule.
+  **Adopted later** (the two-path cost was overstated: the decision is knowable statically —
+  `boxed_globals = imported ∪ ExportKind::Global` computed once per module, since wasm 1.0's
+  export/import sets are fixed at conversion time, not runtime — and a `global_ref` helper keeps
+  `GlobalGet`/`GlobalSet`/`ElemItem::Global` at one call site each). The boundary criterion above
+  (crosses an instantiation boundary ⇒ needs the box) is exactly what `boxed_globals` computes;
+  only the plain-ivar-for-everything-else half of this alternative was actually implemented.
 - **Full wasm-type import validation (signatures, mutability, limits)** — real correctness value
   only for `assert_unlinkable` conformance; no embedder-visible behavior changes for a
   correctly-typed import, which is the only case that matters outside the spec harness. Deferred as

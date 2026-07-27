@@ -121,12 +121,24 @@ fn generate_class_inner(
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
+    // A global needs a shared mutable cell (`Rt::Global`, ADR-16) only if it
+    // can cross an instantiation boundary: imported (came from another
+    // instance) or exported (another instance may import it later). Every
+    // other global is local to this class and never observed from outside
+    // it, so it can be a plain ivar holding the value directly.
+    let boxed_globals: BTreeSet<u32> = (0..module.imported_globals.len() as u32)
+        .chain(module.exports.iter().filter_map(|e| match e.kind {
+            ExportKind::Global(idx) => Some(idx),
+            _ => None,
+        }))
+        .collect();
     let gen = Gen {
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         break_only: RefCell::new(HashMap::new()),
         frame_stack: RefCell::new(Vec::new()),
+        boxed_globals,
     };
     let mut wb = CodeWriter::new("  ");
     wb.indent();
@@ -434,6 +446,11 @@ struct Gen<'a> {
     /// `catch(...) do ... end` block already terminates/short-circuits it
     /// with the same effect as a `throw`.
     frame_stack: RefCell<Vec<(u32, bool)>>,
+    /// Global indices that need the `Rt::Global` box: imported globals
+    /// (index space `0..imported_globals.len()`) and every `ExportKind::
+    /// Global` target. Computed once in `generate_class_inner`. See the
+    /// boundary criterion in the comment there and ADR-16.
+    boxed_globals: BTreeSet<u32>,
 }
 
 impl<'a> Gen<'a> {
@@ -449,6 +466,17 @@ impl<'a> Gen<'a> {
             .get(&label_id)
             .copied()
             .unwrap_or(false)
+    }
+
+    /// An access expression for global `idx`, whichever representation it
+    /// has: `@g{idx}.value` if it's boxed (crosses an instantiation
+    /// boundary), plain `@g{idx}` otherwise. Valid on both sides of `=`.
+    fn global_ref(&self, idx: u32) -> String {
+        if self.boxed_globals.contains(&idx) {
+            format!("@g{idx}.value")
+        } else {
+            format!("@g{idx}")
+        }
     }
 
     /// Reference a module-level runtime helper, recording its unit.
@@ -642,12 +670,14 @@ impl<'a> Gen<'a> {
             }
             let num_imported_globals = m.imported_globals.len();
             for (i, global) in m.globals.iter().enumerate() {
-                self.use_unit("global/_class");
-                let idx = num_imported_globals + i;
-                w.line(format!(
-                    "@g{idx} = Rt::Global.new({})",
-                    self.expr(&global.init)
-                ));
+                let idx = (num_imported_globals + i) as u32;
+                let init = self.expr(&global.init);
+                if self.boxed_globals.contains(&idx) {
+                    self.use_unit("global/_class");
+                    w.line(format!("@g{idx} = Rt::Global.new({init})"));
+                } else {
+                    w.line(format!("@g{idx} = {init}"));
+                }
             }
             for (i, elem) in m.elems.iter().enumerate() {
                 // Built lazily: Declared segments emit an empty array and
@@ -658,7 +688,7 @@ impl<'a> Gen<'a> {
                         .map(|item| match item {
                             ElemItem::Func(func_idx) => self.func_pair(*func_idx),
                             ElemItem::Null => "nil".to_string(),
-                            ElemItem::Global(idx) => format!("@g{idx}.value"),
+                            ElemItem::Global(idx) => self.global_ref(*idx),
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -833,7 +863,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("l{idx} = {}", self.expr(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("@g{idx}.value = {}", self.expr(expr)));
+                w.line(format!("{} = {}", self.global_ref(*idx), self.expr(expr)));
             }
             Stmt::Store {
                 op,
@@ -1130,7 +1160,7 @@ impl<'a> Gen<'a> {
             }
             Expr::Temp(t) => temp(*t),
             Expr::LocalGet(idx) => format!("l{idx}"),
-            Expr::GlobalGet(idx) => format!("@g{idx}.value"),
+            Expr::GlobalGet(idx) => self.global_ref(*idx),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
