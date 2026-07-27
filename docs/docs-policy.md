@@ -8,6 +8,7 @@ nothing is duplicated. All docs are written in English.
 | [README.md](../README.md) | Front door: what dewasm is, one showpiece, install, usage, scope | Users evaluating the project | By hand |
 | [docs/getting-started.md](getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
+| [docs/standalone-interface.md](standalone-interface.md) | The standalone runtime interface (argv, `--dir`, env, exit/trap), uniform across backends | Users running standalone output | By hand |
 | [docs/support.md](support.md) | The feature / WASI matrix per backend | Everyone | **Generated — never hand-edit** |
 | [docs/apps-audit.md](apps-audit.md) | The real-world app gate record and feature verdicts | Contributors, evaluators | By hand |
 | [docs/testing.md](testing.md) | What `cargo test` needs and why it fails loud | Contributors | By hand |

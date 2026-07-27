@@ -232,20 +232,48 @@ impl Backend for PythonBackend {
             w.line("if __name__ == \"__main__\":");
             w.indent();
             if wasi_kwargs {
-                // DEWASM_PREOPEN maps guest paths to host directories for
-                // standalone runs, e.g. "/=./data,/tmp=/tmp"; kept out of argv
-                // since that mirrors the guest's own argv.
+                // Parse the standalone runtime interface (ADR-31): a leading run
+                // of `--dir HOST::GUEST` flags mounts host directories at guest
+                // paths (wasmtime-style), stopping at `--` or the first non-flag
+                // token; the rest is the guest's argv[1..].
                 w.line("_pre = {}");
-                w.line("for _kv in os.environ.get(\"DEWASM_PREOPEN\", \"\").split(\",\"):");
+                w.line("_argv = sys.argv[1:]");
+                w.line("_i = 0");
+                w.line("while _i < len(_argv):");
                 w.indent();
-                w.line("if \"=\" in _kv:");
+                w.line("_a = _argv[_i]");
+                w.line("if _a == \"--\":");
                 w.indent();
-                w.line("_g, _h = _kv.split(\"=\", 1)");
-                w.line("_pre[_g] = _h");
+                w.line("_i += 1");
+                w.line("break");
+                w.dedent();
+                w.line("elif _a == \"--dir\" or _a.startswith(\"--dir=\"):");
+                w.indent();
+                w.line("if _a == \"--dir\":");
+                w.indent();
+                w.line("_i += 1");
+                w.line("if _i >= len(_argv):");
+                w.indent();
+                w.line("sys.stderr.write(\"--dir requires a HOST::GUEST argument\\n\")");
+                w.line("sys.exit(1)");
+                w.dedent();
+                w.line("_spec = _argv[_i]");
+                w.dedent();
+                w.line("else:");
+                w.indent();
+                w.line("_spec = _a[6:]");
+                w.dedent();
+                w.line("_h, _sep, _g = _spec.partition(\"::\")");
+                w.line("_pre[_g if _sep else _h] = _h");
+                w.line("_i += 1");
+                w.dedent();
+                w.line("else:");
+                w.indent();
+                w.line("break");
                 w.dedent();
                 w.dedent();
                 w.line(format!(
-                    "_inst = {class_name}({{}}, args=[os.path.basename(sys.argv[0])] + sys.argv[1:], env=dict(os.environ), preopens=_pre)"
+                    "_inst = {class_name}({{}}, args=[os.path.basename(sys.argv[0])] + _argv[_i:], env=dict(os.environ), preopens=_pre)"
                 ));
             } else {
                 w.line(format!("_inst = {class_name}()"));

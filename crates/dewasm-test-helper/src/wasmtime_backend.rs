@@ -128,6 +128,33 @@ impl BackendUnderTest for Wasmtime {
         run_command_bytes(&mut cmd, stdin)
     }
 
+    /// Standalone `--dir` ground truth (ADR-31): `program` is the wasm path
+    /// (from `convert_app`), and `--dir` is a wasmtime host flag, so run
+    /// `wasmtime run --dir HOST::GUEST... <wasm> args`. This is what the
+    /// generated backends' own `--dir` parsing must reproduce. Per ADR-15 a
+    /// missing `wasmtime` fails loud, never skips.
+    fn run_standalone_dir(
+        &self,
+        program: &str,
+        preopens: &[(&str, &Path)],
+        args: &[&str],
+        stdin: &[u8],
+    ) -> Output {
+        assert!(
+            Command::new("wasmtime").arg("--version").output().is_ok(),
+            "wasmtime not found on PATH — required for the wasmtime-backed suites \
+             (see docs/testing.md)"
+        );
+        let mut cmd = Command::new("wasmtime");
+        cmd.arg("run");
+        for (guest, host) in preopens {
+            cmd.arg("--dir")
+                .arg(format!("{}::{}", host.display(), guest));
+        }
+        cmd.arg(program).args(args);
+        run_command_bytes(&mut cmd, stdin)
+    }
+
     /// Drive the cached wasm binary directly under a pty: `source` is the wasm
     /// path (from `convert_app`), so the command is `wasmtime run <path>
     /// <args...>` — the ground-truth interactive session the backends must

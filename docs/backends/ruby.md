@@ -23,8 +23,11 @@ Standalone wires up WASI and runs `_start`:
 
 ```console
 $ dewasm prog.wasm --target ruby --mode standalone -o prog.rb
-$ ruby prog.rb arg1 arg2
+$ ruby prog.rb --dir ./data::/data arg1 arg2
 ```
+
+Standalone programs follow the shared runtime interface (argv, `--dir` preopens,
+env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md).
 
 Library mode exposes the exports:
 

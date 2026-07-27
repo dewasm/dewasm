@@ -101,6 +101,11 @@ $ python3 hello.py
 Hello, WASI!
 ```
 
+Standalone programs share one runtime interface across every backend, modelled
+on wasmtime's CLI — guest arguments after the program, host directories mounted
+with repeatable `--dir HOST::GUEST` flags — documented in
+[docs/standalone-interface.md](docs/standalone-interface.md).
+
 Library mode hands you the module as a class/type to call from your own code:
 
 ```console

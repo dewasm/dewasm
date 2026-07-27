@@ -22,8 +22,11 @@ generics). The output is a normal Go program — `go run` or `go build` it.
 
 ```console
 $ dewasm prog.wasm --target go --mode standalone -o prog.go
-$ go run prog.go arg1 arg2
+$ go build -o prog prog.go && ./prog --dir ./data::/data arg1 arg2
 ```
+
+Standalone programs follow the shared runtime interface (argv, `--dir` preopens,
+env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md).
 
 Library mode: the generated file is `package main`, so add your own `func main`
 in the same package (the file already imports `fmt`). Constructor arguments are

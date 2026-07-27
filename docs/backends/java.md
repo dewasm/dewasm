@@ -26,8 +26,13 @@ Standalone (entry class `Main`):
 
 ```console
 $ dewasm prog.wasm --target java --mode standalone -o Main.java
-$ javac Main.java && java Main arg1 arg2
+$ javac Main.java && java Main --dir ./data::/data arg1 arg2
 ```
+
+Standalone programs follow the shared runtime interface (argv, `--dir` preopens,
+env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md). Java
+is the one deviation on `argv[0]`: the JVM does not pass the launched file name
+to `main`, so it uses the module class name.
 
 Library (append your `public class Main` to the generated file). Constructor
 arguments are `(imports, argv, env, preopens)`; exports are `Rt.Fn` values in

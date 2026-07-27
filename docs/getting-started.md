@@ -87,6 +87,21 @@ $ echo "moo" | bash cowsay.sh
                 ||     ||
 ```
 
+Standalone programs share one runtime interface across every backend, modelled
+on wasmtime's CLI: pass the guest arguments after the program, and mount host
+directories with repeatable `--dir HOST::GUEST` flags (on the
+filesystem-capable backends). A `proc_exit(N)` becomes exit code `N`, and a trap
+prints to stderr and exits 134. The full reference — argv, env, exit/trap, and
+per-backend runner lines — is
+[docs/standalone-interface.md](standalone-interface.md).
+
+```console
+$ dewasm examples/wat/wasi_standalone_dir.wat --target ruby --mode standalone -o rt.rb
+$ mkdir /tmp/work
+$ ruby rt.rb --dir /tmp/work::/
+hello, wasi fs!
+```
+
 ## 3. Library mode: call the exports
 
 `--mode library` (the default) exposes the module's exports to the host
@@ -212,6 +227,8 @@ are [ADR-7](adr/7-import-providers.md); every backend's provider snippet is in
 
 - [docs/backends/](backends/) — output shape, requirements, and idioms per
   target language.
+- [docs/standalone-interface.md](standalone-interface.md) — the standalone
+  runtime interface (argv, `--dir`, env, exit/trap) shared by every backend.
 - [docs/support.md](support.md) — which features and WASI calls each backend
   supports.
 - [README](../README.md#what-it-can-convert) — the real-world apps dewasm

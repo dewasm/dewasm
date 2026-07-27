@@ -50,8 +50,8 @@ pub use qjs_repl::{
 };
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
-    run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiKind,
-    WASI_CASES,
+    run_standalone_dir, run_standalone_dir_unsupported, run_wasi_containment, run_wasi_fs,
+    run_wasi_standalone, WasiCase, WasiCheck, WasiKind, WASI_CASES,
 };
 pub use wasmtime_backend::Wasmtime;
 
@@ -167,6 +167,34 @@ macro_rules! wasi_suite {
         #[test]
         fn wasi_fs() {
             $crate::run_wasi_fs(&$lang, $template);
+        }
+    };
+}
+
+/// One `#[test]` exercising the standalone `--dir` interface (ADR-31) for
+/// `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir`
+/// mount, and require the file round-trip to succeed. No glue — standalone needs
+/// none. Wired by the four filesystem backends (and re-run under wasmtime as
+/// ground truth); Bash uses [`standalone_dir_unsupported_e2e!`] instead.
+#[macro_export]
+macro_rules! standalone_dir_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn standalone_dir() {
+            $crate::run_standalone_dir(&$lang);
+        }
+    };
+}
+
+/// The Bash counterpart of [`standalone_dir_e2e!`] (ADR-31): assert `--dir`
+/// fails loudly on a backend with no filesystem support (ADR-12), rather than
+/// being silently ignored (ADR-0).
+#[macro_export]
+macro_rules! standalone_dir_unsupported_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn standalone_dir_unsupported() {
+            $crate::run_standalone_dir_unsupported(&$lang);
         }
     };
 }

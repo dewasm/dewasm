@@ -22,8 +22,11 @@ packages — the output uses only the standard library.
 
 ```console
 $ dewasm prog.wasm --target python --mode standalone -o prog.py
-$ python3 prog.py arg1 arg2
+$ python3 prog.py --dir ./data::/data arg1 arg2
 ```
+
+Standalone programs follow the shared runtime interface (argv, `--dir` preopens,
+env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md).
 
 Library mode:
 

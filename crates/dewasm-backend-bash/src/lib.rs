@@ -205,6 +205,14 @@ impl Backend for BashBackend {
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
             if wasi_bundled(module, opts.default_wasi) {
+                // Standalone runtime interface (ADR-31): the Bash backend has no
+                // filesystem support (ADR-12), so a leading `--dir` fails loudly
+                // rather than being silently ignored (ADR-0). `--` just
+                // terminates flag parsing; everything else is guest argv.
+                w.line("case \"${1-}\" in");
+                w.line("  --dir|--dir=*) echo \"the bash backend has no filesystem support; --dir is not accepted\" >&2; exit 2 ;;");
+                w.line("  --) shift ;;");
+                w.line("esac");
                 w.line("WASI_ARGS=(\"${0##*/}\" \"$@\")");
                 w.line("WASI_ENV=()");
                 w.line("for __n in $(compgen -e); do WASI_ENV+=(\"$__n=${!__n}\"); done");

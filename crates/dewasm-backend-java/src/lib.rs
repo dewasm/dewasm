@@ -336,29 +336,58 @@ fn reindent(src: &str, levels: usize) -> String {
     out
 }
 
-/// The standalone entry point: prepend a program name to argv (WASI argv[0]),
-/// instantiate, run `_start`, and map `proc_exit`/trap to a process exit code
-/// (a trap prints to stderr and exits 134, mirroring Ruby/Python/Go).
+/// The standalone entry point: parse the runtime interface (ADR-31) —
+/// `--dir HOST::GUEST` preopens, then the guest argv with argv[0] the program
+/// name — instantiate, run `_start`, and map `proc_exit`/trap to a process exit
+/// code (a trap prints to stderr and exits 134, mirroring Ruby/Python/Go).
 fn main_class(type_name: &str, wasi: bool) -> String {
     let args = if wasi { "wasiArgs" } else { "null" };
+    let env = if wasi { "wasiEnv" } else { "new String[0]" };
     let preopens = if wasi { "preopens" } else { "null" };
-    // Standalone WASI reads DEWASM_PREOPEN ("guest=host,...") into the preopens
-    // argument, kept separate from argv since argv already mirrors the guest's
-    // own argv (ADR-14). Without WASI there is nothing to preopen.
+    // Standalone WASI parses a leading run of `--dir HOST::GUEST` flags
+    // (wasmtime-style), stopping at `--` or the first non-flag token; the rest
+    // is the guest's argv[1..]. The JVM does not pass the launched file name to
+    // `main`, so argv[0] is the module class name (ADR-31). The whole process
+    // environment passes through. Without WASI there is nothing to preopen and
+    // no argv to deliver.
     let arg_setup = if wasi {
         format!(
-            "        String[] wasiArgs = new String[argv.length + 1];\n\
-             {ind}wasiArgs[0] = {name};\n\
-             {ind}System.arraycopy(argv, 0, wasiArgs, 1, argv.length);\n\
-             {ind}java.util.Map<String, String> preopens = new java.util.HashMap<>();\n\
-             {ind}String preopenEnv = System.getenv(\"DEWASM_PREOPEN\");\n\
-             {ind}if (preopenEnv != null) {{\n\
-             {ind}    for (String kv : preopenEnv.split(\",\")) {{\n\
-             {ind}        int eq = kv.indexOf('=');\n\
-             {ind}        if (eq >= 0) {{\n\
-             {ind}            preopens.put(kv.substring(0, eq), kv.substring(eq + 1));\n\
+            "        java.util.Map<String, String> preopens = new java.util.HashMap<>();\n\
+             {ind}int i = 0;\n\
+             {ind}while (i < argv.length) {{\n\
+             {ind}    String a = argv[i];\n\
+             {ind}    String spec;\n\
+             {ind}    if (a.equals(\"--\")) {{\n\
+             {ind}        i++;\n\
+             {ind}        break;\n\
+             {ind}    }} else if (a.equals(\"--dir\")) {{\n\
+             {ind}        if (i + 1 >= argv.length) {{\n\
+             {ind}            System.err.print(\"--dir requires a HOST::GUEST argument\\n\");\n\
+             {ind}            System.exit(1);\n\
              {ind}        }}\n\
+             {ind}        spec = argv[i + 1];\n\
+             {ind}        i += 2;\n\
+             {ind}    }} else if (a.startsWith(\"--dir=\")) {{\n\
+             {ind}        spec = a.substring(6);\n\
+             {ind}        i++;\n\
+             {ind}    }} else {{\n\
+             {ind}        break;\n\
              {ind}    }}\n\
+             {ind}    int sep = spec.indexOf(\"::\");\n\
+             {ind}    if (sep >= 0) {{\n\
+             {ind}        preopens.put(spec.substring(sep + 2), spec.substring(0, sep));\n\
+             {ind}    }} else {{\n\
+             {ind}        preopens.put(spec, spec);\n\
+             {ind}    }}\n\
+             {ind}}}\n\
+             {ind}String[] wasiArgs = new String[argv.length - i + 1];\n\
+             {ind}wasiArgs[0] = {name};\n\
+             {ind}System.arraycopy(argv, i, wasiArgs, 1, argv.length - i);\n\
+             {ind}java.util.Map<String, String> envMap = System.getenv();\n\
+             {ind}String[] wasiEnv = new String[envMap.size()];\n\
+             {ind}int ei = 0;\n\
+             {ind}for (java.util.Map.Entry<String, String> e : envMap.entrySet()) {{\n\
+             {ind}    wasiEnv[ei++] = e.getKey() + \"=\" + e.getValue();\n\
              {ind}}}\n",
             ind = "        ",
             name = java_string(type_name),
@@ -371,7 +400,7 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     out.push_str("    public static void main(String[] argv) {\n");
     out.push_str(&arg_setup);
     out.push_str(&format!(
-        "        {type_name} p = new {type_name}(null, {args}, new String[0], {preopens});\n"
+        "        {type_name} p = new {type_name}(null, {args}, {env}, {preopens});\n"
     ));
     out.push_str("        try {\n");
     out.push_str("            ((Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{});\n");

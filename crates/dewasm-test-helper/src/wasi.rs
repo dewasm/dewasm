@@ -331,6 +331,74 @@ pub fn run_wasi_fs(lang: &dyn BackendUnderTest, template: &str) {
     }
 }
 
+/// Exercise the standalone runtime interface's `--dir` end to end (ADR-31):
+/// convert `wasi_standalone_dir.wat` in *standalone* mode, run it with a
+/// `--dir HOST::GUEST` mount of a fresh scratch dir at guest `/`, and require
+/// the guest to round-trip a file through it — the echoed stdout and the host
+/// file the guest wrote must both be correct. Shared by the four filesystem
+/// backends and re-run under wasmtime as ground truth (its `run_standalone_dir`
+/// override consumes `--dir` as a host flag). No glue: standalone needs none.
+pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
+    let scratch = scratch_dir(&format!("standalone-dir-{}", lang.name()));
+    let bytes = wat::parse_file(examples_dir().join("wasi_standalone_dir.wat")).expect("parse wat");
+    let program = lang.convert_app(&bytes, Mode::Standalone, "standalone_dir");
+    let output = lang.run_standalone_dir(&program, &[("/", scratch.as_path())], &[], b"");
+    assert!(
+        output.status.success(),
+        "standalone --dir under {}: nonzero exit {}\n{}",
+        lang.name(),
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "hello, wasi fs!",
+        "standalone --dir under {}: stdout differs from the wasmtime ground truth",
+        lang.name()
+    );
+    assert_eq!(
+        std::fs::read_to_string(scratch.join("hello.txt")).unwrap_or_default(),
+        "hello, wasi fs!",
+        "standalone --dir under {}: the host file the guest wrote through the preopen is wrong",
+        lang.name()
+    );
+    println!(
+        "standalone --dir under {}: round-trips through the preopen",
+        lang.name()
+    );
+}
+
+/// The Bash side of the standalone `--dir` interface (ADR-31): Bash has no
+/// filesystem support (ADR-12), so a `--dir` flag must fail loudly *before* the
+/// guest runs, not be silently ignored (ADR-0). Convert a WASI stdio program
+/// (`hello.wat`, which Bash can convert) in standalone mode, run it with a
+/// `--dir` flag, and require a nonzero exit, the "no filesystem support"
+/// message on stderr, and that the guest's own output never appeared.
+pub fn run_standalone_dir_unsupported(lang: &dyn BackendUnderTest) {
+    let scratch = scratch_dir(&format!("standalone-dir-unsupported-{}", lang.name()));
+    let bytes = wat::parse_file(examples_dir().join("hello.wat")).expect("parse wat");
+    let program = lang.convert_app(&bytes, Mode::Standalone, "hello");
+    let output = lang.run_standalone_dir(&program, &[("/", scratch.as_path())], &[], b"");
+    assert!(
+        !output.status.success(),
+        "standalone --dir under {} must fail loudly, but it succeeded",
+        lang.name()
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no filesystem support"),
+        "standalone --dir under {}: expected a 'no filesystem support' error, got: {stderr:?}",
+        lang.name()
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "",
+        "standalone --dir under {}: the guest ran despite the rejected --dir",
+        lang.name()
+    );
+    println!("standalone --dir under {}: rejected loudly", lang.name());
+}
+
 /// Run the root-preopen containment probe (`wasi_root_containment_e2e!`): a
 /// preopen whose realpath is the filesystem root must not reject every path
 /// (the containment check would otherwise build the prefix "//" and never

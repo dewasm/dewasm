@@ -22,9 +22,9 @@
 
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_golden_path, run_app_case,
-    run_fs_app_case, run_gzip_cases, run_heavy_app_case, Wasmtime, COWSAY_ARGS, COWSAY_STDIN,
-    CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL,
-    SQLITE3_SHELL_DBFILE,
+    run_fs_app_case, run_gzip_cases, run_heavy_app_case, run_standalone_dir, Wasmtime, COWSAY_ARGS,
+    COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH,
+    SQLITE3_SHELL, SQLITE3_SHELL_DBFILE,
 };
 
 // The wasmtime-backed `BackendUnderTest` (`Wasmtime`, plus the `NeverBackend`
@@ -87,6 +87,17 @@ fn fs_apps() {
     run_fs_app_case(&Wasmtime, &RG_SEARCH, "");
     run_fs_app_case(&Wasmtime, &CPYTHON_HELLO, "");
     run_fs_app_case(&Wasmtime, &CRUBY_HELLO, "");
+}
+
+// The standalone `--dir` interface (ADR-31) run against wasmtime as ground
+// truth: `run_standalone_dir`'s wasmtime path consumes `--dir` as a host flag
+// (`wasmtime run --dir HOST::GUEST <wasm>`), the exact behavior the generated
+// backends' own `--dir` parsing must reproduce. Uses no cached app, only the
+// committed `wasi_standalone_dir.wat`, so it needs only wasmtime on PATH.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn standalone_dir() {
+    run_standalone_dir(&Wasmtime);
 }
 
 // Golden freshness for the interactive-REPL transcript (Fix 4): re-capture the

@@ -220,8 +220,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let bundle = bundler().bundle(&uses, 0)?;
 
     let mut imports = scan_imports(&bundle, standalone);
-    // The standalone WASI main parses DEWASM_PREOPEN with `strings`; that code
-    // lives in main_func (not the scanned bundle), so add the import here.
+    // The standalone WASI main parses `--dir` flags with `strings` (ADR-31);
+    // that code lives in main_func (not the scanned bundle), so add the import
+    // here.
     if standalone && wasi && !imports.iter().any(|i| i == "strings") {
         imports.push("strings".to_string());
         imports.sort();
@@ -310,26 +311,57 @@ fn import_block(imports: &[String]) -> String {
 }
 
 fn main_func(type_name: &str, wasi: bool) -> String {
-    // Standalone WASI reads DEWASM_PREOPEN ("guest=host,...") into the preopens
-    // kwarg, kept separate from os.Args since argv already mirrors the guest's
-    // own argv (ADR-14). Without WASI there is nothing to preopen.
-    let (preopen_setup, preopen_arg) = if wasi {
+    // Standalone WASI parses the runtime interface (ADR-31): a leading run of
+    // `--dir HOST::GUEST` flags mounts host directories at guest paths
+    // (wasmtime-style), stopping at `--` or the first non-flag token; the rest
+    // is the guest's argv[1..], with argv[0] the program basename. Without WASI
+    // there is nothing to preopen and no argv to deliver.
+    let (arg_setup, args_arg, env_arg, preopen_arg) = if wasi {
         (
             "\tpreopens := map[string]string{}\n\
-             \tfor _, kv := range strings.Split(os.Getenv(\"DEWASM_PREOPEN\"), \",\") {\n\
-             \t\tif i := strings.IndexByte(kv, '='); i >= 0 {\n\
-             \t\t\tpreopens[kv[:i]] = kv[i+1:]\n\
+             \trest := os.Args[1:]\n\
+             \ti := 0\n\
+             \tfor i < len(rest) {\n\
+             \t\ta := rest[i]\n\
+             \t\tvar spec string\n\
+             \t\tif a == \"--\" {\n\
+             \t\t\ti++\n\
+             \t\t\tbreak\n\
+             \t\t} else if a == \"--dir\" {\n\
+             \t\t\tif i+1 >= len(rest) {\n\
+             \t\t\t\tos.Stderr.WriteString(\"--dir requires a HOST::GUEST argument\\n\")\n\
+             \t\t\t\tos.Exit(1)\n\
+             \t\t\t}\n\
+             \t\t\tspec = rest[i+1]\n\
+             \t\t\ti += 2\n\
+             \t\t} else if strings.HasPrefix(a, \"--dir=\") {\n\
+             \t\t\tspec = a[6:]\n\
+             \t\t\ti++\n\
+             \t\t} else {\n\
+             \t\t\tbreak\n\
              \t\t}\n\
-             \t}\n",
+             \t\tif j := strings.Index(spec, \"::\"); j >= 0 {\n\
+             \t\t\tpreopens[spec[j+2:]] = spec[:j]\n\
+             \t\t} else {\n\
+             \t\t\tpreopens[spec] = spec\n\
+             \t\t}\n\
+             \t}\n\
+             \tname := os.Args[0]\n\
+             \tif j := strings.LastIndexByte(name, '/'); j >= 0 {\n\
+             \t\tname = name[j+1:]\n\
+             \t}\n\
+             \targv := append([]string{name}, rest[i:]...)\n",
+            "argv",
+            "os.Environ()",
             "preopens",
         )
     } else {
-        ("", "nil")
+        ("", "nil", "nil", "nil")
     };
     format!(
         "func main() {{\n\
-         {preopen_setup}\
-         \tp := New{type_name}(nil, os.Args, os.Environ(), {preopen_arg})\n\
+         {arg_setup}\
+         \tp := New{type_name}(nil, {args_arg}, {env_arg}, {preopen_arg})\n\
          \tdefer func() {{\n\
          \t\tif r := recover(); r != nil {{\n\
          \t\t\tswitch e := r.(type) {{\n\

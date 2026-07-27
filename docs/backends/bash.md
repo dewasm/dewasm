@@ -26,6 +26,11 @@ $ dewasm prog.wasm --target bash --mode standalone -o prog.sh
 $ bash prog.sh arg1 arg2      # a bash 5+ on PATH
 ```
 
+Standalone programs follow the shared runtime interface (argv, env, exit/trap):
+[docs/standalone-interface.md](../standalone-interface.md). Bash has no
+filesystem support, so `--dir` is rejected with a clear error rather than
+silently ignored.
+
 ## Capabilities
 
 Wasm core 1.0 plus the universal baseline, with f32/f64 on the pure-Bash

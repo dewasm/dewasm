@@ -119,6 +119,32 @@ pub trait BackendUnderTest: Sync {
         let _ = (args, env, preopens);
         self.run_bytes(&format!("{program}\n{glue}"), &[], stdin)
     }
+
+    /// Run a *standalone*-mode `program` through the standalone runtime
+    /// interface (ADR-31): the generated main parses a leading run of
+    /// `--dir HOST::GUEST` flags itself, then hands the rest to the guest as
+    /// `argv[1..]`. The default (every generated backend) execs the program with
+    /// those `--dir` flags followed by `args` — exactly what a user types — via
+    /// [`Self::run_bytes`] (compiled backends build first through their
+    /// `run_bytes` override). wasmtime overrides this: `--dir` is a *host*
+    /// runtime flag there, so it runs `wasmtime run --dir HOST::GUEST... <wasm>
+    /// args` instead. Same case feeds both, mirroring [`Self::run_app_fs`].
+    fn run_standalone_dir(
+        &self,
+        program: &str,
+        preopens: &[(&str, &Path)],
+        args: &[&str],
+        stdin: &[u8],
+    ) -> Output {
+        let mut flags: Vec<String> = Vec::new();
+        for (guest, host) in preopens {
+            flags.push("--dir".to_string());
+            flags.push(format!("{}::{}", host.display(), guest));
+        }
+        flags.extend(args.iter().map(|a| a.to_string()));
+        let flag_refs: Vec<&str> = flags.iter().map(String::as_str).collect();
+        self.run_bytes(program, &flag_refs, stdin)
+    }
 }
 
 /// Spawn `cmd` with `stdin` piped in and both output streams captured,

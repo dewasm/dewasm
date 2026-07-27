@@ -202,14 +202,40 @@ impl Backend for RubyBackend {
             w.line("");
             w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
                 if wasi_kwargs {
-                    // DEWASM_PREOPEN maps guest paths to host directories
-                    // for standalone runs, e.g. "/=./data,/tmp=/tmp"; kept
-                    // out of ARGV since that mirrors the guest's own argv.
-                    w.line(
-                        "preopens = ENV.fetch(\"DEWASM_PREOPEN\", \"\").split(\",\").filter_map { |kv| g, h = kv.split(\"=\", 2); [g, h] if h }.to_h",
-                    );
+                    // Parse the standalone runtime interface (ADR-31): a leading
+                    // run of `--dir HOST::GUEST` flags mounts host directories at
+                    // guest paths (wasmtime-style), stopping at `--` or the first
+                    // non-flag token; the rest is the guest's argv[1..].
+                    w.line("preopens = {}");
+                    w.line("argv = ARGV.dup");
+                    w.line("while (a = argv.first)");
+                    w.indent();
+                    w.line("if a == \"--\"");
+                    w.indent();
+                    w.line("argv.shift");
+                    w.line("break");
+                    w.dedent();
+                    w.line("elsif a == \"--dir\"");
+                    w.indent();
+                    w.line("argv.shift");
+                    w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
+                    w.line("host, guest = spec.split(\"::\", 2)");
+                    w.line("preopens[guest || host] = host");
+                    w.dedent();
+                    w.line("elsif a.start_with?(\"--dir=\")");
+                    w.indent();
+                    w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
+                    w.line("preopens[guest || host] = host");
+                    w.dedent();
+                    w.line("else");
+                    w.indent();
+                    w.line("break");
+                    w.dedent();
+                    w.line("end");
+                    w.dedent();
+                    w.line("end");
                     w.line(format!(
-                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *ARGV], env: ENV.to_h, preopens: preopens)"
+                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
                     ));
                 } else {
                     w.line(format!("inst = {class_name}.new"));
