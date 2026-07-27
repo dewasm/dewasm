@@ -1,8 +1,15 @@
-//! Translate a wasm function body (stack machine) into structured IR.
+//! Translate a wasm function body (stack machine) into structured IR with
+//! build-time expression folding.
 //!
-//! Every pushed value is materialized into a temp keyed by (stack depth,
-//! type), so evaluation order and trap points are preserved without any
-//! effect analysis. Dead code after an unconditional branch is skipped while
+//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is
+//! kept as a *pending* expression (with its read/trap `Effects` and node
+//! count) rather than being materialized into a temp immediately. A pending is
+//! spilled to a temp (`sN = <expr>`) only when a later statement's effects
+//! could be observed by it, when it crosses a control-flow boundary, or when a
+//! consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus
+//! fold directly into their consumer, cutting the statement count for every
+//! backend. Evaluation order and trap points are preserved by the spill
+//! discipline. Dead code after an unconditional branch is skipped while
 //! tracking block nesting only.
 
 use std::collections::BTreeSet;
@@ -14,6 +21,86 @@ use crate::feature::Feature;
 use crate::ir::{self, BinOp, BrTarget, Expr, Label, LoadOp, Stmt, StoreOp, Temp, UnOp, ValType};
 use crate::module::{unsupported, val_type};
 
+/// Node-count cap for a folded expression tree. Once a consumer would build a
+/// tree larger than this, its operands are spilled to temps first. The cap
+/// keeps the generated expressions shallow enough not to blow the recursive
+/// descent parser of any target language (Ruby/Python and friends parse
+/// expressions recursively and have finite stack budgets), and bounds the
+/// worst-case textual blow-up of backends whose inline lowerings duplicate an
+/// operand.
+const MAX_FOLD_SIZE: u32 = 32;
+
+/// Whether values fold. Kept as a knob so the pending-stack machinery can be
+/// introduced without behavioral change (every push materializes immediately),
+/// then flipped on once verified. Always `true` in shipped builds.
+const FOLD: bool = false;
+
+/// Side effects a pending expression carries, used to decide when it must be
+/// spilled before a later statement so it cannot observe that statement's
+/// effect (or so its own trap fires at the right point).
+#[derive(Clone, Copy, Default)]
+struct Effects {
+    /// Bitmask of read locals with index < 64.
+    locals: u64,
+    /// A local with index >= 64 is read (a conservative catch-all so the
+    /// bitmask stays a single word).
+    any_high_local: bool,
+    /// Reads a global.
+    globals: bool,
+    /// Reads memory (a load) or `memory.size`.
+    memory: bool,
+    /// May trap (a load, a divide/remainder, or a non-saturating float->int
+    /// truncation).
+    trap: bool,
+}
+
+impl Effects {
+    fn local(idx: u32) -> Self {
+        let mut e = Effects::default();
+        e.add_local(idx);
+        e
+    }
+
+    fn add_local(&mut self, idx: u32) {
+        if idx < 64 {
+            self.locals |= 1 << idx;
+        } else {
+            self.any_high_local = true;
+        }
+    }
+
+    fn merge(&mut self, o: Effects) {
+        self.locals |= o.locals;
+        self.any_high_local |= o.any_high_local;
+        self.globals |= o.globals;
+        self.memory |= o.memory;
+        self.trap |= o.trap;
+    }
+
+    fn reads_local(&self, idx: u32) -> bool {
+        if idx < 64 {
+            self.locals & (1 << idx) != 0
+        } else {
+            self.any_high_local
+        }
+    }
+}
+
+/// A value that has been pushed but not yet materialized into a temp.
+struct Pending {
+    expr: Expr,
+    fx: Effects,
+    /// Node count of `expr` (see `MAX_FOLD_SIZE`).
+    size: u32,
+}
+
+/// One operand-stack slot: its type, and a pending expression when the value
+/// has not been spilled to a temp yet.
+struct Slot {
+    ty: ValType,
+    pending: Option<Pending>,
+}
+
 pub struct FuncBuilder<'a> {
     module: &'a ir::Module,
     /// Type indices of all defined functions (the code section is being
@@ -23,7 +110,7 @@ pub struct FuncBuilder<'a> {
     /// params ++ declared locals
     all_locals: Vec<ValType>,
     num_params: usize,
-    stack: Vec<ValType>,
+    stack: Vec<Slot>,
     frames: Vec<Frame>,
     temps: BTreeSet<Temp>,
     next_label: u32,
@@ -105,72 +192,206 @@ impl<'a> FuncBuilder<'a> {
         self.cur().stmts.push(stmt);
     }
 
-    fn push(&mut self, ty: ValType) -> Temp {
+    /// Push a materialized value: allocate a temp for the top slot and record
+    /// it in `self.temps`. Used for values that are never folded (call
+    /// results, `memory.grow`) and by `spill`.
+    fn push_temp(&mut self, ty: ValType) -> Temp {
         let temp = Temp {
             depth: self.stack.len() as u32,
             ty,
         };
         self.temps.insert(temp);
-        self.stack.push(ty);
+        self.stack.push(Slot { ty, pending: None });
         temp
     }
 
-    fn pop(&mut self) -> Temp {
-        let ty = self.stack.pop().expect("value stack is not empty");
-        Temp {
-            depth: self.stack.len() as u32,
+    /// Push a folded (pending) value. Does not touch `self.temps`.
+    fn push_pending(&mut self, ty: ValType, expr: Expr, fx: Effects, size: u32) {
+        self.stack.push(Slot {
             ty,
+            pending: Some(Pending { expr, fx, size }),
+        });
+        if !FOLD {
+            let top = self.stack.len() - 1;
+            self.spill(top);
         }
     }
 
-    fn peek(&self) -> Temp {
-        let ty = *self.stack.last().expect("value stack is not empty");
-        Temp {
-            depth: self.stack.len() as u32 - 1,
-            ty,
+    /// Pop the top slot as an expression: its pending expression if any, else
+    /// a reference to the temp it was materialized into.
+    fn pop_expr(&mut self) -> (Expr, Effects, u32) {
+        let slot = self.stack.pop().expect("value stack is not empty");
+        match slot.pending {
+            Some(p) => (p.expr, p.fx, p.size),
+            None => (
+                Expr::Temp(Temp {
+                    depth: self.stack.len() as u32,
+                    ty: slot.ty,
+                }),
+                Effects::default(),
+                1,
+            ),
         }
     }
 
-    fn push_assign(&mut self, ty: ValType, expr: Expr) {
-        let dst = self.push(ty);
-        self.emit(Stmt::Assign { dst, expr });
+    fn slot_size(&self, idx: usize) -> u32 {
+        self.stack[idx].pending.as_ref().map_or(1, |p| p.size)
+    }
+
+    fn slot_traps(&self, idx: usize) -> bool {
+        self.stack[idx].pending.as_ref().is_some_and(|p| p.fx.trap)
+    }
+
+    /// Materialize the pending value at stack index `idx` into its temp,
+    /// emitting the assignment. A no-op if already materialized.
+    fn spill(&mut self, idx: usize) {
+        let ty = self.stack[idx].ty;
+        if let Some(p) = self.stack[idx].pending.take() {
+            let temp = Temp {
+                depth: idx as u32,
+                ty,
+            };
+            self.temps.insert(temp);
+            self.emit(Stmt::Assign {
+                dst: temp,
+                expr: p.expr,
+            });
+        }
+    }
+
+    /// Spill every pending whose effects match `pred`, in ascending depth
+    /// order (= wasm evaluation order, so their statements and traps land in
+    /// the right sequence).
+    fn spill_if(&mut self, pred: impl Fn(&Effects) -> bool) {
+        for idx in 0..self.stack.len() {
+            let hit = match &self.stack[idx].pending {
+                Some(p) => pred(&p.fx),
+                None => false,
+            };
+            if hit {
+                self.spill(idx);
+            }
+        }
+    }
+
+    /// Spill the whole stack (used at control-flow boundaries).
+    fn spill_all(&mut self) {
+        for idx in 0..self.stack.len() {
+            self.spill(idx);
+        }
+    }
+
+    fn top_ty(&self) -> ValType {
+        self.stack.last().expect("value stack is not empty").ty
     }
 
     fn un(&mut self, op: UnOp, res: ValType) {
-        let a = self.pop();
-        self.push_assign(res, Expr::Un(op, Box::new(Expr::Temp(a))));
+        let top = self.stack.len() - 1;
+        if self.slot_size(top) + 1 > MAX_FOLD_SIZE {
+            self.spill(top);
+        }
+        let (a, mut fx, size) = self.pop_expr();
+        if un_traps(op) {
+            fx.trap = true;
+        }
+        self.push_pending(res, Expr::Un(op, Box::new(a)), fx, size + 1);
     }
 
     fn bin(&mut self, op: BinOp, res: ValType) {
-        let b = self.pop();
-        let a = self.pop();
-        self.push_assign(
+        let b_idx = self.stack.len() - 1;
+        let a_idx = b_idx - 1;
+        if self.slot_size(a_idx) + self.slot_size(b_idx) + 1 > MAX_FOLD_SIZE {
+            self.spill(a_idx);
+            self.spill(b_idx);
+        }
+        let (b, fxb, sb) = self.pop_expr();
+        let (a, fxa, sa) = self.pop_expr();
+        let mut fx = fxa;
+        fx.merge(fxb);
+        if bin_traps(op) {
+            fx.trap = true;
+        }
+        self.push_pending(
             res,
-            Expr::Bin(op, Box::new(Expr::Temp(a)), Box::new(Expr::Temp(b))),
+            Expr::Bin(op, Box::new(a), Box::new(b)),
+            fx,
+            sa + sb + 1,
         );
     }
 
     fn load(&mut self, op: LoadOp, res: ValType, memarg: &wasmparser::MemArg) {
-        let addr = self.pop();
-        self.push_assign(
+        let top = self.stack.len() - 1;
+        if self.slot_size(top) + 1 > MAX_FOLD_SIZE {
+            self.spill(top);
+        }
+        let (addr, mut fx, size) = self.pop_expr();
+        fx.memory = true;
+        fx.trap = true;
+        self.push_pending(
             res,
             Expr::Load {
                 op,
-                addr: Box::new(Expr::Temp(addr)),
+                addr: Box::new(addr),
                 offset: memarg.offset,
             },
+            fx,
+            size + 1,
         );
     }
 
     fn store(&mut self, op: StoreOp, memarg: &wasmparser::MemArg) {
-        let value = self.pop();
-        let addr = self.pop();
+        let (value, _, _) = self.pop_expr();
+        let (addr, _, _) = self.pop_expr();
+        // The store writes memory; earlier memory reads and pending traps must
+        // be resolved first.
+        self.spill_if(|fx| fx.memory || fx.trap);
         self.emit(Stmt::Store {
             op,
-            addr: Expr::Temp(addr),
-            value: Expr::Temp(value),
+            addr,
+            value,
             offset: memarg.offset,
         });
+    }
+
+    fn select(&mut self) {
+        // Stack: [then, els, cond] with cond on top. The backends lower Select
+        // to a conditionally-evaluated ternary, so a trapping then/els arm
+        // (which wasm evaluates eagerly) must be spilled to keep its trap. The
+        // cond folds freely.
+        let n = self.stack.len();
+        let cond_i = n - 1;
+        let els_i = n - 2;
+        let then_i = n - 3;
+        let ty = self.stack[then_i].ty;
+        let total = self.slot_size(then_i) + self.slot_size(els_i) + self.slot_size(cond_i) + 1;
+        if total > MAX_FOLD_SIZE {
+            self.spill(then_i);
+            self.spill(els_i);
+            self.spill(cond_i);
+        } else {
+            if self.slot_traps(then_i) {
+                self.spill(then_i);
+            }
+            if self.slot_traps(els_i) {
+                self.spill(els_i);
+            }
+        }
+        let (cond, fxc, sc) = self.pop_expr();
+        let (els, fxe, se) = self.pop_expr();
+        let (then, fxt, st) = self.pop_expr();
+        let mut fx = fxt;
+        fx.merge(fxe);
+        fx.merge(fxc);
+        self.push_pending(
+            ty,
+            Expr::Select {
+                cond: Box::new(cond),
+                then: Box::new(then),
+                els: Box::new(els),
+            },
+            fx,
+            st + se + sc + 1,
+        );
     }
 
     fn push_frame(&mut self, kind: FrameKind, params: Vec<ValType>, results: Vec<ValType>) {
@@ -213,7 +434,8 @@ impl<'a> FuncBuilder<'a> {
 
     /// Resolve a branch depth into a target, computing the moves from the
     /// current stack top into the target frame's result (or loop param)
-    /// slots. Marks the target label as referenced.
+    /// slots. Marks the target label as referenced. The caller must have
+    /// spilled the stack first, so the sources read from materialized temps.
     fn branch_target(&mut self, relative_depth: u32) -> BrTarget {
         let idx = self.frames.len() - 1 - relative_depth as usize;
         let (arity_tys, base, is_loop, is_func, label_id) = {
@@ -272,6 +494,12 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_else(&mut self) {
+        // Materialize the then-branch's fallthrough values (into the frame's
+        // result slots) before capturing its body. Skipped when the then
+        // branch ended unreachable (its stack shape is stale).
+        if !self.cur().unreachable {
+            self.spill_all();
+        }
         let base = self.cur().base;
         let params = self.cur().params.clone();
         let then_body = std::mem::take(&mut self.cur().stmts);
@@ -283,24 +511,25 @@ impl<'a> FuncBuilder<'a> {
         }
         self.stack.truncate(base);
         for ty in params {
-            self.push(ty);
+            self.push_temp(ty);
         }
         self.cur().unreachable = false;
     }
 
     fn handle_end(&mut self) {
-        let frame = self.frames.pop().expect("frame stack is not empty");
-        if frame.entered_dead {
-            // The whole frame was dead code; the parent stays unreachable
-            // and the stack was never touched.
-            return;
+        // Spill the frame's live values into its own body before it is popped
+        // (so control-boundary-crossing temps are materialized). The function
+        // frame folds its fallthrough return instead.
+        let is_func = matches!(self.cur().kind, FrameKind::Func);
+        if !self.cur().entered_dead && !self.cur().unreachable && !is_func {
+            self.spill_all();
         }
 
-        // Fallthrough values already live at the result slots; formally
-        // rebuild the stack shape for the parent frame.
-        self.stack.truncate(frame.base);
-        for ty in &frame.results {
-            self.push(*ty);
+        let frame = self.frames.pop().expect("frame stack is not empty");
+        if frame.entered_dead {
+            // The whole frame was dead code; the parent stays unreachable and
+            // the stack was never touched.
+            return;
         }
 
         match frame.kind {
@@ -308,14 +537,10 @@ impl<'a> FuncBuilder<'a> {
                 let mut body = frame.stmts;
                 if !frame.unreachable {
                     let arity = frame.results.len();
-                    let values = (0..arity)
-                        .map(|i| {
-                            Expr::Temp(Temp {
-                                depth: i as u32,
-                                ty: frame.results[i],
-                            })
-                        })
-                        .collect();
+                    let mut values = vec![Expr::I32Const(0); arity];
+                    for i in (0..arity).rev() {
+                        values[i] = self.pop_expr().0;
+                    }
                     body.push(Stmt::Return { values });
                 }
                 let mut temps: Vec<Temp> = self.temps.iter().copied().collect();
@@ -327,51 +552,62 @@ impl<'a> FuncBuilder<'a> {
                     body,
                 });
             }
-            FrameKind::Block => {
-                let label = Label {
-                    id: frame.label_id,
-                    referenced: frame.referenced,
-                };
-                if frame.referenced {
-                    self.emit(Stmt::Block {
-                        label,
-                        body: frame.stmts,
-                    });
-                } else {
-                    // Nobody branches here: splice the body into the parent.
-                    self.cur().stmts.extend(frame.stmts);
+            kind => {
+                // Fallthrough values already live at the result slots; formally
+                // rebuild the stack shape for the parent frame.
+                self.stack.truncate(frame.base);
+                for ty in &frame.results {
+                    self.push_temp(*ty);
                 }
-            }
-            FrameKind::Loop => {
-                let label = Label {
-                    id: frame.label_id,
-                    referenced: frame.referenced,
-                };
-                if frame.referenced {
-                    self.emit(Stmt::Loop {
-                        label,
-                        body: frame.stmts,
-                    });
-                } else {
-                    // No back edge: the loop body runs exactly once.
-                    self.cur().stmts.extend(frame.stmts);
+                match kind {
+                    FrameKind::Block => {
+                        let label = Label {
+                            id: frame.label_id,
+                            referenced: frame.referenced,
+                        };
+                        if frame.referenced {
+                            self.emit(Stmt::Block {
+                                label,
+                                body: frame.stmts,
+                            });
+                        } else {
+                            // Nobody branches here: splice the body into the parent.
+                            self.cur().stmts.extend(frame.stmts);
+                        }
+                    }
+                    FrameKind::Loop => {
+                        let label = Label {
+                            id: frame.label_id,
+                            referenced: frame.referenced,
+                        };
+                        if frame.referenced {
+                            self.emit(Stmt::Loop {
+                                label,
+                                body: frame.stmts,
+                            });
+                        } else {
+                            // No back edge: the loop body runs exactly once.
+                            self.cur().stmts.extend(frame.stmts);
+                        }
+                    }
+                    FrameKind::If { cond, then_body } => {
+                        let label = Label {
+                            id: frame.label_id,
+                            referenced: frame.referenced,
+                        };
+                        let (then, els) = match then_body {
+                            Some(then) => (then, frame.stmts),
+                            None => (frame.stmts, Vec::new()),
+                        };
+                        self.emit(Stmt::If {
+                            label,
+                            cond,
+                            then,
+                            els,
+                        });
+                    }
+                    FrameKind::Func => unreachable!("func frame handled above"),
                 }
-            }
-            FrameKind::If { cond, then_body } => {
-                let label = Label {
-                    id: frame.label_id,
-                    referenced: frame.referenced,
-                };
-                let (then, els) = match then_body {
-                    Some(then) => (then, frame.stmts),
-                    None => (frame.stmts, Vec::new()),
-                };
-                self.emit(Stmt::If {
-                    label,
-                    cond,
-                    then,
-                    els,
-                });
             }
         }
     }
@@ -410,23 +646,29 @@ impl<'a> FuncBuilder<'a> {
             // -- control flow
             Operator::Nop => {}
             Operator::Unreachable => {
+                // A pending OOB load must trap with its own message before the
+                // "unreachable" trap, so resolve trapping pendings first.
+                self.spill_if(|fx| fx.trap);
                 self.emit(Stmt::Unreachable);
                 self.cur().unreachable = true;
             }
             Operator::Block { blockty } => {
                 let (params, results) = self.block_type(blockty)?;
+                self.spill_all();
                 self.push_frame(FrameKind::Block, params, results);
             }
             Operator::Loop { blockty } => {
                 let (params, results) = self.block_type(blockty)?;
+                self.spill_all();
                 self.push_frame(FrameKind::Loop, params, results);
             }
             Operator::If { blockty } => {
-                let cond = self.pop();
+                let (cond, _, _) = self.pop_expr();
                 let (params, results) = self.block_type(blockty)?;
+                self.spill_all();
                 self.push_frame(
                     FrameKind::If {
-                        cond: Expr::Temp(cond),
+                        cond,
                         then_body: None,
                     },
                     params,
@@ -436,55 +678,71 @@ impl<'a> FuncBuilder<'a> {
             Operator::Else => self.handle_else(),
             Operator::End => self.handle_end(),
             Operator::Br { relative_depth } => {
-                let target = self.branch_target(relative_depth);
-                self.emit(Stmt::Br(target));
+                let idx = self.frames.len() - 1 - relative_depth as usize;
+                if matches!(self.frames[idx].kind, FrameKind::Func) {
+                    // A branch to the function frame is a return: fold the
+                    // values, but first flush any deeper trapping pending that
+                    // wasm would have evaluated before the branch.
+                    let arity = self.frames[idx].results.len();
+                    let mut values = vec![Expr::I32Const(0); arity];
+                    for i in (0..arity).rev() {
+                        values[i] = self.pop_expr().0;
+                    }
+                    self.spill_if(|fx| fx.trap);
+                    self.emit(Stmt::Br(BrTarget::Return { values }));
+                } else {
+                    self.spill_all();
+                    let target = self.branch_target(relative_depth);
+                    self.emit(Stmt::Br(target));
+                }
                 self.cur().unreachable = true;
             }
             Operator::BrIf { relative_depth } => {
-                let cond = self.pop();
+                let (cond, _, _) = self.pop_expr();
+                // A not-taken br_if must leave the operands reusable, and
+                // branch_target reads them at canonical depths, so materialize
+                // the whole stack. Return values are not folded under br_if
+                // (the not-taken path would double-consume them).
+                self.spill_all();
                 let target = self.branch_target(relative_depth);
-                self.emit(Stmt::BrIf {
-                    cond: Expr::Temp(cond),
-                    target,
-                });
+                self.emit(Stmt::BrIf { cond, target });
             }
             Operator::BrTable { targets } => {
-                let index = self.pop();
+                let (index, _, _) = self.pop_expr();
+                self.spill_all();
                 let mut resolved = Vec::new();
                 for depth in targets.targets() {
                     resolved.push(self.branch_target(depth?));
                 }
                 let default = self.branch_target(targets.default());
                 self.emit(Stmt::BrTable {
-                    index: Expr::Temp(index),
+                    index,
                     targets: resolved,
                     default,
                 });
                 self.cur().unreachable = true;
             }
             Operator::Return => {
-                let arity = {
-                    let frame = &self.frames[0];
-                    frame.results.len()
-                };
-                let values = (0..arity)
-                    .map(|i| {
-                        Expr::Temp(Temp {
-                            depth: (self.stack.len() - arity + i) as u32,
-                            ty: self.frames[0].results[i],
-                        })
-                    })
-                    .collect();
+                let arity = self.frames[0].results.len();
+                let mut values = vec![Expr::I32Const(0); arity];
+                for i in (0..arity).rev() {
+                    values[i] = self.pop_expr().0;
+                }
+                self.spill_if(|fx| fx.trap);
                 self.emit(Stmt::Return { values });
                 self.cur().unreachable = true;
             }
             Operator::Call { function_index } => {
                 let ty = self.func_type_of(function_index).clone();
+                // A call can read/write globals and memory and can trap;
+                // pending values that observe any of those must be spilled.
+                // Pure-local args survive and fold into the call.
+                self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
                 for i in (0..ty.params.len()).rev() {
-                    args[i] = Expr::Temp(self.pop());
+                    args[i] = self.pop_expr().0;
                 }
-                let results = ty.results.iter().map(|ty| self.push(*ty)).collect();
+                let results = ty.results.iter().map(|ty| self.push_temp(*ty)).collect();
                 self.emit(Stmt::Call {
                     func: function_index,
                     args,
@@ -496,84 +754,86 @@ impl<'a> FuncBuilder<'a> {
                 table_index,
                 ..
             } => {
-                let index = self.pop();
+                // Spill effectful operands (and deeper pendings) first: this
+                // both preserves wasm order and makes the remaining index/arg
+                // fragments pure, so a backend that evaluates the index before
+                // the args cannot reorder an observable effect.
+                self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let ty = self.module.types[type_index as usize].clone();
+                let (index, _, _) = self.pop_expr();
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
                 for i in (0..ty.params.len()).rev() {
-                    args[i] = Expr::Temp(self.pop());
+                    args[i] = self.pop_expr().0;
                 }
-                let results = ty.results.iter().map(|ty| self.push(*ty)).collect();
+                let results = ty.results.iter().map(|ty| self.push_temp(*ty)).collect();
                 self.emit(Stmt::CallIndirect {
                     type_idx: type_index,
                     table_index,
-                    index: Expr::Temp(index),
+                    index,
                     args,
                     results,
                 });
             }
             Operator::Drop => {
-                self.pop();
+                // A dropped value with a pending trap must still evaluate so
+                // the trap fires; a pure one is simply discarded.
+                let top = self.stack.len() - 1;
+                if self.slot_traps(top) {
+                    self.spill(top);
+                }
+                self.pop_expr();
             }
             Operator::TypedSelect { ty } => {
                 // A numeric typed select is just an annotated select; a
                 // ref-typed one is a reference-types construct (ADR-24).
                 val_type(ty)?;
-                let cond = self.pop();
-                let els = self.pop();
-                let then = self.pop();
-                let dst = self.push(then.ty);
-                self.emit(Stmt::Assign {
-                    dst,
-                    expr: Expr::Select {
-                        cond: Box::new(Expr::Temp(cond)),
-                        then: Box::new(Expr::Temp(then)),
-                        els: Box::new(Expr::Temp(els)),
-                    },
-                });
+                self.select();
             }
-            Operator::Select => {
-                let cond = self.pop();
-                let els = self.pop();
-                let then = self.pop();
-                let dst = self.push(then.ty);
-                self.emit(Stmt::Assign {
-                    dst,
-                    expr: Expr::Select {
-                        cond: Box::new(Expr::Temp(cond)),
-                        then: Box::new(Expr::Temp(then)),
-                        els: Box::new(Expr::Temp(els)),
-                    },
-                });
-            }
+            Operator::Select => self.select(),
 
             // -- locals and globals
             Operator::LocalGet { local_index } => {
                 let ty = self.all_locals[local_index as usize];
-                self.push_assign(ty, Expr::LocalGet(local_index));
+                self.push_pending(ty, Expr::LocalGet(local_index), Effects::local(local_index), 1);
             }
             Operator::LocalSet { local_index } => {
-                let value = self.pop();
+                let (value, _, _) = self.pop_expr();
+                // Earlier pendings that read this local must observe its old
+                // value, so spill them before the assignment.
+                self.spill_if(|fx| fx.reads_local(local_index));
                 self.emit(Stmt::LocalSet {
                     idx: local_index,
-                    expr: Expr::Temp(value),
+                    expr: value,
                 });
             }
             Operator::LocalTee { local_index } => {
-                let value = self.peek();
+                let ty = self.top_ty();
+                let (value, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.reads_local(local_index));
                 self.emit(Stmt::LocalSet {
                     idx: local_index,
-                    expr: Expr::Temp(value),
+                    expr: value,
                 });
+                // The value stays on the stack; a later `local.set` on the
+                // same local spills this via the reads-local rule.
+                self.push_pending(ty, Expr::LocalGet(local_index), Effects::local(local_index), 1);
             }
             Operator::GlobalGet { global_index } => {
                 let ty = self.module.global_type(global_index);
-                self.push_assign(ty, Expr::GlobalGet(global_index));
+                let fx = Effects {
+                    globals: true,
+                    ..Effects::default()
+                };
+                self.push_pending(ty, Expr::GlobalGet(global_index), fx, 1);
             }
             Operator::GlobalSet { global_index } => {
-                let value = self.pop();
+                let (value, _, _) = self.pop_expr();
+                // Post-trap global state is observable (the spec asserts it),
+                // so spill both global reads and trapping pendings first.
+                self.spill_if(|fx| fx.globals || fx.trap);
                 self.emit(Stmt::GlobalSet {
                     idx: global_index,
-                    expr: Expr::Temp(value),
+                    expr: value,
                 });
             }
 
@@ -601,74 +861,75 @@ impl<'a> FuncBuilder<'a> {
             Operator::I64Store8 { memarg } => self.store(StoreOp::I64Store8, &memarg),
             Operator::I64Store16 { memarg } => self.store(StoreOp::I64Store16, &memarg),
             Operator::I64Store32 { memarg } => self.store(StoreOp::I64Store32, &memarg),
-            Operator::MemorySize { .. } => self.push_assign(I32, Expr::MemorySize),
+            Operator::MemorySize { .. } => {
+                let fx = Effects {
+                    memory: true,
+                    ..Effects::default()
+                };
+                self.push_pending(I32, Expr::MemorySize, fx, 1);
+            }
             Operator::MemoryGrow { .. } => {
-                let delta = self.pop();
-                let dst = self.push(I32);
-                self.emit(Stmt::MemoryGrow {
-                    dst,
-                    delta: Expr::Temp(delta),
-                });
+                let (delta, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
+                let dst = self.push_temp(I32);
+                self.emit(Stmt::MemoryGrow { dst, delta });
             }
             Operator::MemoryCopy { .. } => {
-                let len = self.pop();
-                let src = self.pop();
-                let dst = self.pop();
-                self.emit(Stmt::MemoryCopy {
-                    dst: Expr::Temp(dst),
-                    src: Expr::Temp(src),
-                    len: Expr::Temp(len),
-                });
+                let (len, _, _) = self.pop_expr();
+                let (src, _, _) = self.pop_expr();
+                let (dst, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
+                self.emit(Stmt::MemoryCopy { dst, src, len });
             }
             Operator::MemoryFill { .. } => {
-                let len = self.pop();
-                let val = self.pop();
-                let dst = self.pop();
-                self.emit(Stmt::MemoryFill {
-                    dst: Expr::Temp(dst),
-                    val: Expr::Temp(val),
-                    len: Expr::Temp(len),
-                });
+                let (len, _, _) = self.pop_expr();
+                let (val, _, _) = self.pop_expr();
+                let (dst, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
+                self.emit(Stmt::MemoryFill { dst, val, len });
             }
             Operator::MemoryInit { data_index, .. } => {
-                let len = self.pop();
-                let src = self.pop();
-                let dst = self.pop();
+                let (len, _, _) = self.pop_expr();
+                let (src, _, _) = self.pop_expr();
+                let (dst, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
                 self.emit(Stmt::MemoryInit {
                     seg: data_index,
-                    dst: Expr::Temp(dst),
-                    src: Expr::Temp(src),
-                    len: Expr::Temp(len),
+                    dst,
+                    src,
+                    len,
                 });
             }
             Operator::DataDrop { data_index } => {
                 self.emit(Stmt::DataDrop { seg: data_index });
             }
             Operator::TableInit { elem_index, table } => {
-                let len = self.pop();
-                let src = self.pop();
-                let dst = self.pop();
+                let (len, _, _) = self.pop_expr();
+                let (src, _, _) = self.pop_expr();
+                let (dst, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
                 self.emit(Stmt::TableInit {
                     seg: elem_index,
                     table_index: table,
-                    dst: Expr::Temp(dst),
-                    src: Expr::Temp(src),
-                    len: Expr::Temp(len),
+                    dst,
+                    src,
+                    len,
                 });
             }
             Operator::TableCopy {
                 dst_table,
                 src_table,
             } => {
-                let len = self.pop();
-                let src = self.pop();
-                let dst = self.pop();
+                let (len, _, _) = self.pop_expr();
+                let (src, _, _) = self.pop_expr();
+                let (dst, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.memory || fx.trap);
                 self.emit(Stmt::TableCopy {
                     dst_table,
                     src_table,
-                    dst: Expr::Temp(dst),
-                    src: Expr::Temp(src),
-                    len: Expr::Temp(len),
+                    dst,
+                    src,
+                    len,
                 });
             }
             Operator::ElemDrop { elem_index } => {
@@ -693,10 +954,18 @@ impl<'a> FuncBuilder<'a> {
             }
 
             // -- constants
-            Operator::I32Const { value } => self.push_assign(I32, Expr::I32Const(value as u32)),
-            Operator::I64Const { value } => self.push_assign(I64, Expr::I64Const(value as u64)),
-            Operator::F32Const { value } => self.push_assign(F32, Expr::F32Const(value.bits())),
-            Operator::F64Const { value } => self.push_assign(F64, Expr::F64Const(value.bits())),
+            Operator::I32Const { value } => {
+                self.push_pending(I32, Expr::I32Const(value as u32), Effects::default(), 1)
+            }
+            Operator::I64Const { value } => {
+                self.push_pending(I64, Expr::I64Const(value as u64), Effects::default(), 1)
+            }
+            Operator::F32Const { value } => {
+                self.push_pending(F32, Expr::F32Const(value.bits()), Effects::default(), 1)
+            }
+            Operator::F64Const { value } => {
+                self.push_pending(F64, Expr::F64Const(value.bits()), Effects::default(), 1)
+            }
 
             // -- i32 unary/binary
             Operator::I32Eqz => self.un(UnOp::I32Eqz, I32),
@@ -859,6 +1128,32 @@ impl<'a> FuncBuilder<'a> {
         }
         Ok(())
     }
+}
+
+/// Binary ops that may trap (divide/remainder by zero or overflow).
+fn bin_traps(op: BinOp) -> bool {
+    use BinOp::*;
+    matches!(
+        op,
+        I32DivS | I32DivU | I32RemS | I32RemU | I64DivS | I64DivU | I64RemS | I64RemU
+    )
+}
+
+/// Unary ops that may trap: the non-saturating float->int truncations (the
+/// saturating `*_sat_*` forms do not trap).
+fn un_traps(op: UnOp) -> bool {
+    use UnOp::*;
+    matches!(
+        op,
+        I32TruncF32S
+            | I32TruncF32U
+            | I32TruncF64S
+            | I32TruncF64U
+            | I64TruncF32S
+            | I64TruncF32U
+            | I64TruncF64S
+            | I64TruncF64U
+    )
 }
 
 /// Attribute an untranslated operator to a feature. Operators gated by
