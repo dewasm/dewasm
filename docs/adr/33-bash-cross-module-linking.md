@@ -3,10 +3,10 @@
 Status: **Accepted, 2026-07-27.** Implemented in
 `crates/dewasm-backend-bash/src/lib.rs` (`Gen::init`) +
 `runtime/bash/units/rt/resolve_import.sh` and `rt/link_err.sh`. Covers
-imported functions (retained) and imported globals (new,
-`Feature::ImportedGlobals` now Supported); imported memories and imported
-tables extend this same protocol in later steps and stay unsupported for
-now. Extends [ADR-11](11-bash-backend-lowering.md).
+imported functions (retained), imported globals (`Feature::ImportedGlobals`
+Supported), and imported memories (`Feature::ImportedMemories` Supported,
+step C); imported tables extend this same protocol in a later step and stay
+unsupported for now. Extends [ADR-11](11-bash-backend-lowering.md).
 
 ## Context
 
@@ -80,19 +80,25 @@ do not, so the tag is derived from the type's shape (`i32,i64->f32`).
 
 ## Consequences
 
-- Positive: mutable imported globals share state correctly with no boxing;
-  the provider protocol generalizes to tables and memories (steps C/D) by
-  populating the already-emitted `<q>TABLE_EXPORTS`/`<q>MEMORY_EXPORTS`
-  maps; `assert_unlinkable` is checked for real (status 135), so the spec
-  harness's `register` support is on for Bash.
+- Positive: mutable imported globals and imported memory (step C) share state
+  correctly with no boxing; the provider protocol generalizes to tables
+  (step D) by populating the already-emitted `<q>TABLE_EXPORTS` map;
+  `assert_unlinkable` is checked for real (status 135), so the spec harness's
+  `register` support is on for Bash. Memory's derived state
+  (`mem`/`pages`/`max_pages`) has no single shared name to alias, so its
+  export/`rt_resolve_import` value is the owning module's flattened *prefix*
+  (`<p>memown`) rather than one variable name; a re-export just forwards that
+  string, so any further `declare -gn` chain still resolves in one hop.
 - Negative: `rt_resolve_import` validates import *kind* but not the finer
-  wasm type — a function's signature or a global's mutability — so a handful
-  of `assert_unlinkable` cases link instead of failing (the `import-limits`
-  ledger cluster, the same accepted gap as Ruby). 135 collides with the
-  `128 + SIGBUS` signal convention; no generated module spawns a subprocess
-  that can raise SIGBUS, so the collision is accepted.
-- Carry-over: imported memories (step C) and imported tables (step D) reuse
-  `rt_resolve_import` and their export maps; until they land, modules that
-  import a shared table/memory are skipped, and assertions against the
-  owning module observe stale shared state (the `linking` ledger cluster in
+  wasm type — a function's signature, a global's mutability, or a memory's
+  min/max limits — so a handful of `assert_unlinkable` cases link instead of
+  failing (the `import-limits` ledger cluster, the same accepted gap as
+  Ruby). 135 collides with the `128 + SIGBUS` signal convention; no generated
+  module spawns a subprocess that can raise SIGBUS, so the collision is
+  accepted.
+- Carry-over: imported tables (step D) reuse `rt_resolve_import` and the
+  `TABLE_EXPORTS` map; until it lands, modules that import a shared table are
+  skipped, and assertions against the owning module observe stale shared
+  state or an uninitialized element (the `linking`/`elem`/`linking0`/
+  `linking3`/`load1` ledger clusters in
   `crates/dewasm-backend-bash/tests/spec.rs`).

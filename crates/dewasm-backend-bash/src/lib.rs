@@ -20,8 +20,8 @@
 //!   table), entry points `<p>init`,
 //!   `<p>invoke`, `<p>global_get`. Imported functions resolve from the
 //!   caller's `IMPORTS` array; other import kinds resolve through
-//!   `PROVIDERS` + per-kind export maps, with imported globals aliased in
-//!   via a `declare -gn` nameref (ADR-33).
+//!   `PROVIDERS` + per-kind export maps, with imported globals and imported
+//!   memory aliased in via `declare -gn` namerefs (ADR-33).
 //!
 //! Requires bash >= 5 (namerefs, associative arrays).
 
@@ -177,6 +177,11 @@ impl Backend for BashBackend {
             // Imported globals alias the provider's cell via a `declare -gn`
             // nameref (ADR-33); mutable and immutable both work through it.
             Feature::ImportedGlobals => SupportStatus::Supported,
+            // Imported memory aliases the provider's mem/pages/max_pages
+            // triplet via `declare -gn` namerefs, keyed off the owning
+            // module's flattened prefix (ADR-33); every mem/WASI unit and
+            // the inline MemoryGrow/MemorySize lowering work unchanged.
+            Feature::ImportedMemories => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -361,15 +366,52 @@ impl<'a> Gen<'a> {
         let p = self.prefix;
         w.line(format!("{p}init() {{"));
         w.indent();
-        // Emission order mirrors the Ruby backend (ADR-33): memory, tables,
-        // WASI state, then imports resolved kind by kind, then defined
-        // state, then export maps, then start.
-        // Imported memory (ImportedMemories, step C) resolves here — slot
-        // left empty until then.
+        // Emission order mirrors the Ruby backend (ADR-33): import
+        // registries, memory, tables, WASI state, then imports resolved
+        // kind by kind, then defined state, then export maps, then start.
+        let num_imported_globals = m.imported_globals.len();
+        let has_imports = !m.imported_funcs.is_empty()
+            || !m.imported_globals.is_empty()
+            || !m.imported_tables.is_empty()
+            || m.imported_memory.is_some();
+        if has_imports {
+            // Guard-declare the two import registries up front: memory
+            // resolution (right below) needs PROVIDERS before the
+            // func/global import loops that used to be the first users of
+            // it. `declare -gA` never clears an existing array, so a
+            // caller's pre-populated IMPORTS (func overrides) / PROVIDERS
+            // (per-module export-map prefixes) survive, while an unset one
+            // becomes an empty associative array rather than being treated
+            // as indexed with its keys evaluated as arithmetic.
+            w.line("declare -gA IMPORTS PROVIDERS");
+        }
+        // Imported memory (ADR-33): resolve the provider's memown prefix
+        // and alias its mem/pages/max_pages triplet in via `declare -gn`
+        // namerefs, so every mem/WASI/MemoryGrow/MemorySize unit keeps
+        // working unchanged whether the memory is owned locally or by
+        // another module. `<p>memown` records the flattened owning
+        // prefix (not a nameref itself) so a re-export just forwards the
+        // string, keeping any further nameref chain at depth 1.
+        if let Some(import) = &m.imported_memory {
+            self.use_unit("rt/resolve_import");
+            self.use_unit("rt/link_err");
+            let mm = bash_str(&import.module);
+            let nn = bash_str(&import.name);
+            let msg = bash_str(&format!("missing import {}.{}", import.module, import.name));
+            w.line(format!("rt_resolve_import {mm} {nn} memory || return $?"));
+            w.line(format!(
+                "[[ -n $RESOLVED ]] || {{ rt_link_err {msg}; return $?; }}"
+            ));
+            w.line(format!(
+                "declare -gn {p}mem=${{RESOLVED}}mem {p}pages=${{RESOLVED}}pages {p}max_pages=${{RESOLVED}}max_pages"
+            ));
+            w.line(format!("{p}memown=$RESOLVED"));
+        }
         if let Some(mem) = &m.memory {
             w.line(format!("{p}mem=()"));
             w.line(format!("{p}pages={}", mem.min_pages));
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
+            w.line(format!("{p}memown={p}"));
         }
         // Imported tables (ImportedTables, step D) resolve here, before the
         // defined tables so both share the unified index space — slot left
@@ -390,20 +432,6 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
             w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
             w.line(format!("{p}wtell=([0]=0 [1]=0 [2]=0)"));
-        }
-        let num_imported_globals = m.imported_globals.len();
-        let has_imports = !m.imported_funcs.is_empty()
-            || !m.imported_globals.is_empty()
-            || !m.imported_tables.is_empty()
-            || m.imported_memory.is_some();
-        if has_imports {
-            // Guard-declare the two import registries: `declare -gA` never
-            // clears an existing array, so a caller's pre-populated IMPORTS
-            // (func overrides) / PROVIDERS (per-module export-map prefixes)
-            // survive, while an unset one becomes an empty associative array
-            // rather than being treated as indexed with its keys evaluated
-            // as arithmetic.
-            w.line("declare -gA IMPORTS PROVIDERS");
         }
         for (i, import) in m.imported_funcs.iter().enumerate() {
             self.use_unit("rt/resolve_import");
@@ -543,6 +571,22 @@ impl<'a> Gen<'a> {
         w.line(format!(
             "declare -gA {p}GLOBAL_EXPORTS=({})",
             gentries.join(" ")
+        ));
+        let mut mentries = Vec::new();
+        for export in &m.exports {
+            if let ExportKind::Memory = export.kind {
+                // Same flattening as globals, but the value is the owning
+                // module's prefix (`<p>memown`), not a single variable name:
+                // memory's derived state (`mem`/`pages`/`max_pages`) needs
+                // the prefix to rebuild all three suffixes on the importing
+                // side, so `rt_resolve_import`'s memory kind resolves to a
+                // prefix rather than one variable name (ADR-33).
+                mentries.push(format!("[{}]=${p}memown", bash_str(&export.name)));
+            }
+        }
+        w.line(format!(
+            "declare -gA {p}MEMORY_EXPORTS=({})",
+            mentries.join(" ")
         ));
 
         if let Some(start) = m.start {
