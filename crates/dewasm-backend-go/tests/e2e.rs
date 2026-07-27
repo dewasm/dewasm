@@ -16,6 +16,7 @@
 //! for the WASI filesystem — minigzip needs `path_open`/`fd_seek`).
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -23,8 +24,9 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
-    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, qjs_repl_pty_e2e, run_command_bytes,
-    standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase, PtyCommand, WasiCase,
+    apps_e2e, capi_apps_e2e, examples_dir, fs_apps_e2e, gzip_e2e, library_e2e, multi_module_e2e,
+    qjs_repl_pty_e2e, run_command_bytes, standalone_e2e, wasi_suite, BackendUnderTest, CApiCase,
+    LibraryCase, MultiModuleCase, PtyCommand, WasiCase,
 };
 
 pub struct Go;
@@ -99,15 +101,17 @@ impl BackendUnderTest for Go {
             .map(|a| format!("{a:?}"))
             .collect::<Vec<_>>()
             .join(", ");
+        // The ctor's `env` is a `[]string` of `KEY=VALUE` pairs (the shape
+        // `os.Environ()` produces and `newWASI` consumes), not a map.
         let env_expr = if env.is_empty() {
             "nil".to_string()
         } else {
             let e = env
                 .iter()
-                .map(|(k, v)| format!("{k:?}: {v:?}"))
+                .map(|(k, v)| format!("{:?}", format!("{k}={v}")))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("map[string]string{{{e}}}")
+            format!("[]string{{{e}}}")
         };
         let pres = preopens
             .iter()
@@ -129,6 +133,88 @@ impl BackendUnderTest for Go {
              }}\n"
         )
     }
+
+    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
+    /// mirrors the spec harness (ADR-29): each module is emitted as bare
+    /// package-level declarations against one flat top-level runtime
+    /// (`generate_program_with_units`), the referenced units are unioned and
+    /// bundled once, and everything is assembled into a single `package main`
+    /// file — an import block covering the runtime's needs plus `fmt` (the
+    /// appended driver prints with it), the bundle, then the module decls. The
+    /// driver (`func main`) is appended afterwards by the runner, so no main is
+    /// emitted. `shared_runtime=false` (independent Embedded runtimes) is never
+    /// exercised for Go: `embedded_runtimes_coexist` is excluded because Go emits
+    /// one flat top-level runtime shared by all modules (ADR-29).
+    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+        assert!(
+            shared_runtime,
+            "go multi-module: shared_runtime=false is excluded (one flat runtime, ADR-29)"
+        );
+        let mut units = BTreeSet::new();
+        let mut decls = Vec::new();
+        for (wat, name) in modules {
+            let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+            let module = dewasm_core::build_module(&bytes).expect("build IR");
+            let (src, u) =
+                dewasm_backend_go::generate_program_with_units(&module, name).expect("generate");
+            units.extend(u);
+            decls.push(src);
+        }
+        let bundle = dewasm_backend_go::bundler()
+            .bundle(&units, 0)
+            .expect("bundle runtime");
+        let decls = decls.join("\n");
+        // Cover whatever the runtime bundle and module decls reference, then
+        // force `fmt` in — the appended driver prints with it and Go forbids a
+        // later `import` after other declarations.
+        let mut imports = scan_imports(&format!("{bundle}\n{decls}"));
+        if !imports.iter().any(|i| i == "fmt") {
+            imports.push("fmt".to_string());
+            imports.sort();
+        }
+        // `generate_program_with_units` emits spec-mode declarations whose
+        // recursion guard references a shared `rtStack` counter, declared in the
+        // spec harness's PREAMBLE; the multi-module composition must declare it
+        // too (ADR-29).
+        format!(
+            "package main\n\n{}\nvar rtStack int\n\n{bundle}\n\n{decls}\n",
+            import_block(&imports)
+        )
+    }
+}
+
+/// The external packages an assembled multi-module program references (mirrors
+/// the spec harness's scanner). Only controlled fragments — the runtime bundle
+/// and generated declarations — are scanned, so no user string can inject a
+/// false import (ADR-29).
+fn scan_imports(text: &str) -> Vec<String> {
+    let candidates = [
+        ("fmt.", "fmt"),
+        ("math.", "math"),
+        ("bits.", "math/bits"),
+        ("binary.", "encoding/binary"),
+        ("rand.", "crypto/rand"),
+        ("strings.", "strings"),
+    ];
+    let mut set: BTreeSet<&'static str> = BTreeSet::new();
+    for (sel, path) in candidates {
+        if text.contains(sel) {
+            set.insert(path);
+        }
+    }
+    set.into_iter().map(|s| s.to_string()).collect()
+}
+
+fn import_block(imports: &[String]) -> String {
+    if imports.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("import (\n");
+    for path in imports {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("\t{path:?}\n"));
+    }
+    out.push_str(")\n");
+    out
 }
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -219,7 +305,23 @@ const GO_OVERRIDE_GLUE: &str = r#"func main() {
 /// is always seeded for library-mode WASI output (see lib.rs), so `*rtExit` is
 /// defined even for fixtures that never import proc_exit. Mirrors
 /// `python_fs_glue`/`ruby_fs_glue`.
-fn go_fs_glue(_case: &WasiCase, host: &Path) -> String {
+fn go_fs_glue(case: &WasiCase, host: &Path) -> String {
+    if case.name == "fs_root_preopen_containment" {
+        // Probe the WASI resolver directly (no guest run): a `"/" => "/"`
+        // preopen must resolve a relative path rather than reject every one
+        // (the containment prefix must not degenerate to "//"). fd 3 is the
+        // sole preopen; errno 0 (wasiOk) means the path stayed contained.
+        return "func main() {\n\
+                \tw := newWASI(nil, nil, map[string]string{\"/\": \"/\"})\n\
+                \t_, err := w.resolve_path(3, \"etc\", true)\n\
+                \tif err == 0 {\n\
+                \t\tfmt.Println(\"contained\")\n\
+                \t} else {\n\
+                \t\tfmt.Println(\"rejected\")\n\
+                \t}\n\
+                }\n"
+        .to_string();
+    }
     format!(
         "func main() {{\n\
          \tinst := NewProg(nil, nil, nil, map[string]string{{{:?}: {:?}}})\n\
@@ -239,6 +341,266 @@ fn go_fs_glue(_case: &WasiCase, host: &Path) -> String {
     )
 }
 
+// ---------------------------------------------------------------------
+// C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the
+// unexported `inst.memory` (`*Memory`). The appended `func main` carries no
+// `import` (the library file already imports `fmt`), so the glue uses only
+// `fmt` + builtins — C strings are scanned/written through `inst.memory.data`
+// / `read_string` / `init`. No wasmtime golden exists (the results live in
+// guest memory), so each drive's output is pinned in the shared table.
+
+fn go_capi_glue(case: &CApiCase, scratch: &Path) -> String {
+    match case.name {
+        "libsqlite3_c_api" => GO_LIBSQLITE3_MEM.replace("__CLASS__", case.class),
+        "sqlite3_file_c_api" => GO_LIBSQLITE3_FILE
+            .replace("__CLASS__", case.class)
+            .replace("__DB__", &format!("{:?}", scratch.to_string_lossy())),
+        "sqlite3_callback_binding" => GO_SQLITE3_CALLBACK.replace("__CLASS__", case.class),
+        other => panic!("{other}: no go capi glue"),
+    }
+}
+
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
+/// `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
+const GO_LIBSQLITE3_MEM: &str = r#"func main() {
+	inst := New__CLASS__(nil, nil, nil, nil)
+	inst.Exports["_initialize"].(func())()
+	mem := inst.memory
+	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
+
+	readCstr := func(ptr uint32) string {
+		if ptr == 0 {
+			return ""
+		}
+		end := ptr
+		for mem.data[end] != 0 {
+			end++
+		}
+		return string(mem.read_string(uint64(ptr), uint64(end-ptr)))
+	}
+	cstr := func(s string) uint32 {
+		b := append([]byte(s), 0)
+		p := malloc(uint32(len(b)))
+		mem.init(uint64(p), b, 0, uint64(len(b)))
+		return p
+	}
+
+	fmt.Printf("version: %s\n", readCstr(inst.Exports["sqlite3_libversion"].(func() uint32)()))
+
+	ppDb := malloc(4)
+	rc := inst.Exports["sqlite3_open"].(func(uint32, uint32) uint32)(cstr(":memory:"), ppDb)
+	if rc != 0 {
+		panic(fmt.Sprintf("open rc=%d", rc))
+	}
+	db := mem.i32_load(uint64(ppDb))
+
+	exec := inst.Exports["sqlite3_exec"].(func(uint32, uint32, uint32, uint32, uint32) uint32)
+	errmsg := inst.Exports["sqlite3_errmsg"].(func(uint32) uint32)
+	rc = exec(db, cstr("create table t(a,b); insert into t values (1,'x'),(2,'y');"), 0, 0, 0)
+	if rc != 0 {
+		panic(fmt.Sprintf("exec rc=%d: %s", rc, readCstr(errmsg(db))))
+	}
+
+	ppStmt := malloc(4)
+	rc = inst.Exports["sqlite3_prepare_v2"].(func(uint32, uint32, uint32, uint32, uint32) uint32)(
+		db, cstr("select a*10, b from t order by a desc"), 0xffffffff, ppStmt, 0)
+	if rc != 0 {
+		panic(fmt.Sprintf("prepare rc=%d", rc))
+	}
+	stmt := mem.i32_load(uint64(ppStmt))
+
+	step := inst.Exports["sqlite3_step"].(func(uint32) uint32)
+	columnCount := inst.Exports["sqlite3_column_count"].(func(uint32) uint32)
+	columnText := inst.Exports["sqlite3_column_text"].(func(uint32, uint32) uint32)
+	for step(stmt) == 100 { // SQLITE_ROW
+		n := columnCount(stmt)
+		row := ""
+		for i := uint32(0); i < n; i++ {
+			if i > 0 {
+				row += "|"
+			}
+			row += readCstr(columnText(stmt, i))
+		}
+		fmt.Println(row)
+	}
+	inst.Exports["sqlite3_finalize"].(func(uint32) uint32)(stmt)
+	inst.Exports["sqlite3_close"].(func(uint32) uint32)(db)
+	fmt.Println("C-API-OK")
+}
+"#;
+
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen,
+/// select — the file lifecycle through the C API (same ADR-14 fs stack as the
+/// shell).
+const GO_LIBSQLITE3_FILE: &str = r#"func main() {
+	inst := New__CLASS__(nil, nil, nil, map[string]string{"/db": __DB__})
+	inst.Exports["_initialize"].(func())()
+	mem := inst.memory
+	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
+
+	readCstr := func(ptr uint32) string {
+		if ptr == 0 {
+			return ""
+		}
+		end := ptr
+		for mem.data[end] != 0 {
+			end++
+		}
+		return string(mem.read_string(uint64(ptr), uint64(end-ptr)))
+	}
+	cstr := func(s string) uint32 {
+		b := append([]byte(s), 0)
+		p := malloc(uint32(len(b)))
+		mem.init(uint64(p), b, 0, uint64(len(b)))
+		return p
+	}
+	open := inst.Exports["sqlite3_open"].(func(uint32, uint32) uint32)
+	openDb := func(path string) uint32 {
+		pp := malloc(4)
+		rc := open(cstr(path), pp)
+		if rc != 0 {
+			panic(fmt.Sprintf("open rc=%d", rc))
+		}
+		return mem.i32_load(uint64(pp))
+	}
+	exec := inst.Exports["sqlite3_exec"].(func(uint32, uint32, uint32, uint32, uint32) uint32)
+	errmsg := inst.Exports["sqlite3_errmsg"].(func(uint32) uint32)
+	closeDb := inst.Exports["sqlite3_close"].(func(uint32) uint32)
+
+	// create + insert, then close so the file is fully flushed
+	db := openDb("/db/data.db")
+	rc := exec(db, cstr("create table t(a,b); insert into t values (1,'x'),(2,'y');"), 0, 0, 0)
+	if rc != 0 {
+		panic(fmt.Sprintf("exec rc=%d: %s", rc, readCstr(errmsg(db))))
+	}
+	closeDb(db)
+
+	// reopen the same file and read it back
+	db = openDb("/db/data.db")
+	ppStmt := malloc(4)
+	rc = inst.Exports["sqlite3_prepare_v2"].(func(uint32, uint32, uint32, uint32, uint32) uint32)(
+		db, cstr("select a*10, b from t order by a"), 0xffffffff, ppStmt, 0)
+	if rc != 0 {
+		panic(fmt.Sprintf("prepare rc=%d", rc))
+	}
+	stmt := mem.i32_load(uint64(ppStmt))
+	step := inst.Exports["sqlite3_step"].(func(uint32) uint32)
+	columnCount := inst.Exports["sqlite3_column_count"].(func(uint32) uint32)
+	columnText := inst.Exports["sqlite3_column_text"].(func(uint32, uint32) uint32)
+	for step(stmt) == 100 { // SQLITE_ROW
+		n := columnCount(stmt)
+		row := ""
+		for i := uint32(0); i < n; i++ {
+			if i > 0 {
+				row += "|"
+			}
+			row += readCstr(columnText(stmt, i))
+		}
+		fmt.Println(row)
+	}
+	inst.Exports["sqlite3_finalize"].(func(uint32) uint32)(stmt)
+	closeDb(db)
+	fmt.Println("FILE-OK")
+}
+"#;
+
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports
+/// `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row
+/// to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7
+/// import-provider map and collects the rows.
+const GO_SQLITE3_CALLBACK: &str = r#"func main() {
+	var rows []string
+	var mem *Memory
+	// host_row is imported as `void host_row(int argc, char **argv)` — no result.
+	hostRow := func(argc, argvPtr uint32) {
+		row := ""
+		for i := uint32(0); i < argc; i++ {
+			p := mem.i32_load(uint64(argvPtr + i*4))
+			if i > 0 {
+				row += "|"
+			}
+			if p != 0 {
+				end := p
+				for mem.data[end] != 0 {
+					end++
+				}
+				row += string(mem.read_string(uint64(p), uint64(end-p)))
+			}
+		}
+		rows = append(rows, row)
+	}
+
+	inst := New__CLASS__(Imports{"env": {"host_row": hostRow}}, nil, nil, nil)
+	inst.Exports["_initialize"].(func())()
+	mem = inst.memory
+	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
+
+	readCstr := func(ptr uint32) string {
+		if ptr == 0 {
+			return ""
+		}
+		end := ptr
+		for mem.data[end] != 0 {
+			end++
+		}
+		return string(mem.read_string(uint64(ptr), uint64(end-ptr)))
+	}
+	cstr := func(s string) uint32 {
+		b := append([]byte(s), 0)
+		p := malloc(uint32(len(b)))
+		mem.init(uint64(p), b, 0, uint64(len(b)))
+		return p
+	}
+
+	ppDb := malloc(4)
+	rc := inst.Exports["sqlite3_open"].(func(uint32, uint32) uint32)(cstr(":memory:"), ppDb)
+	if rc != 0 {
+		panic(fmt.Sprintf("open rc=%d", rc))
+	}
+	db := mem.i32_load(uint64(ppDb))
+
+	exec := inst.Exports["sqlite3_exec"].(func(uint32, uint32, uint32, uint32, uint32) uint32)
+	errmsg := inst.Exports["sqlite3_errmsg"].(func(uint32) uint32)
+	rc = exec(db, cstr("create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"), 0, 0, 0)
+	if rc != 0 {
+		panic(fmt.Sprintf("exec rc=%d: %s", rc, readCstr(errmsg(db))))
+	}
+
+	// guest -> host: run_query calls back into env.host_row once per row
+	rc = inst.Exports["run_query"].(func(uint32, uint32) uint32)(
+		db, cstr("select a, b from t where a >= 2 order by a"))
+	if rc != 0 {
+		panic(fmt.Sprintf("run_query rc=%d", rc))
+	}
+	inst.Exports["sqlite3_close"].(func(uint32) uint32)(db)
+
+	for _, r := range rows {
+		fmt.Printf("row: %s\n", r)
+	}
+	fmt.Println("CALLBACK-OK")
+}
+"#;
+
+// ---------------------------------------------------------------------
+// Multi-module drive glue.
+
+/// Driver for the shared-table case: instantiate `TableExp` (exports the table),
+/// then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports`
+/// as the module provider, as the spec harness's cross-module `register` path
+/// does), and print its `call0` result (`42`).
+fn go_multi_module_glue(case: &MultiModuleCase) -> &'static str {
+    match case.name {
+        "shared_table_call_indirect" => {
+            "func main() {\n\
+             \ta := NewTableExp(nil, nil, nil, nil)\n\
+             \tb := NewTableImp(Imports{\"a\": a.Exports}, nil, nil, nil)\n\
+             \tfmt.Println(b.Exports[\"call0\"].(func() uint32)())\n\
+             }\n"
+        }
+        other => panic!("{other}: no go multi-module glue"),
+    }
+}
+
 standalone_e2e!(Go);
 library_e2e!(Go, go_glue);
 wasi_suite!(Go, Stdio);
@@ -249,3 +611,5 @@ apps_e2e!(Go);
 gzip_e2e!(Go);
 fs_apps_e2e!(Go);
 qjs_repl_pty_e2e!(Go);
+capi_apps_e2e!(Go, go_capi_glue);
+multi_module_e2e!(Go, go_multi_module_glue);

@@ -26,7 +26,7 @@ use std::process::{Command, Output};
 use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
-    apps_cache_dir, assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
+    assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
     qjs_repl_golden_path, run_app_cases, run_command_bytes, run_fs_app_cases_forced,
     run_gzip_cases, BackendUnderTest, PtyCommand,
 };
@@ -68,13 +68,23 @@ impl BackendUnderTest for Wasmtime {
         &NeverBackend
     }
 
-    /// Skip codegen entirely: return the path to the cached binary the goldens
-    /// were captured from, which the shared runner then feeds to `run`.
-    fn convert_app(&self, _bytes: &[u8], _mode: Mode, name: &str) -> String {
-        apps_cache_dir()
-            .join(format!("{name}.wasm"))
-            .to_string_lossy()
-            .into_owned()
+    /// Skip codegen entirely: write the exact bytes the shared runner read from
+    /// the cache to a temp `.wasm` (keyed by content hash so identical apps
+    /// share one file) and return that path, which the runner then feeds to
+    /// `run`/`run_app_fs`. Writing the bytes rather than rebuilding the cache
+    /// path from `name` keeps this independent of the conversion module name,
+    /// which no longer always equals the cache stem (e.g. CRuby: cache
+    /// `ruby.wasm`, class `Cruby`).
+    fn convert_app(&self, bytes: &[u8], _mode: Mode, _name: &str) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        let path =
+            std::env::temp_dir().join(format!("dewasm-wasmtime-{:016x}.wasm", hasher.finish()));
+        if !path.exists() {
+            std::fs::write(&path, bytes).expect("write temp wasm");
+        }
+        path.to_string_lossy().into_owned()
     }
 
     /// `source` is a cache-binary path (from `convert_app`), not generated

@@ -79,14 +79,18 @@ suite:
       stdlib tree (`cache/cpython-lib/lib/python3.14`,
       `cache/ruby-lib/usr/local/lib/ruby`) that the interpreters read at
       startup, which the heavy e2e cases preopen.
-- **Some app cases are Ruby-only and filesystem-exercising** (Phase 5a): the
-  QuickJS file-I/O and scripted-REPL cases and the sqlite3 DB-file / C-API /
-  callback cases live in the Ruby crate's e2e (`crates/dewasm-backend-ruby/tests/e2e.rs`,
-  e.g. `qjs_file_io_ruby`, `sqlite3_callback_binding_ruby`) rather than the
-  shared `apps.rs` table, because only Ruby has WASI filesystem support
-  (ADR-14). Their own committed driver fixtures (the `.js` scripts) live in
-  `examples/apps/fixtures/`; their goldens are still captured from `wasmtime`
-  (see below).
+- **The filesystem-exercising app cases are shared** across every fs-capable
+  backend (ADR-27 revision): the QuickJS file-I/O and scripted-REPL cases, the
+  sqlite3 DB-file case, ripgrep, and the CPython/CRuby runtime demos live in the
+  shared `FS_APP_CASES` table (`crates/dewasm-test-helper/src/apps_fs.rs`, run
+  via `fs_apps_e2e!`); the sqlite3 C-API / callback drives live in the shared
+  `CAPI_CASES` table (`apps_capi.rs`, run via `capi_apps_e2e!`). Each backend
+  supplies only per-language glue; per-case `exclude` rows carry the documented
+  capability/practicality exclusions (e.g. CPython/CRuby on Java, CRuby on Go).
+  The committed driver fixtures (the `.js` scripts) live in
+  `examples/apps/fixtures/`; the `FS_APP_CASES` goldens are still captured from
+  `wasmtime` (the C-API drives have no wasmtime golden — results live in guest
+  memory — so each pins a fixed string).
 - **No `wasmtime` install is needed to run these tests.** They used to
   diff live against `wasmtime run`; that comparison's result is fixed
   for a pinned binary and fixed input, so it's captured once and checked
@@ -145,15 +149,18 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   conformance suite: its `SpecBackend` impl, its `EXPECTED_FAILURES` ledger
   (and, for bash, the curated file list), wired up with `spec_suite!`. Run it
   with `cargo test -p dewasm-backend-<lang> --test spec`.
-- **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's standalone
-  / library / WASI / apps suites, declared by invoking `standalone_e2e!`,
-  `library_e2e!`, `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`,
-  and (for the fs-capable backends) `fs_apps_e2e!` over the shared tables in
-  `dewasm-test-helper`. Library glue, the per-backend WASI-filesystem
-  instantiation glue, and the fs-app `app_glue` impl live here; a case a
-  backend is wired to run but has no glue for fails loudly (ADR-15). Ruby's
-  file also holds the Ruby-only scenarios (provider objects, embedded
-  coexistence, the sqlite3 C API drive, WASI-model internals).
+- **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's suites,
+  declared by invoking the shared macros: `standalone_e2e!`, `library_e2e!`,
+  `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`, and (for the
+  fs-capable backends) `fs_apps_e2e!`, `capi_apps_e2e!`, `multi_module_e2e!`
+  over the shared tables in `dewasm-test-helper`. Per the ADR-27 revision this
+  file contains **only** the `BackendUnderTest` impl, glue strings /
+  glue-producing functions (library glue, WASI-filesystem instantiation glue,
+  the C-API driver glue, the `app_glue` and `compose_modules` impls), and macro
+  invocations — no backend-specific `#[test]` function. Which macros a backend
+  invokes, plus each shared table's per-case `exclude` `(lang, reason)` rows, is
+  the capability declaration; a case a backend is wired to run but has no glue
+  for fails loudly (ADR-15).
 - **The interactive-REPL pty case (`qjs_repl_pty`).** `qjs_repl_pty_e2e!`
   drives the *bare* QuickJS REPL (no script arg → interactive line editor)
   under a real pty (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`) and

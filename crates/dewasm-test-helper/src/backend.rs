@@ -108,6 +108,21 @@ pub trait BackendUnderTest: Sync {
         unimplemented!("a filesystem-app backend must implement app_glue()")
     }
 
+    /// Compose several wat modules that share the backend's linkage model into
+    /// one runnable source (no driver appended). `modules` is `(wat filename in
+    /// examples/wat, class/type name)` pairs. `shared_runtime` selects the
+    /// linkage: `true` emits every module against ONE shared runtime (so an
+    /// imported table can cross modules — the `shared_table` case); `false`
+    /// emits independent self-contained (Embedded) runtimes that coexist
+    /// (the `embedded_coexist` case). Only backends wired into
+    /// `multi_module_e2e!` implement this, each using its own crate's
+    /// multi-module API (the test-helper crate cannot depend on a concrete
+    /// backend). See [`crate::run_multi_module_case`].
+    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+        let _ = (modules, shared_runtime);
+        unimplemented!("a multi-module backend must implement compose_modules()")
+    }
+
     /// Run library-mode `program` (from [`Self::convert_app`]) as a
     /// filesystem app: instantiate `class` with `args`/`env`/`preopens`, feed
     /// `stdin`, and return the process `Output`. The default appends

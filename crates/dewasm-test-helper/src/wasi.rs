@@ -232,6 +232,29 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
+    // A preopen whose realpath is the filesystem root must not reject every
+    // path: the containment check would otherwise build the prefix "//" and
+    // never match. This exercises a WASI-model *internal* (the path-resolution
+    // helper) rather than a guest fixture — no host files are touched — so the
+    // per-backend glue probes the resolver directly with a `"/" => "/"`
+    // preopen instead of running the converted module's `_start`. It converts
+    // `wasi_path_open_roundtrip.wat` only to bring the runtime's WASI class into
+    // scope. Wired on the four filesystem backends; the glue normalizes the
+    // outcome to `contained`. Unix-only: a realpath of `/` is a unix notion.
+    WasiCase {
+        name: "fs_root_preopen_containment",
+        wat: "wasi_path_open_roundtrip.wat",
+        kind: WasiKind::Fs,
+        args: &[],
+        stdin: "",
+        check: WasiCheck::Fs {
+            preopen_subdir: None,
+            setup: |_dir| {},
+            check_stdout: |out| assert_eq!(out, "contained\n"),
+            assert_host: |_dir| {},
+            unix_only: true,
+        },
+    },
 ];
 
 /// Run the `WasiCheck::Standalone` cases of `kind` (stdio, args/env,

@@ -67,8 +67,20 @@ pub struct FsAppCase {
     pub env: &'static [(&'static str, &'static str)],
     /// Guest path -> scratch-relative subdir (`""` = scratch root).
     pub preopens: &'static [(&'static str, &'static str)],
+    /// Guest path -> cache-relative subdir, preopened **directly from the app
+    /// cache** (`examples/apps/cache/<rel>`) rather than copied into scratch.
+    /// The language-runtime apps (CPython/CRuby) mount their multi-hundred-MB
+    /// stdlib trees this way — copying them per run would be prohibitive.
+    pub cache_preopens: &'static [(&'static str, &'static str)],
     pub stage: &'static [Stage],
     pub runs: &'static [FsRun],
+    /// Backends excluded from this case, each `(lang name, human reason)`
+    /// (ADR-27 revision): a data-level capability/practicality exclusion the
+    /// runner prints and honors, instead of a bespoke per-backend test. Used
+    /// where a backend hits a hard limit (e.g. a 30 MB wasm whose generated
+    /// method overflows the JVM's 64 KB bytecode limit) or exceeds the ADR-24
+    /// practicality bar. Never excludes `wasmtime` (the ground-truth engine).
+    pub exclude: &'static [(&'static str, &'static str)],
 }
 
 /// No host-side effect to assert for this run.
@@ -105,6 +117,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
         class: "Qjs",
         env: &[],
         preopens: &[("/work", "")],
+        cache_preopens: &[],
         stage: &[Stage::File {
             src: "qjs_file_io.js",
             dst: "qjs_file_io.js",
@@ -117,6 +130,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
             )),
             assert_host: assert_qjs_io_out,
         }],
+        exclude: &[],
     },
     // QuickJS scripted REPL over piped stdin (Phase 5a #1b): the pinned
     // read-eval-print loop fixture exercises the stdin-read + evalScript path.
@@ -126,6 +140,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
         class: "Qjs",
         env: &[],
         preopens: &[("/work", "")],
+        cache_preopens: &[],
         stage: &[Stage::File {
             src: "qjs_repl.js",
             dst: "qjs_repl.js",
@@ -138,6 +153,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
             )),
             assert_host: assert_none,
         }],
+        exclude: &[],
     },
     // sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation
     // creates and populates `/db/test.db`, a second reopens it and SELECTs.
@@ -148,6 +164,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
         class: "Sqlite3Shell",
         env: &[],
         preopens: &[("/db", "")],
+        cache_preopens: &[],
         stage: &[],
         runs: &[
             FsRun {
@@ -168,6 +185,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
                 assert_host: assert_none,
             },
         ],
+        exclude: &[],
     },
     // ripgrep searching a small fixture directory tree (Phase 5b): recursive
     // directory walking over a preopened tree. `--sort path` forces a
@@ -178,6 +196,7 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
         class: "Rg",
         env: &[],
         preopens: &[("/work", "")],
+        cache_preopens: &[],
         stage: &[Stage::Tree { src: "rg", dst: "" }],
         runs: &[FsRun {
             args: &["rg", "--sort", "path", "needle", "/work"],
@@ -187,6 +206,77 @@ pub const FS_APP_CASES: &[FsAppCase] = &[
             )),
             assert_host: assert_none,
         }],
+        exclude: &[],
+    },
+    // CPython 3.14.6 executing a one-liner (Phase 5b), reading its stdlib from
+    // the cache-preopened `cache/cpython-lib/lib` tree at guest `/lib`. The
+    // heaviest interpreter case: a ~30 MB wasm. Ground truth (wasmtime):
+    //   wasmtime --dir cache/cpython-lib/lib::/lib --env PYTHONHOME=/ \
+    //     --env PYTHONPATH=/lib/python3.14 cache/cpython.wasm \
+    //     -c 'print("hello from cpython", 6 * 7)'
+    // Java is excluded: a single generated method of the CPython interpreter
+    // overflows the JVM's 64 KB per-method bytecode limit (`code too large`),
+    // which the class-splitter (ADR-30) partitions classes but not oversized
+    // individual methods against — a hard limit, not a perf ceiling.
+    FsAppCase {
+        name: "cpython_hello",
+        wasm: "cpython",
+        class: "Cpython",
+        env: &[("PYTHONHOME", "/"), ("PYTHONPATH", "/lib/python3.14")],
+        preopens: &[],
+        cache_preopens: &[("/lib", "cpython-lib/lib")],
+        stage: &[],
+        runs: &[FsRun {
+            args: &["python", "-c", "print('hello from cpython', 6 * 7)"],
+            stdin: "",
+            expect_stdout: Some("hello from cpython 42\n"),
+            assert_host: assert_none,
+        }],
+        exclude: &[(
+            "java",
+            "a CPython interpreter method overflows the JVM 64 KB per-method \
+             bytecode limit (`code too large`); the ADR-30 class-splitter does \
+             not subdivide individual methods — a hard limit",
+        )],
+    },
+    // CRuby 3.4 executing a one-liner (Phase 5b) — the "Ruby on Ruby"
+    // north-star demo — reading its stdlib from the cache-preopened
+    // `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a
+    // ~35 MB wasm. Ground truth (wasmtime):
+    //   wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \
+    //     -e 'puts "hello from cruby #{6*7}"'
+    // Excluded on Go (the ~35 MB wasm's ~242 MB Go source exceeds the ADR-24
+    // ~5-minute practicality bar under `go build` — measured >6 min) and on
+    // Java (the element-segment `Elem` class overflows the JVM 64 K
+    // constant-pool limit, `too many constants` — a hard limit the ADR-30
+    // class-splitter does not subdivide further). CPython, the smaller binary,
+    // clears Go's bar but hits Java's per-method limit; CRuby hits both.
+    FsAppCase {
+        name: "cruby_hello",
+        wasm: "ruby",
+        class: "Cruby",
+        env: &[],
+        preopens: &[],
+        cache_preopens: &[("/usr", "ruby-lib/usr")],
+        stage: &[],
+        runs: &[FsRun {
+            args: &["ruby", "-e", "puts \"hello from cruby #{6*7}\""],
+            stdin: "",
+            expect_stdout: Some("hello from cruby 42\n"),
+            assert_host: assert_none,
+        }],
+        exclude: &[
+            (
+                "go",
+                "the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 \
+                 ~5-minute practicality bar under `go build` (measured >6 min)",
+            ),
+            (
+                "java",
+                "the CRuby element-segment `Elem` class overflows the JVM 64 K \
+                 constant-pool limit (`too many constants`); a hard limit",
+            ),
+        ],
     },
 ];
 
@@ -226,6 +316,10 @@ pub fn run_fs_app_cases_forced(lang: &dyn BackendUnderTest) {
     let cache = apps_cache_dir();
     let fixtures = apps_fixtures_dir();
     for case in FS_APP_CASES {
+        if let Some((_, reason)) = case.exclude.iter().find(|(l, _)| *l == lang.name()) {
+            println!("{} excluded for {}: {reason}", case.name, lang.name());
+            continue;
+        }
         let scratch = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
 
         for stage in case.stage {
@@ -255,6 +349,18 @@ pub fn run_fs_app_cases_forced(lang: &dyn BackendUnderTest) {
                 };
                 (*guest, host)
             })
+            // Cache-preopened stdlib trees are mounted straight from the app
+            // cache (read-only), never copied into scratch (they are hundreds
+            // of MB).
+            .chain(case.cache_preopens.iter().map(|(guest, rel)| {
+                let host = cache.join(rel);
+                assert!(
+                    host.is_dir(),
+                    "{} cache tree {rel} not present — run examples/apps/fetch.sh (see docs/testing.md)",
+                    case.name
+                );
+                (*guest, host)
+            }))
             .collect();
         let preopens: Vec<(&str, &Path)> = preopen_paths
             .iter()
@@ -268,7 +374,13 @@ pub fn run_fs_app_cases_forced(lang: &dyn BackendUnderTest) {
             case.wasm
         );
         let bytes = std::fs::read(&wasm_path).expect("read wasm");
-        let program = lang.convert_app(&bytes, Mode::Library, case.wasm);
+        // Convert under `class`, not the cache stem: the stem and the class name
+        // diverge for CRuby (cache file `ruby.wasm`, but a `Ruby` class collides
+        // with MRI's predefined `Ruby` constant, so the class is `Cruby`). The
+        // class name is already PascalCase, and every backend's PascalCasing is
+        // idempotent, so this yields exactly `class` for every case. wasmtime
+        // ignores the name (it runs the bytes directly).
+        let program = lang.convert_app(&bytes, Mode::Library, case.class);
 
         for run in case.runs {
             let output = lang.run_app_fs(

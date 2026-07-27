@@ -81,3 +81,44 @@ exercises; only a test that needs every backend may live centrally.**
   (same `crates/<x>/` depth keeps `../../` valid).
 - The ADR-8 ledgers and attribution tags move with each backend's
   `SpecBackend` impl — their natural home — and keep their semantics.
+
+## Revision (2026-07-27): backend e2e is impl + glue + macros only
+
+The original decision let "Ruby-only scenarios" (provider objects, embedded
+coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-model
+internals, and the CPython/CRuby runtime demos) stay as hand-written `#[test]`
+functions in the Ruby crate. That carve-out is **withdrawn**. The rule is now
+uniform:
+
+- **A backend crate's `tests/e2e.rs` contains only** the `BackendUnderTest`
+  impl, glue strings / glue-producing functions, and macro invocations. No
+  backend-specific `#[test]` function exists.
+- **Case content is always shared.** Every scenario's fixtures, expectations,
+  and run/assert logic live in a `dewasm-test-helper` table + runner. What a
+  backend supplies is per-language glue (and, for multi-module cases, a
+  `BackendUnderTest::compose_modules` implementation using its own crate's API —
+  the helper crate still may not depend on a concrete backend, so composition
+  is a trait hook, not shared code).
+- **Capability is declared by which macros a backend invokes**, refined by
+  **explicit data-level exclusions with reasons** where a macro is invoked but a
+  particular case is not expressible or not practical. Each shared table carries
+  an `exclude: &[(lang, reason)]` (or, for the fixed-shape multi-module/library
+  cases, a per-case exclusion list) that the runner prints and honors, instead
+  of a bespoke skipped test. Examples now in the tables: Go/Java/Bash excluded
+  from the provider-object and lazy-`@wasi` cases (eager WASI, no provider
+  object); Go/Bash excluded from in-memory stdio capture (no injectable stream);
+  the CPython/CRuby runtime demos excluded on Java (a generated method overflows
+  the JVM 64 KB bytecode limit — `code too large`) and CRuby also on Go (its
+  ~242 MB Go source exceeds the ADR-24 ~5-minute `go build` bar). These are
+  measured, not guessed (docs/apps-audit.md records the numbers).
+
+New shared tables/macros this introduced: `capi_apps_e2e!` (`CAPI_CASES`, the
+sqlite3 C-API drives — no wasmtime golden is possible, so each pins a fixed
+string), `multi_module_e2e!` (`MULTI_MODULE_CASES`, the shared-table and
+embedded-coexistence scenarios, via `compose_modules`), plus new rows in
+`LIBRARY_CASES` (provider/override/stdio), `WASI_CASES` (root-preopen
+containment), and `FS_APP_CASES` (the cache-preopened CPython/CRuby demos, a new
+`cache_preopens` field mounting stdlib trees straight from the app cache instead
+of copying them). The consequence is that a scenario added for one backend is by
+construction offered to every backend, green where the capability holds and
+documented where it does not.

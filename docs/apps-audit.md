@@ -19,8 +19,8 @@ returns.
 | cowsay 0.3.0 | pinned in `fetch.sh` | none | ✅ in scope (shipping) |
 | quickjs-ng v0.15.1 | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**⁴) |
-| CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
-| CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby**⁵) |
+| CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
+| CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
 | ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
@@ -112,31 +112,48 @@ memory idioms, not new WASI fs):
   provides `host_row` via the ADR-7 import-provider mechanism and collects
   the rows (fixed-string expectation).
 
-⁵ **CPython / CRuby executed on Ruby (Phase 5b).** Both language-runtime
-binaries are converted *and run* on the Ruby backend, each reading its
-stdlib from a preopened directory (`fetch.sh` extracts the trees:
-`cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`).
-The feature audit reports both as baseline-only (in scope). No new WASI unit
-was needed: the wide import lists below include functions the Ruby runtime
-does not implement (CPython imports `poll_oneoff`/`path_link`/`path_symlink`/
-`path_readlink`/`sock_*`; CRuby imports `fd_renumber`/`poll_oneoff`/
-`path_readlink`), but none is *called* on the interpreter boot + one-liner
-path, so the ADR-14 syscall set already suffices (measured by running to
-success). Measured on the dev machine (Apple Silicon):
+⁵ **CPython / CRuby executed across backends (Phase 5b; multi-backend as of
+the ADR-27 revision).** Both language-runtime binaries are converted *and run*,
+each reading its stdlib from a preopened directory (`fetch.sh` extracts the
+trees: `cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`).
+They are now shared `FS_APP_CASES` rows (`cpython_hello`, `cruby_hello`) — the
+stdlib trees mount straight from the app cache via the table's `cache_preopens`
+field (never copied), and each is ground-truthed against `wasmtime --dir`. The
+feature audit reports both as baseline-only (in scope). No new WASI unit was
+needed: the wide import lists below include functions no backend implements
+(CPython imports `poll_oneoff`/`path_link`/`path_symlink`/`path_readlink`/
+`sock_*`; CRuby imports `fd_renumber`/`poll_oneoff`/`path_readlink`), but none
+is *called* on the interpreter boot + one-liner path, so the ADR-14 syscall set
+suffices (measured by running to success).
 
-| App | wasm size | convert time | Ruby source size | run time | output |
+Measured on the dev machine (Apple Silicon), convert + (compile, compiled
+backends) + run:
+
+| App | wasm | Ruby | Python | Go | Java |
 | --- | --- | --- | --- | --- | --- |
-| CPython 3.14.6 | 30 MB | ~1.4 s | ~199 MB | ~12 s | `hello from cpython 42` |
-| CRuby 3.4 | 35 MB | ~2.8 s | ~335 MB | ~60 s | `hello from cruby 42` |
+| CPython 3.14.6 | 30 MB | ~1.4 s + ~12 s ✅ | ~6 s + ~31 s ✅ | ~1.4 s + `go build` ~84 s + ~1 s ✅ | ⛔ excluded |
+| CRuby 3.4 | 35 MB | ~2.8 s + ~60 s ✅ | ~3 s + ~107 s ✅ | ⛔ excluded | ⛔ excluded |
 
-Both are comfortably under the ADR-24 ~5-minute practicality bar, so both
-genuinely execute rather than being conversion-only smokes. Because a
-~335 MB temp source file and ~1 GB RSS on *every* `cargo test` is too costly
-for the default gate, the execution cases (`cpython_hello_ruby`,
-`cruby_hello_ruby` in the Ruby crate's e2e) are gated behind
-`DEWASM_APPS_ALL` — the same deliberate perf opt-out the heavy `apps` cases
-use (ADR-15's documented scope: a perf gate, not a missing-environment skip),
-skip-with-a-note when unset. CRuby is the "Ruby on Ruby" north-star demo.
+Exclusions are measured, not guessed, and encoded as `FsAppCase.exclude`
+`(lang, reason)` rows the runner prints:
+
+- **Java (both):** a single generated interpreter method overflows the JVM's
+  64 KB per-method bytecode limit (`javac`: *code too large* on CPython) and,
+  on CRuby, the element-segment `Elem` class also overflows the 64 K
+  constant-pool limit (*too many constants*). Hard limits the ADR-30
+  class-splitter partitions classes — but not oversized individual methods or a
+  single huge element segment — against.
+- **Go (CRuby only):** the ~35 MB wasm's ~242 MB Go source exceeds the ADR-24
+  ~5-minute `go build` bar (measured >6 min). CPython, the smaller binary,
+  clears it (~84 s).
+
+Where included, each is comfortably under the ADR-24 ~5-minute bar, so it
+genuinely executes rather than being a conversion-only smoke. Because the
+heavy source and RSS on *every* `cargo test` is too costly for the default
+gate, both cases (like all `FS_APP_CASES`) are gated behind `DEWASM_APPS_ALL` —
+the same deliberate perf opt-out the heavy `apps` cases use (ADR-15's
+documented scope: a perf gate, not a missing-environment skip). CRuby on Ruby
+is the "Ruby on Ruby" north-star demo.
 
 ⁶ **ripgrep (Phase 5b).** ripgrep 14.1.1 built from the pinned source
 release with `cargo build --release --target wasm32-wasip1` (default

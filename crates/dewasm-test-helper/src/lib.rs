@@ -6,10 +6,12 @@
 //! wires up the suites it participates in via the macros below.
 
 mod apps;
+mod apps_capi;
 mod apps_fs;
 mod backend;
 mod fixtures;
 mod library;
+mod multimodule;
 mod pty;
 mod qjs_repl;
 mod spec;
@@ -17,6 +19,7 @@ mod standalone;
 mod wasi;
 
 pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
+pub use apps_capi::{run_capi_cases, CApiCase, CApiGlue, CAPI_CASES};
 pub use apps_fs::{
     run_fs_app_cases, run_fs_app_cases_forced, FsAppCase, FsRun, Stage, FS_APP_CASES,
 };
@@ -29,6 +32,9 @@ pub use fixtures::{
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
 };
 pub use library::{run_library_case, GlueResolver, LibraryCase, LIBRARY_CASES};
+pub use multimodule::{
+    run_multi_module_case, MultiModuleCase, MultiModuleGlue, MULTI_MODULE_CASES,
+};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
@@ -165,6 +171,40 @@ macro_rules! fs_apps_e2e {
         #[test]
         fn fs_apps() {
             $crate::run_fs_app_cases(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` iterating [`CAPI_CASES`] for `$lang`, resolving each case's
+/// driver with `$glue` (a `fn(&CApiCase, &Path) -> String`). Gated behind
+/// `DEWASM_APPS_ALL` inside `run_capi_cases`. Which backends invoke this is the
+/// capability declaration (ADR-27): the four with a WASI filesystem and a
+/// host-language object model to plumb a C API through (Ruby/Python/Go/Java),
+/// not Bash (ADR-12).
+#[macro_export]
+macro_rules! capi_apps_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn capi_apps() {
+            $crate::run_capi_cases(&$lang, $glue);
+        }
+    };
+}
+
+/// One `#[test]` iterating [`MULTI_MODULE_CASES`] for `$lang`, resolving each
+/// case's driver with `$glue` (a `fn(&MultiModuleCase) -> &'static str`). The
+/// backend must implement [`BackendUnderTest::compose_modules`]. Which backends
+/// invoke this — and each case's `exclude` — is the capability declaration
+/// (ADR-27): the ImportedTables-capable backends for the shared-table case, and
+/// the nested-runtime backends for the coexistence case.
+#[macro_export]
+macro_rules! multi_module_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn multi_module() {
+            for case in $crate::MULTI_MODULE_CASES {
+                $crate::run_multi_module_case(&$lang, case, $glue);
+            }
         }
     };
 }
