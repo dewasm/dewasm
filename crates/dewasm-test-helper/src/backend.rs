@@ -69,6 +69,42 @@ pub trait BackendUnderTest: Sync {
     fn run_heavy_apps(&self) -> bool {
         true
     }
+
+    /// Backend-specific glue that instantiates library-mode class `class`
+    /// with `args` (argv, argv0 included), `env`, and `preopens` (guest path
+    /// -> host directory), runs `_start`, and swallows a clean guest
+    /// `proc_exit`. Appended after the generated program by the default
+    /// [`Self::run_app_fs`]. A backend wired into the filesystem-app suite
+    /// (`run_fs_app_cases`) must implement this.
+    fn app_glue(
+        &self,
+        class: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        preopens: &[(&str, &Path)],
+    ) -> String {
+        let _ = (class, args, env, preopens);
+        unimplemented!("a filesystem-app backend must implement app_glue()")
+    }
+
+    /// Run library-mode `program` (from [`Self::convert_app`]) as a
+    /// filesystem app: instantiate `class` with `args`/`env`/`preopens`, feed
+    /// `stdin`, and return the process `Output`. The default appends
+    /// [`Self::app_glue`] to `program` and runs the result through
+    /// `run_bytes`; an engine-under-test that runs the wasm binary directly
+    /// (wasmtime) overrides this to exec the binary with host preopens.
+    fn run_app_fs(
+        &self,
+        program: &str,
+        class: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        stdin: &[u8],
+        preopens: &[(&str, &Path)],
+    ) -> Output {
+        let glue = self.app_glue(class, args, env, preopens);
+        self.run_bytes(&format!("{program}\n{glue}"), &[], stdin)
+    }
 }
 
 /// Spawn `cmd` with `stdin` piped in and both output streams captured,

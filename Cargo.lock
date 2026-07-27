@@ -210,7 +210,6 @@ dependencies = [
  "dewasm-backend-python",
  "dewasm-backend-ruby",
  "dewasm-core",
- "dewasm-test-helper",
  "wat",
 ]
 

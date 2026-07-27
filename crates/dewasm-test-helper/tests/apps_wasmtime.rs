@@ -26,7 +26,8 @@ use std::process::{Command, Output};
 use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
-    apps_cache_dir, run_app_cases, run_command_bytes, run_gzip_cases, BackendUnderTest,
+    apps_cache_dir, run_app_cases, run_command_bytes, run_fs_app_cases_forced, run_gzip_cases,
+    BackendUnderTest,
 };
 
 /// A [`Backend`] that only exists to satisfy `BackendUnderTest::backend()`.
@@ -95,6 +96,38 @@ impl BackendUnderTest for Wasmtime {
             stdin,
         )
     }
+
+    /// Run the filesystem app directly on the cache binary: `program` is the
+    /// wasm path (from `convert_app`), so ignore the glue-composition the
+    /// default does and instead exec `wasmtime run --dir <host>::<guest>...
+    /// --env K=V... <wasm> <args[1..]>` (wasmtime injects argv0 itself). Per
+    /// ADR-15 a missing `wasmtime` fails loud, never skips.
+    fn run_app_fs(
+        &self,
+        program: &str,
+        _class: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        stdin: &[u8],
+        preopens: &[(&str, &Path)],
+    ) -> Output {
+        assert!(
+            Command::new("wasmtime").arg("--version").output().is_ok(),
+            "wasmtime not found on PATH — required when running with --features wasmtime_test \
+             (see docs/testing.md)"
+        );
+        let mut cmd = Command::new("wasmtime");
+        cmd.arg("run");
+        for (guest, host) in preopens {
+            cmd.arg("--dir")
+                .arg(format!("{}::{}", host.display(), guest));
+        }
+        for (k, v) in env {
+            cmd.arg("--env").arg(format!("{k}={v}"));
+        }
+        cmd.arg(program).args(&args[1..]);
+        run_command_bytes(&mut cmd, stdin)
+    }
 }
 
 // Hand-written `#[test]` fns rather than `apps_e2e!`/`gzip_e2e!`: those macros
@@ -114,4 +147,13 @@ fn apps() {
 #[test]
 fn gzip() {
     run_gzip_cases(&Wasmtime);
+}
+
+// The filesystem app cases: the `wasmtime_test` feature is already the opt-in,
+// so run the whole table unconditionally (`_forced`) rather than also requiring
+// `DEWASM_APPS_ALL` — the gated `run_fs_app_cases` is for the codegen backends.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn fs_apps() {
+    run_fs_app_cases_forced(&Wasmtime);
 }

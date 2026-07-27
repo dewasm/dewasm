@@ -6,6 +6,7 @@
 //! wires up the suites it participates in via the macros below.
 
 mod apps;
+mod apps_fs;
 mod backend;
 mod fixtures;
 mod library;
@@ -14,6 +15,9 @@ mod standalone;
 mod wasi;
 
 pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
+pub use apps_fs::{
+    run_fs_app_cases, run_fs_app_cases_forced, FsAppCase, FsRun, Stage, FS_APP_CASES,
+};
 pub use backend::{run_command, run_command_bytes, run_script, run_script_bytes, BackendUnderTest};
 pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
@@ -119,6 +123,19 @@ macro_rules! gzip_e2e {
         #[test]
         fn gzip() {
             $crate::run_gzip_cases(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` iterating [`FS_APP_CASES`] for `$lang` (a
+/// [`BackendUnderTest`] with WASI filesystem support). Gated behind
+/// `DEWASM_APPS_ALL` inside `run_fs_app_cases`.
+#[macro_export]
+macro_rules! fs_apps_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn fs_apps() {
+            $crate::run_fs_app_cases(&$lang);
         }
     };
 }

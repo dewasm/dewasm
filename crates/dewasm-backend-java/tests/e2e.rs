@@ -12,20 +12,19 @@
 //! Third-milestone scope (ADR-30): full WASI preview 1 incl. the filesystem.
 //! The whole-program `Stdio`/`ArgsEnv`/`Fs` WASI kinds, both library cases,
 //! `apps_e2e!` (cowsay/qjs/sqlite3-shell byte-identical), `gzip_e2e!` (binary
-//! byte-stdio), and the mirrored filesystem app cases (qjs/sqlite/rg, gated on
-//! `DEWASM_APPS_ALL`) are all wired.
+//! byte-stdio), and the shared filesystem app cases (`fs_apps_e2e!` over
+//! `FS_APP_CASES`, via `app_glue`, gated on `DEWASM_APPS_ALL`) are all wired.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::process::{Command, Output};
 
-use dewasm_backend::{Backend, Mode};
+use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
-    apps_cache_dir, apps_e2e, apps_fixtures_dir, convert_on_big_stack, fresh_scratch_dir, gzip_e2e,
-    library_e2e, run_command_bytes, standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase,
-    WasiCase,
+    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, run_command_bytes, standalone_e2e, wasi_suite,
+    BackendUnderTest, LibraryCase, WasiCase,
 };
 
 pub struct Java;
@@ -99,10 +98,60 @@ impl BackendUnderTest for Java {
     /// content-addressed `javac` class-dir cache: measured locally the qjs and
     /// sqlite3-shell standalone cases each pay a one-time ~5-6 s `javac` and
     /// then run warm, well under the ADR-24 5-minute bar. The much heavier
-    /// filesystem app cases (qjs/sqlite reconversion, rg's 22 MB wasm) stay
-    /// behind `DEWASM_APPS_ALL` in the tail of this file.
+    /// filesystem app cases (qjs/sqlite reconversion, rg's 22 MB wasm) live in
+    /// the shared `FS_APP_CASES` table, gated behind `DEWASM_APPS_ALL`.
     fn run_heavy_apps(&self) -> bool {
         true
+    }
+
+    /// A `public class Main` instantiating `class` (positional ctor
+    /// `new class(imports, args, env, preopens)`), running `_start`, and
+    /// swallowing a clean guest `proc_exit` (`Rt.Exit`). Generalizes the
+    /// hand-written glue the mirrored fs app tests used. `Map.of` tops out at
+    /// 10 key/value pairs, well above the single preopen these cases use.
+    fn app_glue(
+        &self,
+        class: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        preopens: &[(&str, &Path)],
+    ) -> String {
+        let argv = args
+            .iter()
+            .map(|a| format!("{a:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let env_expr = if env.is_empty() {
+            "null".to_string()
+        } else {
+            let e = env
+                .iter()
+                .flat_map(|(k, v)| [format!("{k:?}"), format!("{v:?}")])
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("java.util.Map.of({e})")
+        };
+        let pre_pairs = preopens
+            .iter()
+            .flat_map(|(guest, host)| {
+                [
+                    format!("{guest:?}"),
+                    format!("{:?}", host.to_string_lossy()),
+                ]
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "public class Main {{\n\
+             \x20   public static void main(String[] a) throws Exception {{\n\
+             \x20       {class} inst = new {class}(null, new String[]{{{argv}}}, {env_expr}, java.util.Map.of({pre_pairs}));\n\
+             \x20       try {{\n\
+             \x20           ((Rt.Fn) inst.Exports.get(\"_start\")).invoke(new Object[]{{}});\n\
+             \x20       }} catch (Rt.Exit e) {{\n\
+             \x20       }}\n\
+             \x20   }}\n\
+             }}\n"
+        )
     }
 }
 
@@ -186,233 +235,4 @@ wasi_suite!(Java, ArgsEnv);
 wasi_suite!(Java, Fs, java_fs_glue);
 apps_e2e!(Java);
 gzip_e2e!(Java);
-
-// ---------------------------------------------------------------------
-// Filesystem-exercising app cases, mirrored from the Go/Ruby/Python crates now
-// that Java has WASI filesystem support (ADR-30 third milestone, adopting
-// ADR-14's model). Their goldens are the same wasmtime-ground-truthed files the
-// other backends' cases use (crates/dewasm-cli/tests/apps_golden.rs), so the
-// generated Java must produce byte-identical output.
-//
-// These are the heaviest cases in the suite (qjs/sqlite3 softfloat, rg's 22 MB
-// wasm) and Java pays a cold `javac` on top, so they are gated behind
-// DEWASM_APPS_ALL — the same deliberate perf opt-out `run_heavy_apps` uses. The
-// task's gate runs them via
-// `DEWASM_APPS_ALL=1 cargo test -p dewasm-backend-java --test e2e`.
-
-/// Whether the heavy filesystem app cases should actually run.
-fn apps_all() -> bool {
-    std::env::var("DEWASM_APPS_ALL").is_ok()
-}
-
-/// Convert a cached app binary to a library-mode Java file (roomy stack for
-/// SQLite's deep functions, `convert_on_big_stack`). `module_name` derives the
-/// exported class name (`New<Type>` — here the constructor `new <Type>(...)`).
-fn convert_app_library(wasm: &str, module_name: &str) -> String {
-    let path = apps_cache_dir().join(format!("{wasm}.wasm"));
-    assert!(
-        path.exists(),
-        "{wasm} not cached — run examples/apps/fetch.sh (see docs/testing.md)"
-    );
-    let bytes = std::fs::read(&path).expect("read wasm");
-    convert_on_big_stack(&JavaBackend, &bytes, Mode::Library, module_name)
-}
-
-/// Compile `source` (generated classes + an appended `public class Main` glue)
-/// and run it with `stdin`, returning the raw `Output`. Reuses the content-hash
-/// class-dir cache in `Java::run_bytes`.
-fn run_java_io(source: &str, stdin: &str) -> Output {
-    Java.run_bytes(source, &[], stdin.as_bytes())
-}
-
-/// A `public class Main` glue instantiating `type_name` with `args` and a
-/// single preopen at guest `guest` → host `host`, running `_start` and
-/// swallowing a clean guest `proc_exit` (Rt.Exit). Mirrors Go's CATCH_EXIT.
-fn app_glue(type_name: &str, args: &[&str], guest: &str, host: &Path) -> String {
-    let argv = args
-        .iter()
-        .map(|a| format!("{a:?}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "public class Main {{\n\
-         \x20   public static void main(String[] a) throws Exception {{\n\
-         \x20       {type_name} inst = new {type_name}(null, new String[]{{{argv}}}, null, java.util.Map.of({guest:?}, {host:?}));\n\
-         \x20       try {{\n\
-         \x20           ((Rt.Fn) inst.Exports.get(\"_start\")).invoke(new Object[]{{}});\n\
-         \x20       }} catch (Rt.Exit e) {{\n\
-         \x20       }}\n\
-         \x20   }}\n\
-         }}\n",
-        host = host.to_string_lossy()
-    )
-}
-
-/// QuickJS with file I/O (Go's `qjs_file_io_go`): the `qjs:std` module writes a
-/// file into a preopened scratch dir, reads it back, and prints it. Asserts
-/// both the guest stdout golden and the host-side file content.
-#[test]
-fn qjs_file_io_java() {
-    if !apps_all() {
-        println!("qjs_file_io: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
-        return;
-    }
-    let work = fresh_scratch_dir("java-qjs-file-io");
-    std::fs::copy(
-        apps_fixtures_dir().join("qjs_file_io.js"),
-        work.join("qjs_file_io.js"),
-    )
-    .unwrap();
-    let class = convert_app_library("qjs", "qjs");
-    let glue = app_glue("Qjs", &["qjs", "/work/qjs_file_io.js"], "/work", &work);
-    let output = run_java_io(&format!("{class}\n{glue}"), "");
-    assert!(
-        output.status.success(),
-        "qjs_file_io under java failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/qjs_file_io.stdout"),
-        "qjs_file_io: guest stdout differs from the wasmtime golden"
-    );
-    assert_eq!(
-        std::fs::read_to_string(work.join("io_out.txt")).unwrap(),
-        "hello from qjs file io\n",
-        "qjs_file_io: the host file the guest wrote is wrong"
-    );
-}
-
-/// QuickJS scripted REPL over piped stdin (Go's `qjs_repl_go`): the pinned
-/// read-eval-print loop fixture exercises the stdin-read + evalScript path
-/// byte-identically to wasmtime.
-#[test]
-fn qjs_repl_java() {
-    if !apps_all() {
-        println!("qjs_repl: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
-        return;
-    }
-    let work = fresh_scratch_dir("java-qjs-repl");
-    std::fs::copy(
-        apps_fixtures_dir().join("qjs_repl.js"),
-        work.join("qjs_repl.js"),
-    )
-    .unwrap();
-    let class = convert_app_library("qjs", "qjs");
-    let glue = app_glue("Qjs", &["qjs", "/work/qjs_repl.js"], "/work", &work);
-    let output = run_java_io(
-        &format!("{class}\n{glue}"),
-        "1+2\n[3,1,2].sort()\nMath.max(4,9)\n\\q\n",
-    );
-    assert!(
-        output.status.success(),
-        "qjs_repl under java failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/qjs_repl.stdout"),
-        "qjs_repl: guest stdout differs from the wasmtime golden"
-    );
-}
-
-/// sqlite3 shell reading/writing a DB *file* (Go's `sqlite3_shell_dbfile_go`):
-/// one invocation creates and populates `/db/test.db`, a second reopens it and
-/// SELECTs. Asserts the second run's stdout (golden) and that the DB file
-/// exists on the host with nonzero size.
-#[test]
-fn sqlite3_shell_dbfile_java() {
-    if !apps_all() {
-        println!("sqlite3_shell_dbfile: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
-        return;
-    }
-    let db = fresh_scratch_dir("java-sqlite3-dbfile");
-    let class = convert_app_library("sqlite3-shell", "sqlite3_shell");
-    let glue = app_glue("Sqlite3Shell", &["sqlite3"], "/db", &db);
-    let program = format!("{class}\n{glue}");
-
-    let create = run_java_io(
-        &program,
-        ".open /db/test.db\n\
-         CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT);\n\
-         INSERT INTO t(v) VALUES ('alpha'),('beta');\n\
-         .exit\n",
-    );
-    assert!(
-        create.status.success(),
-        "sqlite3 dbfile create under java failed: {}\n{}",
-        create.status,
-        String::from_utf8_lossy(&create.stderr)
-    );
-    let db_file = db.join("test.db");
-    assert!(
-        db_file.metadata().map(|m| m.len() > 0).unwrap_or(false),
-        "sqlite3 dbfile: the first run left no nonzero DB file"
-    );
-
-    let select = run_java_io(
-        &program,
-        ".open /db/test.db\nSELECT id, v FROM t ORDER BY id;\n.exit\n",
-    );
-    assert!(
-        select.status.success(),
-        "sqlite3 dbfile select under java failed: {}\n{}",
-        select.status,
-        String::from_utf8_lossy(&select.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&select.stdout),
-        include_str!("../../../examples/apps/golden/sqlite3_shell_dbfile.stdout"),
-        "sqlite3_shell_dbfile: reopened SELECT stdout differs from the wasmtime golden"
-    );
-}
-
-/// Recursively copy `src` into `dst` (both directories), used to stage the
-/// committed ripgrep fixture tree into a fresh scratch dir before the run.
-fn copy_tree(src: &Path, dst: &Path) {
-    std::fs::create_dir_all(dst).unwrap();
-    for entry in std::fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let to = dst.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            copy_tree(&entry.path(), &to);
-        } else {
-            std::fs::copy(entry.path(), &to).unwrap();
-        }
-    }
-}
-
-/// ripgrep searching a small fixture directory tree (Go's `rg_search_go`):
-/// recursive directory walking (fd_readdir, path_open, path_filestat_get) over
-/// a preopened tree. `--sort path` forces a deterministic order so the
-/// `wasmtime --dir` golden is stable.
-#[test]
-fn rg_search_java() {
-    if !apps_all() {
-        println!("rg_search: heavy case skipped (DEWASM_APPS_ALL=1 to run)");
-        return;
-    }
-    let work = fresh_scratch_dir("java-rg-search");
-    copy_tree(&apps_fixtures_dir().join("rg"), &work);
-    let class = convert_app_library("rg", "rg");
-    let glue = app_glue(
-        "Rg",
-        &["rg", "--sort", "path", "needle", "/work"],
-        "/work",
-        &work,
-    );
-    let output = run_java_io(&format!("{class}\n{glue}"), "");
-    assert!(
-        output.status.success(),
-        "rg_search under java failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/rg_search.stdout"),
-        "rg_search: guest stdout differs from the wasmtime golden"
-    );
-}
+fs_apps_e2e!(Java);

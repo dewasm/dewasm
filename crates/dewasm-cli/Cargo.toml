@@ -9,11 +9,6 @@ authors.workspace = true
 [lints]
 workspace = true
 
-[features]
-# Opt-in: gates tests that need a real `wasmtime` install (ADR-15 keeps
-# the default suite free of that dependency). See docs/testing.md.
-wasmtime_test = []
-
 [[bin]]
 name = "dewasm"
 path = "src/main.rs"
@@ -29,6 +24,3 @@ dewasm-backend-bash.workspace = true
 dewasm-backend-python.workspace = true
 dewasm-backend-go.workspace = true
 dewasm-backend-java.workspace = true
-
-[dev-dependencies]
-dewasm-test-helper.workspace = true

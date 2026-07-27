@@ -19,9 +19,9 @@ use std::path::{Path, PathBuf};
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
-    apps_cache_dir, apps_e2e, apps_fixtures_dir, convert, convert_on_big_stack, examples_dir,
-    fresh_scratch_dir, gzip_e2e, library_e2e, run_script, standalone_e2e, wasi_suite,
-    BackendUnderTest, LibraryCase, WasiCase,
+    apps_cache_dir, apps_e2e, convert, convert_on_big_stack, examples_dir, fresh_scratch_dir,
+    fs_apps_e2e, gzip_e2e, library_e2e, run_script, standalone_e2e, wasi_suite, BackendUnderTest,
+    LibraryCase, WasiCase,
 };
 
 pub struct Ruby;
@@ -37,6 +37,37 @@ impl BackendUnderTest for Ruby {
 
     fn interpreter(&self) -> PathBuf {
         find_ruby().expect("ruby not found on PATH — see docs/testing.md")
+    }
+
+    /// Instantiate `class` with kwargs (args/env/preopens), run `_start`, and
+    /// swallow a clean guest `proc_exit` (`{class}::Rt::Exit`). Generalizes the
+    /// hand-written glue the mirrored fs app tests used.
+    fn app_glue(
+        &self,
+        class: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        preopens: &[(&str, &Path)],
+    ) -> String {
+        let argv = args
+            .iter()
+            .map(|a| format!("{a:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let envs = env
+            .iter()
+            .map(|(k, v)| format!("{k:?} => {v:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let pres = preopens
+            .iter()
+            .map(|(guest, host)| format!("{guest:?} => {:?}", host.to_string_lossy()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "inst = {class}.new({{}}, args: [{argv}], env: {{{envs}}}, preopens: {{{pres}}})\n\
+             begin\n  inst.invoke(\"_start\")\nrescue {class}::Rt::Exit\nend\n"
+        )
     }
 }
 
@@ -75,6 +106,7 @@ wasi_suite!(Ruby, ArgsEnv);
 wasi_suite!(Ruby, Fs, ruby_fs_glue);
 apps_e2e!(Ruby);
 gzip_e2e!(Ruby);
+fs_apps_e2e!(Ruby);
 
 // ---------------------------------------------------------------------
 // Ruby-only scenarios.
@@ -380,13 +412,13 @@ puts "C-API-OK"
 "##;
 
 // ---------------------------------------------------------------------
-// Phase 5a app deepening: filesystem-exercising app cases. These are
-// Ruby-only because only Ruby has WASI filesystem support (ADR-14) — expressed
-// by living in the Ruby crate rather than the shared `APP_CASES` table (which
-// both backends iterate). Their goldens are still ground-truthed against
-// `wasmtime` (crates/dewasm-cli/tests/apps_golden.rs, `apps_golden_fs_matches_wasmtime`);
-// here the generated Ruby must match the same bytes. Every fs flow below runs
-// on the syscall set ADR-14 already ships — no new WASI unit was needed.
+// Phase 5a app deepening: Ruby-only filesystem library scenarios. The
+// guest-visible fs app cases (qjs file I/O + REPL, sqlite3 shell dbfile,
+// ripgrep) now live in the shared `FS_APP_CASES` table (`fs_apps_e2e!` above),
+// run by every fs-capable backend and ground-truthed against wasmtime. What
+// remains here are the Ruby-only C-API drives whose results live in guest
+// memory (no wasmtime golden possible) and the heavy language-runtime binaries.
+// Every fs flow runs on the syscall set ADR-14 already ships — no new WASI unit.
 
 /// Convert a cached app binary to a library-mode Ruby class (roomy stack for
 /// SQLite's deep functions, `convert_on_big_stack`).
@@ -406,132 +438,8 @@ fn run_ruby_io(script: &str, stdin: &str) -> std::process::Output {
     run_script(&ruby, script, "rb", &[], stdin)
 }
 
-/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file
-/// into a preopened scratch dir, reads it back, and prints it. Asserts both
-/// the guest stdout (golden, captured from wasmtime) and the host-side file
-/// content. The `.js` is our own fixture (examples/apps/fixtures/).
-#[test]
-fn qjs_file_io_ruby() {
-    let work = fresh_scratch_dir("ruby-qjs-file-io");
-    std::fs::copy(
-        apps_fixtures_dir().join("qjs_file_io.js"),
-        work.join("qjs_file_io.js"),
-    )
-    .unwrap();
-    let class = convert_app_library("qjs", "Qjs");
-    let glue = format!(
-        "inst = Qjs.new({{}}, args: [\"qjs\", \"/work/qjs_file_io.js\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
-         begin\n  inst.invoke(\"_start\")\nrescue Qjs::Rt::Exit\nend\n",
-        work.to_string_lossy()
-    );
-    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
-    assert!(
-        output.status.success(),
-        "qjs_file_io under ruby failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/qjs_file_io.stdout"),
-        "qjs_file_io: guest stdout differs from the wasmtime golden"
-    );
-    assert_eq!(
-        std::fs::read_to_string(work.join("io_out.txt")).unwrap(),
-        "hello from qjs file io\n",
-        "qjs_file_io: the host file the guest wrote is wrong"
-    );
-}
-
-/// QuickJS scripted REPL over piped stdin (Phase 5a #1b). The built-in
-/// interactive REPL needs a tty — over a pipe it emits ANSI escapes and never
-/// terminates on EOF (docs/apps-audit.md) — so the pinned equivalent is a
-/// read-eval-print loop fixture that exercises the same stdin-read + evalScript
-/// path byte-identically to wasmtime.
-#[test]
-fn qjs_repl_ruby() {
-    let work = fresh_scratch_dir("ruby-qjs-repl");
-    std::fs::copy(
-        apps_fixtures_dir().join("qjs_repl.js"),
-        work.join("qjs_repl.js"),
-    )
-    .unwrap();
-    let class = convert_app_library("qjs", "Qjs");
-    let glue = format!(
-        "inst = Qjs.new({{}}, args: [\"qjs\", \"/work/qjs_repl.js\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
-         begin\n  inst.invoke(\"_start\")\nrescue Qjs::Rt::Exit\nend\n",
-        work.to_string_lossy()
-    );
-    let output = run_ruby_io(
-        &format!("{class}\n{glue}"),
-        "1+2\n[3,1,2].sort()\nMath.max(4,9)\n\\q\n",
-    );
-    assert!(
-        output.status.success(),
-        "qjs_repl under ruby failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/qjs_repl.stdout"),
-        "qjs_repl: guest stdout differs from the wasmtime golden"
-    );
-}
-
-/// sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation
-/// creates and populates `/db/test.db`, a second reopens it and SELECTs.
-/// Asserts the second run's stdout (golden) and that the DB file exists on the
-/// host with nonzero size. `env: {}` mirrors wasmtime's empty guest env so the
-/// `.sqliterc` warning stays on stderr in both.
-#[test]
-fn sqlite3_shell_dbfile_ruby() {
-    let db = fresh_scratch_dir("ruby-sqlite3-dbfile");
-    let class = convert_app_library("sqlite3-shell", "Sqlite3Shell");
-    let glue = format!(
-        "inst = Sqlite3Shell.new({{}}, args: [\"sqlite3\"], env: {{}}, preopens: {{ \"/db\" => {:?} }})\n\
-         begin\n  inst.invoke(\"_start\")\nrescue Sqlite3Shell::Rt::Exit\nend\n",
-        db.to_string_lossy()
-    );
-    let program = format!("{class}\n{glue}");
-
-    let create = run_ruby_io(
-        &program,
-        ".open /db/test.db\n\
-         CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT);\n\
-         INSERT INTO t(v) VALUES ('alpha'),('beta');\n\
-         .exit\n",
-    );
-    assert!(
-        create.status.success(),
-        "sqlite3 dbfile create under ruby failed: {}\n{}",
-        create.status,
-        String::from_utf8_lossy(&create.stderr)
-    );
-    let db_file = db.join("test.db");
-    assert!(
-        db_file.metadata().map(|m| m.len() > 0).unwrap_or(false),
-        "sqlite3 dbfile: the first run left no nonzero DB file"
-    );
-
-    let select = run_ruby_io(
-        &program,
-        ".open /db/test.db\nSELECT id, v FROM t ORDER BY id;\n.exit\n",
-    );
-    assert!(
-        select.status.success(),
-        "sqlite3 dbfile select under ruby failed: {}\n{}",
-        select.status,
-        String::from_utf8_lossy(&select.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&select.stdout),
-        include_str!("../../../examples/apps/golden/sqlite3_shell_dbfile.stdout"),
-        "sqlite3_shell_dbfile: reopened SELECT stdout differs from the wasmtime golden"
-    );
-}
-
-/// The library-shape counterpart to `sqlite3_shell_dbfile_ruby` (Phase 5a #2b):
+/// The library-shape counterpart to the shared `sqlite3_shell_dbfile` fs app
+/// case (Phase 5a #2b):
 /// the sqlite3 C API opening a *file* under a preopen — open, insert, close,
 /// reopen, select — proving the C-API path hits the same ADR-14 fs stack as the
 /// shell. No wasmtime golden (the CLI cannot drive a C-API flow whose results
@@ -688,59 +596,6 @@ db_mod.invoke("sqlite3_close", db)
 ROWS.each { |r| puts "row: #{r.join('|')}" }
 puts "CALLBACK-OK"
 "##;
-
-// ---------------------------------------------------------------------
-// Phase 5b: ripgrep (pinned-source cargo build, examples/apps/fetch.sh).
-// Ruby-only because it exercises the WASI filesystem — recursive directory
-// walking (fd_readdir, path_open, path_filestat_get) over a preopened tree —
-// which only Ruby has (ADR-14). Runs on the syscall set ADR-14 already ships:
-// ripgrep imports poll_oneoff/path_readlink but does not call them on this
-// search path, so no new WASI unit was needed. `--sort path` forces ripgrep's
-// otherwise-parallel directory walk into a single deterministic order, so the
-// golden (captured from `wasmtime --dir`) is stable.
-
-/// Recursively copy `src` into `dst` (both directories), used to stage the
-/// committed ripgrep fixture tree into a fresh scratch dir before the run.
-fn copy_tree(src: &Path, dst: &Path) {
-    std::fs::create_dir_all(dst).unwrap();
-    for entry in std::fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let to = dst.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            copy_tree(&entry.path(), &to);
-        } else {
-            std::fs::copy(entry.path(), &to).unwrap();
-        }
-    }
-}
-
-/// ripgrep searching a small fixture directory tree (Phase 5b). Stages the
-/// committed `examples/apps/fixtures/rg/` tree into a scratch dir, preopens it
-/// at guest `/work`, and searches recursively for `needle`; asserts the guest
-/// stdout is byte-identical to the `wasmtime --dir` golden.
-#[test]
-fn rg_search_ruby() {
-    let work = fresh_scratch_dir("ruby-rg-search");
-    copy_tree(&apps_fixtures_dir().join("rg"), &work);
-    let class = convert_app_library("rg", "Rg");
-    let glue = format!(
-        "inst = Rg.new({{}}, args: [\"rg\", \"--sort\", \"path\", \"needle\", \"/work\"], env: {{}}, preopens: {{ \"/work\" => {:?} }})\n\
-         begin\n  inst.invoke(\"_start\")\nrescue Rg::Rt::Exit\nend\n",
-        work.to_string_lossy()
-    );
-    let output = run_ruby_io(&format!("{class}\n{glue}"), "");
-    assert!(
-        output.status.success(),
-        "rg_search under ruby failed: {}\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        include_str!("../../../examples/apps/golden/rg_search.stdout"),
-        "rg_search: guest stdout differs from the wasmtime golden"
-    );
-}
 
 // ---------------------------------------------------------------------
 // Phase 5b: language-runtime binaries — CPython and CRuby — converted and

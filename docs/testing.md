@@ -110,24 +110,16 @@ $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 ```
 
 This runs wasmtime as a `BackendUnderTest` (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`)
-through the *same* shared `apps` and `gzip` runners the real backends use: for
-each case it execs `wasmtime run` on the cached binary and compares the output
-against the checked-in golden file (independent of whether dewasm's own
-generated output also matches — the always-on per-backend `apps` tests already
-cover that half). The filesystem cases need `wasmtime --dir` preopens rather
-than a shared runner, so their freshness check stays in
-`crates/dewasm-cli/tests/apps_golden.rs` (`apps_golden_fs_matches_wasmtime`,
-same feature gate):
-
-```console
-$ cargo test -p dewasm-cli --test apps_golden --features wasmtime_test apps_golden_fs_matches_wasmtime
-```
-
-It drives them under `wasmtime --dir <scratch>::<guest>` —
-QuickJS file I/O (`--dir <scratch>::/work`, arg `/work/qjs_file_io.js`), the
-QuickJS scripted REPL (same, `qjs_repl.js`, the scripted session on stdin),
-and the sqlite3 shell writing then reopening a DB file (`--dir <scratch>::/db`,
-two invocations). Run either whenever
+through the *same* shared `apps`, `gzip`, and `fs_apps` runners the real
+backends use: for each case it execs `wasmtime run` (with `--dir`/`--env` for
+the filesystem cases) on the cached binary and compares the output against the
+checked-in golden file (independent of whether dewasm's own generated output
+also matches — the always-on per-backend `apps` tests already cover that half).
+The `fs_apps` cases drive `wasmtime --dir <scratch>::<guest>` — QuickJS file I/O
+(`--dir <scratch>::/work`, arg `/work/qjs_file_io.js`), the QuickJS scripted
+REPL (same, `qjs_repl.js`, the scripted session on stdin), the sqlite3 shell
+writing then reopening a DB file (`--dir <scratch>::/db`, two invocations), and
+ripgrep over a staged tree. Run this whenever
 you doubt a golden file, or as part of regenerating one after bumping a
 pin in `examples/apps/fetch.sh`:
 
@@ -155,25 +147,24 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   with `cargo test -p dewasm-backend-<lang> --test spec`.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's standalone
   / library / WASI / apps suites, declared by invoking `standalone_e2e!`,
-  `library_e2e!`, `wasi_suite!`, and `apps_e2e!` over the shared tables in
-  `dewasm-test-helper`. Library glue and (for the WASI filesystem cases) the
-  per-backend instantiation glue live here; a case a backend is wired to run
-  but has no glue for fails loudly (ADR-15). Ruby's file also holds the
-  Ruby-only scenarios (provider objects, embedded coexistence, the sqlite3 C
-  API drive, WASI-model internals).
+  `library_e2e!`, `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, and (for the
+  fs-capable backends) `fs_apps_e2e!` over the shared tables in
+  `dewasm-test-helper`. Library glue, the per-backend WASI-filesystem
+  instantiation glue, and the fs-app `app_glue` impl live here; a case a
+  backend is wired to run but has no glue for fails loudly (ADR-15). Ruby's
+  file also holds the Ruby-only scenarios (provider objects, embedded
+  coexistence, the sqlite3 C API drive, WASI-model internals).
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and
   the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units`
   unit tests at the bottom of each backend's `src/lib.rs`, run with
   `cargo test -p dewasm-backend-<lang> --lib`. **`softfloat.rs`** (bash) is the
   one remaining backend-local integration oracle, unchanged.
-- **`crates/dewasm-cli/tests/`** — only the cross-backend tests:
-  `support_docs.rs` (the `docs/support.md` golden gate over all backends) and
-  `apps_golden.rs` (`apps_golden_fs_matches_wasmtime`, the `wasmtime --dir`
-  filesystem golden check, behind the `wasmtime_test` feature).
+- **`crates/dewasm-cli/tests/`** — only `support_docs.rs` (the
+  `docs/support.md` golden gate over all backends).
 - **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`** — wasmtime as a
-  `BackendUnderTest`: the non-fs `apps`/`gzip` golden-freshness checks run
-  through the shared runners (also behind the `wasmtime_test` feature, named for
-  a future engine such as wasmer/wasmedge joining it).
+  `BackendUnderTest`: the `apps`/`gzip`/`fs_apps` golden-freshness checks run
+  through the shared runners (behind the `wasmtime_test` feature, named for a
+  future engine such as wasmer/wasmedge joining it).
 
 Onboarding a new backend to the e2e suites is: implement `BackendUnderTest`
 (and `SpecBackend` for the spec harness) in the new crate, then invoke the

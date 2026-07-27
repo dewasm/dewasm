@@ -4,12 +4,11 @@ Status: **Accepted, 2026-07-25; landed 2026-07-26.** The
 `dewasm-test-helper` crate and the two-layer `BackendUnderTest` /
 `SpecBackend` traits, shared case tables, and per-feature macros
 (`spec_suite!`, `standalone_e2e!`, `library_e2e!`, `wasi_suite!`,
-`apps_e2e!`) are in place; each backend crate owns its spec and e2e
-suites, and the cross-backend tests remain outside the backend crates:
-`support_docs` and the `wasmtime --dir` filesystem golden check
-(`apps_golden_fs_matches_wasmtime`) in `dewasm-cli`, with wasmtime itself
-wired as a `BackendUnderTest` (`apps_wasmtime`) running the non-fs golden
-checks through the shared runners. Builds on
+`apps_e2e!`, `gzip_e2e!`, `fs_apps_e2e!`) are in place; each backend crate
+owns its spec and e2e suites, `dewasm-cli` keeps only the `support_docs`
+cross-backend gate, and wasmtime is itself wired as a `BackendUnderTest`
+(`apps_wasmtime`) running the `apps`/`gzip`/`fs_apps` golden-freshness
+checks through the same shared runners. Builds on
 [ADR-3](3-testing-strategy.md) (the spec harness binds),
 [ADR-8](8-latest-testsuite-support-matrix.md) (skip attribution and
 per-file failure ledgers), and [ADR-15](15-tests-fail-not-skip.md).
