@@ -23,6 +23,7 @@ wast.workspace = true
 wat.workspace = true
 dewasm-core.workspace = true
 dewasm-backend.workspace = true
+libtest-mimic.workspace = true
 # Real pty pair for the interactive-REPL transcript tests (Fix 4): the qjs
 # REPL only enters its interactive line-editing path when stdin is a tty, so
 # proving it byte-identical to wasmtime needs a genuine pty, not a pipe. A

@@ -4,8 +4,9 @@
 //! and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
 //! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test`
-//! runs a curated file list (ADR-3 pre-accepts this); `DEWASM_SPEC_ALL=1`
-//! sweeps everything. The generic harness lives in `dewasm-test-helper`.
+//! runs a curated file list (ADR-3 pre-accepts this); the rest are `#[ignore]`d
+//! trials, so `cargo test -- --include-ignored` sweeps everything. The generic
+//! harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -132,7 +133,7 @@ impl SpecBackend for BashSpec {
         EXPECTED_FAILURES
     }
 
-    fn default_files(&self) -> Option<&'static [&'static str]> {
+    fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(CURATED_FILES)
     }
 
@@ -155,6 +156,7 @@ impl SpecBackend for BashSpec {
     fn emit_instantiate(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         _var_id: u32,
         _registered: &[(String, String)],
@@ -173,6 +175,7 @@ impl SpecBackend for BashSpec {
     fn instantiate_call(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         _registered: &[(String, String)],
     ) -> String {
@@ -241,7 +244,12 @@ impl SpecBackend for BashSpec {
         let _ = writeln!(script, "{call}\nck $? {} '1'", bash_str(desc));
     }
 
-    fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String> {
+    fn assemble(
+        &self,
+        units: &BTreeSet<String>,
+        _decls: &str,
+        body: &str,
+    ) -> anyhow::Result<String> {
         let mut script = String::from("#!/usr/bin/env bash\n\n");
         script.push_str(&dewasm_backend_bash::shared_runtime(units)?);
         script.push_str(PREAMBLE);

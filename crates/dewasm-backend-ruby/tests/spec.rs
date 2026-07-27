@@ -63,7 +63,9 @@ impl SpecBackend for RubySpec {
         EXPECTED_FAILURES
     }
 
-    fn default_files(&self) -> Option<&'static [&'static str]> {
+    fn curated_files(&self) -> Option<&'static [&'static str]> {
+        // Ruby is fast enough to run the whole testsuite by default; nothing is
+        // marked ignored.
         None
     }
 
@@ -108,6 +110,7 @@ impl SpecBackend for RubySpec {
     fn emit_instantiate(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         var_id: u32,
         registered: &[(String, String)],
@@ -126,6 +129,7 @@ impl SpecBackend for RubySpec {
     fn instantiate_call(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         registered: &[(String, String)],
     ) -> String {
@@ -204,7 +208,12 @@ impl SpecBackend for RubySpec {
         );
     }
 
-    fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String> {
+    fn assemble(
+        &self,
+        units: &BTreeSet<String>,
+        _decls: &str,
+        body: &str,
+    ) -> anyhow::Result<String> {
         let mut script = dewasm_backend_ruby::shared_runtime(units)
             .map_err(|e| anyhow::anyhow!("bundling runtime: {e:#}"))?;
         script.push_str(PREAMBLE);

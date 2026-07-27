@@ -23,6 +23,7 @@ wat = "1"
 wast = "254"
 clap = { version = "4", features = ["derive"] }
 regex = "1"
+libtest-mimic = "0.8"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

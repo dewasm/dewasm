@@ -48,8 +48,8 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
 /// per-file `python3` startup and the pure-Python numeric runtime), so — like
 /// Bash (ADR-3 pre-accepts this) — the gate runs a curated list covering every
 /// semantic area (integers, floats, control flow, memory/table, globals,
-/// linking, bulk ops) plus the whole ledger; `DEWASM_SPEC_ALL=1` sweeps
-/// everything (~2 min, verified green).
+/// linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored`
+/// sweeps everything.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
@@ -153,7 +153,7 @@ impl SpecBackend for PythonSpec {
         EXPECTED_FAILURES
     }
 
-    fn default_files(&self) -> Option<&'static [&'static str]> {
+    fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(CURATED_FILES)
     }
 
@@ -206,6 +206,7 @@ impl SpecBackend for PythonSpec {
     fn emit_instantiate(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         var_id: u32,
         registered: &[(String, String)],
@@ -224,6 +225,7 @@ impl SpecBackend for PythonSpec {
     fn instantiate_call(
         &self,
         script: &mut String,
+        _decls: &mut String,
         conv: &Converted,
         registered: &[(String, String)],
     ) -> String {
@@ -294,7 +296,12 @@ impl SpecBackend for PythonSpec {
         let _ = writeln!(script, "check_unlinkable({}, lambda: {call})", py_str(desc));
     }
 
-    fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String> {
+    fn assemble(
+        &self,
+        units: &BTreeSet<String>,
+        _decls: &str,
+        body: &str,
+    ) -> anyhow::Result<String> {
         // The runtime units use `math`/`struct`; the harness uses `sys` and
         // `threading` (PREAMBLE) — shared_runtime emits only `class Rt`.
         let mut script = String::from("import math\nimport struct\nimport sys\n\n");

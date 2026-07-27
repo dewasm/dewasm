@@ -21,6 +21,7 @@ use std::path::Path;
 use dewasm_backend::SupportStatus;
 use dewasm_core::feature::{Feature, UnsupportedError};
 use dewasm_core::ir;
+use libtest_mimic::{Failed, Trial};
 use wast::parser::{self, ParseBuffer};
 use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
 
@@ -34,9 +35,12 @@ use crate::backend::BackendUnderTest;
 pub trait SpecBackend: BackendUnderTest {
     /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
-    /// Curated default file list for slow interpreters; None runs every file.
-    /// `DEWASM_SPEC_ALL=1` overrides the curation.
-    fn default_files(&self) -> Option<&'static [&'static str]>;
+    /// The non-ignored set: files run by a plain `cargo test`. Every other
+    /// `.wast` file still becomes a trial, but marked `#[ignore]`d, so
+    /// `cargo test -- --ignored` / `--include-ignored` sweeps the whole
+    /// testsuite. `None` marks nothing ignored — the whole testsuite runs by
+    /// default (used by the fast interpreters).
+    fn curated_files(&self) -> Option<&'static [&'static str]>;
     /// Units the harness helpers themselves use.
     fn seed_units(&self) -> &'static [&'static str];
     /// Lower an IR module to source. Backend-level refusals (e.g. floats on an
@@ -52,19 +56,26 @@ pub trait SpecBackend: BackendUnderTest {
     /// Emit the module source plus its instantiation; returns the variable (or
     /// prefix) later invocations use to reach the instance. `registered` is
     /// the (name, instance-expr) pairs of currently `register`ed modules with
-    /// a live instance, for languages that support them.
+    /// a live instance, for languages that support them. `decls` is the
+    /// file-scoped declaration buffer: languages that must hoist a converted
+    /// module's definitions to package/class scope (Go, Java) push
+    /// `conv.source` there rather than into `script`. It is owned by the
+    /// per-file harness state, so parallel trials never share it.
     fn emit_instantiate(
         &self,
         script: &mut String,
+        decls: &mut String,
         conv: &Converted,
         var_id: u32,
         registered: &[(String, String)],
     ) -> String;
     /// Emit the module source only, returning the call that performs the
-    /// (possibly trapping) instantiation, for assert_trap on a module.
+    /// (possibly trapping) instantiation, for assert_trap on a module. See
+    /// [`Self::emit_instantiate`] for `decls`.
     fn instantiate_call(
         &self,
         script: &mut String,
+        decls: &mut String,
         conv: &Converted,
         registered: &[(String, String)],
     ) -> String;
@@ -99,8 +110,11 @@ pub trait SpecBackend: BackendUnderTest {
         unreachable!("only called when supports_registered_imports() is true")
     }
     /// Wrap the accumulated body into a runnable script: shared runtime for
-    /// `units`, harness helpers, body, result-line footer.
-    fn assemble(&self, units: &BTreeSet<String>, body: &str) -> anyhow::Result<String>;
+    /// `units`, harness helpers, hoisted `decls` (see
+    /// [`Self::emit_instantiate`]), body, result-line footer. Backends that
+    /// inline module definitions into `script` receive an empty `decls`.
+    fn assemble(&self, units: &BTreeSet<String>, decls: &str, body: &str)
+        -> anyhow::Result<String>;
 }
 
 /// A converted module: its source text, the language-specific handle used to
@@ -112,17 +126,27 @@ pub struct Converted {
     pub units: BTreeSet<String>,
 }
 
-/// Run the shared spec harness for `lang` (the `spec_suite!` macro's entry
-/// point). Env vars `DEWASM_SPEC` (restrict to named `.wast` stems) and
-/// `DEWASM_SPEC_ALL` (override the curated file list) apply as before.
-pub fn run_spec_suite(lang: &dyn SpecBackend) {
-    let spec_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec");
+/// The tests/spec submodule directory (upstream testsuite).
+fn spec_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")
+}
+
+/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for
+/// `lang` (the `spec_suite!` macro's entry point). File selection is now
+/// cargo's own: the trial name is the file stem, so `cargo test --test spec
+/// i32` runs the `i32`-named file(s) via the built-in name filter. Files
+/// outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d
+/// trials, so a plain `cargo test` runs the curated set and `--include-ignored`
+/// (or `--ignored`) sweeps the whole testsuite. Trials run on libtest-mimic's
+/// thread pool; each owns its per-file state, so the sweep parallelizes.
+pub fn spec_trials(lang: &'static dyn SpecBackend) -> Vec<Trial> {
+    let dir = spec_dir();
     assert!(
-        spec_dir.exists(),
+        dir.exists(),
         "tests/spec not found — run `git submodule update --init` (see docs/testing.md)"
     );
 
-    let mut names: Vec<String> = std::fs::read_dir(&spec_dir)
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
         .expect("read tests/spec")
         .filter_map(|e| {
             let path = e.ok()?.path();
@@ -134,73 +158,63 @@ pub fn run_spec_suite(lang: &dyn SpecBackend) {
         })
         .collect();
     names.sort();
-    if let Some(curated) = lang.default_files() {
-        if std::env::var("DEWASM_SPEC_ALL").is_err() {
-            let wanted: BTreeSet<&str> = curated.iter().copied().collect();
-            names.retain(|n| wanted.contains(n.as_str()));
-        }
-    }
-    if let Ok(list) = std::env::var("DEWASM_SPEC") {
-        let wanted: BTreeSet<&str> = list.split(',').map(|s| s.trim()).collect();
-        names.retain(|n| wanted.contains(n.as_str()));
-    }
 
-    let mut failures = Vec::new();
-    let mut total = Stats::default();
-    for name in &names {
-        let path = spec_dir.join(format!("{name}.wast"));
-        match run_file(lang, name, &path) {
-            Ok(stats) => {
-                if stats.pass + stats.fail > 0 || !stats.unsupported.is_empty() {
-                    println!(
-                        "{name}: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
-                        stats.pass,
-                        stats.fail,
-                        stats.skipped(),
-                        stats.rust_pass,
-                        stats.rust_fail
-                    );
-                }
-                for err in &stats.hard_errors {
-                    failures.push(format!("{name}: {err}"));
-                }
-                let expected = lang
-                    .expected_failures()
-                    .iter()
-                    .find(|(n, _, _)| n == name)
-                    .map(|(_, count, _)| *count)
-                    .unwrap_or(0);
-                if stats.fail != expected {
-                    failures.push(format!(
-                        "{name}: {} assertion failures (expected {expected})",
-                        stats.fail
-                    ));
-                }
-                total.merge(stats);
-            }
-            Err(err) => failures.push(format!("{name}: {err:#}")),
-        }
-    }
+    let curated: Option<BTreeSet<&'static str>> =
+        lang.curated_files().map(|c| c.iter().copied().collect());
 
-    println!(
-        "\nTOTAL: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})",
-        total.pass,
-        total.fail,
-        total.skipped(),
-        total.rust_pass,
-        total.rust_fail
-    );
-    let mut by_count: Vec<(&String, &u32)> = total.unsupported.iter().collect();
-    by_count.sort_by_key(|(tag, count)| (std::cmp::Reverse(**count), tag.as_str()));
-    println!("unsupported (declared, ADR-8):");
-    for (tag, count) in by_count {
-        println!("  {tag}: {count}");
+    names
+        .into_iter()
+        .map(|name| {
+            // Nothing curated => nothing ignored (the whole suite is the
+            // default); otherwise files outside the curated set are ignored.
+            let ignored = curated
+                .as_ref()
+                .is_some_and(|set| !set.contains(name.as_str()));
+            let path = dir.join(format!("{name}.wast"));
+            Trial::test(name.clone(), move || run_trial(lang, &name, &path))
+                .with_ignored_flag(ignored)
+        })
+        .collect()
+}
+
+/// harness=false entry point: parse cargo's test arguments (name filter,
+/// `--ignored`/`--include-ignored`, thread count, ...) and run the trials.
+pub fn spec_main(lang: &'static dyn SpecBackend) {
+    let args = libtest_mimic::Arguments::from_args();
+    libtest_mimic::run(&args, spec_trials(lang)).exit();
+}
+
+/// Run one `.wast` file and apply the per-file gates that the old aggregate
+/// suite applied globally: (a) the assertion-failure count must equal the
+/// backend's `EXPECTED_FAILURES` ledger entry (0 if absent); (b) an
+/// unattributed conversion failure is a dewasm bug; (c) a skip attributed to a
+/// feature the backend declares `Supported` is a declaration regression.
+/// Checks (a)/(c) are per-file here, equivalent to the old global check because
+/// the global sets are the union of the per-file sets. A passing trial stays
+/// quiet; failures carry the per-file summary and detail.
+fn run_trial(lang: &dyn SpecBackend, name: &str, path: &Path) -> Result<(), Failed> {
+    let stats = run_file(lang, name, path).map_err(|err| format!("{name}: {err:#}"))?;
+
+    let mut failures: Vec<String> = stats.hard_errors.clone();
+
+    let expected = lang
+        .expected_failures()
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, count, _)| *count)
+        .unwrap_or(0);
+    if stats.fail != expected {
+        failures.push(format!(
+            "{} assertion failures (expected {expected})",
+            stats.fail
+        ));
+        failures.extend(stats.fail_lines.iter().cloned());
     }
 
     // A skip is only legitimate while its feature is declared unsupported;
     // once the backend flips a feature to Supported, remaining skips are
     // regressions of the declaration.
-    for (tag, count) in &total.unsupported {
+    for (tag, count) in &stats.unsupported {
         let ids: Vec<&str> = tag.split('+').collect();
         let all_supported = ids.iter().all(|id| {
             Feature::from_id(id)
@@ -214,11 +228,19 @@ pub fn run_spec_suite(lang: &dyn SpecBackend) {
         }
     }
 
-    assert!(
-        failures.is_empty(),
-        "spec failures:\n{}",
-        failures.join("\n")
-    );
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Failed::from(format!(
+            "{name}: pass={} fail={} skip={} (rust: invalid-ok={} invalid-bad={})\n{}",
+            stats.pass,
+            stats.fail,
+            stats.skipped(),
+            stats.rust_pass,
+            stats.rust_fail,
+            failures.join("\n"),
+        )))
+    }
 }
 
 #[derive(Default)]
@@ -233,28 +255,24 @@ struct Stats {
     /// assert_invalid / assert_malformed handled on the Rust side
     rust_pass: u32,
     rust_fail: u32,
+    /// `FAIL...` lines from the generated script's stdout, surfaced in the
+    /// trial's failure message (only when the file's count breaks the ledger).
+    fail_lines: Vec<String>,
 }
 
 impl Stats {
     fn skipped(&self) -> u32 {
         self.unsupported.values().sum()
     }
-
-    fn merge(&mut self, other: Stats) {
-        self.pass += other.pass;
-        self.fail += other.fail;
-        self.rust_pass += other.rust_pass;
-        self.rust_fail += other.rust_fail;
-        for (tag, count) in other.unsupported {
-            *self.unsupported.entry(tag).or_default() += count;
-        }
-        self.hard_errors.extend(other.hard_errors);
-    }
 }
 
 struct ScriptGen<'a> {
     lang: &'a dyn SpecBackend,
     script: String,
+    /// File-scoped declaration buffer hoisted ahead of `script` by `assemble`
+    /// (see [`SpecBackend::emit_instantiate`]). Owned per file, so parallel
+    /// trials never share it.
+    decls: String,
     source: &'a str,
     file: &'a str,
     /// Variable/prefix holding the most recent instance, or the attribution
@@ -356,8 +374,13 @@ impl<'a> ScriptGen<'a> {
         };
         let result = self.convert_quote_wat(qw, desc).map(|conv| {
             let registered = self.registered_pairs();
-            self.lang
-                .emit_instantiate(&mut self.script, &conv, self.counter, &registered)
+            self.lang.emit_instantiate(
+                &mut self.script,
+                &mut self.decls,
+                &conv,
+                self.counter,
+                &registered,
+            )
         });
         if let Some(id) = id {
             self.named.insert(id, result.clone());
@@ -457,6 +480,7 @@ fn run_directives(
     let mut gen = ScriptGen {
         lang,
         script: String::new(),
+        decls: String::new(),
         source,
         file: name,
         current: Err("linking".to_string()),
@@ -495,7 +519,12 @@ fn run_directives(
                         gen.convert_quote_wat(QuoteWat::Wat(wat), &desc)
                             .map(|conv| {
                                 let registered = gen.registered_pairs();
-                                lang.instantiate_call(&mut gen.script, &conv, &registered)
+                                lang.instantiate_call(
+                                    &mut gen.script,
+                                    &mut gen.decls,
+                                    &conv,
+                                    &registered,
+                                )
                             })
                     }
                     _ => Err("linking".to_string()),
@@ -543,7 +572,12 @@ fn run_directives(
                     match gen.convert_quote_wat(QuoteWat::Wat(module), &desc) {
                         Ok(conv) => {
                             let registered = gen.registered_pairs();
-                            let call = lang.instantiate_call(&mut gen.script, &conv, &registered);
+                            let call = lang.instantiate_call(
+                                &mut gen.script,
+                                &mut gen.decls,
+                                &conv,
+                                &registered,
+                            );
                             // Upstream wording never matches ours; only the
                             // Rt::LinkError class is checked.
                             let _ = message;
@@ -579,7 +613,7 @@ fn run_directives(
     // One shared runtime bundle for the whole file, kept minimal so that
     // undeclared unit dependencies surface as missing-method errors.
     let script = lang
-        .assemble(&gen.units, &gen.script)
+        .assemble(&gen.units, &gen.decls, &gen.script)
         .map_err(|e| anyhow::anyhow!("assembling script: {e:#}"))?;
 
     let output = lang.run(&script, &[], "");
@@ -595,7 +629,7 @@ fn run_directives(
             stats.fail += parts.next().unwrap_or("0").parse().unwrap_or(0);
             found = true;
         } else if line.starts_with("FAIL") {
-            eprintln!("{line}");
+            stats.fail_lines.push(line.to_string());
         }
     }
     if !found {

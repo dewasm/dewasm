@@ -47,20 +47,23 @@ pub use qjs_repl::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
     qjs_repl_golden_path, run_qjs_repl_pty, QJS_REPL_SESSION,
 };
-pub use spec::{run_spec_suite, Converted, SpecBackend};
+pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
     run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiKind,
     WASI_CASES,
 };
 
-/// One `#[test]` running the shared spec harness for `$lang` (a
-/// [`SpecBackend`]).
+/// The `harness = false` `main` of a backend's spec integration test: builds
+/// one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and
+/// runs them with cargo's own test arguments (name filter,
+/// `--ignored`/`--include-ignored`, thread count). `$lang` must be a
+/// promotable-to-`'static` value — the backend `Spec` structs are unit structs,
+/// so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
 #[macro_export]
 macro_rules! spec_suite {
     ($lang:expr) => {
-        #[test]
-        fn spec() {
-            $crate::run_spec_suite(&$lang);
+        fn main() {
+            $crate::spec_main(&$lang);
         }
     };
 }

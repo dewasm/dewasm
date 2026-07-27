@@ -25,3 +25,9 @@ regex.workspace = true
 wast.workspace = true
 wat.workspace = true
 dewasm-test-helper.workspace = true
+
+# The spec integration test is a libtest-mimic harness: one trial per
+# `.wast` file, so `harness = false` and its `main` comes from `spec_suite!`.
+[[test]]
+name = "spec"
+harness = false

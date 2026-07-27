@@ -220,3 +220,25 @@ cases ordinary `#[ignore]`d tests: `cargo test` skips them visibly, one
 `cargo test -- --include-ignored` runs everything across the whole workspace,
 and `--features heavy_test` runs them for a single crate — no bespoke env var
 to remember or keep in sync with the trait method it used to call.
+
+## Revision (2026-07-27): the spec harness is per-file libtest-mimic trials
+
+`spec_suite!` no longer expands to one monolithic `#[test] fn spec()`; each
+backend's `tests/spec.rs` is now a [libtest-mimic](https://crates.io/crates/libtest-mimic)
+harness (`harness = false`, `main` supplied by the macro) that enumerates one
+trial per upstream `.wast` file (the file stem is the trial name). The bespoke
+selection env vars `DEWASM_SPEC` (file filter) and `DEWASM_SPEC_ALL` (full
+sweep) are retired in favor of cargo's own test UX: name filtering is cargo's
+built-in filter (`cargo test --test spec i32`), and the curated-vs-full split is
+the ignore mechanism — files outside `SpecBackend::curated_files` (renamed from
+`default_files`; `None` still means "run everything") become `#[ignore]`d
+trials, so a plain `cargo test` runs the curated set and `-- --include-ignored`
+sweeps the whole testsuite. Trials run in parallel on libtest-mimic's thread
+pool, so per-file state moved off the shared backend object into the harness's
+own per-file buffers (the Go/Java package/class `decls` accumulator was a
+`Mutex<String>` on the `Spec` struct; it is now a plain per-trial `String`
+threaded through `emit_instantiate`/`instantiate_call`/`assemble`). The per-file
+`EXPECTED_FAILURES` ledger checks (ADR-8) and skip-attribution gates run inside
+each trial — equivalent to the old global checks because the global sets are the
+union of the per-file sets. The old aggregate `TOTAL: pass=… fail=…` line is
+gone; per-file trial results supersede it.

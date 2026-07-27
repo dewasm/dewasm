@@ -25,11 +25,11 @@ instruction instead of skipping.
 
 | Command | What it does |
 | --- | --- |
-| `cargo test` | **The gate**: unit + e2e + full spec harness (~5 s for the harness). Each backend crate owns its own conformance suites (ADR-27); only cross-backend tests live in `dewasm-cli`. |
+| `cargo test` | **The gate**: unit + e2e + curated spec harness. The spec harness is a libtest-mimic test (one trial per `.wast` file); each backend crate owns its own conformance suites (ADR-27), only cross-backend tests live in `dewasm-cli`. |
 | `cargo fmt --check` | Verify Rust code formatting. |
 | `cargo clippy --all-targets -- -D warnings` | Run linter on all targets, failing on any warnings. |
-| `DEWASM_SPEC=i32,br cargo test -p dewasm-backend-ruby --test spec -- --nocapture` | Spec harness on selected `.wast` files only; prints per-file pass/fail/skip. Swap the crate (`-p dewasm-backend-bash`) to switch language. |
-| `DEWASM_SPEC_ALL=1 cargo test -p dewasm-backend-bash --test spec -- --nocapture` | Full-testsuite sweep for bash (~60 s); `cargo test` alone runs bash on a curated file list. |
+| `cargo test -p dewasm-backend-ruby --test spec i32` | Spec harness on `.wast` files whose name matches (cargo's built-in test-name filter — substring, add `--exact` for one file). Swap the crate (`-p dewasm-backend-bash`) to switch language. |
+| `cargo test -p dewasm-backend-bash --test spec -- --include-ignored` | Full-testsuite sweep for bash (curated files are the default; the rest are `#[ignore]`d trials); trials run in parallel. Use `-- --ignored` to run only the non-curated files. |
 | `cargo run -p dewasm-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `examples/apps/fetch.sh` | Fetch/build the pinned real-world apps (cowsay, QuickJS, the three sqlite3 shapes, minigzip, ripgrep, CPython, CRuby) into the gitignored cache; needs a few build tools on PATH (`zig`, the `wasm32-wasip1` rustup target — see docs/testing.md). Enables the `apps` cases of the `e2e` test. |
 

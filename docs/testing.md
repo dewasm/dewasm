@@ -24,8 +24,8 @@ message below is something this document explains how to fix.
   comparing Ruby's output). No specific version is required.
 - **`python3` >= 3.9 on `PATH` (or `$DEWASM_PYTHON`)**: needed by the
   Python backend's spec/e2e tests. Like Bash, the Python spec harness runs
-  a curated `.wast` subset by default (the full sweep is ~2 min); pass
-  `DEWASM_SPEC_ALL=1` to run every file.
+  a curated `.wast` subset by default; add `-- --include-ignored` to run
+  every file.
 - **`bash` >= 5 on `PATH`, `$DEWASM_BASH`, or a common Homebrew
   install path**: needed by the Bash backend's spec/e2e/softfloat tests.
   macOS's system `/bin/bash` is 3.2 and does not qualify (no associative
@@ -37,7 +37,7 @@ message below is something this document explains how to fix.
   (to a content-addressed cache binary) and run the binary; a units test also
   `go build`s the whole runtime bundle. The spec harness compiles one program
   per `.wast` file, so it defaults to a curated list (like bash/python);
-  `DEWASM_SPEC_ALL=1` sweeps every file. Any recent Go (generics, i.e. >= 1.18)
+  `-- --include-ignored` sweeps every file. Any recent Go (generics, i.e. >= 1.18)
   qualifies.
 - **`java` and `javac` on `PATH` (or `$DEWASM_JAVA`/`$DEWASM_JAVAC`)**: needed by
   the Java backend's spec, e2e, and units tests. Java is compiled, so those tests
@@ -45,7 +45,7 @@ message below is something this document explains how to fix.
   run `java -cp <dir> Main`; a units test also `javac`s the whole runtime bundle.
   JDK 11+ qualifies (the backend uses only standard APIs). The spec harness
   compiles one `Main.java` per `.wast` file, so it defaults to a curated list
-  (like bash/python/go); `DEWASM_SPEC_ALL=1` sweeps every file (~40 s).
+  (like bash/python/go); `-- --include-ignored` sweeps every file.
 
 Nothing else is required for `cargo test` to pass in full, **except** for
 the `apps` cases specifically — see below.
@@ -215,8 +215,33 @@ macros for the suites it participates in.
 | --- | --- |
 | `DEWASM_BASH` | Path to a bash >= 5 interpreter, checked before `PATH`/Homebrew fallbacks. |
 | `DEWASM_PYTHON` | Path to a python3 >= 3.9 interpreter, checked before `python3`/`python` on `PATH`. |
-| `DEWASM_SPEC=i32,br` | Restrict the spec harness to specific `.wast` files (comma-separated stems). |
-| `DEWASM_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash and python both default to a curated subset for speed). |
+
+## The spec harness (libtest-mimic)
+
+Each backend's spec integration test (`crates/dewasm-backend-<lang>/tests/spec.rs`)
+is a [libtest-mimic](https://crates.io/crates/libtest-mimic) harness
+(`harness = false`): every upstream `.wast` file becomes one named trial (the
+file stem is the trial name), enumerated at runtime from the `tests/spec`
+submodule. This replaces the former `DEWASM_SPEC`/`DEWASM_SPEC_ALL` environment
+variables with cargo's own test UX:
+
+- **Select files by name** with cargo's built-in filter:
+  `cargo test -p dewasm-backend-ruby --test spec i32` runs every trial whose
+  name contains `i32` (add `-- --exact i32` for that one file).
+- **Curated vs. full sweep** is the ignore mechanism: files outside a backend's
+  curated list are `#[ignore]`d trials, so a plain `cargo test` runs the curated
+  set (Ruby is fast enough to curate nothing — it runs all files), and
+  `-- --include-ignored` (or `-- --ignored` for only the non-curated ones)
+  sweeps the whole testsuite.
+- **Trials run in parallel** on libtest-mimic's thread pool; each trial owns its
+  per-file state, so the sweeps parallelize across cores (control the thread
+  count with `-- --test-threads=N`).
+
+A passing trial is quiet; a failing one carries that file's `pass/fail/skip`
+summary plus the failing assertion lines. The former aggregate cross-backend
+`TOTAL: pass=… fail=…` line is gone — the per-file trial results supersede it.
+Per-file failure counts are still gated against each backend's
+`EXPECTED_FAILURES` ledger (ADR-8) inside the trial.
 
 The heavy app cases (QuickJS, SQLite, the filesystem apps, the C-API cases,
 the interactive-REPL pty case) are gated by the `heavy_test` cargo feature
