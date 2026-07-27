@@ -84,7 +84,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 /// `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path
 /// search is needed (ruby is expected on `PATH`), but the generated
 /// runtime's memory model is `IO::Buffer`-backed (see
-/// docs/adr/DRAFT-ruby-io-buffer.md), which requires Ruby >= 3.4. Per
+/// docs/adr/33-ruby-io-buffer-memory.md), which requires Ruby >= 3.4. Per
 /// ADR-15, fail loud with a setup instruction rather than silently
 /// skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {

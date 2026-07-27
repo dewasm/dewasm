@@ -1,10 +1,10 @@
-# ADR-DRAFT: Build-time expression folding
+# ADR-32 — Build-time Expression Folding
 
-**Status:** Draft. Proposes that the func builder fold single-use stack values
-into their consumers at IR-build time, always on and identical for every
-backend, replacing the previous one-temp-per-instruction scheme. Landed in
-`crates/dewasm-core/src/func.rs` behind no flag; the `Expr` tree and every
-backend's `expr()` recursion are unchanged. (Number assigned at merge.)
+Status: **Accepted, 2026-07-28.** The func builder folds single-use stack
+values into their consumers at IR-build time, always on and identical for
+every backend, replacing the previous one-temp-per-instruction scheme. Landed
+in `crates/dewasm-core/src/func.rs` behind no flag; the `Expr` tree and every
+backend's `expr()` recursion are unchanged.
 
 ## Context
 

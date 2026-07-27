@@ -1,6 +1,6 @@
-# ADR-DRAFT — `IO::Buffer`-Backed Linear Memory for Ruby
+# ADR-33 — `IO::Buffer`-Backed Linear Memory for Ruby
 
-Status: **Draft.** Number assigned at merge. Implemented:
+Status: **Accepted, 2026-07-28.** Implemented:
 `runtime/ruby/units/memory/*.rb`, `crates/dewasm-backend-ruby/src/lib.rs` (`find_ruby`),
 `docs/testing.md`, `AGENTS.md`.
 
