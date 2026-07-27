@@ -81,16 +81,25 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 }
 
 /// Locate a ruby interpreter able to run generated scripts. Unlike
-/// `dewasm_backend_bash::find_bash5`, there is no version floor or
-/// alternate-path search to do: ruby has no documented minimum version
-/// here, so this only confirms `ruby` on PATH actually runs.
+/// `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path
+/// search is needed (ruby is expected on `PATH`), but the generated
+/// runtime's memory model is `IO::Buffer`-backed (see
+/// docs/adr/DRAFT-ruby-io-buffer.md), which requires Ruby >= 3.4. Per
+/// ADR-15, fail loud with a setup instruction rather than silently
+/// skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
-    std::process::Command::new("ruby")
-        .arg("--version")
+    let out = std::process::Command::new("ruby")
+        .args(["-e", "print RUBY_VERSION"])
         .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|_| std::path::PathBuf::from("ruby"))
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let version = String::from_utf8_lossy(&out.stdout);
+    let mut parts = version.trim().split('.');
+    let major: u32 = parts.next()?.parse().ok()?;
+    let minor: u32 = parts.next()?.parse().ok()?;
+    ((major, minor) >= (3, 4)).then(|| std::path::PathBuf::from("ruby"))
 }
 
 /// Generate one class for `module`. Returns the class source and the set

@@ -4,5 +4,5 @@ def init(dst, data, src, len)
   Rt.trap("out of bounds memory access") if src + len > data.bytesize
   check(dst, len)
   return if len == 0
-  @bytes[dst, len] = data.byteslice(src, len)
+  @buffer.set_string(data, dst, len, src)
 end

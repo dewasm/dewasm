@@ -1,3 +1,3 @@
 def size
-  @bytes.bytesize / PAGE_SIZE
+  @size / PAGE_SIZE
 end

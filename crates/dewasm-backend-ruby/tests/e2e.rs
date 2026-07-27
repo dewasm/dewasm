@@ -95,10 +95,10 @@ const RUBY_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
   mem = holder[:inst].memory
-  ptr = mem.bytes.unpack1("L<", offset: iovs)
-  len = mem.bytes.unpack1("L<", offset: iovs + 4)
-  captured << mem.bytes.byteslice(ptr, len)
-  mem.bytes[out_ptr, 4] = [len].pack("L<")
+  ptr = mem.buffer.get_value(:u32, iovs)
+  len = mem.buffer.get_value(:u32, iovs + 4)
+  captured << mem.buffer.get_string(ptr, len)
+  mem.buffer.set_value(:u32, out_ptr, len)
   0
 end
 inst = Prog.new({ "wasi_snapshot_preview1" => { "fd_write" => fd_write } })
@@ -121,10 +121,10 @@ class MyWasi
   end
   def attach(instance) = @memory = instance.memory
   def fd_write(_fd, iovs, _iovs_len, out_ptr)
-    ptr = @memory.bytes.unpack1("L<", offset: iovs)
-    len = @memory.bytes.unpack1("L<", offset: iovs + 4)
-    (@out ||= +"") << @memory.bytes.byteslice(ptr, len)
-    @memory.bytes[out_ptr, 4] = [len].pack("L<")
+    ptr = @memory.buffer.get_value(:u32, iovs)
+    len = @memory.buffer.get_value(:u32, iovs + 4)
+    (@out ||= +"") << @memory.buffer.get_string(ptr, len)
+    @memory.buffer.set_value(:u32, out_ptr, len)
     0
   end
 end
@@ -143,10 +143,10 @@ const RUBY_PARTIAL_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
   mem = holder[:inst].memory
-  ptr = mem.bytes.unpack1("L<", offset: iovs)
-  len = mem.bytes.unpack1("L<", offset: iovs + 4)
-  captured << mem.bytes.byteslice(ptr, len)
-  mem.bytes[out_ptr, 4] = [len].pack("L<")
+  ptr = mem.buffer.get_value(:u32, iovs)
+  len = mem.buffer.get_value(:u32, iovs + 4)
+  captured << mem.buffer.get_string(ptr, len)
+  mem.buffer.set_value(:u32, out_ptr, len)
   0
 end
 inst = Prog.new({ "wasi_snapshot_preview1" => { "fd_write" => fd_write } })
@@ -255,7 +255,8 @@ mem = db_mod.memory
 
 def read_cstr(mem, ptr)
   return nil if ptr.zero?
-  fin = mem.bytes.index("\0".b, ptr)
+  fin = ptr
+  fin += 1 while mem.buffer.get_value(:U8, fin) != 0
   mem.read_string(ptr, fin - ptr)
 end
 
@@ -304,7 +305,8 @@ mem = DB_MOD.memory
 
 def read_cstr(mem, ptr)
   return nil if ptr.zero?
-  fin = mem.bytes.index("\0".b, ptr)
+  fin = ptr
+  fin += 1 while mem.buffer.get_value(:U8, fin) != 0
   mem.read_string(ptr, fin - ptr)
 end
 
@@ -356,7 +358,8 @@ host_row = lambda do |argc, argv_ptr|
   row = (0...argc).map do |i|
     p = mem.i32_load(argv_ptr + i * 4)
     next nil if p.zero?
-    fin = mem.bytes.index("\0".b, p)
+    fin = p
+    fin += 1 while mem.buffer.get_value(:U8, fin) != 0
     mem.read_string(p, fin - p)
   end
   ROWS << row
@@ -369,7 +372,8 @@ MEM_HOLDER[:mem] = mem
 
 def read_cstr(mem, ptr)
   return nil if ptr.zero?
-  fin = mem.bytes.index("\0".b, ptr)
+  fin = ptr
+  fin += 1 while mem.buffer.get_value(:U8, fin) != 0
   mem.read_string(ptr, fin - ptr)
 end
 

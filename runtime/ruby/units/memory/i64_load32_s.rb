@@ -1,2 +1,2 @@
-# requires: memory/i64_load32_u, rt/sext
-def i64_load32_s(a) = Rt.sext(i64_load32_u(a), 32, M64)
+# requires: rt/trap
+def i64_load32_s(a) = (Rt.trap("out of bounds memory access") if a + 4 > @size; @buffer.get_value(:s32, a) & M64)

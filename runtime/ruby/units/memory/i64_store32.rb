@@ -1,1 +1,2 @@
-def i64_store32(a, v) = (check(a, 4); @bytes[a, 4] = [v & M32].pack("L<"))
+# requires: rt/trap
+def i64_store32(a, v) = (Rt.trap("out of bounds memory access") if a + 4 > @size; @buffer.set_value(:u32, a, v & M32))

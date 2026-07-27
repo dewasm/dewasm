@@ -1,2 +1,2 @@
-# requires: memory/i32_load8_u, rt/sext
-def i32_load8_s(a) = Rt.sext(i32_load8_u(a), 8, M32)
+# requires: rt/trap
+def i32_load8_s(a) = (Rt.trap("out of bounds memory access") if a + 1 > @size; @buffer.get_value(:S8, a) & M32)

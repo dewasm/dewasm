@@ -16,7 +16,7 @@ submodule — never edit it.
 ## Development environment
 
 Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` commands pick it up.
-Required tools/setup for the test suite (ruby, bash >= 5, the spec submodule, the `apps` cache)
+Required tools/setup for the test suite (ruby >= 3.4, bash >= 5, the spec submodule, the `apps` cache)
 and the fail-loud-not-skip policy behind it (ADR-15) are documented in
 [`docs/testing.md`](docs/testing.md) — read it before wondering why a test panics with a setup
 instruction instead of skipping.

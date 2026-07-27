@@ -19,9 +19,10 @@ message below is something this document explains how to fix.
   the spec harness (`cargo test -p dewasm-backend-ruby --test spec`, and
   likewise `-p dewasm-backend-bash` / `-p dewasm-backend-python`) fails
   immediately.
-- **`ruby` on `PATH`**: needed by the spec harness and most of the `e2e`
-  test (both the Ruby backend's own tests and, indirectly, anything
-  comparing Ruby's output). No specific version is required.
+- **`ruby` >= 3.4 on `PATH`**: needed by the spec harness and most of the
+  `e2e` test (both the Ruby backend's own tests and, indirectly, anything
+  comparing Ruby's output). The 3.4 floor is the generated runtime's
+  `IO::Buffer`-backed memory (see docs/adr/DRAFT-ruby-io-buffer.md).
 - **`python3` >= 3.9 on `PATH` (or `$DEWASM_PYTHON`)**: needed by the
   Python backend's spec/e2e tests. Like Bash, the Python spec harness runs
   a curated `.wast` subset by default; add `-- --include-ignored` to run
