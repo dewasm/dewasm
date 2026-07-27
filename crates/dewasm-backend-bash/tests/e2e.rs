@@ -5,7 +5,7 @@
 //! host-language object model (ADR-12), so it invokes only the two
 //! always-available library cases (glue is Bash function calls over the R0..
 //! result globals, ADR-11), the whole-program WASI kinds it covers, and the
-//! flat-namespace multi-module case (ADR-33).
+//! flat-namespace multi-module case (ADR-35).
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ impl BackendUnderTest for Bash {
         find_bash5().expect("bash >= 5 not found — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules for the multi-module cases (ADR-33).
+    /// Compose several `.wat` modules for the multi-module cases (ADR-35).
     /// Bash has no namespacing at all — every generated module is already a
     /// bare, prefix-scoped family of global functions/arrays sharing one flat
     /// process, so there is no separate "shared runtime" linkage to build:
@@ -49,7 +49,7 @@ impl BackendUnderTest for Bash {
             shared_runtime,
             "bash multi-module: shared_runtime=false is excluded — bash has one \
              flat global namespace, so two independent runtimes cannot coexist \
-             without their rt_*/mem_* names colliding (ADR-11/ADR-33)"
+             without their rt_*/mem_* names colliding (ADR-11/ADR-35)"
         );
         let mut units = BTreeSet::new();
         let mut decls = Vec::new();
@@ -114,7 +114,7 @@ prog_invoke '_start'
 /// name, so `compose_modules` prefixes it from the case's "TableExp" label
 /// (`func_prefix`); `shared_table_b.wat` imports it under the *wasm* module
 /// name `"a"` (unrelated to "TableExp"), so PROVIDERS maps that literal key
-/// to the exporter's generation prefix (ADR-33).
+/// to the exporter's generation prefix (ADR-35).
 const BASH_SHARED_TABLE_GLUE: &str = r#"tableexp_init || { echo "init failed" >&2; exit 1; }
 declare -A PROVIDERS=([a]=tableexp_)
 tableimp_init || { echo "init failed" >&2; exit 1; }

@@ -1,4 +1,4 @@
-# ADR-33 — Bash Cross-Module Linking
+# ADR-35 — Bash Cross-Module Linking
 
 Status: **Accepted, 2026-07-27.** Implemented in
 `crates/dewasm-backend-bash/src/lib.rs` (`Gen::init`) +

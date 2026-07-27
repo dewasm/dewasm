@@ -53,7 +53,7 @@ the consequences.
 | ADR-29 | [Go Backend Lowering Conventions](29-go-backend-lowering.md) | Accepted |
 | ADR-30 | [Java Backend Lowering Conventions](30-java-backend-lowering.md) | Accepted |
 | ADR-31 | [Standalone Runtime Interface (argv, --dir, env, exit)](31-standalone-runtime-interface.md) | Accepted |
-| ADR-33 | [Bash Cross-Module Linking](33-bash-cross-module-linking.md) | Accepted |
+| ADR-35 | [Bash Cross-Module Linking](35-bash-cross-module-linking.md) | Accepted |
 
 ## Adding a new ADR
 

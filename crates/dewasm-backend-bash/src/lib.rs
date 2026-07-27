@@ -21,7 +21,7 @@
 //!   `<p>invoke`, `<p>global_get`. Imported functions resolve from the
 //!   caller's `IMPORTS` array; other import kinds resolve through
 //!   `PROVIDERS` + per-kind export maps, with imported globals and imported
-//!   memory aliased in via `declare -gn` namerefs (ADR-33).
+//!   memory aliased in via `declare -gn` namerefs (ADR-35).
 //!
 //! Requires bash >= 5 (namerefs, associative arrays).
 
@@ -174,16 +174,16 @@ impl Backend for BashBackend {
             // structural type keys, so more than one table lowers directly.
             Feature::MultipleTables => SupportStatus::Supported,
             // Imported globals alias the provider's cell via a `declare -gn`
-            // nameref (ADR-33); mutable and immutable both work through it.
+            // nameref (ADR-35); mutable and immutable both work through it.
             Feature::ImportedGlobals => SupportStatus::Supported,
             // Imported memory aliases the provider's mem/pages/max_pages
             // triplet via `declare -gn` namerefs, keyed off the owning
-            // module's flattened prefix (ADR-33); every mem/WASI unit and
+            // module's flattened prefix (ADR-35); every mem/WASI unit and
             // the inline MemoryGrow/MemorySize lowering work unchanged.
             Feature::ImportedMemories => SupportStatus::Supported,
             // Imported tables alias the provider's array/type-key
             // array/size triplet via `declare -gn` namerefs, keyed off the
-            // target table's own base name (ADR-33); tab_init, call_indirect,
+            // target table's own base name (ADR-35); tab_init, call_indirect,
             // and active element segments into a shared table all work
             // unchanged through the nameref.
             Feature::ImportedTables => SupportStatus::Supported,
@@ -218,7 +218,7 @@ impl Backend for BashBackend {
         out.push_str(&format!(
             "# Requires bash >= 5. Source this file, then call {prefix}init and\n\
              # {prefix}invoke <export> [args...]; results are returned in R0, R1, ...\n\
-             # Cross-module linking (ADR-33): supply imported *functions* in the\n\
+             # Cross-module linking (ADR-35): supply imported *functions* in the\n\
              # IMPORTS associative array ([module.name]=command); supply any other\n\
              # import kind by pointing PROVIDERS[module] at a prefix <q> owning the\n\
              # per-kind export maps <q>EXPORTS / <q>GLOBAL_EXPORTS / <q>TABLE_EXPORTS\n\
@@ -379,7 +379,7 @@ impl<'a> Gen<'a> {
         let p = self.prefix;
         w.line(format!("{p}init() {{"));
         w.indent();
-        // Emission order mirrors the Ruby backend (ADR-33): import
+        // Emission order mirrors the Ruby backend (ADR-35): import
         // registries, memory, tables, WASI state, then imports resolved
         // kind by kind, then defined state, then export maps, then start.
         let num_imported_globals = m.imported_globals.len();
@@ -398,7 +398,7 @@ impl<'a> Gen<'a> {
             // as indexed with its keys evaluated as arithmetic.
             w.line("declare -gA IMPORTS PROVIDERS");
         }
-        // Imported memory (ADR-33): resolve the provider's memown prefix
+        // Imported memory (ADR-35): resolve the provider's memown prefix
         // and alias its mem/pages/max_pages triplet in via `declare -gn`
         // namerefs, so every mem/WASI/MemoryGrow/MemorySize unit keeps
         // working unchanged whether the memory is owned locally or by
@@ -426,7 +426,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
             w.line(format!("{p}memown={p}"));
         }
-        // Imported tables (ADR-33): resolve before the defined tables so
+        // Imported tables (ADR-35): resolve before the defined tables so
         // both share the unified index space. Unlike memory, a table's
         // derived state (`t<i>`/`t<i>ty`/`t<i>sz`) does share one base name,
         // so `rt_resolve_import`'s table kind resolves to the target's
@@ -496,7 +496,7 @@ impl<'a> Gen<'a> {
         // Imported globals: resolve the provider's cell and alias it in
         // under the unified index with a `declare -gn` nameref, so reads
         // (`(( x = <p>g<i> ))`), mutable writes (`(( <p>g<i> = v ))`), and
-        // init-expr `global.get` offsets all reach the shared cell (ADR-33).
+        // init-expr `global.get` offsets all reach the shared cell (ADR-35).
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.use_unit("rt/resolve_import");
             self.use_unit("rt/link_err");
@@ -616,7 +616,7 @@ impl<'a> Gen<'a> {
         for export in &m.exports {
             if let ExportKind::Global(idx) = export.kind {
                 // Flatten to the underlying cell's variable name so a
-                // consumer's nameref stays depth <=1 (ADR-33): an exported
+                // consumer's nameref stays depth <=1 (ADR-35): an exported
                 // imported global is itself a `<p>g<i>` nameref, so publish
                 // its target (`${!<p>g<i>}`); a defined global publishes its
                 // own literal variable name.
@@ -640,7 +640,7 @@ impl<'a> Gen<'a> {
                 // memory's derived state (`mem`/`pages`/`max_pages`) needs
                 // the prefix to rebuild all three suffixes on the importing
                 // side, so `rt_resolve_import`'s memory kind resolves to a
-                // prefix rather than one variable name (ADR-33).
+                // prefix rather than one variable name (ADR-35).
                 mentries.push(format!("[{}]=${p}memown", bash_str(&export.name)));
             }
         }
@@ -653,7 +653,7 @@ impl<'a> Gen<'a> {
         for export in &m.exports {
             if let ExportKind::Table(idx) = export.kind {
                 // Flatten to the underlying array's base name, exactly like
-                // a global export (ADR-33): an exported imported table is
+                // a global export (ADR-35): an exported imported table is
                 // itself a `<p>t<i>` nameref, so publish its target
                 // (`${!<p>t<i>}`); a defined table publishes its own literal
                 // base name.

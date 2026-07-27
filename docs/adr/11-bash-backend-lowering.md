@@ -7,7 +7,7 @@ the integer subset; WASI and standalone mode landed the same day under
 [ADR-13](13-bash-softfloat-conventions.md)) later removed the float
 conversion-time gate this ADR originally imposed. Cross-module linking
 conventions (imported globals, the PROVIDERS provider protocol, status-135
-link errors) are extended by [ADR-33](33-bash-cross-module-linking.md).
+link errors) are extended by [ADR-35](35-bash-cross-module-linking.md).
 Requires bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2
 and is out of scope.
 

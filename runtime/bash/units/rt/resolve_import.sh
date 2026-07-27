@@ -1,6 +1,6 @@
 # requires: rt/link_err
 # rt_resolve_import <mod> <name> <kind>; kind in func|global|table|memory.
-# The bash shape of the ADR-7 provider protocol (ADR-33). Resolution order:
+# The bash shape of the ADR-7 provider protocol (ADR-35). Resolution order:
 #   (1) for funcs only, an IMPORTS[mod.name] override wins (host wiring);
 #   (2) PROVIDERS[mod] names a prefix <q> that owns per-kind export maps —
 #       <q>EXPORTS (funcs), <q>GLOBAL_EXPORTS, <q>TABLE_EXPORTS,

@@ -19,7 +19,7 @@ use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures (ADR-33). Cross-module linking of
+/// Known assertion-level failures (ADR-35). Cross-module linking of
 /// function, global, memory, and now table imports (through PROVIDERS and
 /// the per-kind export maps) is fully wired; `assert_unlinkable` is checked
 /// for real. Two residual clusters, both pre-existing and out of this
@@ -202,7 +202,7 @@ impl SpecBackend for BashSpec {
     ) -> String {
         script.push_str(&conv.source);
         // Rebuild PROVIDERS from the *current* registered set before every
-        // instantiation (ADR-33): a plain reassignment fully replaces the
+        // instantiation (ADR-35): a plain reassignment fully replaces the
         // associative array on bash >= 5, so a module registered after a
         // failed one never leaves a stale provider entry behind.
         let _ = writeln!(script, "{}", providers_line(registered));
@@ -442,7 +442,7 @@ ckl() {
   return 0
 }
 
-# The $spectest host module as an ADR-33 provider: a `spectest_`-prefixed
+# The $spectest host module as an ADR-35 provider: a `spectest_`-prefixed
 # family of per-kind export maps that PROVIDERS[spectest] points at. IMPORTS
 # stays declared (empty) as the function-only host override channel.
 declare -A IMPORTS=()
