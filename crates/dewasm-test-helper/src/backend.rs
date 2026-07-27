@@ -10,6 +10,8 @@ use std::process::{Command, Output, Stdio};
 
 use dewasm_backend::{Backend, Mode};
 
+use crate::pty::PtyCommand;
+
 /// A target backend wired into the shared case tables and the spec harness.
 /// The spec layer ([`crate::SpecBackend`]) extends this with the
 /// script-phrasing surface; everything a backend needs to run app/e2e suites
@@ -60,6 +62,25 @@ pub trait BackendUnderTest: Sync {
     /// return a path to the cached binary instead.
     fn convert_app(&self, bytes: &[u8], mode: Mode, name: &str) -> String {
         crate::convert_on_big_stack(self.backend(), bytes, mode, name)
+    }
+
+    /// Prepare a *pty* run of standalone `source` with `args` (see
+    /// [`crate::run_under_pty`]). Returns the command to spawn on a pty. The
+    /// default — for interpreted backends — writes `source` to a temp script
+    /// and runs `interpreter <script> <args...>`, exactly mirroring
+    /// [`Self::run_bytes`]'s default but without capturing through pipes.
+    /// Compiled backends (Go, Java) override this to build `source` first and
+    /// return the resulting run command. A missing toolchain fails loud
+    /// (ADR-15).
+    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+        let script = write_temp_script(source, self.backend().file_extension());
+        let mut argv = vec![script.to_string_lossy().into_owned()];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        PtyCommand {
+            program: self.interpreter(),
+            args: argv,
+            cwd: None,
+        }
     }
 
     /// Whether the `apps` suite should run its `heavy` cases (QuickJS,
@@ -148,6 +169,14 @@ pub fn run_script_bytes(
     args: &[&str],
     stdin: &[u8],
 ) -> Output {
+    let path = write_temp_script(script, ext);
+    run_command_bytes(Command::new(interpreter).arg(&path).args(args), stdin)
+}
+
+/// Write `script` to a fresh temp file with extension `ext` and return its
+/// path. The pid + counter pair keeps paths unique across both parallel test
+/// threads and concurrent `cargo test` processes.
+pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
         "dewasm-test-{}-{}.{ext}",
@@ -155,5 +184,5 @@ pub fn run_script_bytes(
         COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::write(&path, script).unwrap();
-    run_command_bytes(Command::new(interpreter).arg(&path).args(args), stdin)
+    path
 }

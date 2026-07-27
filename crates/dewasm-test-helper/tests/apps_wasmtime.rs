@@ -26,8 +26,9 @@ use std::process::{Command, Output};
 use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
-    apps_cache_dir, run_app_cases, run_command_bytes, run_fs_app_cases_forced, run_gzip_cases,
-    BackendUnderTest,
+    apps_cache_dir, assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
+    qjs_repl_golden_path, run_app_cases, run_command_bytes, run_fs_app_cases_forced,
+    run_gzip_cases, BackendUnderTest, PtyCommand,
 };
 
 /// A [`Backend`] that only exists to satisfy `BackendUnderTest::backend()`.
@@ -128,6 +129,26 @@ impl BackendUnderTest for Wasmtime {
         cmd.arg(program).args(&args[1..]);
         run_command_bytes(&mut cmd, stdin)
     }
+
+    /// Drive the cached wasm binary directly under a pty: `source` is the wasm
+    /// path (from `convert_app`), so the command is `wasmtime run <path>
+    /// <args...>` — the ground-truth interactive session the backends must
+    /// match. wasmtime injects argv0, so a bare no-args call is the interactive
+    /// REPL invocation.
+    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+        assert!(
+            Command::new("wasmtime").arg("--version").output().is_ok(),
+            "wasmtime not found on PATH — required when running with --features wasmtime_test \
+             (see docs/testing.md)"
+        );
+        let mut argv = vec!["run".to_string(), source.to_string()];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        PtyCommand {
+            program: "wasmtime".into(),
+            args: argv,
+            cwd: None,
+        }
+    }
 }
 
 // Hand-written `#[test]` fns rather than `apps_e2e!`/`gzip_e2e!`: those macros
@@ -156,4 +177,36 @@ fn gzip() {
 #[test]
 fn fs_apps() {
     run_fs_app_cases_forced(&Wasmtime);
+}
+
+// Golden freshness for the interactive-REPL transcript (Fix 4): re-capture the
+// bare qjs REPL under a real pty from a live wasmtime and require it to equal
+// the checked-in `qjs_repl_interactive.transcript`. Set `DEWASM_UPDATE_GOLDEN=1`
+// to (re)generate the golden instead of comparing — the one sanctioned way to
+// refresh it when the pinned qjs binary or the scripted session changes.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn qjs_repl_interactive_golden() {
+    if std::env::var("DEWASM_UPDATE_GOLDEN").is_ok() {
+        let bytes = capture_qjs_repl_golden(&Wasmtime);
+        println!(
+            "wrote qjs interactive REPL golden ({} bytes) to {:?}",
+            bytes.len(),
+            qjs_repl_golden_path()
+        );
+        return;
+    }
+    let golden = std::fs::read(qjs_repl_golden_path()).unwrap_or_else(|e| {
+        panic!(
+            "qjs repl golden {:?} not readable ({e}) — regenerate with \
+             DEWASM_UPDATE_GOLDEN=1 (see docs/testing.md)",
+            qjs_repl_golden_path()
+        )
+    });
+    let got = capture_qjs_repl_transcript(&Wasmtime);
+    assert_transcript_eq(&got, &golden, "wasmtime");
+    println!(
+        "qjs interactive REPL under wasmtime: matches the golden ({} bytes)",
+        got.len()
+    );
 }

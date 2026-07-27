@@ -72,8 +72,21 @@ gated behind `DEWASM_APPS_ALL` in each crate:
   now implemented (ADR-14 revision; Ruby/Python/Go/Java, Bash deferred),
   and over a pipe the converted REPL now blocks on stdin, reads input, and
   evaluates it (the line editor still echoes ANSI escapes over a pipe, as
-  it does under wasmtime). Byte-exact interactive verification against a
-  real terminal lands with the pty test.
+  it does under wasmtime). The interactive REPL is now verified
+  **byte-identical to wasmtime under a real pty** on all four
+  poll_oneoff backends (Ruby, Python, Go, Java): the `qjs_repl_pty` case
+  (`qjs_repl_pty_e2e!`, gated on `DEWASM_APPS_ALL`) converts bare qjs to a
+  standalone program, drives the scripted session
+  `1+2⏎[3,1,2].sort()⏎Math.max(4,9)⏎\q⏎` under an 80x24 pty
+  (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`), and compares the
+  transcript — ANSI escapes and all — to
+  `examples/apps/golden/qjs_repl_interactive.transcript` (2089 bytes, captured
+  from wasmtime and re-checked by the `wasmtime_test`-gated
+  `qjs_repl_interactive_golden` freshness test). Getting Ruby and Python
+  green required one fix: their `fd_read` used a buffered read that blocks
+  until the full requested length or EOF, which deadlocks a line-buffered tty
+  that never sends EOF — stdin now uses a short read (`IO#readpartial` /
+  `os.read`), the WASI semantics wasmtime already follows.
 
 ⁴ **sqlite3 deepened (Phase 5a).** The pinned source now yields **three**
 artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are

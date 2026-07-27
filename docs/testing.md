@@ -147,13 +147,24 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   with `cargo test -p dewasm-backend-<lang> --test spec`.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's standalone
   / library / WASI / apps suites, declared by invoking `standalone_e2e!`,
-  `library_e2e!`, `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, and (for the
-  fs-capable backends) `fs_apps_e2e!` over the shared tables in
+  `library_e2e!`, `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`,
+  and (for the fs-capable backends) `fs_apps_e2e!` over the shared tables in
   `dewasm-test-helper`. Library glue, the per-backend WASI-filesystem
   instantiation glue, and the fs-app `app_glue` impl live here; a case a
   backend is wired to run but has no glue for fails loudly (ADR-15). Ruby's
   file also holds the Ruby-only scenarios (provider objects, embedded
   coexistence, the sqlite3 C API drive, WASI-model internals).
+- **The interactive-REPL pty case (`qjs_repl_pty`).** `qjs_repl_pty_e2e!`
+  drives the *bare* QuickJS REPL (no script arg → interactive line editor)
+  under a real pty (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`) and
+  requires its transcript — ANSI escapes and all — to be byte-identical to the
+  one wasmtime produces. A pty is required because qjs only enters that path
+  when `fd_fdstat_get` on stdin reports a character device; a pipe does not.
+  The scripted session is *prompt-driven*: each line is sent only after the
+  `qjs > ` prompt reappears, so the transcript is stable regardless of how long
+  a backend takes to start (Ruby parses a ~200 MB source first). Gated behind
+  `DEWASM_APPS_ALL` (perf opt-out, ADR-15); the golden lives at
+  `examples/apps/golden/qjs_repl_interactive.transcript`.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and
   the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units`
   unit tests at the bottom of each backend's `src/lib.rs`, run with
@@ -163,8 +174,11 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   `docs/support.md` golden gate over all backends).
 - **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`** — wasmtime as a
   `BackendUnderTest`: the `apps`/`gzip`/`fs_apps` golden-freshness checks run
-  through the shared runners (behind the `wasmtime_test` feature, named for a
-  future engine such as wasmer/wasmedge joining it).
+  through the shared runners, plus `qjs_repl_interactive_golden`, which
+  re-captures the bare qjs REPL under a pty from a live wasmtime and compares it
+  to the checked-in transcript (set `DEWASM_UPDATE_GOLDEN=1` to regenerate it).
+  All behind the `wasmtime_test` feature, named for a future engine such as
+  wasmer/wasmedge joining it.
 
 Onboarding a new backend to the e2e suites is: implement `BackendUnderTest`
 (and `SpecBackend` for the spec harness) in the new crate, then invoke the

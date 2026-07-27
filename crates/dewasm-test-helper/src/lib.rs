@@ -10,6 +10,8 @@ mod apps_fs;
 mod backend;
 mod fixtures;
 mod library;
+mod pty;
+mod qjs_repl;
 mod spec;
 mod standalone;
 mod wasi;
@@ -18,12 +20,20 @@ pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
 pub use apps_fs::{
     run_fs_app_cases, run_fs_app_cases_forced, FsAppCase, FsRun, Stage, FS_APP_CASES,
 };
-pub use backend::{run_command, run_command_bytes, run_script, run_script_bytes, BackendUnderTest};
+pub use backend::{
+    run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
+    BackendUnderTest,
+};
 pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
 };
 pub use library::{run_library_case, GlueResolver, LibraryCase, LIBRARY_CASES};
+pub use pty::{run_under_pty, PtyCommand};
+pub use qjs_repl::{
+    assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
+    qjs_repl_golden_path, run_qjs_repl_pty, QJS_REPL_SESSION,
+};
 pub use spec::{run_spec_suite, Converted, SpecBackend};
 pub use standalone::{run_standalone_case, StandaloneCase, STANDALONE_CASES};
 pub use wasi::{
@@ -129,6 +139,19 @@ macro_rules! gzip_e2e {
         #[test]
         fn gzip() {
             $crate::run_gzip_cases(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for
+/// `$lang` and comparing the transcript byte-for-byte to the wasmtime golden
+/// (Fix 4). Gated behind `DEWASM_APPS_ALL` inside `run_qjs_repl_pty`.
+#[macro_export]
+macro_rules! qjs_repl_pty_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn qjs_repl_pty() {
+            $crate::run_qjs_repl_pty(&$lang);
         }
     };
 }

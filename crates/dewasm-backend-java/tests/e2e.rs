@@ -17,19 +17,62 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
-    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, run_command_bytes, standalone_e2e, wasi_suite,
-    BackendUnderTest, LibraryCase, WasiCase,
+    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, qjs_repl_pty_e2e, run_command_bytes,
+    standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase, PtyCommand, WasiCase,
 };
 
 pub struct Java;
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Compile `source` (a single `Main.java`) to a content-addressed class-dir
+/// cache (so identical sources compile once) and return its path. `Err(Output)`
+/// carries the `javac` failure so a piped run can report it via
+/// `status.success()` while a pty run panics on it. A missing `javac` is a loud
+/// failure (ADR-15).
+fn build_java(source: &str) -> Result<PathBuf, Output> {
+    let javac =
+        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
+
+    let mut hasher = DefaultHasher::new();
+    source.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    let cache = std::env::temp_dir().join("dewasm-java-cache");
+    std::fs::create_dir_all(&cache).unwrap();
+    let classdir = cache.join(format!("prog-{hash:016x}"));
+
+    if !classdir.join("Main.class").exists() {
+        // Compile into a unique temp dir, then rename onto the cache key so
+        // concurrent test threads never hand out a half-written class dir.
+        let tmp = cache.join(format!(
+            "prog-{hash:016x}.{}.{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let src = tmp.join("Main.java");
+        std::fs::write(&src, source).unwrap();
+        let build = Command::new(&javac)
+            .arg("-d")
+            .arg(&tmp)
+            .arg(&src)
+            .output()
+            .expect("spawn javac");
+        if !build.status.success() {
+            return Err(build);
+        }
+        let _ = std::fs::rename(&tmp, &classdir);
+    }
+
+    Ok(classdir)
+}
 
 impl BackendUnderTest for Java {
     fn name(&self) -> &'static str {
@@ -45,50 +88,46 @@ impl BackendUnderTest for Java {
     /// failure (ADR-15); a compile failure is surfaced as the `javac` `Output`
     /// so the caller's `status.success()` assertion reports it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        let javac =
-            find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
-
-        let mut hasher = DefaultHasher::new();
-        source.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let cache = std::env::temp_dir().join("dewasm-java-cache");
-        std::fs::create_dir_all(&cache).unwrap();
-        let classdir = cache.join(format!("prog-{hash:016x}"));
-
-        if !classdir.join("Main.class").exists() {
-            // Compile into a unique temp dir, then rename onto the cache key so
-            // concurrent test threads never hand out a half-written class dir.
-            let tmp = cache.join(format!(
-                "prog-{hash:016x}.{}.{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            std::fs::create_dir_all(&tmp).unwrap();
-            let src = tmp.join("Main.java");
-            std::fs::write(&src, source).unwrap();
-            let build = Command::new(&javac)
-                .arg("-d")
-                .arg(&tmp)
-                .arg(&src)
-                .output()
-                .expect("spawn javac");
-            if !build.status.success() {
-                return build;
-            }
-            let _ = std::fs::rename(&tmp, &classdir);
+        match build_java(source) {
+            // A compile failure is surfaced as the `javac` `Output` so the
+            // caller's `status.success()` assertion reports it.
+            Err(build) => build,
+            Ok(classdir) => run_command_bytes(
+                Command::new(&java)
+                    .arg("-cp")
+                    .arg(&classdir)
+                    .arg("Main")
+                    .args(args),
+                stdin,
+            ),
         }
+    }
 
-        run_command_bytes(
-            Command::new(&java)
-                .arg("-cp")
-                .arg(&classdir)
-                .arg("Main")
-                .args(args),
-            stdin,
-        )
+    /// Compile `source` and run `java -cp <classdir> Main <args...>` under a
+    /// pty. A compile failure fails loud (ADR-15): there is no `status` for the
+    /// caller to inspect on the pty path, so panic with the `javac` output.
+    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+        let java =
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+        let classdir = build_java(source).unwrap_or_else(|build| {
+            panic!(
+                "javac failed for the pty run:\n{}",
+                String::from_utf8_lossy(&build.stderr)
+            )
+        });
+        let mut argv = vec![
+            "-cp".to_string(),
+            classdir.to_string_lossy().into_owned(),
+            "Main".to_string(),
+        ];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        PtyCommand {
+            program: java,
+            args: argv,
+            cwd: None,
+        }
     }
 
     /// QuickJS and SQLite now run to completion under Java's full WASI surface
@@ -237,3 +276,4 @@ wasi_suite!(Java, Fs, java_fs_glue);
 apps_e2e!(Java);
 gzip_e2e!(Java);
 fs_apps_e2e!(Java);
+qjs_repl_pty_e2e!(Java);

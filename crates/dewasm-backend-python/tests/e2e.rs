@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use dewasm_backend::Backend;
 use dewasm_backend_python::{find_python, PythonBackend};
 use dewasm_test_helper::{
-    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, standalone_e2e, wasi_suite, BackendUnderTest,
-    LibraryCase, WasiCase,
+    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, qjs_repl_pty_e2e, standalone_e2e, wasi_suite,
+    BackendUnderTest, LibraryCase, WasiCase,
 };
 
 pub struct Python;
@@ -136,3 +136,4 @@ wasi_suite!(Python, Fs, python_fs_glue);
 apps_e2e!(Python);
 gzip_e2e!(Python);
 fs_apps_e2e!(Python);
+qjs_repl_pty_e2e!(Python);

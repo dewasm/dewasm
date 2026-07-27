@@ -17,14 +17,14 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
-    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, run_command_bytes, standalone_e2e, wasi_suite,
-    BackendUnderTest, LibraryCase, WasiCase,
+    apps_e2e, fs_apps_e2e, gzip_e2e, library_e2e, qjs_repl_pty_e2e, run_command_bytes,
+    standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase, PtyCommand, WasiCase,
 };
 
 pub struct Go;
@@ -43,41 +43,29 @@ impl BackendUnderTest for Go {
     /// (ADR-15); a build failure is surfaced as the build command's `Output`
     /// so the caller's `status.success()` assertion reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        let go = find_go()
-            .expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
-
-        let mut hasher = DefaultHasher::new();
-        source.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let cache = std::env::temp_dir().join("dewasm-go-cache");
-        std::fs::create_dir_all(&cache).unwrap();
-        let bin = cache.join(format!("prog-{hash:016x}"));
-
-        if !bin.exists() {
-            let src = cache.join(format!("src-{hash:016x}.go"));
-            std::fs::write(&src, source).unwrap();
-            // Build to a unique path, then rename onto the cache key so
-            // concurrent test threads never hand out a half-written binary.
-            let tmp_bin = cache.join(format!(
-                "prog-{hash:016x}.{}.{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            let build = Command::new(&go)
-                .arg("build")
-                .arg("-o")
-                .arg(&tmp_bin)
-                .arg(&src)
-                .output()
-                .expect("spawn go build");
-            if !build.status.success() {
-                return build;
-            }
-            let _ = std::fs::rename(&tmp_bin, &bin);
+        match build_go(source) {
+            // A build failure is surfaced as the build `Output` so the caller's
+            // `status.success()` assertion reports the compile error.
+            Err(build) => build,
+            Ok(bin) => run_command_bytes(Command::new(&bin).args(args), stdin),
         }
+    }
 
-        run_command_bytes(Command::new(&bin).args(args), stdin)
+    /// Build `source` to the cache binary and run it under a pty. A build
+    /// failure fails loud (ADR-15): there is no `status` for the caller to
+    /// inspect on the pty path, so panic with the compiler output.
+    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+        let bin = build_go(source).unwrap_or_else(|build| {
+            panic!(
+                "go build failed for the pty run:\n{}",
+                String::from_utf8_lossy(&build.stderr)
+            )
+        });
+        PtyCommand {
+            program: bin,
+            args: args.iter().map(|a| a.to_string()).collect(),
+            cwd: None,
+        }
     }
 
     /// QuickJS and SQLite now run to completion under Go's full WASI surface
@@ -144,6 +132,48 @@ impl BackendUnderTest for Go {
 }
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Compile `source` to a content-addressed cache binary (so identical sources
+/// build once) and return its path. `Err(Output)` carries the `go build`
+/// failure so a piped run can report it via `status.success()` while a pty run
+/// panics on it. A missing `go` toolchain is a loud failure (ADR-15).
+fn build_go(source: &str) -> Result<PathBuf, Output> {
+    let go =
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+
+    let mut hasher = DefaultHasher::new();
+    source.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    let cache = std::env::temp_dir().join("dewasm-go-cache");
+    std::fs::create_dir_all(&cache).unwrap();
+    let bin = cache.join(format!("prog-{hash:016x}"));
+
+    if !bin.exists() {
+        let src = cache.join(format!("src-{hash:016x}.go"));
+        std::fs::write(&src, source).unwrap();
+        // Build to a unique path, then rename onto the cache key so concurrent
+        // test threads never hand out a half-written binary.
+        let tmp_bin = cache.join(format!(
+            "prog-{hash:016x}.{}.{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let build = Command::new(&go)
+            .arg("build")
+            .arg("-o")
+            .arg(&tmp_bin)
+            .arg(&src)
+            .output()
+            .expect("spawn go build");
+        if !build.status.success() {
+            return Err(build);
+        }
+        let _ = std::fs::rename(&tmp_bin, &bin);
+    }
+
+    Ok(bin)
+}
 
 /// Per-case Go glue (a `func main` appended after the generated declarations;
 /// it carries no `import` — the generated file already imports `fmt`). A case
@@ -218,3 +248,4 @@ wasi_suite!(Go, Fs, go_fs_glue);
 apps_e2e!(Go);
 gzip_e2e!(Go);
 fs_apps_e2e!(Go);
+qjs_repl_pty_e2e!(Go);

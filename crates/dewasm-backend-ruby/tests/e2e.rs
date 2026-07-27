@@ -20,8 +20,8 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
     apps_cache_dir, apps_e2e, convert, convert_on_big_stack, examples_dir, fresh_scratch_dir,
-    fs_apps_e2e, gzip_e2e, library_e2e, run_script, standalone_e2e, wasi_suite, BackendUnderTest,
-    LibraryCase, WasiCase,
+    fs_apps_e2e, gzip_e2e, library_e2e, qjs_repl_pty_e2e, run_script, standalone_e2e, wasi_suite,
+    BackendUnderTest, LibraryCase, WasiCase,
 };
 
 pub struct Ruby;
@@ -108,6 +108,7 @@ wasi_suite!(Ruby, Fs, ruby_fs_glue);
 apps_e2e!(Ruby);
 gzip_e2e!(Ruby);
 fs_apps_e2e!(Ruby);
+qjs_repl_pty_e2e!(Ruby);
 
 // ---------------------------------------------------------------------
 // Ruby-only scenarios.
