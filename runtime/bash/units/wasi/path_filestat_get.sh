@@ -2,8 +2,13 @@
 # WASI path_filestat_get (ADR-32): lookupflags bit 0 = SYMLINK_FOLLOW, passed
 # straight through to wasi_resolve_path's <follow> so a not-followed final
 # symlink is stat'd as itself (filetype 7), mirroring
-# runtime/ruby/units/wasi/path_filestat_get.rb's stat/lstat split. Filetype
-# comes from the test builtins (wasi_filetype). Size is only meaningful for a
+# runtime/ruby/units/wasi/path_filestat_get.rb's stat/lstat split. A missing
+# target is ENOENT (44) — checked with `-e || -h` (so a dangling symlink, not
+# followed, still counts as present) *before* `wasi_filetype`, since that
+# helper always succeeds and reports "unknown" both for a genuinely missing
+# path and for a present-but-unrecognized one (a FIFO); Ruby gets this for
+# free from `File.stat`/`lstat` raising `ENOENT`. Filetype otherwise comes
+# from the test builtins (wasi_filetype). Size is only meaningful for a
 # regular file: for that case, an open file fd on the *same* resolved host
 # path wins over the on-disk size (last one found, matching D1's own
 # last-flush-wins rule for two fds on one file) so a write-then-stat on the
@@ -20,6 +25,10 @@ wasi_path_filestat_get() {
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" "$(( __flags & 1 ))" || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
+  if [[ ! -e $__host && ! -h $__host ]]; then
+    R0=44 # ENOENT
+    return 0
+  fi
   wasi_filetype "$__host" || return $?
   local __ft=$R1
   local __size=0

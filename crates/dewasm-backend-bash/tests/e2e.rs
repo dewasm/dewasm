@@ -11,7 +11,8 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, sqlite3_shell_e2e,
+    cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, qjs_file_io_e2e,
+    qjs_repl_e2e, qjs_repl_pty_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e,
     standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
     BackendUnderTest,
 };
@@ -105,6 +106,38 @@ fi
 "#;
 
 // ---------------------------------------------------------------------
+// Filesystem app glue (ADR-32): class/argv/env/preopen-guest-paths are
+// literals (`WASI_ARGS`/`WASI_ENV`/`WASI_DIRS`, the Bash analogue of Ruby's
+// `args:`/`env:`/`preopens:` kwargs); only the host scratch dir comes through
+// `{scratch}`. `invoke`'s status-133 cascade is discarded (`exit 0`), the
+// same way the Ruby glue's empty `rescue ...::Rt::Exit` swallows it — these
+// cases assert stdout/host state, never the guest's own exit code.
+
+const BASH_QJS_FILE_IO_GLUE: &str = r#"WASI_ARGS=(qjs /work/qjs_file_io.js)
+WASI_ENV=()
+WASI_DIRS=('{scratch}::/work')
+qjs_init || { echo "init failed" >&2; exit 1; }
+qjs_invoke '_start'
+exit 0
+"#;
+
+const BASH_QJS_REPL_GLUE: &str = r#"WASI_ARGS=(qjs /work/qjs_repl.js)
+WASI_ENV=()
+WASI_DIRS=('{scratch}::/work')
+qjs_init || { echo "init failed" >&2; exit 1; }
+qjs_invoke '_start'
+exit 0
+"#;
+
+const BASH_SQLITE3_SHELL_DBFILE_GLUE: &str = r#"WASI_ARGS=(sqlite3)
+WASI_ENV=()
+WASI_DIRS=('{scratch}::/db')
+sqlite3shell_init || { echo "init failed" >&2; exit 1; }
+sqlite3shell_invoke '_start'
+exit 0
+"#;
+
+// ---------------------------------------------------------------------
 // Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Bash, BASH_ADD_GLUE);
@@ -132,6 +165,37 @@ sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
 // unlike the heavy floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);
-// No fs_apps / capi / multi-module macros: Bash has no WASI filesystem and no
-// host-language object model to plumb a C API or nested runtimes through
+
+// Filesystem app cases (ADR-32): Bash's WASI filesystem now covers preopens,
+// path_open, and positioned I/O, so the three small-fixture fs apps are
+// wired (all heavy, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
+qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Bash, BASH_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
+// qjs_repl_pty is not a filesystem case (no preopens) but is wired here
+// alongside them: it shares their standalone-mode QuickJS conversion and is
+// gated the same way. It is markedly slower than the other heavy cases —
+// every keystroke of the scripted session re-enters QuickJS's interactive
+// line editor (redraw/completion), and each successive evaluation measured
+// slower than the last (first prompt ~135s, then +~65s, then +~330s for
+// `[3,1,2].sort()`) — so it will exceed the shared 180s per-prompt
+// `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) under
+// `--features heavy_test`/`--include-ignored`. Left wired rather than
+// unwired per ADR-15 (fail loud, not silently skip): a timeout is still an
+// honest signal, and the case is excluded from `cargo test`'s default run.
+qjs_repl_pty_e2e!(Bash);
+// rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these
+// wasm binaries are tens of MB; the Bash backend's per-instruction lowering
+// (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's
+// own parser can load in practice (ADR-13's softfloat perf figures already
+// put a single arithmetic op at bash-interpreter speed, and these apps are
+// orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not
+// just runtime speed, is the blocker.
+// custom_wasi_provider_e2e! / partial_override_e2e! / stdio_capture_e2e!: not
+// invoked — Bash has no host-language object model to replace WASI wholesale,
+// probe its lazy construction, or redirect stdio into an in-memory object
 // (ADR-12).
+// libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e!
+// / shared_table_e2e! / embedded_coexist: not invoked — no C API host binding
+// and a flat, single-namespace-per-script linkage model (ADR-11), so nested
+// runtimes/instances and cross-module tables have nowhere to attach (ADR-12).

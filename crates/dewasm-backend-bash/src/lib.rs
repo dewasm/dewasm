@@ -204,6 +204,17 @@ impl Backend for BashBackend {
             w.line("");
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
+            // Each wasm call nests one native bash function call (ADR-11), and
+            // a deeply recursive guest (e.g. QuickJS's interactive REPL, whose
+            // startup alone reaches tens of thousands of frames) can exhaust the
+            // *process's* C stack — not the bounded, trappable wasm one
+            // (FUNCNEST) — and crash with a real SIGSEGV rather than a caught
+            // wasm trap. Raise the soft rlimit to the max this process is
+            // allowed before running any guest code; both attempts degrade
+            // silently (`|| true`) since a sandboxed environment may refuse
+            // both, in which case behavior is unchanged from before this line
+            // existed.
+            w.line("ulimit -s unlimited 2>/dev/null || ulimit -s \"$(ulimit -Hs)\" 2>/dev/null || true");
             if wasi_bundled(module, opts.default_wasi) {
                 // Standalone runtime interface (ADR-31): consume a leading run of
                 // `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style),
