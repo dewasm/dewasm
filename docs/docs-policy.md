@@ -17,10 +17,9 @@ nothing is duplicated. All docs are written in English.
 ## Rules
 
 - **`docs/support.md` is generated** from the backend declarations. Never edit
-  it by hand; regenerate with
-  `DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs` (the test
-  fails while the file is stale). Everywhere else, **link** to it rather than
-  copying the matrix.
+  it by hand; regenerate with `cargo xtask update-support-docs`
+  (`cargo test -p dewasm-cli --test support_docs` fails while the file is
+  stale). Everywhere else, **link** to it rather than copying the matrix.
 - **Decisions go in an ADR, not in prose docs.** Anything with real
   alternatives is recorded under `docs/adr/` (the `adr-author` skill carries
   the procedure). Other docs *link* to the ADR for the "why"; they do not

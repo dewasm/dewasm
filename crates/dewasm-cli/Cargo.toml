@@ -9,6 +9,10 @@ authors.workspace = true
 [lints]
 workspace = true
 
+[lib]
+name = "dewasm_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "dewasm"
 path = "src/main.rs"

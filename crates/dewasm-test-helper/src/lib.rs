@@ -17,6 +17,7 @@ mod pty;
 mod qjs_repl;
 mod spec;
 mod wasi;
+mod wasmtime_backend;
 
 pub use apps::{
     run_app_case, run_gzip_cases, run_heavy_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
@@ -52,6 +53,7 @@ pub use wasi::{
     run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiKind,
     WASI_CASES,
 };
+pub use wasmtime_backend::Wasmtime;
 
 /// The `harness = false` `main` of a backend's spec integration test: builds
 /// one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and

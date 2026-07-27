@@ -242,3 +242,13 @@ threaded through `emit_instantiate`/`instantiate_call`/`assemble`). The per-file
 each trial — equivalent to the old global checks because the global sets are the
 union of the per-file sets. The old aggregate `TOTAL: pass=… fail=…` line is
 gone; per-file trial results supersede it.
+
+## Revision (2026-07-27): golden regeneration moves to explicit `xtask` commands
+
+The `support_docs` and `apps_wasmtime` tests' `DEWASM_UPDATE_DOCS`/
+`DEWASM_UPDATE_GOLDEN` env-var regeneration branches are removed; both tests
+are now compare-only, and regeneration is `cargo xtask update-support-docs`
+and `cargo xtask update-repl-golden` respectively (new `crates/xtask` member,
+aliased in `.cargo/config.toml`), with the rendering/capture logic shared via
+a small `dewasm-cli` library crate and `dewasm-test-helper`'s already-public
+capture functions.

@@ -201,13 +201,30 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   `BackendUnderTest`: the `apps`/`gzip`/`fs_apps` golden-freshness checks run
   through the shared runners, plus `qjs_repl_interactive_golden`, which
   re-captures the bare qjs REPL under a pty from a live wasmtime and compares it
-  to the checked-in transcript (set `DEWASM_UPDATE_GOLDEN=1` to regenerate it).
-  All behind the `wasmtime_test` feature, named for a future engine such as
-  wasmer/wasmedge joining it.
+  to the checked-in transcript (compare-only; regenerate with
+  `cargo xtask update-repl-golden`). All behind the `wasmtime_test` feature,
+  named for a future engine such as wasmer/wasmedge joining it.
 
 Onboarding a new backend to the e2e suites is: implement `BackendUnderTest`
 (and `SpecBackend` for the spec harness) in the new crate, then invoke the
 macros for the suites it participates in.
+
+## Regenerating golden files
+
+Two golden files are code-derived rather than hand-written, and each has a
+compare-only test that fails with the exact command to regenerate it — no
+env-var modes:
+
+| Golden | Regenerate with | Compare-only test |
+| --- | --- | --- |
+| `docs/support.md` | `cargo xtask update-support-docs` | `cargo test -p dewasm-cli --test support_docs` |
+| `examples/apps/golden/qjs_repl_interactive.transcript` | `cargo xtask update-repl-golden` | `cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime` |
+
+`update-repl-golden` needs `wasmtime` on `PATH` and the qjs app cached
+(`examples/apps/fetch.sh`) — the same requirements as the freshness test it
+feeds. `cargo xtask` is aliased in `.cargo/config.toml` to
+`cargo run -p xtask --`; run `cargo xtask` with no arguments (or `--help`) for
+the command list.
 
 ## Useful environment variables
 

@@ -43,8 +43,8 @@ included, with one command: `cargo test -- --include-ignored`. Spec-harness fail
 semantics bug: fix the cause. Adding to a per-backend `EXPECTED_FAILURES` ledger in
 `crates/dewasm-backend-<lang>/tests/spec.rs` is a last resort and requires an attribution tag plus a
 reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)). When support declarations or WASI
-units change, regenerate the matrix: `DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test
-support_docs` (the test fails while docs/support.md is stale).
+units change, regenerate the matrix: `cargo xtask update-support-docs` (`cargo test -p dewasm-cli
+--test support_docs` fails while docs/support.md is stale).
 
 ## Implementation guidelines
 
