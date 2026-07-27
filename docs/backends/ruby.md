@@ -9,6 +9,11 @@ A single `.rb` file: the generated module as a Ruby **class** named after the
 input file stem (override with `--module-name`), with the lightweight runtime
 bundled inside it under the relative name `Rt`. Nesting the runtime in the
 class lets several generated files coexist in one process without collision.
+The default name can still clash with a constant MRI already defines — most
+notably `ruby.wasm` defaults to `class Ruby`, which collides with Ruby 4.0's
+built-in `Ruby` module and fails at load time with "Ruby is not a class
+(TypeError)". That is working as designed (the stem is just a default); pass
+`--module-name` to pick a free constant.
 See [ADR-4](../adr/4-ruby-backend-lowering.md) for the lowering conventions and
 [ADR-6](../adr/6-runtime-units.md) for the runtime-unit model.
 
