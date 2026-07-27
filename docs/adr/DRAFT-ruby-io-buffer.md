@@ -90,6 +90,21 @@ loads/stores on Ruby 4.0.4, the version available in this environment.
 - Positive: eliminates 1 allocation per scalar load and 2 per scalar store (measured zero-alloc
   on Ruby 4.0.4's `IO::Buffer#get_value`/`#set_value`), the largest single contributor to the
   measured GC/sweep dominance in the ruby.wasm benchmark.
+- **Measured, with the depth-1 `br`/`next` (ADR-4) and global-unboxing (ADR-16) changes landed
+  alongside it** (same `crates/dewasm-backend-ruby/src/lib.rs` change series, so isolating this
+  change's wall-clock share alone wasn't practical — `stackprof`'s GC line attributes cleanly to
+  this one, the two below don't): converting `ruby.wasm` (35MB) to the standalone Ruby runtime and
+  running `ruby out.rb --dir <ruby-lib>::/usr -- -e 'puts "hello #{6*7}"'` on the same machine as
+  the original 63s baseline, averaged over two runs each: **before 67.2s wall / 63.1s user, after
+  53.6s wall / 51.5s user — ~1.26x wall-clock, ~18% reduction in absolute terms.** A fresh
+  `stackprof` capture on the *after* build shows GC collapsed from the baseline's 41% (39% sweep)
+  to **0.93%** (0.5% marking + 0.4% sweeping) of samples — the memory representation was in fact
+  the dominant GC driver, exactly as hypothesized. The wall-clock gain is smaller than the GC
+  collapse alone would suggest because `Kernel#catch`/`#throw` (still used for every `br` whose
+  target isn't the innermost frame — ADR-4's depth-1 optimization doesn't reach multi-level
+  branches) now accounts for ~18.6% of samples and dominates what's left, and raw Ruby method-call
+  dispatch (one method per wasm function, one line per wasm instruction) is the CPU-bound floor
+  under all of it. GC is no longer the bottleneck; control-flow dispatch is.
 - Positive: `copy`/`fill` gain native `memmove`/`memset`-equivalent implementations instead of
   Ruby-level string slicing and reassembly.
 - Negative: Ruby >= 3.4 is now a hard requirement to run *any* generated Ruby output, not just to
