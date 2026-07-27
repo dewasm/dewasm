@@ -15,7 +15,7 @@ every other `Feature` variant is rejected by the core for every backend ([ADR-24
 
 | Feature | ruby | bash | python | go | java |
 | --- | --- | --- | --- | --- | --- |
-| Imported globals (wasm 1.0) | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Imported globals (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Imported memories (wasm 1.0) | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Imported tables (wasm 1.0) | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Multiple tables | ✅ | ✅ | ✅ | ✅ | ✅ |
