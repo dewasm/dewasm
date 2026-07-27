@@ -53,6 +53,7 @@ the consequences.
 | ADR-29 | [Go Backend Lowering Conventions](29-go-backend-lowering.md) | Accepted |
 | ADR-30 | [Java Backend Lowering Conventions](30-java-backend-lowering.md) | Accepted |
 | ADR-31 | [Standalone Runtime Interface (argv, --dir, env, exit)](31-standalone-runtime-interface.md) | Accepted |
+| ADR-32 | [Bash WASI Filesystem](32-bash-wasi-filesystem.md) | Accepted (landing incrementally) |
 
 ## Adding a new ADR
 

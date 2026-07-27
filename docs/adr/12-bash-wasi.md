@@ -4,6 +4,8 @@ Status: **Accepted, 2026-07-23.** Implemented in `runtime/bash/units/wasi/`
 (the same 16-syscall surface as Ruby, plus the `write_string_list` helper)
 and the standalone emitter in `crates/dewasm-backend-bash/src/lib.rs`.
 Filesystem syscalls remain ENOSYS, as on Ruby.
+The filesystem scope excluded here is superseded by
+[ADR-32](32-bash-wasi-filesystem.md).
 
 ## Context
 
