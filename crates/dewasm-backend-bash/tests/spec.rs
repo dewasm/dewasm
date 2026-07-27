@@ -20,37 +20,37 @@ use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures (ADR-33). Cross-module linking of
-/// function, global, and now memory imports (through PROVIDERS and the
-/// per-kind export maps) is wired; `assert_unlinkable` is checked for real.
-/// Two residual clusters:
+/// function, global, memory, and now table imports (through PROVIDERS and
+/// the per-kind export maps) is fully wired; `assert_unlinkable` is checked
+/// for real. Two residual clusters, both pre-existing and out of this
+/// backend's scope to fix (matching the Ruby ledger, which has already
+/// covered every import kind for a while):
 ///
-/// - `import-limits` (`imports`/`imports2`/part of `linking`):
+/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4):
 ///   `rt_resolve_import` validates that a resolved import is the right
 ///   *kind* (func/global/table/memory) but not the finer-grained wasm type —
-///   a function's param/result signature, a global's mutability, or a
-///   memory's min/max limits. Every `assert_unlinkable` case testing one of
-///   those (not a kind mismatch, which is caught) links instead of failing.
-///   Same accepted gap as the Ruby ledger's `import-limits`; `imports`'s
-///   count is lower than Ruby's 28 because Bash still declares
-///   `ImportedTables` unsupported (step D), so this file's table-import
-///   cases are still skipped rather than reaching (and failing) the same
-///   gap.
-/// - `linking`: downstream of imported tables, still declared-unsupported
-///   (step D). A module that imports a shared table is skipped, so the
-///   active element segment it was to write into that shared store never
-///   runs; a later assertion against the *owning* module (which converts
-///   fine) then observes stale state or an uninitialized element. This is
-///   10 of `linking`'s 14 (the other 4 are its own import-limits cases, a
-///   func signature and a global mutability check). `elem`/`linking0`/
-///   `linking3`/`load1` are entirely this table cluster.
+///   a function's param/result signature, a global's mutability, a table's
+///   min/max limits, or a memory's min/max limits. Every `assert_unlinkable`
+///   case testing one of those (not a kind mismatch, which is caught) links
+///   instead of failing. Same accepted gap as the Ruby ledger's
+///   `import-limits`, and now the same count (28/2/4) since Bash supports
+///   every import kind Ruby does.
+/// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)`
+///   declaration or import is rejected outright by the core builder
+///   (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24) regardless of
+///   backend. Both files exercise this via a module with two memories (one
+///   often an import of another module's exported memory); that module
+///   fails to convert, so the data/assertions that depended on it running
+///   observe stale (zeroed) state in a memory another, unrelated module
+///   still owns. Not a linking gap — every import in play resolves fine —
+///   and not fixable without the multi-memory proposal, which ADR-24 rejects
+///   outright.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("elem", 5, "linking"),
-    ("imports", 22, "import-limits"),
+    ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
-    ("linking", 14, "import-limits+linking"),
-    ("linking0", 1, "linking"),
-    ("linking3", 2, "linking"),
-    ("load1", 5, "linking"),
+    ("linking", 4, "import-limits"),
+    ("linking0", 1, "multi-memory"),
+    ("load1", 5, "multi-memory"),
 ];
 
 /// Files `cargo test` runs by default: integer-only files the backend's

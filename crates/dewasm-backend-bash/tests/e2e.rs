@@ -1,18 +1,21 @@
 //! Bash end-to-end suites (ADR-27): the shared library / WASI / apps case
 //! consts (`dewasm-test-helper`) wired up for the Bash backend. Per the
 //! ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
-//! glue string constants, and per-case macro invocations. Bash has no WASI
-//! filesystem support and no host-language object model (ADR-12), so it invokes
-//! only the two always-available library cases (glue is Bash function calls over
-//! the R0.. result globals, ADR-11) and the whole-program WASI kinds it covers.
+//! glue string constants, and per-case macro invocations. Bash has no
+//! host-language object model (ADR-12), so it invokes only the two
+//! always-available library cases (glue is Bash function calls over the R0..
+//! result globals, ADR-11), the whole-program WASI kinds it covers, and the
+//! flat-namespace multi-module case (ADR-33).
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, sqlite3_shell_e2e,
-    standalone_dir_unsupported_e2e, wasi_import_override_e2e, wasi_suite, BackendUnderTest,
+    cowsay_args_e2e, cowsay_stdin_e2e, examples_dir, gzip_e2e, library_add_e2e, qjs_eval_e2e,
+    shared_table_e2e, sqlite3_shell_e2e, standalone_dir_unsupported_e2e, wasi_import_override_e2e,
+    wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -28,6 +31,42 @@ impl BackendUnderTest for Bash {
 
     fn interpreter(&self) -> PathBuf {
         find_bash5().expect("bash >= 5 not found — see docs/testing.md")
+    }
+
+    /// Compose several `.wat` modules for the multi-module cases (ADR-33).
+    /// Bash has no namespacing at all — every generated module is already a
+    /// bare, prefix-scoped family of global functions/arrays sharing one flat
+    /// process, so there is no separate "shared runtime" linkage to build:
+    /// generate each module (`generate_module_with_units`, prefixed by its
+    /// name via `func_prefix`), union the runtime units they reference, bundle
+    /// that union once, and concatenate the bundle with the module bodies.
+    /// `shared_runtime=false` (independent Embedded runtimes) is never
+    /// exercised for Bash: there is only ever one flat namespace, so two
+    /// independent runtimes cannot coexist without their `rt_*`/`mem_*`
+    /// function names colliding (`embedded_coexist_e2e!` is not invoked).
+    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+        assert!(
+            shared_runtime,
+            "bash multi-module: shared_runtime=false is excluded — bash has one \
+             flat global namespace, so two independent runtimes cannot coexist \
+             without their rt_*/mem_* names colliding (ADR-11/ADR-33)"
+        );
+        let mut units = BTreeSet::new();
+        let mut decls = Vec::new();
+        for (wat, name) in modules {
+            let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+            let module = dewasm_core::build_module(&bytes).expect("build IR");
+            let prefix = dewasm_backend_bash::func_prefix(name);
+            let (src, u) = dewasm_backend_bash::generate_module_with_units(&module, &prefix, false)
+                .expect("generate");
+            units.extend(u);
+            decls.push(src);
+        }
+        format!(
+            "{}\n{}",
+            dewasm_backend_bash::shared_runtime(&units).expect("bundle runtime"),
+            decls.join("\n")
+        )
     }
 }
 
@@ -71,6 +110,18 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
+/// `SHARED_TABLE`'s driver: `shared_table_a.wat`'s module has no wasm-level
+/// name, so `compose_modules` prefixes it from the case's "TableExp" label
+/// (`func_prefix`); `shared_table_b.wat` imports it under the *wasm* module
+/// name `"a"` (unrelated to "TableExp"), so PROVIDERS maps that literal key
+/// to the exporter's generation prefix (ADR-33).
+const BASH_SHARED_TABLE_GLUE: &str = r#"tableexp_init || { echo "init failed" >&2; exit 1; }
+declare -A PROVIDERS=([a]=tableexp_)
+tableimp_init || { echo "init failed" >&2; exit 1; }
+tableimp_invoke call0
+echo $R0
+"#;
+
 // ---------------------------------------------------------------------
 // Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
@@ -100,6 +151,13 @@ sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
 // unlike the heavy floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);
-// No fs_apps / capi / multi-module macros: Bash has no WASI filesystem and no
-// host-language object model to plumb a C API or nested runtimes through
-// (ADR-12).
+// No fs_apps / capi macros: Bash has no host-language C API to plumb a
+// callback binding through, and (on this branch) no WASI filesystem to back
+// an fs app (ADR-12; see ADR-14-equivalent work in progress on a sibling
+// branch).
+
+shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
+// embedded_coexist_e2e!: not invoked — Bash has one flat global namespace
+// (no nested runtime/class construct), so two independently-generated
+// runtimes cannot coexist in one process without their rt_*/mem_* function
+// names colliding (ADR-11).

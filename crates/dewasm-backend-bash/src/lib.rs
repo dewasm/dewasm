@@ -172,7 +172,7 @@ impl Backend for BashBackend {
             Feature::Floats => SupportStatus::Supported,
             // Defined tables now live in per-index array families keyed by
             // structural type keys, so more than one table lowers directly
-            // (imported tables and table bulk ops are still gated).
+            // (table bulk ops are still gated).
             Feature::MultipleTables => SupportStatus::Supported,
             // Imported globals alias the provider's cell via a `declare -gn`
             // nameref (ADR-33); mutable and immutable both work through it.
@@ -182,6 +182,12 @@ impl Backend for BashBackend {
             // module's flattened prefix (ADR-33); every mem/WASI unit and
             // the inline MemoryGrow/MemorySize lowering work unchanged.
             Feature::ImportedMemories => SupportStatus::Supported,
+            // Imported tables alias the provider's array/type-key
+            // array/size triplet via `declare -gn` namerefs, keyed off the
+            // target table's own base name (ADR-33); tab_init, call_indirect,
+            // and active element segments into a shared table all work
+            // unchanged through the nameref.
+            Feature::ImportedTables => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -262,7 +268,9 @@ impl Backend for BashBackend {
 }
 
 /// Sanitized state/function prefix for a module name: `add.wasm` -> `add_`.
-fn func_prefix(module_name: &str) -> String {
+/// Public so multi-module e2e cases (`compose_modules`) can derive each
+/// module's prefix the same way `generate` does.
+pub fn func_prefix(module_name: &str) -> String {
     let mut out = String::new();
     for c in module_name.chars() {
         if c.is_ascii_alphanumeric() {
@@ -413,11 +421,29 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
             w.line(format!("{p}memown={p}"));
         }
-        // Imported tables (ImportedTables, step D) resolve here, before the
-        // defined tables so both share the unified index space — slot left
-        // empty until then.
+        // Imported tables (ADR-33): resolve before the defined tables so
+        // both share the unified index space. Unlike memory, a table's
+        // derived state (`t<i>`/`t<i>ty`/`t<i>sz`) does share one base name,
+        // so `rt_resolve_import`'s table kind resolves to the target's
+        // variable name directly (already flattened by the exporting
+        // module's TABLE_EXPORTS, mirroring imported globals) and each
+        // nameref points straight at the real array, one hop.
+        for (i, import) in m.imported_tables.iter().enumerate() {
+            self.use_unit("rt/resolve_import");
+            self.use_unit("rt/link_err");
+            let mm = bash_str(&import.module);
+            let nn = bash_str(&import.name);
+            let msg = bash_str(&format!("missing import {}.{}", import.module, import.name));
+            w.line(format!("rt_resolve_import {mm} {nn} table || return $?"));
+            w.line(format!(
+                "[[ -n $RESOLVED ]] || {{ rt_link_err {msg}; return $?; }}"
+            ));
+            w.line(format!(
+                "declare -gn {p}t{i}=$RESOLVED {p}t{i}ty=${{RESOLVED}}ty {p}t{i}sz=${{RESOLVED}}sz"
+            ));
+        }
         // Per unified-index-space defined table (imported ++ defined). The
-        // index base keeps room for the imported ones a later step adds.
+        // index base keeps room for the imported ones just above.
         for (i, table) in m.tables.iter().enumerate() {
             let idx = m.num_imported_tables() as usize + i;
             w.line(format!("{p}t{idx}=()"));
@@ -587,6 +613,27 @@ impl<'a> Gen<'a> {
         w.line(format!(
             "declare -gA {p}MEMORY_EXPORTS=({})",
             mentries.join(" ")
+        ));
+        let num_imported_tables = m.num_imported_tables() as usize;
+        let mut tentries = Vec::new();
+        for export in &m.exports {
+            if let ExportKind::Table(idx) = export.kind {
+                // Flatten to the underlying array's base name, exactly like
+                // a global export (ADR-33): an exported imported table is
+                // itself a `<p>t<i>` nameref, so publish its target
+                // (`${!<p>t<i>}`); a defined table publishes its own literal
+                // base name.
+                let value = if (idx as usize) < num_imported_tables {
+                    format!("${{!{p}t{idx}}}")
+                } else {
+                    format!("{p}t{idx}")
+                };
+                tentries.push(format!("[{}]={value}", bash_str(&export.name)));
+            }
+        }
+        w.line(format!(
+            "declare -gA {p}TABLE_EXPORTS=({})",
+            tentries.join(" ")
         ));
 
         if let Some(start) = m.start {

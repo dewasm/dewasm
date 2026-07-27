@@ -161,6 +161,7 @@ dependencies = [
  "dewasm-test-helper",
  "regex",
  "wast",
+ "wat",
 ]
 
 [[package]]

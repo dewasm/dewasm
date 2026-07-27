@@ -2,11 +2,14 @@
 
 Status: **Accepted, 2026-07-27.** Implemented in
 `crates/dewasm-backend-bash/src/lib.rs` (`Gen::init`) +
-`runtime/bash/units/rt/resolve_import.sh` and `rt/link_err.sh`. Covers
-imported functions (retained), imported globals (`Feature::ImportedGlobals`
-Supported), and imported memories (`Feature::ImportedMemories` Supported,
-step C); imported tables extend this same protocol in a later step and stay
-unsupported for now. Extends [ADR-11](11-bash-backend-lowering.md).
+`runtime/bash/units/rt/resolve_import.sh` and `rt/link_err.sh`. Covers every
+wasm 1.0 import kind: imported functions (retained), imported globals
+(`Feature::ImportedGlobals` Supported), imported memories
+(`Feature::ImportedMemories` Supported), and imported tables
+(`Feature::ImportedTables` Supported) — plus the `shared_table_call_indirect`
+multi-module e2e case (`crates/dewasm-backend-bash/tests/e2e.rs`,
+`BackendUnderTest::compose_modules`). Extends
+[ADR-11](11-bash-backend-lowering.md).
 
 ## Context
 
@@ -47,11 +50,17 @@ name found nowhere leaves `RESOLVED=''` so the caller chooses (WASI/ENOSYS
 fallback for WASI modules, else a link error). `IMPORTS` is retained as a
 function-only host override, checked ahead of `PROVIDERS`.
 
-**Export values are flattened so nameref chains stay depth ≤ 1.** A global
-export publishes its backing variable *name*: a defined global publishes its
-own `<p>g<idx>`, a re-exported imported global publishes `${!<p>g<idx>}` (the
-nameref's target, not the nameref itself). A consumer's `declare -gn` then
-points one hop at the real cell, so `${!name}` never has to chase a chain.
+**Export values are flattened so nameref chains stay depth ≤ 1.** A global or
+table export publishes its backing variable *name*: a defined global/table
+publishes its own `<p>g<idx>`/`<p>t<idx>`, a re-exported imported one
+publishes `${!<p>g<idx>}`/`${!<p>t<idx>}` (the nameref's target, not the
+nameref itself). A consumer's `declare -gn` then points one hop at the real
+cell/array, so `${!name}` never has to chase a chain. Memory has no single
+name to flatten to — its derived state (`mem`/`pages`/`max_pages`) is three
+variables, not one cell — so `MEMORY_EXPORTS` instead publishes the owning
+module's *prefix* (`<p>memown`); a re-export just forwards that string, and a
+consumer's three `declare -gn`s (`${RESOLVED}mem`/`pages`/`max_pages`) still
+each resolve in one hop.
 
 **Link errors return status 135** (`rt_link_err`), the linking sibling of
 `rt_trap`'s 134 and `rt_exit`'s 133, propagated through the same
@@ -80,25 +89,26 @@ do not, so the tag is derived from the type's shape (`i32,i64->f32`).
 
 ## Consequences
 
-- Positive: mutable imported globals and imported memory (step C) share state
-  correctly with no boxing; the provider protocol generalizes to tables
-  (step D) by populating the already-emitted `<q>TABLE_EXPORTS` map;
+- Positive: mutable imported globals, memory, and tables all share state
+  correctly with no boxing, through the same `declare -gn` mechanism;
   `assert_unlinkable` is checked for real (status 135), so the spec harness's
-  `register` support is on for Bash. Memory's derived state
-  (`mem`/`pages`/`max_pages`) has no single shared name to alias, so its
-  export/`rt_resolve_import` value is the owning module's flattened *prefix*
-  (`<p>memown`) rather than one variable name; a re-export just forwards that
-  string, so any further `declare -gn` chain still resolves in one hop.
+  `register` support is fully on for Bash and every import kind's `linking`
+  ledger cluster clears (`elem`, `linking0`→table entries, `linking3`). A
+  shared table crossing independently-generated modules now has an e2e case
+  too (`shared_table_call_indirect`, `compose_modules` generating each module
+  against one bundled runtime).
 - Negative: `rt_resolve_import` validates import *kind* but not the finer
-  wasm type — a function's signature, a global's mutability, or a memory's
-  min/max limits — so a handful of `assert_unlinkable` cases link instead of
-  failing (the `import-limits` ledger cluster, the same accepted gap as
-  Ruby). 135 collides with the `128 + SIGBUS` signal convention; no generated
-  module spawns a subprocess that can raise SIGBUS, so the collision is
-  accepted.
-- Carry-over: imported tables (step D) reuse `rt_resolve_import` and the
-  `TABLE_EXPORTS` map; until it lands, modules that import a shared table are
-  skipped, and assertions against the owning module observe stale shared
-  state or an uninitialized element (the `linking`/`elem`/`linking0`/
-  `linking3`/`load1` ledger clusters in
-  `crates/dewasm-backend-bash/tests/spec.rs`).
+  wasm type — a function's signature, a global's mutability, a table's
+  min/max limits, or a memory's min/max limits — so a number of
+  `assert_unlinkable` cases link instead of failing (the `import-limits`
+  ledger cluster: `imports`/`imports2`/part of `linking`, the same accepted
+  gap as Ruby, now at the same counts since Bash covers every import kind
+  Ruby does). 135 collides with the `128 + SIGBUS` signal convention; no
+  generated module spawns a subprocess that can raise SIGBUS, so the
+  collision is accepted.
+- Residual, unrelated to this ADR: `linking0` and `load1` still fail one
+  assertion apiece downstream of a *different*, permanently out-of-scope gap
+  — a module declaring two memories is rejected outright by the core builder
+  (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24), so data meant for a
+  shared memory through that module never runs (the `multi-memory` ledger
+  tag in `crates/dewasm-backend-bash/tests/spec.rs`).

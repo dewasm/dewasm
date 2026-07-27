@@ -17,7 +17,7 @@ every other `Feature` variant is rejected by the core for every backend ([ADR-24
 | --- | --- | --- | --- | --- | --- |
 | Imported globals (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Imported memories (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Imported tables (wasm 1.0) | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Imported tables (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Multiple tables | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bulk table ops / passive element segments | ✅ | ❌ | ✅ | ✅ | ✅ |
 | Floating-point (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ |
