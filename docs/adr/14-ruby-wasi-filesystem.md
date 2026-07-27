@@ -8,6 +8,19 @@ Status: **Accepted, 2026-07-23.** Implemented in `runtime/ruby/units/wasi/`
 `preopens:` provider kwarg in `crates/dewasm-backend-ruby/src/lib.rs`.
 Symlink and rights-narrowing syscalls remain ENOSYS.
 
+**Revision, 2026-07-27:** `poll_oneoff` is no longer a deliberate ENOSYS gap.
+It is implemented for the Ruby, Python, Go, and Java backends
+(`runtime/<lang>/units/wasi/poll_oneoff.*`); Bash stays ENOSYS for now
+(deferred). The motivation is event-loop guests such as the QuickJS REPL,
+which after printing each prompt blocks in `poll_oneoff` on an fd_read
+subscription over stdin — an ENOSYS return there collapses the loop and the
+program exits immediately. Only fd_read on stdin actually blocks (via
+`IO.select`/`select.select`/`syscall.Select`; Java approximates it by polling
+`InputStream.available()`, a documented limitation); regular files,
+stdout/stderr, and every fd_write are treated as immediately ready, and clock
+subscriptions set the wait deadline. Symlink and rights-narrowing syscalls
+still remain ENOSYS.
+
 ## Context
 
 `Rt::WASI` (ADR-7) covered stdio, args/env, clock, and random, but every

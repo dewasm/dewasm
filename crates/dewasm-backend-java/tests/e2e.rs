@@ -232,6 +232,7 @@ standalone_e2e!(Java);
 library_e2e!(Java, java_glue);
 wasi_suite!(Java, Stdio);
 wasi_suite!(Java, ArgsEnv);
+wasi_suite!(Java, Poll);
 wasi_suite!(Java, Fs, java_fs_glue);
 apps_e2e!(Java);
 gzip_e2e!(Java);

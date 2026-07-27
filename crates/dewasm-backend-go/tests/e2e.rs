@@ -213,6 +213,7 @@ standalone_e2e!(Go);
 library_e2e!(Go, go_glue);
 wasi_suite!(Go, Stdio);
 wasi_suite!(Go, ArgsEnv);
+wasi_suite!(Go, Poll);
 wasi_suite!(Go, Fs, go_fs_glue);
 apps_e2e!(Go);
 gzip_e2e!(Go);

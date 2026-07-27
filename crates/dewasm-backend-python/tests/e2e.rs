@@ -131,6 +131,7 @@ standalone_e2e!(Python);
 library_e2e!(Python, python_glue);
 wasi_suite!(Python, Stdio);
 wasi_suite!(Python, ArgsEnv);
+wasi_suite!(Python, Poll);
 wasi_suite!(Python, Fs, python_fs_glue);
 apps_e2e!(Python);
 gzip_e2e!(Python);

@@ -27,6 +27,10 @@ pub enum WasiKind {
     Stdio,
     ArgsEnv,
     ClockRandom,
+    /// poll_oneoff. A whole-program standalone kind like the others, but split
+    /// out because bash resolves poll_oneoff to ENOSYS (ADR-12/ADR-14) and so
+    /// does not wire this kind; the four backends that implement it do.
+    Poll,
     Fs,
 }
 
@@ -97,6 +101,21 @@ pub const WASI_CASES: &[WasiCase] = &[
         check: WasiCheck::Standalone {
             stdout: "",
             code: 3,
+        },
+    },
+    // poll_oneoff: a clock subscription (relative 1 ms) plus an fd_write
+    // readiness subscription on stdout. stdout is always ready, so the call
+    // reports at least one event with error 0 and the module prints its
+    // success line without blocking on the timer.
+    WasiCase {
+        name: "poll_oneoff",
+        wat: "wasi_poll_oneoff.wat",
+        kind: WasiKind::Poll,
+        args: &[],
+        stdin: "",
+        check: WasiCheck::Standalone {
+            stdout: "poll ok\n",
+            code: 0,
         },
     },
     // Filesystem (ADR-14). path_open (create+write, then reopen+read)

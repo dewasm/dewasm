@@ -68,7 +68,7 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | path_rename | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
 | path_symlink | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | path_unlink_file | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
-| poll_oneoff | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| poll_oneoff | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
 | proc_exit | ✅ | ✅ | ✅ | ✅ | ✅ |
 | proc_raise | — | — | — | — | — |
 | random_get | ✅ | ✅ | ✅ | ✅ | ✅ |

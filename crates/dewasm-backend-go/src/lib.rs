@@ -275,6 +275,7 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         ("strings.", "strings"),
         ("syscall.", "syscall"),
         ("time.", "time"),
+        ("unsafe.", "unsafe"),
     ];
     let code: String = bundle
         .lines()

@@ -217,6 +217,7 @@ impl Backend for PythonBackend {
         w.line("import errno");
         w.line("import math");
         w.line("import os");
+        w.line("import select");
         w.line("import struct");
         w.line("import sys");
         w.line("import time");

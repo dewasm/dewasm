@@ -103,6 +103,7 @@ standalone_e2e!(Ruby);
 library_e2e!(Ruby, ruby_glue);
 wasi_suite!(Ruby, Stdio);
 wasi_suite!(Ruby, ArgsEnv);
+wasi_suite!(Ruby, Poll);
 wasi_suite!(Ruby, Fs, ruby_fs_glue);
 apps_e2e!(Ruby);
 gzip_e2e!(Ruby);

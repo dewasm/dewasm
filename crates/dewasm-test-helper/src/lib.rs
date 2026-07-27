@@ -72,7 +72,7 @@ macro_rules! library_e2e {
 
 /// One `#[test]` running the WASI cases of a given feature kind for `$lang`.
 /// The no-glue form covers whole-program standalone kinds (`Stdio`,
-/// `ArgsEnv`, `ClockRandom`); the `$glue` form covers `Fs` (library-mode runs
+/// `ArgsEnv`, `ClockRandom`, `Poll`); the `$glue` form covers `Fs` (library-mode runs
 /// against a preopened host directory, so a per-backend instantiation glue
 /// `fn(&WasiCase, &Path) -> String` is required).
 #[macro_export]
@@ -93,6 +93,12 @@ macro_rules! wasi_suite {
         #[test]
         fn wasi_clock_random() {
             $crate::run_wasi_standalone(&$lang, $crate::WasiKind::ClockRandom);
+        }
+    };
+    ($lang:expr, Poll) => {
+        #[test]
+        fn wasi_poll() {
+            $crate::run_wasi_standalone(&$lang, $crate::WasiKind::Poll);
         }
     };
     ($lang:expr, Fs, $glue:expr) => {

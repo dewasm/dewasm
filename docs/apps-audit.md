@@ -53,18 +53,27 @@ gated behind `DEWASM_APPS_ALL` in each crate:
   **and** the host-side file content. Fixture:
   `examples/apps/fixtures/qjs_file_io.js`.
 - *REPL* (`qjs_repl_ruby`): **ground-truth finding — QuickJS's built-in
-  interactive REPL is not usable over a pipe.** Under `wasmtime`, piping a
+  interactive REPL is not byte-stable over a pipe.** Under `wasmtime`, piping a
   scripted session (`1+2\n\q`) into bare `qjs` or `qjs -i` drives a
   terminal line editor: it emits ANSI escape sequences (cursor moves,
-  syntax-highlight colors), mis-parses `1+2\q` as one line, and — the
-  decisive part — never terminates on stdin EOF (it hung until a 2-minute
-  timeout). So the byte-stable, pipe-friendly equivalent that is pinned
-  instead is a read-eval-print loop *fixture*
+  syntax-highlight colors), mis-parses `1+2\q` as one line, and never
+  terminates on stdin EOF over a pipe (it hangs until a timeout). A
+  scripted read-eval-print *fixture*
   (`examples/apps/fixtures/qjs_repl.js`) reading lines from `std.in` and
-  printing `std.evalScript` results — the same stdin-read + eval path a
-  REPL exercises, minus the tty-only line editor. Neither case needed a
-  new WASI unit; `fd_read` on stdin and the ADR-14 filesystem stack
-  already cover them.
+  printing `std.evalScript` results exercises the same stdin-read + eval
+  path minus the tty-only line editor, and needs nothing beyond `fd_read`
+  and the ADR-14 filesystem stack.
+
+  The *interactive* REPL (bare `qjs`, its actual line editor) is a
+  separate matter: after each prompt it blocks in `poll_oneoff` on an
+  fd_read subscription over stdin, so with `poll_oneoff` resolving to
+  ENOSYS the event loop collapsed and the program exited immediately —
+  the fixture above was a workaround, not the end state. `poll_oneoff` is
+  now implemented (ADR-14 revision; Ruby/Python/Go/Java, Bash deferred),
+  and over a pipe the converted REPL now blocks on stdin, reads input, and
+  evaluates it (the line editor still echoes ANSI escapes over a pipe, as
+  it does under wasmtime). Byte-exact interactive verification against a
+  real terminal lands with the pty test.
 
 ⁴ **sqlite3 deepened (Phase 5a).** The pinned source now yields **three**
 artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
