@@ -205,14 +205,20 @@ impl Backend for BashBackend {
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
             if wasi_bundled(module, opts.default_wasi) {
-                // Standalone runtime interface (ADR-31): the Bash backend has no
-                // filesystem support (ADR-12), so a leading `--dir` fails loudly
-                // rather than being silently ignored (ADR-0). `--` just
-                // terminates flag parsing; everything else is guest argv.
-                w.line("case \"${1-}\" in");
-                w.line("  --dir|--dir=*) echo \"the bash backend has no filesystem support; --dir is not accepted\" >&2; exit 2 ;;");
-                w.line("  --) shift ;;");
-                w.line("esac");
+                // Standalone runtime interface (ADR-31): consume a leading run of
+                // `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style),
+                // stopping at `--` or the first non-flag token; the rest is the
+                // guest's argv[1..]. The Bash backend now honors --dir with real
+                // filesystem support (ADR-32), mirroring the Ruby standalone parser.
+                w.line("WASI_DIRS=()");
+                w.line("while (( $# )); do");
+                w.line("  case \"$1\" in");
+                w.line("    --) shift; break ;;");
+                w.line("    --dir) shift; [[ $# -gt 0 ]] || { echo \"--dir requires a HOST::GUEST argument\" >&2; exit 2; }; WASI_DIRS+=(\"$1\"); shift ;;");
+                w.line("    --dir=*) WASI_DIRS+=(\"${1#--dir=}\"); shift ;;");
+                w.line("    *) break ;;");
+                w.line("  esac");
+                w.line("done");
                 w.line("WASI_ARGS=(\"${0##*/}\" \"$@\")");
                 w.line("WASI_ENV=()");
                 w.line("for __n in $(compgen -e); do WASI_ENV+=(\"$__n=${!__n}\"); done");
@@ -345,13 +351,20 @@ impl<'a> Gen<'a> {
             w.line("local __off");
         }
         if wasi_bundled(m, self.default_wasi) {
-            // Callers set the WASI_ARGS/WASI_ENV arrays before init (the
-            // bash analogue of Ruby's args:/env: keywords); stdio fds are
-            // preopened and fd_read/fd_write track per-fd offsets.
+            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init
+            // (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio
+            // fds are preopened and fd_read/fd_write track per-fd offsets. wnext
+            // is the next fd; wpush is poll_oneoff's one-byte stdin pushback slot;
+            // init_preopens registers the --dir mounts and the filesystem
+            // fd-table arrays, failing init loudly on an unresolvable host (ADR-32).
             w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
             w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
             w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
             w.line(format!("{p}wtell=([0]=0 [1]=0 [2]=0)"));
+            w.line(format!("{p}wnext=3"));
+            w.line(format!("{p}wpush=''"));
+            self.use_unit("wasi/init_preopens");
+            w.line(format!("wasi_init_preopens {p} || return 1"));
         }
         if let Some(mem) = &m.memory {
             w.line(format!("{p}mem=()"));

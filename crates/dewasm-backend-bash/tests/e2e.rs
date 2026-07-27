@@ -12,7 +12,7 @@ use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, sqlite3_shell_e2e,
-    standalone_dir_unsupported_e2e, wasi_import_override_e2e, wasi_suite, BackendUnderTest,
+    standalone_dir_e2e, wasi_import_override_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -84,10 +84,11 @@ wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 wasi_suite!(Bash, Stdio);
 wasi_suite!(Bash, ArgsEnv);
 // wasi_suite!(Bash, Poll) / wasi_suite!(Bash, Fs) / wasi_root_containment_e2e!:
-// not invoked — Bash resolves poll_oneoff to ENOSYS and has no WASI filesystem
-// (ADR-12/ADR-14). Instead of standalone_dir_e2e! (which mounts a --dir preopen),
-// Bash asserts that --dir fails loudly (ADR-31).
-standalone_dir_unsupported_e2e!(Bash);
+// not invoked yet — Bash resolves poll_oneoff to ENOSYS, and its WASI filesystem
+// (ADR-32) lands across several steps (the stat family and namespace-mutation
+// syscalls the Fs suite exercises are still pending). The standalone --dir
+// interface (ADR-31) is now honored, exercised by standalone_dir_e2e! below.
+standalone_dir_e2e!(Bash);
 
 cowsay_args_e2e!(Bash);
 cowsay_stdin_e2e!(Bash);
