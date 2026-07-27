@@ -9,9 +9,11 @@
 //! is a `pub const` [`AppCase`] driven by its own per-case macro
 //! (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`,
 //! `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!`
-//! are heavy — skipped for slow backends by default (softfloat makes
-//! QuickJS/SQLite take tens of seconds) via [`run_heavy_app_case`], which
-//! gates on `lang.run_heavy_apps()` or `DEWASM_APPS_ALL=1`.
+//! are heavy — softfloat makes QuickJS/SQLite take tens of seconds under
+//! Bash — so the macro expands their generated `#[test]` as `#[ignore]`d
+//! unless the expanding backend crate's `heavy_test` feature is enabled; see
+//! [`run_heavy_app_case`], which just runs the case unconditionally now that
+//! the gating lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -114,28 +116,12 @@ pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// Run a heavy [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang`, gated on
-/// `lang.run_heavy_apps()` or `DEWASM_APPS_ALL=1`. See
-/// [`run_heavy_app_case_forced`] for the ungated entry point.
+/// Run a heavy [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang`
+/// unconditionally. The perf opt-out now lives at the macro/feature level
+/// (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as
+/// `#[ignore]`d unless the `heavy_test` feature is on), so this runner — also used
+/// directly by the wasmtime suite — never needs to gate itself.
 pub fn run_heavy_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
-    let run_heavy = lang.run_heavy_apps() || std::env::var("DEWASM_APPS_ALL").is_ok();
-    if !run_heavy {
-        println!(
-            "{} {:?}: heavy case skipped for {} (DEWASM_APPS_ALL=1 to run)",
-            case.name,
-            case.args,
-            lang.name()
-        );
-        return;
-    }
-    run_app_case_inner(lang, case);
-}
-
-/// Run a heavy [`AppCase`] for `lang` unconditionally (ignoring the
-/// `DEWASM_APPS_ALL` gate). Used by the wasmtime suite, whose `wasmtime_test`
-/// feature is already the opt-in — requiring both flags would be
-/// unergonomic (mirrors [`crate::run_fs_app_case_forced`]).
-pub fn run_heavy_app_case_forced(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 

@@ -19,15 +19,15 @@ mod spec;
 mod wasi;
 
 pub use apps::{
-    run_app_case, run_gzip_cases, run_heavy_app_case, run_heavy_app_case_forced, AppCase,
-    COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL, SQLITE3_SHELL,
+    run_app_case, run_gzip_cases, run_heavy_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
+    SQLITE3_SHELL,
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, SQLITE3_CALLBACK_BINDING, SQLITE3_FILE_C_API,
 };
 pub use apps_fs::{
-    run_fs_app_case, run_fs_app_case_forced, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO,
-    QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL_DBFILE,
+    run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
+    RG_SEARCH, SQLITE3_SHELL_DBFILE,
 };
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
@@ -184,9 +184,10 @@ macro_rules! wasi_root_containment_e2e {
 /// `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a
 /// [`BackendUnderTest`]). No glue argument — these are standalone-mode
 /// stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!`
-/// and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and
-/// `sqlite3_shell_e2e!` are heavy (gated on `run_heavy_apps()` or
-/// `DEWASM_APPS_ALL` inside [`run_heavy_app_case`](crate::run_heavy_app_case)).
+/// and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!`
+/// are heavy — their generated `#[test]` is `#[ignore]`d unless the expanding
+/// backend crate's `heavy_test` feature is enabled (run with `--features heavy_test` or
+/// `cargo test -- --include-ignored`).
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -211,9 +212,16 @@ macro_rules! cowsay_stdin_e2e {
 }
 
 /// See [`cowsay_args_e2e!`]. Runs the heavy [`QJS_EVAL`](crate::QJS_EVAL) case.
+/// Heavy: the generated `#[test]` is `#[ignore]`d unless the expanding
+/// backend crate's `heavy_test` feature is enabled (ADR-27 revision) — run it with
+/// `--features heavy_test` or `cargo test -- --include-ignored`.
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn qjs_eval() {
             $crate::run_heavy_app_case(&$lang, &$crate::QJS_EVAL);
@@ -221,10 +229,15 @@ macro_rules! qjs_eval_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the heavy [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case.
+/// See [`cowsay_args_e2e!`]. Runs the heavy [`SQLITE3_SHELL`](crate::SQLITE3_SHELL)
+/// case. Heavy: see [`qjs_eval_e2e!`] for the `#[ignore]`/`heavy_test` feature gate.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn sqlite3_shell() {
             $crate::run_heavy_app_case(&$lang, &$crate::SQLITE3_SHELL);
@@ -248,10 +261,14 @@ macro_rules! gzip_e2e {
 
 /// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for
 /// `$lang` and comparing the transcript byte-for-byte to the wasmtime golden
-/// (Fix 4). Gated behind `DEWASM_APPS_ALL` inside `run_qjs_repl_pty`.
+/// (Fix 4). Heavy: see [`qjs_eval_e2e!`] for the `#[ignore]`/`heavy_test` feature gate.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn qjs_repl_pty() {
             $crate::run_qjs_repl_pty(&$lang);
@@ -262,15 +279,19 @@ macro_rules! qjs_repl_pty_e2e {
 /// Per-case filesystem-app macros (ADR-27 revision): each expands to one
 /// `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with
 /// `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}`
-/// placeholders the runner fills). Gated behind `DEWASM_APPS_ALL` inside
-/// [`run_fs_app_case`](crate::run_fs_app_case). A backend declares participation
-/// by invoking the macro and drops it (with a REASON comment) for a case it
-/// cannot run.
+/// placeholders the runner fills). A backend declares participation by invoking
+/// the macro and drops it (with a REASON comment) for a case it cannot run.
+/// Heavy: the generated `#[test]` is `#[ignore]`d unless the expanding backend
+/// crate's `heavy_test` feature is enabled (see [`qjs_eval_e2e!`]).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
 macro_rules! qjs_file_io_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn qjs_file_io() {
             $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
@@ -282,6 +303,10 @@ macro_rules! qjs_file_io_e2e {
 #[macro_export]
 macro_rules! qjs_repl_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn qjs_repl() {
             $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
@@ -293,6 +318,10 @@ macro_rules! qjs_repl_e2e {
 #[macro_export]
 macro_rules! sqlite3_shell_dbfile_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn sqlite3_shell_dbfile() {
             $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
@@ -304,6 +333,10 @@ macro_rules! sqlite3_shell_dbfile_e2e {
 #[macro_export]
 macro_rules! rg_search_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn rg_search() {
             $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
@@ -315,6 +348,10 @@ macro_rules! rg_search_e2e {
 #[macro_export]
 macro_rules! cpython_hello_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn cpython_hello() {
             $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
@@ -326,6 +363,10 @@ macro_rules! cpython_hello_e2e {
 #[macro_export]
 macro_rules! cruby_hello_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn cruby_hello() {
             $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
@@ -336,15 +377,20 @@ macro_rules! cruby_hello_e2e {
 /// Per-case C-API macros (ADR-27 revision): each expands to one
 /// `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with
 /// `$glue` (a named `&str` const in the backend crate; the file-backed case's
-/// `{scratch}` placeholder is filled by the runner). Gated behind
-/// `DEWASM_APPS_ALL` inside [`run_capi_case`](crate::run_capi_case). Which
-/// backends invoke these is the capability declaration (ADR-27):
-/// Ruby/Python/Go/Java, not Bash (ADR-12).
+/// `{scratch}` placeholder is filled by the runner). Which backends invoke
+/// these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash
+/// (ADR-12). Heavy: the generated `#[test]` is `#[ignore]`d unless the
+/// expanding backend crate's `heavy_test` feature is enabled (see
+/// [`qjs_eval_e2e!`]).
 ///
 /// [`CApiCase`]: crate::CApiCase
 #[macro_export]
 macro_rules! libsqlite3_c_api_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn libsqlite3_c_api() {
             $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
@@ -356,6 +402,10 @@ macro_rules! libsqlite3_c_api_e2e {
 #[macro_export]
 macro_rules! sqlite3_file_c_api_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn sqlite3_file_c_api() {
             $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
@@ -367,6 +417,10 @@ macro_rules! sqlite3_file_c_api_e2e {
 #[macro_export]
 macro_rules! sqlite3_callback_binding_e2e {
     ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
         #[test]
         fn sqlite3_callback_binding() {
             $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);

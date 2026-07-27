@@ -14,13 +14,13 @@
 //! fills. wasmtime does not use the glue: it overrides
 //! [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir`
 //! preopens directly, so the same case consts feed both the backend macros and
-//! the wasmtime suite (via [`run_fs_app_case_forced`]).
+//! the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
-//! [`run_fs_app_case`] is gated behind `DEWASM_APPS_ALL` — the same deliberate
-//! perf opt-out the heavy `apps` cases use (these reconvert qjs/sqlite and stage
-//! ripgrep's 22 MB binary), a perf gate rather than a missing-environment skip.
-//! [`run_fs_app_case_forced`] runs a case unconditionally (used by the wasmtime
-//! suite, whose `wasmtime_test` feature is the opt-in).
+//! These cases are heavy (they reconvert qjs/sqlite and stage ripgrep's 22 MB
+//! binary), so the perf opt-out lives at the macro/feature level: each
+//! per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as
+//! `#[ignore]`d unless the expanding backend crate's `heavy_test` feature is
+//! enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -269,27 +269,12 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue`, gated behind
-/// `DEWASM_APPS_ALL` (uniform perf opt-out; prints a skip note and returns when
-/// it is unset, mirroring the heavy `apps` cases). See
-/// [`run_fs_app_case_forced`] for the ungated entry point.
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue`
+/// unconditionally. The perf opt-out lives at the macro/feature level (see
+/// the module docs), so this runner — also called directly by the wasmtime
+/// suite, which passes an empty `glue` since its `run_app_fs` override
+/// ignores it — never needs to gate itself.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
-    if std::env::var("DEWASM_APPS_ALL").is_err() {
-        println!(
-            "fs app case {} skipped for {} (DEWASM_APPS_ALL=1 to run)",
-            case.name,
-            lang.name()
-        );
-        return;
-    }
-    run_fs_app_case_forced(lang, case, glue);
-}
-
-/// Run one [`FsAppCase`] for `lang` unconditionally (ignoring the
-/// `DEWASM_APPS_ALL` gate). Used by the wasmtime suite, whose `wasmtime_test`
-/// feature is already the opt-in — requiring both flags would be unergonomic.
-/// wasmtime passes an empty `glue` (its `run_app_fs` override ignores it).
-pub fn run_fs_app_case_forced(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let cache = apps_cache_dir();
     let fixtures = apps_fixtures_dir();
     let scratch = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));

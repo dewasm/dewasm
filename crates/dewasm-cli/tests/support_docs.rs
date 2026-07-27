@@ -114,21 +114,6 @@ fn render() -> String {
         let _ = writeln!(out, "{row}|");
     }
 
-    out.push_str("\n## Spec testsuite ledger\n\n");
-    out.push_str(
-        "Whether the backend's spec `EXPECTED_FAILURES` ledger holds any wasm-1.0-\n\
-         attributable entries ([ADR-16](adr/16-ruby-wasm1-completion.md) is the current\n\
-         example).\n\n",
-    );
-    for backend in &backends {
-        let clean = if backend.wasm10_ledger_clean() {
-            "yes"
-        } else {
-            "no"
-        };
-        let _ = writeln!(out, "- **{}**: Spec ledger clean: {clean}", backend.name());
-    }
-
     out
 }
 

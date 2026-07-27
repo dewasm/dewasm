@@ -52,8 +52,9 @@ WASI. The e2e override glue
 
 - **Speed.** Bash arithmetic is signed-64 only, and every float operation is
   softfloat integer arithmetic, so float-heavy programs are slow — the heavy
-  apps (QuickJS, SQLite) are skipped for Bash by default and run only under
-  `DEWASM_APPS_ALL`. Integer-only programs (cowsay, minigzip) run fine.
+  apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only
+  under the `heavy_test` cargo feature (or `cargo test -- --include-ignored`).
+  Integer-only programs (cowsay, minigzip) run fine.
 - Every generated function ends with an explicit `return 0`; a trailing
   arithmetic statement would otherwise leak status 1 (the units lint enforces
   this — [ADR-11](../adr/11-bash-backend-lowering.md)).

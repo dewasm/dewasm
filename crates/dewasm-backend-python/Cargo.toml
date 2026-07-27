@@ -9,6 +9,12 @@ authors.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Opt-in: expands the heavy per-case macros (dewasm-test-helper, ADR-27
+# revision) as active `#[test]`s instead of `#[ignore]`d ones. See
+# docs/testing.md.
+heavy_test = []
+
 [dependencies]
 anyhow.workspace = true
 dewasm-core.workspace = true

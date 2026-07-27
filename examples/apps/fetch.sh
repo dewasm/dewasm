@@ -220,7 +220,8 @@ fi
 # python.wasm we also extract the stdlib tree (lib/python3.14) the interpreter
 # reads at startup from a preopened directory: the e2e case preopens
 # cache/cpython-lib/lib at guest /lib (PYTHONHOME=/, PYTHONPATH=/lib/python3.14).
-# Ruby-only, heavy — execution behind DEWASM_APPS_ALL (docs/apps-audit.md).
+# Ruby-only, heavy — execution behind the `heavy_test` cargo feature
+# (docs/apps-audit.md).
 CPYTHON_URL="https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip"
 CPYTHON_SHA256="73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6"
 
@@ -251,8 +252,9 @@ fi
 # extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at
 # startup; the multi-hundred-MB libruby-static.a and the rest of the tree are
 # not needed at run time and are left out. The e2e case preopens
-# cache/ruby-lib/usr at guest /usr. Ruby-only, heavy — execution behind
-# DEWASM_APPS_ALL. The "Ruby on Ruby" north-star demo (docs/apps-audit.md).
+# cache/ruby-lib/usr at guest /usr. Ruby-only, heavy — execution behind the
+# `heavy_test` cargo feature. The "Ruby on Ruby" north-star demo
+# (docs/apps-audit.md).
 CRUBY_URL="https://github.com/ruby/ruby.wasm/releases/download/2.9.4/ruby-3.4-wasm32-unknown-wasip1-full.tar.gz"
 CRUBY_SHA256="ccda86a375a4fe09849846d3b03a370172a4902a0c571087f48457388a2762c7"
 CRUBY_DIR="ruby-3.4-wasm32-unknown-wasip1-full"

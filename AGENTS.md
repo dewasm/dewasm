@@ -36,12 +36,15 @@ instruction instead of skipping.
 ## Verification
 
 After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
-and `cargo test`. Spec-harness failures mean a semantics bug: fix the cause. Adding to a
-per-backend `EXPECTED_FAILURES` ledger in `crates/dewasm-backend-<lang>/tests/spec.rs` is a last resort and
-requires an attribution tag plus a reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)).
-When support declarations or WASI units change, regenerate the matrix:
-`DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test support_docs` (the test fails while
-docs/support.md is stale).
+and `cargo test`. `cargo test` alone leaves each backend's heavy app cases (QuickJS, SQLite, the
+filesystem/C-API apps, the interactive-REPL pty case) `#[ignore]`d — gated by that backend's
+`heavy_test` cargo feature rather than an environment variable; run the full suite, heavy cases
+included, with one command: `cargo test -- --include-ignored`. Spec-harness failures mean a
+semantics bug: fix the cause. Adding to a per-backend `EXPECTED_FAILURES` ledger in
+`crates/dewasm-backend-<lang>/tests/spec.rs` is a last resort and requires an attribution tag plus a
+reason ([ADR-8](docs/adr/8-latest-testsuite-support-matrix.md)). When support declarations or WASI
+units change, regenerate the matrix: `DEWASM_UPDATE_DOCS=1 cargo test -p dewasm-cli --test
+support_docs` (the test fails while docs/support.md is stale).
 
 ## Implementation guidelines
 

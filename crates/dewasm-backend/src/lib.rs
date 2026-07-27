@@ -74,13 +74,6 @@ pub trait Backend {
         let _ = name;
         false
     }
-
-    /// Whether the backend's spec EXPECTED_FAILURES ledger holds no
-    /// wasm-1.0-attributable entries. The ledger lives in the harness
-    /// crate, so the backend states it explicitly (ADR-25).
-    fn wasm10_ledger_clean(&self) -> bool {
-        false
-    }
 }
 
 /// Reject, with the same `UnsupportedError` attribution the core converter

@@ -15,8 +15,10 @@
 //! `{scratch}` placeholder the runner fills. Which backends invoke a macro is
 //! the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash
 //! — it has no WASI filesystem and no host-language object model to plumb a C
-//! API through (ADR-12). Each runner is gated behind `DEWASM_APPS_ALL` (they
-//! reconvert the ~5 MB sqlite3 artifacts).
+//! API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so
+//! each per-case macro expands its generated `#[test]` as `#[ignore]`d unless
+//! the expanding backend crate's `heavy_test` feature is enabled; [`run_capi_case`]
+//! itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -93,19 +95,11 @@ pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// Run one [`CApiCase`] for `lang` with its per-language `glue`, gated behind
-/// `DEWASM_APPS_ALL` (uniform perf opt-out; the case reconverts the ~5 MB
-/// sqlite3 artifacts). Fills `{scratch}` in `glue` with a fresh scratch dir (the
+/// Run one [`CApiCase`] for `lang` with its per-language `glue`
+/// unconditionally (the perf opt-out lives at the macro/feature level, see the
+/// module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the
 /// file-backed case's preopen; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
-    if std::env::var("DEWASM_APPS_ALL").is_err() {
-        println!(
-            "C-API app case {} skipped for {} (DEWASM_APPS_ALL=1 to run)",
-            case.name,
-            lang.name()
-        );
-        return;
-    }
     let cache = apps_cache_dir();
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
     assert!(

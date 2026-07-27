@@ -164,8 +164,10 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   no glue (the apps macros) or one named glue-string constant as their only
   glue argument; the WASI-filesystem template `wasi_suite!(Fs, …)` likewise
   takes one glue constant. `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are heavy —
-  gated on `run_heavy_apps()`/`DEWASM_APPS_ALL` inside the shared runner. Per
-  the ADR-27 revision this file
+  the macro expands their generated `#[test]` as `#[ignore]`d unless the
+  expanding backend crate's `heavy_test` feature is enabled (run it with
+  `--features heavy_test`, or run everything including ignored tests with a
+  single `cargo test -- --include-ignored`). Per the ADR-27 revision this file
   contains **only** the `BackendUnderTest` impl, named glue string constants
   (library glue, the WASI-filesystem template, the filesystem-app instantiation
   glue, the C-API driver glue, the multi-module driver glue, and the
@@ -183,8 +185,10 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   when `fd_fdstat_get` on stdin reports a character device; a pipe does not.
   The scripted session is *prompt-driven*: each line is sent only after the
   `qjs > ` prompt reappears, so the transcript is stable regardless of how long
-  a backend takes to start (Ruby parses a ~200 MB source first). Gated behind
-  `DEWASM_APPS_ALL` (perf opt-out, ADR-15); the golden lives at
+  a backend takes to start (Ruby parses a ~200 MB source first). Heavy: like
+  the other heavy per-case macros, `qjs_repl_pty_e2e!`'s generated `#[test]`
+  is `#[ignore]`d unless the expanding backend crate's `heavy_test` feature is
+  enabled (perf opt-out, ADR-15); the golden lives at
   `examples/apps/golden/qjs_repl_interactive.transcript`.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and
   the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units`
@@ -213,6 +217,16 @@ macros for the suites it participates in.
 | `DEWASM_PYTHON` | Path to a python3 >= 3.9 interpreter, checked before `python3`/`python` on `PATH`. |
 | `DEWASM_SPEC=i32,br` | Restrict the spec harness to specific `.wast` files (comma-separated stems). |
 | `DEWASM_SPEC_ALL=1` | Run the spec harness against every upstream `.wast` file instead of the curated default list (bash and python both default to a curated subset for speed). |
-| `DEWASM_APPS_ALL=1` | Run the `apps` cases marked `heavy` (QuickJS, SQLite) under Bash too; skipped there by default since bash's softfloat makes them slow (this is a deliberate perf-based opt-out, not a missing-environment one — see ADR-15's scope). |
+
+The heavy app cases (QuickJS, SQLite, the filesystem apps, the C-API cases,
+the interactive-REPL pty case) are gated by the `heavy_test` cargo feature
+instead of an environment variable: each backend crate declares it, and the
+per-case macros expand their generated `#[test]` as `#[ignore]`d unless it is
+enabled. Run them for one backend with `--features heavy_test` (e.g.
+`cargo test -p dewasm-backend-bash --features heavy_test --test e2e`), or run
+everything across the whole workspace — including every backend's heavy
+cases — with a single `cargo test -- --include-ignored` (this is a
+deliberate perf-based opt-out, not a missing-environment one — see ADR-15's
+scope).
 
 See `AGENTS.md`'s Common commands table for the exact invocations.

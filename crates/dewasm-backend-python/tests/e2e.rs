@@ -33,10 +33,6 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    fn run_heavy_apps(&self) -> bool {
-        true
-    }
-
     /// Compose several `.wat` modules. `shared_runtime` emits each against one
     /// top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so
     /// an imported table crosses modules; otherwise it concatenates independent

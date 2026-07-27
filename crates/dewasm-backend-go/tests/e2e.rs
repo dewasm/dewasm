@@ -71,16 +71,6 @@ impl BackendUnderTest for Go {
         }
     }
 
-    /// QuickJS and SQLite run to completion under Go's full WASI surface
-    /// (ADR-29) and pass, so — like the fast interpreters (Ruby/Python) — Go
-    /// runs the heavy `apps` cases (qjs, sqlite3-shell, in-memory) by default.
-    /// Go is compiled, so its cost is bimodal but competitive and far under the
-    /// ADR-24 5-minute bar. The much heavier filesystem app cases live in the
-    /// shared per-case consts, gated behind `DEWASM_APPS_ALL`.
-    fn run_heavy_apps(&self) -> bool {
-        true
-    }
-
     /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
     /// mirrors the spec harness (ADR-29): each module is emitted as bare
     /// package-level declarations against one flat top-level runtime

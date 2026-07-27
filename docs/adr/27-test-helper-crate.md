@@ -203,3 +203,20 @@ Two leftovers from the prior revision are cleaned up, no behavioural change:
   `run_fs_app_case`/`run_fs_app_case_forced` split. `gzip_e2e!` still covers
   minigzip's compress + round-trip pair as one macro (binary stdio does not fit
   the `&str` `AppCase` shape) and is unchanged.
+
+## Revision (2026-07-27): heavy gating moves to a `heavy_test` feature; the support.md ledger section is dropped
+
+`docs/support.md`'s "Spec testsuite ledger" section (`Backend::wasm10_ledger_clean`,
+introduced by [ADR-23](23-backend-support-tiers.md)) is removed: every backend
+reported "no", so the section carried no information for a reader to act on.
+Separately, `DEWASM_APPS_ALL` and `run_heavy_apps()` are retired in favor of a
+`heavy_test` cargo feature declared by each backend crate: the heavy per-case
+macros (`qjs_eval_e2e!`, `sqlite3_shell_e2e!`, the filesystem-app and C-API
+macros, `qjs_repl_pty_e2e!`) now expand their generated `#[test]` with
+`#[cfg_attr(not(feature = "heavy_test"), ignore = "...")]` instead of gating
+inside the shared runner, which now always runs unconditionally (`_forced`
+variants are gone — there is only one runner per case). This makes the heavy
+cases ordinary `#[ignore]`d tests: `cargo test` skips them visibly, one
+`cargo test -- --include-ignored` runs everything across the whole workspace,
+and `--features heavy_test` runs them for a single crate — no bespoke env var
+to remember or keep in sync with the trait method it used to call.

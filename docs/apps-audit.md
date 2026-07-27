@@ -46,7 +46,8 @@ Python (`qjs_file_io_python`, `qjs_repl_python`, ADR-28), Go
 (`qjs_file_io_go`, `qjs_repl_go`, ADR-29's third milestone), and Java
 (`qjs_file_io_java`, `qjs_repl_java`, ADR-30's third milestone, all adopting
 ADR-14's fs model) now mirror both against the same fixtures and goldens,
-gated behind `DEWASM_APPS_ALL` in each crate:
+gated behind the `heavy_test` cargo feature in each crate (`#[ignore]`d
+otherwise; run with `--features heavy_test` or `-- --include-ignored`):
 
 - *File I/O* (`qjs_file_io_ruby`): the `qjs:std` module writes a file,
   reads it back, and prints it; the test asserts the guest stdout golden
@@ -75,7 +76,7 @@ gated behind `DEWASM_APPS_ALL` in each crate:
   it does under wasmtime). The interactive REPL is now verified
   **byte-identical to wasmtime under a real pty** on all four
   poll_oneoff backends (Ruby, Python, Go, Java): the `qjs_repl_pty` case
-  (`qjs_repl_pty_e2e!`, gated on `DEWASM_APPS_ALL`) converts bare qjs to a
+  (`qjs_repl_pty_e2e!`, gated on the `heavy_test` feature) converts bare qjs to a
   standalone program, drives the scripted session
   `1+2⏎[3,1,2].sort()⏎Math.max(4,9)⏎\q⏎` under an 80x24 pty
   (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`), and compares the
@@ -93,7 +94,7 @@ artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
 now covered on the existing ADR-14 syscall set (no new WASI unit). The
 shell DB-file case is also mirrored under Python (`sqlite3_shell_dbfile_python`),
 Go (`sqlite3_shell_dbfile_go`), and Java (`sqlite3_shell_dbfile_java`), same
-fixture/golden, `DEWASM_APPS_ALL`-gated;
+fixture/golden, `heavy_test`-feature-gated;
 the C-API/callback cases stay Ruby-only (they exercise Ruby's provider/guest-
 memory idioms, not new WASI fs):
 
@@ -152,8 +153,8 @@ callsite:
 Where included, each is comfortably under the ADR-24 ~5-minute bar, so it
 genuinely executes rather than being a conversion-only smoke. Because the
 heavy source and RSS on *every* `cargo test` is too costly for the default
-gate, both cases (like all filesystem-app cases) are gated behind
-`DEWASM_APPS_ALL` —
+gate, both cases (like all filesystem-app cases) are gated behind the
+`heavy_test` cargo feature —
 the same deliberate perf opt-out the heavy `apps` cases use (ADR-15's
 documented scope: a perf gate, not a missing-environment skip). CRuby on Ruby
 is the "Ruby on Ruby" north-star demo.
@@ -170,7 +171,7 @@ run-to-run). ripgrep imports `poll_oneoff`/`path_readlink` but does not call
 them on this path, so no new WASI unit was needed. Ruby (`rg_search_ruby`):
 convert ~1.4 s, run ~1.7 s. Python (`rg_search_python`), Go
 (`rg_search_go`, ADR-29), and Java (`rg_search_java`, ADR-30) now mirror it
-against the same fixture/golden, `DEWASM_APPS_ALL`-gated: Python ~10 s
+against the same fixture/golden, `heavy_test`-feature-gated: Python ~10 s
 convert+run for the 22 MB wasm; Go convert+`go build`+run cold likewise
 dominated by the compile. Java is the class-split stress case: rg's ~7300
 functions and ~4900-entry function table overflow a single class's 65535-entry

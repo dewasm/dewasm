@@ -70,18 +70,13 @@ pub fn capture_qjs_repl_golden(lang: &dyn BackendUnderTest) -> Vec<u8> {
     transcript
 }
 
-/// The gated per-backend runner: convert qjs to a standalone program for
-/// `lang`, drive its REPL under a pty, and require the transcript to be
-/// byte-identical to the wasmtime golden. Gated behind `DEWASM_APPS_ALL` (the
-/// sanctioned perf opt-out; prints a skip note and returns when unset, ADR-15).
+/// The per-backend runner: convert qjs to a standalone program for `lang`,
+/// drive its REPL under a pty, and require the transcript to be
+/// byte-identical to the wasmtime golden. The perf opt-out lives at the
+/// macro/feature level (`qjs_repl_pty_e2e!` expands its `#[test]` as
+/// `#[ignore]`d unless the `heavy_test` feature is on), so this runner runs
+/// unconditionally.
 pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
-    if std::env::var("DEWASM_APPS_ALL").is_err() {
-        println!(
-            "qjs_repl_pty skipped for {} (DEWASM_APPS_ALL=1 to run)",
-            lang.name()
-        );
-        return;
-    }
     let golden = std::fs::read(qjs_repl_golden_path()).unwrap_or_else(|e| {
         panic!(
             "qjs repl golden {:?} not readable ({e}) — regenerate it via the \

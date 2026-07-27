@@ -147,11 +147,12 @@ against `wasmtime` is a checked-in test gate ([docs/apps-audit.md](docs/apps-aud
   Converting a runtime and running it back on Ruby is the **"Ruby on Ruby"**
   north-star, achieved.
 
-Honest caveats: the heavy apps (QuickJS, SQLite, CPython, CRuby) are gated
-behind `DEWASM_APPS_ALL` in the test suite because they are slow and large —
-CRuby is a ~335 MB Ruby source file that runs in ~60 s — and Bash skips them
-by default because its softfloat makes float-heavy programs slow. These are
-deliberate performance opt-outs, not correctness gaps ([ADR-15](docs/adr/15-tests-fail-not-skip.md)).
+Honest caveats: the heavy apps (QuickJS, SQLite, CPython, CRuby) are `#[ignore]`d
+by default in the test suite — gated behind each backend crate's `heavy_test`
+cargo feature — because they are slow and large — CRuby is a ~335 MB Ruby
+source file that runs in ~60 s — and Bash skips them by default because its
+softfloat makes float-heavy programs slow. These are deliberate performance
+opt-outs, not correctness gaps ([ADR-15](docs/adr/15-tests-fail-not-skip.md)).
 
 The north-star demos we steer toward: a library-mode SQLite as a pure-Ruby
 `sqlite3` driver (Ruby on Rails on a dewasmified SQLite), and C/Rust tools

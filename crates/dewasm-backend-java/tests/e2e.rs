@@ -129,16 +129,6 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// QuickJS and SQLite run to completion under Java's full WASI surface
-    /// (ADR-30) and match the wasmtime goldens, so — like the other backends —
-    /// Java runs the heavy `apps` cases by default; the class-dir cache keeps the
-    /// bimodal `javac` cost well under the ADR-24 5-minute bar. The much heavier
-    /// filesystem app cases live in the shared per-case consts, gated behind
-    /// `DEWASM_APPS_ALL`.
-    fn run_heavy_apps(&self) -> bool {
-        true
-    }
-
     /// Compose several `.wat` modules for the multi-module cases. Java only
     /// composes against one shared runtime (mirroring the spec harness's
     /// `register` path): generate each module's class with

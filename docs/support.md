@@ -77,15 +77,3 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | sock_recv | — | — | — | — | — |
 | sock_send | — | — | — | — | — |
 | sock_shutdown | — | — | — | — | — |
-
-## Spec testsuite ledger
-
-Whether the backend's spec `EXPECTED_FAILURES` ledger holds any wasm-1.0-
-attributable entries ([ADR-16](adr/16-ruby-wasm1-completion.md) is the current
-example).
-
-- **ruby**: Spec ledger clean: no
-- **bash**: Spec ledger clean: no
-- **python**: Spec ledger clean: no
-- **go**: Spec ledger clean: no
-- **java**: Spec ledger clean: no

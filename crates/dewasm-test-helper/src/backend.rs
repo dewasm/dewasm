@@ -83,14 +83,6 @@ pub trait BackendUnderTest: Sync {
         }
     }
 
-    /// Whether the `apps` suite should run its `heavy` cases (QuickJS,
-    /// SQLite) for this backend even without `DEWASM_APPS_ALL`. Fast
-    /// interpreters (Ruby) run them by default; slow ones (Bash softfloat)
-    /// opt out unless the env var forces them on.
-    fn run_heavy_apps(&self) -> bool {
-        true
-    }
-
     /// Compose several wat modules that share the backend's linkage model into
     /// one runnable source (no driver appended). `modules` is `(wat filename in
     /// examples/wat, class/type name)` pairs. `shared_runtime` selects the

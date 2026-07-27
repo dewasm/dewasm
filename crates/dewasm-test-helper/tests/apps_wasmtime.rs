@@ -27,10 +27,9 @@ use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
-    qjs_repl_golden_path, run_app_case, run_command_bytes, run_fs_app_case_forced, run_gzip_cases,
-    run_heavy_app_case_forced, BackendUnderTest, PtyCommand, COWSAY_ARGS, COWSAY_STDIN,
-    CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL,
-    SQLITE3_SHELL_DBFILE,
+    qjs_repl_golden_path, run_app_case, run_command_bytes, run_fs_app_case, run_gzip_cases,
+    run_heavy_app_case, BackendUnderTest, PtyCommand, COWSAY_ARGS, COWSAY_STDIN, CPYTHON_HELLO,
+    CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL, SQLITE3_SHELL_DBFILE,
 };
 
 /// A [`Backend`] that only exists to satisfy `BackendUnderTest::backend()`.
@@ -168,10 +167,10 @@ impl BackendUnderTest for Wasmtime {
 // onto the generated fn is a local macro-parsing ambiguity (`#` can begin an
 // expr fragment). Calling the shared runners directly is the simplest honest
 // way to attach the `wasmtime_test` ignore gate while still routing through
-// the exact same runners the real backends use. The heavy cases (qjs eval,
-// sqlite3 shell) use the `_forced` entry point so wasmtime always runs all
-// four under the feature flag, rather than also requiring `DEWASM_APPS_ALL`
-// (the same choice `fs_apps` below makes).
+// the exact same runners the real backends use. The runners themselves are
+// ungated (the heavy per-case macros carry their own `heavy_test`-feature
+// `#[ignore]` instead, ADR-27 revision), so `wasmtime_test` alone gates every
+// test in this file.
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
@@ -188,13 +187,13 @@ fn cowsay_stdin() {
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn qjs_eval() {
-    run_heavy_app_case_forced(&Wasmtime, &QJS_EVAL);
+    run_heavy_app_case(&Wasmtime, &QJS_EVAL);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn sqlite3_shell() {
-    run_heavy_app_case_forced(&Wasmtime, &SQLITE3_SHELL);
+    run_heavy_app_case(&Wasmtime, &SQLITE3_SHELL);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
@@ -204,9 +203,7 @@ fn gzip() {
 }
 
 // The filesystem app cases: the `wasmtime_test` feature is already the opt-in,
-// so run every case unconditionally (`_forced`) rather than also requiring
-// `DEWASM_APPS_ALL` — the gated per-case runner is for the codegen backends.
-// wasmtime is the ground-truth engine, so it runs the full set with no
+// and `run_fs_app_case` is ungated, so wasmtime runs the full set with no
 // per-case exclusion; its `run_app_fs` override ignores the glue, so each case
 // is driven with an empty glue string. Hand-written rather than via the per-case
 // `*_e2e!` macros because those cannot carry the `wasmtime_test` ignore gate
@@ -214,12 +211,12 @@ fn gzip() {
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn fs_apps() {
-    run_fs_app_case_forced(&Wasmtime, &QJS_FILE_IO, "");
-    run_fs_app_case_forced(&Wasmtime, &QJS_REPL, "");
-    run_fs_app_case_forced(&Wasmtime, &SQLITE3_SHELL_DBFILE, "");
-    run_fs_app_case_forced(&Wasmtime, &RG_SEARCH, "");
-    run_fs_app_case_forced(&Wasmtime, &CPYTHON_HELLO, "");
-    run_fs_app_case_forced(&Wasmtime, &CRUBY_HELLO, "");
+    run_fs_app_case(&Wasmtime, &QJS_FILE_IO, "");
+    run_fs_app_case(&Wasmtime, &QJS_REPL, "");
+    run_fs_app_case(&Wasmtime, &SQLITE3_SHELL_DBFILE, "");
+    run_fs_app_case(&Wasmtime, &RG_SEARCH, "");
+    run_fs_app_case(&Wasmtime, &CPYTHON_HELLO, "");
+    run_fs_app_case(&Wasmtime, &CRUBY_HELLO, "");
 }
 
 // Golden freshness for the interactive-REPL transcript (Fix 4): re-capture the

@@ -29,12 +29,6 @@ impl BackendUnderTest for Bash {
     fn interpreter(&self) -> PathBuf {
         find_bash5().expect("bash >= 5 not found — see docs/testing.md")
     }
-
-    // Bash's softfloat makes QuickJS/SQLite take tens of seconds, so the heavy
-    // apps cases only run under DEWASM_APPS_ALL.
-    fn run_heavy_apps(&self) -> bool {
-        false
-    }
 }
 
 // ---------------------------------------------------------------------
@@ -95,9 +89,10 @@ wasi_suite!(Bash, ArgsEnv);
 
 cowsay_args_e2e!(Bash);
 cowsay_stdin_e2e!(Bash);
-// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but `run_heavy_apps` (above)
-// skips them by default — Bash's softfloat makes QuickJS/SQLite take tens of
-// seconds. DEWASM_APPS_ALL=1 runs them anyway.
+// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but heavy — Bash's softfloat
+// makes QuickJS/SQLite take tens of seconds, so the generated tests are
+// `#[ignore]`d by default; `--features heavy_test` or `-- --include-ignored` runs
+// them anyway (same as every other backend, ADR-27 revision).
 qjs_eval_e2e!(Bash);
 sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
