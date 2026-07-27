@@ -81,16 +81,20 @@ suite:
       startup, which the heavy e2e cases preopen.
 - **The filesystem-exercising app cases are shared** across every fs-capable
   backend (ADR-27 revision): the QuickJS file-I/O and scripted-REPL cases, the
-  sqlite3 DB-file case, ripgrep, and the CPython/CRuby runtime demos live in the
-  shared `FS_APP_CASES` table (`crates/dewasm-test-helper/src/apps_fs.rs`, run
-  via `fs_apps_e2e!`); the sqlite3 C-API / callback drives live in the shared
-  `CAPI_CASES` table (`apps_capi.rs`, run via `capi_apps_e2e!`). Each backend
-  supplies only per-language glue; per-case `exclude` rows carry the documented
-  capability/practicality exclusions (e.g. CPython/CRuby on Java, CRuby on Go).
-  The committed driver fixtures (the `.js` scripts) live in
-  `examples/apps/fixtures/`; the `FS_APP_CASES` goldens are still captured from
-  `wasmtime` (the C-API drives have no wasmtime golden — results live in guest
-  memory — so each pins a fixed string).
+  sqlite3 DB-file case, ripgrep, and the CPython/CRuby runtime demos are `pub
+  const` cases in `crates/dewasm-test-helper/src/apps_fs.rs`, each driven by its
+  own per-case macro (`qjs_file_io_e2e!` … `cruby_hello_e2e!`); the sqlite3 C-API
+  / callback drives live in `apps_capi.rs`, run via `libsqlite3_c_api_e2e!` and
+  friends. Each backend supplies only a named glue string constant per case
+  (class name, argv, env, and preopen *guest* paths written literally; the
+  runtime host paths substituted from `{scratch}`/`{cache}` placeholders). A
+  backend that cannot run a case does not invoke that case's macro; the reason is
+  a comment at the (absent) callsite, with the measured numbers in
+  `docs/apps-audit.md` (e.g. CPython/CRuby on Java, CRuby on Go). The committed
+  driver fixtures (the `.js` scripts) live in `examples/apps/fixtures/`; the
+  filesystem-app goldens are still captured from `wasmtime` (the C-API drives
+  have no wasmtime golden — results live in guest memory — so each pins a fixed
+  string).
 - **No `wasmtime` install is needed to run these tests.** They used to
   diff live against `wasmtime run`; that comparison's result is fixed
   for a pinned binary and fixed input, so it's captured once and checked
@@ -150,17 +154,23 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   (and, for bash, the curated file list), wired up with `spec_suite!`. Run it
   with `cargo test -p dewasm-backend-<lang> --test spec`.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`** — that backend's suites,
-  declared by invoking the shared macros: `standalone_e2e!`, `library_e2e!`,
-  `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`, and (for the
-  fs-capable backends) `fs_apps_e2e!`, `capi_apps_e2e!`, `multi_module_e2e!`
-  over the shared tables in `dewasm-test-helper`. Per the ADR-27 revision this
-  file contains **only** the `BackendUnderTest` impl, glue strings /
-  glue-producing functions (library glue, WASI-filesystem instantiation glue,
-  the C-API driver glue, the `app_glue` and `compose_modules` impls), and macro
-  invocations — no backend-specific `#[test]` function. Which macros a backend
-  invokes, plus each shared table's per-case `exclude` `(lang, reason)` rows, is
-  the capability declaration; a case a backend is wired to run but has no glue
-  for fails loudly (ADR-15).
+  declared by invoking the shared macros. The zero-glue aggregate macros
+  (`standalone_e2e!`, `apps_e2e!`, `gzip_e2e!`, `qjs_repl_pty_e2e!`,
+  `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`) take just the backend; the
+  per-case macros (the library cases, the filesystem apps `qjs_file_io_e2e!` …
+  `cruby_hello_e2e!`, the C-API `libsqlite3_c_api_e2e!` …, the multi-module
+  `shared_table_e2e!`/`embedded_coexist_e2e!`, `wasi_root_containment_e2e!`) and
+  the WASI-filesystem template `wasi_suite!(Fs, …)` take one named glue-string
+  constant as their only glue argument. Per the ADR-27 revision this file
+  contains **only** the `BackendUnderTest` impl, named glue string constants
+  (library glue, the WASI-filesystem template, the filesystem-app instantiation
+  glue, the C-API driver glue, the multi-module driver glue, and the
+  `compose_modules` impl), and macro invocations — no backend-specific `#[test]`
+  function, no glue-returning function or `match` on a case name. Which macros a
+  backend invokes is the capability declaration; a case a backend cannot run is
+  simply not invoked, with the reason as a comment at the callsite. Runtime paths
+  a glue const cannot know statically are `{scratch}`/`{cache}`/`{guest}`/`{host}`
+  placeholders the runner fills (`glue::fill`).
 - **The interactive-REPL pty case (`qjs_repl_pty`).** `qjs_repl_pty_e2e!`
   drives the *bare* QuickJS REPL (no script arg → interactive line editor)
   under a real pty (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`) and

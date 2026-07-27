@@ -116,9 +116,10 @@ memory idioms, not new WASI fs):
 the ADR-27 revision).** Both language-runtime binaries are converted *and run*,
 each reading its stdlib from a preopened directory (`fetch.sh` extracts the
 trees: `cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`).
-They are now shared `FS_APP_CASES` rows (`cpython_hello`, `cruby_hello`) — the
-stdlib trees mount straight from the app cache via the table's `cache_preopens`
-field (never copied), and each is ground-truthed against `wasmtime --dir`. The
+They are now shared per-case consts (`CPYTHON_HELLO`, `CRUBY_HELLO`, driven by
+`cpython_hello_e2e!`/`cruby_hello_e2e!`) — the stdlib trees mount straight from
+the app cache via the case's `cache_preopens` field (never copied), and each is
+ground-truthed against `wasmtime --dir`. The
 feature audit reports both as baseline-only (in scope). No new WASI unit was
 needed: the wide import lists below include functions no backend implements
 (CPython imports `poll_oneoff`/`path_link`/`path_symlink`/`path_readlink`/
@@ -134,8 +135,9 @@ backends) + run:
 | CPython 3.14.6 | 30 MB | ~1.4 s + ~12 s ✅ | ~6 s + ~31 s ✅ | ~1.4 s + `go build` ~84 s + ~1 s ✅ | ⛔ excluded |
 | CRuby 3.4 | 35 MB | ~2.8 s + ~60 s ✅ | ~3 s + ~107 s ✅ | ⛔ excluded | ⛔ excluded |
 
-Exclusions are measured, not guessed, and encoded as `FsAppCase.exclude`
-`(lang, reason)` rows the runner prints:
+Exclusions are measured, not guessed, and encoded (ADR-27 revision) as a backend
+simply not invoking that case's macro, the reason kept as a comment at the
+callsite:
 
 - **Java (both):** a single generated interpreter method overflows the JVM's
   64 KB per-method bytecode limit (`javac`: *code too large* on CPython) and,
@@ -150,7 +152,8 @@ Exclusions are measured, not guessed, and encoded as `FsAppCase.exclude`
 Where included, each is comfortably under the ADR-24 ~5-minute bar, so it
 genuinely executes rather than being a conversion-only smoke. Because the
 heavy source and RSS on *every* `cargo test` is too costly for the default
-gate, both cases (like all `FS_APP_CASES`) are gated behind `DEWASM_APPS_ALL` —
+gate, both cases (like all filesystem-app cases) are gated behind
+`DEWASM_APPS_ALL` —
 the same deliberate perf opt-out the heavy `apps` cases use (ADR-15's
 documented scope: a perf gate, not a missing-environment skip). CRuby on Ruby
 is the "Ruby on Ruby" north-star demo.

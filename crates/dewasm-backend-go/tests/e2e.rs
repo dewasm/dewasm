@@ -1,32 +1,33 @@
 //! Go end-to-end suites (ADR-27): the shared standalone / library / WASI /
-//! apps case tables (`dewasm-test-helper`) wired up for the Go backend.
+//! apps case consts (`dewasm-test-helper`) wired up for the Go backend. Per the
+//! ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
+//! glue string constants, and per-case macro invocations; glue is a plain `&str`
+//! argument at the callsite, and which macros this file invokes is the
+//! capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Go is the first *compiled* backend, so it overrides `BackendUnderTest::run`
-//! (ADR-27's hook) to compile-and-execute instead of interpreting: `go build`
-//! the generated file to a content-addressed cache binary (so identical
-//! sources — e.g. cowsay's args and stdin cases — build once), then run the
-//! binary directly. Running the binary (not `go run`) is required because
-//! `go run` does not propagate the guest exit code (it prints "exit status N"
-//! and exits 1); the WASI args/env case asserts an exact exit code.
-//!
-//! First-milestone scope (ADR-29): "cowsay runs". WASI covers the eight core
-//! syscalls (stdio + args/env), so the whole-program `Stdio`/`ArgsEnv` kinds
-//! and the two library cases are wired, plus `apps_e2e!` (cowsay byte-identical;
-//! the heavy qjs/sqlite cases stay off, and the `Fs` suite and `gzip_e2e!` wait
-//! for the WASI filesystem — minigzip needs `path_open`/`fd_seek`).
+//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's
+//! hook) to compile-and-execute instead of interpreting: `go build` the
+//! generated file to a content-addressed cache binary (so identical sources —
+//! e.g. cowsay's args and stdin cases — build once), then run the binary
+//! directly. Running the binary (not `go run`) is required because `go run` does
+//! not propagate the guest exit code (it prints "exit status N" and exits 1);
+//! the WASI args/env case asserts an exact exit code. Go covers full WASI
+//! preview 1 incl. the filesystem (ADR-29).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
-    apps_e2e, capi_apps_e2e, examples_dir, fs_apps_e2e, gzip_e2e, library_e2e, multi_module_e2e,
-    qjs_repl_pty_e2e, run_command_bytes, standalone_e2e, wasi_suite, BackendUnderTest, CApiCase,
-    LibraryCase, MultiModuleCase, PtyCommand, WasiCase,
+    apps_e2e, cpython_hello_e2e, examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e,
+    qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes,
+    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, standalone_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Go;
@@ -70,68 +71,14 @@ impl BackendUnderTest for Go {
         }
     }
 
-    /// QuickJS and SQLite now run to completion under Go's full WASI surface
-    /// (ADR-29 third milestone) and pass, so — like the fast interpreters
-    /// (Ruby/Python) — Go runs the heavy `apps` cases (qjs, sqlite3-shell,
-    /// in-memory) by default. Go is compiled, so its cost is bimodal but
-    /// competitive: measured locally cowsay+qjs+sqlite3-shell standalone is
-    /// ~33 s cold (Go's own build cache empty) and ~3 s on every subsequent
-    /// run (that cache warm) — cheaper across repeated runs than Ruby's ~15 s
-    /// (interpreted, no caching), and far under the ADR-24 5-minute bar. The
-    /// much heavier filesystem app cases (qjs/sqlite reconversion for the fs
-    /// scenarios, rg's 22 MB wasm) live in the shared `FS_APP_CASES` table,
-    /// gated behind `DEWASM_APPS_ALL` (`fs_apps_e2e!`).
+    /// QuickJS and SQLite run to completion under Go's full WASI surface
+    /// (ADR-29) and pass, so — like the fast interpreters (Ruby/Python) — Go
+    /// runs the heavy `apps` cases (qjs, sqlite3-shell, in-memory) by default.
+    /// Go is compiled, so its cost is bimodal but competitive and far under the
+    /// ADR-24 5-minute bar. The much heavier filesystem app cases live in the
+    /// shared per-case consts, gated behind `DEWASM_APPS_ALL`.
     fn run_heavy_apps(&self) -> bool {
         true
-    }
-
-    /// A `func main` instantiating `class` (positional ctor
-    /// `New<class>(imports, args, env, preopens)`), running `_start`, and
-    /// recovering a clean guest `proc_exit` (`*rtExit`). Generalizes the
-    /// hand-written glue the mirrored fs app tests used.
-    fn app_glue(
-        &self,
-        class: &str,
-        args: &[&str],
-        env: &[(&str, &str)],
-        preopens: &[(&str, &Path)],
-    ) -> String {
-        let argv = args
-            .iter()
-            .map(|a| format!("{a:?}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        // The ctor's `env` is a `[]string` of `KEY=VALUE` pairs (the shape
-        // `os.Environ()` produces and `newWASI` consumes), not a map.
-        let env_expr = if env.is_empty() {
-            "nil".to_string()
-        } else {
-            let e = env
-                .iter()
-                .map(|(k, v)| format!("{:?}", format!("{k}={v}")))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("[]string{{{e}}}")
-        };
-        let pres = preopens
-            .iter()
-            .map(|(guest, host)| format!("{guest:?}: {:?}", host.to_string_lossy()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "func main() {{\n\
-             \tinst := New{class}(nil, []string{{{argv}}}, {env_expr}, map[string]string{{{pres}}})\n\
-             \tdefer func() {{\n\
-             \t\tif r := recover(); r != nil {{\n\
-             \t\t\tif _, ok := r.(*rtExit); ok {{\n\
-             \t\t\t\treturn\n\
-             \t\t\t}}\n\
-             \t\t\tpanic(r)\n\
-             \t\t}}\n\
-             \t}}()\n\
-             \tinst.Exports[\"_start\"].(func())()\n\
-             }}\n"
-        )
     }
 
     /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
@@ -143,7 +90,7 @@ impl BackendUnderTest for Go {
     /// appended driver prints with it), the bundle, then the module decls. The
     /// driver (`func main`) is appended afterwards by the runner, so no main is
     /// emitted. `shared_runtime=false` (independent Embedded runtimes) is never
-    /// exercised for Go: `embedded_runtimes_coexist` is excluded because Go emits
+    /// exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits
     /// one flat top-level runtime shared by all modules (ADR-29).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         assert!(
@@ -261,26 +208,21 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-/// Per-case Go glue (a `func main` appended after the generated declarations;
-/// it carries no `import` — the generated file already imports `fmt`). A case
-/// wired to run but with no glue panics loudly (ADR-15).
-fn go_glue(case: &LibraryCase) -> &'static str {
-    match case.name {
-        "add" => {
-            "func main() {\n\
-             \tinst := NewAdd(nil, nil, nil, nil)\n\
-             \tfmt.Println(inst.Exports[\"add\"].(func(uint32, uint32) uint32)(2, 3))\n\
-             \tfmt.Println(inst.Exports[\"add\"].(func(uint32, uint32) uint32)(0xffffffff, 1))\n\
-             \tfmt.Println(inst.Exports[\"fib\"].(func(uint32) uint32)(10))\n\
-             }\n"
-        }
-        "wasi_import_override" => GO_OVERRIDE_GLUE,
-        other => panic!("{other}: no go glue"),
-    }
+// ---------------------------------------------------------------------
+// Library-case glue. The appended `func main` carries no `import` — the
+// generated file already imports `fmt`.
+
+/// `add.wat`: call the exported functions and print each result.
+const GO_ADD_GLUE: &str = r#"func main() {
+	inst := NewAdd(nil, nil, nil, nil)
+	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(2, 3))
+	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(0xffffffff, 1))
+	fmt.Println(inst.Exports["fib"].(func(uint32) uint32)(10))
 }
+"#;
 
 /// The ADR-7 override/fallback glue: an explicit `fd_write` import wins,
-/// `random_get` falls back to the bundled WASI. Mirrors the Ruby/Python/Bash
+/// `random_get` falls back to the bundled WASI. Mirrors the other backends'
 /// override glues — intercept fd_write and print the actual bytes written.
 const GO_OVERRIDE_GLUE: &str = r#"func main() {
 	var captured []byte
@@ -298,72 +240,130 @@ const GO_OVERRIDE_GLUE: &str = r#"func main() {
 }
 "#;
 
-/// Instantiate an fs fixture with the scratch dir preopened at guest `/`, run
-/// `_start`, and surface a `proc_exit` code as a trailing decimal line (via
-/// rtExit). One glue serves both stdout-reporting and proc_exit fixtures: the
-/// former return from `_start` normally, so nothing extra is printed. rt/exit
-/// is always seeded for library-mode WASI output (see lib.rs), so `*rtExit` is
-/// defined even for fixtures that never import proc_exit. Mirrors
-/// `python_fs_glue`/`ruby_fs_glue`.
-fn go_fs_glue(case: &WasiCase, host: &Path) -> String {
-    if case.name == "fs_root_preopen_containment" {
-        // Probe the WASI resolver directly (no guest run): a `"/" => "/"`
-        // preopen must resolve a relative path rather than reject every one
-        // (the containment prefix must not degenerate to "//"). fd 3 is the
-        // sole preopen; errno 0 (wasiOk) means the path stayed contained.
-        return "func main() {\n\
-                \tw := newWASI(nil, nil, map[string]string{\"/\": \"/\"})\n\
-                \t_, err := w.resolve_path(3, \"etc\", true)\n\
-                \tif err == 0 {\n\
-                \t\tfmt.Println(\"contained\")\n\
-                \t} else {\n\
-                \t\tfmt.Println(\"rejected\")\n\
-                \t}\n\
-                }\n"
-        .to_string();
-    }
-    format!(
-        "func main() {{\n\
-         \tinst := NewProg(nil, nil, nil, map[string]string{{{:?}: {:?}}})\n\
-         \tdefer func() {{\n\
-         \t\tif r := recover(); r != nil {{\n\
-         \t\t\tif e, ok := r.(*rtExit); ok {{\n\
-         \t\t\t\tfmt.Println(e.code)\n\
-         \t\t\t\treturn\n\
-         \t\t\t}}\n\
-         \t\t\tpanic(r)\n\
-         \t\t}}\n\
-         \t}}()\n\
-         \tinst.Exports[\"_start\"].(func())()\n\
-         }}\n",
-        "/",
-        host.to_string_lossy()
-    )
+// ---------------------------------------------------------------------
+// WASI filesystem glue.
+
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
+/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (via
+/// rtExit) as a trailing decimal line. rt/exit is always seeded for library-mode
+/// WASI output, so `*rtExit` is defined even for fixtures that never import
+/// proc_exit.
+const GO_FS_GLUE: &str = r#"func main() {
+	inst := NewProg(nil, nil, nil, map[string]string{"{guest}": "{host}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(*rtExit); ok {
+				fmt.Println(e.code)
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
 }
+"#;
+
+/// The root-preopen containment probe: probe the WASI resolver directly (no
+/// guest run). A `"/" => "/"` preopen must resolve a relative path rather than
+/// reject every one; fd 3 is the sole preopen, errno 0 (wasiOk) means contained.
+const GO_CONTAINMENT_GLUE: &str = r#"func main() {
+	w := newWASI(nil, nil, map[string]string{"/": "/"})
+	_, err := w.resolve_path(3, "etc", true)
+	if err == 0 {
+		fmt.Println("contained")
+	} else {
+		fmt.Println("rejected")
+	}
+}
+"#;
+
+// ---------------------------------------------------------------------
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
+// the host scratch/cache dirs come through {scratch}/{cache}. One glue serves
+// both stdout-reporting and proc_exit fixtures: the former return from `_start`
+// normally, so nothing extra is printed.
+
+const GO_QJS_FILE_IO_GLUE: &str = r#"func main() {
+	inst := NewQjs(nil, []string{"qjs", "/work/qjs_file_io.js"}, nil, map[string]string{"/work": "{scratch}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
+const GO_QJS_REPL_GLUE: &str = r#"func main() {
+	inst := NewQjs(nil, []string{"qjs", "/work/qjs_repl.js"}, nil, map[string]string{"/work": "{scratch}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
+const GO_SQLITE3_SHELL_GLUE: &str = r#"func main() {
+	inst := NewSqlite3Shell(nil, []string{"sqlite3"}, nil, map[string]string{"/db": "{scratch}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
+const GO_RG_SEARCH_GLUE: &str = r#"func main() {
+	inst := NewRg(nil, []string{"rg", "--sort", "path", "needle", "/work"}, nil, map[string]string{"/work": "{scratch}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
+const GO_CPYTHON_GLUE: &str = r#"func main() {
+	inst := NewCpython(nil, []string{"python", "-c", "print('hello from cpython', 6 * 7)"}, []string{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, map[string]string{"/lib": "{cache}/cpython-lib/lib"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
 
 // ---------------------------------------------------------------------
 // C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the
 // unexported `inst.memory` (`*Memory`). The appended `func main` carries no
-// `import` (the library file already imports `fmt`), so the glue uses only
-// `fmt` + builtins — C strings are scanned/written through `inst.memory.data`
-// / `read_string` / `init`. No wasmtime golden exists (the results live in
-// guest memory), so each drive's output is pinned in the shared table.
-
-fn go_capi_glue(case: &CApiCase, scratch: &Path) -> String {
-    match case.name {
-        "libsqlite3_c_api" => GO_LIBSQLITE3_MEM.replace("__CLASS__", case.class),
-        "sqlite3_file_c_api" => GO_LIBSQLITE3_FILE
-            .replace("__CLASS__", case.class)
-            .replace("__DB__", &format!("{:?}", scratch.to_string_lossy())),
-        "sqlite3_callback_binding" => GO_SQLITE3_CALLBACK.replace("__CLASS__", case.class),
-        other => panic!("{other}: no go capi glue"),
-    }
-}
+// `import` (the library file already imports `fmt`). No wasmtime golden exists
+// (the results live in guest memory), so each drive's output is pinned in the
+// shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
 /// `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const GO_LIBSQLITE3_MEM: &str = r#"func main() {
-	inst := New__CLASS__(nil, nil, nil, nil)
+	inst := NewLibsqlite3(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
 	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
@@ -433,7 +433,7 @@ const GO_LIBSQLITE3_MEM: &str = r#"func main() {
 /// select — the file lifecycle through the C API (same ADR-14 fs stack as the
 /// shell).
 const GO_LIBSQLITE3_FILE: &str = r#"func main() {
-	inst := New__CLASS__(nil, nil, nil, map[string]string{"/db": __DB__})
+	inst := NewLibsqlite3(nil, nil, nil, map[string]string{"/db": "{scratch}"})
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
 	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
@@ -530,7 +530,7 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 		rows = append(rows, row)
 	}
 
-	inst := New__CLASS__(Imports{"env": {"host_row": hostRow}}, nil, nil, nil)
+	inst := NewSqlite3Binding(Imports{"env": {"host_row": hostRow}}, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem = inst.memory
 	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
@@ -588,28 +588,49 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 /// then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports`
 /// as the module provider, as the spec harness's cross-module `register` path
 /// does), and print its `call0` result (`42`).
-fn go_multi_module_glue(case: &MultiModuleCase) -> &'static str {
-    match case.name {
-        "shared_table_call_indirect" => {
-            "func main() {\n\
-             \ta := NewTableExp(nil, nil, nil, nil)\n\
-             \tb := NewTableImp(Imports{\"a\": a.Exports}, nil, nil, nil)\n\
-             \tfmt.Println(b.Exports[\"call0\"].(func() uint32)())\n\
-             }\n"
-        }
-        other => panic!("{other}: no go multi-module glue"),
-    }
+const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
+	a := NewTableExp(nil, nil, nil, nil)
+	b := NewTableImp(Imports{"a": a.Exports}, nil, nil, nil)
+	fmt.Println(b.Exports["call0"].(func() uint32)())
 }
+"#;
+
+// ---------------------------------------------------------------------
+// Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 standalone_e2e!(Go);
-library_e2e!(Go, go_glue);
+
+library_add_e2e!(Go, GO_ADD_GLUE);
+wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled
+// WASI is eagerly constructed in the ctor and there is no provider-object import
+// form (ADR-29), so the lazy-construction observable cannot hold.
+// stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no
+// io.Writer indirection to inject an in-memory buffer (ADR-29).
+
 wasi_suite!(Go, Stdio);
 wasi_suite!(Go, ArgsEnv);
 wasi_suite!(Go, Poll);
-wasi_suite!(Go, Fs, go_fs_glue);
+wasi_suite!(Go, Fs, GO_FS_GLUE);
+wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
+
 apps_e2e!(Go);
 gzip_e2e!(Go);
-fs_apps_e2e!(Go);
+
+qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Go, GO_RG_SEARCH_GLUE);
+cpython_hello_e2e!(Go, GO_CPYTHON_GLUE);
+// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source
+// exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured
+// >6 min); see docs/apps-audit.md.
 qjs_repl_pty_e2e!(Go);
-capi_apps_e2e!(Go, go_capi_glue);
-multi_module_e2e!(Go, go_multi_module_glue);
+
+libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM);
+sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE);
+sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK);
+
+shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
+// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is
+// shared by all modules (ADR-29); two independent runtimes cannot coexist.

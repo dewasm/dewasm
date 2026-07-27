@@ -91,23 +91,6 @@ pub trait BackendUnderTest: Sync {
         true
     }
 
-    /// Backend-specific glue that instantiates library-mode class `class`
-    /// with `args` (argv, argv0 included), `env`, and `preopens` (guest path
-    /// -> host directory), runs `_start`, and swallows a clean guest
-    /// `proc_exit`. Appended after the generated program by the default
-    /// [`Self::run_app_fs`]. A backend wired into the filesystem-app suite
-    /// (`run_fs_app_cases`) must implement this.
-    fn app_glue(
-        &self,
-        class: &str,
-        args: &[&str],
-        env: &[(&str, &str)],
-        preopens: &[(&str, &Path)],
-    ) -> String {
-        let _ = (class, args, env, preopens);
-        unimplemented!("a filesystem-app backend must implement app_glue()")
-    }
-
     /// Compose several wat modules that share the backend's linkage model into
     /// one runnable source (no driver appended). `modules` is `(wat filename in
     /// examples/wat, class/type name)` pairs. `shared_runtime` selects the
@@ -124,21 +107,24 @@ pub trait BackendUnderTest: Sync {
     }
 
     /// Run library-mode `program` (from [`Self::convert_app`]) as a
-    /// filesystem app: instantiate `class` with `args`/`env`/`preopens`, feed
-    /// `stdin`, and return the process `Output`. The default appends
-    /// [`Self::app_glue`] to `program` and runs the result through
-    /// `run_bytes`; an engine-under-test that runs the wasm binary directly
-    /// (wasmtime) overrides this to exec the binary with host preopens.
+    /// filesystem app: append the already-filled instantiation `glue` (a named
+    /// backend const with its `{scratch}`/`{cache}` placeholders resolved by the
+    /// runner, ADR-27 revision), feed `stdin`, and return the process `Output`.
+    /// The default runs `program` + `glue` through `run_bytes`, so the static
+    /// `args`/`env`/`preopens` are written literally inside `glue` and ignored
+    /// here; an engine-under-test that runs the wasm binary directly (wasmtime)
+    /// overrides this to exec the binary (`program` is the wasm path) with those
+    /// host `args`/`env`/`preopens` and ignores `glue`.
     fn run_app_fs(
         &self,
         program: &str,
-        class: &str,
+        glue: &str,
         args: &[&str],
         env: &[(&str, &str)],
         stdin: &[u8],
         preopens: &[(&str, &Path)],
     ) -> Output {
-        let glue = self.app_glue(class, args, env, preopens);
+        let _ = (args, env, preopens);
         self.run_bytes(&format!("{program}\n{glue}"), &[], stdin)
     }
 }

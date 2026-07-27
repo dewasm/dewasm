@@ -1,15 +1,18 @@
 //! Bash end-to-end suites (ADR-27): the shared standalone / library / WASI /
-//! apps case tables (`dewasm-test-helper`) wired up for the Bash backend.
-//! Bash has no WASI filesystem support (ADR-12), so there is no
-//! `wasi_suite!(Fs)` invocation; the library glue is Bash function calls over
-//! the R0.. result globals (ADR-11).
+//! apps case consts (`dewasm-test-helper`) wired up for the Bash backend. Per
+//! the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
+//! glue string constants, and per-case macro invocations. Bash has no WASI
+//! filesystem support and no host-language object model (ADR-12), so it invokes
+//! only the two always-available library cases (glue is Bash function calls over
+//! the R0.. result globals, ADR-11) and the whole-program WASI kinds it covers.
 
 use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    apps_e2e, gzip_e2e, library_e2e, standalone_e2e, wasi_suite, BackendUnderTest, LibraryCase,
+    apps_e2e, gzip_e2e, library_add_e2e, standalone_e2e, wasi_import_override_e2e, wasi_suite,
+    BackendUnderTest,
 };
 
 pub struct Bash;
@@ -34,21 +37,20 @@ impl BackendUnderTest for Bash {
     }
 }
 
-/// Per-case Bash glue: results come back through the R0 global (ADR-11). A
-/// case Bash is wired to run but has no glue for panics loudly (ADR-15).
-fn bash_glue(case: &LibraryCase) -> &'static str {
-    match case.name {
-        "add" => {
-            "add_init || exit 1\n\
-                  add_invoke add 2 3; echo $R0\n\
-                  add_invoke add 4294967295 1; echo $R0\n\
-                  add_invoke fib 10; echo $R0\n"
-        }
-        "wasi_import_override" => BASH_OVERRIDE_GLUE,
-        other => panic!("{other}: no bash glue"),
-    }
-}
+// ---------------------------------------------------------------------
+// Library-case glue: results come back through the R0 global (ADR-11).
 
+/// `add.wat`: call the exported functions and echo each result global.
+const BASH_ADD_GLUE: &str = r#"add_init || exit 1
+add_invoke add 2 3; echo $R0
+add_invoke add 4294967295 1; echo $R0
+add_invoke fib 10; echo $R0
+"#;
+
+/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins,
+/// `random_get` falls back to the bundled WASI. Captures and prints the actual
+/// bytes the module wrote — the same observable proof of interception the other
+/// backends' override glues use.
 const BASH_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   # (fd, iovs, iovs_len, nwritten_ptr): capture and print the actual
   # bytes the module wrote, the same observable proof of interception
@@ -75,11 +77,28 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
+// ---------------------------------------------------------------------
+// Suite wiring (ADR-27): each per-case macro invocation declares participation.
+
 standalone_e2e!(Bash);
-library_e2e!(Bash, bash_glue);
+
+library_add_e2e!(Bash, BASH_ADD_GLUE);
+wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e! / stdio_capture_e2e!: not
+// invoked — Bash has no host-language object model to replace WASI wholesale,
+// probe its lazy construction, or redirect stdio into an in-memory object
+// (ADR-12).
+
 wasi_suite!(Bash, Stdio);
 wasi_suite!(Bash, ArgsEnv);
+// wasi_suite!(Bash, Poll) / wasi_suite!(Bash, Fs) / wasi_root_containment_e2e!:
+// not invoked — Bash resolves poll_oneoff to ENOSYS and has no WASI filesystem
+// (ADR-12/ADR-14).
+
 apps_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
 // unlike the heavy floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);
+// No fs_apps / capi / multi-module macros: Bash has no WASI filesystem and no
+// host-language object model to plumb a C API or nested runtimes through
+// (ADR-12).

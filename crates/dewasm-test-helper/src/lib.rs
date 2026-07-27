@@ -10,6 +10,7 @@ mod apps_capi;
 mod apps_fs;
 mod backend;
 mod fixtures;
+mod glue;
 mod library;
 mod multimodule;
 mod pty;
@@ -19,9 +20,12 @@ mod standalone;
 mod wasi;
 
 pub use apps::{run_app_cases, run_gzip_cases, AppCase, APP_CASES};
-pub use apps_capi::{run_capi_cases, CApiCase, CApiGlue, CAPI_CASES};
+pub use apps_capi::{
+    run_capi_case, CApiCase, LIBSQLITE3_C_API, SQLITE3_CALLBACK_BINDING, SQLITE3_FILE_C_API,
+};
 pub use apps_fs::{
-    run_fs_app_cases, run_fs_app_cases_forced, FsAppCase, FsRun, Stage, FS_APP_CASES,
+    run_fs_app_case, run_fs_app_case_forced, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO,
+    QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL_DBFILE,
 };
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
@@ -31,10 +35,11 @@ pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
 };
-pub use library::{run_library_case, GlueResolver, LibraryCase, LIBRARY_CASES};
-pub use multimodule::{
-    run_multi_module_case, MultiModuleCase, MultiModuleGlue, MULTI_MODULE_CASES,
+pub use library::{
+    run_library_case, LibraryCase, CUSTOM_WASI_PROVIDER, LIBRARY_ADD, PARTIAL_OVERRIDE,
+    STDIO_CAPTURE, WASI_IMPORT_OVERRIDE,
 };
+pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
@@ -43,7 +48,8 @@ pub use qjs_repl::{
 pub use spec::{run_spec_suite, Converted, SpecBackend};
 pub use standalone::{run_standalone_case, StandaloneCase, STANDALONE_CASES};
 pub use wasi::{
-    run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiFsGlue, WasiKind, WASI_CASES,
+    run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase, WasiCheck, WasiKind,
+    WASI_CASES,
 };
 
 /// One `#[test]` running the shared spec harness for `$lang` (a
@@ -72,25 +78,73 @@ macro_rules! standalone_e2e {
     };
 }
 
-/// One `#[test]` iterating [`LIBRARY_CASES`] for `$lang`, resolving each
-/// case's glue with `$glue` (a `fn(&LibraryCase) -> &'static str`).
+/// Per-case library macros (ADR-27 revision): each expands to one
+/// `#[test] fn <case>()` running the named [`LibraryCase`] const for `$lang`
+/// with `$glue` (a named `&str` const in the backend crate). A backend declares
+/// participation by invoking the macro and drops it (with a REASON comment) for
+/// a capability it lacks.
+///
+/// [`LIBRARY_ADD`]: crate::LIBRARY_ADD
 #[macro_export]
-macro_rules! library_e2e {
+macro_rules! library_add_e2e {
     ($lang:expr, $glue:expr) => {
         #[test]
-        fn library() {
-            for case in $crate::LIBRARY_CASES {
-                $crate::run_library_case(&$lang, case, $glue);
-            }
+        fn library_add() {
+            $crate::run_library_case(&$lang, &$crate::LIBRARY_ADD, $glue);
+        }
+    };
+}
+
+/// See [`library_add_e2e!`]. Runs [`WASI_IMPORT_OVERRIDE`](crate::WASI_IMPORT_OVERRIDE).
+#[macro_export]
+macro_rules! wasi_import_override_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn wasi_import_override() {
+            $crate::run_library_case(&$lang, &$crate::WASI_IMPORT_OVERRIDE, $glue);
+        }
+    };
+}
+
+/// See [`library_add_e2e!`]. Runs [`CUSTOM_WASI_PROVIDER`](crate::CUSTOM_WASI_PROVIDER).
+#[macro_export]
+macro_rules! custom_wasi_provider_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn custom_wasi_provider() {
+            $crate::run_library_case(&$lang, &$crate::CUSTOM_WASI_PROVIDER, $glue);
+        }
+    };
+}
+
+/// See [`library_add_e2e!`]. Runs [`PARTIAL_OVERRIDE`](crate::PARTIAL_OVERRIDE).
+#[macro_export]
+macro_rules! partial_override_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn partial_override() {
+            $crate::run_library_case(&$lang, &$crate::PARTIAL_OVERRIDE, $glue);
+        }
+    };
+}
+
+/// See [`library_add_e2e!`]. Runs [`STDIO_CAPTURE`](crate::STDIO_CAPTURE).
+#[macro_export]
+macro_rules! stdio_capture_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn stdio_capture() {
+            $crate::run_library_case(&$lang, &$crate::STDIO_CAPTURE, $glue);
         }
     };
 }
 
 /// One `#[test]` running the WASI cases of a given feature kind for `$lang`.
-/// The no-glue form covers whole-program standalone kinds (`Stdio`,
-/// `ArgsEnv`, `ClockRandom`, `Poll`); the `$glue` form covers `Fs` (library-mode runs
-/// against a preopened host directory, so a per-backend instantiation glue
-/// `fn(&WasiCase, &Path) -> String` is required).
+/// The no-glue form covers whole-program standalone kinds (`Stdio`, `ArgsEnv`,
+/// `ClockRandom`, `Poll`); the `Fs` form covers the filesystem cases
+/// (library-mode runs against a preopened host directory), taking a single
+/// per-backend glue **template** const whose `{guest}`/`{host}` placeholders the
+/// runner fills with each case's preopen pair (ADR-27 revision).
 #[macro_export]
 macro_rules! wasi_suite {
     ($lang:expr, Stdio) => {
@@ -117,10 +171,24 @@ macro_rules! wasi_suite {
             $crate::run_wasi_standalone(&$lang, $crate::WasiKind::Poll);
         }
     };
-    ($lang:expr, Fs, $glue:expr) => {
+    ($lang:expr, Fs, $template:expr) => {
         #[test]
         fn wasi_fs() {
-            $crate::run_wasi_fs(&$lang, $glue);
+            $crate::run_wasi_fs(&$lang, $template);
+        }
+    };
+}
+
+/// One `#[test]` running the root-preopen containment probe for `$lang` with
+/// `$glue` (a named `&str` const that drives the WASI resolver directly). Split
+/// out of `wasi_suite!(Fs)` because it does not fit the shared preopen-and-run
+/// template — see [`run_wasi_containment`](crate::run_wasi_containment).
+#[macro_export]
+macro_rules! wasi_root_containment_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn wasi_root_containment() {
+            $crate::run_wasi_containment(&$lang, $glue);
         }
     };
 }
@@ -162,49 +230,147 @@ macro_rules! qjs_repl_pty_e2e {
     };
 }
 
-/// One `#[test]` iterating [`FS_APP_CASES`] for `$lang` (a
-/// [`BackendUnderTest`] with WASI filesystem support). Gated behind
-/// `DEWASM_APPS_ALL` inside `run_fs_app_cases`.
+/// Per-case filesystem-app macros (ADR-27 revision): each expands to one
+/// `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with
+/// `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}`
+/// placeholders the runner fills). Gated behind `DEWASM_APPS_ALL` inside
+/// [`run_fs_app_case`](crate::run_fs_app_case). A backend declares participation
+/// by invoking the macro and drops it (with a REASON comment) for a case it
+/// cannot run.
+///
+/// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
-macro_rules! fs_apps_e2e {
-    ($lang:expr) => {
+macro_rules! qjs_file_io_e2e {
+    ($lang:expr, $glue:expr) => {
         #[test]
-        fn fs_apps() {
-            $crate::run_fs_app_cases(&$lang);
+        fn qjs_file_io() {
+            $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
         }
     };
 }
 
-/// One `#[test]` iterating [`CAPI_CASES`] for `$lang`, resolving each case's
-/// driver with `$glue` (a `fn(&CApiCase, &Path) -> String`). Gated behind
-/// `DEWASM_APPS_ALL` inside `run_capi_cases`. Which backends invoke this is the
-/// capability declaration (ADR-27): the four with a WASI filesystem and a
-/// host-language object model to plumb a C API through (Ruby/Python/Go/Java),
-/// not Bash (ADR-12).
+/// See [`qjs_file_io_e2e!`]. Runs [`QJS_REPL`](crate::QJS_REPL).
 #[macro_export]
-macro_rules! capi_apps_e2e {
+macro_rules! qjs_repl_e2e {
     ($lang:expr, $glue:expr) => {
         #[test]
-        fn capi_apps() {
-            $crate::run_capi_cases(&$lang, $glue);
+        fn qjs_repl() {
+            $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
         }
     };
 }
 
-/// One `#[test]` iterating [`MULTI_MODULE_CASES`] for `$lang`, resolving each
-/// case's driver with `$glue` (a `fn(&MultiModuleCase) -> &'static str`). The
-/// backend must implement [`BackendUnderTest::compose_modules`]. Which backends
-/// invoke this — and each case's `exclude` — is the capability declaration
-/// (ADR-27): the ImportedTables-capable backends for the shared-table case, and
-/// the nested-runtime backends for the coexistence case.
+/// See [`qjs_file_io_e2e!`]. Runs [`SQLITE3_SHELL_DBFILE`](crate::SQLITE3_SHELL_DBFILE).
 #[macro_export]
-macro_rules! multi_module_e2e {
+macro_rules! sqlite3_shell_dbfile_e2e {
     ($lang:expr, $glue:expr) => {
         #[test]
-        fn multi_module() {
-            for case in $crate::MULTI_MODULE_CASES {
-                $crate::run_multi_module_case(&$lang, case, $glue);
-            }
+        fn sqlite3_shell_dbfile() {
+            $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
+        }
+    };
+}
+
+/// See [`qjs_file_io_e2e!`]. Runs [`RG_SEARCH`](crate::RG_SEARCH).
+#[macro_export]
+macro_rules! rg_search_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn rg_search() {
+            $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
+        }
+    };
+}
+
+/// See [`qjs_file_io_e2e!`]. Runs [`CPYTHON_HELLO`](crate::CPYTHON_HELLO).
+#[macro_export]
+macro_rules! cpython_hello_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn cpython_hello() {
+            $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
+        }
+    };
+}
+
+/// See [`qjs_file_io_e2e!`]. Runs [`CRUBY_HELLO`](crate::CRUBY_HELLO).
+#[macro_export]
+macro_rules! cruby_hello_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn cruby_hello() {
+            $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
+        }
+    };
+}
+
+/// Per-case C-API macros (ADR-27 revision): each expands to one
+/// `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with
+/// `$glue` (a named `&str` const in the backend crate; the file-backed case's
+/// `{scratch}` placeholder is filled by the runner). Gated behind
+/// `DEWASM_APPS_ALL` inside [`run_capi_case`](crate::run_capi_case). Which
+/// backends invoke these is the capability declaration (ADR-27):
+/// Ruby/Python/Go/Java, not Bash (ADR-12).
+///
+/// [`CApiCase`]: crate::CApiCase
+#[macro_export]
+macro_rules! libsqlite3_c_api_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn libsqlite3_c_api() {
+            $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
+        }
+    };
+}
+
+/// See [`libsqlite3_c_api_e2e!`]. Runs [`SQLITE3_FILE_C_API`](crate::SQLITE3_FILE_C_API).
+#[macro_export]
+macro_rules! sqlite3_file_c_api_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn sqlite3_file_c_api() {
+            $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
+        }
+    };
+}
+
+/// See [`libsqlite3_c_api_e2e!`]. Runs [`SQLITE3_CALLBACK_BINDING`](crate::SQLITE3_CALLBACK_BINDING).
+#[macro_export]
+macro_rules! sqlite3_callback_binding_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn sqlite3_callback_binding() {
+            $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
+        }
+    };
+}
+
+/// Per-case multi-module macros (ADR-27 revision): each expands to one
+/// `#[test] fn <case>()` running the named [`MultiModuleCase`] const for `$lang`
+/// with `$glue` (a named `&str` driver const in the backend crate). The backend
+/// must implement [`BackendUnderTest::compose_modules`]. Which backends invoke
+/// these is the capability declaration (ADR-27): the ImportedTables-capable
+/// backends for the shared-table case, and the nested-runtime backends for the
+/// coexistence case.
+///
+/// [`MultiModuleCase`]: crate::MultiModuleCase
+#[macro_export]
+macro_rules! shared_table_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn shared_table() {
+            $crate::run_multi_module_case(&$lang, &$crate::SHARED_TABLE, $glue);
+        }
+    };
+}
+
+/// See [`shared_table_e2e!`]. Runs [`EMBEDDED_COEXIST`](crate::EMBEDDED_COEXIST).
+#[macro_export]
+macro_rules! embedded_coexist_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[test]
+        fn embedded_coexist() {
+            $crate::run_multi_module_case(&$lang, &$crate::EMBEDDED_COEXIST, $glue);
         }
     };
 }

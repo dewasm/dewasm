@@ -9,8 +9,13 @@
 //!     backend runs these.
 //!   * `WasiCheck::Fs` — a library-mode run against a preopened host scratch
 //!     directory, with host-side setup before and assertions after. Needs
-//!     per-backend instantiation glue (only Ruby has WASI filesystem support
-//!     today, ADR-14), passed to the runner.
+//!     per-backend instantiation glue: a single template string per backend
+//!     (`wasi_suite!(Lang, Fs, TEMPLATE)`) whose `{guest}`/`{host}`
+//!     placeholders the runner fills with the preopen pair (ADR-27 revision).
+//!     The one case that does not fit the template — the root-preopen
+//!     containment probe, which calls the WASI resolver directly rather than
+//!     running a guest — is dissolved into its own `wasi_root_containment_e2e!`
+//!     macro with its own glue const.
 
 use std::path::Path;
 
@@ -18,6 +23,7 @@ use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
 use crate::fixtures::{convert, examples_dir};
+use crate::glue::fill;
 
 /// The WASI p1 feature units a fixture exercises. Public API of the helper
 /// crate, so unused variants are not dead code — a backend selects the kinds
@@ -232,29 +238,6 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // A preopen whose realpath is the filesystem root must not reject every
-    // path: the containment check would otherwise build the prefix "//" and
-    // never match. This exercises a WASI-model *internal* (the path-resolution
-    // helper) rather than a guest fixture — no host files are touched — so the
-    // per-backend glue probes the resolver directly with a `"/" => "/"`
-    // preopen instead of running the converted module's `_start`. It converts
-    // `wasi_path_open_roundtrip.wat` only to bring the runtime's WASI class into
-    // scope. Wired on the four filesystem backends; the glue normalizes the
-    // outcome to `contained`. Unix-only: a realpath of `/` is a unix notion.
-    WasiCase {
-        name: "fs_root_preopen_containment",
-        wat: "wasi_path_open_roundtrip.wat",
-        kind: WasiKind::Fs,
-        args: &[],
-        stdin: "",
-        check: WasiCheck::Fs {
-            preopen_subdir: None,
-            setup: |_dir| {},
-            check_stdout: |out| assert_eq!(out, "contained\n"),
-            assert_host: |_dir| {},
-            unix_only: true,
-        },
-    },
 ];
 
 /// Run the `WasiCheck::Standalone` cases of `kind` (stdio, args/env,
@@ -292,17 +275,14 @@ pub fn run_wasi_standalone(lang: &dyn BackendUnderTest, kind: WasiKind) {
     }
 }
 
-/// Glue for a filesystem case: given the case and the preopened host
-/// directory, produce the (backend-specific) instantiation-and-run source
-/// appended to the converted module. It must preopen `host` at guest `/`,
-/// invoke `_start`, and surface a `proc_exit` code as a trailing decimal line
-/// (the fixtures either print to stdout or exit with a code).
-pub type WasiFsGlue = fn(&WasiCase, &Path) -> String;
-
 /// Run the `WasiCheck::Fs` cases: create a scratch dir, run the host-side
-/// setup, convert in library mode, append `glue`, run, then apply the case's
-/// stdout check and host-state assertions.
-pub fn run_wasi_fs(lang: &dyn BackendUnderTest, glue: WasiFsGlue) {
+/// setup, convert in library mode, append `template` with its `{guest}`/`{host}`
+/// placeholders filled (guest `/`, host the preopened dir), run, then apply the
+/// case's stdout check and host-state assertions. Every non-containment Fs case
+/// shares the one template (preopen the host dir at `/`, run `_start`, surface a
+/// `proc_exit` code as a trailing decimal line); the containment probe is a
+/// separate case (see [`run_wasi_containment`]).
+pub fn run_wasi_fs(lang: &dyn BackendUnderTest, template: &str) {
     for case in WASI_CASES.iter().filter(|c| c.kind == WasiKind::Fs) {
         let WasiCheck::Fs {
             preopen_subdir,
@@ -333,11 +313,11 @@ pub fn run_wasi_fs(lang: &dyn BackendUnderTest, glue: WasiFsGlue) {
             Mode::Library,
             "prog",
         );
-        let output = lang.run(
-            &format!("{src}\n{}", glue(case, &dir)),
-            case.args,
-            case.stdin,
+        let glue = fill(
+            template,
+            &[("guest", "/"), ("host", &dir.to_string_lossy())],
         );
+        let output = lang.run(&format!("{src}\n{glue}"), case.args, case.stdin);
         assert!(
             output.status.success(),
             "{} under {}: failed: {}\n{}",
@@ -349,4 +329,40 @@ pub fn run_wasi_fs(lang: &dyn BackendUnderTest, glue: WasiFsGlue) {
         check_stdout(&String::from_utf8_lossy(&output.stdout));
         assert_host(&dir);
     }
+}
+
+/// Run the root-preopen containment probe (`wasi_root_containment_e2e!`): a
+/// preopen whose realpath is the filesystem root must not reject every path
+/// (the containment check would otherwise build the prefix "//" and never
+/// match). This exercises a WASI-model *internal* (the path-resolution helper)
+/// rather than a guest fixture — no host files are touched — so `glue` probes
+/// the resolver directly with a `"/" => "/"` preopen instead of running the
+/// converted module's `_start`. `wasi_path_open_roundtrip.wat` is converted only
+/// to bring the runtime's WASI class into scope; `glue` normalizes the outcome
+/// to `contained`. Unix-only: a realpath of `/` is a unix notion, so it is a
+/// no-op elsewhere (the way `#[cfg(unix)]` used to compile it out).
+pub fn run_wasi_containment(lang: &dyn BackendUnderTest, glue: &str) {
+    if !cfg!(unix) {
+        return;
+    }
+    let src = convert(
+        lang.backend(),
+        &examples_dir().join("wasi_path_open_roundtrip.wat"),
+        Mode::Library,
+        "prog",
+    );
+    let output = lang.run(&format!("{src}\n{glue}"), &[], "");
+    assert!(
+        output.status.success(),
+        "fs_root_preopen_containment under {}: failed: {}\n{}",
+        lang.name(),
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "contained\n",
+        "fs_root_preopen_containment under {}: stdout",
+        lang.name()
+    );
 }

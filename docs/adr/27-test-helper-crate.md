@@ -122,3 +122,60 @@ containment), and `FS_APP_CASES` (the cache-preopened CPython/CRuby demos, a new
 of copying them). The consequence is that a scenario added for one backend is by
 construction offered to every backend, green where the capability holds and
 documented where it does not.
+
+## Revision (2026-07-27): glue is a named const, one per-case macro per case
+
+The *delivery* of per-language glue set up by the previous revision — glue
+resolver functions that `match` on the case name, and later `(case name, glue)`
+pair lists iterated by one macro — is **withdrawn** as unreadable and of no
+value: the case name appeared twice (in the table and in the match/pair), the
+resolver's `panic!("no glue")` re-encoded what a missing invocation already
+says, and one macro fanning out over a table hid which cases a backend actually
+ran. The final shape:
+
+- **Glue is a named `&str` constant** in each backend's `tests/e2e.rs` (e.g.
+  `const RUBY_QJS_FILE_IO_GLUE: &str = r#"..."#;`), passed as a plain macro
+  argument. No `(name, glue)` pair lists, no glue-returning functions, no
+  `match` on a case name anywhere.
+- **One macro per case, at most one glue argument each.** Every multi-case table
+  that was iterated by a single macro is dissolved into a `pub const` case in
+  `dewasm-test-helper` plus a per-case macro expanding to its own
+  `#[test] fn <case>()` that calls a shared per-case runner: the filesystem apps
+  (`qjs_file_io_e2e!` … `cruby_hello_e2e!` over `QJS_FILE_IO` … `CRUBY_HELLO`),
+  the C-API drives (`libsqlite3_c_api_e2e!` …), the multi-module cases
+  (`shared_table_e2e!`, `embedded_coexist_e2e!`), and the library cases
+  (`library_add_e2e!`, `wasi_import_override_e2e!`, `custom_wasi_provider_e2e!`,
+  `partial_override_e2e!`, `stdio_capture_e2e!`). The root-preopen containment
+  probe, which does not fit the WASI filesystem template, becomes its own
+  `wasi_root_containment_e2e!`. Zero-glue aggregate macros stay as they were
+  (`apps_e2e!`, `gzip_e2e!`, `standalone_e2e!`, `spec_suite!`,
+  `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`); `wasi_suite!(Lang, Fs, …)`
+  keeps its single-template-string shape, the template now a named per-backend
+  const with `{guest}`/`{host}` placeholders.
+- **Static values are literals; only runtime paths are placeholders.** The class
+  name, argv, env, and preopen *guest* paths are written out literally inside
+  each glue const. The only values a glue cannot know statically — the host path
+  of a fresh scratch dir and the app-cache root — arrive through a tiny
+  documented substitution helper (`glue::fill`) that replaces `{scratch}`,
+  `{cache}`, `{guest}`, and `{host}`.
+- **Exclusions dissolve into non-invocation.** A backend that cannot run a case
+  simply does not invoke that case's macro; the reason lives as a short comment
+  at the (absent) callsite, with the measured numbers still in
+  `docs/apps-audit.md`. The per-case `exclude` fields and the `NO_LAZY_WASI`
+  ledger are removed from the shared case data.
+- **`BackendUnderTest::app_glue` is deleted** — glue arrives as data, not from a
+  trait hook. `run_app_fs` keeps its hook role but now takes the already-filled
+  glue string (and still carries `args`/`env`/`preopens` for the wasmtime
+  override, which execs the cache binary and ignores the glue). The other
+  infrastructure hooks (`convert_app`, `run`/`run_bytes`, `compose_modules`,
+  `pty_command`, `run_heavy_apps`) are unchanged.
+- **wasmtime** invokes the same per-case runners through hand-written
+  `#[test]` functions rather than the `*_e2e!` macros, because those cannot
+  carry the `wasmtime_test` `#[ignore]` gate (the same reason its `apps`/`gzip`
+  tests were already hand-written); it passes an empty glue, which its
+  `run_app_fs` override ignores.
+
+The behavioural contract is unchanged: the same generated programs run against
+the same goldens and assertions on the same backends. Only the wiring is more
+readable — each `#[test]` name is now the case name, and each callsite shows
+exactly one case with exactly one glue.

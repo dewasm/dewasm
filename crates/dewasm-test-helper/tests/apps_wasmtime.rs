@@ -27,8 +27,9 @@ use dewasm_backend::{Backend, GenOptions, Mode, OutputFile};
 use dewasm_core::ir;
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
-    qjs_repl_golden_path, run_app_cases, run_command_bytes, run_fs_app_cases_forced,
-    run_gzip_cases, BackendUnderTest, PtyCommand,
+    qjs_repl_golden_path, run_app_cases, run_command_bytes, run_fs_app_case_forced, run_gzip_cases,
+    BackendUnderTest, PtyCommand, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL, RG_SEARCH,
+    SQLITE3_SHELL_DBFILE,
 };
 
 /// A [`Backend`] that only exists to satisfy `BackendUnderTest::backend()`.
@@ -109,14 +110,14 @@ impl BackendUnderTest for Wasmtime {
     }
 
     /// Run the filesystem app directly on the cache binary: `program` is the
-    /// wasm path (from `convert_app`), so ignore the glue-composition the
-    /// default does and instead exec `wasmtime run --dir <host>::<guest>...
+    /// wasm path (from `convert_app`), so ignore the appended `glue` the default
+    /// composes and instead exec `wasmtime run --dir <host>::<guest>...
     /// --env K=V... <wasm> <args[1..]>` (wasmtime injects argv0 itself). Per
     /// ADR-15 a missing `wasmtime` fails loud, never skips.
     fn run_app_fs(
         &self,
         program: &str,
-        _class: &str,
+        _glue: &str,
         args: &[&str],
         env: &[(&str, &str)],
         stdin: &[u8],
@@ -181,12 +182,22 @@ fn gzip() {
 }
 
 // The filesystem app cases: the `wasmtime_test` feature is already the opt-in,
-// so run the whole table unconditionally (`_forced`) rather than also requiring
-// `DEWASM_APPS_ALL` — the gated `run_fs_app_cases` is for the codegen backends.
+// so run every case unconditionally (`_forced`) rather than also requiring
+// `DEWASM_APPS_ALL` — the gated per-case runner is for the codegen backends.
+// wasmtime is the ground-truth engine, so it runs the full set with no
+// per-case exclusion; its `run_app_fs` override ignores the glue, so each case
+// is driven with an empty glue string. Hand-written rather than via the per-case
+// `*_e2e!` macros because those cannot carry the `wasmtime_test` ignore gate
+// (the same reason `apps`/`gzip` above are hand-written).
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn fs_apps() {
-    run_fs_app_cases_forced(&Wasmtime);
+    run_fs_app_case_forced(&Wasmtime, &QJS_FILE_IO, "");
+    run_fs_app_case_forced(&Wasmtime, &QJS_REPL, "");
+    run_fs_app_case_forced(&Wasmtime, &SQLITE3_SHELL_DBFILE, "");
+    run_fs_app_case_forced(&Wasmtime, &RG_SEARCH, "");
+    run_fs_app_case_forced(&Wasmtime, &CPYTHON_HELLO, "");
+    run_fs_app_case_forced(&Wasmtime, &CRUBY_HELLO, "");
 }
 
 // Golden freshness for the interactive-REPL transcript (Fix 4): re-capture the

@@ -1,22 +1,26 @@
-//! Ruby end-to-end suites (ADR-27): the shared case tables (`dewasm-test-helper`)
+//! Ruby end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`)
 //! wired up for the Ruby backend. Per the ADR-27 revision this file holds ONLY
-//! the [`BackendUnderTest`] impl, glue strings / glue-producing functions, and
+//! the [`BackendUnderTest`] impl, named glue string constants, and per-case
 //! macro invocations — every scenario's case content (fixtures, expectations,
-//! run logic) lives in a shared table, and which macros this file invokes is the
-//! capability declaration. The formerly Ruby-only scenarios (the ADR-7 provider
-//! model, embedded-runtime coexistence, cross-module table sharing, the sqlite3
-//! C-API drive, WASI-filesystem internals, and the CPython/CRuby runtime demos)
-//! now run wherever a backend's declared capabilities cover them, with explicit
-//! data-level exclusions where they do not.
+//! run logic) lives in a shared const, glue is a plain `&str` argument at the
+//! callsite, and which macros this file invokes is the capability declaration.
+//! The formerly Ruby-only scenarios (the ADR-7 provider model, embedded-runtime
+//! coexistence, cross-module table sharing, the sqlite3 C-API drive,
+//! WASI-filesystem internals, and the CPython/CRuby runtime demos) now run
+//! wherever a backend's declared capabilities cover them, with a REASON comment
+//! at any non-invocation.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
-    apps_e2e, capi_apps_e2e, convert, examples_dir, fs_apps_e2e, gzip_e2e, library_e2e,
-    multi_module_e2e, qjs_repl_pty_e2e, standalone_e2e, wasi_suite, BackendUnderTest, CApiCase,
-    LibraryCase, MultiModuleCase, WasiCase,
+    apps_e2e, convert, cpython_hello_e2e, cruby_hello_e2e, custom_wasi_provider_e2e,
+    embedded_coexist_e2e, examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e,
+    partial_override_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e,
+    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, standalone_e2e, stdio_capture_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Ruby;
@@ -32,36 +36,6 @@ impl BackendUnderTest for Ruby {
 
     fn interpreter(&self) -> PathBuf {
         find_ruby().expect("ruby not found on PATH — see docs/testing.md")
-    }
-
-    /// Instantiate `class` with kwargs (args/env/preopens), run `_start`, and
-    /// swallow a clean guest `proc_exit` (`{class}::Rt::Exit`).
-    fn app_glue(
-        &self,
-        class: &str,
-        args: &[&str],
-        env: &[(&str, &str)],
-        preopens: &[(&str, &Path)],
-    ) -> String {
-        let argv = args
-            .iter()
-            .map(|a| format!("{a:?}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let envs = env
-            .iter()
-            .map(|(k, v)| format!("{k:?} => {v:?}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let pres = preopens
-            .iter()
-            .map(|(guest, host)| format!("{guest:?} => {:?}", host.to_string_lossy()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "inst = {class}.new({{}}, args: [{argv}], env: {{{envs}}}, preopens: {{{pres}}})\n\
-             begin\n  inst.invoke(\"_start\")\nrescue {class}::Rt::Exit\nend\n"
-        )
     }
 
     /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
@@ -106,23 +80,12 @@ impl BackendUnderTest for Ruby {
 // ---------------------------------------------------------------------
 // Library-case glue.
 
-/// Per-case Ruby glue. A case Ruby is wired to run but has no glue for panics
-/// loudly (ADR-15).
-fn ruby_glue(case: &LibraryCase) -> &'static str {
-    match case.name {
-        "add" => {
-            "inst = Add.new\n\
-             print inst.invoke(\"add\", 2, 3), \"\\n\"\n\
-             print inst.invoke(\"add\", 0xffffffff, 1), \"\\n\"\n\
-             print inst.invoke(\"fib\", 10), \"\\n\""
-        }
-        "wasi_import_override" => RUBY_OVERRIDE_GLUE,
-        "custom_wasi_provider" => RUBY_CUSTOM_PROVIDER_GLUE,
-        "partial_override_falls_back_to_bundled_wasi" => RUBY_PARTIAL_OVERRIDE_GLUE,
-        "wasi_stdio_capture" => RUBY_STDIO_CAPTURE_GLUE,
-        other => panic!("{other}: no ruby glue"),
-    }
-}
+/// `add.wat`: call the exported functions and print each result.
+const RUBY_ADD_GLUE: &str = r#"inst = Add.new
+print inst.invoke("add", 2, 3), "\n"
+print inst.invoke("add", 0xffffffff, 1), "\n"
+print inst.invoke("fib", 10), "\n"
+"#;
 
 /// The ADR-7 override/fallback glue (an explicit `fd_write` import wins,
 /// `random_get` falls back to the bundled WASI). Intercepts fd_write and prints
@@ -213,45 +176,79 @@ print captured.string
 // ---------------------------------------------------------------------
 // WASI filesystem glue.
 
-/// Instantiate a fs fixture with the scratch dir preopened at guest `/`, run
-/// `_start`, and surface a `proc_exit` code as a trailing decimal line. The
-/// `fs_root_preopen_containment` case instead probes the WASI resolver directly
-/// (no guest run) with a `"/" => "/"` preopen.
-fn ruby_fs_glue(case: &WasiCase, host: &Path) -> String {
-    if case.name == "fs_root_preopen_containment" {
-        return "wasi = Prog::Rt::WASI.new(preopens: { \"/\" => \"/\" })\n\
-                _path, err = wasi.send(:resolve_path, 3, \"etc\")\n\
-                print(err.nil? ? \"contained\" : \"rejected\", \"\\n\")\n"
-            .to_string();
-    }
-    format!(
-        "inst = Prog.new({{}}, preopens: {{ {:?} => {:?} }})\n\
-         begin\n  inst.invoke(\"_start\")\nrescue Prog::Rt::Exit => e\n  print e.code, \"\\n\"\nend\n",
-        "/",
-        host.to_string_lossy()
-    )
-}
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
+/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a
+/// trailing decimal line.
+const RUBY_FS_GLUE: &str = r#"inst = Prog.new({}, preopens: { "{guest}" => "{host}" })
+begin
+  inst.invoke("_start")
+rescue Prog::Rt::Exit => e
+  print e.code, "\n"
+end
+"#;
+
+/// The root-preopen containment probe: call the WASI resolver directly with a
+/// `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+const RUBY_CONTAINMENT_GLUE: &str = r#"wasi = Prog::Rt::WASI.new(preopens: { "/" => "/" })
+_path, err = wasi.send(:resolve_path, 3, "etc")
+print(err.nil? ? "contained" : "rejected", "\n")
+"#;
+
+// ---------------------------------------------------------------------
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
+// the host scratch/cache dirs come through {scratch}/{cache}.
+
+const RUBY_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs.new({}, args: ["qjs", "/work/qjs_file_io.js"], env: {}, preopens: {"/work" => "{scratch}"})
+begin
+  inst.invoke("_start")
+rescue Qjs::Rt::Exit
+end
+"#;
+
+const RUBY_QJS_REPL_GLUE: &str = r#"inst = Qjs.new({}, args: ["qjs", "/work/qjs_repl.js"], env: {}, preopens: {"/work" => "{scratch}"})
+begin
+  inst.invoke("_start")
+rescue Qjs::Rt::Exit
+end
+"#;
+
+const RUBY_SQLITE3_SHELL_GLUE: &str = r#"inst = Sqlite3Shell.new({}, args: ["sqlite3"], env: {}, preopens: {"/db" => "{scratch}"})
+begin
+  inst.invoke("_start")
+rescue Sqlite3Shell::Rt::Exit
+end
+"#;
+
+const RUBY_RG_SEARCH_GLUE: &str = r#"inst = Rg.new({}, args: ["rg", "--sort", "path", "needle", "/work"], env: {}, preopens: {"/work" => "{scratch}"})
+begin
+  inst.invoke("_start")
+rescue Rg::Rt::Exit
+end
+"#;
+
+const RUBY_CPYTHON_GLUE: &str = r#"inst = Cpython.new({}, args: ["python", "-c", "print('hello from cpython', 6 * 7)"], env: {"PYTHONHOME" => "/", "PYTHONPATH" => "/lib/python3.14"}, preopens: {"/lib" => "{cache}/cpython-lib/lib"})
+begin
+  inst.invoke("_start")
+rescue Cpython::Rt::Exit
+end
+"#;
+
+const RUBY_CRUBY_GLUE: &str = r#"inst = Cruby.new({}, args: ["ruby", "-e", "puts \"hello from cruby #{6*7}\""], env: {}, preopens: {"/usr" => "{cache}/ruby-lib/usr"})
+begin
+  inst.invoke("_start")
+rescue Cruby::Rt::Exit
+end
+"#;
 
 // ---------------------------------------------------------------------
 // C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No
 // wasmtime golden — the results live in guest memory — so each drive's output
-// is pinned in the shared table.
-
-fn ruby_capi_glue(case: &CApiCase, scratch: &Path) -> String {
-    match case.name {
-        "libsqlite3_c_api" => RUBY_LIBSQLITE3_MEM.replace("__CLASS__", case.class),
-        "sqlite3_file_c_api" => RUBY_LIBSQLITE3_FILE
-            .replace("__CLASS__", case.class)
-            .replace("__DB__", &scratch.to_string_lossy()),
-        "sqlite3_callback_binding" => RUBY_SQLITE3_CALLBACK.replace("__CLASS__", case.class),
-        other => panic!("{other}: no ruby capi glue"),
-    }
-}
+// is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
 /// `Rt::Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const RUBY_LIBSQLITE3_MEM: &str = r##"
-db_mod = __CLASS__.new
+db_mod = Libsqlite3.new
 db_mod.invoke("_initialize")
 mem = db_mod.memory
 
@@ -300,7 +297,7 @@ puts "C-API-OK"
 /// select — the file lifecycle through the C API (same ADR-14 fs stack as the
 /// shell).
 const RUBY_LIBSQLITE3_FILE: &str = r##"
-DB_MOD = __CLASS__.new({}, preopens: { "/db" => "__DB__" })
+DB_MOD = Libsqlite3.new({}, preopens: { "/db" => "{scratch}" })
 DB_MOD.invoke("_initialize")
 mem = DB_MOD.memory
 
@@ -364,7 +361,7 @@ host_row = lambda do |argc, argv_ptr|
   ROWS << row
 end
 
-db_mod = __CLASS__.new({ "env" => { "host_row" => host_row } })
+db_mod = Sqlite3Binding.new({ "env" => { "host_row" => host_row } })
 db_mod.invoke("_initialize")
 mem = db_mod.memory
 MEM_HOLDER[:mem] = mem
@@ -403,17 +400,13 @@ puts "CALLBACK-OK"
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
-fn ruby_multi_module_glue(case: &MultiModuleCase) -> &'static str {
-    match case.name {
-        "shared_table_call_indirect" => {
-            "a = TableExp.new\n\
-             b = TableImp.new({ \"a\" => a })\n\
-             print b.invoke(\"call0\"), \"\\n\"\n"
-        }
-        "embedded_runtimes_coexist" => RUBY_EMBEDDED_COEXIST_GLUE,
-        other => panic!("{other}: no ruby multi-module glue"),
-    }
-}
+/// Driver for the shared-table case: instantiate the exporter and the importer
+/// linked against it, then print `call0` (call_indirect through the shared
+/// table -> 42).
+const RUBY_SHARED_TABLE_GLUE: &str = r#"a = TableExp.new
+b = TableImp.new({ "a" => a })
+print b.invoke("call0"), "\n"
+"#;
 
 /// Two Embedded artifacts coexist, each with its own nested `Rt`: exercise both,
 /// prove their trap classes are distinct, and catch one's trap. Output is
@@ -432,17 +425,36 @@ end
 "#;
 
 // ---------------------------------------------------------------------
-// Suite wiring (ADR-27): each macro invocation declares participation.
+// Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 standalone_e2e!(Ruby);
-library_e2e!(Ruby, ruby_glue);
+
+library_add_e2e!(Ruby, RUBY_ADD_GLUE);
+wasi_import_override_e2e!(Ruby, RUBY_OVERRIDE_GLUE);
+custom_wasi_provider_e2e!(Ruby, RUBY_CUSTOM_PROVIDER_GLUE);
+partial_override_e2e!(Ruby, RUBY_PARTIAL_OVERRIDE_GLUE);
+stdio_capture_e2e!(Ruby, RUBY_STDIO_CAPTURE_GLUE);
+
 wasi_suite!(Ruby, Stdio);
 wasi_suite!(Ruby, ArgsEnv);
 wasi_suite!(Ruby, Poll);
-wasi_suite!(Ruby, Fs, ruby_fs_glue);
+wasi_suite!(Ruby, Fs, RUBY_FS_GLUE);
+wasi_root_containment_e2e!(Ruby, RUBY_CONTAINMENT_GLUE);
+
 apps_e2e!(Ruby);
 gzip_e2e!(Ruby);
-fs_apps_e2e!(Ruby);
+
+qjs_file_io_e2e!(Ruby, RUBY_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Ruby, RUBY_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Ruby, RUBY_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Ruby, RUBY_RG_SEARCH_GLUE);
+cpython_hello_e2e!(Ruby, RUBY_CPYTHON_GLUE);
+cruby_hello_e2e!(Ruby, RUBY_CRUBY_GLUE);
 qjs_repl_pty_e2e!(Ruby);
-capi_apps_e2e!(Ruby, ruby_capi_glue);
-multi_module_e2e!(Ruby, ruby_multi_module_glue);
+
+libsqlite3_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_MEM);
+sqlite3_file_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_FILE);
+sqlite3_callback_binding_e2e!(Ruby, RUBY_SQLITE3_CALLBACK);
+
+shared_table_e2e!(Ruby, RUBY_SHARED_TABLE_GLUE);
+embedded_coexist_e2e!(Ruby, RUBY_EMBEDDED_COEXIST_GLUE);

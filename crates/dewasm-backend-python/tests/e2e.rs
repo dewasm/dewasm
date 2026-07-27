@@ -1,19 +1,20 @@
-//! Python end-to-end suites (ADR-27): the shared case tables (`dewasm-test-helper`)
+//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`)
 //! wired up for the Python backend. Per the ADR-27 revision this file holds ONLY
-//! the [`BackendUnderTest`] impl, glue strings / glue-producing functions, and
+//! the [`BackendUnderTest`] impl, named glue string constants, and per-case
 //! macro invocations. Python covers full WASI preview 1 incl. the filesystem
-//! (ADR-28), so it wires every WASI kind, the heavy `apps`/`fs_apps`/`capi_apps`
-//! suites, and the shared-table multi-module case (`embedded_runtimes_coexist`
-//! is excluded — Python's library Embedded output uses one top-level `Rt`).
+//! (ADR-28), so it wires every WASI kind, the heavy `apps`/`fs_apps`/`capi`
+//! suites, and the shared-table multi-module case.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_python::{find_python, PythonBackend};
 use dewasm_test_helper::{
-    apps_e2e, capi_apps_e2e, convert, examples_dir, fs_apps_e2e, gzip_e2e, library_e2e,
-    multi_module_e2e, qjs_repl_pty_e2e, standalone_e2e, wasi_suite, BackendUnderTest, CApiCase,
-    LibraryCase, MultiModuleCase, WasiCase,
+    apps_e2e, convert, cpython_hello_e2e, cruby_hello_e2e, custom_wasi_provider_e2e, examples_dir,
+    gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e, qjs_file_io_e2e,
+    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
+    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, standalone_e2e, stdio_capture_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Python;
@@ -35,40 +36,10 @@ impl BackendUnderTest for Python {
         true
     }
 
-    /// Instantiate `class` with kwargs (args/env/preopens), run `_start`, and
-    /// swallow a clean guest `proc_exit` (`Rt.Exit`).
-    fn app_glue(
-        &self,
-        class: &str,
-        args: &[&str],
-        env: &[(&str, &str)],
-        preopens: &[(&str, &Path)],
-    ) -> String {
-        let argv = args
-            .iter()
-            .map(|a| format!("{a:?}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let envs = env
-            .iter()
-            .map(|(k, v)| format!("{k:?}: {v:?}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let pres = preopens
-            .iter()
-            .map(|(guest, host)| format!("{guest:?}: {:?}", host.to_string_lossy()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!(
-            "inst = {class}({{}}, args=[{argv}], env={{{envs}}}, preopens={{{pres}}})\n\
-             try:\n    inst.invoke(\"_start\")\nexcept Rt.Exit:\n    pass\n"
-        )
-    }
-
     /// Compose several `.wat` modules. `shared_runtime` emits each against one
     /// top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so
     /// an imported table crosses modules; otherwise it concatenates independent
-    /// Embedded conversions (only used by cases Python is not excluded from).
+    /// Embedded conversions (only used by cases Python invokes).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -111,23 +82,12 @@ impl BackendUnderTest for Python {
 // ---------------------------------------------------------------------
 // Library-case glue.
 
-/// Per-case Python glue. A case Python is wired to run but has no glue for
-/// panics loudly (ADR-15).
-fn python_glue(case: &LibraryCase) -> &'static str {
-    match case.name {
-        "add" => {
-            "inst = Add()\n\
-             print(inst.invoke(\"add\", 2, 3))\n\
-             print(inst.invoke(\"add\", 0xffffffff, 1))\n\
-             print(inst.invoke(\"fib\", 10))\n"
-        }
-        "wasi_import_override" => PYTHON_OVERRIDE_GLUE,
-        "custom_wasi_provider" => PYTHON_CUSTOM_PROVIDER_GLUE,
-        "partial_override_falls_back_to_bundled_wasi" => PYTHON_PARTIAL_OVERRIDE_GLUE,
-        "wasi_stdio_capture" => PYTHON_STDIO_CAPTURE_GLUE,
-        other => panic!("{other}: no python glue"),
-    }
-}
+/// `add.wat`: call the exported functions and print each result.
+const PYTHON_ADD_GLUE: &str = r#"inst = Add()
+print(inst.invoke("add", 2, 3))
+print(inst.invoke("add", 0xffffffff, 1))
+print(inst.invoke("fib", 10))
+"#;
 
 /// The ADR-7 override/fallback glue: fd_write intercepted, random_get falls
 /// back to the bundled WASI. Prints the actual bytes written.
@@ -237,41 +197,75 @@ sys.stdout.flush()
 // ---------------------------------------------------------------------
 // WASI filesystem glue.
 
-/// Instantiate a fs fixture with the scratch dir preopened at guest `/`, run
-/// `_start`, and surface a `proc_exit` code as a trailing decimal line. The
-/// `fs_root_preopen_containment` case instead probes the WASI resolver with a
-/// `"/" => "/"` preopen (no guest run).
-fn python_fs_glue(case: &WasiCase, host: &Path) -> String {
-    if case.name == "fs_root_preopen_containment" {
-        return "wasi = Rt.WASI(preopens={\"/\": \"/\"})\n\
-                _path, err = wasi.resolve_path(3, \"etc\")\n\
-                print(\"contained\" if err is None else \"rejected\")\n"
-            .to_string();
-    }
-    format!(
-        "inst = Prog({{}}, preopens={{{:?}: {:?}}})\n\
-         try:\n    inst.invoke(\"_start\")\nexcept Rt.Exit as e:\n    print(e.code)\n",
-        "/",
-        host.to_string_lossy()
-    )
-}
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
+/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a
+/// trailing decimal line.
+const PYTHON_FS_GLUE: &str = r#"inst = Prog({}, preopens={"{guest}": "{host}"})
+try:
+    inst.invoke("_start")
+except Rt.Exit as e:
+    print(e.code)
+"#;
+
+/// The root-preopen containment probe: call the WASI resolver directly with a
+/// `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+const PYTHON_CONTAINMENT_GLUE: &str = r#"wasi = Rt.WASI(preopens={"/": "/"})
+_path, err = wasi.resolve_path(3, "etc")
+print("contained" if err is None else "rejected")
+"#;
 
 // ---------------------------------------------------------------------
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt.Memory.
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
+// the host scratch/cache dirs come through {scratch}/{cache}.
 
-fn python_capi_glue(case: &CApiCase, scratch: &Path) -> String {
-    match case.name {
-        "libsqlite3_c_api" => PYTHON_LIBSQLITE3_MEM.replace("__CLASS__", case.class),
-        "sqlite3_file_c_api" => PYTHON_LIBSQLITE3_FILE
-            .replace("__CLASS__", case.class)
-            .replace("__DB__", &scratch.to_string_lossy()),
-        "sqlite3_callback_binding" => PYTHON_SQLITE3_CALLBACK.replace("__CLASS__", case.class),
-        other => panic!("{other}: no python capi glue"),
-    }
-}
+const PYTHON_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_file_io.js"], env={}, preopens={"/work": "{scratch}"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+const PYTHON_QJS_REPL_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_repl.js"], env={}, preopens={"/work": "{scratch}"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+const PYTHON_SQLITE3_SHELL_GLUE: &str = r#"inst = Sqlite3Shell({}, args=["sqlite3"], env={}, preopens={"/db": "{scratch}"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+const PYTHON_RG_SEARCH_GLUE: &str = r#"inst = Rg({}, args=["rg", "--sort", "path", "needle", "/work"], env={}, preopens={"/work": "{scratch}"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+const PYTHON_CPYTHON_GLUE: &str = r#"inst = Cpython({}, args=["python", "-c", "print('hello from cpython', 6 * 7)"], env={"PYTHONHOME": "/", "PYTHONPATH": "/lib/python3.14"}, preopens={"/lib": "{cache}/cpython-lib/lib"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+const PYTHON_CRUBY_GLUE: &str = r#"inst = Cruby({}, args=["ruby", "-e", "puts \"hello from cruby #{6*7}\""], env={}, preopens={"/usr": "{cache}/ruby-lib/usr"})
+try:
+    inst.invoke("_start")
+except Rt.Exit:
+    pass
+"#;
+
+// ---------------------------------------------------------------------
+// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt.Memory. Only the
+// file-backed case uses {scratch}.
 
 const PYTHON_LIBSQLITE3_MEM: &str = r#"
-db_mod = __CLASS__({})
+db_mod = Libsqlite3({})
 db_mod.invoke("_initialize")
 mem = db_mod.memory
 
@@ -315,7 +309,7 @@ print("C-API-OK")
 "#;
 
 const PYTHON_LIBSQLITE3_FILE: &str = r#"
-db_mod = __CLASS__({}, preopens={"/db": "__DB__"})
+db_mod = Libsqlite3({}, preopens={"/db": "{scratch}"})
 db_mod.invoke("_initialize")
 mem = db_mod.memory
 
@@ -379,7 +373,7 @@ def host_row(argc, argv_ptr):
     return 0
 
 
-db_mod = __CLASS__({"env": {"host_row": host_row}})
+db_mod = Sqlite3Binding({"env": {"host_row": host_row}})
 db_mod.invoke("_initialize")
 mem = db_mod.memory
 _holder["mem"] = mem
@@ -419,29 +413,48 @@ print("CALLBACK-OK")
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
-fn python_multi_module_glue(case: &MultiModuleCase) -> &'static str {
-    match case.name {
-        "shared_table_call_indirect" => {
-            "a = TableExp()\n\
-             b = TableImp({\"a\": a})\n\
-             print(b.invoke(\"call0\"))\n"
-        }
-        other => panic!("{other}: no python multi-module glue"),
-    }
-}
+/// Driver for the shared-table case: instantiate the exporter and the importer
+/// linked against it, then print `call0` (call_indirect through the shared
+/// table -> 42).
+const PYTHON_SHARED_TABLE_GLUE: &str = r#"a = TableExp()
+b = TableImp({"a": a})
+print(b.invoke("call0"))
+"#;
 
 // ---------------------------------------------------------------------
-// Suite wiring (ADR-27).
+// Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 standalone_e2e!(Python);
-library_e2e!(Python, python_glue);
+
+library_add_e2e!(Python, PYTHON_ADD_GLUE);
+wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
+custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
+partial_override_e2e!(Python, PYTHON_PARTIAL_OVERRIDE_GLUE);
+stdio_capture_e2e!(Python, PYTHON_STDIO_CAPTURE_GLUE);
+
 wasi_suite!(Python, Stdio);
 wasi_suite!(Python, ArgsEnv);
 wasi_suite!(Python, Poll);
-wasi_suite!(Python, Fs, python_fs_glue);
+wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
+wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
+
 apps_e2e!(Python);
 gzip_e2e!(Python);
-fs_apps_e2e!(Python);
+
+qjs_file_io_e2e!(Python, PYTHON_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Python, PYTHON_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
+cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
+cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
 qjs_repl_pty_e2e!(Python);
-capi_apps_e2e!(Python, python_capi_glue);
-multi_module_e2e!(Python, python_multi_module_glue);
+
+libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
+sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
+sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
+
+shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
+// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits
+// one top-level `class Rt:` (a sibling, redefined on concatenation), not a
+// per-class nested runtime, so two independent runtimes cannot coexist
+// (docs/apps-audit.md).
