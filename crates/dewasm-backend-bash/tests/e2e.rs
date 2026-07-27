@@ -12,7 +12,8 @@ use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, gzip_e2e, library_add_e2e, qjs_eval_e2e, sqlite3_shell_e2e,
-    standalone_dir_e2e, wasi_import_override_e2e, wasi_suite, BackendUnderTest,
+    standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
+    BackendUnderTest,
 };
 
 pub struct Bash;
@@ -71,6 +72,38 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
+/// The `wasi_suite!(Bash, Fs, ...)` template (ADR-32): fill `WASI_DIRS` with
+/// the one preopen pair, init, invoke `_start`, then surface a `proc_exit`
+/// call the same way the standalone main does — `invoke` returns status 133
+/// (ADR-12) with the code in `$EXIT_CODE` — as a trailing decimal line, the
+/// same observable the Ruby glue's `rescue Prog::Rt::Exit` produces. A case
+/// that never calls `proc_exit` just falls off the end of `_start`, so
+/// nothing is appended and the script exits 0.
+const BASH_FS_GLUE: &str = r#"WASI_DIRS=('{host}::{guest}')
+prog_init || { echo "init failed" >&2; exit 1; }
+prog_invoke '_start'
+status=$?
+if [[ $status -eq 133 ]]; then
+  echo "$EXIT_CODE"
+fi
+exit 0
+"#;
+
+/// The root-preopen containment probe's glue: preopen the filesystem root at
+/// guest `/` and call the WASI resolver directly (`wasi_resolve_path <p>
+/// <dirfd> <path> <follow>`, ADR-32) instead of running a guest — the bash
+/// analogue of Ruby's `wasi.send(:resolve_path, ...)`. `follow=1` matches
+/// Ruby's `resolve_path`'s `follow_last: true` default.
+const BASH_CONTAINMENT_GLUE: &str = r#"WASI_DIRS=('/::/')
+prog_init || { echo "init failed" >&2; exit 1; }
+wasi_resolve_path prog_ 3 etc 1
+if [[ $R0 -eq 0 ]]; then
+  echo "contained"
+else
+  echo "rejected"
+fi
+"#;
+
 // ---------------------------------------------------------------------
 // Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
@@ -84,12 +117,8 @@ wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 wasi_suite!(Bash, Stdio);
 wasi_suite!(Bash, ArgsEnv);
 wasi_suite!(Bash, Poll);
-// wasi_suite!(Bash, Fs) / wasi_root_containment_e2e!: not invoked yet — Bash's
-// WASI filesystem (ADR-32) lands across several steps (the stat family and
-// namespace-mutation syscalls the Fs suite exercises are still pending).
-// poll_oneoff (ADR-32 D4) is now implemented, so its suite is wired above. The
-// standalone --dir interface (ADR-31) is honored, exercised by
-// standalone_dir_e2e! below.
+wasi_suite!(Bash, Fs, BASH_FS_GLUE);
+wasi_root_containment_e2e!(Bash, BASH_CONTAINMENT_GLUE);
 standalone_dir_e2e!(Bash);
 
 cowsay_args_e2e!(Bash);

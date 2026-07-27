@@ -31,6 +31,11 @@ wasi_resolve_path() {
     fi
   else
     local __dir=${__joined%/*}
+    # A root-preopen entry ("/etc") strips to an empty parent, not the
+    # filesystem root — `cd -P -- ""` is a bash error ("null directory"), not
+    # a no-op. Without this, every path under a root preopen (`WASI_DIRS=('/::/')`)
+    # would resolve to ENOENT regardless of containment.
+    [[ -z $__dir ]] && __dir=/
     local __realparent
     __realparent=$(cd -P -- "$__dir" 2>/dev/null && pwd -P)
     if [[ -z $__realparent ]]; then
