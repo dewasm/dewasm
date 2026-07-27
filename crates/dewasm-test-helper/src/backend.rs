@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use dewasm_backend::Backend;
+use dewasm_backend::{Backend, Mode};
 
 /// A target backend wired into the shared case tables and the spec harness.
 /// The spec layer ([`crate::SpecBackend`]) extends this with the
@@ -50,6 +50,16 @@ pub trait BackendUnderTest: Sync {
             args,
             stdin,
         )
+    }
+
+    /// Produce the runnable artifact for cached app `name` (bytes read from
+    /// the app cache) that the app/gzip suites then hand to `run`/`run_bytes`.
+    /// The default converts the wasm to backend source on a roomy stack
+    /// (`convert_on_big_stack`); an engine-under-test that runs the wasm
+    /// binary directly (e.g. wasmtime) overrides this to skip codegen and
+    /// return a path to the cached binary instead.
+    fn convert_app(&self, bytes: &[u8], mode: Mode, name: &str) -> String {
+        crate::convert_on_big_stack(self.backend(), bytes, mode, name)
     }
 
     /// Whether the `apps` suite should run its `heavy` cases (QuickJS,

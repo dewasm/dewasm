@@ -13,7 +13,7 @@
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert_on_big_stack};
+use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, apps_golden_dir};
 
 pub struct AppCase {
     pub name: &'static str,
@@ -92,7 +92,7 @@ pub fn run_app_cases(lang: &dyn BackendUnderTest) {
             case.name
         );
         let bytes = std::fs::read(&wasm_path).expect("read wasm");
-        let src = convert_on_big_stack(lang.backend(), &bytes, Mode::Standalone, case.name);
+        let src = lang.convert_app(&bytes, Mode::Standalone, case.name);
         let output = lang.run(&src, case.args, case.stdin);
 
         assert_eq!(
@@ -139,7 +139,7 @@ pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
         "minigzip not cached — run examples/apps/fetch.sh (see docs/testing.md)"
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
-    let src = convert_on_big_stack(lang.backend(), &bytes, Mode::Standalone, "minigzip");
+    let src = lang.convert_app(&bytes, Mode::Standalone, "minigzip");
 
     let input = std::fs::read(apps_fixtures_dir().join("gzip").join("input.txt"))
         .expect("read gzip input fixture");
