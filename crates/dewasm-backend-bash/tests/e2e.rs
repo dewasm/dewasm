@@ -83,11 +83,13 @@ wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 
 wasi_suite!(Bash, Stdio);
 wasi_suite!(Bash, ArgsEnv);
-// wasi_suite!(Bash, Poll) / wasi_suite!(Bash, Fs) / wasi_root_containment_e2e!:
-// not invoked yet — Bash resolves poll_oneoff to ENOSYS, and its WASI filesystem
-// (ADR-32) lands across several steps (the stat family and namespace-mutation
-// syscalls the Fs suite exercises are still pending). The standalone --dir
-// interface (ADR-31) is now honored, exercised by standalone_dir_e2e! below.
+wasi_suite!(Bash, Poll);
+// wasi_suite!(Bash, Fs) / wasi_root_containment_e2e!: not invoked yet — Bash's
+// WASI filesystem (ADR-32) lands across several steps (the stat family and
+// namespace-mutation syscalls the Fs suite exercises are still pending).
+// poll_oneoff (ADR-32 D4) is now implemented, so its suite is wired above. The
+// standalone --dir interface (ADR-31) is honored, exercised by
+// standalone_dir_e2e! below.
 standalone_dir_e2e!(Bash);
 
 cowsay_args_e2e!(Bash);

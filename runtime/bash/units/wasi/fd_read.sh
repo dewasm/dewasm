@@ -45,8 +45,8 @@ wasi_fd_read() {
     return 0
   fi
   local -n __push=${__p}wpush
-  local __ch __b __eof=0
-  for (( __i = 0; __i < __iovs_len && __eof == 0; __i++ )); do
+  local __ch __b __stop=0
+  for (( __i = 0; __i < __iovs_len && __stop == 0; __i++ )); do
     mem_i32_load "$__p" $(( __iovs + __i * 8 )) || return $?
     __ptr=$R0
     mem_i32_load "$__p" $(( __iovs + __i * 8 + 4 )) || return $?
@@ -57,13 +57,25 @@ wasi_fd_read() {
       if [[ -n $__push ]]; then
         __b=$__push
         __push=''
-      elif ! IFS= read -r -d '' -n 1 __ch; then
-        __eof=1
-        break
-      elif [[ -z $__ch ]]; then
-        __b=0
       else
-        printf -v __b '%d' "'$__ch"
+        # Short-read gating: only the first byte of the call blocks; each
+        # further byte is taken only while input is already available. `read
+        # -t 0` reports readiness without consuming (success iff a byte is
+        # ready), giving the readpartial short-read semantics wasmtime/Ruby
+        # offer and that line-buffered tty guests (the QuickJS REPL) need — a
+        # full iovec is not drained past what one interactive line delivered.
+        if (( __total > 0 )) && ! IFS= read -r -t 0; then
+          __stop=1
+          break
+        fi
+        if ! IFS= read -r -d '' -n 1 __ch; then
+          __stop=1
+          break
+        elif [[ -z $__ch ]]; then
+          __b=0
+        else
+          printf -v __b '%d' "'$__ch"
+        fi
       fi
       __m[__ptr + __j]=$(( __b & 0xff ))
       (( __total += 1 ))
