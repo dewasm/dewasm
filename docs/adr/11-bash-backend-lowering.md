@@ -5,9 +5,11 @@ Status: **Accepted, 2026-07-23.** Implemented in
 the integer subset; WASI and standalone mode landed the same day under
 [ADR-12](12-bash-wasi.md), and the ADR-5 softfloat (conventions in
 [ADR-13](13-bash-softfloat-conventions.md)) later removed the float
-conversion-time gate this ADR originally imposed. Requires bash >= 5
-(namerefs, associative arrays); macOS system bash is 3.2 and is out of
-scope.
+conversion-time gate this ADR originally imposed. Cross-module linking
+conventions (imported globals, the PROVIDERS provider protocol, status-135
+link errors) are extended by [ADR-33](33-bash-cross-module-linking.md).
+Requires bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2
+and is out of scope.
 
 ## Context
 
