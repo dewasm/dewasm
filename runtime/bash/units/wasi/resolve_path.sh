@@ -1,6 +1,6 @@
 # wasi_resolve_path <p> <dirfd> <rel> <follow>: resolve a guest-relative path
 # against a directory fd to a physical host path, confined to that dirfd's own
-# stored root (ADR-32, mirroring runtime/ruby/units/wasi/resolve_path.rb). R0 is
+# stored root (ADR-34, mirroring runtime/ruby/units/wasi/resolve_path.rb). R0 is
 # the errno (0 = ok), R1 the physical path on success.
 #
 # The parent is resolved physically via a `cd -P` subshell and the basename
@@ -9,7 +9,7 @@
 # resolves the whole path as a directory instead. Final-component symlinks:
 # a directory symlink is followed (via cd -P) when <follow> is 1; a file symlink
 # cannot be followed (no readlink builtin) and returns ELOOP (32), stricter than
-# Ruby (ADR-32). Check-then-open TOCTOU caveat carried over from ADR-14.
+# Ruby (ADR-34). Check-then-open TOCTOU caveat carried over from ADR-14.
 wasi_resolve_path() {
   local __p=$1 __dirfd=$2 __rel=$3 __follow=$4
   local -n __fds=${__p}wfds

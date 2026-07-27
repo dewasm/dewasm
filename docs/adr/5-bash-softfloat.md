@@ -7,7 +7,7 @@ integers/memory/WASI milestones, with its conventions recorded in
 green and real binaries run under bash.
 
 **Revision, 2026-07-27:** the "dependency set is exactly a Bash interpreter"
-criterion is narrowly amended by [ADR-32](32-bash-wasi-filesystem.md) — the
+criterion is narrowly amended by [ADR-34](34-bash-wasi-filesystem.md) — the
 four WASI namespace-mutation syscalls may each call one POSIX command
 (`mkdir`/`rmdir`/`rm`/`mv`), which pure Bash cannot express.
 

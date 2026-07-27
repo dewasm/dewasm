@@ -9,7 +9,7 @@ argv[0], env, and the trap exit code unified; Bash rejects `--dir` loudly. The
 reference is [docs/standalone-interface.md](../standalone-interface.md).
 
 **Revision, 2026-07-27:** Bash's `--dir` rejection is superseded by
-[ADR-32](32-bash-wasi-filesystem.md) — the Bash backend now honors `--dir`
+[ADR-34](34-bash-wasi-filesystem.md) — the Bash backend now honors `--dir`
 with real filesystem support.
 
 ## Context

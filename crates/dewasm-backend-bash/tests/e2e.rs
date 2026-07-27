@@ -73,7 +73,7 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
-/// The `wasi_suite!(Bash, Fs, ...)` template (ADR-32): fill `WASI_DIRS` with
+/// The `wasi_suite!(Bash, Fs, ...)` template (ADR-34): fill `WASI_DIRS` with
 /// the one preopen pair, init, invoke `_start`, then surface a `proc_exit`
 /// call the same way the standalone main does — `invoke` returns status 133
 /// (ADR-12) with the code in `$EXIT_CODE` — as a trailing decimal line, the
@@ -92,7 +92,7 @@ exit 0
 
 /// The root-preopen containment probe's glue: preopen the filesystem root at
 /// guest `/` and call the WASI resolver directly (`wasi_resolve_path <p>
-/// <dirfd> <path> <follow>`, ADR-32) instead of running a guest — the bash
+/// <dirfd> <path> <follow>`, ADR-34) instead of running a guest — the bash
 /// analogue of Ruby's `wasi.send(:resolve_path, ...)`. `follow=1` matches
 /// Ruby's `resolve_path`'s `follow_last: true` default.
 const BASH_CONTAINMENT_GLUE: &str = r#"WASI_DIRS=('/::/')
@@ -106,7 +106,7 @@ fi
 "#;
 
 // ---------------------------------------------------------------------
-// Filesystem app glue (ADR-32): class/argv/env/preopen-guest-paths are
+// Filesystem app glue (ADR-34): class/argv/env/preopen-guest-paths are
 // literals (`WASI_ARGS`/`WASI_ENV`/`WASI_DIRS`, the Bash analogue of Ruby's
 // `args:`/`env:`/`preopens:` kwargs); only the host scratch dir comes through
 // `{scratch}`. `invoke`'s status-133 cascade is discarded (`exit 0`), the
@@ -166,7 +166,7 @@ sqlite3_shell_e2e!(Bash);
 // unlike the heavy floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);
 
-// Filesystem app cases (ADR-32): Bash's WASI filesystem now covers preopens,
+// Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens,
 // path_open, and positioned I/O, so the three small-fixture fs apps are
 // wired (all heavy, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
 qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);

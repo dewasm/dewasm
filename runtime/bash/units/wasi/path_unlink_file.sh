@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_unlink_file (ADR-32 D2): one of the four namespace-mutation units
+# WASI path_unlink_file (ADR-34 D2): one of the four namespace-mutation units
 # licensed to shell out — a single `--`-guarded `rm` (never `-r`) on the
 # resolved physical path. unlink(2) never follows a trailing symlink (it
 # removes the link itself), so resolution uses follow_last=0, mirroring

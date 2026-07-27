@@ -1,4 +1,4 @@
-# ADR-32 — Bash WASI Filesystem
+# ADR-34 — Bash WASI Filesystem
 
 Status: **Accepted, 2026-07-27.** The Bash backend gains WASI preview-1
 filesystem support, mirroring the Ruby design ([ADR-14](14-ruby-wasi-filesystem.md))

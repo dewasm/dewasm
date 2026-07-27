@@ -1,6 +1,6 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
 # Byte-wise binary-safe reads. A file fd (kind 2) copies from its whole-file
-# byte buffer at the current offset (ADR-32); stdin (kind 1, fd 0) reads live via
+# byte buffer at the current offset (ADR-34); stdin (kind 1, fd 0) reads live via
 # `read -d '' -n 1`, where '' with success is a NUL byte and failure is EOF, and
 # consumes any pushed-back byte first (<p>wpush, set by poll_oneoff). A directory
 # fd is EISDIR. LC_ALL=C keeps reads and ordinal conversion byte-granular.

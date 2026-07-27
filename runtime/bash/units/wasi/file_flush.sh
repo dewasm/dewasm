@@ -1,5 +1,5 @@
 # wasi_file_flush <array-name> <path>: write the named byte-ordinal array to
-# <path>, replacing its contents (ADR-32 whole-file buffering). A single
+# <path>, replacing its contents (ADR-34 whole-file buffering). A single
 # `exec {fd}>` truncate-create opens the file; bytes are emitted through a
 # binary-safe '\xHH' printf format built in ~4 KiB batches. R0 is the errno.
 wasi_file_flush() {

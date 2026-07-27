@@ -1,5 +1,5 @@
 # wasi_init_preopens <p>: register the standalone/library preopens from the
-# ordered WASI_DIRS array (the bash analogue of Ruby's `preopens:` kwarg, ADR-32)
+# ordered WASI_DIRS array (the bash analogue of Ruby's `preopens:` kwarg, ADR-34)
 # and initialize the parallel fd-table arrays for this prefix. Each WASI_DIRS
 # entry is 'HOST::GUEST' (no `::` means guest==host); the host is resolved
 # physically via `cd -P`, and an unresolvable host is a loud init failure

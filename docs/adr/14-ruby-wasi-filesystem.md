@@ -12,7 +12,7 @@ Symlink and rights-narrowing syscalls remain ENOSYS.
 It is implemented for the Ruby, Python, Go, and Java backends
 (`runtime/<lang>/units/wasi/poll_oneoff.*`); Bash stays ENOSYS for now
 (deferred; the Bash filesystem design, including `poll_oneoff`, is
-[ADR-32](32-bash-wasi-filesystem.md)). The motivation is event-loop guests such as the QuickJS REPL,
+[ADR-34](34-bash-wasi-filesystem.md)). The motivation is event-loop guests such as the QuickJS REPL,
 which after printing each prompt blocks in `poll_oneoff` on an fd_read
 subscription over stdin — an ENOSYS return there collapses the loop and the
 program exits immediately. Only fd_read on stdin actually blocks (via

@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path, wasi/filetype, wasi/pack_filestat, wasi/file_size
-# WASI path_filestat_get (ADR-32): lookupflags bit 0 = SYMLINK_FOLLOW, passed
+# WASI path_filestat_get (ADR-34): lookupflags bit 0 = SYMLINK_FOLLOW, passed
 # straight through to wasi_resolve_path's <follow> so a not-followed final
 # symlink is stat'd as itself (filetype 7), mirroring
 # runtime/ruby/units/wasi/path_filestat_get.rb's stat/lstat split. A missing

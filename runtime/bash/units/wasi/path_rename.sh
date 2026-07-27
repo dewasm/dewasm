@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_rename (ADR-32 D2): one of the four namespace-mutation units
+# WASI path_rename (ADR-34 D2): one of the four namespace-mutation units
 # licensed to shell out — a single `--`-guarded `mv` on the two resolved
 # physical paths. rename(2) never follows trailing symlinks on either side
 # (it moves the link itself and replaces the destination link), so both

@@ -1,5 +1,5 @@
 # requires: mem/check, mem/i32_store, wasi/filetype
-# WASI fd_readdir (ADR-32): the first call for a dir fd snapshots the listing
+# WASI fd_readdir (ADR-34): the first call for a dir fd snapshots the listing
 # into <p>wdn<fd>/<p>wdt<fd> (names/filetypes) — glob the host directory once
 # with dotglob+nullglob (restored unconditionally right after, via the saved
 # `shopt -p` string), strip to basenames, insertion-sort byte-wise

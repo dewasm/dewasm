@@ -1,5 +1,5 @@
 # requires: mem/i32_store, wasi/read_path, wasi/resolve_path, wasi/file_slurp
-# WASI path_open (ADR-32), mirroring runtime/ruby/units/wasi/path_open.rb.
+# WASI path_open (ADR-34), mirroring runtime/ruby/units/wasi/path_open.rb.
 # Resolves the guest path (lookupflags bit 0 = follow symlinks), then either
 # opens a directory fd (O_DIRECTORY, or an existing directory even without it)
 # or a file fd backed by a whole-file byte buffer. oflags: CREAT=0x1,

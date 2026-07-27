@@ -220,7 +220,7 @@ impl Backend for BashBackend {
                 // `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style),
                 // stopping at `--` or the first non-flag token; the rest is the
                 // guest's argv[1..]. The Bash backend now honors --dir with real
-                // filesystem support (ADR-32), mirroring the Ruby standalone parser.
+                // filesystem support (ADR-34), mirroring the Ruby standalone parser.
                 w.line("WASI_DIRS=()");
                 w.line("while (( $# )); do");
                 w.line("  case \"$1\" in");
@@ -367,7 +367,7 @@ impl<'a> Gen<'a> {
             // fds are preopened and fd_read/fd_write track per-fd offsets. wnext
             // is the next fd; wpush is poll_oneoff's one-byte stdin pushback slot;
             // init_preopens registers the --dir mounts and the filesystem
-            // fd-table arrays, failing init loudly on an unresolvable host (ADR-32).
+            // fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
             w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
             w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
             w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));

@@ -54,7 +54,7 @@ it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the
 ## Bash `--dir`
 
 The Bash backend honors `--dir` with real WASI filesystem support
-([ADR-32](adr/32-bash-wasi-filesystem.md)); a missing `--dir` argument fails
+([ADR-34](adr/34-bash-wasi-filesystem.md)); a missing `--dir` argument fails
 loudly with exit 2. Bash reaches the same exit/trap surface as the other
 backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap;
 [ADR-11](adr/11-bash-backend-lowering.md)/[ADR-12](adr/12-bash-wasi.md)).

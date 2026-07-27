@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_remove_directory (ADR-32 D2): one of the four namespace-mutation
+# WASI path_remove_directory (ADR-34 D2): one of the four namespace-mutation
 # units licensed to shell out — a single `--`-guarded `rmdir` on the resolved
 # physical path. rmdir(2) never follows a trailing symlink, so resolution
 # uses follow_last=0, mirroring

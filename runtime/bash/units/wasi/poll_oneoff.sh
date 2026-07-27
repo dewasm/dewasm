@@ -1,7 +1,7 @@
 # requires: mem/fill, mem/i32_load, mem/i32_load8_u, mem/i32_load16_u, mem/i64_load, mem/i32_store, mem/i32_store8, mem/i32_store16, mem/i64_store
 # poll_oneoff waits until at least one subscription is ready, then writes one
 # event per ready subscription (WASI p1: 48-byte subscriptions in, 32-byte
-# events out; mirrors the Ruby unit, ADR-32 D4). fd_write on any writable fd, a
+# events out; mirrors the Ruby unit, ADR-34 D4). fd_write on any writable fd, a
 # regular-file fd_read, and stdout/stderr reads are immediately ready; an
 # unknown or directory fd reports EBADF; only fd_read on stdin blocks. A clock
 # subscription sets the wait deadline; if it elapses with no fd ready the

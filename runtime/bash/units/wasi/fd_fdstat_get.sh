@@ -1,6 +1,6 @@
 # requires: mem/fill, mem/i32_store8, mem/i64_store
 # 24-byte fdstat: filetype u8 at +0 by fd kind — 3 = directory, 4 = regular
-# file, or (stdio) 2 = char device when a tty else 4 (ADR-32) — flags/padding
+# file, or (stdio) 2 = char device when a tty else 4 (ADR-34) — flags/padding
 # zeroed, rights_base/inheriting u64 = all bits.
 wasi_fd_fdstat_get() {
   local __p=$1 __fd=$2 __out=$3
