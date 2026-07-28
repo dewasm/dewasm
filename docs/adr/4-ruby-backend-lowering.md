@@ -5,7 +5,9 @@ Status: **Accepted, 2026-07-23.** Backfilled; implemented in
 conventions are ADR-2's; this ADR covers control flow and object shape.
 The multi-level-`br` and loop-`catch`-value decisions (and the flag-variable
 rejection) are superseded by [ADR-42](42-ruby-label-variable-cascade.md); the
-temps-hoisting and `call_indirect` decisions still stand.
+temps-hoisting decision stands, as does `call_indirect`'s structural
+type-symbol comparison — but its splat-array dispatch is amended by
+[ADR-44](44-ruby-call-indirect-arity.md) (fixed-arity `Table#callN`).
 
 ## Context
 
@@ -63,7 +65,10 @@ language facts drove the lowering shape.
   sites. Wasm compares function types structurally, not by index — and
   any module-local id (even a canonicalized index) breaks once a table
   is shared across modules via an imported table, whose index spaces
-  differ.
+  differ. *(The dispatch used a splat: `@tT.call(index, type_sym,
+  *args)` re-splatting into `func.call(*args)`. Amended by
+  [ADR-44](44-ruby-call-indirect-arity.md): a per-arity `Table#callN`
+  drops both splats; the structural-symbol comparison here is unchanged.)*
 - **Module = one class**: imports resolved in `initialize` (`@ifN`
   ivars), globals as `@gN`, exports in an `@exports` hash keyed by the
   raw export name with `invoke(name, *args)` as the entry point (export
