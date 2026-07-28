@@ -1,8 +1,8 @@
 //! End-to-end coverage for `--data-file` data-segment externalization
-//! (ADR-37). For Ruby and Go: convert a module both embedded and with a
-//! sidecar, run each generated program, and assert byte-identical stdout/exit
-//! plus a smaller source file. Also pins the loud rejections (unsupported
-//! targets, `-o -`).
+//! (ADR-37). For Ruby, Go, Python and Java: convert a module both embedded and
+//! with a sidecar, run each generated program, and assert byte-identical
+//! stdout/exit plus a smaller source file. Also pins the loud rejections (the
+//! bash target, `-o -`).
 //!
 //! The inline fixture carries an active segment, a passive segment initialized
 //! via `memory.init` + `data.drop`, and a bulky third segment so the sidecar
@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend_go::find_go;
+use dewasm_backend_java::{find_java, find_javac};
+use dewasm_backend_python::find_python;
 use dewasm_backend_ruby::find_ruby;
 
 /// The built `dewasm` binary under test (Cargo sets this for integration tests).
@@ -118,6 +120,52 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
         .current_dir(dir)
         .output()
         .expect("spawn go program");
+    (out.stdout, out.status.code().unwrap_or(-1))
+}
+
+/// Run a Python program from its own directory (so the sidecar, resolved via
+/// `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
+fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
+    let python = find_python().expect("python3 not found on PATH — see docs/testing.md");
+    let out = Command::new(python)
+        .arg(prog)
+        .args(args)
+        .current_dir(prog.parent().unwrap())
+        .output()
+        .expect("spawn python");
+    (out.stdout, out.status.code().unwrap_or(-1))
+}
+
+/// Compile `Main.java` into `classdir` (mirrors the java spec harness recipe).
+fn compile_java(src: &Path, classdir: &Path) {
+    let javac =
+        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
+    std::fs::create_dir_all(classdir).unwrap();
+    let build = Command::new(&javac)
+        .arg("-d")
+        .arg(classdir)
+        .arg(src)
+        .output()
+        .expect("spawn javac");
+    assert!(
+        build.status.success(),
+        "javac failed:\n{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+}
+
+/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader
+/// resolves the sidecar sitting alongside `Main.class`), returning (stdout,
+/// exit code).
+fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
+    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+    let out = Command::new(&java)
+        .arg("-cp")
+        .arg(classdir)
+        .arg("Main")
+        .args(args)
+        .output()
+        .expect("spawn java");
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
@@ -253,6 +301,139 @@ fn go_data_file_matches_embedded() {
     assert_eq!(code_e, code_x);
 }
 
+#[test]
+fn python_data_file_matches_embedded() {
+    let dir = tempdir("python");
+    let wat = dir.join("mod.wat");
+    write(&wat, &fixture_wat());
+    let watp = wat.to_str().unwrap();
+
+    let embedded = dir.join("embedded.py");
+    let ext = dir.join("ext.py");
+    let sidecar = dir.join("ext.bin");
+
+    let e = run_dewasm(&[
+        watp,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        embedded.to_str().unwrap(),
+    ]);
+    assert!(
+        e.status.success(),
+        "embedded convert: {}",
+        String::from_utf8_lossy(&e.stderr)
+    );
+    let x = run_dewasm(&[
+        watp,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        ext.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap(),
+    ]);
+    assert!(
+        x.status.success(),
+        "data-file convert: {}",
+        String::from_utf8_lossy(&x.stderr)
+    );
+
+    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    let src_embedded = std::fs::metadata(&embedded).unwrap().len();
+    let src_ext = std::fs::metadata(&ext).unwrap().len();
+    assert!(
+        src_ext < src_embedded,
+        "externalized .py ({src_ext} B) should be smaller than embedded ({src_embedded} B)"
+    );
+
+    let (out_e, code_e) = run_python(&embedded, &[]);
+    let (out_x, code_x) = run_python(&ext, &[]);
+    assert_eq!(out_e, FIXTURE_STDOUT.as_bytes());
+    assert_eq!(
+        out_e, out_x,
+        "stdout differs between embedded and externalized"
+    );
+    assert_eq!(code_e, 0);
+    assert_eq!(code_e, code_x);
+}
+
+#[test]
+fn java_data_file_matches_embedded() {
+    let dir = tempdir("java");
+    let wat = dir.join("mod.wat");
+    write(&wat, &fixture_wat());
+    let watp = wat.to_str().unwrap();
+
+    // Embedded: source in one dir, compiled into its own class dir.
+    let embedded = dir.join("embedded").join("Main.java");
+    let ecls = dir.join("embedded-cls");
+    std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
+    // Externalized: the sidecar lands directly in the run-time class dir so the
+    // `DATA_BLOB` code-source loader finds it next to `Main.class`.
+    let ext = dir.join("ext").join("Main.java");
+    let xcls = dir.join("ext-cls");
+    std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(&xcls).unwrap();
+    let sidecar = xcls.join("data.bin");
+
+    let e = run_dewasm(&[
+        watp,
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        embedded.to_str().unwrap(),
+    ]);
+    assert!(
+        e.status.success(),
+        "embedded convert: {}",
+        String::from_utf8_lossy(&e.stderr)
+    );
+    let x = run_dewasm(&[
+        watp,
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        ext.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap(),
+    ]);
+    assert!(
+        x.status.success(),
+        "data-file convert: {}",
+        String::from_utf8_lossy(&x.stderr)
+    );
+
+    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    let src_embedded = std::fs::metadata(&embedded).unwrap().len();
+    let src_ext = std::fs::metadata(&ext).unwrap().len();
+    assert!(
+        src_ext < src_embedded,
+        "externalized Main.java ({src_ext} B) should be smaller than embedded ({src_embedded} B)"
+    );
+
+    compile_java(&embedded, &ecls);
+    compile_java(&ext, &xcls);
+
+    let (out_e, code_e) = run_java(&ecls, &[]);
+    let (out_x, code_x) = run_java(&xcls, &[]);
+    assert_eq!(out_e, FIXTURE_STDOUT.as_bytes());
+    assert_eq!(
+        out_e, out_x,
+        "stdout differs between embedded and externalized"
+    );
+    assert_eq!(code_e, 0);
+    assert_eq!(code_e, code_x);
+}
+
 // --------------------------------------------------------------------------
 // Loud rejections (default gate).
 
@@ -265,30 +446,26 @@ fn rejects_unsupported_targets_and_stdout() {
     let sidecar = dir.join("d.bin");
     let sc = sidecar.to_str().unwrap();
 
-    for (target, needle) in [
-        ("bash", "bash"),
-        ("python", "deferred"),
-        ("java", "deferred"),
-    ] {
-        let out = dir.join(format!("out.{target}"));
-        let r = run_dewasm(&[
-            watp,
-            "-t",
-            target,
-            "-m",
-            "library",
-            "-o",
-            out.to_str().unwrap(),
-            "--data-file",
-            sc,
-        ]);
-        assert!(!r.status.success(), "{target}: expected rejection");
-        let err = String::from_utf8_lossy(&r.stderr);
-        assert!(
-            err.contains(needle),
-            "{target}: error should mention {needle:?}, got: {err}"
-        );
-    }
+    // Bash is the sole target that rejects `--data-file` (its data lives in the
+    // runtime, ADR-37); the error names the target.
+    let out = dir.join("out.bash");
+    let r = run_dewasm(&[
+        watp,
+        "-t",
+        "bash",
+        "-m",
+        "library",
+        "-o",
+        out.to_str().unwrap(),
+        "--data-file",
+        sc,
+    ]);
+    assert!(!r.status.success(), "bash: expected rejection");
+    assert!(
+        String::from_utf8_lossy(&r.stderr).contains("bash"),
+        "bash: error should mention the target, got: {}",
+        String::from_utf8_lossy(&r.stderr)
+    );
 
     // --data-file with stdout output is rejected even for a supported target.
     let r = run_dewasm(&[
@@ -425,6 +602,120 @@ fn go_qjs_data_file_matches_embedded() {
 
     let (out_e, code_e) = run_go(&embedded, QJS_ARGS);
     let (out_x, code_x) = run_go(&ext, QJS_ARGS);
+    assert_eq!(String::from_utf8_lossy(&out_e), QJS_STDOUT);
+    assert_eq!(out_e, out_x);
+    assert_eq!(code_e, code_x);
+}
+
+#[test]
+#[ignore = "heavy: converts and runs the cached qjs.wasm (multi-second)"]
+fn python_qjs_data_file_matches_embedded() {
+    let wasm = qjs_wasm();
+    assert!(
+        wasm.exists(),
+        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let wasm = wasm.to_str().unwrap();
+    let dir = tempdir("qjs-python");
+    let embedded = dir.join("embedded.py");
+    let ext = dir.join("qjs.py");
+    let sidecar = dir.join("qjs.bin");
+
+    assert!(run_dewasm(&[
+        wasm,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        embedded.to_str().unwrap()
+    ])
+    .status
+    .success());
+    assert!(run_dewasm(&[
+        wasm,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        ext.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap()
+    ])
+    .status
+    .success());
+
+    let src_embedded = std::fs::metadata(&embedded).unwrap().len();
+    let src_ext = std::fs::metadata(&ext).unwrap().len();
+    assert!(
+        src_ext < src_embedded,
+        "externalized qjs.py ({src_ext}) should shrink vs embedded ({src_embedded})"
+    );
+
+    let (out_e, code_e) = run_python(&embedded, QJS_ARGS);
+    let (out_x, code_x) = run_python(&ext, QJS_ARGS);
+    assert_eq!(String::from_utf8_lossy(&out_e), QJS_STDOUT);
+    assert_eq!(out_e, out_x);
+    assert_eq!(code_e, code_x);
+}
+
+#[test]
+#[ignore = "heavy: javac of the cached qjs.wasm source (multi-second)"]
+fn java_qjs_data_file_matches_embedded() {
+    let wasm = qjs_wasm();
+    assert!(
+        wasm.exists(),
+        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+    );
+    let wasm = wasm.to_str().unwrap();
+    let dir = tempdir("qjs-java");
+    let embedded = dir.join("embedded").join("Main.java");
+    let ecls = dir.join("embedded-cls");
+    std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
+    let ext = dir.join("ext").join("Main.java");
+    let xcls = dir.join("ext-cls");
+    std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(&xcls).unwrap();
+    let sidecar = xcls.join("qjs.bin");
+
+    assert!(run_dewasm(&[
+        wasm,
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        embedded.to_str().unwrap()
+    ])
+    .status
+    .success());
+    assert!(run_dewasm(&[
+        wasm,
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        ext.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap()
+    ])
+    .status
+    .success());
+
+    let src_embedded = std::fs::metadata(&embedded).unwrap().len();
+    let src_ext = std::fs::metadata(&ext).unwrap().len();
+    assert!(
+        src_ext < src_embedded,
+        "externalized qjs Main.java ({src_ext}) should shrink vs embedded ({src_embedded})"
+    );
+
+    compile_java(&embedded, &ecls);
+    compile_java(&ext, &xcls);
+
+    let (out_e, code_e) = run_java(&ecls, QJS_ARGS);
+    let (out_x, code_x) = run_java(&xcls, QJS_ARGS);
     assert_eq!(String::from_utf8_lossy(&out_e), QJS_STDOUT);
     assert_eq!(out_e, out_x);
     assert_eq!(code_e, code_x);
