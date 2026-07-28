@@ -22,6 +22,7 @@ run `./fetch.sh` first.
 | rg (ripgrep) | [ripgrep 14.1.1](https://github.com/BurntSushi/ripgrep/releases/tag/14.1.1), built with `cargo build --target wasm32-wasip1` | recursive directory search over a preopened fixture tree, byte-identical to `wasmtime --dir` (Ruby-only, Phase 5b) |
 | cpython | [CPython 3.14.6 wasi build](https://github.com/brettcannon/cpython-wasi-build/releases/tag/v3.14.6) (official prebuilt) | a whole Python interpreter converted and **executed** on Ruby, reading its stdlib from a preopen (Ruby-only, heavy; Phase 5b) |
 | ruby (CRuby) | [ruby.wasm 2.9.4](https://github.com/ruby/ruby.wasm/releases/tag/2.9.4) full build (official prebuilt) | CRuby 3.4 executed on the Ruby backend — the "Ruby on Ruby" north-star demo (Ruby-only, heavy; Phase 5b) |
+| libpcap | [libpcap 1.10.6](https://www.tcpdump.org/release/libpcap-1.10.6.tar.gz), built from source with `zig` (reactor) | libpcap's BPF filter compiler as a C-API library: `compile_filter("tcp port 80")` returns a serialized BPF program from guest memory, driven on Ruby + Python + Go (heavy) |
 
 ```console
 $ ./fetch.sh

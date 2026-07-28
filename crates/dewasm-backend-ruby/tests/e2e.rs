@@ -17,8 +17,8 @@ use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
     custom_wasi_provider_e2e, embedded_coexist_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, partial_override_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
-    qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
+    libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
+    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
     sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
     stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
     BackendUnderTest,
@@ -402,6 +402,36 @@ ROWS.each { |r| puts "row: #{r.join('|')}" }
 puts "CALLBACK-OK"
 "##;
 
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80"
+/// (DLT_EN10MB, snaplen 65535), then walk the serialized program
+/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory,
+/// printing each instruction as `code jt jf k`.
+const RUBY_PCAP_COMPILE: &str = r##"
+inst = Libpcap.new
+inst.invoke("_initialize")
+mem = inst.memory
+
+def cstr(inst, mem, s)
+  p = inst.invoke("malloc", s.bytesize + 1)
+  mem.init(p, "#{s}\0", 0, s.bytesize + 1)
+  p
+end
+
+prog = inst.invoke("compile_filter", cstr(inst, mem, "tcp port 80"), 1, 65535)
+raise "compile failed" if prog.zero?
+n = mem.i32_load(prog)
+n.times do |i|
+  base = prog + 4 + i * 8
+  code = mem.i32_load16_u(base)
+  jt = mem.i32_load8_u(base + 2)
+  jf = mem.i32_load8_u(base + 3)
+  k = mem.i32_load(base + 4)
+  puts "#{code} #{jt} #{jf} #{k}"
+end
+inst.invoke("free", prog)
+puts "BPF-OK"
+"##;
+
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
@@ -462,6 +492,7 @@ qjs_repl_pty_e2e!(Ruby);
 libsqlite3_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Ruby, RUBY_SQLITE3_CALLBACK);
+pcap_compile_e2e!(Ruby, RUBY_PCAP_COMPILE);
 
 shared_table_e2e!(Ruby, RUBY_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Ruby, RUBY_EMBEDDED_COEXIST_GLUE);

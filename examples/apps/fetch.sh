@@ -136,6 +136,71 @@ else
   echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"
 fi
 
+# --- libpcap: BPF filter compiler, built from the pinned upstream source
+# release with zig (ADR-22) as a reactor library. Only the platform-independent
+# filter-compilation TUs are built (no capture backend); src/pcap_config.h
+# stands in for ./configure's config.h (see its header comment), and our own
+# src/pcap_binding.c exports compile_filter(), which turns a textual filter
+# like "tcp port 80" into a serialized BPF program in guest memory. libpcap
+# 1.10.x no longer ships pre-generated grammar.c/scanner.c, so the parser is
+# regenerated here with bison + flex (matching the substitution ./configure
+# would apply for a bison >= 3 reentrant parser).
+PCAP_URL="https://www.tcpdump.org/release/libpcap-1.10.6.tar.gz"
+PCAP_SHA256="872dd11337fe1ab02ad9d4fee047c9da244d695c6ddf34e2ebb733efd4ed8aa9"
+PCAP_DIR="libpcap-1.10.6"
+# The filter-compiler TUs plus the libpcap internals the linker demands
+# (fmtutils/etherent/strlcpy) and the generated parser (grammar/scanner).
+PCAP_SRCS=(
+  pcap.c gencode.c optimize.c nametoaddr.c bpf_image.c bpf_filter.c
+  grammar.c scanner.c pcap-common.c fmtutils.c etherent.c missing/strlcpy.c
+)
+
+pcap_stamp="cache/libpcap.src-sha256"
+if [ -f cache/libpcap.wasm ] \
+  && [ "$(cat "$pcap_stamp" 2>/dev/null || true)" = "$PCAP_SHA256" ]; then
+  echo "libpcap: cached"
+else
+  command -v zig >/dev/null || {
+    echo "libpcap: zig not found — install zig (e.g. brew install zig) to build the libpcap app" >&2
+    exit 1
+  }
+  command -v bison >/dev/null || {
+    echo "libpcap: bison not found — install bison (e.g. brew install bison) to regenerate the filter grammar" >&2
+    exit 1
+  }
+  command -v flex >/dev/null || {
+    echo "libpcap: flex not found — install flex (e.g. brew install flex) to regenerate the filter scanner" >&2
+    exit 1
+  }
+  echo "libpcap: fetching $PCAP_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/libpcap.tar.gz" "$PCAP_URL"
+  echo "$PCAP_SHA256  $tmp/libpcap.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/libpcap.tar.gz" -C "$tmp"
+  pdir="$tmp/$PCAP_DIR"
+  echo "libpcap: generating grammar.c/scanner.c (bison/flex)"
+  sed 's/@REENTRANT_PARSER@/%define api.pure/' "$pdir/grammar.y.in" >"$pdir/grammar.y"
+  ( cd "$pdir" && bison -p pcap_ -o grammar.c -d grammar.y \
+    && flex -P pcap_ --header-file=scanner.h --nounput -o scanner.c scanner.l )
+  cp src/pcap_config.h "$pdir/config.h"
+  echo "libpcap: building libpcap.wasm (zig cc, reactor)"
+  psrcs=()
+  for s in "${PCAP_SRCS[@]}"; do psrcs+=("$pdir/$s"); done
+  # pcap_compile_nopcap() is the documented filter-only entry point but is
+  # marked deprecated (thread-safety of its error buffer); silence that here.
+  zig cc -target wasm32-wasi -mexec-model=reactor -O2 \
+    -DBUILDING_PCAP -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal \
+    -Wno-deprecated-declarations -I "$pdir" \
+    "${psrcs[@]}" src/pcap_binding.c \
+    -Wl,--export=compile_filter -Wl,--export=malloc -Wl,--export=free \
+    -o cache/libpcap.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$PCAP_SHA256" >"$pcap_stamp"
+  echo "libpcap: -> cache/libpcap.wasm"
+fi
+
 # --- minigzip: zlib's stdio (de)compression demo, built from the pinned
 # zlib source release with zig (ADR-22). Integer-only and tiny, with binary
 # stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.

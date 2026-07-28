@@ -24,10 +24,11 @@ use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
+    libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
+    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
+    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Go;
@@ -571,6 +572,41 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 }
 "#;
 
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80"
+/// (DLT_EN10MB, snaplen 65535), then walk the serialized program
+/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory,
+/// printing each instruction as `code jt jf k`.
+const GO_PCAP_COMPILE: &str = r#"func main() {
+	inst := NewLibpcap(nil, nil, nil, nil)
+	inst.Exports["_initialize"].(func())()
+	mem := inst.memory
+	malloc := inst.Exports["malloc"].(func(uint32) uint32)
+	cstr := func(s string) uint32 {
+		b := append([]byte(s), 0)
+		p := malloc(uint32(len(b)))
+		mem.init(uint64(p), b, 0, uint64(len(b)))
+		return p
+	}
+
+	compile := inst.Exports["compile_filter"].(func(uint32, uint32, uint32) uint32)
+	prog := compile(cstr("tcp port 80"), 1, 65535)
+	if prog == 0 {
+		panic("compile failed")
+	}
+	n := mem.i32_load(uint64(prog))
+	for i := uint32(0); i < n; i++ {
+		base := prog + 4 + i*8
+		code := uint32(mem.data[base]) | uint32(mem.data[base+1])<<8
+		jt := uint32(mem.data[base+2])
+		jf := uint32(mem.data[base+3])
+		k := mem.i32_load(uint64(base + 4))
+		fmt.Printf("%d %d %d %d\n", code, jt, jf, k)
+	}
+	inst.Exports["free"].(func(uint32))(prog)
+	fmt.Println("BPF-OK")
+}
+"#;
+
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
@@ -622,6 +658,7 @@ qjs_repl_pty_e2e!(Go);
 libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK);
+pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 
 shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is

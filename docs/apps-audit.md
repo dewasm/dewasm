@@ -26,6 +26,7 @@ returns.
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
 | ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
+| libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go⁸) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains
 (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index
@@ -199,6 +200,37 @@ trip ~0.3 s under Bash). The binary stdin/golden cannot travel through the
 `&str`/`include_str!` `APP_CASES` path, so these live in a dedicated
 `run_gzip_cases` (bytes-capable `run_bytes`/`run_command_bytes` helpers) that
 each backend calls.
+
+⁸ **libpcap (Track A).** libpcap 1.10.6 built from the pinned upstream release
+with `zig cc -target wasm32-wasi -mexec-model=reactor` as a C-API library. Only
+the platform-independent BPF-filter-compilation translation units are compiled
+(no capture backend); the parser is regenerated with bison/flex (1.10.x no
+longer ships pre-generated `grammar.c`/`scanner.c`). Audit: reference-types
+*encoding only*¹, in scope. Our own `examples/apps/src/pcap_binding.c` exports
+`compile_filter`, which runs `pcap_compile_nopcap` and serializes the resulting
+BPF program (`[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`) into
+guest memory; the C-API case (`pcap_compile`, `pcap_compile_e2e!`) drives
+`compile_filter("tcp port 80", DLT_EN10MB, 65535)` on Ruby, Python, and Go and
+pins the canonical tcp-port-80 program (deterministic — BPF holds
+offsets/constants only). Like the other reactor-library C-API cases it is
+`heavy_test`-gated (a ~2 MB artifact reconverted per run). Bash does not
+participate: no host-language C API to plumb a pointer-returning binding
+through (ADR-12). *Shim caveat:* wasip1 has no `./configure` host, no
+`socket()`, and no baseline `setjmp`/`longjmp`, so a first-party
+`examples/apps/src/pcap_config.h`⁹ stands in for the generated `config.h` — see
+its header comment.
+
+⁹ **The `pcap_config.h` shim** collapses three wasip1 gaps: the `./configure`
+feature macros the filter compiler reads; placeholders (`socket()`,
+`SIOCGIF*`) that let the never-reached, wasm-ld-GC'd `pcap_lookupnet` compile;
+and a baseline-wasm `setjmp`→0 / `longjmp`→trap stand-in (libpcap reports
+filter *syntax errors* via `longjmp`, which wasip1's `<setjmp.h>` refuses to
+compile without the out-of-scope wasm exception-handling proposal). A valid
+filter — the only kind this demo compiles — never takes the error path, so the
+stand-in is transparent; an invalid filter would trap rather than return an
+error. Name-based filters (`host example.com`) are likewise out of scope:
+`pcap_binding.c` stubs the missing `getaddrinfo`/`getnetbyname`/`getprotobyname`
+to report "not found".
 
 ## Deferred: pandoc
 

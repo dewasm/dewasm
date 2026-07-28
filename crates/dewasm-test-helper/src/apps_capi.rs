@@ -95,6 +95,27 @@ pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
+/// libpcap BPF filter compilation (ADR-22): our own committed C
+/// (examples/apps/src/pcap_binding.c) exports `compile_filter`, which runs
+/// libpcap's platform-independent BPF compiler (`pcap_compile_nopcap`) on a
+/// textual filter and serializes the resulting program into guest memory as
+/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`. The glue drives
+/// `compile_filter("tcp port 80", DLT_EN10MB=1, 65535)`, prints each insn as
+/// `code jt jf k`, and a sentinel. The pinned output is the canonical
+/// tcp-port-80 filter (ethertype IPv6 0x86dd/IPv4 0x0800, IP proto TCP=6,
+/// port 80), deterministic because BPF programs hold offsets/constants only,
+/// no addresses. In-memory, so `{scratch}` goes unused.
+pub const PCAP_COMPILE: CApiCase = CApiCase {
+    name: "pcap_compile",
+    wasm: "libpcap",
+    class: "Libpcap",
+    expect_stdout: "40 0 0 12\n21 0 6 34525\n48 0 0 20\n21 0 15 6\n40 0 0 54\n\
+                    21 12 0 80\n40 0 0 56\n21 10 11 80\n21 0 10 2048\n48 0 0 23\n\
+                    21 0 8 6\n40 0 0 20\n69 6 0 8191\n177 0 0 14\n72 0 0 14\n\
+                    21 2 0 80\n72 0 0 16\n21 0 1 80\n6 0 0 65535\n6 0 0 0\nBPF-OK\n",
+    assert_host: assert_none,
+};
+
 /// Run one [`CApiCase`] for `lang` with its per-language `glue`
 /// unconditionally (the perf opt-out lives at the macro/feature level, see the
 /// module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the
