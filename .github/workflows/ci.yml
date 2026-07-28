@@ -51,7 +51,7 @@ jobs:
           version: '47.0.2' # matches local dev; bump deliberately
       - name: Test
         if: github.event_name == 'pull_request'
-        run: cargo test
+        run: cargo test --no-fail-fast
       - name: Test (including heavy cases)
         if: github.event_name != 'pull_request'
-        run: cargo test -- --include-ignored
+        run: cargo test --no-fail-fast -- --include-ignored

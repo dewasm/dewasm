@@ -26,8 +26,13 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // macOS CoreFoundation injects __CF_USER_TEXT_ENCODING into the CF-linked
-    // ruby process, so the guest sees one extra environ entry (ADR-40).
+];
+
+/// Host-scoped failures on a macOS host: macOS CoreFoundation injects
+/// `__CF_USER_TEXT_ENCODING` into the CF-linked ruby process, so the guest sees
+/// one extra environ entry and count-exact `environ_*` assertions cannot hold.
+/// Plain Linux ruby injects nothing, so these pass there (ADR-40).
+const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
     (
         "assemblyscript/environ_get-multiple-variables",
         "environ: host-interpreter env injection",
@@ -61,6 +66,10 @@ impl BackendUnderTest for RubyWasi {
 impl WasiTestsuiteBackend for RubyWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
+    }
+
+    fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
+        WASI_TESTSUITE_EXPECTED_FAILURES_MACOS
     }
 }
 
