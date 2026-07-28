@@ -21,11 +21,11 @@ wasi_fd_write() {
   local LC_ALL=C
   local __i __j __ptr __len __total=0
   if [[ $__kind == 2 ]]; then
-    local -n __wwr=${__p}wwr
+    local -n __wrbase=${__p}wrbase
     local -n __wapp=${__p}wapp
     local -n __wdirty=${__p}wdirty
-    if [[ ${__wwr[$__fd]} != 1 ]]; then
-      R0=8 # EBADF: not opened for writing
+    if (( (__wrbase[$__fd] & 0x40) == 0 )); then
+      R0=76 # ENOTCAPABLE: fd lacks FD_WRITE
       return 0
     fi
     local -n __buf=${__p}wbuf${__fd}

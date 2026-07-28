@@ -37,13 +37,13 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | environ_sizes_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | clock_res_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | clock_time_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_advise | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
-| fd_allocate | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| fd_advise | ✅ | ✅ | ✅ | ✅ | ✅ |
+| fd_allocate | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_close | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_datasync | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_fdstat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_fdstat_set_flags | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
-| fd_fdstat_set_rights | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| fd_fdstat_set_flags | ✅ | ✅ | ✅ | ✅ | ✅ |
+| fd_fdstat_set_rights | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_set_size | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
@@ -53,7 +53,7 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | fd_pwrite | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_read | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_readdir | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_renumber | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| fd_renumber | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_seek | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_sync | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_tell | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -61,12 +61,12 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | path_create_directory | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_filestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
-| path_link | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| path_link | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_open | ✅ | ✅ | ✅ | ✅ | ✅ |
-| path_readlink | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| path_readlink | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_remove_directory | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_rename | ✅ | ✅ | ✅ | ✅ | ✅ |
-| path_symlink | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ✅ |
+| path_symlink | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_unlink_file | ✅ | ✅ | ✅ | ✅ | ✅ |
 | poll_oneoff | ✅ | ✅ | ✅ | ✅ | ✅ |
 | proc_exit | ✅ | ✅ | ✅ | ✅ | ✅ |

@@ -10,14 +10,46 @@
 # a directory symlink is followed (via cd -P) when <follow> is 1; a file symlink
 # cannot be followed (no readlink builtin) and returns ELOOP (32), stricter than
 # Ruby (ADR-34). Check-then-open TOCTOU caveat carried over from ADR-14.
+#
+# A leading "/" makes the path absolute, which escapes the dirfd sandbox before
+# any join — NOTCAPABLE (76), not a lexical join under the root (ADR-40). A
+# dirfd that names an open non-directory fd is ENOTDIR (54); an unopened fd is
+# EBADF (8).
 wasi_resolve_path() {
   local __p=$1 __dirfd=$2 __rel=$3 __follow=$4
   local -n __fds=${__p}wfds
   local -n __wpath=${__p}wpath
-  if [[ ${__fds[$__dirfd]-} != 3 ]]; then
-    R0=8 # EBADF: not a directory fd
+  local __kind=${__fds[$__dirfd]-}
+  if [[ -z $__kind ]]; then
+    R0=8 # EBADF: unopened fd
     return 0
   fi
+  if [[ $__kind != 3 ]]; then
+    R0=54 # ENOTDIR: dirfd is an open file/stdio fd, not a directory
+    return 0
+  fi
+  if [[ $__rel == /* ]]; then
+    R0=76 # ENOTCAPABLE: an absolute path escapes the preopen sandbox
+    return 0
+  fi
+  # Reject a path that lexically ascends above the dirfd root via `..` — an
+  # escape even when the resulting physical parent does not exist (so it cannot
+  # be caught by the post-resolution containment check, which would misreport it
+  # as ENOENT). A pure component walk: each name is +1 depth, `..` is -1, and a
+  # depth that ever goes negative has escaped the root (ADR-40).
+  local __walk=$__rel __comp __depth=0
+  while [[ -n $__walk ]]; do
+    __comp=${__walk%%/*}
+    if [[ $__walk == */* ]]; then __walk=${__walk#*/}; else __walk=''; fi
+    case $__comp in
+      '' | .) : ;;
+      ..)
+        (( __depth-- , 1 ))
+        if (( __depth < 0 )); then R0=76; return 0; fi
+        ;;
+      *) (( __depth++ , 1 )) ;;
+    esac
+  done
   local __root=${__wpath[$__dirfd]}
   local __joined=${__root%/}/$__rel
   local __base=${__joined##*/}

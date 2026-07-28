@@ -21,11 +21,14 @@ wasi_path_unlink_file() {
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" 0 || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
-  if [[ ! -e $__host ]]; then
+  if [[ ! -e $__host && ! -h $__host ]]; then
     R0=44 # ENOENT
     return 0
   fi
-  if [[ -d $__host ]]; then
+  # A symlink (even to a directory, even dangling) is unlinked as the link
+  # itself; only a real directory is EISDIR (ADR-40 — `-h` guards the `-d`
+  # test, which would otherwise dereference a symlink-to-directory).
+  if [[ -d $__host && ! -h $__host ]]; then
     R0=31 # EISDIR
     return 0
   fi

@@ -14,13 +14,14 @@ wasi_fd_close() {
     wasi_fd_flush "$__p" "$__fd" || return $?
     unset "${__p}wbuf${__fd}"
     local -n __wpath=${__p}wpath
-    local -n __wrd=${__p}wrd
-    local -n __wwr=${__p}wwr
+    local -n __wrbase=${__p}wrbase
+    local -n __wrinh=${__p}wrinh
+    local -n __wfdflags=${__p}wfdflags
     local -n __wapp=${__p}wapp
     local -n __wdirty=${__p}wdirty
     local -n __tell=${__p}wtell
-    unset "__wpath[$__fd]" "__wrd[$__fd]" "__wwr[$__fd]" \
-      "__wapp[$__fd]" "__wdirty[$__fd]" "__tell[$__fd]"
+    unset "__wpath[$__fd]" "__wrbase[$__fd]" "__wrinh[$__fd]" \
+      "__wfdflags[$__fd]" "__wapp[$__fd]" "__wdirty[$__fd]" "__tell[$__fd]"
   fi
   unset "__fds[$__fd]"
   R0=0
