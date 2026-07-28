@@ -3,6 +3,8 @@ def wasi_fd_read(self, fd, iovs_ptr, iovs_len, nread_ptr):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
         return self.ERRNO_BADF
+    if not (self.fd_meta[fd][0] & self.RIGHTS_FD_READ):
+        return self.ERRNO_NOTCAPABLE
     stdin = io is self.std_ios[0]
     nread = 0
     try:
