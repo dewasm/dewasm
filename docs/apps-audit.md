@@ -22,6 +22,8 @@ returns.
 | CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
+| zeroperl (Perl 5.42) | see below | none (host-shim blocked) | ⛔ deferred |
+| LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
 | ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
 
@@ -210,6 +212,33 @@ each backend calls.
   SIMD support alone would unblock it.
 - Revisit when/if SIMD enters scope; the binary is otherwise a pure
   wasip1 stdio converter and would make a strong demo.
+
+## Deferred: zeroperl
+
+- Source: [github.com/6over3/zeroperl](https://github.com/6over3/zeroperl) —
+  a WASI reactor build of Perl 5.42. A prebuilt artifact is redistributed
+  in [github.com/lbe/go-exiftool-wasm](https://github.com/lbe/go-exiftool-wasm)
+  as `internal/zeroperl/zeroperl.wasm` (pin the serving commit + sha256 when
+  it is promoted).
+- Audit: **not blocked on a wasm feature** — the blocker is host shims. The
+  build relies on binaryen **asyncify** plus a custom **setjmp/longjmp** shim
+  and an imported `env.call_host_function`, none of which the runtime provides.
+  This is an ABI/host-environment gap, not a proposal outside the 0.1 scope.
+- Revisit when a setjmp/asyncify story exists (a general asyncify unwinding
+  shim plus the `call_host_function` host glue); Perl 5 would be a marquee
+  scripting-language demo alongside CPython and CRuby.
+
+## Deferred: LightningCSS
+
+- Source: [github.com/pgaskin/go-lightningcss](https://github.com/pgaskin/go-lightningcss)
+  — a Rust **reactor** build of LightningCSS (the CSS parser/transformer),
+  produced via a **pgaskin/wasm2go fork** of the build tooling; the published
+  artifact is therefore unverified against an upstream release.
+- Audit: **not yet run** — deferred pending audit. The fork-built artifact is
+  not trustworthy enough to promote as-is.
+- Revisit by pinning the build (a reproducible from-source recipe, not the
+  fork's prebuilt wasm) and running the feature-audit on the resulting binary
+  before promoting it in scope.
 
 ## WASI p1 import surfaces (for the Phase 5 wiring)
 
