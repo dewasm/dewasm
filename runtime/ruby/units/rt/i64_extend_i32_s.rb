@@ -1,2 +1,2 @@
-# requires: rt/s32
-def i64_extend_i32_s(x) = s32(x) & M64
+# requires: rt/s32, rt/m64
+def i64_extend_i32_s(x) = m64(s32(x))

@@ -1382,9 +1382,9 @@ impl<'a> Gen<'a> {
             I32Add => format!("(({a} + {b}) & 0xffffffff)"),
             I32Sub => format!("(({a} - {b}) & 0xffffffff)"),
             I32Mul => format!("(({a} * {b}) & 0xffffffff)"),
-            I64Add => format!("(({a} + {b}) & 0xffffffffffffffff)"),
-            I64Sub => format!("(({a} - {b}) & 0xffffffffffffffff)"),
-            I64Mul => format!("(({a} * {b}) & 0xffffffffffffffff)"),
+            I64Add => format!("{}({a} + {b})", self.rt("m64")),
+            I64Sub => format!("{}({a} - {b})", self.rt("m64")),
+            I64Mul => format!("{}({a} * {b})", self.rt("m64")),
             I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
             I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
             I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
@@ -1401,13 +1401,10 @@ impl<'a> Gen<'a> {
             I32ShrS => {
                 format!("(({}({a}) >> ({b} & 31)) & 0xffffffff)", self.rt("s32"))
             }
-            I64Shl => format!("(({a} << ({b} & 63)) & 0xffffffffffffffff)"),
+            I64Shl => format!("{}({a} << ({b} & 63))", self.rt("m64")),
             I64ShrU => format!("({a} >> ({b} & 63))"),
             I64ShrS => {
-                format!(
-                    "(({}({a}) >> ({b} & 63)) & 0xffffffffffffffff)",
-                    self.rt("s64")
-                )
+                format!("{}({}({a}) >> ({b} & 63))", self.rt("m64"), self.rt("s64"))
             }
             I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
