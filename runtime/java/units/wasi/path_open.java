@@ -23,20 +23,30 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         boolean read = (fsRightsBase & 0x2) != 0; // rights::FD_READ
         boolean write = (fsRightsBase & 0x40) != 0; // rights::FD_WRITE
         boolean append = (fdflags & 0x1) != 0; // fdflags::APPEND
+        boolean create = (oflags & 0x1) != 0; // oflags::CREAT
+        boolean excl = (oflags & 0x4) != 0; // oflags::EXCL
+        boolean trunc = (oflags & 0x8) != 0; // oflags::TRUNC
         java.util.Set<java.nio.file.OpenOption> opts = new java.util.HashSet<>();
         if (read || (!read && !write)) {
             opts.add(java.nio.file.StandardOpenOption.READ);
         }
-        if (write) {
+        // FileChannel.open silently ignores CREATE/CREATE_NEW/TRUNCATE_EXISTING
+        // unless the channel is opened for WRITE, so a create request with
+        // rights_base=0 (create_file's `path_open(dir, CREAT, 0, 0, 0)`) would
+        // resolve to {READ, CREATE}, which does not create and then fails
+        // NoSuchFileException -> NOENT. Force WRITE whenever a create/truncate
+        // option is present; the fd's reported/enforced rights still come from
+        // the rights model, the underlying channel merely needs the capability.
+        if (write || create || excl || trunc) {
             opts.add(java.nio.file.StandardOpenOption.WRITE);
         }
-        if ((oflags & 0x1) != 0) { // oflags::CREAT
+        if (create) {
             opts.add(java.nio.file.StandardOpenOption.CREATE);
         }
-        if ((oflags & 0x4) != 0) { // oflags::EXCL
+        if (excl) {
             opts.add(java.nio.file.StandardOpenOption.CREATE_NEW);
         }
-        if ((oflags & 0x8) != 0) { // oflags::TRUNC
+        if (trunc) {
             opts.add(java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
         }
         java.nio.channels.FileChannel ch;

@@ -21,9 +21,6 @@ use dewasm_test_helper::{
 /// gaps on supported syscalls (tracked bugs in the shared WASI runtime), and
 /// environ entries the JVM host injects itself, which count-exact `environ_*`
 /// assertions cannot absorb (ADR-40).
-/// Java additionally has a cluster where `path_open` with
-/// `O_CREAT` fails to create a file (NOENT) in these fixtures — a Java-runtime
-/// bug tracked here (its e2e filesystem create path still works).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -88,31 +85,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     (
         "rust/unlink_file_trailing_slashes",
         "path_unlink_file: trailing slash not rejected",
-    ),
-    // Java-specific: path_open O_CREAT create fails NOENT in these fixtures.
-    (
-        "rust/path_rename",
-        "path_open: O_CREAT create returns NOENT (java)",
-    ),
-    (
-        "rust/file_unbuffered_write",
-        "path_open: O_CREAT create returns NOENT (java)",
-    ),
-    (
-        "rust/dangling_fd",
-        "path_open: O_CREAT create returns NOENT (java)",
-    ),
-    (
-        "rust/isatty",
-        "path_open: O_CREAT create returns NOENT (java)",
-    ),
-    (
-        "rust/path_open_create_existing",
-        "path_open: O_CREAT create returns NOENT (java)",
-    ),
-    (
-        "rust/remove_directory_trailing_slashes",
-        "path_open: O_CREAT create returns NOENT (java)",
     ),
     // The JVM host injects environ entries of its own (macOS CoreFoundation's
     // __CF_USER_TEXT_ENCODING), so count-exact environ assertions cannot hold
