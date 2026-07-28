@@ -300,10 +300,13 @@ fn convert_standalone(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<St
                 module_name: "prog".to_string(),
                 runtime: RuntimeLinkage::Embedded,
                 default_wasi: true,
+                data_file: None,
             },
         )
         .map_err(|e| attribute(&e))?;
-    Ok(units.remove(0).contents)
+    // The primary source is always UTF-8 (generated code); only the optional
+    // data sidecar is raw bytes, and this runner never requests one.
+    Ok(String::from_utf8(units.remove(0).contents).expect("generated source is valid UTF-8"))
 }
 
 /// A staged copy of a `root` fixture, removed on drop.
