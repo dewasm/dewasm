@@ -12,6 +12,24 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p cache
 
+# --- wasm-opt -O2 preprocessing (ADR-39) for the locally-built modules.
+# Only modules we build here (the two reactor C libs and ripgrep) are
+# post-processed: it shrinks them and normalizes the overlong call_indirect
+# immediates the LLVM toolchain emits (so the converter sees pure baseline
+# wasm). Baseline features only — never SIMD/atomics/EH — and no
+# wasm-ctor-eval. The stamp for each such module includes `wasm-opt --version`
+# so a wasm-opt upgrade re-triggers the build.
+WASM_OPT_FEATURES=(
+  --enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int
+  --enable-mutable-globals --enable-multivalue --enable-reference-types
+)
+wasm_opt_inplace() {
+  wasm-opt "${WASM_OPT_FEATURES[@]}" -O2 "$1" -o "$1"
+}
+# The version string folded into a locally-built module's stamp (empty when
+# wasm-opt is absent, so the cache misses and the loud prereq check fires).
+wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
+
 # name | URL | sha256 | path inside the tarball (empty = URL is the .wasm itself)
 APPS=(
   "cowsay|https://cdn.wasmer.io/packages/syrusakbary/cowsay/cowsay-0.3.0-b185348b-2e15-480b-96ac-216064a85e0d.tar.gz|44c990f3ceec797d6e90f54e2ba72789b9544be61ee4011aa7ac6c05252ca605|target/wasm32-wasi/release/cowsay.wasm"
@@ -136,6 +154,134 @@ else
   echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"
 fi
 
+# --- libpcap: BPF filter compiler, built from the pinned upstream source
+# release with zig (ADR-22) as a reactor library. Only the platform-independent
+# filter-compilation TUs are built (no capture backend); src/pcap_config.h
+# stands in for ./configure's config.h (see its header comment), and our own
+# src/pcap_binding.c exports compile_filter(), which turns a textual filter
+# like "tcp port 80" into a serialized BPF program in guest memory. libpcap
+# 1.10.x no longer ships pre-generated grammar.c/scanner.c, so the parser is
+# regenerated here with bison + flex (matching the substitution ./configure
+# would apply for a bison >= 3 reentrant parser).
+PCAP_URL="https://www.tcpdump.org/release/libpcap-1.10.6.tar.gz"
+PCAP_SHA256="872dd11337fe1ab02ad9d4fee047c9da244d695c6ddf34e2ebb733efd4ed8aa9"
+PCAP_DIR="libpcap-1.10.6"
+# The filter-compiler TUs plus the libpcap internals the linker demands
+# (fmtutils/etherent/strlcpy) and the generated parser (grammar/scanner).
+PCAP_SRCS=(
+  pcap.c gencode.c optimize.c nametoaddr.c bpf_image.c bpf_filter.c
+  grammar.c scanner.c pcap-common.c fmtutils.c etherent.c missing/strlcpy.c
+)
+
+pcap_stamp="cache/libpcap.src-sha256"
+pcap_want="$(printf '%s\n%s' "$PCAP_SHA256" "$(wasm_opt_version)")"
+if [ -f cache/libpcap.wasm ] \
+  && [ "$(cat "$pcap_stamp" 2>/dev/null || true)" = "$pcap_want" ]; then
+  echo "libpcap: cached"
+else
+  command -v zig >/dev/null || {
+    echo "libpcap: zig not found — install zig (e.g. brew install zig) to build the libpcap app" >&2
+    exit 1
+  }
+  command -v wasm-opt >/dev/null || {
+    echo "libpcap: wasm-opt not found — install binaryen (e.g. brew install binaryen) to preprocess the libpcap app (ADR-39)" >&2
+    exit 1
+  }
+  command -v bison >/dev/null || {
+    echo "libpcap: bison not found — install bison (e.g. brew install bison) to regenerate the filter grammar" >&2
+    exit 1
+  }
+  command -v flex >/dev/null || {
+    echo "libpcap: flex not found — install flex (e.g. brew install flex) to regenerate the filter scanner" >&2
+    exit 1
+  }
+  echo "libpcap: fetching $PCAP_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/libpcap.tar.gz" "$PCAP_URL"
+  echo "$PCAP_SHA256  $tmp/libpcap.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/libpcap.tar.gz" -C "$tmp"
+  pdir="$tmp/$PCAP_DIR"
+  echo "libpcap: generating grammar.c/scanner.c (bison/flex)"
+  sed 's/@REENTRANT_PARSER@/%define api.pure/' "$pdir/grammar.y.in" >"$pdir/grammar.y"
+  ( cd "$pdir" && bison -p pcap_ -o grammar.c -d grammar.y \
+    && flex -P pcap_ --header-file=scanner.h --nounput -o scanner.c scanner.l )
+  cp src/pcap_config.h "$pdir/config.h"
+  echo "libpcap: building libpcap.wasm (zig cc, reactor)"
+  psrcs=()
+  for s in "${PCAP_SRCS[@]}"; do psrcs+=("$pdir/$s"); done
+  # pcap_compile_nopcap() is the documented filter-only entry point but is
+  # marked deprecated (thread-safety of its error buffer); silence that here.
+  # --strip-debug drops the DWARF wasm-opt cannot process.
+  zig cc -target wasm32-wasi -mexec-model=reactor -O2 \
+    -DBUILDING_PCAP -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal \
+    -Wno-deprecated-declarations -Wl,--strip-debug -I "$pdir" \
+    "${psrcs[@]}" src/pcap_binding.c \
+    -Wl,--export=compile_filter -Wl,--export=malloc -Wl,--export=free \
+    -o cache/libpcap.wasm
+  echo "libpcap: wasm-opt -O2 (ADR-39)"
+  wasm_opt_inplace cache/libpcap.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s' "$pcap_want" >"$pcap_stamp"
+  echo "libpcap: -> cache/libpcap.wasm"
+fi
+
+# --- tree-sitter: the incremental-parsing runtime plus the tree-sitter-json
+# grammar, built from the pinned upstream releases with zig (ADR-22) as a
+# reactor library. The runtime is a single-TU amalgamation (lib/src/lib.c);
+# tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen). Our
+# own src/treesitter_binding.c exports parse_source(), which parses a source
+# string and returns the parse tree's S-expression (ts_node_string). One
+# combined stamp covers both source checksums.
+TS_URL="https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.11.tar.gz"
+TS_SHA256="1bab01ed21464f3272665b9c60e39ee79f68da1333e80b23f2c9356569d06971"
+TS_DIR="tree-sitter-0.26.11"
+TSJSON_URL="https://github.com/tree-sitter/tree-sitter-json/archive/refs/tags/v0.24.8.tar.gz"
+TSJSON_SHA256="acf6e8362457e819ed8b613f2ad9a0e1b621a77556c296f3abea58f7880a9213"
+TSJSON_DIR="tree-sitter-json-0.24.8"
+
+# One stamp covering both pinned checksums (order-fixed) plus wasm-opt version.
+ts_stamp="cache/treesitter.src-sha256"
+ts_want="$(printf '%s %s\n%s' "$TS_SHA256" "$TSJSON_SHA256" "$(wasm_opt_version)")"
+if [ -f cache/treesitter.wasm ] \
+  && [ "$(cat "$ts_stamp" 2>/dev/null || true)" = "$ts_want" ]; then
+  echo "treesitter: cached"
+else
+  command -v zig >/dev/null || {
+    echo "treesitter: zig not found — install zig (e.g. brew install zig) to build the tree-sitter app" >&2
+    exit 1
+  }
+  command -v wasm-opt >/dev/null || {
+    echo "treesitter: wasm-opt not found — install binaryen (e.g. brew install binaryen) to preprocess the tree-sitter app (ADR-39)" >&2
+    exit 1
+  }
+  echo "treesitter: fetching $TS_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/ts.tar.gz" "$TS_URL"
+  echo "$TS_SHA256  $tmp/ts.tar.gz" | shasum -a 256 -c - >/dev/null
+  echo "treesitter: fetching $TSJSON_URL"
+  curl -fsSL -o "$tmp/tsjson.tar.gz" "$TSJSON_URL"
+  echo "$TSJSON_SHA256  $tmp/tsjson.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/ts.tar.gz" -C "$tmp"
+  tar xzf "$tmp/tsjson.tar.gz" -C "$tmp"
+  echo "treesitter: building treesitter.wasm (zig cc, reactor)"
+  # --strip-debug drops the DWARF wasm-opt cannot process.
+  zig cc -target wasm32-wasi -mexec-model=reactor -O2 -Wl,--strip-debug \
+    -I "$tmp/$TS_DIR/lib/include" -I "$tmp/$TS_DIR/lib/src" \
+    -I "$tmp/$TSJSON_DIR/src" \
+    "$tmp/$TS_DIR/lib/src/lib.c" "$tmp/$TSJSON_DIR/src/parser.c" src/treesitter_binding.c \
+    -Wl,--export=parse_source -Wl,--export=malloc -Wl,--export=free \
+    -o cache/treesitter.wasm
+  echo "treesitter: wasm-opt -O2 (ADR-39)"
+  wasm_opt_inplace cache/treesitter.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s' "$ts_want" >"$ts_stamp"
+  echo "treesitter: -> cache/treesitter.wasm"
+fi
+
 # --- minigzip: zlib's stdio (de)compression demo, built from the pinned
 # zlib source release with zig (ADR-22). Integer-only and tiny, with binary
 # stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.
@@ -189,11 +335,16 @@ RG_SHA256="4dad02a2f9c8c3c8d89434e47337aa654cb0e2aa50e806589132f186bf5c2b66"
 RG_DIR="ripgrep-14.1.1"
 
 rg_stamp="cache/rg.src-sha256"
-if [ -f cache/rg.wasm ] && [ "$(cat "$rg_stamp" 2>/dev/null || true)" = "$RG_SHA256" ]; then
+rg_want="$(printf '%s\n%s' "$RG_SHA256" "$(wasm_opt_version)")"
+if [ -f cache/rg.wasm ] && [ "$(cat "$rg_stamp" 2>/dev/null || true)" = "$rg_want" ]; then
   echo "rg: cached"
 else
   command -v cargo >/dev/null || {
     echo "rg: cargo not found — install the Rust toolchain to build ripgrep" >&2
+    exit 1
+  }
+  command -v wasm-opt >/dev/null || {
+    echo "rg: wasm-opt not found — install binaryen (e.g. brew install binaryen) to preprocess ripgrep (ADR-39)" >&2
     exit 1
   }
   rustup target list --installed 2>/dev/null | grep -qx wasm32-wasip1 || {
@@ -209,9 +360,11 @@ else
   echo "rg: building rg.wasm (cargo build --release --target wasm32-wasip1)"
   ( cd "$tmp/$RG_DIR" && cargo build --release --target wasm32-wasip1 )
   cp "$tmp/$RG_DIR/target/wasm32-wasip1/release/rg.wasm" cache/rg.wasm
+  echo "rg: wasm-opt -O2 (ADR-39)"
+  wasm_opt_inplace cache/rg.wasm
   rm -rf "$tmp"
   trap - EXIT
-  printf '%s\n' "$RG_SHA256" >"$rg_stamp"
+  printf '%s' "$rg_want" >"$rg_stamp"
   echo "rg: -> cache/rg.wasm"
 fi
 

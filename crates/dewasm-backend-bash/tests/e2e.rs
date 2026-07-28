@@ -243,9 +243,11 @@ qjs_repl_pty_e2e!(Bash);
 // just runtime speed, is the blocker.
 
 shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
-// libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e!:
-// not invoked — Bash has no host-language C API to plumb a callback binding
-// through (ADR-12).
+// libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e!
+// / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no
+// host-language C API to plumb a pointer-returning binding through (ADR-12), and
+// the multi-MB reactor artifacts are far past what Bash's parser can load in
+// practice.
 // embedded_coexist_e2e!: not invoked — Bash has one flat global namespace
 // (no nested runtime/class construct), so two independently-generated
 // runtimes cannot coexist in one process without their rt_*/mem_* function

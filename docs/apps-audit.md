@@ -22,8 +22,12 @@ returns.
 | CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
-| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
+| zeroperl (Perl 5.42) | see below | none (host-shim blocked) | ⛔ deferred |
+| LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
+| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
+| libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go⁸) |
+| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go¹⁰) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains
 (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index
@@ -161,8 +165,8 @@ is the "Ruby on Ruby" north-star demo.
 
 ⁶ **ripgrep (Phase 5b).** ripgrep 14.1.1 built from the pinned source
 release with `cargo build --release --target wasm32-wasip1` (default
-features — which already exclude pcre2; no tweaks needed). Audit:
-reference-types *encoding only*¹, in scope. A recursive directory search over
+features — which already exclude pcre2; no tweaks needed). Audit: baseline only
+after the ADR-39 `wasm-opt` pass¹¹, in scope. A recursive directory search over
 the committed fixture tree (`examples/apps/fixtures/rg/`) staged into a scratch
 dir and preopened at `/work`, asserting the guest stdout is byte-identical to
 the `wasmtime --dir` golden. `--sort path` forces ripgrep's otherwise-parallel
@@ -198,6 +202,62 @@ trip ~0.3 s under Bash). The binary stdin/golden cannot travel through the
 `run_gzip_cases` (bytes-capable `run_bytes`/`run_command_bytes` helpers) that
 each backend calls.
 
+⁸ **libpcap (Track A).** libpcap 1.10.6 built from the pinned upstream release
+with `zig cc -target wasm32-wasi -mexec-model=reactor` as a C-API library. Only
+the platform-independent BPF-filter-compilation translation units are compiled
+(no capture backend); the parser is regenerated with bison/flex (1.10.x no
+longer ships pre-generated `grammar.c`/`scanner.c`). Audit: baseline only after
+the ADR-39 `wasm-opt` pass¹¹ (which re-encodes the overlong `call_indirect`
+immediates), in scope. Our own `examples/apps/src/pcap_binding.c` exports
+`compile_filter`, which runs `pcap_compile_nopcap` and serializes the resulting
+BPF program (`[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`) into
+guest memory; the C-API case (`pcap_compile`, `pcap_compile_e2e!`) drives
+`compile_filter("tcp port 80", DLT_EN10MB, 65535)` on Ruby, Python, and Go and
+pins the canonical tcp-port-80 program (deterministic — BPF holds
+offsets/constants only). Like the other reactor-library C-API cases it is
+`heavy_test`-gated (a ~2 MB artifact reconverted per run). Bash does not
+participate: no host-language C API to plumb a pointer-returning binding
+through (ADR-12). *Shim caveat:* wasip1 has no `./configure` host, no
+`socket()`, and no baseline `setjmp`/`longjmp`, so a first-party
+`examples/apps/src/pcap_config.h`⁹ stands in for the generated `config.h` — see
+its header comment.
+
+⁹ **The `pcap_config.h` shim** collapses three wasip1 gaps: the `./configure`
+feature macros the filter compiler reads; placeholders (`socket()`,
+`SIOCGIF*`) that let the never-reached, wasm-ld-GC'd `pcap_lookupnet` compile;
+and a baseline-wasm `setjmp`→0 / `longjmp`→trap stand-in (libpcap reports
+filter *syntax errors* via `longjmp`, which wasip1's `<setjmp.h>` refuses to
+compile without the out-of-scope wasm exception-handling proposal). A valid
+filter — the only kind this demo compiles — never takes the error path, so the
+stand-in is transparent; an invalid filter would trap rather than return an
+error. Name-based filters (`host example.com`) are likewise out of scope:
+`pcap_binding.c` stubs the missing `getaddrinfo`/`getnetbyname`/`getprotobyname`
+to report "not found".
+
+¹⁰ **tree-sitter (Track A).** The tree-sitter incremental-parsing runtime
+0.26.11 (single-TU amalgamation `lib/src/lib.c`) plus the pre-generated
+tree-sitter-json 0.24.8 grammar (`src/parser.c`), built from the pinned
+upstream releases with `zig cc -mexec-model=reactor` as a C-API library. Audit:
+baseline only after the ADR-39 `wasm-opt` pass¹¹, in scope — unlike libpcap, the
+runtime needs no shim (no `setjmp`, no host lookups). Our own
+`examples/apps/src/treesitter_binding.c` exports `parse_source`, which parses a
+source string and returns the parse tree's S-expression (`ts_node_string`, a
+malloc'd C string) into guest memory. The C-API case (`treesitter_parse`,
+`treesitter_parse_e2e!`) parses the fixed snippet `{"key": [1, true, null]}` on
+Ruby, Python, and Go and pins the S-expression `(document (object (pair key:
+(string (string_content)) value: (array (number) (true) (null)))))`
+(deterministic — tree-sitter's node naming is fixed by the pinned grammar).
+`heavy_test`-gated like the other reactor-library C-API cases; Bash does not
+participate (ADR-12).
+
+¹¹ **ADR-39 `wasm-opt` preprocessing.** The three modules `fetch.sh` builds
+locally (libpcap, tree-sitter, ripgrep) are run through `wasm-opt -O2` (baseline
+features only, no ctor-eval) before caching — see
+[ADR-39](adr/39-wasm-opt-preprocessing.md). Besides shrinking them, `wasm-opt`
+re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so
+these modules audit as *pure* baseline rather than baseline + the
+reference-types encoding bit¹ the downloaded/unoptimized artifacts carry.
+
 ## Deferred: pandoc
 
 - Source: https://haskell-wasm.github.io/pandoc-wasm/pandoc.wasm
@@ -210,6 +270,33 @@ each backend calls.
   SIMD support alone would unblock it.
 - Revisit when/if SIMD enters scope; the binary is otherwise a pure
   wasip1 stdio converter and would make a strong demo.
+
+## Deferred: zeroperl
+
+- Source: [github.com/6over3/zeroperl](https://github.com/6over3/zeroperl) —
+  a WASI reactor build of Perl 5.42. A prebuilt artifact is redistributed
+  in [github.com/lbe/go-exiftool-wasm](https://github.com/lbe/go-exiftool-wasm)
+  as `internal/zeroperl/zeroperl.wasm` (pin the serving commit + sha256 when
+  it is promoted).
+- Audit: **not blocked on a wasm feature** — the blocker is host shims. The
+  build relies on binaryen **asyncify** plus a custom **setjmp/longjmp** shim
+  and an imported `env.call_host_function`, none of which the runtime provides.
+  This is an ABI/host-environment gap, not a proposal outside the 0.1 scope.
+- Revisit when a setjmp/asyncify story exists (a general asyncify unwinding
+  shim plus the `call_host_function` host glue); Perl 5 would be a marquee
+  scripting-language demo alongside CPython and CRuby.
+
+## Deferred: LightningCSS
+
+- Source: [github.com/pgaskin/go-lightningcss](https://github.com/pgaskin/go-lightningcss)
+  — a Rust **reactor** build of LightningCSS (the CSS parser/transformer),
+  produced via a **pgaskin/wasm2go fork** of the build tooling; the published
+  artifact is therefore unverified against an upstream release.
+- Audit: **not yet run** — deferred pending audit. The fork-built artifact is
+  not trustworthy enough to promote as-is.
+- Revisit by pinning the build (a reproducible from-source recipe, not the
+  fork's prebuilt wasm) and running the feature-audit on the resulting binary
+  before promoting it in scope.
 
 ## WASI p1 import surfaces (for the Phase 5 wiring)
 
