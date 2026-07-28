@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4 # no submodules: fmt/clippy don't read them
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lint
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    # The --include-ignored sweep (full spec suites + heavy apps) has
+    # unmeasured wall time; give it generous headroom and tighten later.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true # tests/spec + tests/wasi-testsuite
+      - uses: ./.github/actions/setup-tests
+        with:
+          rust-cache-shared-key: tests
+          # Only main writes the shared build cache; PRs restore it read-only
+          # to keep the repo under the 10 GB cache budget.
+          rust-cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      # `--include-ignored` un-ignores the apps_wasmtime golden-freshness
+      # suite, which execs `wasmtime run` and fails loudly without it (ADR-15).
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+        if: github.event_name != 'pull_request'
+        with:
+          version: '47.0.2' # matches local dev; bump deliberately
+      - name: Test
+        if: github.event_name == 'pull_request'
+        run: cargo test
+      - name: Test (including heavy cases)
+        if: github.event_name != 'pull_request'
+        run: cargo test -- --include-ignored
