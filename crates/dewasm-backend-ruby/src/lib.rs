@@ -569,19 +569,17 @@ impl<'a> Gen<'a> {
     /// and reaches this decision): if the pending `__br` names this frame,
     /// clear it and fall through (the wasm branch lands past the block);
     /// otherwise a still-pending `__br` targets an ancestor, so `break` again
-    /// to relay it outward.
+    /// to relay it outward. Emitted as a single line: epilogues sit at every
+    /// crossed frame, often deeply indented, so each extra line costs its full
+    /// indent in output bytes.
     fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
-        w.line(format!("if __br == {label_id}"));
-        w.indent();
-        w.line("__br = nil");
-        w.dedent();
         if self.has_enclosing_frame() {
-            w.line("elsif __br");
-            w.indent();
-            w.line("break");
-            w.dedent();
+            w.line(format!(
+                "if __br == {label_id} then __br = nil elsif __br then break end"
+            ));
+        } else {
+            w.line(format!("__br = nil if __br == {label_id}"));
         }
-        w.line("end");
     }
 
     /// An access expression for global `idx`, whichever representation it
@@ -1034,13 +1032,10 @@ impl<'a> Gen<'a> {
                     // fallthrough leaves `__br` nil and exits the loop.
                     w.block("while true", "end", |w| {
                         w.block("begin", "end while false", |w| self.stmts(w, body));
-                        w.line(format!("if __br == {}", label.id));
-                        w.indent();
-                        w.line("__br = nil");
-                        w.line("next");
-                        w.dedent();
-                        w.line("end");
-                        w.line("break");
+                        w.line(format!(
+                            "if __br == {} then __br = nil; next else break end",
+                            label.id
+                        ));
                     });
                 } else {
                     // No `br` reaches this loop from a nested frame: a back-edge
@@ -1056,7 +1051,7 @@ impl<'a> Gen<'a> {
                 // A `br` that passes through this loop toward an ancestor left
                 // `__br` set and `break`ed the `while`; relay it outward.
                 if crossed && self.has_enclosing_frame() {
-                    w.block("if __br", "end", |w| w.line("break"));
+                    w.line("break if __br");
                 }
                 self.frame_stack.borrow_mut().pop();
             }
@@ -1277,8 +1272,7 @@ impl<'a> Gen<'a> {
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
                 if via_var {
-                    w.line(format!("__br = {label}"));
-                    w.line("break");
+                    w.line(format!("__br = {label}; break"));
                 } else {
                     w.line(if *is_loop { "next" } else { "break" });
                 }

@@ -81,7 +81,10 @@ the per-block dispatch loop ADR-4 feared is unnecessary.
 - Negative: a *wrapped* loop's back-edge takes a `__br` assignment and a
   compare instead of a plain `next`; the common loop+block idiom stays
   unwrapped and keeps `next`. A multi-level `br` emits one small epilogue
-  per crossed frame.
+  per crossed frame — an output-size cost (epilogues sit at deep indents,
+  so they are emitted as single lines; measured on `sqlite3-shell`, the
+  multi-line first cut grew the output by 37%, mostly leading
+  whitespace).
 - The spec harness (ADR-3) binds correctness: it is green for the Ruby
   backend under this lowering, including `br_table`, `unwind`, and
   `labels`.
