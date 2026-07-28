@@ -326,6 +326,30 @@ else
   echo "minigzip: -> cache/minigzip.wasm"
 fi
 
+# --- dwarf-fixture: a first-party C fixture built WITH DWARF (`-g`) so the
+# --dwarf-line source back-mapping test has a module carrying `.debug_line`
+# (ADR-38). The source is committed (src/dwarf_fixture.c, first-party — ADR-9);
+# unlike the other apps there is nothing to download, so the "pin" is the
+# sha256 of that source file: editing it rebuilds. Built at -O1 (not -O0) so the
+# fixture exercises the folded-expression marker path the core test calibrates.
+DWARF_FIXTURE_SRC="src/dwarf_fixture.c"
+DWARF_FIXTURE_SHA256="$(shasum -a 256 "$DWARF_FIXTURE_SRC" | cut -d' ' -f1)"
+
+dwarf_stamp="cache/dwarf-fixture.src-sha256"
+if [ -f cache/dwarf-fixture.wasm ] \
+  && [ "$(cat "$dwarf_stamp" 2>/dev/null || true)" = "$DWARF_FIXTURE_SHA256" ]; then
+  echo "dwarf-fixture: cached"
+else
+  command -v zig >/dev/null || {
+    echo "dwarf-fixture: zig not found — install zig (e.g. brew install zig) to build the DWARF fixture" >&2
+    exit 1
+  }
+  echo "dwarf-fixture: building dwarf-fixture.wasm (zig cc -g -O1)"
+  zig cc -target wasm32-wasi -g -O1 -o cache/dwarf-fixture.wasm "$DWARF_FIXTURE_SRC"
+  printf '%s\n' "$DWARF_FIXTURE_SHA256" >"$dwarf_stamp"
+  echo "dwarf-fixture: -> cache/dwarf-fixture.wasm"
+fi
+
 # --- ripgrep: built from the pinned source release with cargo for
 # wasm32-wasip1. Default features (which already exclude pcre2); no tweaks
 # needed — ripgrep 14.1.1 builds clean for wasip1 as-is. A Ruby-only

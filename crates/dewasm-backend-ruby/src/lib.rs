@@ -1148,6 +1148,11 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
+            Stmt::SourceLine(pos) => {
+                // A source-position back-mapping comment (ADR-38); inert.
+                let file = &self.module.debug_files[pos.file as usize];
+                w.line(format!("# {file}:{}", pos.line));
+            }
         }
     }
 

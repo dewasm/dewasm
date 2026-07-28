@@ -59,6 +59,7 @@ the consequences.
 | ADR-35 | [Bash Cross-Module Linking](35-bash-cross-module-linking.md) | Accepted |
 | ADR-36 | [Official WASI p1 Conformance Suite as a Harness Layer](36-wasi-testsuite-conformance.md) | Accepted |
 | ADR-37 | [Opt-in Data-Segment Externalization (`--data-file`)](37-data-segment-externalization.md) | Accepted |
+| ADR-38 | [Opt-in DWARF Line-Number Back-Mapping (`--dwarf-line`)](38-dwarf-line-back-mapping.md) | Accepted |
 | ADR-39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
 
 ## Adding a new ADR

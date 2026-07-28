@@ -1258,6 +1258,18 @@ impl<'a> Gen<'a> {
                     self.emit_if(w, cond, then, els);
                 }
             }
+            Stmt::SourceLine(pos) => {
+                // Go honors `//line` directives only at column 1, so bypass the
+                // writer's indentation with `raw` (ADR-38). The directive sets
+                // the source position of the *following* line, which is exactly
+                // the statement this marker precedes.
+                let file = &self.module.debug_files[pos.file as usize];
+                if pos.col > 0 {
+                    w.raw(format!("//line {file}:{}:{}\n", pos.line, pos.col));
+                } else {
+                    w.raw(format!("//line {file}:{}\n", pos.line));
+                }
+            }
             _ => self.simple_stmt(w, stmt),
         }
     }
@@ -1437,7 +1449,7 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("p.elem{seg} = nil"));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::SourceLine(_) => {
                 unreachable!("structured statement routed to simple_stmt")
             }
         }
@@ -1813,7 +1825,8 @@ fn collect_reads_stmt(
             e(src, read_locals, used_locals, read_temps);
             e(len, read_locals, used_locals, read_temps);
         }
-        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable => {}
+        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable | Stmt::SourceLine(_) => {
+        }
     }
 }
 

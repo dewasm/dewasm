@@ -156,7 +156,8 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
         ir::Stmt::If { then, els, .. } => {
             stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
         }
-        ir::Stmt::Assign { .. }
+        ir::Stmt::SourceLine(_)
+        | ir::Stmt::Assign { .. }
         | ir::Stmt::LocalSet { .. }
         | ir::Stmt::GlobalSet { .. }
         | ir::Stmt::Store { .. }

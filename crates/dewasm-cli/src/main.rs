@@ -47,6 +47,13 @@ struct Cli {
     /// `-o -`.
     #[arg(long)]
     data_file: Option<PathBuf>,
+
+    /// Parse the module's DWARF `.debug_*` sections and emit source-position
+    /// markers (Go `//line`, Ruby/Python comments) so generated-code stack
+    /// traces point into the original source (ADR-38). A module without DWARF
+    /// simply yields no markers.
+    #[arg(long)]
+    dwarf_line: bool,
 }
 
 fn main() -> Result<()> {
@@ -132,7 +139,12 @@ fn main() -> Result<()> {
         )
         .into());
     }
-    let module = dewasm_core::build_module(&bytes)?;
+    let module = dewasm_core::build_module_with_options(
+        &bytes,
+        &dewasm_core::BuildOptions {
+            debug_line: cli.dwarf_line,
+        },
+    )?;
     let files = backend.generate(&module, &opts)?;
 
     // Route by name: the data sidecar (its `name` is the configured

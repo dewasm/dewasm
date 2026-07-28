@@ -51,6 +51,10 @@ pub struct Module {
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
     pub start: Option<u32>,
+    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers,
+    /// indexed by [`SourcePos::file`]. Empty unless DWARF line back-mapping was
+    /// requested (`BuildOptions::debug_line`, ADR-38).
+    pub debug_files: Vec<String>,
 }
 
 impl Module {
@@ -226,8 +230,23 @@ pub enum BrTarget {
     },
 }
 
+/// A resolved source position, indexing [`Module::debug_files`]. Carried by
+/// [`Stmt::SourceLine`] markers for DWARF line back-mapping (ADR-38); a `col`
+/// of 0 means the column is unknown (DWARF's "left edge").
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SourcePos {
+    pub file: u32,
+    pub line: u32,
+    pub col: u32,
+}
+
 #[derive(Debug)]
 pub enum Stmt {
+    /// A source-position marker emitted just before the statement it annotates
+    /// when DWARF line back-mapping is on (ADR-38). Semantically inert: a
+    /// backend renders it as a position directive/comment or drops it, and its
+    /// presence never changes the surrounding statements' meaning.
+    SourceLine(SourcePos),
     Assign {
         dst: Temp,
         expr: Expr,
