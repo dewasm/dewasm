@@ -3,6 +3,11 @@
 Status: **Accepted, 2026-07-23.** Backfilled; implemented in
 `crates/dewasm-backend-ruby/src/lib.rs` + `runtime/ruby/`. Numeric
 conventions are ADR-2's; this ADR covers control flow and object shape.
+The multi-level-`br` and loop-`catch`-value decisions (and the flag-variable
+rejection) are superseded by [ADR-42](42-ruby-label-variable-cascade.md); the
+temps-hoisting decision stands, as does `call_indirect`'s structural
+type-symbol comparison — but its splat-array dispatch is amended by
+[ADR-44](44-ruby-call-indirect-arity.md) (fixed-arity `Table#callN`).
 
 ## Context
 
@@ -13,18 +18,25 @@ language facts drove the lowering shape.
 
 ## Decision
 
-- **Multi-level `br` lowers to `catch`/`throw`.** A referenced block
+- **Multi-level `br` lowers to `catch`/`throw`.** *(Superseded by
+  [ADR-42](42-ruby-label-variable-cascade.md): the `__br` label-variable
+  cascade.)* A referenced block
   label becomes `catch(:lN) do ... end`; `br` becomes result-slot
   assignments followed by `throw :lN`. Unreferenced labels emit nothing
   (ADR-1's `referenced` flag).
 - **Loops become `while true` wrapping a `catch` whose value picks
-  continue vs. exit**: the body falls through to `true` (break the while)
+  continue vs. exit**: *(Superseded by
+  [ADR-42](42-ruby-label-variable-cascade.md).)* the body falls through
+  to `true` (break the while)
   and a back-edge `throw`s `false` (next iteration). One shape covers
   branches to the loop head from any nesting depth.
 - **A `br`/`br_if`/`br_table` at the innermost capturing frame — depth 1
   — lowers to a plain `break`/`next` instead of `throw`, and a frame every
   one of whose incoming branches is depth-1 drops `catch`/`throw`
-  entirely** (`Block` renders as `begin ... end while false`, `Loop` as a
+  entirely** *(Superseded by
+  [ADR-42](42-ruby-label-variable-cascade.md), which drops `catch`/`throw`
+  for every frame, not only depth-1-only ones; the depth-1 `break`/`next`
+  fast path it keeps.)* (`Block` renders as `begin ... end while false`, `Loop` as a
   bare `while true ... end` with an appended trailing `break` for
   fallthrough). This was the Consequences section's candidate
   optimization below, now adopted: `break`/`next` inside a `catch(...) do
@@ -53,7 +65,10 @@ language facts drove the lowering shape.
   sites. Wasm compares function types structurally, not by index — and
   any module-local id (even a canonicalized index) breaks once a table
   is shared across modules via an imported table, whose index spaces
-  differ.
+  differ. *(The dispatch used a splat: `@tT.call(index, type_sym,
+  *args)` re-splatting into `func.call(*args)`. Amended by
+  [ADR-44](44-ruby-call-indirect-arity.md): a per-arity `Table#callN`
+  drops both splats; the structural-symbol comparison here is unchanged.)*
 - **Module = one class**: imports resolved in `initialize` (`@ifN`
   ivars), globals as `@gN`, exports in an `@exports` hash keyed by the
   raw export name with `invoke(name, *args)` as the entry point (export
@@ -66,7 +81,11 @@ language facts drove the lowering shape.
 - **Flag variables / state-machine dispatch for multi-level br** — both
   obscure the code far more than catch/throw, and the state machine
   costs a dispatch loop per block; catch/throw benchmarked acceptably and
-  maps 1:1 to label semantics.
+  maps 1:1 to label semantics. *(Reversed by
+  [ADR-42](42-ruby-label-variable-cascade.md): once result values are
+  decoupled from control — via the `assigns` slot-copies and hoisted
+  temps above — a control-only flag needs no per-block dispatch, and
+  `catch`/`throw`'s allocation cost turned out to dominate hot loops.)*
 - **`define_method` per export as the public API** — export names collide
   with `Object` methods and Ruby keywords; a name-keyed hash plus
   `invoke` is collision-free. Friendly named methods can be layered on

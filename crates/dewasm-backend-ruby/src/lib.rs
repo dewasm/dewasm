@@ -5,15 +5,17 @@
 //! - i32/i64 are unsigned (masked) Ruby Integers; signed views via
 //!   `Rt.s32/s64` only where an instruction needs them.
 //! - f32/f64 are Ruby Floats; f32 results are re-rounded with `Rt.f32`.
-//! - Multi-level `br` uses catch/throw; loops become `while true` with a
-//!   catch whose value distinguishes continue from fallthrough.
+//! - `br` lowers to a method-local `__br` label-variable cascade: blocks and
+//!   referenced ifs are `begin...end while false`, loops are `while true`, and
+//!   a multi-level branch sets `__br` to the target label id and `break`s,
+//!   each crossed frame's epilogue relaying it until the target lands.
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by
 //! the relative name `Rt`, so linkage (embedded per class, shared, or a
 //! future gem) is the caller's choice.
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -152,7 +154,7 @@ fn generate_class_inner(
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
-        break_only: RefCell::new(HashMap::new()),
+        frames: RefCell::new(FrameSets::default()),
         frame_stack: RefCell::new(Vec::new()),
         boxed_globals,
         data_file: data_file.map(str::to_string),
@@ -377,6 +379,11 @@ fn hex_bytes(data: &[u8]) -> String {
 /// units).
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
+/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN`
+/// dispatch method (ADR-44); wider signatures fall back to the splat `call`.
+/// The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
+const MAX_FIXED_ARITY: usize = 8;
+
 fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
 }
@@ -393,71 +400,96 @@ fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
             .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
-/// Pre-pass (ADR-4's `break`/`next` optimization): for every capturing
-/// frame's label id in `body` (a `Block`, a `Loop`, or an `If` whose
-/// `label.referenced` is set — the forms that emit `catch`/`throw`; a
-/// plain `if`, `BrIf`'s wrapper `if`, and `BrTable`'s `case` do not
-/// capture), record whether *every* `br`/`br_if`/`br_table` target that
-/// names it does so from the innermost capturing frame enclosing the
-/// branch. If so, that frame's own `catch`/`throw` machinery is provably
-/// dead: nothing ever `throw`s to it from a nested frame, so the simpler
-/// `begin...end while false` / `while true...end` rendering (`stmt()`)
-/// is equivalent.
-fn compute_break_only(body: &[Stmt]) -> HashMap<u32, bool> {
-    let mut result = HashMap::new();
-    let mut stack: Vec<u32> = Vec::new();
-    walk_break_only(body, &mut stack, &mut result);
-    result
+/// Per-function frame classification for the label-variable cascade.
+#[derive(Default)]
+struct FrameSets {
+    /// Capturing frames (`Block`, `Loop`, or referenced-`If`) that a `br` from
+    /// strictly inside crosses, and so must carry a land-or-relay epilogue.
+    crossed: HashSet<u32>,
+    /// Loops that a `br` targets from a *strictly nested* capturing frame, so
+    /// the branch reaches the loop head by a `break` out of an inner scope
+    /// rather than a direct `next`. Such a loop wraps its body in an inner
+    /// `begin ... end while false` (the break target) and takes its back-edge
+    /// through `__br`; every other loop keeps the lean `while true` with a
+    /// plain `next` back-edge.
+    wrapped: HashSet<u32>,
 }
 
-fn walk_break_only(stmts: &[Stmt], stack: &mut Vec<u32>, result: &mut HashMap<u32, bool>) {
+/// Compute the [`FrameSets`] for a function body.
+///
+/// Walking with a stack of the open capturing frames (label id + is-loop), a
+/// `br` to target `T` at stack position `pos` (the innermost open frame is the
+/// top) is either a self-branch — `pos == top`, a plain `break`/`next` that
+/// leaves the innermost frame directly, marking nothing — or an outward
+/// branch, `pos < top`, which must traverse `stack[pos..=top]`: the target
+/// frame, all pass-through frames, *and* the innermost frame whose own `break`
+/// otherwise lands mid-body in its parent. Every frame on that inclusive path
+/// needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T`
+/// itself is a loop reached this way (from a nested frame), it is `wrapped`. A
+/// plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture,
+/// so they are not on the stack. `br_if`/`br_table` feed every target through
+/// the same routine.
+fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
+    let mut sets = FrameSets::default();
+    let mut stack: Vec<(u32, bool)> = Vec::new();
+    walk_frame_sets(body, &mut stack, &mut sets);
+    sets
+}
+
+fn walk_frame_sets(stmts: &[Stmt], stack: &mut Vec<(u32, bool)>, sets: &mut FrameSets) {
     for stmt in stmts {
         match stmt {
             Stmt::Block { label, body } => {
-                result.entry(label.id).or_insert(true);
-                stack.push(label.id);
-                walk_break_only(body, stack, result);
+                stack.push((label.id, false));
+                walk_frame_sets(body, stack, sets);
                 stack.pop();
             }
             Stmt::Loop { label, body } => {
-                result.entry(label.id).or_insert(true);
-                stack.push(label.id);
-                walk_break_only(body, stack, result);
+                stack.push((label.id, true));
+                walk_frame_sets(body, stack, sets);
                 stack.pop();
             }
             Stmt::If {
                 label, then, els, ..
             } => {
                 if label.referenced {
-                    result.entry(label.id).or_insert(true);
-                    stack.push(label.id);
+                    stack.push((label.id, false));
                 }
-                walk_break_only(then, stack, result);
-                walk_break_only(els, stack, result);
+                walk_frame_sets(then, stack, sets);
+                walk_frame_sets(els, stack, sets);
                 if label.referenced {
                     stack.pop();
                 }
             }
-            Stmt::Br(target) => record_break_only_target(target, stack, result),
-            Stmt::BrIf { target, .. } => record_break_only_target(target, stack, result),
+            Stmt::Br(target) => record_target(target, stack, sets),
+            Stmt::BrIf { target, .. } => record_target(target, stack, sets),
             Stmt::BrTable {
                 targets, default, ..
             } => {
                 for target in targets {
-                    record_break_only_target(target, stack, result);
+                    record_target(target, stack, sets);
                 }
-                record_break_only_target(default, stack, result);
+                record_target(default, stack, sets);
             }
             _ => {}
         }
     }
 }
 
-fn record_break_only_target(target: &BrTarget, stack: &[u32], result: &mut HashMap<u32, bool>) {
+fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets) {
     if let BrTarget::Label { label, .. } = target {
-        let innermost = stack.last() == Some(label);
-        let entry = result.entry(*label).or_insert(true);
-        *entry = *entry && innermost;
+        if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
+            // Outward branch (target is not the innermost frame): mark the
+            // whole inclusive path from the target to the innermost frame.
+            if pos + 1 < stack.len() {
+                sets.crossed.extend(stack[pos..].iter().map(|(id, _)| *id));
+                // A loop targeted from a nested frame needs its body-scope
+                // wrapper so the relayed `break` re-enters via `next`.
+                if stack[pos].1 {
+                    sets.wrapped.insert(*label);
+                }
+            }
+        }
     }
 }
 
@@ -466,22 +498,18 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// Per-function, set by `function()` before emitting its body: for each
-    /// capturing frame's label id (`Block`/`Loop`/referenced-`If`), whether
-    /// every `br` that targets it does so from the innermost capturing frame
-    /// at the branch site — i.e. always as a `break`/`next`, never a
-    /// `throw` from a nested frame. Such a frame needs no `catch`/`throw`
-    /// machinery at all (see `compute_break_only`).
-    break_only: RefCell<HashMap<u32, bool>>,
-    /// Emission-time stack of capturing frames currently open (label id,
-    /// is_loop), pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
-    /// `branch()` uses the top of this stack to decide whether a `br` can
-    /// become a plain `break`/`next` (target is the innermost frame) or must
-    /// stay a `throw` (target is an outer frame) — correct either way the
-    /// target frame chose to render itself, since `break`/`next` inside a
-    /// `catch(...) do ... end` block already terminates/short-circuits it
-    /// with the same effect as a `throw`.
-    frame_stack: RefCell<Vec<(u32, bool)>>,
+    /// Per-function frame classification, set by `function()`: which frames
+    /// carry a land-or-relay epilogue and which loops wrap their body. See
+    /// `compute_frame_sets`.
+    frames: RefCell<FrameSets>,
+    /// Emission-time stack of capturing frames currently open (label ids),
+    /// pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
+    /// `branch()` compares the top of this stack against a `br`'s target to
+    /// decide between the depth-1 fast path (a plain `break`/`next` that
+    /// leaves the innermost frame directly) and the cascade (`__br = <id>;
+    /// break`, relayed by each crossed frame's epilogue until the target
+    /// lands).
+    frame_stack: RefCell<Vec<u32>>,
     /// Global indices that need the `Rt::Global` box: imported globals
     /// (index space `0..imported_globals.len()`) and every `ExportKind::
     /// Global` target. Computed once in `generate_class_inner`. See the
@@ -514,14 +542,46 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// Whether `label_id`'s capturing frame needs no `catch`/`throw` at all
-    /// (see `compute_break_only`, populated per-function by `function()`).
-    fn is_break_only(&self, label_id: u32) -> bool {
-        self.break_only
-            .borrow()
-            .get(&label_id)
-            .copied()
-            .unwrap_or(false)
+    /// Whether `label_id`'s capturing frame is crossed by some `br` (see
+    /// `compute_frame_sets`), populated per-function by `function()`.
+    fn is_crossed(&self, label_id: u32) -> bool {
+        self.frames.borrow().crossed.contains(&label_id)
+    }
+
+    /// Whether `label_id`'s loop wraps its body in an inner scope because a
+    /// `br` targets it from a strictly nested frame (see `compute_frame_sets`).
+    fn is_wrapped(&self, label_id: u32) -> bool {
+        self.frames.borrow().wrapped.contains(&label_id)
+    }
+
+    /// Whether the frame currently on top of `frame_stack` has an enclosing
+    /// capturing frame — i.e. a `break` emitted in its epilogue has a loop to
+    /// bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so
+    /// the outermost frame omits the relay arm (a pending branch can never
+    /// target something outside it, so that arm is also dead).
+    fn has_enclosing_frame(&self) -> bool {
+        self.frame_stack.borrow().len() > 1
+    }
+
+    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted
+    /// *after* the frame's `end while false` (so a `break` out of the scope —
+    /// from a nested relay or a direct exit — skips any intervening body code
+    /// and reaches this decision): if the pending `__br` names this frame,
+    /// clear it and fall through (the wasm branch lands past the block);
+    /// otherwise a still-pending `__br` targets an ancestor, so `break` again
+    /// to relay it outward.
+    fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
+        w.line(format!("if __br == {label_id}"));
+        w.indent();
+        w.line("__br = nil");
+        w.dedent();
+        if self.has_enclosing_frame() {
+            w.line("elsif __br");
+            w.indent();
+            w.line("break");
+            w.dedent();
+        }
+        w.line("end");
     }
 
     /// An access expression for global `idx`, whichever representation it
@@ -883,7 +943,7 @@ impl<'a> Gen<'a> {
     }
 
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
-        *self.break_only.borrow_mut() = compute_break_only(&func.body);
+        *self.frames.borrow_mut() = compute_frame_sets(&func.body);
         self.frame_stack.borrow_mut().clear();
         let ty = &self.module.types[func.type_idx as usize];
         let params = (0..ty.params.len())
@@ -900,15 +960,22 @@ impl<'a> Gen<'a> {
                 let name = format!("l{}", ty.params.len() + i);
                 w.line(format!("{name} = {}", default_value(*local_ty)));
             }
-            // Hoist all temps to method scope: assignments inside catch/do
-            // blocks would otherwise be block-local in Ruby.
+            // Hoist all temps to method scope: assignments inside the
+            // `begin`/`while` frames would otherwise be block-local in Ruby.
+            // The pending-branch variable `__br` is hoisted alongside them
+            // whenever the function has any crossed frame (a fallthrough
+            // epilogue reads `__br` before any branch assigns it); with no
+            // crossed frame nothing ever references it.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
-            if !depths.is_empty() {
-                let decl = depths
-                    .iter()
-                    .map(|d| format!("s{d} = "))
-                    .collect::<String>();
+            let mut decl = String::new();
+            if !self.frames.borrow().crossed.is_empty() {
+                decl.push_str("__br = ");
+            }
+            for d in &depths {
+                decl.push_str(&format!("s{d} = "));
+            }
+            if !decl.is_empty() {
                 w.line(format!("{decl}nil"));
             }
             self.stmts(w, &func.body);
@@ -946,40 +1013,50 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::Block { label, body } => {
-                let break_only = self.is_break_only(label.id);
-                self.frame_stack.borrow_mut().push((label.id, false));
-                if break_only {
-                    w.block("begin", "end while false", |w| {
-                        self.stmts(w, body);
-                    });
-                } else {
-                    w.block(format!("catch(:l{}) do", label.id), "end", |w| {
-                        self.stmts(w, body);
-                    });
+                let crossed = self.is_crossed(label.id);
+                self.frame_stack.borrow_mut().push(label.id);
+                w.block("begin", "end while false", |w| self.stmts(w, body));
+                if crossed {
+                    self.emit_land_or_relay(w, label.id);
                 }
                 self.frame_stack.borrow_mut().pop();
             }
             Stmt::Loop { label, body } => {
-                let break_only = self.is_break_only(label.id);
-                self.frame_stack.borrow_mut().push((label.id, true));
-                if break_only {
-                    // No throw ever targets this loop from a nested frame,
-                    // so back-edges (a br at the innermost position, see
-                    // `branch()`) are plain `next`; a fallthrough at the end
-                    // of the body must still exit the loop, hence the
-                    // trailing `break`.
+                let crossed = self.is_crossed(label.id);
+                let wrapped = self.is_wrapped(label.id);
+                self.frame_stack.borrow_mut().push(label.id);
+                if wrapped {
+                    // A `br` targets this loop from a nested frame, arriving
+                    // with `__br` set by `break`ing out of the inner `begin`
+                    // (skipping any code left in the body). The decision then
+                    // re-enters via `next`, or `break`s the `while` so the
+                    // post-loop relay can pass `__br` further out. A plain
+                    // fallthrough leaves `__br` nil and exits the loop.
+                    w.block("while true", "end", |w| {
+                        w.block("begin", "end while false", |w| self.stmts(w, body));
+                        w.line(format!("if __br == {}", label.id));
+                        w.indent();
+                        w.line("__br = nil");
+                        w.line("next");
+                        w.dedent();
+                        w.line("end");
+                        w.line("break");
+                    });
+                } else {
+                    // No `br` reaches this loop from a nested frame: a back-edge
+                    // is a plain `next` (see `branch()`), a fallthrough exits
+                    // via the trailing `break`, and an outward `br` sets `__br`
+                    // and `break`s the `while` for the post-loop relay to pass
+                    // outward.
                     w.block("while true", "end", |w| {
                         self.stmts(w, body);
                         w.line("break");
                     });
-                } else {
-                    w.block("while true", "end", |w| {
-                        w.block(format!("__b = catch(:l{}) do", label.id), "end", |w| {
-                            self.stmts(w, body);
-                            w.line("true");
-                        });
-                        w.line("break if __b");
-                    });
+                }
+                // A `br` that passes through this loop toward an ancestor left
+                // `__br` set and `break`ed the `while`; relay it outward.
+                if crossed && self.has_enclosing_frame() {
+                    w.block("if __br", "end", |w| w.line("break"));
                 }
                 self.frame_stack.borrow_mut().pop();
             }
@@ -1007,16 +1084,11 @@ impl<'a> Gen<'a> {
                     w.line("end");
                 };
                 if label.referenced {
-                    let break_only = self.is_break_only(label.id);
-                    self.frame_stack.borrow_mut().push((label.id, false));
-                    if break_only {
-                        w.block("begin", "end while false", |w| {
-                            emit_if(w, self);
-                        });
-                    } else {
-                        w.block(format!("catch(:l{}) do", label.id), "end", |w| {
-                            emit_if(w, self);
-                        });
+                    let crossed = self.is_crossed(label.id);
+                    self.frame_stack.borrow_mut().push(label.id);
+                    w.block("begin", "end while false", |w| emit_if(w, self));
+                    if crossed {
+                        self.emit_land_or_relay(w, label.id);
                     }
                     self.frame_stack.borrow_mut().pop();
                 } else {
@@ -1068,10 +1140,22 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                self.use_unit("table/call");
+                // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids
+                // building a `*args` array on either side; the splat `call`
+                // stays as the fallback for signatures wider than
+                // MAX_FIXED_ARITY (unobserved in the real-world apps, whose
+                // call_indirect arities top out at 8).
                 let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
-                let call = format!("@t{table_index}.call({})", call_args.join(", "));
+                let method = if args.len() <= MAX_FIXED_ARITY {
+                    let n = args.len();
+                    self.use_unit(&format!("table/call{n}"));
+                    format!("call{n}")
+                } else {
+                    self.use_unit("table/call");
+                    "call".to_string()
+                };
+                let call = format!("@t{table_index}.{method}({})", call_args.join(", "));
                 w.line(assign_results(results, call));
             }
             Stmt::MemoryGrow { dst, delta } => {
@@ -1182,21 +1266,21 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                // A br at the innermost capturing frame is always a plain
-                // break/next, whether or not that frame kept its
-                // catch/throw rendering: break inside a `catch(...) do ...
-                // end` block terminates the catch (same effect as
-                // throwing to it), and next makes the block evaluate to
-                // nil, which the loop's `break if __b` reads as "continue"
-                // — see `compute_break_only`'s doc comment. Only a target
-                // outside the innermost frame still needs a real throw.
-                let innermost = self.frame_stack.borrow().last().map(|(id, _)| id) == Some(label);
-                if innermost {
-                    w.line(if *is_loop { "next" } else { "break" });
-                } else if *is_loop {
-                    w.line(format!("throw :l{label}, false"));
+                // Fast path — a br whose target is the innermost enclosing
+                // frame leaves it directly: `break` out of a block/if's
+                // `begin...end while false`, or `next` to take an unwrapped
+                // loop's back-edge. Everything else (a br to an outer frame, or
+                // a back-edge into a *wrapped* loop, whose body sits in an
+                // inner `begin`) sets the pending label variable and `break`s
+                // out of the innermost scope; each crossed frame's epilogue
+                // then relays `__br` outward until the target lands.
+                let innermost = self.frame_stack.borrow().last() == Some(label);
+                let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
+                if via_var {
+                    w.line(format!("__br = {label}"));
+                    w.line("break");
                 } else {
-                    w.line(format!("throw :l{label}"));
+                    w.line(if *is_loop { "next" } else { "break" });
                 }
             }
         }
@@ -1315,9 +1399,9 @@ impl<'a> Gen<'a> {
             I32Add => format!("(({a} + {b}) & 0xffffffff)"),
             I32Sub => format!("(({a} - {b}) & 0xffffffff)"),
             I32Mul => format!("(({a} * {b}) & 0xffffffff)"),
-            I64Add => format!("(({a} + {b}) & 0xffffffffffffffff)"),
-            I64Sub => format!("(({a} - {b}) & 0xffffffffffffffff)"),
-            I64Mul => format!("(({a} * {b}) & 0xffffffffffffffff)"),
+            I64Add => format!("{}({a} + {b})", self.rt("m64")),
+            I64Sub => format!("{}({a} - {b})", self.rt("m64")),
+            I64Mul => format!("{}({a} * {b})", self.rt("m64")),
             I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
             I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
             I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
@@ -1334,13 +1418,10 @@ impl<'a> Gen<'a> {
             I32ShrS => {
                 format!("(({}({a}) >> ({b} & 31)) & 0xffffffff)", self.rt("s32"))
             }
-            I64Shl => format!("(({a} << ({b} & 63)) & 0xffffffffffffffff)"),
+            I64Shl => format!("{}({a} << ({b} & 63))", self.rt("m64")),
             I64ShrU => format!("({a} >> ({b} & 63))"),
             I64ShrS => {
-                format!(
-                    "(({}({a}) >> ({b} & 63)) & 0xffffffffffffffff)",
-                    self.rt("s64")
-                )
+                format!("{}({}({a}) >> ({b} & 63))", self.rt("m64"), self.rt("s64"))
             }
             I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
@@ -1541,5 +1622,50 @@ mod units {
             "unit dependency drift:\n{}",
             problems.join("\n")
         );
+    }
+}
+
+/// Codegen-shape checks for the label-variable cascade (ADR-42): a
+/// multi-level `br` must lower to the `__br` cascade, never to `catch`/`throw`.
+#[cfg(test)]
+mod cascade {
+    use super::*;
+
+    fn convert(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single
+    // `br_table` whose targets span all three nesting depths (self-exit,
+    // loop-continue from a nested frame, and outer-block-exit), exercising the
+    // fast path, a wrapped loop, and a relayed landing at once.
+    const MIXED_DEPTHS: &str = r#"
+      (module
+        (func (export "f") (param i32) (result i32)
+          (local i32)
+          (block $A
+            (loop $B
+              (block $C
+                (br_table $C $B $A (local.get 0)))
+              (local.set 1 (i32.const 7))))
+          (local.get 1)))
+    "#;
+
+    #[test]
+    fn multi_level_br_uses_label_cascade() {
+        let src = convert(MIXED_DEPTHS);
+        // The cascade: a pending-label assignment, a landing compare, and a
+        // relay arm — plus the wrapped loop's back-edge `next`.
+        assert!(src.contains("__br ="), "no `__br =` in:\n{src}");
+        assert!(src.contains("if __br =="), "no landing compare in:\n{src}");
+        assert!(src.contains("elsif __br"), "no relay arm in:\n{src}");
+        assert!(src.contains("next"), "no loop back-edge in:\n{src}");
+        // ...and never the retired catch/throw shape.
+        assert!(!src.contains("catch("), "catch survived in:\n{src}");
+        assert!(!src.contains("throw "), "throw survived in:\n{src}");
     }
 }
