@@ -16,80 +16,21 @@ use dewasm_test_helper::{
     wasi_testsuite_suite, BackendUnderTest, PtyCommand, WasiTestsuiteBackend,
 };
 
-/// Known trial failures with their attribution (ADR-8, policy in ADR-36):
-/// `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision
-/// gaps on supported syscalls (tracked bugs in the shared WASI runtime).
+/// Known trial failures with their attribution (ADR-8, policy in ADR-40):
+/// `(trial, tag)` — out-of-scope syscalls and the one std-portability gap the
+/// full WASI p1 filesystem support (ADR-40) cannot close on Go.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
+    // No socket layer in a demo runtime (out of scope, docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    ("rust/fd_advise", "fd_advise (ENOSYS)"),
-    ("rust/fd_fdstat_set_rights", "fd_fdstat_set_rights (ENOSYS)"),
-    ("rust/fd_flags_set", "fd_fdstat_set_flags (ENOSYS)"),
-    ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
-    ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
-    ("rust/file_allocate", "fd_allocate (ENOSYS)"),
-    ("rust/path_link", "path_link (ENOSYS)"),
-    ("rust/readlink", "path_readlink (ENOSYS)"),
-    ("rust/renumber", "fd_renumber (ENOSYS)"),
-    ("rust/stdio", "fd_renumber (ENOSYS)"),
-    ("rust/overwrite_preopen", "fd_renumber (ENOSYS)"),
-    ("rust/symlink_create", "path_symlink (ENOSYS)"),
-    ("rust/symlink_filestat", "path_symlink (ENOSYS)"),
+    // Setting a symlink's own times (NOFOLLOW) needs lutimes, which Go's std
+    // exposes no portable (darwin+linux, build-tag-free) way to call —
+    // os.Chtimes follows the link. Every regular-file times path is supported;
+    // only the symlink-target case in this one trial is out of reach (ADR-40).
     (
-        "rust/path_symlink_trailing_slashes",
-        "path_symlink (ENOSYS)",
+        "rust/symlink_filestat",
+        "path_filestat_set_times: no portable std lutimes for a NOFOLLOW symlink",
     ),
-    ("rust/path_exists", "path_symlink (ENOSYS)"),
-    ("rust/nofollow_errors", "path_symlink (ENOSYS)"),
-    ("rust/dir_fd_op_failures", "fd_advise+fd_allocate (ENOSYS)"),
-    // Semantics-precision gaps on supported syscalls (tracked bugs, ADR-36).
-    (
-        "rust/truncation_rights",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/directory_seek",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/path_open_read_write",
-        "fd_fdstat_get: per-open rights not masked",
-    ),
-    (
-        "rust/path_filestat",
-        "fd_fdstat_get: open fdflags (APPEND) not reflected",
-    ),
-    (
-        "rust/fd_readdir",
-        "fd_readdir: '.'/'..' dot-entries + d_ino",
-    ),
-    (
-        "rust/path_open_preopen",
-        "path_open: rights-restricted reopen",
-    ),
-    (
-        "rust/interesting_paths",
-        "path_open: absolute / '..' path resolution",
-    ),
-    (
-        "rust/path_open_dirfd_not_dir",
-        "path_open: non-dir base errno NOTDIR vs BADF",
-    ),
-    (
-        "rust/file_seek_tell",
-        "fd_seek: negative-offset errno INVAL vs IO",
-    ),
-    (
-        "rust/unlink_file_trailing_slashes",
-        "path_unlink_file: trailing slash not rejected",
-    ),
-    // Go-specific runtime quirks (tracked bugs).
-    (
-        "rust/path_rename",
-        "path_rename: dir-onto-empty-dir NOTEMPTY",
-    ),
-    ("c/pwrite-with-append", "fd_pwrite: APPEND positioning"),
 ];
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

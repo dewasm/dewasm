@@ -12,8 +12,10 @@ func (w *WASI) wasi_fd_pwrite(fd, iovsPtr, iovsLen uint32, offset uint64, nwritt
         ptr := w.memory.i32_load(uint64(iovsPtr) + uint64(i)*8)
         length := w.memory.i32_load(uint64(iovsPtr)+uint64(i)*8 + 4)
         chunk := w.memory.read_string(uint64(ptr), uint64(length))
-        // WriteAt writes all of chunk or returns a non-nil error.
-        n, err := f.WriteAt(chunk, int64(offset+uint64(written)))
+        // syscall.Pwrite rather than f.WriteAt: WriteAt rejects a fd opened
+        // O_APPEND ("invalid use of WriteAt"), and a positional write must
+        // ignore append anyway (ADR-40). Portable on darwin+linux.
+        n, err := syscall.Pwrite(int(f.Fd()), chunk, int64(offset+uint64(written)))
         written += uint32(n)
         if err != nil {
             return wasiIo

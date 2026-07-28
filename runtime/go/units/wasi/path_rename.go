@@ -12,7 +12,13 @@ func (w *WASI) wasi_path_rename(oldDirfd, oldPathPtr, oldPathLen, newDirfd, newP
     if err != wasiOk {
         return err
     }
-    if e := os.Rename(oldHost, newHost); e != nil {
+    // syscall.Rename, not os.Rename: Go's os.Rename wrapper Lstats the
+    // destination and, when it is a directory, returns a synthetic EEXIST on
+    // macOS instead of letting rename(2) replace an empty target dir — the
+    // atomic dir-onto-empty-dir semantics the suite requires. The raw syscall
+    // has the correct POSIX behaviour (ENOTEMPTY on a non-empty target,
+    // EISDIR/ENOTDIR on type mismatches) (ADR-40).
+    if e := syscall.Rename(oldHost, newHost); e != nil {
         return w.fs_errno(e)
     }
     return wasiOk

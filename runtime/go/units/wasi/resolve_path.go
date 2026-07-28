@@ -28,15 +28,35 @@ func (w *WASI) within(base, path string) bool {
 // sandbox between the check and the actual filesystem call could in principle
 // escape. Accepted for a single-process research/demo runtime.
 func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, uint32) {
-    entry, ok := w.fds[dirfd].(*wasiDir)
-    if !ok {
+    raw, present := w.fds[dirfd]
+    if !present {
         return "", wasiBadf
     }
+    entry, ok := raw.(*wasiDir)
+    if !ok {
+        // A base fd that exists but is a file, not a directory: NOTDIR, so a
+        // guest opening a path underneath a plain file gets the POSIX errno
+        // rather than BADF (ADR-40).
+        return "", wasiNotdir
+    }
     if strings.ContainsRune(rel, 0) {
-        return "", wasiPerm
+        // A trailing NUL (or embedded NUL) is a malformed path: INVAL, matching
+        // what the guests treat as ERRNO_INVAL/ILSEQ.
+        return "", wasiInval
+    }
+    // A leading slash is an absolute guest path — never capable against a
+    // preopen root (rejected before any join could absorb it; ADR-40).
+    if strings.HasPrefix(rel, "/") {
+        return "", wasiNotcapable
     }
     base := entry.hostPath
     joined := filepath.Join(base, rel)
+    // Lexical containment on the cleaned path, before touching the filesystem:
+    // catches a "../.." escape even when the (nonexistent) target would
+    // otherwise fall through to a NOENT branch (the suite wants NOTCAPABLE).
+    if !w.within(base, filepath.Clean(joined)) {
+        return "", wasiNotcapable
+    }
     // The final component as the *guest* wrote it — not filepath.Base(joined),
     // which Cleans "." / ".." away and would report the parent's own name (Go's
     // filepath.Join Cleans, unlike Python's os.path.join). A trailing "." or
