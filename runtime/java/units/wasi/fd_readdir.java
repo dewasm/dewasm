@@ -8,7 +8,10 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
         return WASI_NOTCAPABLE;
     }
     Dir dir = (Dir) e;
-    if (!dir.loaded) {
+    // Re-snapshot on every cookie-0 (fresh-start) call so a directory mutated
+    // between full reads is seen; a nonzero cookie resumes the snapshot the
+    // cookie was minted against (ADR-14's opaque-resume-point contract).
+    if (!dir.loaded || cookie == 0) {
         dir.entries = readdir_entries(dir.hostPath);
         dir.loaded = true;
     }
@@ -22,6 +25,7 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
         byte[] hdr = new byte[24];
         java.nio.ByteBuffer h = java.nio.ByteBuffer.wrap(hdr).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         h.putLong(0, i + 1);
+        h.putLong(8, ent.ino);
         h.putInt(16, ent.name.length);
         hdr[20] = ent.filetype;
         out.write(hdr, 0, 24);
@@ -43,8 +47,14 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
 // sorted by name so the listing is deterministic across runs.
 private java.util.List<Dirent> readdir_entries(java.nio.file.Path hostPath) {
     java.util.List<Dirent> entries = new java.util.ArrayList<>();
-    entries.add(new Dirent(".".getBytes(java.nio.charset.StandardCharsets.UTF_8), (byte) 3));
-    entries.add(new Dirent("..".getBytes(java.nio.charset.StandardCharsets.UTF_8), (byte) 3));
+    // "." and ".." carry the real inode of the directory and its parent so a
+    // guest that cross-checks d_ino against fd_filestat_get(dir).ino agrees
+    // (the parent's ino falls back to 0 outside the sandbox).
+    entries.add(new Dirent(
+        ".".getBytes(java.nio.charset.StandardCharsets.UTF_8), (byte) 3, readdir_ino(hostPath)));
+    entries.add(new Dirent(
+        "..".getBytes(java.nio.charset.StandardCharsets.UTF_8), (byte) 3,
+        readdir_ino(hostPath.getParent())));
     try (java.nio.file.DirectoryStream<java.nio.file.Path> ds = java.nio.file.Files.newDirectoryStream(hostPath)) {
         java.util.List<java.nio.file.Path> kids = new java.util.ArrayList<>();
         for (java.nio.file.Path p : ds) {
@@ -62,10 +72,26 @@ private java.util.List<Dirent> readdir_entries(java.nio.file.Path hostPath) {
                 // Leave the type as unknown (0).
             }
             entries.add(new Dirent(
-                p.getFileName().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8), ft));
+                p.getFileName().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8), ft,
+                readdir_ino(p)));
         }
     } catch (java.io.IOException ex) {
         // An unreadable directory yields just "." / "..".
     }
     return entries;
+}
+
+// The host inode of a path via the "unix:ino" attribute view (the same source
+// pack_filestat reads), or 0 on a non-unix filesystem or a null/unreadable
+// path. NOFOLLOW so a symlink entry reports the link's own inode.
+private static long readdir_ino(java.nio.file.Path p) {
+    if (p == null) {
+        return 0;
+    }
+    try {
+        return ((Number) java.nio.file.Files.getAttribute(
+            p, "unix:ino", java.nio.file.LinkOption.NOFOLLOW_LINKS)).longValue();
+    } catch (Exception ex) {
+        return 0;
+    }
 }

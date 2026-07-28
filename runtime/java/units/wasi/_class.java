@@ -89,10 +89,12 @@ static final class Dir {
 static final class Dirent {
     final byte[] name;
     final byte filetype;
+    final long ino;
 
-    Dirent(byte[] name, byte filetype) {
+    Dirent(byte[] name, byte filetype, long ino) {
         this.name = name;
         this.filetype = filetype;
+        this.ino = ino;
     }
 }
 

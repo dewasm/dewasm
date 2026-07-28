@@ -45,10 +45,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("rust/dir_fd_op_failures", "fd_advise+fd_allocate (ENOSYS)"),
     // Semantics-precision gaps on supported syscalls (tracked bugs, ADR-36).
     ("rust/path_filestat", "path_filestat_set_times (ENOSYS)"),
-    (
-        "rust/fd_readdir",
-        "fd_readdir: '.'/'..' dot-entries + d_ino",
-    ),
     // The JVM host injects environ entries of its own (macOS CoreFoundation's
     // __CF_USER_TEXT_ENCODING), so count-exact environ assertions cannot hold
     // even under the harness's cleared environment (ADR-40).
