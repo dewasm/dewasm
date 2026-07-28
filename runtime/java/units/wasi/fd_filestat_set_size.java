@@ -6,6 +6,9 @@ int wasi_fd_filestat_set_size(int fd, long size) {
     if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_FILESTAT_SET_SIZE)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.channels.FileChannel ch = ((Handle) e).ch;
     try {
         long cur = ch.size();

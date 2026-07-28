@@ -14,6 +14,11 @@ int wasi_path_unlink_file(int dirfd, int pathPtr, int pathLen) {
     if (java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_ISDIR;
     }
+    // A trailing slash demands a directory; on a non-directory target that is
+    // ENOTDIR (a plain unlink of the file without the slash still succeeds).
+    if (rel.endsWith("/")) {
+        return WASI_NOTDIR;
+    }
     try {
         java.nio.file.Files.delete(p);
     } catch (java.io.IOException ex) {

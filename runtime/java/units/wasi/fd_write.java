@@ -10,6 +10,9 @@ int wasi_fd_write(int fd, int iovsPtr, int iovsLen, int nwrittenPtr) {
     if (s == null && h == null) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_WRITE)) {
+        return WASI_NOTCAPABLE;
+    }
     int written = 0;
     try {
         if (h != null && h.append) {

@@ -8,6 +8,9 @@ int wasi_fd_read(int fd, int iovsPtr, int iovsLen, int nreadPtr) {
     if (ch == null && in == null) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_READ)) {
+        return WASI_NOTCAPABLE;
+    }
     int nread = 0;
     try {
         for (int i = 0; i < iovsLen; i++) {

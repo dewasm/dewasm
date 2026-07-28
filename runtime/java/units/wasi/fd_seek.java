@@ -9,6 +9,9 @@ int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
     if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_SEEK)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.channels.FileChannel ch = ((Handle) e).ch;
     try {
         long pos;
@@ -24,6 +27,12 @@ int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
                 break;
             default:
                 return WASI_INVAL;
+        }
+        // A resulting offset before byte 0 is EINVAL, not an I/O error
+        // (FileChannel.position would raise IllegalArgumentException); seeking
+        // past the end is allowed. Check explicitly so the errno is precise.
+        if (pos < 0) {
+            return WASI_INVAL;
         }
         ch.position(pos);
         memory.i64_store(Integer.toUnsignedLong(outPtr), pos);

@@ -6,6 +6,7 @@ int wasi_fd_close(int fd) {
         return WASI_BADF;
     }
     Object e = fds.remove(fd);
+    meta.remove(fd);
     if (e instanceof Handle) {
         try {
             ((Handle) e).ch.close();
