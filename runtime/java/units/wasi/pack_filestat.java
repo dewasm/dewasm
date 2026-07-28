@@ -22,7 +22,14 @@ byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOExce
     } catch (Exception e) {
         // Non-unix filesystem: leave dev/ino at 0 and nlink at 1.
     }
+    // Report the three timestamps separately (atim/mtim/ctim) rather than
+    // collapsing them to mtime, so a guest that sets one and checks the others
+    // stay put (fd_filestat_set_times) sees the distinction. Java exposes no
+    // faithful ctim, so the change-time slot reuses creationTime as a
+    // best-effort stand-in (ADR-14).
+    long atime = a.lastAccessTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long mtime = a.lastModifiedTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
+    long ctime = a.creationTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     byte[] buf = new byte[64];
     java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.LITTLE_ENDIAN);
     bb.putLong(0, dev);
@@ -30,8 +37,8 @@ byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOExce
     buf[16] = wasi_filetype(a);
     bb.putLong(24, nlink);
     bb.putLong(32, a.size());
-    bb.putLong(40, mtime);
+    bb.putLong(40, atime);
     bb.putLong(48, mtime);
-    bb.putLong(56, mtime);
+    bb.putLong(56, ctime);
     return buf;
 }

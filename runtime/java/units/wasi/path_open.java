@@ -4,7 +4,11 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    Resolved r = resolve_path(dirfd, rel, true);
+    // dirflags::SYMLINK_FOLLOW decides whether the final component is chased
+    // through a symlink. Without it (the default) a symlink final component is
+    // ELOOP, not silently opened as its target (the O_NOFOLLOW shape).
+    boolean follow = (dirflags & 0x1) != 0;
+    Resolved r = resolve_path(dirfd, rel, follow);
     if (r.errno != WASI_OK) {
         return r.errno;
     }
@@ -19,6 +23,10 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         return WASI_NOTCAPABLE;
     }
     java.nio.file.Path hostPath = java.nio.file.Paths.get(r.path);
+    // A symlink final component reached without SYMLINK_FOLLOW is ELOOP.
+    if (!follow && java.nio.file.Files.isSymbolicLink(hostPath)) {
+        return WASI_LOOP;
+    }
     boolean wantDir = (oflags & 0x2) != 0; // oflags::DIRECTORY
     boolean create = (oflags & 0x1) != 0; // oflags::CREAT
     boolean excl = (oflags & 0x4) != 0; // oflags::EXCL
