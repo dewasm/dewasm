@@ -6,13 +6,87 @@
 // byte strings; env is passed already-ordered ("K=V") and preopens are assigned
 // fds in sorted order, so there is no map-iteration nondeterminism (ADR-29).
 const (
-    wasiOk    uint32 = 0
-    wasiBadf  uint32 = 8
-    wasiInval uint32 = 28
-    wasiIo    uint32 = 29
-    wasiNosys uint32 = 52
-    wasiSpipe uint32 = 70
+    wasiOk         uint32 = 0
+    wasiBadf       uint32 = 8
+    wasiInval      uint32 = 28
+    wasiIo         uint32 = 29
+    wasiNosys      uint32 = 52
+    wasiSpipe      uint32 = 70
+    wasiNotcapable uint32 = 76 // rights-narrowing violation (ADR-40)
 )
+
+// WASI p1 rights bits (ADR-40, per-fd rights model adopted from the reference
+// runtime's per-filetype masks). A preopen/dir fd carries dirRightsBase; a file
+// fd carries whatever path_open requested intersected with the dir's inheriting
+// set. Enforced NOTCAPABLE=76 in the fd_read/fd_write/fd_seek/fd_readdir/
+// fd_filestat_set_size units and narrowed by fd_fdstat_set_rights.
+const (
+    rightFdDatasync          uint64 = 1 << 0
+    rightFdRead              uint64 = 1 << 1
+    rightFdSeek              uint64 = 1 << 2
+    rightFdFdstatSetFlags    uint64 = 1 << 3
+    rightFdSync              uint64 = 1 << 4
+    rightFdTell              uint64 = 1 << 5
+    rightFdWrite             uint64 = 1 << 6
+    rightFdAdvise            uint64 = 1 << 7
+    rightFdAllocate          uint64 = 1 << 8
+    rightPathCreateDirectory uint64 = 1 << 9
+    rightPathCreateFile      uint64 = 1 << 10
+    rightPathLinkSource      uint64 = 1 << 11
+    rightPathLinkTarget      uint64 = 1 << 12
+    rightPathOpen            uint64 = 1 << 13
+    rightFdReaddir           uint64 = 1 << 14
+    rightPathReadlink        uint64 = 1 << 15
+    rightPathRenameSource    uint64 = 1 << 16
+    rightPathRenameTarget    uint64 = 1 << 17
+    rightPathFilestatGet     uint64 = 1 << 18
+    rightPathFilestatSetSize uint64 = 1 << 19
+    rightPathFilestatSetTimes uint64 = 1 << 20
+    rightFdFilestatGet       uint64 = 1 << 21
+    rightFdFilestatSetSize   uint64 = 1 << 22
+    rightFdFilestatSetTimes  uint64 = 1 << 23
+    rightPathSymlink         uint64 = 1 << 24
+    rightPathRemoveDirectory uint64 = 1 << 25
+    rightPathUnlinkFile      uint64 = 1 << 26
+    rightPollFdReadwrite     uint64 = 1 << 27
+
+    // The reference runtime's directory masks (what wasi-libc and the
+    // conformance suite hard-code as the minimum for every directory). A dir
+    // base deliberately excludes FD_SEEK and FD_FILESTAT_SET_SIZE (the suite
+    // asserts their absence); inheriting adds the per-file fd_* rights a file
+    // opened underneath may request.
+    dirRightsBase uint64 = rightPathCreateDirectory | rightPathCreateFile |
+        rightPathLinkSource | rightPathLinkTarget | rightPathOpen |
+        rightFdReaddir | rightPathReadlink | rightPathRenameSource |
+        rightPathRenameTarget | rightPathSymlink | rightPathRemoveDirectory |
+        rightPathUnlinkFile | rightPathFilestatGet | rightPathFilestatSetTimes |
+        rightFdFilestatGet | rightFdFilestatSetTimes
+    dirRightsInheriting uint64 = dirRightsBase | rightFdDatasync | rightFdRead |
+        rightFdSeek | rightFdFdstatSetFlags | rightFdSync | rightFdTell |
+        rightFdWrite | rightFdAdvise | rightFdAllocate | rightFdFilestatSetSize |
+        rightPollFdReadwrite
+
+    // Stdio streams get a broad tty-shaped set so rights enforcement never
+    // blocks the inherited descriptors (seek still answers SPIPE first).
+    stdioRights uint64 = rightFdRead | rightFdWrite | rightFdSeek | rightFdTell |
+        rightFdFdstatSetFlags | rightFdSync | rightFdDatasync | rightFdAdvise |
+        rightFdAllocate | rightFdFilestatGet | rightFdFilestatSetSize |
+        rightFdFilestatSetTimes | rightPollFdReadwrite
+)
+
+// fdflags bits (fs_flags). Only APPEND is acted on (fd_write seeks to end);
+// SYNC/DSYNC/RSYNC/NONBLOCK are stored and reported but treated as no-ops.
+const (
+    fdflagAppend uint16 = 1 << 0
+)
+
+// Per-fd rights/flags carried alongside the fd-table entry (ADR-40). Every
+// live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
+type wasiFdMeta struct {
+    base       uint64
+    inheriting uint64
+    fdflags    uint16
+}
 
 // A directory descriptor (ADR-14): either a preopen (preopenName set to the
 // guest-visible path passed in preopens) or a directory the guest opened itself
@@ -28,18 +102,27 @@ type wasiDir struct {
 type wasiDirent struct {
     name     []byte
     filetype byte
+    ino      uint64
 }
 
 type WASI struct {
     args   [][]byte
     env    [][]byte
     fds    map[uint32]any
+    meta   map[uint32]*wasiFdMeta
     nextFd uint32
     memory *Memory
 }
 
 func newWASI(args []string, env []string, preopens map[string]string) *WASI {
-    w := &WASI{fds: map[uint32]any{0: os.Stdin, 1: os.Stdout, 2: os.Stderr}}
+    w := &WASI{
+        fds: map[uint32]any{0: os.Stdin, 1: os.Stdout, 2: os.Stderr},
+        meta: map[uint32]*wasiFdMeta{
+            0: {base: stdioRights, inheriting: stdioRights},
+            1: {base: stdioRights, inheriting: stdioRights},
+            2: {base: stdioRights, inheriting: stdioRights},
+        },
+    }
     for _, a := range args {
         w.args = append(w.args, []byte(a))
     }
@@ -65,10 +148,20 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
             panic("preopen " + guest + " => " + preopens[guest] + ": not a directory")
         }
         w.fds[nextFd] = &wasiDir{hostPath: real, preopenName: []byte(guest)}
+        w.meta[nextFd] = &wasiFdMeta{base: dirRightsBase, inheriting: dirRightsInheriting}
         nextFd++
     }
     w.nextFd = nextFd
     return w
+}
+
+// checkRight reports wasiOk if the fd holds `right`, else wasiNotcapable. An fd
+// with no tracked meta (should not happen for a live fd) is permitted (ADR-40).
+func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
+    if m, ok := w.meta[fd]; ok && m.base&right == 0 {
+        return wasiNotcapable
+    }
+    return wasiOk
 }
 
 // isStdio reports whether f is one of the three inherited standard streams,

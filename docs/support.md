@@ -37,36 +37,36 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | environ_sizes_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | clock_res_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | clock_time_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_advise | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_allocate | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_advise | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
+| fd_allocate | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | fd_close | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_datasync | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_fdstat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_fdstat_set_flags | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_fdstat_set_rights | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_fdstat_set_flags | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
+| fd_fdstat_set_rights | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | fd_filestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_set_size | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | fd_pread | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_prestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_prestat_dir_name | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_pwrite | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_read | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_readdir | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_renumber | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_renumber | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | fd_seek | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_sync | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_tell | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_write | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_create_directory | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_filestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| path_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| path_link | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_filestat_set_times | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
+| path_link | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | path_open | ✅ | ✅ | ✅ | ✅ | ✅ |
-| path_readlink | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_readlink | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | path_remove_directory | ✅ | ✅ | ✅ | ✅ | ✅ |
 | path_rename | ✅ | ✅ | ✅ | ✅ | ✅ |
-| path_symlink | ✅ | ❌ (ENOSYS) | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| path_symlink | ✅ | ❌ (ENOSYS) | ✅ | ✅ | ❌ (ENOSYS) |
 | path_unlink_file | ✅ | ✅ | ✅ | ✅ | ✅ |
 | poll_oneoff | ✅ | ✅ | ✅ | ✅ | ✅ |
 | proc_exit | ✅ | ✅ | ✅ | ✅ | ✅ |

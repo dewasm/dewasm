@@ -4,6 +4,9 @@ func (w *WASI) wasi_fd_read(fd, iovsPtr, iovsLen, nreadPtr uint32) uint32 {
     if !ok {
         return wasiBadf
     }
+    if e := w.checkRight(fd, rightFdRead); e != wasiOk { // ADR-40
+        return e
+    }
     nread := uint32(0)
     for i := uint32(0); i < iovsLen; i++ {
         ptr := w.memory.i32_load(uint64(iovsPtr) + uint64(i)*8)

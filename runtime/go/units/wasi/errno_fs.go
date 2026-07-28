@@ -12,7 +12,8 @@ const (
     wasiNotdir      uint32 = 54
     wasiNotempty    uint32 = 55
     wasiPerm        uint32 = 63
-    wasiNotcapable  uint32 = 76
+    // wasiNotcapable (76) lives in wasi/_class: the per-fd rights model needs
+    // it even in stdio-only modules that don't bundle these fs-only codes.
 )
 
 // One host-error-to-WASI-errno mapping shared by every filesystem syscall, so

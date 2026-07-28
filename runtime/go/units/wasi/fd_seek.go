@@ -11,9 +11,14 @@ func (w *WASI) wasi_fd_seek(fd uint32, offset uint64, whence, outPtr uint32) uin
     if whence > 2 {
         return wasiInval
     }
+    if e := w.checkRight(fd, rightFdSeek); e != wasiOk { // ADR-40
+        return e
+    }
     pos, err := f.Seek(int64(offset), int(whence))
     if err != nil {
-        return wasiIo
+        // A negative resulting offset is EINVAL, not an I/O error (the suite
+        // distinguishes them).
+        return wasiInval
     }
     w.memory.i64_store(uint64(outPtr), uint64(pos))
     return wasiOk

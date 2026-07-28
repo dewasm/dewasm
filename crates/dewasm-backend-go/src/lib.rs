@@ -307,6 +307,7 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         ("filepath.", "path/filepath"),
         ("math.", "math"),
         ("rand.", "crypto/rand"),
+        ("reflect.", "reflect"),
         ("os.", "os"),
         ("sort.", "sort"),
         ("strings.", "strings"),
