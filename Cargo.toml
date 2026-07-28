@@ -6,7 +6,8 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-authors = ["TSUYUSATO Kitsune <make.just.on@gmail.com>"]
+authors = ["Hiroya Fujinami <make.just.on@gmail.com>"]
+repository = "https://github.com/dewasm/dewasm"
 
 [workspace.dependencies]
 dewasm-core = { path = "crates/dewasm-core" }
