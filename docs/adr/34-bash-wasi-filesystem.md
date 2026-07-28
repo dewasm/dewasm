@@ -1,13 +1,14 @@
 # ADR-34 — Bash WASI Filesystem
 
-Status: **Accepted, 2026-07-27.** The Bash backend gains WASI preview-1
-filesystem support, mirroring the Ruby design ([ADR-14](14-ruby-wasi-filesystem.md))
-within Bash's constraints. Landing incrementally in `runtime/bash/units/wasi/`:
-this step adds the fd-table state, `path_open`, the reworked
+Status: **Accepted, 2026-07-27; fully landed 2026-07-28.** The Bash backend
+gains WASI preview-1 filesystem support, mirroring the Ruby design
+([ADR-14](14-ruby-wasi-filesystem.md)) within Bash's constraints: the fd-table
+state, `path_open`, the reworked
 `fd_read`/`fd_write`/`fd_seek`/`fd_tell`/`fd_close`/`fd_fdstat_get`/`fd_prestat_get`
-units, `fd_prestat_dir_name`, and the standalone `--dir` parser; the stat family,
-the four namespace-mutation syscalls, and `poll_oneoff` follow in later steps. The
-same syscalls that stay ENOSYS on Ruby stay ENOSYS here.
+units, `fd_prestat_dir_name`, the standalone `--dir` parser, the stat family,
+the four namespace-mutation syscalls, and `poll_oneoff` — all under
+`runtime/bash/units/wasi/`. The same syscalls that stay ENOSYS on Ruby stay
+ENOSYS here.
 
 ## Context
 
