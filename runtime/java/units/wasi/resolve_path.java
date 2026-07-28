@@ -29,14 +29,30 @@ private static boolean within(java.nio.file.Path base, java.nio.file.Path path) 
 Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     Object e = fds.get(dirfd);
     if (!(e instanceof Dir)) {
-        return new Resolved(null, WASI_BADF);
+        // A non-directory fd (a regular file, or stdio) used as a dirfd is
+        // ENOTDIR; only an fd absent from the table is EBADF (ADR-40).
+        return new Resolved(null, fds.containsKey(dirfd) ? WASI_NOTDIR : WASI_BADF);
     }
     Dir dir = (Dir) e;
     if (rel.indexOf('\0') >= 0) {
-        return new Resolved(null, WASI_PERM);
+        return new Resolved(null, WASI_INVAL);
+    }
+    // A leading slash is an absolute path: WASI confines the guest to the
+    // preopen tree, so it is rejected outright rather than reinterpreted
+    // relative to the dirfd (the wasmtime behaviour interesting_paths asserts).
+    if (rel.startsWith("/")) {
+        return new Resolved(null, WASI_NOTCAPABLE);
     }
     java.nio.file.Path base = dir.hostPath;
     java.nio.file.Path joined = java.nio.file.Paths.get(base.toString() + "/" + rel).normalize();
+    // Lexical containment gate: enough ".." components can normalize to a path
+    // above base even though every prefix exists, so reject it here (NOTCAPABLE)
+    // before the filesystem is consulted — otherwise a nonexistent escaped
+    // target would surface as NOENT rather than the capability error the guest
+    // expects. The realpath + within() checks below still catch symlink escapes.
+    if (!within(base, joined)) {
+        return new Resolved(null, WASI_NOTCAPABLE);
+    }
     // The final component as the *guest* wrote it (not joined.getFileName(),
     // which has Cleaned "." / ".." away). A trailing "." or ".." is never a
     // symlink, so those fall through to full resolution.

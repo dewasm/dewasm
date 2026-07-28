@@ -11,7 +11,8 @@ static final int WASI_NOENT = 44;
 static final int WASI_NOTDIR = 54;
 static final int WASI_NOTEMPTY = 55;
 static final int WASI_PERM = 63;
-static final int WASI_NOTCAPABLE = 76;
+// WASI_NOTCAPABLE (76) lives in the always-bundled wasi/_class prelude, since
+// the rights model enforces it from stdio-core fd_* units too (ADR-40).
 
 // One host-error-to-WASI-errno mapping shared by every filesystem syscall, so
 // the same host error never maps to different codes depending on which syscall

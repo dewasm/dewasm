@@ -26,8 +26,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
     ("rust/fd_advise", "fd_advise (ENOSYS)"),
-    ("rust/fd_fdstat_set_rights", "fd_fdstat_set_rights (ENOSYS)"),
-    ("rust/fd_flags_set", "fd_fdstat_set_flags (ENOSYS)"),
     ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
     ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
     ("rust/file_allocate", "fd_allocate (ENOSYS)"),
@@ -46,37 +44,10 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("rust/nofollow_errors", "path_symlink (ENOSYS)"),
     ("rust/dir_fd_op_failures", "fd_advise+fd_allocate (ENOSYS)"),
     // Semantics-precision gaps on supported syscalls (tracked bugs, ADR-36).
-    (
-        "rust/truncation_rights",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/directory_seek",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/path_open_read_write",
-        "fd_fdstat_get: per-open rights not masked",
-    ),
-    (
-        "rust/path_filestat",
-        "fd_fdstat_get: open fdflags (APPEND) not reflected",
-    ),
+    ("rust/path_filestat", "path_filestat_set_times (ENOSYS)"),
     (
         "rust/fd_readdir",
         "fd_readdir: '.'/'..' dot-entries + d_ino",
-    ),
-    (
-        "rust/path_open_preopen",
-        "path_open: rights-restricted reopen",
-    ),
-    (
-        "rust/interesting_paths",
-        "path_open: absolute / '..' path resolution",
-    ),
-    (
-        "rust/path_open_dirfd_not_dir",
-        "path_open: non-dir base errno NOTDIR vs BADF",
     ),
     (
         "rust/file_seek_tell",

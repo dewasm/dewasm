@@ -8,35 +8,61 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     if (r.errno != WASI_OK) {
         return r.errno;
     }
+    // The opening dirfd must itself carry PATH_OPEN; O_TRUNC additionally spends
+    // the directory's PATH_FILESTAT_SET_SIZE right (truncation is a size change),
+    // both enforced with NOTCAPABLE (ADR-40).
+    if (lacksRight(dirfd, R_PATH_OPEN)) {
+        return WASI_NOTCAPABLE;
+    }
+    boolean trunc = (oflags & 0x8) != 0; // oflags::TRUNC
+    if (trunc && lacksRight(dirfd, R_PATH_FILESTAT_SET_SIZE)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.file.Path hostPath = java.nio.file.Paths.get(r.path);
-    if ((oflags & 0x2) != 0) { // oflags::DIRECTORY
+    boolean wantDir = (oflags & 0x2) != 0; // oflags::DIRECTORY
+    boolean create = (oflags & 0x1) != 0; // oflags::CREAT
+    boolean excl = (oflags & 0x4) != 0; // oflags::EXCL
+    boolean trailingSlash = rel.endsWith("/");
+    boolean exists = java.nio.file.Files.exists(hostPath);
+    boolean isDir = java.nio.file.Files.isDirectory(hostPath);
+    // The parent directory fd's inheriting rights cap what any child fd may
+    // hold; the opened fd's filetype then masks that down to the directory-
+    // relevant or file-relevant rights (ADR-40).
+    FdMeta dm = meta.get(dirfd);
+    long dirInh = (dm != null) ? dm.inheriting : (DIR_RIGHTS | FILE_RIGHTS);
+
+    if (isDir) {
+        // An existing directory, opened with or without O_DIRECTORY and with an
+        // optional trailing slash. Requesting write access to a directory is
+        // EISDIR (a directory has no byte stream to write).
+        if ((fsRightsBase & R_FD_WRITE) != 0) {
+            return WASI_ISDIR;
+        }
+        long base = fsRightsBase & dirInh & DIR_RIGHTS;
+        long inh = fsRightsInheriting & dirInh & (DIR_RIGHTS | FILE_RIGHTS);
+        fds.put(nextFd, new Dir(hostPath, null));
+        meta.put(nextFd, new FdMeta(base, inh, fdflags));
+    } else if (wantDir) {
         // O_DIRECTORY distinguishes "missing" (ENOENT) from "not a directory"
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
-        if (!java.nio.file.Files.exists(hostPath)) {
-            return WASI_NOENT;
-        }
-        if (!java.nio.file.Files.isDirectory(hostPath)) {
-            return WASI_NOTDIR;
-        }
-        fds.put(nextFd, new Dir(hostPath, null));
+        return exists ? WASI_NOTDIR : WASI_NOENT;
+    } else if (trailingSlash) {
+        // A trailing slash demands a directory, but the target is not one.
+        return exists ? WASI_NOTDIR : WASI_NOENT;
     } else {
         boolean read = (fsRightsBase & 0x2) != 0; // rights::FD_READ
         boolean write = (fsRightsBase & 0x40) != 0; // rights::FD_WRITE
         boolean append = (fdflags & 0x1) != 0; // fdflags::APPEND
-        boolean create = (oflags & 0x1) != 0; // oflags::CREAT
-        boolean excl = (oflags & 0x4) != 0; // oflags::EXCL
-        boolean trunc = (oflags & 0x8) != 0; // oflags::TRUNC
         java.util.Set<java.nio.file.OpenOption> opts = new java.util.HashSet<>();
         if (read || (!read && !write)) {
             opts.add(java.nio.file.StandardOpenOption.READ);
         }
         // FileChannel.open silently ignores CREATE/CREATE_NEW/TRUNCATE_EXISTING
         // unless the channel is opened for WRITE, so a create request with
-        // rights_base=0 (create_file's `path_open(dir, CREAT, 0, 0, 0)`) would
-        // resolve to {READ, CREATE}, which does not create and then fails
-        // NoSuchFileException -> NOENT. Force WRITE whenever a create/truncate
-        // option is present; the fd's reported/enforced rights still come from
-        // the rights model, the underlying channel merely needs the capability.
+        // rights_base=0 would resolve to {READ, CREATE}, fail to create, and
+        // then error NoSuchFileException -> NOENT. Force WRITE whenever a
+        // create/truncate option is present; the fd's reported and enforced
+        // rights still come from the rights model below (ADR-40).
         if (write || create || excl || trunc) {
             opts.add(java.nio.file.StandardOpenOption.WRITE);
         }
@@ -55,7 +81,10 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         } catch (java.io.IOException ex) {
             return fs_errno(ex);
         }
+        long base = fsRightsBase & dirInh & FILE_RIGHTS;
+        long inh = fsRightsInheriting & dirInh & FILE_RIGHTS;
         fds.put(nextFd, new Handle(ch, hostPath, append));
+        meta.put(nextFd, new FdMeta(base, inh, fdflags));
     }
     memory.i32_store(Integer.toUnsignedLong(openedFdPtr), nextFd);
     nextFd++;

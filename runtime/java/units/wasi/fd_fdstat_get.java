@@ -1,4 +1,4 @@
-// requires: memory/fill, memory/i32_store8, memory/i64_store
+// requires: memory/fill, memory/i32_store8, memory/i32_store16, memory/i64_store
 int wasi_fd_fdstat_get(int fd, int outPtr) {
     Object e = fds.get(fd);
     if (e == null && !fds.containsKey(fd)) {
@@ -13,11 +13,18 @@ int wasi_fd_fdstat_get(int fd, int outPtr) {
         // matching the wasmtime golden captured with piped stdin (ADR-30).
         filetype = (System.console() != null) ? 2 : 4;
     }
+    // The stored per-fd rights and open fdflags (ADR-40); an fd with no meta
+    // (the inherited stdio streams) reports full rights and no flags.
+    FdMeta m = meta.get(fd);
+    long base = (m != null) ? m.base : -1L;
+    long inheriting = (m != null) ? m.inheriting : -1L;
+    int fdflags = (m != null) ? m.fdflags : 0;
     // fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base
     // (u64) + fs_rights_inheriting (u64) = 24 bytes.
     memory.fill(Integer.toUnsignedLong(outPtr), 0, 24);
     memory.i32_store8(Integer.toUnsignedLong(outPtr), filetype);
-    memory.i64_store(Integer.toUnsignedLong(outPtr) + 8, -1L); // rights base: all
-    memory.i64_store(Integer.toUnsignedLong(outPtr) + 16, -1L); // rights inheriting: all
+    memory.i32_store16(Integer.toUnsignedLong(outPtr) + 2, fdflags);
+    memory.i64_store(Integer.toUnsignedLong(outPtr) + 8, base);
+    memory.i64_store(Integer.toUnsignedLong(outPtr) + 16, inheriting);
     return WASI_OK;
 }

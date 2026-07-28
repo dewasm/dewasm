@@ -4,6 +4,9 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     if (!(e instanceof Dir)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_READDIR)) {
+        return WASI_NOTCAPABLE;
+    }
     Dir dir = (Dir) e;
     if (!dir.loaded) {
         dir.entries = readdir_entries(dir.hostPath);

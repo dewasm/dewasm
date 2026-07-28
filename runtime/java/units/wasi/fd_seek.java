@@ -9,6 +9,9 @@ int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
     if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_SEEK)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.channels.FileChannel ch = ((Handle) e).ch;
     try {
         long pos;
