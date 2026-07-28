@@ -4,6 +4,12 @@
 // source is hard-linked as the symlink, not its target). Following the source
 // symlink (LOOKUPFLAGS_SYMLINK_FOLLOW) is rejected; hard-linking a directory is
 // EPERM; a trailing slash on the destination is ENOENT.
+//
+// macOS link(2) follows a symlink source (unlike Linux and unlike the
+// AT_SYMLINK_NOFOLLOW linkat the suite expects), and Files.createLink cannot
+// express NOFOLLOW, so createLink on a symlink source follows the (dangling)
+// link and throws. Emulate a NOFOLLOW hard-link-to-a-symlink by recreating the
+// symlink at the destination (mirrors the Go backend's fallback, ADR-40).
 int wasi_path_link(int oldFd, int oldFlags, int oldPtr, int oldLen, int newFd, int newPtr,
                    int newLen) {
     if ((oldFlags & 0x1) != 0) { // lookupflags::SYMLINK_FOLLOW
@@ -34,6 +40,14 @@ int wasi_path_link(int oldFd, int oldFlags, int oldPtr, int oldLen, int newFd, i
     try {
         java.nio.file.Files.createLink(newP, oldP);
     } catch (java.io.IOException ex) {
+        if (java.nio.file.Files.isSymbolicLink(oldP)) {
+            try {
+                java.nio.file.Files.createSymbolicLink(newP, java.nio.file.Files.readSymbolicLink(oldP));
+                return WASI_OK;
+            } catch (java.io.IOException se) {
+                return fs_errno(se);
+            }
+        }
         return fs_errno(ex);
     }
     return WASI_OK;

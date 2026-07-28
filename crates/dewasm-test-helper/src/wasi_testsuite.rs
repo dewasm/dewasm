@@ -18,6 +18,13 @@
 //! exit code, or a stdout mismatch is a *failure*; the ledger (ADR-8) then
 //! decides whether it is expected. Every ledger entry names the WASI function
 //! or interface behaviour responsible.
+//!
+//! A ledger entry may be *host-scoped*: some failures depend on the host libc
+//! or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`,
+//! or a Linux JDK truncating symlink times to microseconds). A backend declares
+//! those via `expected_failures_macos()`/`expected_failures_linux()`; the runner
+//! merges the host-matching list into the base ledger, so an entry that only
+//! trips on one host is not flagged as an unexpected pass on the other.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -39,6 +46,23 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     /// *passes* is a hard failure — remove it (same both-ways discipline as
     /// `spec.rs`).
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)];
+
+    /// Host-scoped ledger entries that only fail on a **macOS** host (host libc
+    /// or interpreter behaviour, e.g. CoreFoundation injecting
+    /// `__CF_USER_TEXT_ENCODING`). Merged into [`expected_failures`] only when
+    /// the harness runs on macOS; ignored on other hosts, so the both-ways
+    /// discipline still flags a genuine unexpected pass there.
+    fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    /// Host-scoped ledger entries that only fail on a **Linux** host (host libc
+    /// or interpreter behaviour, e.g. a JDK routing NOFOLLOW symlink times
+    /// through microsecond `lutimes`). Merged into [`expected_failures`] only
+    /// when the harness runs on Linux.
+    fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
 }
 
 /// The three prebuilt suites we drive, all `wasm32-wasip1` (the standard goal
@@ -137,7 +161,18 @@ fn enumerate() -> anyhow::Result<Vec<Case>> {
 /// suite and `-- --exact rust/path_link` selects one module.
 pub fn wasi_testsuite_trials(lang: &'static dyn WasiTestsuiteBackend) -> Vec<Trial> {
     let cases = enumerate().expect("enumerate wasi-testsuite");
-    let ledger = lang.expected_failures();
+    // Merge the base ledger with the host-matching scoped entries, so a failure
+    // that only trips on this host is expected while its counterpart on the
+    // other host is still flagged as a genuine unexpected pass. Leaked to
+    // `'static` because trials outlive this function.
+    let mut ledger: Vec<(&'static str, &'static str)> = lang.expected_failures().to_vec();
+    if cfg!(target_os = "macos") {
+        ledger.extend_from_slice(lang.expected_failures_macos());
+    }
+    if cfg!(target_os = "linux") {
+        ledger.extend_from_slice(lang.expected_failures_linux());
+    }
+    let ledger: &'static [(&'static str, &'static str)] = Vec::leak(ledger);
     cases
         .into_iter()
         .map(|case| {

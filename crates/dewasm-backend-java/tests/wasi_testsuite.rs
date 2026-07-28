@@ -25,18 +25,13 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // path_link is implemented and passes every case except hard-linking a
-    // symlink itself: that needs linkat(2) without AT_SYMLINK_FOLLOW, which
-    // Java's Files.createLink cannot express, so on macOS link(2) follows the
-    // (dangling) symlink and returns NOENT where the guest expects the hard
-    // link to be created to the link (ADR-40).
-    (
-        "rust/path_link",
-        "path_link: hard-link-to-symlink needs linkat AT_SYMLINK_FOLLOW=0 (java/macOS)",
-    ),
-    // The JVM host injects environ entries of its own (macOS CoreFoundation's
-    // __CF_USER_TEXT_ENCODING), so count-exact environ assertions cannot hold
-    // even under the harness's cleared environment (ADR-40).
+];
+
+/// Host-scoped failures on a macOS host: the JVM host injects environ entries
+/// of its own (macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`), so
+/// count-exact environ assertions cannot hold even under the harness's cleared
+/// environment. A plain Linux JVM injects nothing, so these pass there (ADR-40).
+const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
     (
         "assemblyscript/environ_get-multiple-variables",
         "environ: host-interpreter env injection",
@@ -50,6 +45,16 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "environ: host-interpreter env injection",
     ),
 ];
+
+/// Host-scoped failures on a Linux host: the unit passes ns-precision FileTime
+/// to `BasicFileAttributeView.setTimes` with `NOFOLLOW_LINKS`, but the Linux JDK
+/// routes the NOFOLLOW case through µs-precision `lutimes`, so the suite's ns
+/// `mtim` round-trip is truncated and fails; macOS preserves ns. Symmetric to
+/// the Go backend's ledgered lutimes gap (ADR-40).
+const WASI_TESTSUITE_EXPECTED_FAILURES_LINUX: &[(&str, &str)] = &[(
+    "rust/symlink_filestat",
+    "path_filestat_set_times: Linux JDK sets NOFOLLOW symlink times via microsecond lutimes, truncating ns",
+)];
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -130,6 +135,14 @@ fn build_java(source: &str) -> Result<PathBuf, Output> {
 impl WasiTestsuiteBackend for JavaWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
+    }
+
+    fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
+        WASI_TESTSUITE_EXPECTED_FAILURES_MACOS
+    }
+
+    fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
+        WASI_TESTSUITE_EXPECTED_FAILURES_LINUX
     }
 }
 
