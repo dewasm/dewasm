@@ -17,6 +17,7 @@ mod pty;
 mod qjs_repl;
 mod spec;
 mod wasi;
+mod wasi_testsuite;
 mod wasmtime_backend;
 
 pub use apps::{
@@ -53,6 +54,7 @@ pub use wasi::{
     run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase,
     WasiCheck, WasiKind, WASI_CASES,
 };
+pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
 pub use wasmtime_backend::Wasmtime;
 
 /// The `harness = false` `main` of a backend's spec integration test: builds
@@ -66,6 +68,21 @@ macro_rules! spec_suite {
     ($lang:expr) => {
         fn main() {
             $crate::spec_main(&$lang);
+        }
+    };
+}
+
+/// The `harness = false` `main` of a backend's WASI-testsuite integration test
+/// (ADR-36): builds one libtest-mimic trial per prebuilt `.wasm` for `$lang` (a
+/// [`WasiTestsuiteBackend`]) and runs them with cargo's own test arguments. Like
+/// [`spec_suite!`], `$lang` is a promotable-to-`'static` unit struct.
+///
+/// [`WasiTestsuiteBackend`]: crate::WasiTestsuiteBackend
+#[macro_export]
+macro_rules! wasi_testsuite_suite {
+    ($lang:expr) => {
+        fn main() {
+            $crate::wasi_testsuite_main(&$lang);
         }
     };
 }

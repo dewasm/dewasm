@@ -24,6 +24,11 @@ wat.workspace = true
 dewasm-core.workspace = true
 dewasm-backend.workspace = true
 libtest-mimic.workspace = true
+# Test-only manifest parsing for the WASI-testsuite harness (ADR-36). This
+# crate never ships (`publish = false`), so a JSON dependency here has no
+# shipped-artifact impact.
+serde.workspace = true
+serde_json.workspace = true
 # Real pty pair for the interactive-REPL transcript tests (Fix 4): the qjs
 # REPL only enters its interactive line-editing path when stdin is a tty, so
 # proving it byte-identical to wasmtime needs a genuine pty, not a pipe. A

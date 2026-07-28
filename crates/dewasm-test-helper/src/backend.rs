@@ -145,6 +145,48 @@ pub trait BackendUnderTest: Sync {
         let flag_refs: Vec<&str> = flags.iter().map(String::as_str).collect();
         self.run_bytes(program, &flag_refs, stdin)
     }
+
+    /// Run a *standalone*-mode `program` through the standalone interface
+    /// (ADR-31) like [`Self::run_standalone_dir`], but additionally set `env`
+    /// on the child process and return the full [`Output`] — the surface the
+    /// WASI-testsuite harness needs ([`crate::wasi_testsuite`]), which
+    /// [`Self::run_standalone_dir`] cannot give (it inherits the parent env and
+    /// its callers discard the exit code). `dirs` are `(guest, host)` preopens
+    /// rendered as the leading `--dir HOST::GUEST` flags the generated `main`
+    /// parses; `args` follow as guest `argv[1..]`.
+    ///
+    /// The default reuses the backend's own launch recipe
+    /// ([`Self::pty_command`] — interpreter + temp script for the interpreted
+    /// backends, a freshly built binary for the compiled ones) so no
+    /// per-backend override is needed, then drives it through pipes with `env`
+    /// applied and `stdin` fed. `env` is *added* on top of the inherited
+    /// process environment, matching ADR-31's whole-environment passthrough.
+    fn run_standalone_wasi(
+        &self,
+        program: &str,
+        dirs: &[(&str, &Path)],
+        args: &[&str],
+        env: &[(&str, &str)],
+        stdin: &[u8],
+    ) -> Output {
+        let mut argv: Vec<String> = Vec::new();
+        for (guest, host) in dirs {
+            argv.push("--dir".to_string());
+            argv.push(format!("{}::{}", host.display(), guest));
+        }
+        argv.extend(args.iter().map(|a| a.to_string()));
+        let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let cmd = self.pty_command(program, &argv_refs);
+        let mut command = Command::new(&cmd.program);
+        command.args(&cmd.args);
+        if let Some(cwd) = &cmd.cwd {
+            command.current_dir(cwd);
+        }
+        for (k, v) in env {
+            command.env(k, v);
+        }
+        run_command_bytes(&mut command, stdin)
+    }
 }
 
 /// Spawn `cmd` with `stdin` piped in and both output streams captured,

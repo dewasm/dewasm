@@ -24,6 +24,8 @@ wast = "254"
 clap = { version = "4", features = ["derive"] }
 regex = "1"
 libtest-mimic = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

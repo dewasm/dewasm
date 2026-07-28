@@ -31,3 +31,10 @@ dewasm-test-helper.workspace = true
 [[test]]
 name = "spec"
 harness = false
+
+# The WASI-testsuite integration test (ADR-36) is likewise a
+# libtest-mimic harness: one trial per prebuilt `.wasm`, `harness = false`,
+# `main` from `wasi_testsuite_suite!`.
+[[test]]
+name = "wasi_testsuite"
+harness = false

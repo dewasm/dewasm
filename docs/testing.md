@@ -14,11 +14,16 @@ message below is something this document explains how to fix.
 
 - **Rust toolchain**: pinned by `rust-toolchain.toml`; plain `cargo`
   commands pick it up automatically.
-- **`git submodule update --init`**: fetches the wasm spec testsuite into
-  `tests/spec/` (an upstream submodule — never edit it). Without this,
-  the spec harness (`cargo test -p dewasm-backend-ruby --test spec`, and
+- **`git submodule update --init`**: fetches the two upstream testsuite
+  submodules (never edit either) — the wasm spec testsuite into `tests/spec/`
+  and the official WASI p1 conformance suite
+  ([`WebAssembly/wasi-testsuite`](https://github.com/WebAssembly/wasi-testsuite),
+  branch `prod/testsuite-base`) into `tests/wasi-testsuite/`. Without the
+  former the spec harness (`cargo test -p dewasm-backend-ruby --test spec`, and
   likewise `-p dewasm-backend-bash` / `-p dewasm-backend-python`) fails
-  immediately.
+  immediately; without the latter the WASI-testsuite harness
+  (`cargo test -p dewasm-backend-<lang> --test wasi_testsuite`, ADR-36) does.
+  Initialize just one with `git submodule update --init tests/wasi-testsuite`.
 - **`ruby` >= 3.4 on `PATH`**: needed by the spec harness and most of the
   `e2e` test (both the Ruby backend's own tests and, indirectly, anything
   comparing Ruby's output). The 3.4 floor is the generated runtime's
@@ -273,3 +278,28 @@ deliberate perf-based opt-out, not a missing-environment one — see ADR-15's
 scope).
 
 See `AGENTS.md`'s Common commands table for the exact invocations.
+
+## The WASI-testsuite harness (libtest-mimic)
+
+Alongside the spec harness, each backend has a second libtest-mimic suite
+(`crates/dewasm-backend-<lang>/tests/wasi_testsuite.rs`, `harness = false`,
+`main` from `wasi_testsuite_suite!`) that runs the official WASI p1 conformance
+modules from the `tests/wasi-testsuite` submodule (ADR-36). It converts each
+prebuilt `.wasm` in `--mode standalone` and executes it through the ADR-31
+interface — the co-located `<name>.json` manifest's `args`/`env`/`root` become
+guest argv / child env / a `--dir <root>::/` preopen (from a fresh temp copy, so
+trials are hermetic), and the trial asserts the process exit code and, when
+pinned, stdout. Run one backend with:
+
+```console
+$ cargo test -p dewasm-backend-ruby --test wasi_testsuite   # or bash/python/go/java
+```
+
+The c + rust + assemblyscript `wasm32-wasip1` suites run (the Rust `wasm32-wasip3`
+tree is excluded — preview 3 is component-model territory, ADR-24). Each backend
+carries its own `WASI_TESTSUITE_EXPECTED_FAILURES` ledger (ADR-8): every known
+failure is attributed to a declared ENOSYS gap (docs/support.md), a
+semantics-precision gap on a supported syscall, or the ADR-31 whole-environment
+passthrough. As in the spec harness the ledger is checked both ways — a ledgered
+trial that unexpectedly *passes* is a hard failure, so filling a gap forces the
+entry to be removed.
