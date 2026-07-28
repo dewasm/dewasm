@@ -1446,12 +1446,13 @@ impl<'a> Gen<'a> {
             F32Mul => format!("{}({a} * {b})", self.rt("f32")),
             F32Div => format!("{}({a} / {b})", self.rt("f32")),
             F64Add => format!("({a} + {b})"),
-            // MRI's `Float#-` leaves a signaling NaN unquieted when the RHS
-            // is +0.0 (observed on every x86_64-linux build 3.4.5..4.1dev;
-            // macOS is unaffected), so the host FPU cannot be trusted to
-            // return an arithmetic NaN. Quiet any NaN result explicitly; the
-            // `== r` self-compare is false only for NaN, keeping the common
-            // finite path allocation- and call-free. See ADR-2 / issue #11.
+            // GCC-built MRI (any arch; every version probed) leaves a
+            // signaling NaN unquieted when the RHS is +0.0: the flonum decode
+            // returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`,
+            // skipping the FPU sub. The host `-` therefore cannot be trusted
+            // to return an arithmetic NaN. Quiet any NaN result explicitly;
+            // the `== r` self-compare is false only for NaN, keeping the
+            // common finite path allocation- and call-free. ADR-47, issue #11.
             F64Sub => format!("((r = {a} - {b}) == r ? r : {}(r))", self.rt("quiet_nan")),
             F64Mul => format!("({a} * {b})"),
             F64Div => format!("({a} / {b})"),
