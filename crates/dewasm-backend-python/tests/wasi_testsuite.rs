@@ -11,8 +11,8 @@ use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBa
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36):
 /// `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision
 /// gaps on supported syscalls (tracked bugs in the shared WASI runtime), and
-/// the ADR-31 whole-environment passthrough the `environ_*` count assertions
-/// cannot satisfy.
+/// environ entries the CPython host injects itself, which count-exact
+/// `environ_*` assertions cannot absorb (ADR-40).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -83,18 +83,21 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/path_open_nonblock",
         "path_open: O_NONBLOCK on a directory (ISDIR)",
     ),
-    // ADR-31: a standalone program inherits the whole host environment.
+    // The CPython host injects environ entries of its own (macOS
+    // CoreFoundation's __CF_USER_TEXT_ENCODING plus the PEP 538 LC_CTYPE
+    // locale coercion), so count-exact environ assertions cannot hold even
+    // under the harness's cleared environment (ADR-40).
     (
         "assemblyscript/environ_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-no-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
 ];
 

@@ -15,8 +15,11 @@ use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBa
 ///   * semantics-precision gaps on *supported* syscalls (errno codes,
 ///     per-filetype rights masking, dirent `.`/`..`) — tracked known bugs in
 ///     the shared WASI runtime, to be fixed across all backends;
-///   * the ADR-31 interface choice that a standalone program inherits the whole
-///     host environment, which the `environ_*` count assertions cannot satisfy.
+///   * environment variables the host interpreter itself injects (macOS
+///     CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest
+///     legitimately observes, so count-exact `environ_*` assertions cannot
+///     hold even though the harness runs trials with a cleared environment
+///     (ADR-40).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -82,18 +85,19 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/interesting_paths",
         "path_open: absolute / '..' path resolution",
     ),
-    // ADR-31: a standalone program inherits the whole host environment.
+    // macOS CoreFoundation injects __CF_USER_TEXT_ENCODING into the CF-linked
+    // ruby process, so the guest sees one extra environ entry (ADR-40).
     (
         "assemblyscript/environ_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-no-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
 ];
 

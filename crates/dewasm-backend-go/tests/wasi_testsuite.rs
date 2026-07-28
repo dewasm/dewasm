@@ -18,9 +18,7 @@ use dewasm_test_helper::{
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36):
 /// `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision
-/// gaps on supported syscalls (tracked bugs in the shared WASI runtime), and
-/// the ADR-31 whole-environment passthrough the `environ_*` count assertions
-/// cannot satisfy.
+/// gaps on supported syscalls (tracked bugs in the shared WASI runtime).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -92,19 +90,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "path_rename: dir-onto-empty-dir NOTEMPTY",
     ),
     ("c/pwrite-with-append", "fd_pwrite: APPEND positioning"),
-    // ADR-31: a standalone program inherits the whole host environment.
-    (
-        "assemblyscript/environ_get-multiple-variables",
-        "env-passthrough (ADR-31)",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-multiple-variables",
-        "env-passthrough (ADR-31)",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-no-variables",
-        "env-passthrough (ADR-31)",
-    ),
 ];
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

@@ -12,8 +12,9 @@ use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBa
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36):
 /// `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision
 /// gaps on supported syscalls (tracked bugs in the shared WASI runtime), and
-/// the ADR-31 whole-environment passthrough the `environ_*` count assertions
-/// cannot satisfy. Bash's own extras (`path_rename`, unbuffered read-back, inode
+/// environ entries bash itself exports (PWD/SHLVL/_), which count-exact
+/// `environ_*` assertions cannot absorb (ADR-40).
+/// Bash's own extras (`path_rename`, unbuffered read-back, inode
 /// uniqueness) are its runtime's quirks, tracked the same way.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
@@ -87,18 +88,20 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ),
     ("c/fdopendir-with-access", "fd_readdir: d_ino uniqueness"),
     ("c/stat-dev-ino", "path_filestat_get: st_ino uniqueness"),
-    // ADR-31: a standalone program inherits the whole host environment.
+    // Bash itself exports PWD/SHLVL/_ into every script's environment, so
+    // count-exact environ assertions cannot hold even under the harness's
+    // cleared environment (ADR-40).
     (
         "assemblyscript/environ_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-no-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
 ];
 

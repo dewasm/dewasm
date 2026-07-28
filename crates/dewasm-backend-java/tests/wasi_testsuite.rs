@@ -19,8 +19,9 @@ use dewasm_test_helper::{
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36):
 /// `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision
 /// gaps on supported syscalls (tracked bugs in the shared WASI runtime), and
-/// the ADR-31 whole-environment passthrough the `environ_*` count assertions
-/// cannot satisfy. Java additionally has a cluster where `path_open` with
+/// environ entries the JVM host injects itself, which count-exact `environ_*`
+/// assertions cannot absorb (ADR-40).
+/// Java additionally has a cluster where `path_open` with
 /// `O_CREAT` fails to create a file (NOENT) in these fixtures — a Java-runtime
 /// bug tracked here (its e2e filesystem create path still works).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
@@ -113,18 +114,20 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/remove_directory_trailing_slashes",
         "path_open: O_CREAT create returns NOENT (java)",
     ),
-    // ADR-31: a standalone program inherits the whole host environment.
+    // The JVM host injects environ entries of its own (macOS CoreFoundation's
+    // __CF_USER_TEXT_ENCODING), so count-exact environ assertions cannot hold
+    // even under the harness's cleared environment (ADR-40).
     (
         "assemblyscript/environ_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-multiple-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
     (
         "assemblyscript/environ_sizes_get-no-variables",
-        "env-passthrough (ADR-31)",
+        "environ: host-interpreter env injection",
     ),
 ];
 

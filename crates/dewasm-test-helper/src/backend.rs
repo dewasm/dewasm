@@ -158,9 +158,8 @@ pub trait BackendUnderTest: Sync {
     /// The default reuses the backend's own launch recipe
     /// ([`Self::pty_command`] — interpreter + temp script for the interpreted
     /// backends, a freshly built binary for the compiled ones) so no
-    /// per-backend override is needed, then drives it through pipes with `env`
-    /// applied and `stdin` fed. `env` is *added* on top of the inherited
-    /// process environment, matching ADR-31's whole-environment passthrough.
+    /// per-backend override is needed, then drives it through pipes with
+    /// exactly `env` as the child environment and `stdin` fed.
     fn run_standalone_wasi(
         &self,
         program: &str,
@@ -177,16 +176,44 @@ pub trait BackendUnderTest: Sync {
         argv.extend(args.iter().map(|a| a.to_string()));
         let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         let cmd = self.pty_command(program, &argv_refs);
-        let mut command = Command::new(&cmd.program);
+        // The guest must observe exactly the manifest env (upstream's wasmtime
+        // adapter passes only `--env k=v`, isolating the guest from the host
+        // environment); dewasm's ADR-31 programs pass the whole process env
+        // through, so the isolation has to happen here instead (ADR-40). With
+        // the child PATH gone, exec would fall back to the OS default path and
+        // pick the *system* interpreter (ruby 2.6 / bash 3.2 on macOS), so a
+        // bare program name is resolved against the parent PATH first.
+        let resolved = resolve_in_parent_path(&cmd.program);
+        let mut command = Command::new(resolved);
         command.args(&cmd.args);
         if let Some(cwd) = &cmd.cwd {
             command.current_dir(cwd);
         }
+        command.env_clear();
         for (k, v) in env {
             command.env(k, v);
         }
         run_command_bytes(&mut command, stdin)
     }
+}
+
+/// Resolve a bare program name to an absolute path using the *parent*
+/// process's PATH, so an `env_clear`ed child still runs the interpreter the
+/// test environment selected. Names already containing a separator pass
+/// through untouched.
+fn resolve_in_parent_path(program: &Path) -> PathBuf {
+    if program.components().count() > 1 {
+        return program.to_path_buf();
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let candidate = dir.join(program);
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+    program.to_path_buf()
 }
 
 /// Spawn `cmd` with `stdin` piped in and both output streams captured,
