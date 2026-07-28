@@ -20,6 +20,11 @@ wasi_fd_seek() {
     R0=8 # EBADF: a directory has no seek offset
     return 0
   fi
+  local -n __wrbase=${__p}wrbase
+  if (( (__wrbase[$__fd] & 0x4) == 0 )); then
+    R0=76 # ENOTCAPABLE: fd lacks FD_SEEK
+    return 0
+  fi
   local -n __buf=${__p}wbuf${__fd}
   local __base
   case $__whence in

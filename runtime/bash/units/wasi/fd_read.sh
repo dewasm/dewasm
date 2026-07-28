@@ -21,6 +21,11 @@ wasi_fd_read() {
   local LC_ALL=C
   local __i __j __ptr __len __total=0
   if [[ $__kind == 2 ]]; then
+    local -n __wrbase=${__p}wrbase
+    if (( (__wrbase[$__fd] & 0x2) == 0 )); then
+      R0=76 # ENOTCAPABLE: fd lacks FD_READ
+      return 0
+    fi
     local -n __buf=${__p}wbuf${__fd}
     local __buflen=${#__buf[@]} __pos=${__tell[$__fd]}
     for (( __i = 0; __i < __iovs_len && __pos < __buflen; __i++ )); do

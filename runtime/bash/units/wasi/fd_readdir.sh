@@ -19,6 +19,11 @@ wasi_fd_readdir() {
     R0=8 # EBADF
     return 0
   fi
+  local -n __wrbase=${__p}wrbase
+  if (( (__wrbase[$__fd] & 0x4000) == 0 )); then
+    R0=76 # ENOTCAPABLE: fd lacks FD_READDIR
+    return 0
+  fi
   if ! declare -p "${__p}wdn${__fd}" &>/dev/null; then
     local -n __wpath=${__p}wpath
     local __root=${__wpath[$__fd]}

@@ -13,6 +13,11 @@ wasi_fd_filestat_set_size() {
     R0=28 # EINVAL
     return 0
   fi
+  local -n __wrbase=${__p}wrbase
+  if (( (__wrbase[$__fd] & 0x400000) == 0 )); then
+    R0=76 # ENOTCAPABLE: fd lacks FD_FILESTAT_SET_SIZE
+    return 0
+  fi
   local -n __wbuf=${__p}wbuf${__fd}
   local -n __wdirty=${__p}wdirty
   local __cur=${#__wbuf[@]}

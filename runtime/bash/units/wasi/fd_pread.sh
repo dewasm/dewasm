@@ -22,6 +22,11 @@ wasi_fd_pread() {
     fi
     return 0
   fi
+  local -n __wrbase=${__p}wrbase
+  if (( (__wrbase[$__fd] & 0x2) == 0 )); then
+    R0=76 # ENOTCAPABLE: fd lacks FD_READ
+    return 0
+  fi
   local -n __buf=${__p}wbuf${__fd}
   local __buflen=${#__buf[@]}
   local LC_ALL=C
