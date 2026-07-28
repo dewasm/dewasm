@@ -379,6 +379,11 @@ fn hex_bytes(data: &[u8]) -> String {
 /// units).
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
+/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN`
+/// dispatch method (ADR-44); wider signatures fall back to the splat `call`.
+/// The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
+const MAX_FIXED_ARITY: usize = 8;
+
 fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
 }
@@ -1135,10 +1140,22 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                self.use_unit("table/call");
+                // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids
+                // building a `*args` array on either side; the splat `call`
+                // stays as the fallback for signatures wider than
+                // MAX_FIXED_ARITY (unobserved in the real-world apps, whose
+                // call_indirect arities top out at 8).
                 let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
-                let call = format!("@t{table_index}.call({})", call_args.join(", "));
+                let method = if args.len() <= MAX_FIXED_ARITY {
+                    let n = args.len();
+                    self.use_unit(&format!("table/call{n}"));
+                    format!("call{n}")
+                } else {
+                    self.use_unit("table/call");
+                    "call".to_string()
+                };
+                let call = format!("@t{table_index}.{method}({})", call_args.join(", "));
                 w.line(assign_results(results, call));
             }
             Stmt::MemoryGrow { dst, delta } => {
