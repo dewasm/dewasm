@@ -352,6 +352,11 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
         }
     }
 
+    // Collapse runs of adjacent active data segments into single blobs
+    // (ADR-41). Semantics-preserving and unconditional: every backend emits one
+    // initializer per active segment, so the reduction composes downstream.
+    crate::data_merge::merge_adjacent_data_segments(&mut module);
+
     Ok(module)
 }
 

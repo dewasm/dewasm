@@ -1,8 +1,10 @@
 # ADR-37 — Opt-in Data-Segment Externalization (`--data-file`)
 
-Status: **Accepted, 2026-07-28.** Implemented for the Ruby and Go backends
-behind the CLI's `--data-file` flag; Bash, Python and Java reject it loudly at
-the CLI. Default (no-flag) output is byte-identical to before.
+Status: **Accepted, 2026-07-28.** Implemented for the Ruby, Go, Python and Java
+backends behind the CLI's `--data-file` flag; Bash rejects it loudly at the CLI
+(its data lives in the runtime, not a standalone literal). Default (no-flag)
+output is byte-identical to before. Extended 2026-07-28 with the Python and Java
+backends and the Java code-source load strategy.
 
 ## Context
 
@@ -32,7 +34,23 @@ conversion time" applies to the rejections below). When set, the backend:
   `File.binread(File.join(__dir__, "<name>"))` read once into a frozen
   `DATA_BLOB` constant, then `DATA_BLOB.byteslice(o, len)` (kept ASCII-8BIT, as
   `binread` returns); Go a package-scope `//go:embed <name>` / `var dataBlob
-  []byte` sliced `dataBlob[o:o+len]`.
+  []byte` sliced `dataBlob[o:o+len]`; Python a module-level `DATA_BLOB =
+  open(os.path.join(os.path.dirname(__file__), "<name>"), "rb").read()` sliced
+  `DATA_BLOB[o:o+len]`; Java a `static final byte[] DATA_BLOB` loaded by a
+  static method (see the code-source rule below) and sliced
+  `java.util.Arrays.copyOfRange(DATA_BLOB, o, o+len)` — a fresh array per
+  segment, so `data.drop` can still empty the field.
+
+**Java load strategy — code-source-relative, not a working-directory guess.**
+Java has no `__file__`/`__dir__`, and a compiled program may run from a class
+directory or a packaged jar. The generated loader resolves the sidecar against
+the class's own `getProtectionDomain().getCodeSource().getLocation()`: a regular
+file (the jar) contributes its *parent* directory, a directory (the class dir)
+is used directly, and the sidecar name is resolved there with
+`Files.readAllBytes`, rethrowing any failure as an unchecked `RuntimeException`.
+The discriminating criterion is locating the sidecar by *where the program's own
+code lives*, which both deployment shapes answer, rather than by the process
+CWD, which neither reliably does.
 
 `OutputFile.contents` widened from `String` to `Vec<u8>` so a backend can return
 raw binary alongside UTF-8 source.
@@ -42,12 +60,11 @@ semantic content, so it is a per-invocation *flag*, never a default and never a
 backend capability flip — the generated program's behaviour is identical either
 way (the spec harness, which never sets the flag, still binds; ADR-3).
 
-**Scope:** Ruby and Go only. Bash embeds data in its runtime rather than as a
-standalone literal, so a sidecar would be a larger change; Python and Java are
-deliberately deferred behind the two flagship backends. All three *reject*
-`--data-file` at the CLI with an attributed error rather than silently ignoring
-it. `--data-file` with `-o -` (stdout) is likewise rejected: the sidecar needs a
-real path next to the program.
+**Scope:** Ruby, Go, Python and Java. Bash embeds data in its runtime rather
+than as a standalone literal, so a sidecar would be a larger change; it alone
+*rejects* `--data-file` at the CLI with an attributed error rather than silently
+ignoring it. `--data-file` with `-o -` (stdout) is likewise rejected: the sidecar
+needs a real path next to the program.
 
 Go mechanics (ADR-29): `//go:embed` is a directive, not a package selector, so
 the import scanner cannot see it — `embed` is added as a blank `import _
@@ -79,6 +96,14 @@ Measured (release CLI; `ruby.wasm` = CRuby, 35 MB wasm; `qjs.wasm`, 1.5 MB):
 | ruby.wasm / Go | 131.4 MB | 123.2 MB | 4.17 MB |
 | qjs.wasm / Ruby | 13.45 MB | 13.19 MB | 0.13 MB |
 | qjs.wasm / Go | 10.61 MB | 10.34 MB | 0.13 MB |
+| qjs.wasm / Python | 11.46 MB | 11.19 MB | 0.13 MB |
+| qjs.wasm / Java | 15.17 MB | 14.99 MB | 0.13 MB |
+
+The Python and Java `qjs.wasm` deltas (measured after this revision, release CLI)
+match the Ruby/Go pattern exactly: the source shrinks by roughly the eliminated
+inline encoding (`bytes.fromhex` / chunked Base64) minus the shared 0.13 MB
+sidecar, a ~2–3 % code-dominated reduction, confirming the win is a source-size
+one, not a parse-time one.
 
 Ruby `compile_file` parse of `ruby.wasm`: 6.15 s → 5.97 s. Go `build` of
 `qjs.wasm`: 10.8 s → 11.1 s (within noise; `ruby.wasm`/Go build is impractical
@@ -91,12 +116,15 @@ and build time are governed by the code, so they barely move. The win scales
 with a module's data:code ratio and is largest for data-heavy modules; for the
 current app corpus it is a modest source-size reduction, not a parse-time one.
 
-Follow-ups (out of scope here): adjacent-segment merging to reduce the
-per-segment `memory.init` count; extending the test-helper `BackendUnderTest`
-with an aux-files channel so the shared app/e2e suites (not just the CLI
-integration test) can exercise sidecar output; and — if warranted by the
-numbers — Python/Java support.
+Follow-ups: adjacent-segment merging to reduce the per-segment `memory.init`
+count landed as its own core pass (ADR-41). Python and Java support landed in
+this revision. Extending the test-helper `BackendUnderTest` with an aux-files
+channel — so the shared app/e2e suites (not just the CLI integration test) can
+exercise sidecar output — is again deliberately deferred: the CLI
+integration test (`crates/dewasm-cli/tests/data_file.rs`) covers all four
+backends end-to-end, so the harness extension buys coverage breadth, not a gap,
+and is not worth the test-helper churn yet.
 
-Cross-refs: ADR-29 (Go lowering / import scanning), ADR-30 (Java lowering,
-deferred here), ADR-31 (standalone runtime interface — the generated main that
-loads the sidecar).
+Cross-refs: ADR-29 (Go lowering / import scanning), ADR-30 (Java lowering),
+ADR-31 (standalone runtime interface — the generated main that loads the
+sidecar), ADR-41 (adjacent data-segment merging, the segment-count follow-up).

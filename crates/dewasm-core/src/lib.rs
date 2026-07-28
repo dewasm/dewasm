@@ -4,6 +4,7 @@
 pub mod feature;
 pub mod ir;
 
+mod data_merge;
 mod debug_line;
 mod func;
 mod module;

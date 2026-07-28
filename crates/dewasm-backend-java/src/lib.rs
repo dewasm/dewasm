@@ -200,10 +200,27 @@ impl Backend for JavaBackend {
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         check_module_support(&JavaBackend, module)?;
         let contents = generate_source(module, opts)?;
-        Ok(vec![OutputFile {
+        let mut files = vec![OutputFile {
             name: "Main.java".to_string(),
             contents: contents.into_bytes(),
-        }])
+        }];
+        // The data sidecar (ADR-37): every segment's bytes concatenated in
+        // segment order, matching the `data_offsets` prefix sums baked into the
+        // generated `Arrays.copyOfRange(DATA_BLOB, …)` slices. Only emitted when
+        // there is data to externalize (otherwise nothing reads it).
+        if let Some(cfg) = &opts.data_file {
+            if !module.datas.is_empty() {
+                let mut blob = Vec::new();
+                for data in &module.datas {
+                    blob.extend_from_slice(&data.data);
+                }
+                files.push(OutputFile {
+                    name: cfg.sidecar_name.clone(),
+                    contents: blob,
+                });
+            }
+        }
+        Ok(files)
     }
 }
 
@@ -234,7 +251,8 @@ pub fn generate_program_with_units(
     type_name: &str,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&JavaBackend, module)?;
-    let gen = new_gen(module, type_name.to_string(), false);
+    // The spec-harness generation path never externalizes (ADR-37): pass None.
+    let gen = new_gen(module, type_name.to_string(), false, None);
     let mut body = CodeWriter::new("    ");
     gen.constructor(&mut body);
     for (i, func) in module.funcs.iter().enumerate() {
@@ -253,7 +271,20 @@ pub fn generate_program_with_units(
     Ok((out, gen.uses.into_inner()))
 }
 
-fn new_gen(module: &Module, type_name: String, default_wasi: bool) -> Gen<'_> {
+fn new_gen(
+    module: &Module,
+    type_name: String,
+    default_wasi: bool,
+    data_file: Option<String>,
+) -> Gen<'_> {
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the
+    // concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    let mut data_offsets = Vec::with_capacity(module.datas.len());
+    let mut acc = 0usize;
+    for data in &module.datas {
+        data_offsets.push(acc);
+        acc += data.data.len();
+    }
     Gen {
         module,
         default_wasi,
@@ -268,12 +299,19 @@ fn new_gen(module: &Module, type_name: String, default_wasi: bool) -> Gen<'_> {
         elem_capture: Cell::new(false),
         partitioned: Cell::new(false),
         in_partition: Cell::new(false),
+        data_file,
+        data_offsets,
     }
 }
 
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let type_name = type_name(&opts.module_name);
-    let gen = new_gen(module, type_name.clone(), opts.default_wasi);
+    let gen = new_gen(
+        module,
+        type_name.clone(),
+        opts.default_wasi,
+        opts.data_file.as_ref().map(|c| c.sidecar_name.clone()),
+    );
     // A module whose function count crosses the threshold is split across nested
     // `P{k}` classes, each with its own constant pool (ADR-30). Set before the
     // constructor: its exports/start emit function calls through `defined_call`,
@@ -285,6 +323,16 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     // before the runtime bundle is assembled.
     let mut body = CodeWriter::new("    ");
     gen.constructor(&mut body);
+    // Externalized data blob (ADR-37): a static field loaded once from the
+    // sidecar next to this program, sliced by the generated
+    // `Arrays.copyOfRange(DATA_BLOB, …)` calls. Only emitted when there is data
+    // to externalize (otherwise the generated code never reads it).
+    if let Some(sidecar) = &gen.data_file {
+        if !module.datas.is_empty() {
+            body.line("");
+            gen.emit_data_blob(&mut body, sidecar);
+        }
+    }
     let num_imported = module.num_imported_funcs() as usize;
     if gen.partitioned.get() {
         gen.emit_partition_classes(&mut body, num_imported);
@@ -523,11 +571,68 @@ struct Gen<'a> {
     /// True while emitting a function body inside a `P{k}` partition class, so
     /// instance references resolve through the passed `inst` parameter.
     in_partition: Cell<bool>,
+    /// When `Some`, data segments are externalized into a binary sidecar of
+    /// this filename (loaded once into the static `DATA_BLOB`) instead of
+    /// embedded as chunked Base64 (ADR-37); `data_offsets[i]` locates segment
+    /// `i` in the blob.
+    data_file: Option<String>,
+    data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// The Java expression yielding a data segment's bytes: a copy of a slice of
+    /// the externalized `DATA_BLOB` when `--data-file` is on, else the inline
+    /// chunked-Base64 decode (ADR-37). Both yield a fresh `byte[]`, so the
+    /// segment field stays independently mutable (`data.drop` sets it empty).
+    fn data_expr(&self, seg: usize, data: &[u8]) -> String {
+        if self.data_file.is_some() {
+            let o = self.data_offsets[seg];
+            format!(
+                "java.util.Arrays.copyOfRange(DATA_BLOB, {o}, {})",
+                o + data.len()
+            )
+        } else {
+            self.use_unit("rt/data_from_b64");
+            data_blob(data)
+        }
+    }
+
+    /// Emit the static `DATA_BLOB` field and its loader (ADR-37). The sidecar is
+    /// resolved relative to this program's own code source: the jar's directory
+    /// (regular file) or the class directory itself, so `java -cp <dir> Main`
+    /// finds the sidecar alongside the class. Only called when externalizing and
+    /// the module has data.
+    fn emit_data_blob(&self, w: &mut CodeWriter, sidecar: &str) {
+        w.line("static final byte[] DATA_BLOB = loadDataBlob();");
+        w.line("");
+        w.line("private static byte[] loadDataBlob() {");
+        w.indent();
+        w.line("try {");
+        w.indent();
+        w.line(format!(
+            "java.net.URI __uri = {}.class.getProtectionDomain().getCodeSource().getLocation().toURI();",
+            self.type_name
+        ));
+        w.line("java.nio.file.Path __p = java.nio.file.Paths.get(__uri);");
+        w.line(
+            "java.nio.file.Path __dir = java.nio.file.Files.isRegularFile(__p) ? __p.getParent() : __p;",
+        );
+        w.line(format!(
+            "return java.nio.file.Files.readAllBytes(__dir.resolve({}));",
+            java_string(sidecar)
+        ));
+        w.dedent();
+        w.line("} catch (Exception __e) {");
+        w.indent();
+        w.line("throw new RuntimeException(\"failed to load data sidecar\", __e);");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("}");
     }
 
     fn rt(&self, name: &str) -> String {
@@ -829,8 +934,7 @@ impl<'a> Gen<'a> {
         // (see above). Each is a self-contained method so an oversized segment
         // never bloats `<init>` past the 64KB method limit (ADR-30).
         for (i, data) in m.datas.iter().enumerate() {
-            self.use_unit("rt/data_from_b64");
-            let blob = data_blob(&data.data);
+            let blob = self.data_expr(i, &data.data);
             w.line("");
             w.line(format!("private void initData{i}() {{"));
             w.indent();

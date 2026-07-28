@@ -77,22 +77,18 @@ fn main() -> Result<()> {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
     }
 
-    // Data-segment externalization (ADR-37): opt-in, ruby/go only, needs a
-    // real sidecar path (not stdout). Reject the unsupported combinations at
-    // the front with a clear, attributed error rather than mis-emitting.
+    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java only,
+    // needs a real sidecar path (not stdout). Reject the unsupported
+    // combinations at the front with a clear, attributed error rather than
+    // mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
-                "ruby" | "go" => {}
+                "ruby" | "go" | "python" | "java" => {}
                 "bash" => bail!(
                     "--data-file is not supported for the bash target: the bash \
-                     backend embeds data segments in its runtime, not as a sidecar; \
-                     only ruby and go externalize today (ADR-37)"
-                ),
-                "python" | "java" => bail!(
-                    "--data-file is not yet supported for the {} target: it is \
-                     deliberately deferred — ruby and go land first (ADR-37)",
-                    cli.target
+                     backend embeds data segments in its runtime, not as a sidecar \
+                     (ADR-37)"
                 ),
                 other => bail!("--data-file is not supported for target {other}"),
             }

@@ -123,7 +123,14 @@ pub fn generate_class_with_units(
     linkage: &RuntimeLinkage,
     default_wasi: bool,
 ) -> Result<(String, BTreeSet<String>)> {
-    generate_class_inner(module, class_name, linkage, default_wasi, &BTreeSet::new())
+    generate_class_inner(
+        module,
+        class_name,
+        linkage,
+        default_wasi,
+        &BTreeSet::new(),
+        None,
+    )
 }
 
 fn generate_class_inner(
@@ -132,12 +139,23 @@ fn generate_class_inner(
     linkage: &RuntimeLinkage,
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
+    data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the
+    // concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    let mut data_offsets = Vec::with_capacity(module.datas.len());
+    let mut acc = 0usize;
+    for data in &module.datas {
+        data_offsets.push(acc);
+        acc += data.data.len();
+    }
     let gen = Gen {
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
+        data_file: data_file.map(str::to_string),
+        data_offsets,
     };
     let mut wb = CodeWriter::new("    ");
     gen.class(&mut wb, class_name);
@@ -210,6 +228,7 @@ impl Backend for PythonBackend {
             &opts.runtime,
             opts.default_wasi,
             &extra_seeds,
+            opts.data_file.as_ref().map(|c| c.sidecar_name.as_str()),
         )?;
 
         let mut w = CodeWriter::new("    ");
@@ -221,6 +240,19 @@ impl Backend for PythonBackend {
         w.line("import struct");
         w.line("import sys");
         w.line("import time");
+        // Externalized data blob (ADR-37): read once at import time from the
+        // sidecar next to this module, then sliced by the generated
+        // `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to
+        // externalize (otherwise the generated code never reads it).
+        if let Some(cfg) = &opts.data_file {
+            if !module.datas.is_empty() {
+                w.line("");
+                w.line(format!(
+                    "DATA_BLOB = open(os.path.join(os.path.dirname(__file__), {}), \"rb\").read()",
+                    py_string(&cfg.sidecar_name)
+                ));
+            }
+        }
         w.line("");
         w.line("");
         w.raw(&class_src);
@@ -295,10 +327,27 @@ impl Backend for PythonBackend {
             w.dedent();
         }
 
-        Ok(vec![OutputFile {
+        let mut files = vec![OutputFile {
             name: format!("{}.py", opts.module_name),
             contents: w.finish().into_bytes(),
-        }])
+        }];
+        // The data sidecar (ADR-37): every segment's bytes concatenated in
+        // segment order, matching the `data_offsets` prefix sums baked into the
+        // generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data
+        // to externalize (otherwise the generated code never reads it).
+        if let Some(cfg) = &opts.data_file {
+            if !module.datas.is_empty() {
+                let mut blob = Vec::new();
+                for data in &module.datas {
+                    blob.extend_from_slice(&data.data);
+                }
+                files.push(OutputFile {
+                    name: cfg.sidecar_name.clone(),
+                    contents: blob,
+                });
+            }
+        }
+        Ok(files)
     }
 }
 
@@ -388,9 +437,27 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
+    /// When `Some`, data segments are externalized into a binary sidecar of
+    /// this filename (loaded once into the module-level `DATA_BLOB`) instead of
+    /// embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates
+    /// segment `i` in the blob.
+    data_file: Option<String>,
+    data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
+    /// The Python expression yielding a data segment's bytes: a slice of the
+    /// externalized `DATA_BLOB` when `--data-file` is on, else an inline
+    /// `bytes.fromhex` literal (ADR-37). Both yield a `bytes` object.
+    fn data_expr(&self, seg: usize, data: &[u8]) -> String {
+        if self.data_file.is_some() {
+            let o = self.data_offsets[seg];
+            format!("DATA_BLOB[{o}:{}]", o + data.len())
+        } else {
+            hex_bytes(data)
+        }
+    }
+
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
     }
@@ -621,13 +688,13 @@ impl<'a> Gen<'a> {
                     w.line(format!(
                         "self.memory.init({}, {}, 0, {})",
                         self.expr(offset),
-                        hex_bytes(&data.data),
+                        self.data_expr(i, &data.data),
                         data.data.len()
                     ));
                     w.line(format!("self.data{i} = b\"\""));
                 }
                 None => {
-                    w.line(format!("self.data{i} = {}", hex_bytes(&data.data)));
+                    w.line(format!("self.data{i} = {}", self.data_expr(i, &data.data)));
                 }
             }
         }
