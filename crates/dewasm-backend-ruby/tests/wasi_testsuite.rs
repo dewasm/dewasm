@@ -26,24 +26,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // Still-ENOSYS filesystem-extension syscalls (implemented in the next
-    // commit): advise/allocate, renumber, symlink/link/readlink, set_times.
-    ("rust/fd_advise", "fd_advise (ENOSYS)"),
-    ("rust/file_allocate", "fd_allocate (ENOSYS)"),
-    ("rust/dir_fd_op_failures", "fd_allocate (ENOSYS)"),
-    ("rust/renumber", "fd_renumber (ENOSYS)"),
-    ("rust/stdio", "fd_renumber (ENOSYS)"),
-    ("rust/overwrite_preopen", "fd_renumber (ENOSYS)"),
-    ("rust/symlink_create", "path_symlink (ENOSYS)"),
-    ("rust/symlink_filestat", "path_symlink (ENOSYS)"),
-    ("rust/path_symlink_trailing_slashes", "path_symlink (ENOSYS)"),
-    ("rust/path_exists", "path_symlink (ENOSYS)"),
-    ("rust/nofollow_errors", "path_symlink (ENOSYS)"),
-    ("rust/path_link", "path_link (ENOSYS)"),
-    ("rust/readlink", "path_readlink (ENOSYS)"),
-    ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
-    ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
-    ("rust/path_filestat", "path_filestat_set_times (ENOSYS)"),
     // macOS CoreFoundation injects __CF_USER_TEXT_ENCODING into the CF-linked
     // ruby process, so the guest sees one extra environ entry (ADR-40).
     (
