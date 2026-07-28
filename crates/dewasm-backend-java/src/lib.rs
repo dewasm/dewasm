@@ -202,7 +202,7 @@ impl Backend for JavaBackend {
         let contents = generate_source(module, opts)?;
         Ok(vec![OutputFile {
             name: "Main.java".to_string(),
-            contents,
+            contents: contents.into_bytes(),
         }])
     }
 }

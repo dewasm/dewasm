@@ -297,7 +297,7 @@ impl Backend for PythonBackend {
 
         Ok(vec![OutputFile {
             name: format!("{}.py", opts.module_name),
-            contents: w.finish(),
+            contents: w.finish().into_bytes(),
         }])
     }
 }

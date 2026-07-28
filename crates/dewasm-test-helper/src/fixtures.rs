@@ -41,7 +41,7 @@ pub fn fresh_scratch_dir(name: &str) -> PathBuf {
 /// Convert raw wasm bytes with `backend`.
 pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str) -> String {
     let module = dewasm_core::build_module(bytes).expect("build IR");
-    backend
+    let source = backend
         .generate(
             &module,
             &GenOptions {
@@ -49,11 +49,16 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
                 module_name: name.to_string(),
                 runtime: RuntimeLinkage::Embedded,
                 default_wasi: true,
+                data_file: None,
             },
         )
         .expect("generate")
         .remove(0)
-        .contents
+        .contents;
+    // The primary source is always UTF-8 (generated code); only the optional
+    // data sidecar is raw bytes, and this helper only ever asks for the
+    // primary file (`data_file: None`).
+    String::from_utf8(source).expect("generated source is valid UTF-8")
 }
 
 /// Convert a `.wat` fixture with `backend`.

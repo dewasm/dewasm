@@ -47,11 +47,27 @@ pub struct GenOptions {
     /// `wasi_snapshot_preview1` imports the embedder does not provide.
     /// Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
+    /// Externalize data-segment bytes into a binary sidecar instead of
+    /// embedding them as hex literals (ADR-37). When `Some`, the backend
+    /// emits load-from-sidecar code and returns a second `OutputFile`
+    /// carrying the blob. Only backends that declare support honor it (the
+    /// CLI rejects it for the rest); a backend that ignores it keeps
+    /// embedding.
+    pub data_file: Option<DataFileConfig>,
+}
+
+/// Configuration for data-segment externalization (ADR-37).
+#[derive(Clone, Debug)]
+pub struct DataFileConfig {
+    /// The filename the generated program references relative to itself
+    /// (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile`
+    /// carries this exact `name`; the CLI routes it to the requested path.
+    pub sidecar_name: String,
 }
 
 pub struct OutputFile {
     pub name: String,
-    pub contents: String,
+    pub contents: Vec<u8>,
 }
 
 pub trait Backend {

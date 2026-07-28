@@ -110,7 +110,14 @@ pub fn generate_class_with_units(
     linkage: &RuntimeLinkage,
     default_wasi: bool,
 ) -> Result<(String, BTreeSet<String>)> {
-    generate_class_inner(module, class_name, linkage, default_wasi, &BTreeSet::new())
+    generate_class_inner(
+        module,
+        class_name,
+        linkage,
+        default_wasi,
+        &BTreeSet::new(),
+        None,
+    )
 }
 
 fn generate_class_inner(
@@ -119,6 +126,7 @@ fn generate_class_inner(
     linkage: &RuntimeLinkage,
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
+    data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
     // A global needs a shared mutable cell (`Rt::Global`, ADR-16) only if it
@@ -132,6 +140,14 @@ fn generate_class_inner(
             _ => None,
         }))
         .collect();
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the
+    // concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    let mut data_offsets = Vec::with_capacity(module.datas.len());
+    let mut acc = 0usize;
+    for data in &module.datas {
+        data_offsets.push(acc);
+        acc += data.data.len();
+    }
     let gen = Gen {
         module,
         default_wasi,
@@ -139,6 +155,8 @@ fn generate_class_inner(
         break_only: RefCell::new(HashMap::new()),
         frame_stack: RefCell::new(Vec::new()),
         boxed_globals,
+        data_file: data_file.map(str::to_string),
+        data_offsets,
     };
     let mut wb = CodeWriter::new("  ");
     wb.indent();
@@ -212,6 +230,7 @@ impl Backend for RubyBackend {
             &opts.runtime,
             opts.default_wasi,
             &extra_seeds,
+            opts.data_file.as_ref().map(|c| c.sidecar_name.as_str()),
         )?;
 
         let mut w = CodeWriter::new("  ");
@@ -281,10 +300,27 @@ impl Backend for RubyBackend {
             });
         }
 
-        Ok(vec![OutputFile {
+        let mut files = vec![OutputFile {
             name: format!("{}.rb", opts.module_name),
-            contents: w.finish(),
-        }])
+            contents: w.finish().into_bytes(),
+        }];
+        // The data sidecar (ADR-37): every segment's bytes concatenated in
+        // segment order, matching the `data_offsets` prefix sums baked into the
+        // generated `DATA_BLOB.byteslice` calls. Only emitted when there is
+        // data to externalize (otherwise the generated code never reads it).
+        if let Some(cfg) = &opts.data_file {
+            if !module.datas.is_empty() {
+                let mut blob = Vec::new();
+                for data in &module.datas {
+                    blob.extend_from_slice(&data.data);
+                }
+                files.push(OutputFile {
+                    name: cfg.sidecar_name.clone(),
+                    contents: blob,
+                });
+            }
+        }
+        Ok(files)
     }
 }
 
@@ -451,9 +487,29 @@ struct Gen<'a> {
     /// Global` target. Computed once in `generate_class_inner`. See the
     /// boundary criterion in the comment there and ADR-16.
     boxed_globals: BTreeSet<u32>,
+    /// When `Some`, data segments are externalized into a binary sidecar of
+    /// this filename (referenced via `__dir__`) instead of embedded as hex
+    /// literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    data_file: Option<String>,
+    data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
+    /// The Ruby expression yielding a data segment's bytes: a slice of the
+    /// externalized blob when `--data-file` is on, else an inline packed-hex
+    /// literal (ADR-37). Both yield an ASCII-8BIT (binary) string.
+    fn data_expr(&self, seg: usize, data: &[u8]) -> String {
+        if self.data_file.is_some() {
+            format!(
+                "DATA_BLOB.byteslice({}, {})",
+                self.data_offsets[seg],
+                data.len()
+            )
+        } else {
+            hex_bytes(data)
+        }
+    }
+
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
     }
@@ -593,6 +649,17 @@ impl<'a> Gen<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         w.line(format!("MEMORY_EXPORTS = [{memory_entries}].freeze"));
+        // Externalized data blob (ADR-37): read once at class-definition time,
+        // kept binary (ASCII-8BIT, as File.binread returns). Only emitted when
+        // there is data to externalize.
+        if let Some(name) = &self.data_file {
+            if !m.datas.is_empty() {
+                w.line(format!(
+                    "DATA_BLOB = File.binread(File.join(__dir__, {})).freeze",
+                    ruby_string(name)
+                ));
+            }
+        }
         w.line("");
 
         let wasi_fallback = wasi_bundled(m, self.default_wasi);
@@ -718,13 +785,13 @@ impl<'a> Gen<'a> {
                         w.line(format!(
                             "@memory.init({}, {}, 0, {})",
                             self.expr(offset),
-                            hex_bytes(&data.data),
+                            self.data_expr(i, &data.data),
                             data.data.len()
                         ));
                         w.line(format!("@data{i} = \"\".b"));
                     }
                     None => {
-                        w.line(format!("@data{i} = {}", hex_bytes(&data.data)));
+                        w.line(format!("@data{i} = {}", self.data_expr(i, &data.data)));
                     }
                 }
             }
