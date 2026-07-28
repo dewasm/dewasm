@@ -19,16 +19,38 @@ use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Identical to the Ruby ledger: the same stale-state cross-module linking
-/// failures (a `register`ed module was supposed to write into the first
-/// module's shared table/memory, so assertions see stale state). The linking
-/// milestone clears these.
+/// Known assertion-level failures (ADR-35). Cross-module linking of
+/// function, global, memory, and now table imports (through PROVIDERS and
+/// the per-kind export maps) is fully wired; `assert_unlinkable` is checked
+/// for real. Two residual clusters, both pre-existing and out of this
+/// backend's scope to fix (matching the Ruby ledger, which has already
+/// covered every import kind for a while):
+///
+/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4):
+///   `rt_resolve_import` validates that a resolved import is the right
+///   *kind* (func/global/table/memory) but not the finer-grained wasm type —
+///   a function's param/result signature, a global's mutability, a table's
+///   min/max limits, or a memory's min/max limits. Every `assert_unlinkable`
+///   case testing one of those (not a kind mismatch, which is caught) links
+///   instead of failing. Same accepted gap as the Ruby ledger's
+///   `import-limits`, and now the same count (28/2/4) since Bash supports
+///   every import kind Ruby does.
+/// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)`
+///   declaration or import is rejected outright by the core builder
+///   (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24) regardless of
+///   backend. Both files exercise this via a module with two memories (one
+///   often an import of another module's exported memory); that module
+///   fails to convert, so the data/assertions that depended on it running
+///   observe stale (zeroed) state in a memory another, unrelated module
+///   still owns. Not a linking gap — every import in play resolves fine —
+///   and not fixable without the multi-memory proposal, which ADR-24 rejects
+///   outright.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("elem", 5, "linking"),
-    ("linking", 10, "linking"),
-    ("linking0", 1, "linking"),
-    ("linking3", 2, "linking"),
-    ("load1", 5, "linking"),
+    ("imports", 28, "import-limits"),
+    ("imports2", 2, "import-limits"),
+    ("linking", 4, "import-limits"),
+    ("linking0", 1, "multi-memory"),
+    ("load1", 5, "multi-memory"),
 ];
 
 /// Files `cargo test` runs by default: integer-only files the backend's
@@ -50,6 +72,7 @@ const CURATED_FILES: &[&str] = &[
     "data1",
     "elem",
     "endianness",
+    "exports",
     "f32",
     "f32_bitwise",
     "f32_cmp",
@@ -68,11 +91,19 @@ const CURATED_FILES: &[&str] = &[
     "i32",
     "i64",
     "if",
+    "imports",
+    "imports0",
+    "imports1",
+    "imports2",
+    "imports3",
+    "imports4",
     "int_exprs",
     "int_literals",
     "labels",
     "linking",
     "linking0",
+    "linking1",
+    "linking2",
     "linking3",
     "load",
     "load0",
@@ -102,6 +133,10 @@ const CURATED_FILES: &[&str] = &[
     "store1",
     "store2",
     "switch",
+    "table",
+    "table_copy",
+    "table_copy_mixed",
+    "table_init",
     "traps",
     "traps0",
     "type",
@@ -153,15 +188,24 @@ impl SpecBackend for BashSpec {
         })
     }
 
+    fn supports_registered_imports(&self) -> bool {
+        true
+    }
+
     fn emit_instantiate(
         &self,
         script: &mut String,
         _decls: &mut String,
         conv: &Converted,
         _var_id: u32,
-        _registered: &[(String, String)],
+        registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
+        // Rebuild PROVIDERS from the *current* registered set before every
+        // instantiation (ADR-35): a plain reassignment fully replaces the
+        // associative array on bash >= 5, so a module registered after a
+        // failed one never leaves a stale provider entry behind.
+        let _ = writeln!(script, "{}", providers_line(registered));
         // A trap while instantiating a plain module directive aborts the file,
         // mirroring an uncaught Ruby exception at toplevel.
         let _ = writeln!(
@@ -177,9 +221,10 @@ impl SpecBackend for BashSpec {
         script: &mut String,
         _decls: &mut String,
         conv: &Converted,
-        _registered: &[(String, String)],
+        registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
+        let _ = writeln!(script, "{}", providers_line(registered));
         format!("{}init", conv.handle)
     }
 
@@ -244,6 +289,10 @@ impl SpecBackend for BashSpec {
         let _ = writeln!(script, "{call}\nck $? {} '1'", bash_str(desc));
     }
 
+    fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
+        let _ = writeln!(script, "{call}\nckl $? {}", bash_str(desc));
+    }
+
     fn assemble(
         &self,
         units: &BTreeSet<String>,
@@ -261,6 +310,17 @@ impl SpecBackend for BashSpec {
 
 fn bash_str(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// The PROVIDERS rebuild line for an instantiation: always the `spectest`
+/// host prefix plus each currently-`register`ed module mapped to its
+/// generation prefix (the `conv.handle` returned by `emit_instantiate`).
+fn providers_line(registered: &[(String, String)]) -> String {
+    let mut entries = vec!["[spectest]=spectest_".to_string()];
+    for (name, prefix) in registered {
+        entries.push(format!("[{}]={prefix}", bash_str(name)));
+    }
+    format!("PROVIDERS=({})", entries.join(" "))
 }
 
 fn arg_bash(arg: &WastArg<'_>) -> Result<String, String> {
@@ -361,16 +421,66 @@ cke() {
   return 0
 }
 
+# ckl <status> <desc>: an assert_unlinkable check. Upstream's wording never
+# matches ours, so only the status is inspected: exactly 135 (rt_link_err)
+# is a pass; 0 means it linked when it shouldn't, 134 means it trapped after
+# linking, anything else crashed — all failures (mirrors ruby check_unlinkable).
+ckl() {
+  local st=$1 desc=$2
+  if (( st == 135 )); then
+    (( PASS += 1 ))
+  elif (( st == 0 )); then
+    (( FAIL += 1 ))
+    echo "FAIL(linked, want unlinkable): $desc"
+  elif (( st == 134 )); then
+    (( FAIL += 1 ))
+    echo "FAIL(trapped '$TRAP_MSG', want unlinkable): $desc"
+  else
+    (( FAIL += 1 ))
+    echo "FAIL(status $st, want unlinkable): $desc"
+  fi
+  return 0
+}
+
+# The $spectest host module as an ADR-35 provider: a `spectest_`-prefixed
+# family of per-kind export maps that PROVIDERS[spectest] points at. IMPORTS
+# stays declared (empty) as the function-only host override channel.
+declare -A IMPORTS=()
 spectest_print() { return 0; }
-declare -A IMPORTS=(
-  ['spectest.print']=spectest_print
-  ['spectest.print_i32']=spectest_print
-  ['spectest.print_i64']=spectest_print
-  ['spectest.print_f32']=spectest_print
-  ['spectest.print_f64']=spectest_print
-  ['spectest.print_i32_f32']=spectest_print
-  ['spectest.print_f64_f64']=spectest_print
+declare -A spectest_EXPORTS=(
+  ['print']=spectest_print
+  ['print_i32']=spectest_print
+  ['print_i64']=spectest_print
+  ['print_f32']=spectest_print
+  ['print_f64']=spectest_print
+  ['print_i32_f32']=spectest_print
+  ['print_f64_f64']=spectest_print
 )
+# Global fixture values from the wast spectest host module: i32/i64 = 666;
+# f32 = the u32 bit pattern of 666.6f (1143383654); f64 = the signed-64 bit
+# pattern of 666.6 (4649074691427585229) — the bash float representation
+# (ADR-13). Globals flatten to their backing variable names (nameref depth 1).
+spectest_g_i32=666
+spectest_g_i64=666
+spectest_g_f32=1143383654
+spectest_g_f64=4649074691427585229
+declare -A spectest_GLOBAL_EXPORTS=(
+  ['global_i32']=spectest_g_i32
+  ['global_i64']=spectest_g_i64
+  ['global_f32']=spectest_g_f32
+  ['global_f64']=spectest_g_f64
+)
+# Table/memory fixtures are inert until the imported-table/-memory steps but
+# complete the provider shape so a kind mismatch against them link-errors.
+spectest_t0=()
+spectest_t0ty=()
+spectest_t0sz=10
+declare -A spectest_TABLE_EXPORTS=(['table']=spectest_t0)
+spectest_mem=()
+spectest_pages=1
+spectest_max_pages=2
+declare -A spectest_MEMORY_EXPORTS=(['memory']=spectest_)
+declare -A PROVIDERS=([spectest]=spectest_)
 "#;
 
 const POSTAMBLE: &str = r#"
