@@ -284,7 +284,7 @@ impl Backend for BashBackend {
         }
         Ok(vec![OutputFile {
             name: format!("{}.sh", opts.module_name),
-            contents: out,
+            contents: out.into_bytes(),
         }])
     }
 }

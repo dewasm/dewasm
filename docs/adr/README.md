@@ -57,6 +57,7 @@ the consequences.
 | ADR-33 | [`IO::Buffer`-Backed Linear Memory for Ruby](33-ruby-io-buffer-memory.md) | Accepted |
 | ADR-34 | [Bash WASI Filesystem](34-bash-wasi-filesystem.md) | Accepted |
 | ADR-35 | [Bash Cross-Module Linking](35-bash-cross-module-linking.md) | Accepted |
+| ADR-37 | [Opt-in Data-Segment Externalization (`--data-file`)](37-data-segment-externalization.md) | Accepted |
 
 ## Adding a new ADR
 

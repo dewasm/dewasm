@@ -155,10 +155,27 @@ impl Backend for GoBackend {
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         check_module_support(&GoBackend, module)?;
         let contents = generate_source(module, opts)?;
-        Ok(vec![OutputFile {
+        let mut files = vec![OutputFile {
             name: format!("{}.go", opts.module_name),
-            contents,
-        }])
+            contents: contents.into_bytes(),
+        }];
+        // The data sidecar (ADR-37): every segment's bytes concatenated in
+        // segment order, matching the `data_offsets` baked into the generated
+        // `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file.
+        // Only emitted when there is data to externalize.
+        if let Some(cfg) = &opts.data_file {
+            if !module.datas.is_empty() {
+                let mut blob = Vec::new();
+                for data in &module.datas {
+                    blob.extend_from_slice(&data.data);
+                }
+                files.push(OutputFile {
+                    name: cfg.sidecar_name.clone(),
+                    contents: blob,
+                });
+            }
+        }
+        Ok(files)
     }
 }
 
@@ -180,6 +197,8 @@ pub fn generate_program_with_units(
         uses: RefCell::new(BTreeSet::new()),
         cur_locals: RefCell::new(Vec::new()),
         spec: true,
+        data_file: None,
+        data_offsets: data_offsets(module),
     };
     let mut body = CodeWriter::new("\t");
     gen.emit_program(&mut body);
@@ -195,6 +214,8 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         uses: RefCell::new(BTreeSet::new()),
         cur_locals: RefCell::new(Vec::new()),
         spec: false,
+        data_file: opts.data_file.as_ref().map(|c| c.sidecar_name.clone()),
+        data_offsets: data_offsets(module),
     };
 
     // Body: the generated struct + constructor + methods, into its own writer
@@ -241,6 +262,21 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     out.push_str("package main\n\n");
     out.push_str(&import_block(&imports));
     out.push('\n');
+    // Data externalization (ADR-37): pull the segment bytes from a
+    // `//go:embed`ed sidecar. `embed` is a blank import (the package is used
+    // only through the directive, which — unlike a package-qualified selector —
+    // the import scanner cannot see; ADR-29), and the directive must sit
+    // immediately above its `var` with no intervening blank line. A separate
+    // `import` declaration is legal Go and keeps `import_block` untouched.
+    if let Some(cfg) = &opts.data_file {
+        if !module.datas.is_empty() {
+            out.push_str("import _ \"embed\"\n\n");
+            out.push_str(&format!(
+                "//go:embed {}\nvar dataBlob []byte\n\n",
+                cfg.sidecar_name
+            ));
+        }
+    }
     out.push_str(&bundle);
     out.push_str("\n\n");
     out.push_str(&body.finish());
@@ -431,6 +467,18 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("Rt.unhex(\"{hex}\")")
 }
 
+/// Prefix sums locating each data segment in the concatenated sidecar blob
+/// (ADR-37). Only consulted when `--data-file` externalizes the segments.
+fn data_offsets(module: &Module) -> Vec<usize> {
+    let mut offsets = Vec::with_capacity(module.datas.len());
+    let mut acc = 0usize;
+    for data in &module.datas {
+        offsets.push(acc);
+        acc += data.data.len();
+    }
+    offsets
+}
+
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 fn is_wasi_module(name: &str) -> bool {
@@ -531,11 +579,29 @@ struct Gen<'a> {
     /// methods and the recursion guard. Off for the shipped standalone/library
     /// output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
+    /// When `Some`, data segments are externalized into a `//go:embed`ed
+    /// binary sidecar of this filename instead of embedded as `Rt.unhex`
+    /// literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    data_file: Option<String>,
+    data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// The Go expression yielding a data segment's bytes: a sub-slice of the
+    /// embedded blob when `--data-file` is on (no runtime helper), else an
+    /// `Rt.unhex(...)` inline hex literal (ADR-37).
+    fn data_expr(&self, seg: usize, data: &[u8]) -> String {
+        if self.data_file.is_some() {
+            let o = self.data_offsets[seg];
+            format!("dataBlob[{o}:{}]", o + data.len())
+        } else {
+            self.use_unit("rt/unhex");
+            hex_bytes(data)
+        }
     }
 
     /// Reference a runtime helper method, recording its unit.
@@ -816,19 +882,18 @@ impl<'a> Gen<'a> {
         }
 
         for (i, data) in m.datas.iter().enumerate() {
-            self.use_unit("rt/unhex");
             match &data.offset {
                 Some(offset) => {
                     self.use_unit("memory/init");
                     w.line(format!(
                         "p.memory.init(uint64({}), {}, 0, {})",
                         self.expr(offset),
-                        hex_bytes(&data.data),
+                        self.data_expr(i, &data.data),
                         data.data.len()
                     ));
                 }
                 None => {
-                    w.line(format!("p.data{i} = {}", hex_bytes(&data.data)));
+                    w.line(format!("p.data{i} = {}", self.data_expr(i, &data.data)));
                 }
             }
         }
