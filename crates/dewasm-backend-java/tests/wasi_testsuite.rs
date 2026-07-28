@@ -49,14 +49,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/fd_readdir",
         "fd_readdir: '.'/'..' dot-entries + d_ino",
     ),
-    (
-        "rust/file_seek_tell",
-        "fd_seek: negative-offset errno INVAL vs IO",
-    ),
-    (
-        "rust/unlink_file_trailing_slashes",
-        "path_unlink_file: trailing slash not rejected",
-    ),
     // The JVM host injects environ entries of its own (macOS CoreFoundation's
     // __CF_USER_TEXT_ENCODING), so count-exact environ assertions cannot hold
     // even under the harness's cleared environment (ADR-40).
