@@ -9,82 +9,41 @@ use dewasm_backend_ruby::RubyBackend;
 use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBackend};
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36):
-/// `(trial, tag)`. Three kinds, all attributed honestly:
-///   * declared ENOSYS / out-of-scope syscalls (docs/support.md) — filling the
-///     gap later flips the entry to a hard failure, exactly ADR-8's contract;
-///   * semantics-precision gaps on *supported* syscalls (errno codes,
-///     per-filetype rights masking, dirent `.`/`..`) — tracked known bugs in
-///     the shared WASI runtime, to be fixed across all backends;
+/// `(trial, tag)`. Two kinds remain, both attributed honestly:
+///   * declared out-of-scope syscalls (`sock_shutdown`; docs/support.md) —
+///     filling the gap later flips the entry to a hard failure, exactly ADR-8's
+///     contract;
 ///   * environment variables the host interpreter itself injects (macOS
 ///     CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest
 ///     legitimately observes, so count-exact `environ_*` assertions cannot
 ///     hold even though the harness runs trials with a cleared environment
 ///     (ADR-40).
+///
+/// The former filesystem ledger (per-fd rights/fdflags, symlink/link/readlink,
+/// renumber, advise/allocate, set_times, path-resolution errno precision) is
+/// now implemented — see the `wasi/` runtime units and ADR-40.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared ENOSYS / out-of-scope syscalls.
+    // Declared out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
+    // Still-ENOSYS filesystem-extension syscalls (implemented in the next
+    // commit): advise/allocate, renumber, symlink/link/readlink, set_times.
     ("rust/fd_advise", "fd_advise (ENOSYS)"),
-    ("rust/fd_fdstat_set_rights", "fd_fdstat_set_rights (ENOSYS)"),
-    ("rust/fd_flags_set", "fd_fdstat_set_flags (ENOSYS)"),
-    ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
-    ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
     ("rust/file_allocate", "fd_allocate (ENOSYS)"),
-    ("rust/path_link", "path_link (ENOSYS)"),
-    ("rust/readlink", "path_readlink (ENOSYS)"),
+    ("rust/dir_fd_op_failures", "fd_allocate (ENOSYS)"),
     ("rust/renumber", "fd_renumber (ENOSYS)"),
     ("rust/stdio", "fd_renumber (ENOSYS)"),
     ("rust/overwrite_preopen", "fd_renumber (ENOSYS)"),
     ("rust/symlink_create", "path_symlink (ENOSYS)"),
     ("rust/symlink_filestat", "path_symlink (ENOSYS)"),
-    (
-        "rust/path_symlink_trailing_slashes",
-        "path_symlink (ENOSYS)",
-    ),
+    ("rust/path_symlink_trailing_slashes", "path_symlink (ENOSYS)"),
     ("rust/path_exists", "path_symlink (ENOSYS)"),
     ("rust/nofollow_errors", "path_symlink (ENOSYS)"),
-    ("rust/dir_fd_op_failures", "fd_advise+fd_allocate (ENOSYS)"),
-    // Semantics-precision gaps on supported syscalls (tracked bugs).
-    (
-        "rust/file_seek_tell",
-        "fd_seek: negative-offset errno INVAL vs IO",
-    ),
-    (
-        "rust/path_open_dirfd_not_dir",
-        "path_open: non-dir base errno NOTDIR vs BADF",
-    ),
-    (
-        "rust/unlink_file_trailing_slashes",
-        "path_unlink_file: trailing slash not rejected",
-    ),
-    (
-        "rust/truncation_rights",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/directory_seek",
-        "fd_fdstat_get: per-filetype rights not masked",
-    ),
-    (
-        "rust/path_open_read_write",
-        "fd_fdstat_get: per-open rights not masked",
-    ),
-    (
-        "rust/path_filestat",
-        "fd_fdstat_get: open fdflags (APPEND) not reflected",
-    ),
-    (
-        "rust/fd_readdir",
-        "fd_readdir: '.'/'..' dot-entries + d_ino",
-    ),
-    (
-        "rust/path_open_preopen",
-        "path_open: rights-restricted reopen",
-    ),
-    (
-        "rust/interesting_paths",
-        "path_open: absolute / '..' path resolution",
-    ),
+    ("rust/path_link", "path_link (ENOSYS)"),
+    ("rust/readlink", "path_readlink (ENOSYS)"),
+    ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
+    ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
+    ("rust/path_filestat", "path_filestat_set_times (ENOSYS)"),
     // macOS CoreFoundation injects __CF_USER_TEXT_ENCODING into the CF-linked
     // ruby process, so the guest sees one extra environ entry (ADR-40).
     (

@@ -1,7 +1,8 @@
-# requires: memory/i32_load, memory/i32_store, memory/init
+# requires: memory/i32_load, memory/i32_store, memory/init, wasi/rights
 def wasi_fd_read(fd, iovs_ptr, iovs_len, nread_ptr)
   io = @fds[fd]
   return ERRNO_BADF if io.nil? || io.is_a?(WasiDir)
+  return ERRNO_NOTCAPABLE unless fd_has_right?(fd, RIGHT_FD_READ)
   stdin = @std_ios[0].equal?(io)
   nread = 0
   iovs_len.times do |i|

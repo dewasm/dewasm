@@ -1,3 +1,4 @@
+# requires: wasi/rights
 ERRNO_SUCCESS = 0
 ERRNO_BADF = 8
 ERRNO_INVAL = 28
@@ -21,6 +22,16 @@ def initialize(args: [], env: {}, preopens: {})
   @args = args.map(&:to_s)
   @env = env.map { |k, v| "#{k}=#{v}" }
   @fds = { 0 => $stdin, 1 => $stdout, 2 => $stderr }
+  # Per-fd capability metadata (ADR-40): fd => [rights_base,
+  # rights_inheriting, fdflags]. stdio is seeded all-rights (it is never
+  # rights-tested and must stay readable/writable); preopens likewise, so
+  # a real embedder keeps unrestricted access and path_open derives the
+  # narrowed rights from them.
+  @fd_meta = {
+    0 => [Rt::M64, Rt::M64, 0],
+    1 => [Rt::M64, Rt::M64, 0],
+    2 => [Rt::M64, Rt::M64, 0],
+  }
   # The stdio special-cases (SPIPE on seek/tell/pread/pwrite, no close)
   # key on the objects captured here, in lockstep with the fd table —
   # not on whatever the globals point at when a syscall runs.
@@ -33,6 +44,13 @@ def initialize(args: [], env: {}, preopens: {})
       raise ArgumentError, "preopen #{guest.inspect} => #{host.inspect}: #{e.message}"
     end
     @fds[next_fd] = WasiDir.new(real, guest, nil)
+    # A preopen is a directory, so its base is the directory-rights set
+    # (no FD_WRITE etc.); its inheriting rights carry the full file-rights
+    # set so guest-opened files under it get real read/write capability.
+    # root_directory() in the testsuite reopens the preopen with exactly
+    # these, so seeding all-of-M64 here would wrongly hand a directory the
+    # write right and make that reopen fail EISDIR.
+    @fd_meta[next_fd] = [DIR_BASE_RIGHTS, DIR_INHERITING_RIGHTS, 0]
     next_fd += 1
   end
   @next_fd = next_fd

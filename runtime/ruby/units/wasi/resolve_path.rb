@@ -23,9 +23,19 @@ private :within?
 # runtime, not a multi-tenant sandbox host.
 def resolve_path(dirfd, rel, follow_last: true)
   entry = @fds[dirfd]
-  return [nil, ERRNO_BADF] unless entry.is_a?(WasiDir)
-  return [nil, ERRNO_PERM] if rel.include?("\0")
+  return [nil, ERRNO_BADF] if entry.nil?
+  return [nil, ERRNO_NOTDIR] unless entry.is_a?(WasiDir)
+  return [nil, ERRNO_INVAL] if rel.include?("\0")
+  # An absolute guest path is an escape attempt: File.join would silently
+  # collapse the leading slash back inside the base, so reject it outright.
+  return [nil, ERRNO_NOTCAPABLE] if rel.start_with?("/")
   base = entry.host_path
+  # Lexical escape guard: expand ".." purely textually against the base and
+  # reject anything that climbs out. realpath below is the symlink-aware
+  # check, but it can't run when the escaped parent doesn't exist on disk
+  # (it would raise ENOENT), so a path like "a/../../etc" needs catching
+  # here to report NOTCAPABLE rather than NOENT.
+  return [nil, ERRNO_NOTCAPABLE] unless within?(base, File.expand_path(rel, base))
   joined = File.join(base, rel)
   last = File.basename(joined)
   if !follow_last && last != "." && last != ".."

@@ -42,8 +42,8 @@ stub ([ADR-7](adr/7-import-providers.md), bash conventions in
 | fd_close | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_datasync | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_fdstat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
-| fd_fdstat_set_flags | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
-| fd_fdstat_set_rights | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_fdstat_set_flags | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
+| fd_fdstat_set_rights | ✅ | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
 | fd_filestat_get | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_set_size | ✅ | ✅ | ✅ | ✅ | ✅ |
 | fd_filestat_set_times | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) | ❌ (ENOSYS) |
