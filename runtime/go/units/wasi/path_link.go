@@ -1,11 +1,13 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Create a hard link new = old, both endpoints contained. The source is
-// followed only under LOOKUPFLAGS_SYMLINK_FOLLOW; the destination is resolved
-// NOFOLLOW (ADR-40).
+// Create a hard link new = old, both endpoints contained. Both endpoints are
+// resolved NOFOLLOW and LOOKUPFLAGS_SYMLINK_FOLLOW is rejected as EINVAL like
+// the other backends (ADR-40).
 func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDirfd, newPathPtr, newPathLen uint32) uint32 {
-    oldFollow := oldFlags&0x1 != 0 // lookupflags::SYMLINK_FOLLOW
+    if oldFlags&0x1 != 0 { // lookupflags::SYMLINK_FOLLOW
+        return wasiInval
+    }
     oldRel := string(w.memory.read_string(uint64(oldPathPtr), uint64(oldPathLen)))
-    oldHost, err := w.resolve_path(oldDirfd, oldRel, oldFollow)
+    oldHost, err := w.resolve_path(oldDirfd, oldRel, false)
     if err != wasiOk {
         return err
     }
@@ -23,14 +25,12 @@ func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDir
         // AT_SYMLINK_NOFOLLOW linkat the suite expects), and std exposes no
         // portable linkat. Emulate a NOFOLLOW hard-link-to-a-symlink by
         // recreating the symlink at the destination (ADR-40).
-        if !oldFollow {
-            if fi, le := os.Lstat(oldHost); le == nil && fi.Mode()&os.ModeSymlink != 0 {
-                if target, re := os.Readlink(oldHost); re == nil {
-                    if se := os.Symlink(target, newHost); se != nil {
-                        return w.fs_errno(se)
-                    }
-                    return wasiOk
+        if fi, le := os.Lstat(oldHost); le == nil && fi.Mode()&os.ModeSymlink != 0 {
+            if target, re := os.Readlink(oldHost); re == nil {
+                if se := os.Symlink(target, newHost); se != nil {
+                    return w.fs_errno(se)
                 }
+                return wasiOk
             }
         }
         return w.fs_errno(e)
