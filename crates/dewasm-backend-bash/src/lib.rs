@@ -1111,6 +1111,10 @@ impl<'a> Gen<'a> {
                 self.use_unit("rt/trap");
                 w.line("rt_trap 'unreachable' || return $?");
             }
+            // REASON: DWARF source-line back-mapping is out of scope for Bash
+            // (ADR-38); the marker renders nothing, keeping output identical to
+            // a non-`--dwarf-line` build.
+            Stmt::SourceLine(_) => {}
         }
     }
 

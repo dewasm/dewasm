@@ -17,8 +17,11 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 use wasmparser::{BlockType, FunctionBody, Operator};
 
+use crate::debug_line::LineTable;
 use crate::feature::Feature;
-use crate::ir::{self, BinOp, BrTarget, Expr, Label, LoadOp, Stmt, StoreOp, Temp, UnOp, ValType};
+use crate::ir::{
+    self, BinOp, BrTarget, Expr, Label, LoadOp, SourcePos, Stmt, StoreOp, Temp, UnOp, ValType,
+};
 use crate::module::{unsupported, val_type};
 
 /// Node-count cap for a folded expression tree. Once a consumer would build a
@@ -115,6 +118,20 @@ pub struct FuncBuilder<'a> {
     temps: BTreeSet<Temp>,
     next_label: u32,
     result: Option<ir::Func>,
+    /// DWARF line table for source back-mapping, when `--dwarf-line` is on
+    /// (ADR-38). `None` leaves the whole marker path inert.
+    line_table: Option<&'a LineTable>,
+    /// The most recent source position resolved from an operator's offset while
+    /// streaming this body. Updated per operator (holding its last *known* value
+    /// across offsets that map to nothing), then consulted when a statement is
+    /// emitted. Tracking it as operators stream — rather than resolving only the
+    /// emit-triggering operator — is what lets a folded expression (whose
+    /// consuming operator, e.g. the function `end`, may sit on a line-table gap)
+    /// still carry the source line of the operators that built it.
+    cur_pos: Option<SourcePos>,
+    /// The last source position actually emitted as a marker in this function,
+    /// so only change points produce one (per-function: reset for every body).
+    last_pos: Option<SourcePos>,
 }
 
 enum FrameKind {
@@ -158,7 +175,18 @@ impl<'a> FuncBuilder<'a> {
             temps: BTreeSet::new(),
             next_label: 0,
             result: None,
+            line_table: None,
+            cur_pos: None,
+            last_pos: None,
         }
+    }
+
+    /// Attach the DWARF line table so `emit` injects source-position markers
+    /// (ADR-38). A no-op with `None` (the default), keeping non-`--dwarf-line`
+    /// output byte-identical.
+    pub fn with_line_table(mut self, line_table: Option<&'a LineTable>) -> Self {
+        self.line_table = line_table;
+        self
     }
 
     pub fn translate(mut self, body: &FunctionBody<'_>) -> Result<ir::Func> {
@@ -175,7 +203,8 @@ impl<'a> FuncBuilder<'a> {
 
         let mut reader = body.get_operators_reader()?;
         while !self.frames.is_empty() {
-            let op = reader.read()?;
+            let (op, offset) = reader.read_with_offset()?;
+            self.track_source_pos(offset);
             self.op(op)?;
         }
 
@@ -189,7 +218,39 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn emit(&mut self, stmt: Stmt) {
+        if let Some(marker) = self.source_marker() {
+            self.cur().stmts.push(marker);
+        }
         self.cur().stmts.push(stmt);
+    }
+
+    /// Resolve `offset` (an operator's module-file position) against the line
+    /// table and remember it as the current source position, so the next
+    /// emitted statement can be annotated. An offset that maps to nothing (a
+    /// line-table gap or `end_sequence` boundary) leaves the last known position
+    /// in place rather than clearing it. A no-op without a line table (ADR-38).
+    fn track_source_pos(&mut self, offset: usize) {
+        let Some(table) = self.line_table else {
+            return;
+        };
+        if let Some(pos) = table.lookup(offset as u64) {
+            self.cur_pos = Some(pos);
+        }
+    }
+
+    /// The [`Stmt::SourceLine`] marker to place before the statement about to be
+    /// emitted, or `None` when the current source position is unchanged from the
+    /// last marker emitted (change points only) or back-mapping is off (ADR-38).
+    /// The caller pushes the returned marker; the two emit paths (`emit` and the
+    /// function's fallthrough return) share this so both are annotated.
+    fn source_marker(&mut self) -> Option<Stmt> {
+        self.line_table?;
+        let pos = self.cur_pos?;
+        if self.last_pos == Some(pos) {
+            return None;
+        }
+        self.last_pos = Some(pos);
+        Some(Stmt::SourceLine(pos))
     }
 
     /// Push a materialized value: allocate a temp for the top slot and record
@@ -540,6 +601,12 @@ impl<'a> FuncBuilder<'a> {
                     let mut values = vec![Expr::I32Const(0); arity];
                     for i in (0..arity).rev() {
                         values[i] = self.pop_expr().0;
+                    }
+                    // The fallthrough return does not route through `emit`, so
+                    // annotate it here too (ADR-38); folded bodies frequently
+                    // collapse to just this statement.
+                    if let Some(marker) = self.source_marker() {
+                        body.push(marker);
                     }
                     body.push(Stmt::Return { values });
                 }

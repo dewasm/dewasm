@@ -1,14 +1,26 @@
 //! Decode + validate a wasm binary and build the [`crate::ir::Module`].
 
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use wasmparser::{
     CompositeInnerType, ConstExpr, DataKind, ElementItems, ElementKind, ExternalKind, Operator,
     Parser, Payload, TypeRef, Validator, WasmFeatures,
 };
 
+use crate::debug_line::LineTable;
 use crate::feature::{Feature, UnsupportedError};
 use crate::func::FuncBuilder;
 use crate::ir;
+
+/// Knobs for [`build_module_with_options`]. Defaults reproduce
+/// [`build_module`] exactly, so every existing call site is byte-identical.
+#[derive(Debug, Default, Clone)]
+pub struct BuildOptions {
+    /// Parse `.debug_*` custom sections and emit [`ir::Stmt::SourceLine`]
+    /// markers at source-line change points (ADR-38). Off by default.
+    pub debug_line: bool,
+}
 
 pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow::Error {
     UnsupportedError::new(feature, detail).into()
@@ -41,6 +53,32 @@ pub fn is_component(bytes: &[u8]) -> bool {
 }
 
 pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
+    build_module_with_options(bytes, &BuildOptions::default())
+}
+
+/// Pre-pass (only when DWARF line back-mapping is requested): scan the payloads
+/// for `.debug_*` custom sections and the code section's content start, then
+/// build the line table. It runs before the main loop because `.debug_line`
+/// custom sections normally appear *after* the code section, so the table must
+/// exist before any function body is translated.
+fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
+    let mut debug_sections: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut code_section_start: u64 = 0;
+    for payload in Parser::new(0).parse_all(bytes) {
+        match payload? {
+            Payload::CustomSection(reader) if reader.name().starts_with(".debug_") => {
+                debug_sections.insert(reader.name().to_string(), reader.data().to_vec());
+            }
+            Payload::CodeSectionStart { range, .. } => {
+                code_section_start = range.start as u64;
+            }
+            _ => {}
+        }
+    }
+    LineTable::parse(&debug_sections, code_section_start)
+}
+
+pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result<ir::Module> {
     if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
         // Attribute the refusal to the proposals whose validator features
         // would make the module validate (ADR-8); an empty feature list
@@ -51,6 +89,14 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
             detail: format!("wasm validation failed: {err}"),
         }));
     }
+
+    // Build the DWARF line table up front (pre-pass), so every function body
+    // can resolve its operator offsets while translating (ADR-38).
+    let line_table = if options.debug_line {
+        collect_line_table(bytes)?
+    } else {
+        None
+    };
 
     let mut module = ir::Module {
         types: Vec::new(),
@@ -66,6 +112,10 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
         elems: Vec::new(),
         datas: Vec::new(),
         start: None,
+        debug_files: line_table
+            .as_ref()
+            .map(|t| t.files.clone())
+            .unwrap_or_default(),
     };
 
     // Type indices of defined functions, in code section order.
@@ -288,6 +338,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
                 let type_idx = defined_func_types[next_code_index];
                 next_code_index += 1;
                 let func = FuncBuilder::new(&module, &defined_func_types, type_idx)
+                    .with_line_table(line_table.as_ref())
                     .translate(&body)
                     .with_context(|| {
                         format!(

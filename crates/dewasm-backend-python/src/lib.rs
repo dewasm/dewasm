@@ -873,6 +873,14 @@ impl<'a> Gen<'a> {
                     }
                     *guarded = before || !stmt_free_targets(stmt).is_empty();
                 }
+                Stmt::SourceLine(_) => {
+                    // A comment carries no runtime effect, so render it outside
+                    // the `_br == 0` guard: a lone comment under an indented
+                    // guard block would be an empty suite Python rejects, and
+                    // the guard state must stay exactly as the surrounding
+                    // statements left it (ADR-38).
+                    self.simple_stmt(w, stmt);
+                }
                 _ => {
                     if *guarded {
                         w.line("if _br == 0:");
@@ -1036,6 +1044,11 @@ impl<'a> Gen<'a> {
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
+            }
+            Stmt::SourceLine(pos) => {
+                // A source-position back-mapping comment (ADR-38); inert.
+                let file = &self.module.debug_files[pos.file as usize];
+                w.line(format!("# {file}:{}", pos.line));
             }
             Stmt::TableInit {
                 seg,

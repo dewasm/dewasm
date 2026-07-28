@@ -1404,6 +1404,10 @@ impl<'a> Gen<'a> {
                 self.reset_marker(w, label);
                 *guarded = *guarded || !stmt_free_targets(stmt).is_empty();
             }
+            // REASON: DWARF source-line markers are out of scope for Java (ADR-38)
+            // — drop them here (not via the `_br` guard) so the guard state and
+            // emitted output stay byte-identical to a non-`--dwarf-line` build.
+            Stmt::SourceLine(_) => {}
             _ => {
                 if *guarded {
                     w.line(format!("if ({} == 0) {{", self.br()));
@@ -1615,6 +1619,10 @@ impl<'a> Gen<'a> {
                 // `throw`) avoids an "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
             }
+            // REASON: source-line markers are out of scope for Java (ADR-38);
+            // `emit_stmt` drops them before routing here, so this is unreachable
+            // but kept for the exhaustive match.
+            Stmt::SourceLine(_) => {}
             Stmt::TableInit {
                 seg,
                 table_index,
@@ -2177,7 +2185,9 @@ fn stmt_cost(stmt: &Stmt) -> usize {
         Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
             expr_cost(dst) + expr_cost(src) + expr_cost(len)
         }
-        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable => 0,
+        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable | Stmt::SourceLine(_) => {
+            0
+        }
     }
 }
 
