@@ -84,6 +84,12 @@ unchanged.
   test behaviour the CLI never produces, and env-clearing risks the interpreter
   launch itself. Ledgering the three count-exact `environ_*` tests under
   `env-passthrough` is the honest record.
+  **Superseded, 2026-07-28 ([ADR-40](40-wasi-p1-completion.md)):** the runner
+  now clears the child environment (the launch risk is handled by resolving
+  the interpreter against the parent PATH), which is exactly how upstream's
+  wasmtime adapter isolates the guest; the rows that remain ledgered on
+  interpreted backends are re-attributed to host-interpreter env injection,
+  not to ADR-31.
 - **Fixing the kind-(b) precision gaps now.** They live in the per-language
   WASI runtime and would need care across all five backends without regressing
   the curated `wasi.rs` suite — larger than this integration. They are ledgered

@@ -22,6 +22,15 @@ stdout/stderr, and every fd_write are treated as immediately ready, and clock
 subscriptions set the wait deadline. Symlink and rights-narrowing syscalls
 still remain ENOSYS.
 
+**Revision, 2026-07-28 ([ADR-40](40-wasi-p1-completion.md)):** the symlink
+family (`path_symlink`/`path_readlink`/`path_link`) and the rights syscalls
+are now implemented on every backend, superseding this ADR's two deferral
+paragraphs: containment is enforced at follow time by the existing
+`resolve_path` check (creating a link no longer waits on a posture it cannot
+close), and rights are tracked *and enforced* per fd, answering the
+"narrowing without enforcement misleads" objection by enforcing. The TOCTOU
+check-then-open caveat itself is unchanged.
+
 ## Context
 
 `Rt::WASI` (ADR-7) covered stdio, args/env, clock, and random, but every

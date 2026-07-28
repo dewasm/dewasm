@@ -60,8 +60,9 @@ units change, regenerate the matrix: `cargo xtask update-support-docs` (`cargo t
   the Bash softfloat (bit-pattern floats, the round_pack contract, the Rust-oracle test
   in `crates/dewasm-backend-bash/tests/softfloat.rs`) in
   [ADR-13](docs/adr/13-bash-softfloat-conventions.md); Ruby WASI filesystem support (the
-  `preopens:` provider kwarg, the fd-table model, and the accepted TOCTOU/symlink sandboxing
-  caveat) in [ADR-14](docs/adr/14-ruby-wasi-filesystem.md).
+  `preopens:` provider kwarg, the fd-table model, and the accepted TOCTOU sandboxing caveat)
+  in [ADR-14](docs/adr/14-ruby-wasi-filesystem.md), completed to full WASI p1 — the symlink
+  family and the enforced per-fd rights model — by [ADR-40](docs/adr/40-wasi-p1-completion.md).
 - Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:`
   headers, referenced as `Rt` ([ADR-6](docs/adr/6-runtime-units.md)); keep the headers in sync
   when editing a unit — the units lint test enforces most of it.

@@ -10,6 +10,14 @@ the four namespace-mutation syscalls, and `poll_oneoff` — all under
 `runtime/bash/units/wasi/`. The same syscalls that stay ENOSYS on Ruby stay
 ENOSYS here.
 
+**Revision, 2026-07-28 ([ADR-40](40-wasi-p1-completion.md)):** the D2
+external-command license extends to `ln -s`, `ln`, and `readlink` for the
+symlink family (namespace mutation, plus the capability-completeness clause
+for `readlink`); `fd_advise`/`fd_allocate`/`fd_renumber` and the per-fd
+rights model are implemented in pure Bash. Timestamps (`touch` fails the D2
+criterion), d_ino/dev-ino (D6, no `stat`), the D1 cross-fd read-back, and
+following a *file* symlink (D3, ELOOP) remain the declared gaps.
+
 ## Context
 
 [ADR-12](12-bash-wasi.md) built the Bash WASI surface (stdio, args/env,
