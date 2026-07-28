@@ -1,7 +1,9 @@
 # Ruby backend
 
 `--target ruby` (the default). The most complete backend and the host for the
-SQLite and CRuby north-star demos.
+SQLite and CRuby north-star demos — up to and including Rails running on the
+converted SQLite ([`examples/rails`](../../examples/rails/README.md),
+[ADR-45](../adr/45-rails-sqlite3-shim-example.md)).
 
 ## Output shape
 

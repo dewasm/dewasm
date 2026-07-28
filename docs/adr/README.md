@@ -66,6 +66,7 @@ the consequences.
 | ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted |
 | ADR-43 | [Ruby Backend: i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | ADR-44 | [Ruby Backend: Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
+| ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
 
 ## Adding a new ADR
 

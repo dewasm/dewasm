@@ -91,17 +91,38 @@ SQLITE_CFLAGS=(
   -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal
   -DSQLITE_NOHAVE_SYSTEM
 )
+# The full statement/bind/column surface: enough to implement the sqlite3
+# gem API that Rails' SQLite3Adapter uses (examples/rails) on top of it.
 SQLITE_EXPORTS=(
-  sqlite3_libversion sqlite3_open sqlite3_close
-  sqlite3_prepare_v2 sqlite3_step sqlite3_finalize
-  sqlite3_column_count sqlite3_column_text sqlite3_column_type
-  sqlite3_exec sqlite3_errmsg sqlite3_malloc sqlite3_free
+  sqlite3_libversion sqlite3_libversion_number sqlite3_open sqlite3_open_v2
+  sqlite3_close sqlite3_close_v2
+  sqlite3_prepare_v2 sqlite3_step sqlite3_reset sqlite3_clear_bindings
+  sqlite3_finalize
+  sqlite3_column_count sqlite3_column_name sqlite3_column_decltype
+  sqlite3_column_type sqlite3_column_text sqlite3_column_blob
+  sqlite3_column_bytes sqlite3_column_int64 sqlite3_column_double
+  sqlite3_bind_parameter_count sqlite3_bind_parameter_index
+  sqlite3_bind_int64 sqlite3_bind_double sqlite3_bind_text sqlite3_bind_blob
+  sqlite3_bind_null
+  sqlite3_exec sqlite3_errmsg sqlite3_errcode sqlite3_extended_errcode
+  sqlite3_error_offset
+  sqlite3_changes sqlite3_total_changes sqlite3_last_insert_rowid
+  sqlite3_get_autocommit sqlite3_busy_timeout sqlite3_complete
+  sqlite3_malloc sqlite3_free
+)
+BINDING_EXPORTS=(
+  run_query
+  sqlite3_open sqlite3_close sqlite3_exec sqlite3_errmsg
+  sqlite3_malloc sqlite3_free
 )
 
+# The stamp covers the source sha *and* the export lists, so editing either
+# retriggers the build.
+sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]}"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if [ -f cache/sqlite3-shell.wasm ] && [ -f cache/libsqlite3.wasm ] \
   && [ -f cache/sqlite3-binding.wasm ] \
-  && [ "$(cat "$sqlite_stamp" 2>/dev/null || true)" = "$SQLITE_SHA256" ]; then
+  && [ "$(cat "$sqlite_stamp" 2>/dev/null || true)" = "$sqlite_key" ]; then
   echo "sqlite3: cached"
 else
   command -v zig >/dev/null || {
@@ -135,11 +156,6 @@ else
   # symbols this callback flow needs are exported; the import lands via the
   # import_module/import_name attributes in src/sqlite3_binding.c.
   echo "sqlite3: building sqlite3-binding.wasm (zig cc, reactor + host callback)"
-  BINDING_EXPORTS=(
-    run_query
-    sqlite3_open sqlite3_close sqlite3_exec sqlite3_errmsg
-    sqlite3_malloc sqlite3_free
-  )
   binding_exports=()
   for e in "${BINDING_EXPORTS[@]}"; do binding_exports+=("-Wl,--export=$e"); done
   zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
@@ -150,7 +166,7 @@ else
     -o cache/sqlite3-binding.wasm
   rm -rf "$tmp"
   trap - EXIT
-  printf '%s\n' "$SQLITE_SHA256" >"$sqlite_stamp"
+  printf '%s\n' "$sqlite_key" >"$sqlite_stamp"
   echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"
 fi
 
