@@ -25,7 +25,7 @@ pub use apps::{
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
-    SQLITE3_FILE_C_API,
+    SQLITE3_FILE_C_API, TREESITTER_PARSE,
 };
 pub use apps_fs::{
     run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
@@ -449,6 +449,25 @@ macro_rules! pcap_compile_e2e {
         #[test]
         fn pcap_compile() {
             $crate::run_capi_case(&$lang, &$crate::PCAP_COMPILE, $glue);
+        }
+    };
+}
+
+/// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case
+/// [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a
+/// fixed JSON snippet and prints the parse tree's S-expression. Heavy (a
+/// ~1.5 MB reactor artifact reconverted per run), so gated like the sqlite
+/// C-API cases.
+#[macro_export]
+macro_rules! treesitter_parse_e2e {
+    ($lang:expr, $glue:expr) => {
+        #[cfg_attr(
+            not(feature = "heavy_test"),
+            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
+        )]
+        #[test]
+        fn treesitter_parse() {
+            $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
         }
     };
 }

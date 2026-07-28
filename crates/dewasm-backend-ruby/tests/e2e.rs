@@ -20,8 +20,8 @@ use dewasm_test_helper::{
     libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
     qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
     sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest,
+    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, BackendUnderTest,
 };
 
 pub struct Ruby;
@@ -432,6 +432,30 @@ inst.invoke("free", prog)
 puts "BPF-OK"
 "##;
 
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
+/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
+/// malloc'd NUL-terminated C string) from guest memory.
+const RUBY_TREESITTER_PARSE: &str = r##"
+inst = Treesitter.new
+inst.invoke("_initialize")
+mem = inst.memory
+
+def cstr(inst, mem, s)
+  p = inst.invoke("malloc", s.bytesize + 1)
+  mem.init(p, "#{s}\0", 0, s.bytesize + 1)
+  p
+end
+
+src = %q({"key": [1, true, null]})
+r = inst.invoke("parse_source", cstr(inst, mem, src), src.bytesize)
+raise "parse failed" if r.zero?
+fin = r
+fin += 1 while mem.i32_load8_u(fin) != 0
+puts mem.read_string(r, fin - r)
+inst.invoke("free", r)
+puts "TS-OK"
+"##;
+
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
@@ -493,6 +517,7 @@ libsqlite3_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Ruby, RUBY_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Ruby, RUBY_PCAP_COMPILE);
+treesitter_parse_e2e!(Ruby, RUBY_TREESITTER_PARSE);
 
 shared_table_e2e!(Ruby, RUBY_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Ruby, RUBY_EMBEDDED_COEXIST_GLUE);

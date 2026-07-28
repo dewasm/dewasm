@@ -27,6 +27,7 @@ returns.
 | ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
 | libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go⁸) |
+| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go¹⁰) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains
 (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index
@@ -231,6 +232,22 @@ stand-in is transparent; an invalid filter would trap rather than return an
 error. Name-based filters (`host example.com`) are likewise out of scope:
 `pcap_binding.c` stubs the missing `getaddrinfo`/`getnetbyname`/`getprotobyname`
 to report "not found".
+
+¹⁰ **tree-sitter (Track A).** The tree-sitter incremental-parsing runtime
+0.26.11 (single-TU amalgamation `lib/src/lib.c`) plus the pre-generated
+tree-sitter-json 0.24.8 grammar (`src/parser.c`), built from the pinned
+upstream releases with `zig cc -mexec-model=reactor` as a C-API library. Audit:
+reference-types *encoding only*¹, in scope — unlike libpcap, the runtime needs
+no shim (no `setjmp`, no host lookups). Our own
+`examples/apps/src/treesitter_binding.c` exports `parse_source`, which parses a
+source string and returns the parse tree's S-expression (`ts_node_string`, a
+malloc'd C string) into guest memory. The C-API case (`treesitter_parse`,
+`treesitter_parse_e2e!`) parses the fixed snippet `{"key": [1, true, null]}` on
+Ruby, Python, and Go and pins the S-expression `(document (object (pair key:
+(string (string_content)) value: (array (number) (true) (null)))))`
+(deterministic — tree-sitter's node naming is fixed by the pinned grammar).
+`heavy_test`-gated like the other reactor-library C-API cases; Bash does not
+participate (ADR-12).
 
 ## Deferred: pandoc
 

@@ -201,6 +201,54 @@ else
   echo "libpcap: -> cache/libpcap.wasm"
 fi
 
+# --- tree-sitter: the incremental-parsing runtime plus the tree-sitter-json
+# grammar, built from the pinned upstream releases with zig (ADR-22) as a
+# reactor library. The runtime is a single-TU amalgamation (lib/src/lib.c);
+# tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen). Our
+# own src/treesitter_binding.c exports parse_source(), which parses a source
+# string and returns the parse tree's S-expression (ts_node_string). One
+# combined stamp covers both source checksums.
+TS_URL="https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.11.tar.gz"
+TS_SHA256="1bab01ed21464f3272665b9c60e39ee79f68da1333e80b23f2c9356569d06971"
+TS_DIR="tree-sitter-0.26.11"
+TSJSON_URL="https://github.com/tree-sitter/tree-sitter-json/archive/refs/tags/v0.24.8.tar.gz"
+TSJSON_SHA256="acf6e8362457e819ed8b613f2ad9a0e1b621a77556c296f3abea58f7880a9213"
+TSJSON_DIR="tree-sitter-json-0.24.8"
+
+# One stamp covering both pinned checksums (order-fixed).
+ts_stamp="cache/treesitter.src-sha256"
+ts_want="$TS_SHA256 $TSJSON_SHA256"
+if [ -f cache/treesitter.wasm ] \
+  && [ "$(cat "$ts_stamp" 2>/dev/null || true)" = "$ts_want" ]; then
+  echo "treesitter: cached"
+else
+  command -v zig >/dev/null || {
+    echo "treesitter: zig not found — install zig (e.g. brew install zig) to build the tree-sitter app" >&2
+    exit 1
+  }
+  echo "treesitter: fetching $TS_URL"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL -o "$tmp/ts.tar.gz" "$TS_URL"
+  echo "$TS_SHA256  $tmp/ts.tar.gz" | shasum -a 256 -c - >/dev/null
+  echo "treesitter: fetching $TSJSON_URL"
+  curl -fsSL -o "$tmp/tsjson.tar.gz" "$TSJSON_URL"
+  echo "$TSJSON_SHA256  $tmp/tsjson.tar.gz" | shasum -a 256 -c - >/dev/null
+  tar xzf "$tmp/ts.tar.gz" -C "$tmp"
+  tar xzf "$tmp/tsjson.tar.gz" -C "$tmp"
+  echo "treesitter: building treesitter.wasm (zig cc, reactor)"
+  zig cc -target wasm32-wasi -mexec-model=reactor -O2 \
+    -I "$tmp/$TS_DIR/lib/include" -I "$tmp/$TS_DIR/lib/src" \
+    -I "$tmp/$TSJSON_DIR/src" \
+    "$tmp/$TS_DIR/lib/src/lib.c" "$tmp/$TSJSON_DIR/src/parser.c" src/treesitter_binding.c \
+    -Wl,--export=parse_source -Wl,--export=malloc -Wl,--export=free \
+    -o cache/treesitter.wasm
+  rm -rf "$tmp"
+  trap - EXIT
+  printf '%s\n' "$ts_want" >"$ts_stamp"
+  echo "treesitter: -> cache/treesitter.wasm"
+fi
+
 # --- minigzip: zlib's stdio (de)compression demo, built from the pinned
 # zlib source release with zig (ADR-22). Integer-only and tiny, with binary
 # stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.

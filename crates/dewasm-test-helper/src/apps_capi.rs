@@ -116,6 +116,23 @@ pub const PCAP_COMPILE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
+/// tree-sitter JSON parse (ADR-22): our own committed C
+/// (examples/apps/src/treesitter_binding.c) exports `parse_source`, which
+/// parses a source string with the tree-sitter runtime + the pre-generated
+/// tree-sitter-json grammar and returns the parse tree's S-expression (a
+/// malloc'd C string) via `ts_node_string`. The glue parses the fixed snippet
+/// `{"key": [1, true, null]}`, prints the S-expression, and a sentinel. The
+/// output is deterministic (tree-sitter's node naming is fixed by the pinned
+/// grammar). In-memory, so `{scratch}` goes unused.
+pub const TREESITTER_PARSE: CApiCase = CApiCase {
+    name: "treesitter_parse",
+    wasm: "treesitter",
+    class: "Treesitter",
+    expect_stdout: "(document (object (pair key: (string (string_content)) \
+                    value: (array (number) (true) (null)))))\nTS-OK\n",
+    assert_host: assert_none,
+};
+
 /// Run one [`CApiCase`] for `lang` with its per-language `glue`
 /// unconditionally (the perf opt-out lives at the macro/feature level, see the
 /// module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the

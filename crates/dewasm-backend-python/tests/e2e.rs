@@ -15,8 +15,8 @@ use dewasm_test_helper::{
     partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
     qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
     sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest,
+    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, BackendUnderTest,
 };
 
 pub struct Python;
@@ -439,6 +439,32 @@ inst.invoke("free", prog)
 print("BPF-OK")
 "#;
 
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
+/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
+/// malloc'd NUL-terminated C string) from guest memory.
+const PYTHON_TREESITTER_PARSE: &str = r#"
+inst = Treesitter({})
+inst.invoke("_initialize")
+mem = inst.memory
+
+
+def cstr(s):
+    b = s.encode("utf-8") + b"\x00"
+    p = inst.invoke("malloc", len(b))
+    mem.init(p, b, 0, len(b))
+    return p
+
+
+src = '{"key": [1, true, null]}'
+b = src.encode("utf-8")
+r = inst.invoke("parse_source", cstr(src), len(b))
+assert r != 0, "parse failed"
+end = mem.data.index(0, r)
+print(mem.read_string(r, end - r).decode("utf-8"))
+inst.invoke("free", r)
+print("TS-OK")
+"#;
+
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
@@ -484,6 +510,7 @@ libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
+treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 
 shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — Python's library Embedded output emits

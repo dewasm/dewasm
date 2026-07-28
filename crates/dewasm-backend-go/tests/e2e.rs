@@ -27,8 +27,8 @@ use dewasm_test_helper::{
     libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
     qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
     sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, BackendUnderTest, PtyCommand,
+    sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Go;
@@ -607,6 +607,37 @@ const GO_PCAP_COMPILE: &str = r#"func main() {
 }
 "#;
 
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
+/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
+/// malloc'd NUL-terminated C string) from guest memory.
+const GO_TREESITTER_PARSE: &str = r#"func main() {
+	inst := NewTreesitter(nil, nil, nil, nil)
+	inst.Exports["_initialize"].(func())()
+	mem := inst.memory
+	malloc := inst.Exports["malloc"].(func(uint32) uint32)
+	cstr := func(s string) uint32 {
+		b := append([]byte(s), 0)
+		p := malloc(uint32(len(b)))
+		mem.init(uint64(p), b, 0, uint64(len(b)))
+		return p
+	}
+
+	src := "{\"key\": [1, true, null]}"
+	parse := inst.Exports["parse_source"].(func(uint32, uint32) uint32)
+	r := parse(cstr(src), uint32(len(src)))
+	if r == 0 {
+		panic("parse failed")
+	}
+	end := r
+	for mem.data[end] != 0 {
+		end++
+	}
+	fmt.Println(string(mem.read_string(uint64(r), uint64(end-r))))
+	inst.Exports["free"].(func(uint32))(r)
+	fmt.Println("TS-OK")
+}
+"#;
+
 // ---------------------------------------------------------------------
 // Multi-module drive glue.
 
@@ -659,6 +690,7 @@ libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
+treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 
 shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is
