@@ -368,37 +368,6 @@ pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
     );
 }
 
-/// The Bash side of the standalone `--dir` interface (ADR-31): Bash has no
-/// filesystem support (ADR-12), so a `--dir` flag must fail loudly *before* the
-/// guest runs, not be silently ignored (ADR-0). Convert a WASI stdio program
-/// (`hello.wat`, which Bash can convert) in standalone mode, run it with a
-/// `--dir` flag, and require a nonzero exit, the "no filesystem support"
-/// message on stderr, and that the guest's own output never appeared.
-pub fn run_standalone_dir_unsupported(lang: &dyn BackendUnderTest) {
-    let scratch = scratch_dir(&format!("standalone-dir-unsupported-{}", lang.name()));
-    let bytes = wat::parse_file(examples_dir().join("hello.wat")).expect("parse wat");
-    let program = lang.convert_app(&bytes, Mode::Standalone, "hello");
-    let output = lang.run_standalone_dir(&program, &[("/", scratch.as_path())], &[], b"");
-    assert!(
-        !output.status.success(),
-        "standalone --dir under {} must fail loudly, but it succeeded",
-        lang.name()
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("no filesystem support"),
-        "standalone --dir under {}: expected a 'no filesystem support' error, got: {stderr:?}",
-        lang.name()
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "",
-        "standalone --dir under {}: the guest ran despite the rejected --dir",
-        lang.name()
-    );
-    println!("standalone --dir under {}: rejected loudly", lang.name());
-}
-
 /// Run the root-preopen containment probe (`wasi_root_containment_e2e!`): a
 /// preopen whose realpath is the filesystem root must not reject every path
 /// (the containment check would otherwise build the prefix "//" and never

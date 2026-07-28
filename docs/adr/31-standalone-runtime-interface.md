@@ -8,6 +8,10 @@ HOST::GUEST` flags parsed by the generated main; `DEWASM_PREOPEN` removed;
 argv[0], env, and the trap exit code unified; Bash rejects `--dir` loudly. The
 reference is [docs/standalone-interface.md](../standalone-interface.md).
 
+**Revision, 2026-07-27:** Bash's `--dir` rejection is superseded by
+[ADR-34](34-bash-wasi-filesystem.md) — the Bash backend now honors `--dir`
+with real filesystem support.
+
 ## Context
 
 A converted `--mode standalone` program is a real CLI: a WASI guest wrapped in a

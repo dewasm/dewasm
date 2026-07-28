@@ -55,6 +55,7 @@ the consequences.
 | ADR-31 | [Standalone Runtime Interface (argv, --dir, env, exit)](31-standalone-runtime-interface.md) | Accepted |
 | ADR-32 | [Build-time Expression Folding](32-expression-folding.md) | Accepted |
 | ADR-33 | [`IO::Buffer`-Backed Linear Memory for Ruby](33-ruby-io-buffer-memory.md) | Accepted |
+| ADR-34 | [Bash WASI Filesystem](34-bash-wasi-filesystem.md) | Accepted (landing incrementally) |
 | ADR-35 | [Bash Cross-Module Linking](35-bash-cross-module-linking.md) | Accepted |
 
 ## Adding a new ADR

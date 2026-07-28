@@ -36,7 +36,7 @@ it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the
 | --- | --- | --- |
 | Ruby | — | `ruby prog.rb [--dir H::G]... [args...]` |
 | Python | — | `python3 prog.py [--dir H::G]... [args...]` |
-| Bash | — | `bash prog.sh [args...]` — **no `--dir`** (see below) |
+| Bash | — | `bash prog.sh [--dir H::G]... [args...]` |
 | Go | `go build -o prog prog.go` | `./prog [--dir H::G]... [args...]` |
 | Java | `javac Main.java` | `java Main [--dir H::G]... [args...]` |
 
@@ -51,21 +51,12 @@ it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the
 | `_start` returns | Process exits `0`. |
 | trap | `trap: <message>` on stderr, process exits **134**. |
 
-## Bash has no `--dir`
+## Bash `--dir`
 
-The Bash backend has no WASI filesystem support ([ADR-12](adr/12-bash-wasi.md)).
-Rather than silently ignore a directory mount, a leading `--dir` fails loudly
-([ADR-0](adr/0-foundation.md)):
-
-```console
-$ bash prog.sh --dir /data::/
-the bash backend has no filesystem support; --dir is not accepted
-$ echo $?
-2
-```
-
-Bash reaches the same exit/trap surface as the other backends through its
-status-cascade protocol (133 = `proc_exit`, 134 = trap;
+The Bash backend honors `--dir` with real WASI filesystem support
+([ADR-34](adr/34-bash-wasi-filesystem.md)); a missing `--dir` argument fails
+loudly with exit 2. Bash reaches the same exit/trap surface as the other
+backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap;
 [ADR-11](adr/11-bash-backend-lowering.md)/[ADR-12](adr/12-bash-wasi.md)).
 
 ## Example
