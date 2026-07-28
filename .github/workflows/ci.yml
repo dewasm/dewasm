@@ -28,7 +28,43 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
 
+  apps-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      key: ${{ steps.appskey.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0 # keep in sync with local dev
+      - name: Install fetch.sh build tools (binaryen, bison, flex)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends binaryen bison flex
+      - name: Add wasm32-wasip1 target (fetch.sh builds ripgrep with it)
+        run: rustup target add wasm32-wasip1
+      # The libpcap/tree-sitter/ripgrep stamps in fetch.sh fold in
+      # `wasm-opt --version`, so the apps-cache key must too: a binaryen bump
+      # must yield a new key so the rebuilt artifacts get re-saved.
+      - name: Compute apps cache key
+        id: appskey
+        run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-${{ hashFiles('examples/apps/fetch.sh', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: examples/apps/cache
+          key: ${{ steps.appskey.outputs.key }}
+          restore-keys: |
+            apps-v1-${{ runner.os }}-
+      - name: Populate apps cache (no-op on full cache hit)
+        run: examples/apps/fetch.sh
+
   test:
+    needs: apps-cache
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [ruby, bash, python, go, java]
     runs-on: ubuntu-latest
     # The --include-ignored sweep (full spec suites + heavy apps) has
     # unmeasured wall time; give it generous headroom and tighten later.
@@ -36,22 +72,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true # tests/spec + tests/wasi-testsuite
-      - uses: ./.github/actions/setup-tests
+          submodules: true
+      - if: matrix.backend == 'ruby'
+        uses: ruby/setup-ruby@v1
         with:
-          rust-cache-shared-key: tests
+          ruby-version: '3.4'
+      - if: matrix.backend == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - if: matrix.backend == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test-${{ matrix.backend }}
           # Only main writes the shared build cache; PRs restore it read-only
           # to keep the repo under the 10 GB cache budget.
-          rust-cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: examples/apps/cache
+          key: ${{ needs.apps-cache.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Test
+        if: github.event_name == 'pull_request'
+        run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
+      - name: Test (including heavy cases)
+        if: github.event_name != 'pull_request'
+        run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast -- --include-ignored
+
+  core:
+    needs: apps-cache
+    runs-on: ubuntu-latest
+    # The --include-ignored sweep (full spec suites + heavy apps) has
+    # unmeasured wall time; give it generous headroom and tighten later.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      # dewasm-cli holds the cross-backend tests, so this job needs every
+      # backend toolchain (bash and python ship with the runner).
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: core
+          # Only main writes the shared build cache; PRs restore it read-only
+          # to keep the repo under the 10 GB cache budget.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: examples/apps/cache
+          key: ${{ needs.apps-cache.outputs.key }}
+          fail-on-cache-miss: true
       # `--include-ignored` un-ignores the apps_wasmtime golden-freshness
       # suite, which execs `wasmtime run` and fails loudly without it (ADR-15).
       - uses: bytecodealliance/actions/wasmtime/setup@v1
         if: github.event_name != 'pull_request'
         with:
-          version: '47.0.2' # matches local dev; bump deliberately
+          version: '47.0.2'
       - name: Test
         if: github.event_name == 'pull_request'
-        run: cargo test --no-fail-fast
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast
       - name: Test (including heavy cases)
         if: github.event_name != 'pull_request'
-        run: cargo test --no-fail-fast -- --include-ignored
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast -- --include-ignored
