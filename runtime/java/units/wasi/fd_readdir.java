@@ -17,9 +17,8 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     }
     long lim = Integer.toUnsignedLong(bufLen);
     java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-    // The u64 cookie lives in a signed long: compare unsigned so a high-bit
-    // cookie reads as a huge position past any snapshot's end (an empty
-    // result, matching wasmtime) instead of a negative subscript.
+    // u64 cookie in a signed long: compare unsigned so a high-bit cookie is
+    // past-the-end (empty result), not a negative subscript.
     long i = cookie;
     while (Long.compareUnsigned(i, dir.entries.size()) < 0 && out.size() < lim) {
         Dirent ent = dir.entries.get((int) i);

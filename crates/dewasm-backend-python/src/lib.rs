@@ -240,8 +240,7 @@ impl Backend for PythonBackend {
         w.line("import struct");
         w.line("import sys");
         if opts.mode == Mode::Standalone {
-            // Backs the ADR-28 big-stack guest thread in the standalone
-            // entrypoint below; library mode never needs it.
+            // For the ADR-28 guest thread in the standalone entrypoint.
             w.line("import threading");
         }
         w.line("import time");
@@ -315,15 +314,10 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
-            // Deep-but-valid guest recursion needs far more than CPython's
-            // default ~1000-frame limit, and raising the limit alone risks a
-            // C-stack overflow, so the guest runs on a big-stack thread with a
-            // raised recursion limit — the same values the spec harness uses
-            // (ADR-28). The thread carries any exception back so proc_exit and
-            // traps still resolve to ADR-31's exit codes via `sys.exit` on the
-            // main thread. A daemon thread lets a KeyboardInterrupt delivered
-            // to the main thread (blocked in `join`) exit the process without
-            // waiting for the guest, as when the guest ran on the main thread.
+            // ADR-28: run the guest on a big-stack thread with a raised
+            // recursion limit (the spec harness's values). The thread carries
+            // exceptions back so proc_exit/traps still exit via the main
+            // thread; daemon so Ctrl-C during `join` still terminates.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");

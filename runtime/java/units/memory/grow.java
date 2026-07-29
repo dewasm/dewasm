@@ -1,9 +1,6 @@
-// memory.grow: extend by `delta` pages (delta read unsigned); returns the old
-// size in pages, or -1 (i32 0xFFFFFFFF) if the request cannot be satisfied.
-// The byte size is computed in long and checked against the byte[] cap before
-// the int cast (32768 pages is already 2^31 bytes, one past what a Java array
-// can hold), and an allocation failure is likewise reported as -1 — wasm lets
-// grow fail, never crash.
+// memory.grow: returns the old size in pages, or -1 when unsatisfiable.
+// Byte size checked in long against the byte[] cap (32768 pages > max array);
+// allocation failure is also -1 — wasm lets grow fail, never crash.
 int grow(int delta) {
     int old = d.length / 65536;
     long want = (long) old + (delta & 0xFFFFFFFFL);

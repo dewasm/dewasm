@@ -1,50 +1,28 @@
 //! Adjacent active-data-segment merging (ADR-41).
 //!
-//! Toolchains such as LLVM can split a program's initialized data across
-//! thousands of tiny active segments (ruby.wasm ships 7871). Every backend
-//! emits one initializer per active segment, so collapsing runs of
-//! consecutive, near-adjacent segments into a single zero-filled blob is a
-//! semantics-preserving win that composes with every downstream backend for
-//! free. This pass runs unconditionally at the end of module building.
+//! Toolchains split initialized data across thousands of tiny active segments
+//! (ruby.wasm ships 7871); merging runs of near-adjacent ones into a single
+//! zero-filled blob shrinks every backend's output. Runs at the end of module
+//! building.
 //!
-//! Four guards make the rewrite sound; failing any of them bails the whole
-//! pass (leaving `module.datas` untouched):
+//! Four guards keep the rewrite sound; failing any bails the whole pass:
 //!
-//! 1. **No bulk-memory segment references.** `memory.init` / `data.drop`
-//!    address segments *by index*; merging renumbers and drops indices, so a
-//!    single such op anywhere makes the pass unsafe.
-//! 2. **Declaration order is never reordered.** Only runs of segments already
-//!    consecutive in `module.datas` are merged; active segments initialize in
-//!    order and later writes win, so preserving order preserves the final
-//!    memory image.
-//! 3. **Active `i32.const` segments are globally ascending and
-//!    non-overlapping.** This proves no other constant-offset segment occupies
-//!    a gap between two merged segments, so zero-filling that gap cannot erase
-//!    a byte some other constant-offset segment wrote.
-//! 4. **Every active segment has an `i32.const` offset.** A `global.get`
-//!    offset writes to a runtime-unknown address that guard 3 cannot exclude
-//!    from the gaps: if it lands inside one and a merged blob is emitted after
-//!    it, the gap's zero fill silently clobbers its bytes (issue #28 — with
-//!    `[(global.get base) "XX", (i32.const 0) "ab", (i32.const 8) "cd"]` and
-//!    `base = 4`, the merged blob's zeros at 2..8 erase "XX" at 4..6). One
-//!    such segment anywhere therefore bails the whole pass, keeping guard 3's
-//!    "no segment occupies a gap" claim true for *every* segment. This forgoes
-//!    merging in mixed modules, but real toolchain output is all-const
-//!    (non-PIC) or all-`global.get __memory_base` (PIC, nothing to merge
-//!    either way), so nothing of value is lost.
+//! 1. **No `memory.init`/`data.drop`** — they address segments by index.
+//! 2. **Declaration order is preserved** — segments apply in order, later
+//!    writes win.
+//! 3. **Active `i32.const` segments are ascending and non-overlapping** — so
+//!    no const-offset segment sits inside a zero-filled gap.
+//! 4. **No `global.get` offsets** — such a segment's runtime-unknown target
+//!    could sit inside a gap and be clobbered by the blob's zeros (issue #28).
 //!
-//! Passive segments (`offset: None`) carry no standalone memory effect once
-//! guard 1 has ruled out `memory.init`, so they pass straight through without
-//! closing an open run.
+//! Passive segments carry no memory effect once guard 1 holds and pass
+//! through without closing a run.
 
 use crate::ir::{DataSegment, Expr, Module, Stmt};
 
-/// Largest byte gap between two consecutive active segments that is still worth
-/// bridging with zero fill. The bytes are emitted inline by every backend
-/// unconditionally (the `--data-file` externalization threshold is a separate,
-/// backend-visible concern; this pass runs in the core, which cannot see
-/// `GenOptions`), so the figure is tuned to the always-on inline cost rather
-/// than to wasm2go's externalize-only 4096.
+/// Largest gap worth bridging with zero fill. Tuned to the always-on inline
+/// cost (the core cannot see `GenOptions`), not wasm2go's externalize-only
+/// 4096.
 const MAX_MERGE_GAP: u64 = 64;
 
 /// Merge runs of adjacent active data segments in `module`, in place.
@@ -61,9 +39,7 @@ pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
         return;
     }
 
-    // Guard 4: no active segment may have a non-constant (global.get) offset —
-    // its runtime-unknown target could sit inside a gap a merged blob
-    // zero-fills.
+    // Guard 4: no non-constant (global.get) offsets.
     if module
         .datas
         .iter()
@@ -100,9 +76,8 @@ pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
             }
             // Passive: no standalone memory effect, keep the run open.
             None => out.push(DataSegment { offset: None, data }),
-            // Non-constant offset: unreachable under guard 4; kept as an
-            // order-preserving pass-through so a future guard change cannot
-            // silently reorder writes.
+            // Unreachable under guard 4; kept as an order-preserving
+            // pass-through.
             Some(other) => {
                 if let Some((run_start, acc)) = run.take() {
                     out.push(active_segment(run_start, acc));
