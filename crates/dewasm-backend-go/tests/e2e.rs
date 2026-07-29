@@ -174,15 +174,19 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
     let bin = cache.join(format!("prog-{hash:016x}"));
 
     if !bin.exists() {
-        let src = cache.join(format!("src-{hash:016x}.go"));
-        std::fs::write(&src, source).unwrap();
-        // Build to a unique path, then rename onto the cache key so concurrent
-        // test threads never hand out a half-written binary.
-        let tmp_bin = cache.join(format!(
-            "prog-{hash:016x}.{}.{}",
+        // Both the source and the binary get per-attempt unique names: two
+        // threads with the same hash (cowsay's args and stdin cases) may build
+        // concurrently, and a shared source path would let one truncate the
+        // file mid-read of the other's `go build` (issue #19). Only the final
+        // rename onto the cache key is shared, and that is atomic.
+        let unique = format!(
+            "{hash:016x}.{}.{}",
             std::process::id(),
             COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
+        );
+        let src = cache.join(format!("src-{unique}.go"));
+        std::fs::write(&src, source).unwrap();
+        let tmp_bin = cache.join(format!("prog-{unique}"));
         let build = Command::new(&go)
             .arg("build")
             .arg("-o")
@@ -194,6 +198,7 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
             return Err(build);
         }
         let _ = std::fs::rename(&tmp_bin, &bin);
+        let _ = std::fs::remove_file(&src);
     }
 
     Ok(bin)
