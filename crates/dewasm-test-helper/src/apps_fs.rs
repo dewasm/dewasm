@@ -16,10 +16,10 @@
 //! preopens directly, so the same case consts feed both the backend macros and
 //! the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
-//! These cases are heavy (they reconvert qjs/sqlite and stage ripgrep's 22 MB
+//! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB
 //! binary), so the perf opt-out lives at the macro/feature level: each
 //! per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as
-//! `#[ignore]`d unless the expanding backend crate's `heavy_test` feature is
+//! `#[ignore]`d unless the expanding backend crate's `slow_test` feature is
 //! enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};

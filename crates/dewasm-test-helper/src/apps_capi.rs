@@ -17,7 +17,7 @@
 //! — it has no WASI filesystem and no host-language object model to plumb a C
 //! API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so
 //! each per-case macro expands its generated `#[test]` as `#[ignore]`d unless
-//! the expanding backend crate's `heavy_test` feature is enabled; [`run_capi_case`]
+//! the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`]
 //! itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};

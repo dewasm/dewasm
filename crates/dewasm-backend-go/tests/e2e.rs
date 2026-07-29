@@ -672,23 +672,29 @@ standalone_dir_e2e!(Go);
 
 cowsay_args_e2e!(Go);
 cowsay_stdin_e2e!(Go);
-qjs_eval_e2e!(Go);
-sqlite3_shell_e2e!(Go);
+// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s
+// that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's
+// memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under
+// `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds
+// (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`,
+// `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
+qjs_eval_e2e!(Go, ultra);
+sqlite3_shell_e2e!(Go, ultra);
 gzip_e2e!(Go);
 
-qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE);
+qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
 qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Go, GO_RG_SEARCH_GLUE);
-cpython_hello_e2e!(Go, GO_CPYTHON_GLUE);
+rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
+cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
 // cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source
 // exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured
 // >6 min); see docs/apps-audit.md.
 qjs_repl_pty_e2e!(Go);
 
-libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK);
+libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
+sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
+sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
 pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 

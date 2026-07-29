@@ -69,6 +69,7 @@ the consequences.
 | ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
 | ADR-46 | [Host-OS-Scoped Expected-Failure Ledgers for the WASI Testsuite Harness](46-host-scoped-wasi-ledgers.md) | Accepted |
 | ADR-47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
+| ADR-48 | [Two-Tier Slow-Test Gating (slow_test / ultra_slow_test)](48-slow-test-tiers.md) | Accepted |
 
 ## Adding a new ADR
 

@@ -206,34 +206,35 @@ standalone_dir_e2e!(Bash);
 
 cowsay_args_e2e!(Bash);
 cowsay_stdin_e2e!(Bash);
-// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but heavy — Bash's softfloat
+// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but slow — Bash's softfloat
 // makes QuickJS/SQLite take tens of seconds, so the generated tests are
-// `#[ignore]`d by default; `--features heavy_test` or `-- --include-ignored` runs
+// `#[ignore]`d by default; `--features slow_test` or `-- --include-ignored` runs
 // them anyway (same as every other backend, ADR-27 revision).
 qjs_eval_e2e!(Bash);
 sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default,
-// unlike the heavy floating-point apps (QuickJS/SQLite).
+// unlike the slow floating-point apps (QuickJS/SQLite).
 gzip_e2e!(Bash);
 
 // Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens,
 // path_open, and positioned I/O, so the three small-fixture fs apps are
-// wired (all heavy, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
+// wired (all slow, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
 qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
 qjs_repl_e2e!(Bash, BASH_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here
-// alongside them: it shares their standalone-mode QuickJS conversion and is
-// gated the same way. It is markedly slower than the other heavy cases —
-// every keystroke of the scripted session re-enters QuickJS's interactive
-// line editor (redraw/completion), and each successive evaluation measured
-// slower than the last (first prompt ~135s, then +~65s, then +~330s for
-// `[3,1,2].sort()`) — so it will exceed the shared 180s per-prompt
-// `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) under
-// `--features heavy_test`/`--include-ignored`. Left wired rather than
-// unwired per ADR-15 (fail loud, not silently skip): a timeout is still an
-// honest signal, and the case is excluded from `cargo test`'s default run.
-qjs_repl_pty_e2e!(Bash);
+// alongside them: it shares their standalone-mode QuickJS conversion. It is
+// markedly slower than every other case — every keystroke of the scripted
+// session re-enters QuickJS's interactive line editor (redraw/completion), and
+// each successive evaluation measured slower than the last (first prompt ~135s,
+// then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s
+// per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and
+// timed out on CI (#22). It is therefore pinned to the `ultra` tier (ADR-48):
+// kept out of CI's `slow_test` sweep and run only under
+// `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release
+// verification. Left wired rather than unwired per ADR-15 (fail loud, not
+// silently skip): a timeout is still an honest signal.
+qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these
 // wasm binaries are tens of MB; the Bash backend's per-instruction lowering
 // (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's

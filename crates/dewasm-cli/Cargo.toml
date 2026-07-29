@@ -10,6 +10,13 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Opt-in: expands the slow cross-backend `--data-file` real-app cases
+# (tests/data_file.rs — convert + run/build the cached qjs.wasm) as active
+# `#[test]`s instead of `#[ignore]`d ones. CI's main sweep tier; see
+# docs/testing.md.
+slow_test = []
+
 [lib]
 name = "dewasm_cli"
 path = "src/lib.rs"

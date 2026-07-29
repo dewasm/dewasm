@@ -2,7 +2,7 @@
 //! wired up for the Python backend. Per the ADR-27 revision this file holds ONLY
 //! the [`BackendUnderTest`] impl, named glue string constants, and per-case
 //! macro invocations. Python covers full WASI preview 1 incl. the filesystem
-//! (ADR-28), so it wires every WASI kind, the heavy `apps`/`fs_apps`/`capi`
+//! (ADR-28), so it wires every WASI kind, the slow-tier `apps`/`fs_apps`/`capi`
 //! suites, and the shared-table multi-module case.
 
 use std::path::PathBuf;
