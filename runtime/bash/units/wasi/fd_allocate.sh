@@ -15,6 +15,13 @@ wasi_fd_allocate() {
     R0=28 # EINVAL
     return 0
   fi
+  if (( __len > 0x7fffffffffffffff - __offset )); then
+    # offset+len would wrap bash's signed-64 arithmetic; no file can be that
+    # large. EIO matches Ruby/Python, whose OS-level EFBIG falls through their
+    # generic errno mapping as ERRNO_IO.
+    R0=29 # EIO
+    return 0
+  fi
   local __want=$(( __offset + __len ))
   local -n __wbuf=${__p}wbuf${__fd}
   local -n __wdirty=${__p}wdirty
