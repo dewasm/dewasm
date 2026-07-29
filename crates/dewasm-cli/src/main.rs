@@ -98,6 +98,19 @@ fn main() -> Result<()> {
                      must be written to a real path next to the generated program"
                 );
             }
+            // The sidecar and the primary source are written independently
+            // (the loop below); a --data-file that resolves to the same file
+            // as -o would clobber the freshly written source with the data
+            // blob. Fail before anything is written (ADR-0).
+            if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
+                bail!(
+                    "--data-file {} resolves to the same file as the output path {}: \
+                     the data sidecar would overwrite the generated source \
+                     (choose a different --data-file path)",
+                    path.display(),
+                    cli.output.display()
+                );
+            }
             let sidecar_name = path
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
@@ -147,6 +160,23 @@ fn main() -> Result<()> {
     // `sidecar_name`) goes to `--data-file`'s path, the primary source to
     // `-o` (ADR-37).
     let sidecar_name = opts.data_file.as_ref().map(|c| c.sidecar_name.as_str());
+    // Only the sidecar itself may carry `sidecar_name`: a generated source
+    // file sharing that name (e.g. the java backend's fixed `Main.java`)
+    // would be misrouted to the sidecar path and clobbered by the blob.
+    // Two shapes: with data segments the source *and* the sidecar match
+    // (`matching > 1`); without, the backend emits no sidecar and the lone
+    // matching file is the source (`matching == files.len()`). Fail before
+    // anything is written (ADR-0).
+    if let Some(name) = sidecar_name {
+        let matching = files.iter().filter(|f| f.name == name).count();
+        if matching > 1 || matching == files.len() {
+            bail!(
+                "--data-file name {name:?} collides with a generated output file \
+                 of the {} backend; choose a different sidecar filename",
+                backend.name()
+            );
+        }
+    }
     for file in files {
         if Some(file.name.as_str()) == sidecar_name {
             let path = cli
@@ -166,4 +196,26 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Resolve `path` for the --data-file/-o collision check: canonicalize as far
+/// as the filesystem allows — the file itself when it exists, otherwise its
+/// parent directory (the write target's location) joined with the final
+/// component — so differently spelled paths (`out.py` vs `./out.py`, `..`
+/// hops, symlinked directories) compare equal. Falls back to the
+/// cwd-anchored absolute form when nothing exists yet.
+fn resolve_for_collision(path: &Path) -> PathBuf {
+    if let Ok(resolved) = path.canonicalize() {
+        return resolved;
+    }
+    if let Some(name) = path.file_name() {
+        let parent = match path.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        if let Ok(parent) = parent.canonicalize() {
+            return parent.join(name);
+        }
+    }
+    std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
 }
