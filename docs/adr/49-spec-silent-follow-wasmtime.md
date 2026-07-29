@@ -20,6 +20,26 @@ accepting the union of its `unix`/`macos`/`windows` arms — which is exactly
 how these divergences had gone undetected; its intended strict usage is to set
 one `ERRNO_MODE_*` variable.
 
+### Survey of other implementations (2026-07-29)
+
+The 25-probe matrix was also run (macOS host) under wasmer 7.2.1, WasmEdge
+0.17.1, and Node 24 (`node:wasi`/uvwasi); the full table is in PR #43. On the
+resolution family (slash over an existing non-directory → ENOTDIR, missing →
+ENOENT, the symlink-destination and unlink-of-directory shapes) wasmtime's
+behavior is the consensus. On the contentious shapes it is not uniformly so:
+`rmdir("dir/")` → EINVAL is **wasmtime alone** (WasmEdge and Node both
+succeed, the POSIX reading), and EINVAL for O_CREAT through `"newf/"` on
+macOS is matched by no other runtime (WasmEdge/Node pass the host's ENOENT
+through). Stripping the slash on a nonexistent rename destination is shared
+with WasmEdge (Node reports the host's ENOENT), as is `mkdir("file/")` →
+EEXIST (Node passes the host's ENOTDIR through). WasmEdge itself silently
+renames through a slash-suffixed *source* — the issue-42 bug class — and
+wasmer 7's virtual-fs overlay denies all namespace mutations on mapped
+volumes (EACCES/NOTCAPABLE), leaving only its resolution probes usable. The
+survey did not change the decision: the user chose one reference to copy
+rather than a majority vote per shape, and wasmtime — the runtime the
+upstream testsuite itself encodes — remains it.
+
 ## Decision
 
 **Where the WASI spec is silent, dewasm's WASI behavior follows wasmtime's
