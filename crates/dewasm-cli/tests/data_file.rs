@@ -6,9 +6,10 @@
 //!
 //! The inline fixture carries an active segment, a passive segment initialized
 //! via `memory.init` + `data.drop`, and a bulky third segment so the sidecar
-//! form provably shrinks the source. The heavy real-app cases (`qjs.wasm`) are
-//! `#[ignore]`d, matching the project's convention for cases that pay a
-//! multi-second `go build` / interpreter startup (run with `--include-ignored`).
+//! form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are
+//! `#[ignore]`d unless the `slow_test` feature is on, matching the project's
+//! tier convention (ADR-48) for cases that pay a multi-second `go build` /
+//! interpreter startup (run with `--features slow_test` or `--include-ignored`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -487,7 +488,8 @@ fn rejects_unsupported_targets_and_stdout() {
 }
 
 // --------------------------------------------------------------------------
-// Real-app parity (heavy: `#[ignore]`d; run with --include-ignored).
+// Real-app parity (slow: `#[ignore]`d unless `--features slow_test`; also run
+// with --include-ignored).
 
 fn qjs_wasm() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/qjs.wasm")
@@ -498,7 +500,10 @@ const QJS_ARGS: &[&str] = &["-e", "console.log(6 * 7)"];
 const QJS_STDOUT: &str = "42\n";
 
 #[test]
-#[ignore = "heavy: converts and runs the cached qjs.wasm (multi-second)"]
+#[cfg_attr(
+    not(feature = "slow_test"),
+    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test or -- --include-ignored"
+)]
 fn ruby_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
@@ -551,7 +556,10 @@ fn ruby_qjs_data_file_matches_embedded() {
 }
 
 #[test]
-#[ignore = "heavy: go build of the cached qjs.wasm source (multi-second)"]
+#[cfg_attr(
+    not(feature = "slow_test"),
+    ignore = "slow: go build of the cached qjs.wasm source (multi-second): --features slow_test or -- --include-ignored"
+)]
 fn go_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
@@ -608,7 +616,10 @@ fn go_qjs_data_file_matches_embedded() {
 }
 
 #[test]
-#[ignore = "heavy: converts and runs the cached qjs.wasm (multi-second)"]
+#[cfg_attr(
+    not(feature = "slow_test"),
+    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test or -- --include-ignored"
+)]
 fn python_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
@@ -661,7 +672,10 @@ fn python_qjs_data_file_matches_embedded() {
 }
 
 #[test]
-#[ignore = "heavy: javac of the cached qjs.wasm source (multi-second)"]
+#[cfg_attr(
+    not(feature = "slow_test"),
+    ignore = "slow: javac of the cached qjs.wasm source (multi-second): --features slow_test or -- --include-ignored"
+)]
 fn java_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(

@@ -22,7 +22,7 @@
 
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_golden_path, run_app_case,
-    run_fs_app_case, run_gzip_cases, run_heavy_app_case, run_standalone_dir, Wasmtime, COWSAY_ARGS,
+    run_fs_app_case, run_gzip_cases, run_slow_app_case, run_standalone_dir, Wasmtime, COWSAY_ARGS,
     COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH,
     SQLITE3_SHELL, SQLITE3_SHELL_DBFILE,
 };
@@ -38,7 +38,7 @@ use dewasm_test_helper::{
 // expr fragment). Calling the shared runners directly is the simplest honest
 // way to attach the `wasmtime_test` ignore gate while still routing through
 // the exact same runners the real backends use. The runners themselves are
-// ungated (the heavy per-case macros carry their own `heavy_test`-feature
+// ungated (the slow per-case macros carry their own `slow_test`-feature
 // `#[ignore]` instead, ADR-27 revision), so `wasmtime_test` alone gates every
 // test in this file.
 
@@ -57,13 +57,13 @@ fn cowsay_stdin() {
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn qjs_eval() {
-    run_heavy_app_case(&Wasmtime, &QJS_EVAL);
+    run_slow_app_case(&Wasmtime, &QJS_EVAL);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn sqlite3_shell() {
-    run_heavy_app_case(&Wasmtime, &SQLITE3_SHELL);
+    run_slow_app_case(&Wasmtime, &SQLITE3_SHELL);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]

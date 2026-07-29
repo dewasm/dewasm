@@ -21,7 +21,7 @@ mod wasi_testsuite;
 mod wasmtime_backend;
 
 pub use apps::{
-    run_app_case, run_gzip_cases, run_heavy_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
+    run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
     SQLITE3_SHELL,
 };
 pub use apps_capi::{
@@ -68,7 +68,7 @@ pub use wasmtime_backend::Wasmtime;
 macro_rules! spec_suite {
     ($lang:expr) => {
         fn main() {
-            $crate::spec_main(&$lang);
+            $crate::spec_main(&$lang, cfg!(feature = "slow_test"));
         }
     };
 }
@@ -85,6 +85,34 @@ macro_rules! wasi_testsuite_suite {
         fn main() {
             $crate::wasi_testsuite_main(&$lang);
         }
+    };
+}
+
+/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item
+/// (ADR-48). The per-case app macros below delegate here so a callsite can pick
+/// the tier without duplicating the gate:
+///
+/// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep
+///   tier). This is the default for every slow-case macro.
+/// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a
+///   case measured at roughly a minute or more on a CI runner. These are kept
+///   out of CI and run only under `--features ultra_slow_test` or
+///   `-- --include-ignored`, in local pre-release verification.
+#[macro_export]
+macro_rules! slow_tier_test {
+    (slow, $item:item) => {
+        #[cfg_attr(
+            not(feature = "slow_test"),
+            ignore = "slow app case: --features slow_test or -- --include-ignored"
+        )]
+        $item
+    };
+    (ultra, $item:item) => {
+        #[cfg_attr(
+            not(feature = "ultra_slow_test"),
+            ignore = "ultra-slow app case (~1min+ on a CI runner, ADR-48): --features ultra_slow_test or -- --include-ignored"
+        )]
+        $item
     };
 }
 
@@ -223,9 +251,10 @@ macro_rules! wasi_root_containment_e2e {
 /// [`BackendUnderTest`]). No glue argument — these are standalone-mode
 /// stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!`
 /// and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!`
-/// are heavy — their generated `#[test]` is `#[ignore]`d unless the expanding
-/// backend crate's `heavy_test` feature is enabled (run with `--features heavy_test` or
-/// `cargo test -- --include-ignored`).
+/// are slow — their generated `#[test]` is `#[ignore]`d unless the expanding
+/// backend crate's `slow_test` feature is enabled (run with `--features slow_test`
+/// or `cargo test -- --include-ignored`). A callsite may pass a trailing tier
+/// token (`slow`, the default, or `ultra`); see [`slow_tier_test!`] (ADR-48).
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -249,36 +278,40 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the heavy [`QJS_EVAL`](crate::QJS_EVAL) case.
-/// Heavy: the generated `#[test]` is `#[ignore]`d unless the expanding
-/// backend crate's `heavy_test` feature is enabled (ADR-27 revision) — run it with
-/// `--features heavy_test` or `cargo test -- --include-ignored`.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case.
+/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding
+/// backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with
+/// `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing
+/// `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn qjs_eval() {
-            $crate::run_heavy_app_case(&$lang, &$crate::QJS_EVAL);
+        $crate::qjs_eval_e2e!($lang, slow);
+    };
+    ($lang:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn qjs_eval() {
+                $crate::run_slow_app_case(&$lang, &$crate::QJS_EVAL);
+            }
         }
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the heavy [`SQLITE3_SHELL`](crate::SQLITE3_SHELL)
-/// case. Heavy: see [`qjs_eval_e2e!`] for the `#[ignore]`/`heavy_test` feature gate.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL)
+/// case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate
+/// and the trailing tier token.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn sqlite3_shell() {
-            $crate::run_heavy_app_case(&$lang, &$crate::SQLITE3_SHELL);
+        $crate::sqlite3_shell_e2e!($lang, slow);
+    };
+    ($lang:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn sqlite3_shell() {
+                $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
+            }
         }
     };
 }
@@ -299,17 +332,19 @@ macro_rules! gzip_e2e {
 
 /// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for
 /// `$lang` and comparing the transcript byte-for-byte to the wasmtime golden
-/// (Fix 4). Heavy: see [`qjs_eval_e2e!`] for the `#[ignore]`/`heavy_test` feature gate.
+/// (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature
+/// gate and the trailing tier token.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn qjs_repl_pty() {
-            $crate::run_qjs_repl_pty(&$lang);
+        $crate::qjs_repl_pty_e2e!($lang, slow);
+    };
+    ($lang:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn qjs_repl_pty() {
+                $crate::run_qjs_repl_pty(&$lang);
+            }
         }
     };
 }
@@ -319,20 +354,22 @@ macro_rules! qjs_repl_pty_e2e {
 /// `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}`
 /// placeholders the runner fills). A backend declares participation by invoking
 /// the macro and drops it (with a REASON comment) for a case it cannot run.
-/// Heavy: the generated `#[test]` is `#[ignore]`d unless the expanding backend
-/// crate's `heavy_test` feature is enabled (see [`qjs_eval_e2e!`]).
+/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend
+/// crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing
+/// tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
 macro_rules! qjs_file_io_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn qjs_file_io() {
-            $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
+        $crate::qjs_file_io_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn qjs_file_io() {
+                $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
+            }
         }
     };
 }
@@ -341,13 +378,14 @@ macro_rules! qjs_file_io_e2e {
 #[macro_export]
 macro_rules! qjs_repl_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn qjs_repl() {
-            $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
+        $crate::qjs_repl_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn qjs_repl() {
+                $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
+            }
         }
     };
 }
@@ -356,13 +394,14 @@ macro_rules! qjs_repl_e2e {
 #[macro_export]
 macro_rules! sqlite3_shell_dbfile_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn sqlite3_shell_dbfile() {
-            $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
+        $crate::sqlite3_shell_dbfile_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn sqlite3_shell_dbfile() {
+                $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
+            }
         }
     };
 }
@@ -371,13 +410,14 @@ macro_rules! sqlite3_shell_dbfile_e2e {
 #[macro_export]
 macro_rules! rg_search_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn rg_search() {
-            $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
+        $crate::rg_search_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn rg_search() {
+                $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
+            }
         }
     };
 }
@@ -386,13 +426,14 @@ macro_rules! rg_search_e2e {
 #[macro_export]
 macro_rules! cpython_hello_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn cpython_hello() {
-            $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
+        $crate::cpython_hello_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn cpython_hello() {
+                $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
+            }
         }
     };
 }
@@ -401,13 +442,14 @@ macro_rules! cpython_hello_e2e {
 #[macro_export]
 macro_rules! cruby_hello_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn cruby_hello() {
-            $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
+        $crate::cruby_hello_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn cruby_hello() {
+                $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
+            }
         }
     };
 }
@@ -417,21 +459,22 @@ macro_rules! cruby_hello_e2e {
 /// `$glue` (a named `&str` const in the backend crate; the file-backed case's
 /// `{scratch}` placeholder is filled by the runner). Which backends invoke
 /// these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash
-/// (ADR-12). Heavy: the generated `#[test]` is `#[ignore]`d unless the
-/// expanding backend crate's `heavy_test` feature is enabled (see
+/// (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the
+/// expanding backend crate's `slow_test` feature is enabled (see
 /// [`qjs_eval_e2e!`]).
 ///
 /// [`CApiCase`]: crate::CApiCase
 #[macro_export]
 macro_rules! libsqlite3_c_api_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn libsqlite3_c_api() {
-            $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
+        $crate::libsqlite3_c_api_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn libsqlite3_c_api() {
+                $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
+            }
         }
     };
 }
@@ -440,51 +483,54 @@ macro_rules! libsqlite3_c_api_e2e {
 #[macro_export]
 macro_rules! sqlite3_file_c_api_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn sqlite3_file_c_api() {
-            $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
+        $crate::sqlite3_file_c_api_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn sqlite3_file_c_api() {
+                $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
+            }
         }
     };
 }
 
 /// See [`libsqlite3_c_api_e2e!`]. Runs the libpcap BPF-compile case
 /// [`PCAP_COMPILE`](crate::PCAP_COMPILE): drives `compile_filter` on
-/// "tcp port 80" and prints the serialized BPF program. Heavy (a ~2 MB
+/// "tcp port 80" and prints the serialized BPF program. Slow (a ~2 MB
 /// reactor artifact reconverted per run), so gated like the sqlite C-API
 /// cases.
 #[macro_export]
 macro_rules! pcap_compile_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn pcap_compile() {
-            $crate::run_capi_case(&$lang, &$crate::PCAP_COMPILE, $glue);
+        $crate::pcap_compile_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn pcap_compile() {
+                $crate::run_capi_case(&$lang, &$crate::PCAP_COMPILE, $glue);
+            }
         }
     };
 }
 
 /// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case
 /// [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a
-/// fixed JSON snippet and prints the parse tree's S-expression. Heavy (a
+/// fixed JSON snippet and prints the parse tree's S-expression. Slow (a
 /// ~1.5 MB reactor artifact reconverted per run), so gated like the sqlite
 /// C-API cases.
 #[macro_export]
 macro_rules! treesitter_parse_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn treesitter_parse() {
-            $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
+        $crate::treesitter_parse_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn treesitter_parse() {
+                $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
+            }
         }
     };
 }
@@ -493,13 +539,14 @@ macro_rules! treesitter_parse_e2e {
 #[macro_export]
 macro_rules! sqlite3_callback_binding_e2e {
     ($lang:expr, $glue:expr) => {
-        #[cfg_attr(
-            not(feature = "heavy_test"),
-            ignore = "heavy app case: --features heavy_test or -- --include-ignored"
-        )]
-        #[test]
-        fn sqlite3_callback_binding() {
-            $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
+        $crate::sqlite3_callback_binding_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn sqlite3_callback_binding() {
+                $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
+            }
         }
     };
 }

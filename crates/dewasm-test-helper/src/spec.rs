@@ -139,7 +139,11 @@ fn spec_dir() -> std::path::PathBuf {
 /// trials, so a plain `cargo test` runs the curated set and `--include-ignored`
 /// (or `--ignored`) sweeps the whole testsuite. Trials run on libtest-mimic's
 /// thread pool; each owns its per-file state, so the sweep parallelizes.
-pub fn spec_trials(lang: &'static dyn SpecBackend) -> Vec<Trial> {
+///
+/// `slow_tier` is the backend crate's `slow_test` feature (CI's main sweep tier,
+/// ADR-48): when on, nothing is marked ignored — the whole testsuite runs, the
+/// same set the old `--include-ignored` sweep covered.
+pub fn spec_trials(lang: &'static dyn SpecBackend, slow_tier: bool) -> Vec<Trial> {
     let dir = spec_dir();
     assert!(
         dir.exists(),
@@ -159,8 +163,13 @@ pub fn spec_trials(lang: &'static dyn SpecBackend) -> Vec<Trial> {
         .collect();
     names.sort();
 
-    let curated: Option<BTreeSet<&'static str>> =
-        lang.curated_files().map(|c| c.iter().copied().collect());
+    // The slow tier runs the whole testsuite (nothing curated => nothing
+    // ignored below), matching the old `--include-ignored` main sweep.
+    let curated: Option<BTreeSet<&'static str>> = if slow_tier {
+        None
+    } else {
+        lang.curated_files().map(|c| c.iter().copied().collect())
+    };
 
     names
         .into_iter()
@@ -179,9 +188,9 @@ pub fn spec_trials(lang: &'static dyn SpecBackend) -> Vec<Trial> {
 
 /// harness=false entry point: parse cargo's test arguments (name filter,
 /// `--ignored`/`--include-ignored`, thread count, ...) and run the trials.
-pub fn spec_main(lang: &'static dyn SpecBackend) {
+pub fn spec_main(lang: &'static dyn SpecBackend, slow_tier: bool) {
     let args = libtest_mimic::Arguments::from_args();
-    libtest_mimic::run(&args, spec_trials(lang)).exit();
+    libtest_mimic::run(&args, spec_trials(lang, slow_tier)).exit();
 }
 
 /// Run one `.wast` file and apply the per-file gates that the old aggregate

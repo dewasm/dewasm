@@ -56,9 +56,11 @@ WASI. The e2e override glue
 ## Caveats
 
 - **Speed.** Bash arithmetic is signed-64 only, and every float operation is
-  softfloat integer arithmetic, so float-heavy programs are slow — the heavy
+  softfloat integer arithmetic, so float-heavy programs are slow — the slow
   apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only
-  under the `heavy_test` cargo feature (or `cargo test -- --include-ignored`).
+  under the `slow_test` cargo feature (or `cargo test -- --include-ignored`);
+  the interactive qjs REPL pty case is slower still and sits at the
+  `ultra_slow_test` tier ([ADR-48](../adr/48-slow-test-tiers.md), kept out of CI).
   Integer-only programs (cowsay, minigzip) run fine.
 - Every generated function ends with an explicit `return 0`; a trailing
   arithmetic statement would otherwise leak status 1 (the units lint enforces

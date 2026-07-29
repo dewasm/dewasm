@@ -37,7 +37,7 @@ pub const QJS_REPL_SESSION: &[u8] = b"1+2\r[3,1,2].sort()\rMath.max(4,9)\r\\q\r"
 const QJS_PROMPT: &[u8] = b"qjs > ";
 
 /// Hard cap on the pty session (fail loud, ADR-15). Generous: the interactive
-/// loop is I/O-bound line editing, not the heavy batch qjs cases, but the
+/// loop is I/O-bound line editing, not the slow batch qjs cases, but the
 /// compiled backends may pay a one-time build inside `pty_command` first.
 const PTY_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -74,7 +74,7 @@ pub fn capture_qjs_repl_golden(lang: &dyn BackendUnderTest) -> Vec<u8> {
 /// drive its REPL under a pty, and require the transcript to be
 /// byte-identical to the wasmtime golden. The perf opt-out lives at the
 /// macro/feature level (`qjs_repl_pty_e2e!` expands its `#[test]` as
-/// `#[ignore]`d unless the `heavy_test` feature is on), so this runner runs
+/// `#[ignore]`d unless the `slow_test` feature is on), so this runner runs
 /// unconditionally.
 pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
     let golden = std::fs::read(qjs_repl_golden_path()).unwrap_or_else(|e| {

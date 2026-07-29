@@ -50,8 +50,8 @@ Python (`qjs_file_io_python`, `qjs_repl_python`, ADR-28), Go
 (`qjs_file_io_go`, `qjs_repl_go`, ADR-29's third milestone), and Java
 (`qjs_file_io_java`, `qjs_repl_java`, ADR-30's third milestone, all adopting
 ADR-14's fs model) now mirror both against the same fixtures and goldens,
-gated behind the `heavy_test` cargo feature in each crate (`#[ignore]`d
-otherwise; run with `--features heavy_test` or `-- --include-ignored`):
+gated behind the `slow_test` cargo feature in each crate (`#[ignore]`d
+otherwise; run with `--features slow_test` or `-- --include-ignored`):
 
 - *File I/O* (`qjs_file_io_ruby`): the `qjs:std` module writes a file,
   reads it back, and prints it; the test asserts the guest stdout golden
@@ -80,7 +80,7 @@ otherwise; run with `--features heavy_test` or `-- --include-ignored`):
   it does under wasmtime). The interactive REPL is now verified
   **byte-identical to wasmtime under a real pty** on all four
   poll_oneoff backends (Ruby, Python, Go, Java): the `qjs_repl_pty` case
-  (`qjs_repl_pty_e2e!`, gated on the `heavy_test` feature) converts bare qjs to a
+  (`qjs_repl_pty_e2e!`, gated on the `slow_test` feature) converts bare qjs to a
   standalone program, drives the scripted session
   `1+2⏎[3,1,2].sort()⏎Math.max(4,9)⏎\q⏎` under an 80x24 pty
   (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`), and compares the
@@ -98,7 +98,7 @@ artifacts (ADR-22); the DB-*file* lifecycle and a guest→host callback are
 now covered on the existing ADR-14 syscall set (no new WASI unit). The
 shell DB-file case is also mirrored under Python (`sqlite3_shell_dbfile_python`),
 Go (`sqlite3_shell_dbfile_go`), and Java (`sqlite3_shell_dbfile_java`), same
-fixture/golden, `heavy_test`-feature-gated;
+fixture/golden, `slow_test`-feature-gated;
 the C-API/callback cases stay Ruby-only (they exercise Ruby's provider/guest-
 memory idioms, not new WASI fs):
 
@@ -158,8 +158,8 @@ Where included, each is comfortably under the ADR-24 ~5-minute bar, so it
 genuinely executes rather than being a conversion-only smoke. Because the
 heavy source and RSS on *every* `cargo test` is too costly for the default
 gate, both cases (like all filesystem-app cases) are gated behind the
-`heavy_test` cargo feature —
-the same deliberate perf opt-out the heavy `apps` cases use (ADR-15's
+`slow_test` cargo feature —
+the same deliberate perf opt-out the slow `apps` cases use (ADR-15's
 documented scope: a perf gate, not a missing-environment skip). CRuby on Ruby
 is the "Ruby on Ruby" north-star demo.
 
@@ -175,7 +175,7 @@ run-to-run). ripgrep imports `poll_oneoff`/`path_readlink` but does not call
 them on this path, so no new WASI unit was needed. Ruby (`rg_search_ruby`):
 convert ~1.4 s, run ~1.7 s. Python (`rg_search_python`), Go
 (`rg_search_go`, ADR-29), and Java (`rg_search_java`, ADR-30) now mirror it
-against the same fixture/golden, `heavy_test`-feature-gated: Python ~10 s
+against the same fixture/golden, `slow_test`-feature-gated: Python ~10 s
 convert+run for the 22 MB wasm; Go convert+`go build`+run cold likewise
 dominated by the compile. Java is the class-split stress case: rg's ~7300
 functions and ~4900-entry function table overflow a single class's 65535-entry
@@ -196,7 +196,7 @@ byte-stdio path is exact through compiled output too, ADR-29/ADR-30). Two cases:
 `examples/apps/golden/minigzip_compress.gz`) and *round trip* (compress then
 `-d` decompress → original, self-checking). zlib's gz stream is deterministic
 here — mtime 0, OS byte 3 — so wasmtime and every backend agree byte-for-byte.
-Not marked heavy: no softfloat, so Bash runs it too (compress ~0.9 s + round
+Not marked slow: no softfloat, so Bash runs it too (compress ~0.9 s + round
 trip ~0.3 s under Bash). The binary stdin/golden cannot travel through the
 `&str`/`include_str!` `APP_CASES` path, so these live in a dedicated
 `run_gzip_cases` (bytes-capable `run_bytes`/`run_command_bytes` helpers) that
@@ -215,7 +215,7 @@ guest memory; the C-API case (`pcap_compile`, `pcap_compile_e2e!`) drives
 `compile_filter("tcp port 80", DLT_EN10MB, 65535)` on Ruby, Python, and Go and
 pins the canonical tcp-port-80 program (deterministic — BPF holds
 offsets/constants only). Like the other reactor-library C-API cases it is
-`heavy_test`-gated (a ~2 MB artifact reconverted per run). Bash does not
+`slow_test`-gated (a ~2 MB artifact reconverted per run). Bash does not
 participate: no host-language C API to plumb a pointer-returning binding
 through (ADR-12). *Shim caveat:* wasip1 has no `./configure` host, no
 `socket()`, and no baseline `setjmp`/`longjmp`, so a first-party
@@ -247,7 +247,7 @@ malloc'd C string) into guest memory. The C-API case (`treesitter_parse`,
 Ruby, Python, and Go and pins the S-expression `(document (object (pair key:
 (string (string_content)) value: (array (number) (true) (null)))))`
 (deterministic — tree-sitter's node naming is fixed by the pinned grammar).
-`heavy_test`-gated like the other reactor-library C-API cases; Bash does not
+`slow_test`-gated like the other reactor-library C-API cases; Bash does not
 participate (ADR-12).
 
 ¹¹ **ADR-39 `wasm-opt` preprocessing.** The three modules `fetch.sh` builds

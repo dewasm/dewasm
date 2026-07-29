@@ -31,7 +31,9 @@ message below is something this document explains how to fix.
 - **`python3` >= 3.9 on `PATH` (or `$DEWASM_PYTHON`)**: needed by the
   Python backend's spec/e2e tests. Like Bash, the Python spec harness runs
   a curated `.wast` subset by default; add `-- --include-ignored` to run
-  every file.
+  every file. Note: the slow qjs-scale generated modules (deep loop nesting)
+  need **python >= 3.12.4** — 3.12.0–3.12.3 hit a static-block limit that
+  breaks that generated code (issue #21), so CI pins 3.13.
 - **`bash` >= 5 on `PATH`, `$DEWASM_BASH`, or a common Homebrew
   install path**: needed by the Bash backend's spec/e2e/softfloat tests.
   macOS's system `/bin/bash` is 3.2 and does not qualify (no associative
@@ -169,11 +171,13 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   `shared_table_e2e!`/`embedded_coexist_e2e!`, `wasi_root_containment_e2e!`) take
   no glue (the apps macros) or one named glue-string constant as their only
   glue argument; the WASI-filesystem template `wasi_suite!(Fs, …)` likewise
-  takes one glue constant. `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are heavy —
+  takes one glue constant. `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow —
   the macro expands their generated `#[test]` as `#[ignore]`d unless the
-  expanding backend crate's `heavy_test` feature is enabled (run it with
-  `--features heavy_test`, or run everything including ignored tests with a
-  single `cargo test -- --include-ignored`). Per the ADR-27 revision this file
+  expanding backend crate's `slow_test` feature is enabled (run it with
+  `--features slow_test`, or run everything including the ultra tier with a
+  single `cargo test -- --include-ignored`); a callsite may pass a trailing
+  `ultra` tier token ([ADR-48](adr/48-slow-test-tiers.md)). Per the ADR-27
+  revision this file
   contains **only** the `BackendUnderTest` impl, named glue string constants
   (library glue, the WASI-filesystem template, the filesystem-app instantiation
   glue, the C-API driver glue, the multi-module driver glue, and the
@@ -191,10 +195,12 @@ on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
   when `fd_fdstat_get` on stdin reports a character device; a pipe does not.
   The scripted session is *prompt-driven*: each line is sent only after the
   `qjs > ` prompt reappears, so the transcript is stable regardless of how long
-  a backend takes to start (Ruby parses a ~200 MB source first). Heavy: like
-  the other heavy per-case macros, `qjs_repl_pty_e2e!`'s generated `#[test]`
-  is `#[ignore]`d unless the expanding backend crate's `heavy_test` feature is
-  enabled (perf opt-out, ADR-15); the golden lives at
+  a backend takes to start (Ruby parses a ~200 MB source first). Slow: like
+  the other slow per-case macros, `qjs_repl_pty_e2e!`'s generated `#[test]`
+  is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is
+  enabled (perf opt-out, ADR-15). For bash it is promoted to the ultra tier
+  (`ultra_slow_test`) because it timed out on CI
+  ([ADR-48](adr/48-slow-test-tiers.md), #22); the golden lives at
   `examples/apps/golden/qjs_repl_interactive.transcript`.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and
   the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units`
@@ -255,7 +261,9 @@ variables with cargo's own test UX:
   curated list are `#[ignore]`d trials, so a plain `cargo test` runs the curated
   set (Ruby is fast enough to curate nothing — it runs all files), and
   `-- --include-ignored` (or `-- --ignored` for only the non-curated ones)
-  sweeps the whole testsuite.
+  sweeps the whole testsuite. The `slow_test` feature also runs the full sweep
+  (nothing is marked ignored), so CI's main leg — `--features slow_test` — covers
+  every `.wast` file ([ADR-48](adr/48-slow-test-tiers.md)).
 - **Trials run in parallel** on libtest-mimic's thread pool; each trial owns its
   per-file state, so the sweeps parallelize across cores (control the thread
   count with `-- --test-threads=N`).
@@ -266,16 +274,25 @@ summary plus the failing assertion lines. The former aggregate cross-backend
 Per-file failure counts are still gated against each backend's
 `EXPECTED_FAILURES` ledger (ADR-8) inside the trial.
 
-The heavy app cases (QuickJS, SQLite, the filesystem apps, the C-API cases,
-the interactive-REPL pty case) are gated by the `heavy_test` cargo feature
-instead of an environment variable: each backend crate declares it, and the
-per-case macros expand their generated `#[test]` as `#[ignore]`d unless it is
-enabled. Run them for one backend with `--features heavy_test` (e.g.
-`cargo test -p dewasm-backend-bash --features heavy_test --test e2e`), or run
-everything across the whole workspace — including every backend's heavy
-cases — with a single `cargo test -- --include-ignored` (this is a
-deliberate perf-based opt-out, not a missing-environment one — see ADR-15's
-scope).
+The slow app cases (QuickJS, SQLite, the filesystem apps, the C-API cases,
+the interactive-REPL pty case) run in two tiers gated by cargo features rather
+than an environment variable ([ADR-48](adr/48-slow-test-tiers.md)):
+
+- **`slow_test`** — CI's main sweep. Each backend crate declares it; the
+  per-case macros expand their generated `#[test]` as `#[ignore]`d unless it is
+  enabled, and it also runs the full spec-testsuite sweep. Run one backend's
+  slow tier with `--features slow_test` (e.g.
+  `cargo test -p dewasm-backend-bash --features slow_test --test e2e`).
+- **`ultra_slow_test`** (implies `slow_test`) — the cases measured at roughly a
+  minute or more on a CI runner: the interactive qjs REPL pty case (bash timed
+  out >180s, #22) and go's giant-generated-program `go build`s (which
+  collectively exhausted a 4-core runner's memory, #23). These are pinned per
+  callsite and **deliberately kept out of CI** — run them only in local
+  pre-release verification with `--features ultra_slow_test` or the
+  everything-included `cargo test -- --include-ignored`.
+
+This is a deliberate perf-based opt-out, not a missing-environment one — see
+ADR-15's scope; the ultra tier is not CI-verified.
 
 See `AGENTS.md`'s Common commands table for the exact invocations.
 

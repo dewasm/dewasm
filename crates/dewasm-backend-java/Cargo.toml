@@ -11,10 +11,10 @@ repository.workspace = true
 workspace = true
 
 [features]
-# Opt-in: expands the heavy per-case macros (dewasm-test-helper, ADR-27
-# revision) as active `#[test]`s instead of `#[ignore]`d ones. See
-# docs/testing.md.
-heavy_test = []
+# Opt-in: expands the slow per-case macros (dewasm-test-helper, ADR-27
+# revision) as active `#[test]`s instead of `#[ignore]`d ones, and runs the
+# full spec testsuite sweep — CI's main sweep tier. See docs/testing.md.
+slow_test = []
 
 [dependencies]
 anyhow.workspace = true

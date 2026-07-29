@@ -9,10 +9,10 @@
 //! is a `pub const` [`AppCase`] driven by its own per-case macro
 //! (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`,
 //! `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!`
-//! are heavy — softfloat makes QuickJS/SQLite take tens of seconds under
+//! are slow — softfloat makes QuickJS/SQLite take tens of seconds under
 //! Bash — so the macro expands their generated `#[test]` as `#[ignore]`d
-//! unless the expanding backend crate's `heavy_test` feature is enabled; see
-//! [`run_heavy_app_case`], which just runs the case unconditionally now that
+//! unless the expanding backend crate's `slow_test` feature is enabled; see
+//! [`run_slow_app_case`], which just runs the case unconditionally now that
 //! the gating lives at the macro/feature level.
 
 use dewasm_backend::Mode;
@@ -48,8 +48,8 @@ pub const COWSAY_STDIN: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// QuickJS `-e` one-liner eval (heavy: softfloat-bound interpreters skip by
-/// default, see [`run_heavy_app_case`]).
+/// QuickJS `-e` one-liner eval (slow tier: softfloat-bound interpreters skip by
+/// default, see [`run_slow_app_case`]).
 pub const QJS_EVAL: AppCase = AppCase {
     name: "qjs",
     args: &[
@@ -61,8 +61,8 @@ pub const QJS_EVAL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// sqlite3 shell against an in-memory database (heavy: softfloat-bound
-/// interpreters skip by default, see [`run_heavy_app_case`]).
+/// sqlite3 shell against an in-memory database (slow tier: softfloat-bound
+/// interpreters skip by default, see [`run_slow_app_case`]).
 pub const SQLITE3_SHELL: AppCase = AppCase {
     name: "sqlite3-shell",
     args: &[],
@@ -110,18 +110,18 @@ fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     );
 }
 
-/// Run a non-heavy [`AppCase`] (`COWSAY_ARGS`/`COWSAY_STDIN`) for `lang`
+/// Run a fast [`AppCase`] (`COWSAY_ARGS`/`COWSAY_STDIN`) for `lang`
 /// unconditionally.
 pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// Run a heavy [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang`
+/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang`
 /// unconditionally. The perf opt-out now lives at the macro/feature level
 /// (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as
-/// `#[ignore]`d unless the `heavy_test` feature is on), so this runner — also used
+/// `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used
 /// directly by the wasmtime suite — never needs to gate itself.
-pub fn run_heavy_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
+pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 

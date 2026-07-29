@@ -66,7 +66,7 @@ jobs:
       matrix:
         backend: [ruby, bash, python, go, java]
     runs-on: ubuntu-latest
-    # The --include-ignored sweep (full spec suites + heavy apps) has
+    # The slow-tier sweep (full spec suites + slow apps, ADR-48) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -87,6 +87,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # ubuntu-24.04's system python 3.12.3 hits the static-block limit that
+      # breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
+      - if: matrix.backend == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}
@@ -101,14 +107,18 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
-      - name: Test (including heavy cases)
+      # Tiers (ADR-48): the `slow_test` feature runs the full spec sweep plus the
+      # slow per-case app cases (CI's main sweep). It deliberately excludes the
+      # `ultra_slow_test` cases — the ~1 min+ pty / giant-`go build` cases that
+      # timed out (#22) or exhausted runner memory (#23) — which run only locally.
+      - name: Test (slow tier)
         if: github.event_name != 'pull_request'
-        run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast -- --include-ignored
+        run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast --features dewasm-backend-${{ matrix.backend }}/slow_test
 
   core:
     needs: apps-cache
     runs-on: ubuntu-latest
-    # The --include-ignored sweep (full spec suites + heavy apps) has
+    # The slow-tier sweep (full spec suites + slow apps, ADR-48) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -116,7 +126,8 @@ jobs:
         with:
           submodules: true
       # dewasm-cli holds the cross-backend tests, so this job needs every
-      # backend toolchain (bash and python ship with the runner).
+      # backend toolchain (bash ships with the runner; python is pinned below
+      # because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code, #21).
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -128,6 +139,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: core
@@ -139,8 +153,11 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # `--include-ignored` un-ignores the apps_wasmtime golden-freshness
-      # suite, which execs `wasmtime run` and fails loudly without it (ADR-15).
+      # Tiers (ADR-48): the slow tier feature-gates what `--include-ignored`
+      # used to un-ignore. `dewasm-test-helper/wasmtime_test` runs the
+      # apps_wasmtime golden-freshness suite (execs `wasmtime run`, installed
+      # below, ADR-15); `dewasm-cli/slow_test` runs the slow cross-backend
+      # `--data-file` real-app cases.
       - uses: bytecodealliance/actions/wasmtime/setup@v1
         if: github.event_name != 'pull_request'
         with:
@@ -148,6 +165,6 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast
-      - name: Test (including heavy cases)
+      - name: Test (slow tier)
         if: github.event_name != 'pull_request'
-        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast -- --include-ignored
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast --features dewasm-cli/slow_test,dewasm-test-helper/wasmtime_test
