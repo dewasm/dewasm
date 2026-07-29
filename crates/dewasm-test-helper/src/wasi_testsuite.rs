@@ -19,6 +19,11 @@
 //! decides whether it is expected. Every ledger entry names the WASI function
 //! or interface behaviour responsible.
 //!
+//! The Rust suite runs with the host-matched strict errno mode injected into
+//! the guest environment (ADR-49) — see the comment in [`evaluate`] — so its
+//! `assert_errno!` arms pin the host's errno flavor instead of the permissive
+//! union of all flavors.
+//!
 //! A ledger entry may be *host-scoped*: some failures depend on the host libc
 //! or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`,
 //! or a Linux JDK truncating symlink times to microseconds). A backend declares
@@ -253,11 +258,32 @@ fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
     };
 
     let args: Vec<&str> = m.args.iter().map(String::as_str).collect();
-    let env: Vec<(&str, &str)> = m
+    let mut env: Vec<(&str, &str)> = m
         .env
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
+    // Pin the Rust suite's errno assertions to the host's flavor (ADR-49).
+    // Unset, the suite's `TestConfig` is Permissive — every `assert_errno!`
+    // accepts the *union* of its unix/macos/windows arms, which is how
+    // host-divergence bugs slipped through (issue #42). Upstream's intended
+    // strict usage is to set exactly one mode; since dewasm backends surface
+    // the host OS's errnos (like wasmtime), the mode must match the host.
+    // This deliberately deviates from the manifest-only-env rule (commit
+    // 02c5ef5): that rule exists so environ_*-counting trials see exactly the
+    // manifest environment, and no *Rust* trial counts environ entries — the
+    // C/assemblyscript suites, which do, ignore ERRNO_MODE_* anyway and run
+    // untouched.
+    if case.trial_name.starts_with("rust/") {
+        env.push((
+            if std::env::consts::OS == "macos" {
+                "ERRNO_MODE_MACOS"
+            } else {
+                "ERRNO_MODE_UNIX"
+            },
+            "1",
+        ));
+    }
 
     let output = lang.run_standalone_wasi(&program, &dirs, &args, &env, b"");
 

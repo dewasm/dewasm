@@ -55,8 +55,20 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
         return exists ? WASI_NOTDIR : WASI_NOENT;
     } else if (trailingSlash) {
-        // A trailing slash demands a directory, but the target is not one.
-        return exists ? WASI_NOTDIR : WASI_NOENT;
+        // A trailing slash demands a directory, but the target is not one. An
+        // existing non-directory is ENOTDIR; a nonexistent one is ENOENT —
+        // except under O_CREAT, which can never create a directory: wasmtime
+        // 47 (ADR-49) reports EINVAL on macOS (its manual path resolution
+        // rejects the shape) and EISDIR on Linux (host passthrough).
+        if (exists) {
+            return WASI_NOTDIR;
+        }
+        if (create) {
+            return System.getProperty("os.name").toLowerCase().contains("mac")
+                ? WASI_INVAL
+                : WASI_ISDIR;
+        }
+        return WASI_NOENT;
     } else {
         boolean read = (fsRightsBase & 0x2) != 0; // rights::FD_READ
         boolean write = (fsRightsBase & 0x40) != 0; // rights::FD_WRITE

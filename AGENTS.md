@@ -52,6 +52,10 @@ units change, regenerate the matrix: `cargo xtask update-support-docs` (`cargo t
 
 ## Implementation guidelines
 
+- Where the WASI spec is silent (trailing-slash paths, errno flavors), behavior follows
+  wasmtime as measured on both CI hosts — never POSIX or invented semantics — and the
+  wasi-testsuite harness runs the Rust suite under host-pinned strict errno modes
+  ([ADR-49](docs/adr/49-spec-silent-follow-wasmtime.md)).
 - **The spec testsuite binds; an ADR says why** ([ADR-3](docs/adr/3-testing-strategy.md)).
   Correctness of generated code outranks its readability ([ADR-1](docs/adr/1-ir-design.md));
   readability improvements go into optional passes, never into semantics-relevant lowering.

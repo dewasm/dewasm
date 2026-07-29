@@ -9,10 +9,21 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
+    // A missing target is ENOENT before any shape check (Files.isDirectory is
+    // false for "missing" and "not a directory" alike).
+    if (!java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+        return WASI_NOENT;
+    }
     // Files.delete would happily remove a regular file or an empty directory;
     // rmdir must fail (ENOTDIR) on a non-directory, so pre-check.
     if (!java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOTDIR;
+    }
+    // wasmtime 47 (ADR-49) rejects removing an existing directory through a
+    // slash-suffixed name with EINVAL on both hosts (cap-std's final-component
+    // handling).
+    if (rel.endsWith("/")) {
+        return WASI_INVAL;
     }
     try {
         java.nio.file.Files.delete(p);

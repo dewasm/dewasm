@@ -51,6 +51,17 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
         info, e := os.Stat(hostPath)
         if e != nil {
+            // A trailing slash demands a directory, which open(2) can never
+            // create, so O_CREAT must not manufacture a plain file through
+            // the slash. The errno follows wasmtime 47 (ADR-49): EINVAL on
+            // macOS (its manual path resolution rejects the shape), EISDIR
+            // on Linux (host passthrough); a plain open stays ENOENT.
+            if hasTrailingSlash && oflags&0x2 == 0 && oflags&0x1 != 0 {
+                if runtime.GOOS == "darwin" {
+                    return wasiInval
+                }
+                return wasiIsdir
+            }
             return wasiNoent
         }
         if !info.IsDir() {

@@ -256,14 +256,14 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // Trailing-slash pathname resolution (issue #42): "name/" may only resolve
-    // to a directory, a signal the runtimes' path plumbing used to drop before
-    // the host syscall could enforce it. The fixture's probes cover the whole
-    // path_* family; the fixture header documents which shapes are normalized
-    // (nonexistent slash-suffixed rename destination / O_CREAT target, mkdir
-    // of "file/") because Linux and macOS disagree at the host level, and
-    // which symlink-through-slash shapes stay untested as accepted host
-    // splits. The bash-only Linux/macOS-divergence pins from PR #41 live in
+    // Trailing-slash pathname resolution (issue #42, ADR-49): the WASI spec is
+    // silent here, so the expectations are wasmtime 47's measured behavior on
+    // both hosts — a signal the runtimes' path plumbing used to drop before
+    // the host syscall could enforce anything. The fixture's probes cover the
+    // whole path_* family; its header documents the one host-split probe (k,
+    // O_CREAT through a slash: EINVAL on macOS, EISDIR on Linux — wasmtime's
+    // own split, asserted per-host below) and the shapes deliberately left
+    // untested. The bash-only pins from PR #41 live in
     // crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs.
     WasiCase {
         name: "fs_trailing_slash",
@@ -279,35 +279,45 @@ pub const WASI_CASES: &[WasiCase] = &[
                 std::fs::create_dir(dir.join("dir")).unwrap();
             },
             check_stdout: |out| {
+                let k = if cfg!(target_os = "macos") {
+                    "k28"
+                } else {
+                    "k31"
+                };
                 assert_eq!(
                     out,
-                    "a54\nb54\nc54\nd44\ne54\nf54\ng54\nh54\ni54\nj44\nk44\nl44\nm20\nn00\no00\n"
+                    format!(
+                        "a54\nb54\nc54\nd44\ne54\nf54\ng54\nh54\ni44\nj00\n{k}\nl20\nm00\nn44\no28\np00\n"
+                    )
                 )
             },
             assert_host: |dir| {
-                // Every failing probe must have left the filesystem alone; the
-                // two succeeding ones (n, o) must have taken effect.
+                // The failing probes must have left the filesystem alone; the
+                // succeeding ones (j, m, p) must have taken effect.
                 assert_eq!(
                     std::fs::read_to_string(dir.join("file")).unwrap(),
                     "keep me"
                 );
                 assert_eq!(
-                    std::fs::read_to_string(dir.join("file2")).unwrap(),
-                    "also kept"
+                    std::fs::read_to_string(dir.join("newd")).unwrap(),
+                    "also kept",
+                    "j must rename file2 to a plain file newd (wasmtime strips the slash)"
                 );
+                assert!(!dir.join("file2").exists(), "j must move file2 away");
                 assert!(!dir.join("renamed").exists(), "a must not rename");
-                assert!(!dir.join("lnk").exists(), "i must not link");
-                assert!(!dir.join("newd").exists(), "k must not create a file");
-                assert!(!dir.join("newf").exists(), "l must not create a file");
-                assert!(dir.join("newdir").is_dir(), "n must create newdir/");
-                assert!(!dir.join("dir").exists(), "o must remove dir/");
+                assert!(!dir.join("lnk").exists(), "h must not link");
+                assert!(!dir.join("newf").exists(), "k must not create a file");
+                assert!(dir.join("newdir").is_dir(), "m must create newdir/");
+                assert!(!dir.join("dir").exists(), "o must keep dir, p removes it");
             },
             unix_only: false,
         },
     },
-    // The symlink side of the trailing-slash rule: the slash forces the final
-    // symlink to be followed even for the nofollow-shaped syscalls, so a
-    // slash-suffixed symlink-to-a-file is ENOTDIR (never the link itself).
+    // The symlink side of the trailing-slash rule (ADR-49): readlink through
+    // a slash follows to the target (ENOTDIR on a file), and a slash-suffixed
+    // symlink *destination* is EEXIST/ENOTDIR/ENOENT by what sits behind the
+    // slash — wasmtime's resolution order on both hosts, where a raw Linux
+    // symlinkat(2) would report EEXIST even over a plain file.
     WasiCase {
         name: "fs_trailing_slash_symlink",
         wat: "wasi_trailing_slash_symlink.wat",
@@ -321,16 +331,21 @@ pub const WASI_CASES: &[WasiCase] = &[
                 {
                     std::fs::write(dir.join("file"), "x").unwrap();
                     std::os::unix::fs::symlink("file", dir.join("linkfile")).unwrap();
+                    std::fs::create_dir(dir.join("sd1")).unwrap();
                 }
                 #[cfg(not(unix))]
                 let _ = dir;
             },
-            check_stdout: |out| assert_eq!(out, "s54\nt54\n"),
+            check_stdout: |out| assert_eq!(out, "t54\nu20\nv54\nw44\n"),
             assert_host: |dir| {
                 assert!(
                     dir.join("linkfile").symlink_metadata().is_ok(),
                     "the probes must not remove the link"
-                )
+                );
+                assert!(
+                    dir.join("dang").symlink_metadata().is_err(),
+                    "w must not create a symlink"
+                );
             },
             unix_only: true,
         },

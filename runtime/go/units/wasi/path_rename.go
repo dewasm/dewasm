@@ -12,21 +12,12 @@ func (w *WASI) wasi_path_rename(oldDirfd, oldPathPtr, oldPathLen, newDirfd, newP
     if err != wasiOk {
         return err
     }
-    // A slash-suffixed destination may only name an existing directory or one
-    // the rename itself creates from a directory source (POSIX pathname
-    // resolution; issue #42). resolve_path already reported ENOTDIR for an
-    // existing non-directory; the nonexistent case must not fall through — the
-    // resolved host path has lost the slash, so rename(2) would silently
-    // create a plain *file* at the name. ENOENT is the macOS/POSIX errno
-    // (Linux would say ENOTDIR), the choice the other backends normalize to
-    // (runtime/bash/units/wasi/path_rename.sh).
-    if strings.HasSuffix(newRel, "/") {
-        if _, e := os.Lstat(newHost); e != nil {
-            if fi, se := os.Lstat(oldHost); se != nil || !fi.IsDir() {
-                return wasiNoent
-            }
-        }
-    }
+    // Trailing slashes (issue #42, ADR-49: follow wasmtime): resolve_path
+    // already reported ENOTDIR for a slash-suffixed name over an existing
+    // non-directory on either side; a *nonexistent* slash-suffixed
+    // destination matches wasmtime's cap-std, which strips the slash and
+    // lets the rename proceed — exactly what the bare resolved path below
+    // does.
     // syscall.Rename, not os.Rename: Go's os.Rename wrapper Lstats the
     // destination and, when it is a directory, returns a synthetic EEXIST on
     // macOS instead of letting rename(2) replace an empty target dir — the

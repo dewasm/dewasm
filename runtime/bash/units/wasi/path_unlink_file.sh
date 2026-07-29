@@ -4,15 +4,12 @@
 # resolved physical path. unlink(2) never follows a trailing symlink (it
 # removes the link itself), so resolution uses follow_last=0, mirroring
 # runtime/ruby/units/wasi/path_unlink_file.rb. A directory target is rejected
-# up front (before ever invoking `rm`) as EISDIR: this is the errno Linux's
-# unlink(2) raises for a directory and what most WASI runtimes (wasmtime
-# included, on the Linux hosts they mostly run on) surface — a native macOS
-# unlink(2) would instead raise EPERM, the same cross-platform split Ruby's
-# FS_ERRNO table already accepts both sides of, but this backend never calls
-# the OS unlink(2) itself (it probes `-d` first), so it picks the one value
-# rather than inheriting whichever the host OS happens to raise. A missing
-# path is ENOENT; any other `rm` failure (e.g. a permission error) defaults
-# to EIO.
+# up front (before ever invoking `rm`) with the errno wasmtime inherits from
+# the host unlink(2) — EPERM on macOS, EISDIR on Linux (ADR-49): this backend
+# never calls the OS unlink(2) itself (it probes `-d` first), so it emulates
+# the host split the upstream wasi-testsuite pins under its strict errno
+# modes. A missing path is ENOENT; any other `rm` failure (e.g. a permission
+# error) defaults to EIO.
 wasi_path_unlink_file() {
   local __p=$1 __dirfd=$2 __path_ptr=$3 __path_len=$4
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?
@@ -26,10 +23,18 @@ wasi_path_unlink_file() {
     return 0
   fi
   # A symlink (even to a directory, even dangling) is unlinked as the link
-  # itself; only a real directory is EISDIR (ADR-40 — `-h` guards the `-d`
-  # test, which would otherwise dereference a symlink-to-directory).
+  # itself; only a real directory is rejected (`-h` guards the `-d` test,
+  # which would otherwise dereference a symlink-to-directory). The errno
+  # mirrors what wasmtime inherits from the host unlink(2) (ADR-49): EPERM
+  # on macOS, EISDIR on Linux — the upstream wasi-testsuite pins exactly
+  # that split under its strict errno modes, so the one-value pick the unit
+  # header used to document is gone.
   if [[ -d $__host && ! -h $__host ]]; then
-    R0=31 # EISDIR
+    if [[ $OSTYPE == darwin* ]]; then
+      R0=63 # EPERM
+    else
+      R0=31 # EISDIR
+    fi
     return 0
   fi
   if command rm -- "$__host" 2>/dev/null; then

@@ -15,10 +15,15 @@ int wasi_path_unlink_file(int dirfd, int pathPtr, int pathLen) {
         && !java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOENT;
     }
-    // Files.delete would remove an empty directory; unlink must fail (EISDIR)
-    // on any directory, so pre-check.
+    // Files.delete would remove an empty directory; unlink must fail on any
+    // directory, so pre-check. The errno mirrors what wasmtime inherits from
+    // the host unlink(2) (ADR-49): EPERM on macOS, EISDIR on Linux — the
+    // upstream wasi-testsuite pins exactly that split under its strict errno
+    // modes.
     if (java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-        return WASI_ISDIR;
+        return System.getProperty("os.name").toLowerCase().contains("mac")
+            ? WASI_PERM
+            : WASI_ISDIR;
     }
     // A trailing slash demands a directory; on a non-directory target that is
     // ENOTDIR (a plain unlink of the file without the slash still succeeds).

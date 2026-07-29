@@ -25,15 +25,14 @@
 #     `mv`, which replaces the destination like rename(2) does.
 # Trailing slashes on either name are stripped before resolution so a
 # `mv`/`rmdir` on the clean physical path behaves, but the slash is
-# remembered: POSIX pathname resolution only lets "name/" resolve to an
-# existing directory (or a directory about to be created), so a
-# slash-bearing name that resolves to an existing non-directory is ENOTDIR
-# on either side, a nonexistent slash-bearing source is ENOENT (the
-# ordinary missing-source check), and a nonexistent slash-bearing
-# destination is only acceptable when the source is a directory — ENOENT
-# otherwise (POSIX/macOS; Linux reports ENOTDIR for that last case).
-# Anything else `mv` still manages to fail on (e.g. a permission error)
-# defaults to EIO.
+# remembered: a slash-bearing name that resolves to an existing
+# non-directory is ENOTDIR on either side, and a nonexistent slash-bearing
+# source is ENOENT (the ordinary missing-source check). A nonexistent
+# slash-bearing destination simply loses its slash and the rename proceeds
+# — even from a non-directory source — matching wasmtime's cap-std
+# resolution (ADR-49; POSIX would refuse, but where the WASI spec is
+# silent dewasm follows wasmtime). Anything else `mv` still manages to
+# fail on (e.g. a permission error) defaults to EIO.
 wasi_path_rename() {
   local __p=$1 __old_dirfd=$2 __old_path_ptr=$3 __old_path_len=$4
   local __new_dirfd=$5 __new_path_ptr=$6 __new_path_len=$7
@@ -107,12 +106,6 @@ wasi_path_rename() {
         return 0
       fi
     fi
-  elif (( __new_slash && ! __old_is_dir )); then
-    # A nonexistent destination with a trailing slash names a directory to be
-    # created, which only a directory source can satisfy (POSIX pathname
-    # resolution; macOS reports ENOENT here, Linux ENOTDIR — we follow POSIX).
-    R0=44 # ENOENT
-    return 0
   fi
   if command mv -- "$__old_host" "$__new_host" 2>/dev/null; then
     R0=0

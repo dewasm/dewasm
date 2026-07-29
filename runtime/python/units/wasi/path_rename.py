@@ -10,23 +10,17 @@ def wasi_path_rename(self, old_dirfd, old_path_ptr, old_path_len, new_dirfd, new
     new_host, err = self.resolve_path(new_dirfd, new_rel, False)
     if err is not None:
         return err
-    # Trailing-slash semantics (issue #42): resolve_path preserved the slash, so
-    # the host rename(2) enforces the uniform shapes itself — an existing
-    # non-directory behind a slash is ENOTDIR on either side, a missing
-    # slash-bearing source is ENOENT. The one shape Linux and macOS disagree on
-    # — a nonexistent slash-bearing destination with a non-directory source
-    # (macOS/POSIX ENOENT, Linux ENOTDIR) — is normalized to ENOENT here,
-    # mirroring runtime/bash/units/wasi/path_rename.sh. The probes use the
-    # slash-stripped path: stat on the slash-bearing one already fails ENOTDIR
-    # and would misread "exists as a file" as "missing".
-    if new_host.endswith(os.sep):
-        old_bare = old_host[:-1] if old_host.endswith(os.sep) else old_host
-        new_bare = new_host[:-1]
-        # When the source itself bears a slash over an existing non-directory,
-        # fall through: the host reports the source-side ENOTDIR first.
-        src_slash_ok = not old_host.endswith(os.sep) or os.path.isdir(old_bare)
-        if not os.path.lexists(new_bare) and src_slash_ok and not os.path.isdir(old_bare):
-            return self.ERRNO_NOENT
+    # Trailing-slash semantics (issue #42, ADR-49: follow wasmtime): the slash
+    # resolve_path preserved lets the host rename(2) enforce the shapes
+    # wasmtime inherits from the OS — an existing non-directory behind a slash
+    # is ENOTDIR on either side, a missing slash-suffixed source is ENOENT. A
+    # *nonexistent* slash-suffixed destination is the one shape wasmtime does
+    # not inherit: cap-std strips the slash and the rename proceeds (even from
+    # a non-directory source), so strip it here too. The existence probe uses
+    # the slash-stripped path: stat on the slash-bearing one already fails
+    # ENOTDIR and would misread "exists as a file" as "missing".
+    if new_host.endswith(os.sep) and not os.path.lexists(new_host[:-1]):
+        new_host = new_host[:-1]
     try:
         os.rename(old_host, new_host)
     except OSError as e:

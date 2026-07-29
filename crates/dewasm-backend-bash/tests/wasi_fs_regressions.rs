@@ -177,12 +177,14 @@ fn rename_trailing_slash_on_file_destination_is_enotdir() {
     assert_eq!(std::fs::read_to_string(dir.join("dst")).unwrap(), "d");
 }
 
-/// A trailing slash on a *nonexistent* destination names a directory to be
-/// created, which a regular-file source cannot satisfy: ENOENT (44) per POSIX
-/// pathname resolution (macOS agrees; Linux reports ENOTDIR — the bash unit
-/// follows POSIX, documented in the unit header).
+/// A trailing slash on a *nonexistent* destination is stripped and the
+/// rename proceeds, creating a plain file at the bare name — wasmtime 47's
+/// cap-std behavior on both hosts, which ADR-49 adopts over the POSIX
+/// reading (ENOENT) this pin used to assert. The raw hosts diverge here
+/// (macOS rename(2) ENOENT, Linux ENOTDIR), which is why the unit implements
+/// the stripped rename explicitly rather than passing the slash through.
 #[test]
-fn rename_trailing_slash_missing_destination_file_source_is_enoent() {
+fn rename_trailing_slash_missing_destination_strips_and_renames() {
     let dir = scratch_dir("slash-dst-missing");
     std::fs::write(dir.join("src"), "s").unwrap();
     let out = run_module(
@@ -190,9 +192,13 @@ fn rename_trailing_slash_missing_destination_file_source_is_enoent() {
         &rename_wat("src", "newdir/"),
         &start_glue(&dir),
     );
-    assert_eq!(out, "44\n");
-    assert!(dir.join("src").exists(), "source must survive");
-    assert!(!dir.join("newdir").exists(), "nothing may be created");
+    assert_eq!(out, "0\n");
+    assert!(!dir.join("src").exists(), "source must move");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("newdir")).unwrap(),
+        "s",
+        "the bare name receives the file"
+    );
 }
 
 /// Trailing slashes on directories keep working: rename("d1/", "d2/") with a

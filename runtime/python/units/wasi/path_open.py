@@ -33,12 +33,15 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
         flags |= os.O_EXCL
     if oflags & 0x8 != 0:  # oflags::TRUNC
         flags |= os.O_TRUNC
-    # A trailing slash may only resolve to a directory (issue #42). An existing
-    # non-directory is ENOTDIR from the host open below; the nonexistent case
-    # is normalized to ENOENT here — open(2) cannot create a directory, and the
-    # hosts disagree on the O_CREAT shape (macOS/POSIX ENOENT, Linux EISDIR).
+    # A trailing slash may only resolve to a directory (issue #42), which
+    # open(2) can never create, so O_CREAT must not manufacture a plain file
+    # through the slash. The errno follows wasmtime 47 (ADR-49): EINVAL on
+    # macOS (its manual path resolution rejects the shape), EISDIR on Linux
+    # (host passthrough); a plain open is ENOENT on both.
     if host_path.endswith(os.sep) and not os.path.lexists(host_path[:-1]):
-        return self.ERRNO_NOENT
+        if oflags & 0x1 == 0:  # no oflags::CREAT
+            return self.ERRNO_NOENT
+        return self.ERRNO_INVAL if sys.platform == "darwin" else self.ERRNO_ISDIR
     try:
         fd = os.open(host_path, flags, 0o644)
     except OSError as e:

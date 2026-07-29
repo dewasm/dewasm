@@ -70,6 +70,7 @@ the consequences.
 | ADR-46 | [Host-OS-Scoped Expected-Failure Ledgers for the WASI Testsuite Harness](46-host-scoped-wasi-ledgers.md) | Accepted |
 | ADR-47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
 | ADR-48 | [Two-Tier Slow-Test Gating (slow_test / ultra_slow_test)](48-slow-test-tiers.md) | Accepted |
+| ADR-49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
 
 ## Adding a new ADR
 

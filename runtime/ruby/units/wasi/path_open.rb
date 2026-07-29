@@ -26,12 +26,15 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
 
   exists = File.exist?(host_path) || File.symlink?(host_path)
   if trailing
-    # A trailing slash demands a directory. A nonexistent target is ENOENT
-    # even with O_CREAT — open(2) cannot create a directory — normalized
-    # here because the hosts disagree on the O_CREAT shape (macOS/POSIX
-    # ENOENT, Linux EISDIR) and letting it fall through would create a
-    # plain *file* through the slash.
-    return ERRNO_NOENT unless exists
+    unless exists
+      # A trailing slash demands a directory, which open(2) can never
+      # create, so O_CREAT must not manufacture a plain file through the
+      # slash. The errno follows wasmtime 47 (ADR-49): EINVAL on macOS
+      # (its manual path resolution rejects the shape), EISDIR on Linux
+      # (host passthrough); a plain open is ENOENT on both.
+      return ERRNO_NOENT if oflags & 0x1 == 0
+      return RUBY_PLATFORM.include?("darwin") ? ERRNO_INVAL : ERRNO_ISDIR
+    end
     return ERRNO_NOTDIR unless File.directory?(host_path)
   end
 
