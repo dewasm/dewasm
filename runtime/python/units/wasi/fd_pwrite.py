@@ -5,6 +5,8 @@ def wasi_fd_pwrite(self, fd, iovs_ptr, iovs_len, offset, nwritten_ptr):
         return self.ERRNO_BADF
     if io in self.std_ios:
         return self.ERRNO_SPIPE
+    if not (self.fd_meta[fd][0] & self.RIGHTS_FD_WRITE):
+        return self.ERRNO_NOTCAPABLE
     written = 0
     try:
         for i in range(iovs_len):

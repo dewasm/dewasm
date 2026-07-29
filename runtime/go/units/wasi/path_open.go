@@ -11,6 +11,14 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     if e := w.checkRight(dirfd, rightPathOpen); e != wasiOk {
         return e
     }
+    // OFLAGS_TRUNC truncates on open; that spends the directory's
+    // PATH_FILESTAT_SET_SIZE right (ADR-40), checked before the OS open can
+    // touch the file.
+    if oflags&0x8 != 0 { // oflags::TRUNC
+        if e := w.checkRight(dirfd, rightPathFilestatSetSize); e != wasiOk {
+            return e
+        }
+    }
     // Opening a directory read/write is ISDIR; the suite requires it for
     // O_DIRECTORY with FD_WRITE requested, before the directory is even stat'd.
     if oflags&0x2 != 0 && fsRightsBase&rightFdWrite != 0 {

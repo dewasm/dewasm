@@ -9,6 +9,9 @@ int wasi_fd_pwrite(int fd, int iovsPtr, int iovsLen, long offset, int nwrittenPt
     if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_WRITE)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.channels.FileChannel ch = ((Handle) e).ch;
     int written = 0;
     try {
