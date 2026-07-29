@@ -83,7 +83,7 @@ jobs:
           go-version: stable
           cache: false
       - if: matrix.backend == 'java'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -135,7 +135,7 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
