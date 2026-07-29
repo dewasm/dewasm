@@ -7,6 +7,9 @@ func (w *WASI) wasi_fd_pread(fd, iovsPtr, iovsLen uint32, offset uint64, nreadPt
     if w.isStdio(f) {
         return wasiSpipe
     }
+    if e := w.checkRight(fd, rightFdRead); e != wasiOk { // ADR-40
+        return e
+    }
     nread := uint32(0)
     for i := uint32(0); i < iovsLen; i++ {
         ptr := w.memory.i32_load(uint64(iovsPtr) + uint64(i)*8)

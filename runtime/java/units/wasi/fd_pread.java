@@ -9,6 +9,9 @@ int wasi_fd_pread(int fd, int iovsPtr, int iovsLen, long offset, int nreadPtr) {
     if (!(e instanceof Handle)) {
         return WASI_BADF;
     }
+    if (lacksRight(fd, R_FD_READ)) {
+        return WASI_NOTCAPABLE;
+    }
     java.nio.channels.FileChannel ch = ((Handle) e).ch;
     int nread = 0;
     try {

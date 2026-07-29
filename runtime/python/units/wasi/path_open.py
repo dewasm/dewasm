@@ -6,6 +6,10 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
     host_path, err = self.resolve_path(dirfd, rel, symlink_follow)
     if err is not None:
         return err
+    # The dirfd must itself carry PATH_OPEN (ADR-40); a rights-narrowed dir fd
+    # that dropped it can no longer open beneath itself.
+    if not (self.fd_meta[dirfd][0] & self.RIGHTS_PATH_OPEN):
+        return self.ERRNO_NOTCAPABLE
     # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd (ADR-40).
     if oflags & 0x8 != 0 and not (self.fd_meta[dirfd][0] & self.RIGHTS_PATH_FILESTAT_SET_SIZE):
         return self.ERRNO_NOTCAPABLE

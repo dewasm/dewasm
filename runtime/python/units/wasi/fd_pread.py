@@ -5,6 +5,8 @@ def wasi_fd_pread(self, fd, iovs_ptr, iovs_len, offset, nread_ptr):
         return self.ERRNO_BADF
     if io in self.std_ios:
         return self.ERRNO_SPIPE
+    if not (self.fd_meta[fd][0] & self.RIGHTS_FD_READ):
+        return self.ERRNO_NOTCAPABLE
     nread = 0
     try:
         for i in range(iovs_len):

@@ -59,8 +59,8 @@ const (
         rightPathLinkSource | rightPathLinkTarget | rightPathOpen |
         rightFdReaddir | rightPathReadlink | rightPathRenameSource |
         rightPathRenameTarget | rightPathSymlink | rightPathRemoveDirectory |
-        rightPathUnlinkFile | rightPathFilestatGet | rightPathFilestatSetTimes |
-        rightFdFilestatGet | rightFdFilestatSetTimes
+        rightPathUnlinkFile | rightPathFilestatGet | rightPathFilestatSetSize |
+        rightPathFilestatSetTimes | rightFdFilestatGet | rightFdFilestatSetTimes
     dirRightsInheriting uint64 = dirRightsBase | rightFdDatasync | rightFdRead |
         rightFdSeek | rightFdFdstatSetFlags | rightFdSync | rightFdTell |
         rightFdWrite | rightFdAdvise | rightFdAllocate | rightFdFilestatSetSize |
