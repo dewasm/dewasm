@@ -98,10 +98,8 @@ fn main() -> Result<()> {
                      must be written to a real path next to the generated program"
                 );
             }
-            // The sidecar and the primary source are written independently
-            // (the loop below); a --data-file that resolves to the same file
-            // as -o would clobber the freshly written source with the data
-            // blob. Fail before anything is written (ADR-0).
+            // A --data-file resolving to the same file as -o would clobber
+            // the generated source; fail before anything is written (ADR-0).
             if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
                 bail!(
                     "--data-file {} resolves to the same file as the output path {}: \
@@ -160,13 +158,10 @@ fn main() -> Result<()> {
     // `sidecar_name`) goes to `--data-file`'s path, the primary source to
     // `-o` (ADR-37).
     let sidecar_name = opts.data_file.as_ref().map(|c| c.sidecar_name.as_str());
-    // Only the sidecar itself may carry `sidecar_name`: a generated source
-    // file sharing that name (e.g. the java backend's fixed `Main.java`)
-    // would be misrouted to the sidecar path and clobbered by the blob.
-    // Two shapes: with data segments the source *and* the sidecar match
-    // (`matching > 1`); without, the backend emits no sidecar and the lone
-    // matching file is the source (`matching == files.len()`). Fail before
-    // anything is written (ADR-0).
+    // A generated source sharing `sidecar_name` (e.g. java's fixed
+    // `Main.java`) would be misrouted and clobbered: `matching > 1` = source
+    // and sidecar collide, `matching == files.len()` = no sidecar emitted and
+    // the match is the source itself (ADR-0).
     if let Some(name) = sidecar_name {
         let matching = files.iter().filter(|f| f.name == name).count();
         if matching > 1 || matching == files.len() {
@@ -198,12 +193,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Resolve `path` for the --data-file/-o collision check: canonicalize as far
-/// as the filesystem allows — the file itself when it exists, otherwise its
-/// parent directory (the write target's location) joined with the final
-/// component — so differently spelled paths (`out.py` vs `./out.py`, `..`
-/// hops, symlinked directories) compare equal. Falls back to the
-/// cwd-anchored absolute form when nothing exists yet.
+/// Canonicalize for the --data-file/-o collision check (the file, else
+/// parent + final component, else cwd-anchored absolute) so differently
+/// spelled paths compare equal.
 fn resolve_for_collision(path: &Path) -> PathBuf {
     if let Ok(resolved) = path.canonicalize() {
         return resolved;
