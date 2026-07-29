@@ -116,9 +116,27 @@ fn qjs_repl_interactive_golden() {
         )
     });
     let got = capture_qjs_repl_transcript(&Wasmtime);
-    assert_transcript_eq(&got, &golden, "wasmtime");
+    // Linux wasmtime emits one extra trailing CRLF on pty teardown that
+    // macOS wasmtime (which captured the golden) does not; the converted
+    // backends match the golden byte-for-byte on both hosts, so the
+    // difference is wasmtime's own exit behavior, outside the transcript's
+    // meaningful content (it ends at the `\q` echo). Compare modulo trailing
+    // CRLFs here only — the per-backend comparison stays exact (issue #33).
+    assert_transcript_eq(
+        trim_trailing_crlfs(&got),
+        trim_trailing_crlfs(&golden),
+        "wasmtime",
+    );
     println!(
         "qjs interactive REPL under wasmtime: matches the golden ({} bytes)",
         got.len()
     );
+}
+
+/// Strip any trailing `\r\n` pairs (see `qjs_repl_interactive_golden`).
+fn trim_trailing_crlfs(mut t: &[u8]) -> &[u8] {
+    while let Some(rest) = t.strip_suffix(b"\r\n") {
+        t = rest;
+    }
+    t
 }
