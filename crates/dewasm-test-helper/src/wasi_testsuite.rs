@@ -19,6 +19,9 @@
 //! decides whether it is expected. Every ledger entry names the WASI function
 //! or interface behaviour responsible.
 //!
+//! The Rust suite runs with the host-matched strict errno mode injected
+//! (ADR-49); see [`evaluate`].
+//!
 //! A ledger entry may be *host-scoped*: some failures depend on the host libc
 //! or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`,
 //! or a Linux JDK truncating symlink times to microseconds). A backend declares
@@ -253,11 +256,26 @@ fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
     };
 
     let args: Vec<&str> = m.args.iter().map(String::as_str).collect();
-    let env: Vec<(&str, &str)> = m
+    let mut env: Vec<(&str, &str)> = m
         .env
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
+    // Pin the Rust suite's errno assertions to the host flavor (ADR-49):
+    // unset, upstream's TestConfig is Permissive — the union of its per-OS
+    // arms. Deliberate deviation from the manifest-only-env rule (commit
+    // 02c5ef5), scoped to Rust: the C/assemblyscript suites assert exact
+    // environ contents.
+    if case.trial_name.starts_with("rust/") {
+        env.push((
+            if std::env::consts::OS == "macos" {
+                "ERRNO_MODE_MACOS"
+            } else {
+                "ERRNO_MODE_UNIX"
+            },
+            "1",
+        ));
+    }
 
     let output = lang.run_standalone_wasi(&program, &dirs, &args, &env, b"");
 

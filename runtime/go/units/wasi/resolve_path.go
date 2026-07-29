@@ -49,6 +49,13 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if strings.HasPrefix(rel, "/") {
         return "", wasiNotcapable
     }
+    // Strip a trailing slash before the final-component bookkeeping below (an
+    // empty last component silently degrades followLast) and re-check via
+    // trailingDirGate (issue #42).
+    trailing := strings.HasSuffix(rel, "/")
+    if trailing {
+        rel = strings.TrimRight(rel, "/")
+    }
     base := entry.hostPath
     joined := filepath.Join(base, rel)
     // Lexical containment on the cleaned path, before touching the filesystem:
@@ -74,7 +81,11 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         if !w.within(base, realParent) {
             return "", wasiNotcapable
         }
-        return filepath.Join(realParent, last), wasiOk
+        host := filepath.Join(realParent, last)
+        if e := w.trailingDirGate(trailing, host); e != wasiOk {
+            return "", e
+        }
+        return host, wasiOk
     }
     if _, err := os.Lstat(joined); err == nil {
         real, err := filepath.EvalSymlinks(joined)
@@ -85,6 +96,9 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         }
         if !w.within(base, real) {
             return "", wasiNotcapable
+        }
+        if e := w.trailingDirGate(trailing, real); e != wasiOk {
+            return "", e
         }
         return real, wasiOk
     }
@@ -99,4 +113,17 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         return "", wasiNotcapable
     }
     return filepath.Join(realParent, filepath.Base(joined)), wasiOk
+}
+
+// trailingDirGate: a slash-suffixed name may only resolve to a directory —
+// an existing non-directory is ENOTDIR (issue #42). os.Stat follows
+// symlinks, as the slash requires; a missing target is each caller's case.
+func (w *WASI) trailingDirGate(trailing bool, host string) uint32 {
+    if !trailing {
+        return wasiOk
+    }
+    if fi, err := os.Stat(host); err == nil && !fi.IsDir() {
+        return wasiNotdir
+    }
+    return wasiOk
 }

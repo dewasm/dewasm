@@ -53,13 +53,27 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
+    // A slash-suffixed name may only resolve to a directory (issue #42):
+    // Paths.get has normalized the slash away, so enforce it here — the
+    // probes follow symlinks as the slash requires; a missing target is each
+    // syscall's case. The slash is also stripped from `last` below, which
+    // would otherwise be "" and silently degrade followLast.
+    boolean trailing = rel.endsWith("/");
+    String core = rel;
+    while (core.endsWith("/")) {
+        core = core.substring(0, core.length() - 1);
+    }
+    if (trailing && java.nio.file.Files.exists(joined)
+        && !java.nio.file.Files.isDirectory(joined)) {
+        return new Resolved(null, WASI_NOTDIR);
+    }
     // The final component as the *guest* wrote it (not joined.getFileName(),
     // which has Cleaned "." / ".." away). A trailing "." or ".." is never a
     // symlink, so those fall through to full resolution.
-    String last = rel;
-    int idx = rel.lastIndexOf('/');
+    String last = core;
+    int idx = core.lastIndexOf('/');
     if (idx >= 0) {
-        last = rel.substring(idx + 1);
+        last = core.substring(idx + 1);
     }
     if (!followLast && !last.equals(".") && !last.equals("..") && !last.isEmpty()) {
         java.nio.file.Path parent = joined.getParent();

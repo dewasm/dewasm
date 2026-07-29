@@ -37,6 +37,21 @@ wasi_path_open() {
   if (( (__oflags & 0x8) && (__dir_base & 0x80000) == 0 )); then R0=76; return 0; fi # TRUNC needs PATH_FILESTAT_SET_SIZE
   # A symlink final component that was not followed cannot be opened (D3).
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
+  # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in
+  # resolve_path): O_CREAT must not create through the slash — per wasmtime
+  # (ADR-49) EINVAL on macOS / EISDIR on Linux; a plain open is ENOENT.
+  if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
+    if (( __oflags & 0x1 )); then
+      if [[ $OSTYPE == darwin* ]]; then
+        R0=28 # EINVAL
+      else
+        R0=31 # EISDIR
+      fi
+    else
+      R0=44 # ENOENT
+    fi
+    return 0
+  fi
   local __fd=$__wnext
   if (( __oflags & 0x2 )) || { [[ ! -h $__host ]] && [[ -d $__host ]]; }; then
     if (( __oflags & 0x2 )); then

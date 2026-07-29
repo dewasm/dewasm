@@ -32,6 +32,14 @@ wasi_resolve_path() {
     R0=76 # ENOTCAPABLE: an absolute path escapes the preopen sandbox
     return 0
   fi
+  # Strip a trailing slash for resolution (the parent/basename split below
+  # would read an empty basename and misresolve every slash-suffixed name),
+  # remember it, and re-check the directory constraint below (issue #42).
+  local __slash=0
+  if [[ $__rel == */ ]]; then
+    __slash=1
+    while [[ $__rel == */ ]]; do __rel=${__rel%/}; done
+  fi
   # Reject a path that lexically ascends above the dirfd root via `..` — an
   # escape even when the resulting physical parent does not exist (so it cannot
   # be caught by the post-resolution containment check, which would misreport it
@@ -89,6 +97,12 @@ wasi_resolve_path() {
     fi
   fi
   if [[ $__real == "$__root" || $__real == "${__root%/}/"* ]]; then
+    # Slash-suffixed names may only resolve to a directory; `-e` follows
+    # symlinks as the slash requires. A missing target is each caller's case.
+    if (( __slash )) && [[ -e $__real && ! -d $__real ]]; then
+      R0=54 # ENOTDIR: a slash-suffixed name resolved to a non-directory
+      return 0
+    fi
     R1=$__real
     R0=0
     return 0

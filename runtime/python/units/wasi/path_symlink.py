@@ -10,6 +10,14 @@ def wasi_path_symlink(self, old_path_ptr, old_path_len, fd, new_path_ptr, new_pa
     link_host, err = self.resolve_path(fd, new_rel, False)
     if err is not None:
         return err
+    # Slash-suffixed link name, per wasmtime (ADR-49): EEXIST on a directory,
+    # ENOTDIR on a non-directory (raw Linux would say EEXIST), ENOENT when
+    # missing. Probe the slash-stripped path.
+    if link_host.endswith(os.sep):
+        bare = link_host[:-1]
+        if os.path.lexists(bare):
+            return self.ERRNO_EXIST if os.path.isdir(bare) else self.ERRNO_NOTDIR
+        return self.ERRNO_NOENT
     try:
         os.symlink(target, link_host)
     except OSError as e:

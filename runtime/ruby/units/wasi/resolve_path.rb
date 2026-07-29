@@ -10,6 +10,10 @@ private :within?
 # root. Every call re-validates against its own dirfd's root, so nested
 # path_opens can't be used to launder an escape one level cheaper.
 #
+# A trailing slash is stripped for resolution and re-appended to the
+# returned host path, so the host call enforces it (issue #42; mirrors
+# runtime/python/units/wasi/resolve_path.py).
+#
 # `follow_last: false` resolves the parent but leaves the final
 # component untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that
 # operate on a symlink itself (lstat, unlink, rename, rmdir, mkdir). A
@@ -36,7 +40,10 @@ def resolve_path(dirfd, rel, follow_last: true)
   # (it would raise ENOENT), so a path like "a/../../etc" needs catching
   # here to report NOTCAPABLE rather than NOENT.
   return [nil, ERRNO_NOTCAPABLE] unless within?(base, File.expand_path(rel, base))
-  joined = File.join(base, rel)
+  trailing = rel.length > 1 && rel.end_with?("/")
+  suffix = trailing ? "/" : ""
+  core = rel.sub(%r{/+\z}, "")
+  joined = core.empty? ? base : File.join(base, core)
   last = File.basename(joined)
   if !follow_last && last != "." && last != ".."
     begin
@@ -49,12 +56,12 @@ def resolve_path(dirfd, rel, follow_last: true)
       return [nil, ERRNO_IO]
     end
     return [nil, ERRNO_NOTCAPABLE] unless within?(base, real_parent)
-    return [File.join(real_parent, last), nil]
+    return [File.join(real_parent, last) + suffix, nil]
   end
   begin
     real = File.realpath(joined)
     return [nil, ERRNO_NOTCAPABLE] unless within?(base, real)
-    [real, nil]
+    [real + suffix, nil]
   rescue Errno::ENOENT
     begin
       real_parent = File.realpath(File.dirname(joined))
@@ -64,7 +71,7 @@ def resolve_path(dirfd, rel, follow_last: true)
       return [nil, ERRNO_IO]
     end
     return [nil, ERRNO_NOTCAPABLE] unless within?(base, real_parent)
-    [File.join(real_parent, File.basename(joined)), nil]
+    [File.join(real_parent, File.basename(joined)) + suffix, nil]
   rescue Errno::ELOOP
     [nil, ERRNO_LOOP]
   rescue SystemCallError

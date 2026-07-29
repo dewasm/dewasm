@@ -256,6 +256,93 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
+    // Trailing-slash shapes (issue #42): pinned to wasmtime 47 on both hosts
+    // (ADR-49). Probe k is wasmtime's own host split, asserted per host; the
+    // fixture header lists the unpinned shapes. The bash-only PR #41 pins
+    // live in crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs.
+    WasiCase {
+        name: "fs_trailing_slash",
+        wat: "wasi_trailing_slash.wat",
+        kind: WasiKind::Fs,
+        args: &[],
+        stdin: "",
+        check: WasiCheck::Fs {
+            preopen_subdir: None,
+            setup: |dir| {
+                std::fs::write(dir.join("file"), "keep me").unwrap();
+                std::fs::write(dir.join("file2"), "also kept").unwrap();
+                std::fs::create_dir(dir.join("dir")).unwrap();
+            },
+            check_stdout: |out| {
+                let k = if cfg!(target_os = "macos") {
+                    "k28"
+                } else {
+                    "k31"
+                };
+                assert_eq!(
+                    out,
+                    format!(
+                        "a54\nb54\nc54\nd44\ne54\nf54\ng54\nh54\ni44\nj00\n{k}\nl20\nm00\nn44\no28\np00\n"
+                    )
+                )
+            },
+            assert_host: |dir| {
+                // The failing probes must have left the filesystem alone; the
+                // succeeding ones (j, m, p) must have taken effect.
+                assert_eq!(
+                    std::fs::read_to_string(dir.join("file")).unwrap(),
+                    "keep me"
+                );
+                assert_eq!(
+                    std::fs::read_to_string(dir.join("newd")).unwrap(),
+                    "also kept",
+                    "j must rename file2 to a plain file newd (wasmtime strips the slash)"
+                );
+                assert!(!dir.join("file2").exists(), "j must move file2 away");
+                assert!(!dir.join("renamed").exists(), "a must not rename");
+                assert!(!dir.join("lnk").exists(), "h must not link");
+                assert!(!dir.join("newf").exists(), "k must not create a file");
+                assert!(dir.join("newdir").is_dir(), "m must create newdir/");
+                assert!(!dir.join("dir").exists(), "o must keep dir, p removes it");
+            },
+            unix_only: false,
+        },
+    },
+    // The symlink side (ADR-49): readlink through a slash follows to the
+    // target; a slash-suffixed symlink destination errs by what sits behind
+    // the slash.
+    WasiCase {
+        name: "fs_trailing_slash_symlink",
+        wat: "wasi_trailing_slash_symlink.wat",
+        kind: WasiKind::Fs,
+        args: &[],
+        stdin: "",
+        check: WasiCheck::Fs {
+            preopen_subdir: None,
+            setup: |dir| {
+                #[cfg(unix)]
+                {
+                    std::fs::write(dir.join("file"), "x").unwrap();
+                    std::os::unix::fs::symlink("file", dir.join("linkfile")).unwrap();
+                    std::fs::create_dir(dir.join("sd1")).unwrap();
+                }
+                #[cfg(not(unix))]
+                let _ = dir;
+            },
+            check_stdout: |out| assert_eq!(out, "t54\nu20\nv54\nw44\n"),
+            assert_host: |dir| {
+                assert!(
+                    dir.join("linkfile").symlink_metadata().is_ok(),
+                    "the probes must not remove the link"
+                );
+                assert!(
+                    dir.join("dang").symlink_metadata().is_err(),
+                    "w must not create a symlink"
+                );
+            },
+            unix_only: true,
+        },
+    },
     // Per-fd rights enforcement (ADR-40). A fd narrowed by
     // fd_fdstat_set_rights must refuse fd_pread/fd_pwrite (NOTCAPABLE, like
     // fd_read/fd_write); a dirfd stripped of PATH_FILESTAT_SET_SIZE must

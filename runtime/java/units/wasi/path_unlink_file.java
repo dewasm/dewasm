@@ -9,10 +9,19 @@ int wasi_path_unlink_file(int dirfd, int pathPtr, int pathLen) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
-    // Files.delete would remove an empty directory; unlink must fail (EISDIR)
-    // on any directory, so pre-check.
+    // A missing slash-suffixed target is ENOENT, not ENOTDIR: resolve_path's
+    // directory gate only rejects *existing* non-directories (issue #42).
+    if (rel.endsWith("/")
+        && !java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+        return WASI_NOENT;
+    }
+    // Files.delete would remove an empty directory; unlink must fail on any
+    // directory. Errno per host, as wasmtime inherits it (ADR-49): EPERM on
+    // macOS, EISDIR on Linux.
     if (java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-        return WASI_ISDIR;
+        return System.getProperty("os.name").toLowerCase().contains("mac")
+            ? WASI_PERM
+            : WASI_ISDIR;
     }
     // A trailing slash demands a directory; on a non-directory target that is
     // ENOTDIR (a plain unlink of the file without the slash still succeeds).

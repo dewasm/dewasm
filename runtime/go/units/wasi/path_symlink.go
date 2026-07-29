@@ -10,13 +10,17 @@ func (w *WASI) wasi_path_symlink(oldPathPtr, oldPathLen, fd, newPathPtr, newPath
         return wasiNotcapable
     }
     newRel := string(w.memory.read_string(uint64(newPathPtr), uint64(newPathLen)))
-    // A trailing slash on the link name is NOENT: the link is a fresh leaf.
-    if len(newRel) > 0 && newRel[len(newRel)-1] == '/' {
-        return wasiNoent
-    }
     linkHost, err := w.resolve_path(fd, newRel, false)
     if err != wasiOk {
         return err
+    }
+    // Slash-suffixed link name (ADR-49): EEXIST if something is there
+    // (non-directories were ENOTDIR in resolve_path), else ENOENT.
+    if strings.HasSuffix(newRel, "/") {
+        if _, e := os.Lstat(linkHost); e == nil {
+            return wasiExist
+        }
+        return wasiNoent
     }
     if e := os.Symlink(target, linkHost); e != nil {
         return w.fs_errno(e)

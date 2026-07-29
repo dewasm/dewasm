@@ -7,6 +7,13 @@ func (w *WASI) wasi_path_remove_directory(dirfd, pathPtr, pathLen uint32) uint32
     if err != wasiOk {
         return err
     }
+    // rmdir through a trailing slash on an existing directory is EINVAL per
+    // wasmtime (ADR-49); other shapes come from resolve_path or the syscall.
+    if strings.HasSuffix(rel, "/") {
+        if fi, e := os.Stat(hostPath); e == nil && fi.IsDir() {
+            return wasiInval
+        }
+    }
     if e := syscall.Rmdir(hostPath); e != nil {
         return w.fs_errno(e)
     }

@@ -5,6 +5,10 @@ def wasi_path_remove_directory(self, dirfd, path_ptr, path_len):
     host_path, err = self.resolve_path(dirfd, rel, False)
     if err is not None:
         return err
+    # rmdir through a trailing slash on an existing directory is EINVAL per
+    # wasmtime (ADR-49); other shapes come from the host call.
+    if host_path.endswith(os.sep) and os.path.isdir(host_path[:-1]):
+        return self.ERRNO_INVAL
     try:
         os.rmdir(host_path)
     except OSError as e:

@@ -308,6 +308,7 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         ("math.", "math"),
         ("rand.", "crypto/rand"),
         ("reflect.", "reflect"),
+        ("runtime.", "runtime"),
         ("os.", "os"),
         ("sort.", "sort"),
         ("strings.", "strings"),
@@ -323,9 +324,27 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    // A selector only counts at an identifier boundary: `runtime.GOOS` must
+    // not register a use of `time.`.
+    fn selector_used(code: &str, sel: &str) -> bool {
+        let bytes = code.as_bytes();
+        let mut start = 0;
+        while let Some(i) = code[start..].find(sel) {
+            let idx = start + i;
+            if idx == 0 {
+                return true;
+            }
+            let prev = bytes[idx - 1];
+            if !(prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'.') {
+                return true;
+            }
+            start = idx + 1;
+        }
+        false
+    }
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {
-        if code.contains(sel) {
+        if selector_used(&code, sel) {
             set.insert(path);
         }
     }

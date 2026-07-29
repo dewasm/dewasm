@@ -51,6 +51,14 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
         info, e := os.Stat(hostPath)
         if e != nil {
+            // O_CREAT must not create through a trailing slash; per wasmtime
+            // (ADR-49): EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+            if hasTrailingSlash && oflags&0x2 == 0 && oflags&0x1 != 0 {
+                if runtime.GOOS == "darwin" {
+                    return wasiInval
+                }
+                return wasiIsdir
+            }
             return wasiNoent
         }
         if !info.IsDir() {

@@ -16,6 +16,12 @@ wasi_path_create_directory() {
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?
   if (( R0 != 0 )); then return 0; fi
   local __rel=$R1
+  # Strip a trailing slash before the resolver's directory gate: mkdir names
+  # a directory anyway, and EEXIST is wasmtime's answer for mkdir("file/")
+  # where the hosts split (ADR-49).
+  local __stripped=$__rel
+  while [[ $__stripped == */ ]]; do __stripped=${__stripped%/}; done
+  [[ -n $__stripped ]] && __rel=$__stripped
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" 0 || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
