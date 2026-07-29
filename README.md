@@ -64,13 +64,13 @@ Build from source with the pinned Rust toolchain (picked up automatically
 from `rust-toolchain.toml`):
 
 ```console
-$ cargo install --git https://github.com/makenowjust-sandbox/dewasm dewasm-cli
+$ cargo install --git https://github.com/dewasm/dewasm dewasm-cli
 ```
 
 or clone and build locally:
 
 ```console
-$ git clone https://github.com/makenowjust-sandbox/dewasm
+$ git clone https://github.com/dewasm/dewasm
 $ cd dewasm
 $ cargo build --release        # binary at target/release/dewasm
 ```
@@ -159,9 +159,13 @@ source file that runs in ~60 s — and Bash skips them by default because its
 softfloat makes float-heavy programs slow. These are deliberate performance
 opt-outs, not correctness gaps ([ADR-15](docs/adr/15-tests-fail-not-skip.md)).
 
-The north-star demos we steer toward: a library-mode SQLite as a pure-Ruby
-`sqlite3` driver (Ruby on Rails on a dewasmified SQLite), and C/Rust tools
-running under plain Bash.
+The other north-star demo — a library-mode SQLite as a pure-Ruby `sqlite3`
+driver, real enough to run Ruby on Rails against a dewasm-converted SQLite —
+has shipped as `examples/rails`
+([ADR-45](docs/adr/45-rails-sqlite3-shim-example.md)): an unmodified Rails 8
+app served over HTTP with `libsqlite3.wasm` converted to Ruby as its only
+database engine. C/Rust tools running under plain Bash are demonstrated
+above by `cowsay` and `minigzip`.
 
 ## Scope
 
@@ -204,7 +208,8 @@ rejected at conversion time with a clear error, never a runtime surprise
 
 ## Toward 0.1
 
-The backends and the app gate are in place. Remaining before tagging 0.1:
+The backends and the app gate are in place, and the GitHub repository has
+been renamed and moved to `dewasm` ([ADR-26](docs/adr/26-rename-dewasm.md)).
+Remaining before tagging 0.1:
 
-1. Rename the GitHub repository to `dewasm` ([ADR-26](docs/adr/26-rename-dewasm.md)).
-2. Cut and tag the 0.1 release.
+1. Cut and tag the 0.1 release.

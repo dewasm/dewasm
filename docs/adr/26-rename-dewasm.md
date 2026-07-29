@@ -1,9 +1,10 @@
 # ADR-26 — Rename the Project: dewasmify → dewasm
 
-Status: **Accepted, 2026-07-25.** Landed 2026-07-26: crates are
-`dewasm-*`, the binary is `dewasm`, env vars are `DEWASM_*`, and docs
-are swept (superseded ADR bodies keep the historical name). The GitHub
-repository rename remains a manual step. Amends the naming note in
+Status: **Accepted, 2026-07-25; fully landed 2026-07-28.** Landed
+2026-07-26: crates are `dewasm-*`, the binary is `dewasm`, env vars are
+`DEWASM_*`, and docs are swept (superseded ADR bodies keep the
+historical name). The GitHub repository itself now lives at
+`github.com/dewasm/dewasm` (commit ae2b430). Amends the naming note in
 [ADR-0](0-foundation.md).
 
 ## Context
