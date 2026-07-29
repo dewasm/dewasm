@@ -167,6 +167,24 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
+    // fd_readdir with a dircookie whose high bit is set (u64 2^63): the
+    // cookie is an unsigned position past any snapshot's end, so the call
+    // succeeds with bufused 0 (matching wasmtime). Runtimes holding the
+    // cookie in a signed type must not index negatively (issue #27).
+    WasiCase {
+        name: "fs_readdir_high_cookie",
+        wat: "wasi_readdir_high_cookie.wat",
+        kind: WasiKind::Fs,
+        args: &[],
+        stdin: "",
+        check: WasiCheck::Fs {
+            preopen_subdir: None,
+            setup: |dir| std::fs::write(dir.join("entry.txt"), "x").unwrap(),
+            check_stdout: |out| assert_eq!(out, "past-end ok\n"),
+            assert_host: |_dir| {},
+            unix_only: false,
+        },
+    },
     // path_open with oflags::DIRECTORY on a missing path is ENOENT (44), not
     // ENOTDIR (54) — guests (e.g. wasi-libc's opendir) branch on the
     // difference. The fixture exits with the errno.

@@ -63,6 +63,11 @@ wasi_fd_readdir() {
   local -n __m=${__p}mem
   local LC_ALL=C
   local __out=() __outlen=0 __ri=$__cookie __name __nlen __next __ck __b
+  # The u64 cookie arrives as bash's signed-64 bit pattern (ADR-11): a
+  # negative value is a huge unsigned position past any snapshot's end, so
+  # report end-of-directory (an empty result, matching wasmtime) instead of
+  # letting the loop read negative subscripts.
+  if (( __ri < 0 )); then __ri=$__total; fi
   while (( __ri < __total && __outlen < __buf_len )); do
     __name=${__names[__ri]}
     __nlen=${#__name}
