@@ -12,6 +12,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p cache
 
+# Every download goes through this helper: the pinned hosts (GitHub,
+# sqlite.org, tcpdump.org, wasmer.io) return transient 5xx often enough to
+# kill a cold CI run otherwise (issue #17); curl retries 408/429/5xx and
+# refused connections.
+fetch_url() {
+  curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused -o "$2" "$1"
+}
+
 # --- wasm-opt -O2 preprocessing (ADR-39) for the locally-built modules.
 # Only modules we build here (the two reactor C libs and ripgrep) are
 # post-processed: it shrinks them and normalizes the overlong call_indirect
@@ -55,11 +63,11 @@ for app in "${APPS[@]}"; do
   trap 'rm -rf "$tmp"' EXIT
   if [ -z "$wasm_path" ]; then
     # URL is a standalone .wasm asset (e.g. a GitHub release) — no archive.
-    curl -fsSL -o "$tmp/app.wasm" "$url"
+    fetch_url "$url" "$tmp/app.wasm"
     echo "$sha256  $tmp/app.wasm" | shasum -a 256 -c - >/dev/null
     cp "$tmp/app.wasm" "$out"
   else
-    curl -fsSL -o "$tmp/pkg.tar.gz" "$url"
+    fetch_url "$url" "$tmp/pkg.tar.gz"
     echo "$sha256  $tmp/pkg.tar.gz" | shasum -a 256 -c - >/dev/null
     tar xzf "$tmp/pkg.tar.gz" -C "$tmp"
     cp "$tmp/$wasm_path" "$out"
@@ -136,7 +144,7 @@ else
   echo "sqlite3: fetching $SQLITE_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/sqlite.zip" "$SQLITE_URL"
+  fetch_url "$SQLITE_URL" "$tmp/sqlite.zip"
   echo "$SQLITE_SHA256  $tmp/sqlite.zip" | shasum -a 256 -c - >/dev/null
   unzip -q "$tmp/sqlite.zip" -d "$tmp"
   echo "sqlite3: building sqlite3-shell.wasm (zig cc)"
@@ -214,7 +222,7 @@ else
   echo "libpcap: fetching $PCAP_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/libpcap.tar.gz" "$PCAP_URL"
+  fetch_url "$PCAP_URL" "$tmp/libpcap.tar.gz"
   echo "$PCAP_SHA256  $tmp/libpcap.tar.gz" | shasum -a 256 -c - >/dev/null
   tar xzf "$tmp/libpcap.tar.gz" -C "$tmp"
   pdir="$tmp/$PCAP_DIR"
@@ -275,10 +283,10 @@ else
   echo "treesitter: fetching $TS_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/ts.tar.gz" "$TS_URL"
+  fetch_url "$TS_URL" "$tmp/ts.tar.gz"
   echo "$TS_SHA256  $tmp/ts.tar.gz" | shasum -a 256 -c - >/dev/null
   echo "treesitter: fetching $TSJSON_URL"
-  curl -fsSL -o "$tmp/tsjson.tar.gz" "$TSJSON_URL"
+  fetch_url "$TSJSON_URL" "$tmp/tsjson.tar.gz"
   echo "$TSJSON_SHA256  $tmp/tsjson.tar.gz" | shasum -a 256 -c - >/dev/null
   tar xzf "$tmp/ts.tar.gz" -C "$tmp"
   tar xzf "$tmp/tsjson.tar.gz" -C "$tmp"
@@ -327,7 +335,7 @@ else
   echo "minigzip: fetching $ZLIB_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/zlib.tar.gz" "$ZLIB_URL"
+  fetch_url "$ZLIB_URL" "$tmp/zlib.tar.gz"
   echo "$ZLIB_SHA256  $tmp/zlib.tar.gz" | shasum -a 256 -c - >/dev/null
   tar xzf "$tmp/zlib.tar.gz" -C "$tmp"
   echo "minigzip: building minigzip.wasm (zig cc)"
@@ -394,7 +402,7 @@ else
   echo "rg: fetching $RG_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/rg.tar.gz" "$RG_URL"
+  fetch_url "$RG_URL" "$tmp/rg.tar.gz"
   echo "$RG_SHA256  $tmp/rg.tar.gz" | shasum -a 256 -c - >/dev/null
   tar xzf "$tmp/rg.tar.gz" -C "$tmp"
   echo "rg: building rg.wasm (cargo build --release --target wasm32-wasip1)"
@@ -427,7 +435,7 @@ else
   echo "cpython: fetching $CPYTHON_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/py.zip" "$CPYTHON_URL"
+  fetch_url "$CPYTHON_URL" "$tmp/py.zip"
   echo "$CPYTHON_SHA256  $tmp/py.zip" | shasum -a 256 -c - >/dev/null
   unzip -qo "$tmp/py.zip" python.wasm -d "$tmp"
   cp "$tmp/python.wasm" cache/cpython.wasm
@@ -460,7 +468,7 @@ else
   echo "ruby: fetching $CRUBY_URL"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL -o "$tmp/ruby.tar.gz" "$CRUBY_URL"
+  fetch_url "$CRUBY_URL" "$tmp/ruby.tar.gz"
   echo "$CRUBY_SHA256  $tmp/ruby.tar.gz" | shasum -a 256 -c - >/dev/null
   tar xzf "$tmp/ruby.tar.gz" -C "$tmp" "$CRUBY_DIR/usr/local/bin/ruby"
   cp "$tmp/$CRUBY_DIR/usr/local/bin/ruby" cache/ruby.wasm
