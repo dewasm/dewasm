@@ -1,19 +1,6 @@
-//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert
-//! each cached app with a backend and require byte-identical stdout and exit
-//! status against a golden output captured once from wasmtime and checked
-//! into `examples/apps/golden/` (ADR-15) — running these does not itself need
-//! `wasmtime` installed.
+//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a golden output captured once from wasmtime and checked into `examples/apps/golden/` (ADR-15) — running these does not itself need `wasmtime` installed.
 //!
-//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated
-//! by `examples/apps/fetch.sh`) fail the test, they don't skip it. Each case
-//! is a `pub const` [`AppCase`] driven by its own per-case macro
-//! (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`,
-//! `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!`
-//! are slow — softfloat makes QuickJS/SQLite take tens of seconds under
-//! Bash — so the macro expands their generated `#[test]` as `#[ignore]`d
-//! unless the expanding backend crate's `slow_test` feature is enabled; see
-//! [`run_slow_app_case`], which just runs the case unconditionally now that
-//! the gating lives at the macro/feature level.
+//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/fetch.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the gating lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -24,8 +11,7 @@ pub struct AppCase {
     pub name: &'static str,
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// Captured once via `wasmtime run` (ADR-15); the golden reference this
-    /// case's generated-language output must match exactly.
+    /// Captured once via `wasmtime run` (ADR-15); the golden reference this case's generated-language output must match exactly.
     pub expect_stdout: &'static str,
     pub expect_code: i32,
 }
@@ -48,8 +34,7 @@ pub const COWSAY_STDIN: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// QuickJS `-e` one-liner eval (slow tier: softfloat-bound interpreters skip by
-/// default, see [`run_slow_app_case`]).
+/// QuickJS `-e` one-liner eval (slow tier: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
 pub const QJS_EVAL: AppCase = AppCase {
     name: "qjs",
     args: &[
@@ -61,8 +46,7 @@ pub const QJS_EVAL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// sqlite3 shell against an in-memory database (slow tier: softfloat-bound
-/// interpreters skip by default, see [`run_slow_app_case`]).
+/// sqlite3 shell against an in-memory database (slow tier: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
 pub const SQLITE3_SHELL: AppCase = AppCase {
     name: "sqlite3-shell",
     args: &[],
@@ -74,8 +58,7 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// Convert the cached app `case` names with `lang`'s backend, run it, and diff
-/// against the case's golden output.
+/// Convert the cached app `case` names with `lang`'s backend, run it, and diff against the case's golden output.
 fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
     assert!(
@@ -110,34 +93,19 @@ fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     );
 }
 
-/// Run a fast [`AppCase`] (`COWSAY_ARGS`/`COWSAY_STDIN`) for `lang`
-/// unconditionally.
+/// Run a fast [`AppCase`] (`COWSAY_ARGS`/`COWSAY_STDIN`) for `lang` unconditionally.
 pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang`
-/// unconditionally. The perf opt-out now lives at the macro/feature level
-/// (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as
-/// `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used
-/// directly by the wasmtime suite — never needs to gate itself.
+/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature level (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs to gate itself.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// The gzip byte-stdio stress cases (minigzip, the Phase 5b compression CLI):
-/// binary stdin/stdout the text-only app cases cannot carry (their `&str`
-/// stdin and `include_str!` goldens require valid UTF-8; a gz stream is
-/// neither). Runs under *every* backend — Ruby and Bash both — since it is
-/// integer-only (no softfloat) and therefore fast even under Bash. Two cases:
+/// The gzip byte-stdio stress cases (minigzip, the Phase 5b compression CLI): binary stdin/stdout the text-only app cases cannot carry (their `&str` stdin and `include_str!` goldens require valid UTF-8; a gz stream is neither). Runs under *every* backend — Ruby and Bash both — since it is integer-only (no softfloat) and therefore fast even under Bash. Two cases:
 ///
-///   * *compress* — feed a fixed text input on stdin, require the compressed
-///     stdout to be byte-identical to the golden captured from `wasmtime`
-///     (`examples/apps/golden/minigzip_compress.gz`). zlib's gz stream is
-///     deterministic here (mtime 0, OS byte 3), so this is a stable equality.
-///   * *round trip* — compress, then decompress that output with `-d`, and
-///     require the result to equal the original input (self-checking; proves
-///     both directions of the binary stdio path).
+/// * *compress* — feed a fixed text input on stdin, require the compressed stdout to be byte-identical to the golden captured from `wasmtime` (`examples/apps/golden/minigzip_compress.gz`). zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality. * *round trip* — compress, then decompress that output with `-d`, and require the result to equal the original input (self-checking; proves both directions of the binary stdio path).
 pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
     assert!(

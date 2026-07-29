@@ -1,24 +1,6 @@
-//! C-API-driving app cases (ADR-27): a converted library-mode artifact whose
-//! C API is driven directly from host-language glue — `sqlite3_malloc`,
-//! guest-memory pointer plumbing, and (for the callback case) an imported
-//! `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no
-//! wasmtime golden**: the CLI cannot drive a C-API flow whose results live in
-//! guest memory, so each case pins a fixed expected string, every value in it
-//! anchored by the amalgamation version pinned in `examples/apps/fetch.sh`.
+//! C-API-driving app cases (ADR-27): a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime golden**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/fetch.sh`.
 //!
-//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro
-//! (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`,
-//! `sqlite3_callback_binding_e2e!`). The per-language variation is the named
-//! glue const passed to that macro (malloc/pointer plumbing/memory
-//! access/provider registration written out literally in the backend's
-//! language); the file-backed case's runtime scratch path arrives through the
-//! `{scratch}` placeholder the runner fills. Which backends invoke a macro is
-//! the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash
-//! — it has no WASI filesystem and no host-language object model to plumb a C
-//! API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so
-//! each per-case macro expands its generated `#[test]` as `#[ignore]`d unless
-//! the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`]
-//! itself just runs the case unconditionally.
+//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`, `sqlite3_callback_binding_e2e!`). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path arrives through the `{scratch}` placeholder the runner fills. Which backends invoke a macro is the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash — it has no WASI filesystem and no host-language object model to plumb a C API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -28,19 +10,16 @@ use crate::backend::BackendUnderTest;
 use crate::fixtures::{apps_cache_dir, fresh_scratch_dir};
 use crate::glue::fill;
 
-/// A C-API-driving case: convert `wasm` (cache stem) to library class `class`,
-/// append the backend's glue, run it, and require exactly `expect_stdout`.
+/// A C-API-driving case: convert `wasm` (cache stem) to library class `class`, append the backend's glue, run it, and require exactly `expect_stdout`.
 pub struct CApiCase {
     pub name: &'static str,
-    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the
-    /// conversion module name (every backend PascalCases it to `class`).
+    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the conversion module name (every backend PascalCases it to `class`).
     pub wasm: &'static str,
     /// The library class name the glue instantiates (PascalCase of `wasm`).
     pub class: &'static str,
     /// The fixed stdout the drive must produce (no wasmtime golden possible).
     pub expect_stdout: &'static str,
-    /// Host-side assertion over the scratch dir after the run (file cases);
-    /// `assert_none` when there is nothing to check.
+    /// Host-side assertion over the scratch dir after the run (file cases); `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
 }
 
@@ -59,9 +38,7 @@ fn assert_dbfile(scratch: &Path) {
     );
 }
 
-/// The library half of the sqlite3 build (ADR-22): the C API driven in memory.
-/// version + two SELECT rows + a sentinel, all pinned by the amalgamation
-/// version. In-memory (`:memory:`), so the `{scratch}` placeholder goes unused.
+/// The library half of the sqlite3 build (ADR-22): the C API driven in memory. version + two SELECT rows + a sentinel, all pinned by the amalgamation version. In-memory (`:memory:`), so the `{scratch}` placeholder goes unused.
 pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     name: "libsqlite3_c_api",
     wasm: "libsqlite3",
@@ -70,10 +47,7 @@ pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// The same C API opening a *file* under a preopen (ADR-22): create+insert,
-/// close, reopen, select — proving the C-API path hits the same ADR-14 fs stack
-/// as the shell. The glue preopens the fresh scratch dir via `{scratch}` and
-/// leaves a nonzero DB file on the host.
+/// The same C API opening a *file* under a preopen (ADR-22): create+insert, close, reopen, select — proving the C-API path hits the same ADR-14 fs stack as the shell. The glue preopens the fresh scratch dir via `{scratch}` and leaves a nonzero DB file on the host.
 pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     name: "sqlite3_file_c_api",
     wasm: "libsqlite3",
@@ -82,11 +56,7 @@ pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     assert_host: assert_dbfile,
 };
 
-/// Guest->host callback round trip (ADR-22): our own committed C
-/// (examples/apps/src/sqlite3_binding.c) exports `run_query`, which calls
-/// `sqlite3_exec` with a C callback forwarding each row to the *imported*
-/// `env.host_row`. The glue provides `host_row` via the ADR-7 import provider
-/// and collects the rows.
+/// Guest->host callback round trip (ADR-22): our own committed C (examples/apps/src/sqlite3_binding.c) exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import provider and collects the rows.
 pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     name: "sqlite3_callback_binding",
     wasm: "sqlite3-binding",
@@ -95,16 +65,7 @@ pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// libpcap BPF filter compilation (ADR-22): our own committed C
-/// (examples/apps/src/pcap_binding.c) exports `compile_filter`, which runs
-/// libpcap's platform-independent BPF compiler (`pcap_compile_nopcap`) on a
-/// textual filter and serializes the resulting program into guest memory as
-/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`. The glue drives
-/// `compile_filter("tcp port 80", DLT_EN10MB=1, 65535)`, prints each insn as
-/// `code jt jf k`, and a sentinel. The pinned output is the canonical
-/// tcp-port-80 filter (ethertype IPv6 0x86dd/IPv4 0x0800, IP proto TCP=6,
-/// port 80), deterministic because BPF programs hold offsets/constants only,
-/// no addresses. In-memory, so `{scratch}` goes unused.
+/// libpcap BPF filter compilation (ADR-22): our own committed C (examples/apps/src/pcap_binding.c) exports `compile_filter`, which runs libpcap's platform-independent BPF compiler (`pcap_compile_nopcap`) on a textual filter and serializes the resulting program into guest memory as `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`. The glue drives `compile_filter("tcp port 80", DLT_EN10MB=1, 65535)`, prints each insn as `code jt jf k`, and a sentinel. The pinned output is the canonical tcp-port-80 filter (ethertype IPv6 0x86dd/IPv4 0x0800, IP proto TCP=6, port 80), deterministic because BPF programs hold offsets/constants only, no addresses. In-memory, so `{scratch}` goes unused.
 pub const PCAP_COMPILE: CApiCase = CApiCase {
     name: "pcap_compile",
     wasm: "libpcap",
@@ -116,14 +77,7 @@ pub const PCAP_COMPILE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// tree-sitter JSON parse (ADR-22): our own committed C
-/// (examples/apps/src/treesitter_binding.c) exports `parse_source`, which
-/// parses a source string with the tree-sitter runtime + the pre-generated
-/// tree-sitter-json grammar and returns the parse tree's S-expression (a
-/// malloc'd C string) via `ts_node_string`. The glue parses the fixed snippet
-/// `{"key": [1, true, null]}`, prints the S-expression, and a sentinel. The
-/// output is deterministic (tree-sitter's node naming is fixed by the pinned
-/// grammar). In-memory, so `{scratch}` goes unused.
+/// tree-sitter JSON parse (ADR-22): our own committed C (examples/apps/src/treesitter_binding.c) exports `parse_source`, which parses a source string with the tree-sitter runtime + the pre-generated tree-sitter-json grammar and returns the parse tree's S-expression (a malloc'd C string) via `ts_node_string`. The glue parses the fixed snippet `{"key": [1, true, null]}`, prints the S-expression, and a sentinel. The output is deterministic (tree-sitter's node naming is fixed by the pinned grammar). In-memory, so `{scratch}` goes unused.
 pub const TREESITTER_PARSE: CApiCase = CApiCase {
     name: "treesitter_parse",
     wasm: "treesitter",
@@ -133,10 +87,7 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// Run one [`CApiCase`] for `lang` with its per-language `glue`
-/// unconditionally (the perf opt-out lives at the macro/feature level, see the
-/// module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the
-/// file-backed case's preopen; unused by the in-memory cases).
+/// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the file-backed case's preopen; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let cache = apps_cache_dir();
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));

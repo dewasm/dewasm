@@ -1,5 +1,4 @@
-//! Backend trait and code emission utilities shared by all language
-//! backends.
+//! Backend trait and code emission utilities shared by all language backends.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -16,24 +15,18 @@ pub enum SupportStatus {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
-    /// Emit a module that is instantiated with an imports object and exposes
-    /// its exports to the host language.
+    /// Emit a module that is instantiated with an imports object and exposes its exports to the host language.
     Library,
     /// Emit a runnable program that wires up WASI and calls `_start`.
     Standalone,
 }
 
-/// How generated code gets its runtime. Generated code always refers to
-/// the runtime by the relative name `Rt` (or the backend's equivalent);
-/// linkage only decides where that name is defined.
+/// How generated code gets its runtime. Generated code always refers to the runtime by the relative name `Rt` (or the backend's equivalent); linkage only decides where that name is defined.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeLinkage {
-    /// Nest the needed runtime units inside the generated module itself
-    /// (single self-contained file; multiple generated artifacts never
-    /// collide).
+    /// Nest the needed runtime units inside the generated module itself (single self-contained file; multiple generated artifacts never collide).
     Embedded,
-    /// Emit only an alias to a runtime defined elsewhere (a shared bundle
-    /// in the same program, or a future runtime package/gem).
+    /// Emit only an alias to a runtime defined elsewhere (a shared bundle in the same program, or a future runtime package/gem).
     Alias(String),
 }
 
@@ -43,25 +36,16 @@ pub struct GenOptions {
     /// Class/package/module name for the generated code.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
-    /// Bundle the built-in WASI implementation as a fallback for
-    /// `wasi_snapshot_preview1` imports the embedder does not provide.
-    /// Disable to keep generated libraries free of ambient authority.
+    /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide. Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
-    /// Externalize data-segment bytes into a binary sidecar instead of
-    /// embedding them as hex literals (ADR-37). When `Some`, the backend
-    /// emits load-from-sidecar code and returns a second `OutputFile`
-    /// carrying the blob. Only backends that declare support honor it (the
-    /// CLI rejects it for the rest); a backend that ignores it keeps
-    /// embedding.
+    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals (ADR-37). When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob. Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
     pub data_file: Option<DataFileConfig>,
 }
 
 /// Configuration for data-segment externalization (ADR-37).
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
-    /// The filename the generated program references relative to itself
-    /// (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile`
-    /// carries this exact `name`; the CLI routes it to the requested path.
+    /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
     pub sidecar_name: String,
 }
 
@@ -75,32 +59,22 @@ pub trait Backend {
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
 
-    /// Declared support level per feature (ADR-8). The spec harness only
-    /// tolerates skips attributable to features that are not `Supported`;
-    /// flipping a feature to `Supported` makes its skips hard failures.
+    /// Declared support level per feature (ADR-8). The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
     }
 
-    /// Whether the backend bundles a WASI preview 1 runtime unit for
-    /// `name` (e.g. `"fd_write"`). Feeds the generated support docs
-    /// (ADR-25).
+    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`). Feeds the generated support docs (ADR-25).
     fn has_wasi_p1(&self, name: &str) -> bool {
         let _ = name;
         false
     }
 }
 
-/// Reject, with the same `UnsupportedError` attribution the core converter
-/// uses (ADR-0), any construct the shared IR now represents but this
-/// specific `backend` has not declared `Supported` (ADR-8). The core
-/// builder is backend-agnostic and accepts every wasm-1.0-scoped
-/// construct; a backend that hasn't implemented one of them yet must
-/// refuse it itself, at conversion time, rather than mis-lower it.
+/// Reject, with the same `UnsupportedError` attribution the core converter uses (ADR-0), any construct the shared IR now represents but this specific `backend` has not declared `Supported` (ADR-8). The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct; a backend that hasn't implemented one of them yet must refuse it itself, at conversion time, rather than mis-lower it.
 pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Result<()> {
-    // `used` is a closure so the usage scan (an IR walk for TableBulkOps)
-    // only runs for features the backend has *not* declared Supported.
+    // `used` is a closure so the usage scan (an IR walk for TableBulkOps) only runs for features the backend has *not* declared Supported.
     let require = |feature: Feature, used: &dyn Fn() -> bool, detail: &str| -> Result<()> {
         if backend.feature_status(feature) != SupportStatus::Supported && used() {
             return Err(UnsupportedError::new(feature, detail.to_string()).into());
@@ -144,10 +118,7 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
 }
 
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
-    // Exhaustive on purpose: a future body-carrying Stmt variant must
-    // show up here as a compile error, not silently stop the recursion
-    // (which would let an Unsupported backend mis-lower instead of
-    // rejecting at conversion time, violating ADR-0).
+    // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time, violating ADR-0).
     stmts.iter().any(|stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
         ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
@@ -176,12 +147,7 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     })
 }
 
-/// The full WASI preview 1 surface, for the generated support docs; which
-/// of these a backend implements is derived from its runtime units
-/// (`bundler().has_unit("wasi/<name>")`). The bool marks whether the
-/// function is in scope: `false` for the out-of-scope surface (sockets,
-/// `proc_raise`) that no toolchain output exercises and even wasmtime
-/// leaves unimplemented (ADR-25).
+/// The full WASI preview 1 surface, for the generated support docs; which of these a backend implements is derived from its runtime units (`bundler().has_unit("wasi/<name>")`). The bool marks whether the function is in scope: `false` for the out-of-scope surface (sockets, `proc_raise`) that no toolchain output exercises and even wasmtime leaves unimplemented (ADR-25).
 pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("args_get", true),
     ("args_sizes_get", true),
@@ -231,30 +197,23 @@ pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("sock_shutdown", false),
 ];
 
-/// One runtime unit: a single method (or an inseparable scope prelude),
-/// with its dependencies declared in `<comment> requires:` header lines.
+/// One runtime unit: a single method (or an inseparable scope prelude), with its dependencies declared in `<comment> requires:` header lines.
 pub struct RuntimeUnit {
     pub id: String,
     pub requires: Vec<String>,
     pub body: String,
 }
 
-/// A named scope units can live in (e.g. a class nested in the runtime
-/// module). `prefix` is the unit-id path segment; `open`/`close` wrap the
-/// scope's units; the root scope uses empty wrappers.
+/// A named scope units can live in (e.g. a class nested in the runtime module). `prefix` is the unit-id path segment; `open`/`close` wrap the scope's units; the root scope uses empty wrappers.
 pub struct RuntimeScope {
     pub prefix: &'static str,
     pub open: &'static str,
     pub close: &'static str,
-    /// Unit implicitly required by every unit of this scope (class
-    /// skeleton, constants); also force-included for the root scope.
+    /// Unit implicitly required by every unit of this scope (class skeleton, constants); also force-included for the root scope.
     pub prelude: Option<&'static str>,
 }
 
-/// Resolves `requires:` closures over runtime units and emits the bundle,
-/// grouped by scope in declaration order, deterministically sorted within
-/// a scope. Language-agnostic: syntax comes from the scopes and the
-/// caller-provided wrapper around the whole bundle.
+/// Resolves `requires:` closures over runtime units and emits the bundle, grouped by scope in declaration order, deterministically sorted within a scope. Language-agnostic: syntax comes from the scopes and the caller-provided wrapper around the whole bundle.
 pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
     units: BTreeMap<String, RuntimeUnit>,
@@ -336,8 +295,7 @@ impl RuntimeBundler {
         self.units.values()
     }
 
-    /// Compute the dependency closure of `seeds`, including scope preludes
-    /// and the root scope's prelude.
+    /// Compute the dependency closure of `seeds`, including scope preludes and the root scope's prelude.
     pub fn closure(&self, seeds: &BTreeSet<String>) -> Result<BTreeSet<String>> {
         let mut closure = BTreeSet::new();
         let mut queue: VecDeque<String> = seeds.iter().cloned().collect();
@@ -362,9 +320,7 @@ impl RuntimeBundler {
         Ok(closure)
     }
 
-    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent
-    /// level of the bundle's root-scope members (the caller wraps the
-    /// result in the runtime module/namespace itself).
+    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent level of the bundle's root-scope members (the caller wraps the result in the runtime module/namespace itself).
     pub fn bundle(&self, seeds: &BTreeSet<String>, base_indent: usize) -> Result<String> {
         let closure = self.closure(seeds)?;
         let mut out = String::new();

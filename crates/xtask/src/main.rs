@@ -1,8 +1,4 @@
-//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased
-//! in `.cargo/config.toml`). Replaces the former golden-regeneration env-var
-//! toggles on the `support_docs` and `apps_wasmtime` tests with explicit
-//! subcommands: those tests are now compare-only and point here when they
-//! fail.
+//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former golden-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
 //!
 //! No `clap` dependency: two subcommands and a help message do not need one.
 
@@ -48,10 +44,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Render `docs/support.md` from the backends' own declarations and write it
-/// to disk (ADR-8). The corresponding test (`crates/dewasm-cli/tests/
-/// support_docs.rs`) is compare-only and names this command in its failure
-/// message.
+/// Render `docs/support.md` from the backends' own declarations and write it to disk (ADR-8). The corresponding test (`crates/dewasm-cli/tests/ support_docs.rs`) is compare-only and names this command in its failure message.
 fn update_support_docs() -> Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
     let rendered = render_support_docs();
@@ -60,11 +53,7 @@ fn update_support_docs() -> Result<()> {
     Ok(())
 }
 
-/// Recapture the interactive QuickJS REPL transcript against a live wasmtime
-/// under a pty and write it to the checked-in golden path (Fix 4,
-/// `crates/dewasm-test-helper/src/qjs_repl.rs`). The corresponding freshness
-/// test (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) is compare-only
-/// and names this command in its failure message.
+/// Recapture the interactive QuickJS REPL transcript against a live wasmtime under a pty and write it to the checked-in golden path (Fix 4, `crates/dewasm-test-helper/src/qjs_repl.rs`). The corresponding freshness test (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) is compare-only and names this command in its failure message.
 fn update_repl_golden() -> Result<()> {
     let bytes = capture_qjs_repl_golden(&Wasmtime);
     println!(

@@ -1,254 +1,72 @@
 # ADR-27 — Shared Test-Helper Crate with Per-Feature Test Macros
 
-Status: **Accepted, 2026-07-25; landed 2026-07-26.** The
-`dewasm-test-helper` crate and the two-layer `BackendUnderTest` /
-`SpecBackend` traits, shared case tables, and per-feature macros
-(`spec_suite!`, `standalone_e2e!`, `library_e2e!`, `wasi_suite!`,
-`apps_e2e!`, `gzip_e2e!`, `fs_apps_e2e!`) are in place; each backend crate
-owns its spec and e2e suites, `dewasm-cli` keeps only the `support_docs`
-cross-backend gate, and wasmtime is itself wired as a `BackendUnderTest`
-(`apps_wasmtime`) running the `apps`/`gzip`/`fs_apps` golden-freshness
-checks through the same shared runners. Builds on
-[ADR-3](3-testing-strategy.md) (the spec harness binds),
-[ADR-8](8-latest-testsuite-support-matrix.md) (skip attribution and
-per-file failure ledgers), and [ADR-15](15-tests-fail-not-skip.md).
+Status: **Accepted, 2026-07-25; landed 2026-07-26.** The `dewasm-test-helper` crate and the two-layer `BackendUnderTest` / `SpecBackend` traits, shared case tables, and per-feature macros (`spec_suite!`, `standalone_e2e!`, `library_e2e!`, `wasi_suite!`, `apps_e2e!`, `gzip_e2e!`, `fs_apps_e2e!`) are in place; each backend crate owns its spec and e2e suites, `dewasm-cli` keeps only the `support_docs` cross-backend gate, and wasmtime is itself wired as a `BackendUnderTest` (`apps_wasmtime`) running the `apps`/`gzip`/`fs_apps` golden-freshness checks through the same shared runners. Builds on [ADR-3](3-testing-strategy.md) (the spec harness binds), [ADR-8](8-latest-testsuite-support-matrix.md) (skip attribution and per-file failure ledgers), and [ADR-15](15-tests-fail-not-skip.md).
 
 ## Context
 
-Nearly all tests live in the CLI crate — spec harness, e2e suites, app
-golden tests — because it is the one crate that depends on every
-backend. That placement means a backend's conformance suite is not in
-the backend's crate, adding a backend means editing the CLI's test
-tree, and the two ad-hoc abstractions that grew there (`SpecLang` with
-its script-phrasing `emit_*` surface; the thinner `E2eLang`) overlap
-without composing. With three more backends planned, the shape must be
-fixed first.
+Nearly all tests live in the CLI crate — spec harness, e2e suites, app golden tests — because it is the one crate that depends on every backend. That placement means a backend's conformance suite is not in the backend's crate, adding a backend means editing the CLI's test tree, and the two ad-hoc abstractions that grew there (`SpecLang` with its script-phrasing `emit_*` surface; the thinner `E2eLang`) overlap without composing. With three more backends planned, the shape must be fixed first.
 
 ## Decision
 
-Create **`dewasm-test-helper`**: a crate depending only on
-`dewasm-core` + `dewasm-backend` (never on concrete backend crates),
-used by each backend crate as a dev-dependency. It provides:
+Create **`dewasm-test-helper`**: a crate depending only on `dewasm-core` + `dewasm-backend` (never on concrete backend crates), used by each backend crate as a dev-dependency. It provides:
 
-- **A two-layer backend-under-test abstraction.** The base trait
-  (`BackendUnderTest`) is `name` / `backend` / `run(source, args,
-  stdin)`; `run`'s default implementation writes a temp file and execs
-  an interpreter, and compiled targets (Go, Java) override `run`
-  itself. The spec layer (`SpecBackend: BackendUnderTest`) carries the
-  script-phrasing surface, the per-file failure ledger, and the
-  curated-file list. Criterion for the split: **a backend must be able
-  to run app/e2e suites before it can phrase spec assertions** — the
-  "cowsay first" bring-up path of ADR-24 implements the base layer
-  only.
-- **Shared case tables without glue** (standalone, library, WASI,
-  apps). WASI cases are grouped per feature unit — stdio, args/env,
-  clock/random, filesystem — forming the project's own WASI p1
-  conformance suite, which matters because WASI has no official one.
-  Language-specific glue stays in the backend crate and is passed to
-  the runners.
-- **Per-feature test macros** (`spec_suite!`, `standalone_e2e!`,
-  `library_e2e!`, `wasi_suite!`, `apps_e2e!`) that expand to `#[test]`
-  functions iterating the shared tables, so a backend crate's
-  `tests/` declares exactly which suites it participates in — this
-  wiring replaces the retired tier gating (ADR-25).
+- **A two-layer backend-under-test abstraction.** The base trait (`BackendUnderTest`) is `name` / `backend` / `run(source, args, stdin)`; `run`'s default implementation writes a temp file and execs an interpreter, and compiled targets (Go, Java) override `run` itself. The spec layer (`SpecBackend: BackendUnderTest`) carries the script-phrasing surface, the per-file failure ledger, and the curated-file list. Criterion for the split: **a backend must be able to run app/e2e suites before it can phrase spec assertions** — the "cowsay first" bring-up path of ADR-24 implements the base layer only.
+- **Shared case tables without glue** (standalone, library, WASI, apps). WASI cases are grouped per feature unit — stdio, args/env, clock/random, filesystem — forming the project's own WASI p1 conformance suite, which matters because WASI has no official one. Language-specific glue stays in the backend crate and is passed to the runners.
+- **Per-feature test macros** (`spec_suite!`, `standalone_e2e!`, `library_e2e!`, `wasi_suite!`, `apps_e2e!`) that expand to `#[test]` functions iterating the shared tables, so a backend crate's `tests/` declares exactly which suites it participates in — this wiring replaces the retired tier gating (ADR-25).
 
-Backend-specific tests (units lint, softfloat oracle, Ruby-only
-scenarios) live in their backend crate as today. Tests that inherently
-need every backend — the `docs/support.md` golden gate and the
-golden-vs-wasmtime app check — stay in the CLI crate, which already
-depends on all backends. Rule: **a test lives with the one backend it
-exercises; only a test that needs every backend may live centrally.**
+Backend-specific tests (units lint, softfloat oracle, Ruby-only scenarios) live in their backend crate as today. Tests that inherently need every backend — the `docs/support.md` golden gate and the golden-vs-wasmtime app check — stay in the CLI crate, which already depends on all backends. Rule: **a test lives with the one backend it exercises; only a test that needs every backend may live centrally.**
 
 ## Rejected alternatives
 
-- **Keep tests in the CLI crate** — a new backend's conformance would
-  again be someone else's test tree; the CLI crate is a 100-line
-  binary, not the project's test host.
-- **One flat trait** — forces a pre-spec backend to stub a dozen
-  `emit_*` methods before its first cowsay run.
-- **test-helper depends on the backend crates** — inverts the
-  dependency so backends could no longer dev-depend on the helper.
-- **A dedicated conformance crate for the cross-backend tests** — an
-  extra crate for two tests; noted as the escape hatch if a third
-  appears.
+- **Keep tests in the CLI crate** — a new backend's conformance would again be someone else's test tree; the CLI crate is a 100-line binary, not the project's test host.
+- **One flat trait** — forces a pre-spec backend to stub a dozen `emit_*` methods before its first cowsay run.
+- **test-helper depends on the backend crates** — inverts the dependency so backends could no longer dev-depend on the helper.
+- **A dedicated conformance crate for the cross-backend tests** — an extra crate for two tests; noted as the escape hatch if a third appears.
 
 ## Consequences
 
-- Positive: backend bring-up is "implement the base trait, invoke
-  macros"; suites stay byte-identical across backends by construction.
-- Negative: macro indirection makes individual test names less
-  greppable; fixture paths must resolve from each consuming crate
-  (same `crates/<x>/` depth keeps `../../` valid).
-- The ADR-8 ledgers and attribution tags move with each backend's
-  `SpecBackend` impl — their natural home — and keep their semantics.
+- Positive: backend bring-up is "implement the base trait, invoke macros"; suites stay byte-identical across backends by construction.
+- Negative: macro indirection makes individual test names less greppable; fixture paths must resolve from each consuming crate (same `crates/<x>/` depth keeps `../../` valid).
+- The ADR-8 ledgers and attribution tags move with each backend's `SpecBackend` impl — their natural home — and keep their semantics.
 
 ## Revision (2026-07-27): backend e2e is impl + glue + macros only
 
-The original decision let "Ruby-only scenarios" (provider objects, embedded
-coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-model
-internals, and the CPython/CRuby runtime demos) stay as hand-written `#[test]`
-functions in the Ruby crate. That carve-out is **withdrawn**. The rule is now
-uniform:
+The original decision let "Ruby-only scenarios" (provider objects, embedded coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-model internals, and the CPython/CRuby runtime demos) stay as hand-written `#[test]` functions in the Ruby crate. That carve-out is **withdrawn**. The rule is now uniform:
 
-- **A backend crate's `tests/e2e.rs` contains only** the `BackendUnderTest`
-  impl, glue strings / glue-producing functions, and macro invocations. No
-  backend-specific `#[test]` function exists.
-- **Case content is always shared.** Every scenario's fixtures, expectations,
-  and run/assert logic live in a `dewasm-test-helper` table + runner. What a
-  backend supplies is per-language glue (and, for multi-module cases, a
-  `BackendUnderTest::compose_modules` implementation using its own crate's API —
-  the helper crate still may not depend on a concrete backend, so composition
-  is a trait hook, not shared code).
-- **Capability is declared by which macros a backend invokes**, refined by
-  **explicit data-level exclusions with reasons** where a macro is invoked but a
-  particular case is not expressible or not practical. Each shared table carries
-  an `exclude: &[(lang, reason)]` (or, for the fixed-shape multi-module/library
-  cases, a per-case exclusion list) that the runner prints and honors, instead
-  of a bespoke skipped test. Examples now in the tables: Go/Java/Bash excluded
-  from the provider-object and lazy-`@wasi` cases (eager WASI, no provider
-  object); Go/Bash excluded from in-memory stdio capture (no injectable stream);
-  the CPython/CRuby runtime demos excluded on Java (a generated method overflows
-  the JVM 64 KB bytecode limit — `code too large`) and CRuby also on Go (its
-  ~242 MB Go source exceeds the ADR-24 ~5-minute `go build` bar). These are
-  measured, not guessed (docs/apps-audit.md records the numbers).
+- **A backend crate's `tests/e2e.rs` contains only** the `BackendUnderTest` impl, glue strings / glue-producing functions, and macro invocations. No backend-specific `#[test]` function exists.
+- **Case content is always shared.** Every scenario's fixtures, expectations, and run/assert logic live in a `dewasm-test-helper` table + runner. What a backend supplies is per-language glue (and, for multi-module cases, a `BackendUnderTest::compose_modules` implementation using its own crate's API — the helper crate still may not depend on a concrete backend, so composition is a trait hook, not shared code).
+- **Capability is declared by which macros a backend invokes**, refined by **explicit data-level exclusions with reasons** where a macro is invoked but a particular case is not expressible or not practical. Each shared table carries an `exclude: &[(lang, reason)]` (or, for the fixed-shape multi-module/library cases, a per-case exclusion list) that the runner prints and honors, instead of a bespoke skipped test. Examples now in the tables: Go/Java/Bash excluded from the provider-object and lazy-`@wasi` cases (eager WASI, no provider object); Go/Bash excluded from in-memory stdio capture (no injectable stream); the CPython/CRuby runtime demos excluded on Java (a generated method overflows the JVM 64 KB bytecode limit — `code too large`) and CRuby also on Go (its ~242 MB Go source exceeds the ADR-24 ~5-minute `go build` bar). These are measured, not guessed (docs/apps-audit.md records the numbers).
 
-New shared tables/macros this introduced: `capi_apps_e2e!` (`CAPI_CASES`, the
-sqlite3 C-API drives — no wasmtime golden is possible, so each pins a fixed
-string), `multi_module_e2e!` (`MULTI_MODULE_CASES`, the shared-table and
-embedded-coexistence scenarios, via `compose_modules`), plus new rows in
-`LIBRARY_CASES` (provider/override/stdio), `WASI_CASES` (root-preopen
-containment), and `FS_APP_CASES` (the cache-preopened CPython/CRuby demos, a new
-`cache_preopens` field mounting stdlib trees straight from the app cache instead
-of copying them). The consequence is that a scenario added for one backend is by
-construction offered to every backend, green where the capability holds and
-documented where it does not.
+New shared tables/macros this introduced: `capi_apps_e2e!` (`CAPI_CASES`, the sqlite3 C-API drives — no wasmtime golden is possible, so each pins a fixed string), `multi_module_e2e!` (`MULTI_MODULE_CASES`, the shared-table and embedded-coexistence scenarios, via `compose_modules`), plus new rows in `LIBRARY_CASES` (provider/override/stdio), `WASI_CASES` (root-preopen containment), and `FS_APP_CASES` (the cache-preopened CPython/CRuby demos, a new `cache_preopens` field mounting stdlib trees straight from the app cache instead of copying them). The consequence is that a scenario added for one backend is by construction offered to every backend, green where the capability holds and documented where it does not.
 
 ## Revision (2026-07-27): glue is a named const, one per-case macro per case
 
-The *delivery* of per-language glue set up by the previous revision — glue
-resolver functions that `match` on the case name, and later `(case name, glue)`
-pair lists iterated by one macro — is **withdrawn** as unreadable and of no
-value: the case name appeared twice (in the table and in the match/pair), the
-resolver's `panic!("no glue")` re-encoded what a missing invocation already
-says, and one macro fanning out over a table hid which cases a backend actually
-ran. The final shape:
+The *delivery* of per-language glue set up by the previous revision — glue resolver functions that `match` on the case name, and later `(case name, glue)` pair lists iterated by one macro — is **withdrawn** as unreadable and of no value: the case name appeared twice (in the table and in the match/pair), the resolver's `panic!("no glue")` re-encoded what a missing invocation already says, and one macro fanning out over a table hid which cases a backend actually ran. The final shape:
 
-- **Glue is a named `&str` constant** in each backend's `tests/e2e.rs` (e.g.
-  `const RUBY_QJS_FILE_IO_GLUE: &str = r#"..."#;`), passed as a plain macro
-  argument. No `(name, glue)` pair lists, no glue-returning functions, no
-  `match` on a case name anywhere.
-- **One macro per case, at most one glue argument each.** Every multi-case table
-  that was iterated by a single macro is dissolved into a `pub const` case in
-  `dewasm-test-helper` plus a per-case macro expanding to its own
-  `#[test] fn <case>()` that calls a shared per-case runner: the filesystem apps
-  (`qjs_file_io_e2e!` … `cruby_hello_e2e!` over `QJS_FILE_IO` … `CRUBY_HELLO`),
-  the C-API drives (`libsqlite3_c_api_e2e!` …), the multi-module cases
-  (`shared_table_e2e!`, `embedded_coexist_e2e!`), and the library cases
-  (`library_add_e2e!`, `wasi_import_override_e2e!`, `custom_wasi_provider_e2e!`,
-  `partial_override_e2e!`, `stdio_capture_e2e!`). The root-preopen containment
-  probe, which does not fit the WASI filesystem template, becomes its own
-  `wasi_root_containment_e2e!`. Zero-glue aggregate macros stay as they were
-  (`apps_e2e!`, `gzip_e2e!`, `standalone_e2e!`, `spec_suite!`,
-  `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`); `wasi_suite!(Lang, Fs, …)`
-  keeps its single-template-string shape, the template now a named per-backend
-  const with `{guest}`/`{host}` placeholders.
-- **Static values are literals; only runtime paths are placeholders.** The class
-  name, argv, env, and preopen *guest* paths are written out literally inside
-  each glue const. The only values a glue cannot know statically — the host path
-  of a fresh scratch dir and the app-cache root — arrive through a tiny
-  documented substitution helper (`glue::fill`) that replaces `{scratch}`,
-  `{cache}`, `{guest}`, and `{host}`.
-- **Exclusions dissolve into non-invocation.** A backend that cannot run a case
-  simply does not invoke that case's macro; the reason lives as a short comment
-  at the (absent) callsite, with the measured numbers still in
-  `docs/apps-audit.md`. The per-case `exclude` fields and the `NO_LAZY_WASI`
-  ledger are removed from the shared case data.
-- **`BackendUnderTest::app_glue` is deleted** — glue arrives as data, not from a
-  trait hook. `run_app_fs` keeps its hook role but now takes the already-filled
-  glue string (and still carries `args`/`env`/`preopens` for the wasmtime
-  override, which execs the cache binary and ignores the glue). The other
-  infrastructure hooks (`convert_app`, `run`/`run_bytes`, `compose_modules`,
-  `pty_command`, `run_heavy_apps`) are unchanged.
-- **wasmtime** invokes the same per-case runners through hand-written
-  `#[test]` functions rather than the `*_e2e!` macros, because those cannot
-  carry the `wasmtime_test` `#[ignore]` gate (the same reason its `apps`/`gzip`
-  tests were already hand-written); it passes an empty glue, which its
-  `run_app_fs` override ignores.
+- **Glue is a named `&str` constant** in each backend's `tests/e2e.rs` (e.g. `const RUBY_QJS_FILE_IO_GLUE: &str = r#"..."#;`), passed as a plain macro argument. No `(name, glue)` pair lists, no glue-returning functions, no `match` on a case name anywhere.
+- **One macro per case, at most one glue argument each.** Every multi-case table that was iterated by a single macro is dissolved into a `pub const` case in `dewasm-test-helper` plus a per-case macro expanding to its own `#[test] fn <case>()` that calls a shared per-case runner: the filesystem apps (`qjs_file_io_e2e!` … `cruby_hello_e2e!` over `QJS_FILE_IO` … `CRUBY_HELLO`), the C-API drives (`libsqlite3_c_api_e2e!` …), the multi-module cases (`shared_table_e2e!`, `embedded_coexist_e2e!`), and the library cases (`library_add_e2e!`, `wasi_import_override_e2e!`, `custom_wasi_provider_e2e!`, `partial_override_e2e!`, `stdio_capture_e2e!`). The root-preopen containment probe, which does not fit the WASI filesystem template, becomes its own `wasi_root_containment_e2e!`. Zero-glue aggregate macros stay as they were (`apps_e2e!`, `gzip_e2e!`, `standalone_e2e!`, `spec_suite!`, `wasi_suite!(Stdio/ArgsEnv/ClockRandom/Poll)`); `wasi_suite!(Lang, Fs, …)` keeps its single-template-string shape, the template now a named per-backend const with `{guest}`/`{host}` placeholders.
+- **Static values are literals; only runtime paths are placeholders.** The class name, argv, env, and preopen *guest* paths are written out literally inside each glue const. The only values a glue cannot know statically — the host path of a fresh scratch dir and the app-cache root — arrive through a tiny documented substitution helper (`glue::fill`) that replaces `{scratch}`, `{cache}`, `{guest}`, and `{host}`.
+- **Exclusions dissolve into non-invocation.** A backend that cannot run a case simply does not invoke that case's macro; the reason lives as a short comment at the (absent) callsite, with the measured numbers still in `docs/apps-audit.md`. The per-case `exclude` fields and the `NO_LAZY_WASI` ledger are removed from the shared case data.
+- **`BackendUnderTest::app_glue` is deleted** — glue arrives as data, not from a trait hook. `run_app_fs` keeps its hook role but now takes the already-filled glue string (and still carries `args`/`env`/`preopens` for the wasmtime override, which execs the cache binary and ignores the glue). The other infrastructure hooks (`convert_app`, `run`/`run_bytes`, `compose_modules`, `pty_command`, `run_heavy_apps`) are unchanged.
+- **wasmtime** invokes the same per-case runners through hand-written `#[test]` functions rather than the `*_e2e!` macros, because those cannot carry the `wasmtime_test` `#[ignore]` gate (the same reason its `apps`/`gzip` tests were already hand-written); it passes an empty glue, which its `run_app_fs` override ignores.
 
-The behavioural contract is unchanged: the same generated programs run against
-the same goldens and assertions on the same backends. Only the wiring is more
-readable — each `#[test]` name is now the case name, and each callsite shows
-exactly one case with exactly one glue.
+The behavioural contract is unchanged: the same generated programs run against the same goldens and assertions on the same backends. Only the wiring is more readable — each `#[test]` name is now the case name, and each callsite shows exactly one case with exactly one glue.
 
 ## Revision (2026-07-27): standalone scaffolding deleted, apps dissolved into per-case macros
 
 Two leftovers from the prior revision are cleaned up, no behavioural change:
 
-- **`standalone_e2e!`/`STANDALONE_CASES`/`StandaloneCase` deleted.** Every
-  standalone fixture (hello, argc) was reclassified into `WASI_CASES`
-  (`Stdio`/`ArgsEnv`, already run in `Mode::Standalone`) during the Phase-4
-  reorg, leaving `STANDALONE_CASES` an empty table with no callers of its
-  runner beyond the aggregate macro. The module, the struct, the runner, the
-  macro, and its five callsite invocations are removed outright; a per-case
-  macro will be added if a genuine non-WASI standalone case ever appears.
-- **`apps_e2e!`/`APP_CASES` dissolved into four per-case macros**
-  (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`,
-  `sqlite3_shell_e2e!`), matching the per-case shape the previous revision
-  already gave the filesystem/C-API/multi-module tables. The cases take no
-  glue (they are standalone-mode stdin/args cases). The `heavy: bool` field is
-  dropped from `AppCase`; the two heavy cases (`QJS_EVAL`, `SQLITE3_SHELL`) get
-  their own gated runner (`run_heavy_app_case`, checking
-  `run_heavy_apps()`/`DEWASM_APPS_ALL`, same as before) plus an ungated
-  `run_heavy_app_case_forced` for wasmtime, mirroring the
-  `run_fs_app_case`/`run_fs_app_case_forced` split. `gzip_e2e!` still covers
-  minigzip's compress + round-trip pair as one macro (binary stdio does not fit
-  the `&str` `AppCase` shape) and is unchanged.
+- **`standalone_e2e!`/`STANDALONE_CASES`/`StandaloneCase` deleted.** Every standalone fixture (hello, argc) was reclassified into `WASI_CASES` (`Stdio`/`ArgsEnv`, already run in `Mode::Standalone`) during the Phase-4 reorg, leaving `STANDALONE_CASES` an empty table with no callers of its runner beyond the aggregate macro. The module, the struct, the runner, the macro, and its five callsite invocations are removed outright; a per-case macro will be added if a genuine non-WASI standalone case ever appears.
+- **`apps_e2e!`/`APP_CASES` dissolved into four per-case macros** (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`), matching the per-case shape the previous revision already gave the filesystem/C-API/multi-module tables. The cases take no glue (they are standalone-mode stdin/args cases). The `heavy: bool` field is dropped from `AppCase`; the two heavy cases (`QJS_EVAL`, `SQLITE3_SHELL`) get their own gated runner (`run_heavy_app_case`, checking `run_heavy_apps()`/`DEWASM_APPS_ALL`, same as before) plus an ungated `run_heavy_app_case_forced` for wasmtime, mirroring the `run_fs_app_case`/`run_fs_app_case_forced` split. `gzip_e2e!` still covers minigzip's compress + round-trip pair as one macro (binary stdio does not fit the `&str` `AppCase` shape) and is unchanged.
 
 ## Revision (2026-07-27): heavy gating moves to a `heavy_test` feature; the support.md ledger section is dropped
 
-`docs/support.md`'s "Spec testsuite ledger" section (`Backend::wasm10_ledger_clean`,
-introduced by [ADR-23](23-backend-support-tiers.md)) is removed: every backend
-reported "no", so the section carried no information for a reader to act on.
-Separately, `DEWASM_APPS_ALL` and `run_heavy_apps()` are retired in favor of a
-`heavy_test` cargo feature declared by each backend crate: the heavy per-case
-macros (`qjs_eval_e2e!`, `sqlite3_shell_e2e!`, the filesystem-app and C-API
-macros, `qjs_repl_pty_e2e!`) now expand their generated `#[test]` with
-`#[cfg_attr(not(feature = "heavy_test"), ignore = "...")]` instead of gating
-inside the shared runner, which now always runs unconditionally (`_forced`
-variants are gone — there is only one runner per case). This makes the heavy
-cases ordinary `#[ignore]`d tests: `cargo test` skips them visibly, one
-`cargo test -- --include-ignored` runs everything across the whole workspace,
-and `--features heavy_test` runs them for a single crate — no bespoke env var
-to remember or keep in sync with the trait method it used to call.
+`docs/support.md`'s "Spec testsuite ledger" section (`Backend::wasm10_ledger_clean`, introduced by [ADR-23](23-backend-support-tiers.md)) is removed: every backend reported "no", so the section carried no information for a reader to act on. Separately, `DEWASM_APPS_ALL` and `run_heavy_apps()` are retired in favor of a `heavy_test` cargo feature declared by each backend crate: the heavy per-case macros (`qjs_eval_e2e!`, `sqlite3_shell_e2e!`, the filesystem-app and C-API macros, `qjs_repl_pty_e2e!`) now expand their generated `#[test]` with `#[cfg_attr(not(feature = "heavy_test"), ignore = "...")]` instead of gating inside the shared runner, which now always runs unconditionally (`_forced` variants are gone — there is only one runner per case). This makes the heavy cases ordinary `#[ignore]`d tests: `cargo test` skips them visibly, one `cargo test -- --include-ignored` runs everything across the whole workspace, and `--features heavy_test` runs them for a single crate — no bespoke env var to remember or keep in sync with the trait method it used to call.
 
 ## Revision (2026-07-27): the spec harness is per-file libtest-mimic trials
 
-`spec_suite!` no longer expands to one monolithic `#[test] fn spec()`; each
-backend's `tests/spec.rs` is now a [libtest-mimic](https://crates.io/crates/libtest-mimic)
-harness (`harness = false`, `main` supplied by the macro) that enumerates one
-trial per upstream `.wast` file (the file stem is the trial name). The bespoke
-selection env vars `DEWASM_SPEC` (file filter) and `DEWASM_SPEC_ALL` (full
-sweep) are retired in favor of cargo's own test UX: name filtering is cargo's
-built-in filter (`cargo test --test spec i32`), and the curated-vs-full split is
-the ignore mechanism — files outside `SpecBackend::curated_files` (renamed from
-`default_files`; `None` still means "run everything") become `#[ignore]`d
-trials, so a plain `cargo test` runs the curated set and `-- --include-ignored`
-sweeps the whole testsuite. Trials run in parallel on libtest-mimic's thread
-pool, so per-file state moved off the shared backend object into the harness's
-own per-file buffers (the Go/Java package/class `decls` accumulator was a
-`Mutex<String>` on the `Spec` struct; it is now a plain per-trial `String`
-threaded through `emit_instantiate`/`instantiate_call`/`assemble`). The per-file
-`EXPECTED_FAILURES` ledger checks (ADR-8) and skip-attribution gates run inside
-each trial — equivalent to the old global checks because the global sets are the
-union of the per-file sets. The old aggregate `TOTAL: pass=… fail=…` line is
-gone; per-file trial results supersede it.
+`spec_suite!` no longer expands to one monolithic `#[test] fn spec()`; each backend's `tests/spec.rs` is now a [libtest-mimic](https://crates.io/crates/libtest-mimic) harness (`harness = false`, `main` supplied by the macro) that enumerates one trial per upstream `.wast` file (the file stem is the trial name). The bespoke selection env vars `DEWASM_SPEC` (file filter) and `DEWASM_SPEC_ALL` (full sweep) are retired in favor of cargo's own test UX: name filtering is cargo's built-in filter (`cargo test --test spec i32`), and the curated-vs-full split is the ignore mechanism — files outside `SpecBackend::curated_files` (renamed from `default_files`; `None` still means "run everything") become `#[ignore]`d trials, so a plain `cargo test` runs the curated set and `-- --include-ignored` sweeps the whole testsuite. Trials run in parallel on libtest-mimic's thread pool, so per-file state moved off the shared backend object into the harness's own per-file buffers (the Go/Java package/class `decls` accumulator was a `Mutex<String>` on the `Spec` struct; it is now a plain per-trial `String` threaded through `emit_instantiate`/`instantiate_call`/`assemble`). The per-file `EXPECTED_FAILURES` ledger checks (ADR-8) and skip-attribution gates run inside each trial — equivalent to the old global checks because the global sets are the union of the per-file sets. The old aggregate `TOTAL: pass=… fail=…` line is gone; per-file trial results supersede it.
 
 ## Revision (2026-07-27): golden regeneration moves to explicit `xtask` commands
 
-The `support_docs` and `apps_wasmtime` tests' `DEWASM_UPDATE_DOCS`/
-`DEWASM_UPDATE_GOLDEN` env-var regeneration branches are removed; both tests
-are now compare-only, and regeneration is `cargo xtask update-support-docs`
-and `cargo xtask update-repl-golden` respectively (new `crates/xtask` member,
-aliased in `.cargo/config.toml`), with the rendering/capture logic shared via
-a small `dewasm-cli` library crate and `dewasm-test-helper`'s already-public
-capture functions.
+The `support_docs` and `apps_wasmtime` tests' `DEWASM_UPDATE_DOCS`/ `DEWASM_UPDATE_GOLDEN` env-var regeneration branches are removed; both tests are now compare-only, and regeneration is `cargo xtask update-support-docs` and `cargo xtask update-repl-golden` respectively (new `crates/xtask` member, aliased in `.cargo/config.toml`), with the rendering/capture logic shared via a small `dewasm-cli` library crate and `dewasm-test-helper`'s already-public capture functions.

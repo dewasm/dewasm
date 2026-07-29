@@ -1,26 +1,8 @@
-//! Filesystem-exercising app cases (ADR-27), shared across every backend with
-//! WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the
-//! ground-truth engine. Each case converts a cached app to a library-mode
-//! class, stages fixtures into a fresh scratch dir preopened into the guest,
-//! and runs one or more invocations, diffing stdout against the same
-//! `examples/apps/golden/` files the always-on `apps` suite uses (ADR-15) and
-//! asserting the host-side effects the guest was supposed to produce.
+//! Filesystem-exercising app cases (ADR-27), shared across every backend with WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the ground-truth engine. Each case converts a cached app to a library-mode class, stages fixtures into a fresh scratch dir preopened into the guest, and runs one or more invocations, diffing stdout against the same `examples/apps/golden/` files the always-on `apps` suite uses (ADR-15) and asserting the host-side effects the guest was supposed to produce.
 //!
-//! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro
-//! (`qjs_file_io_e2e!`, `sqlite3_shell_dbfile_e2e!`, ...). The per-language
-//! instantiation glue is a named const passed to that macro: it writes out the
-//! class name, argv, env, and preopen *guest* paths literally and takes only the
-//! runtime host paths through the `{scratch}`/`{cache}` placeholders the runner
-//! fills. wasmtime does not use the glue: it overrides
-//! [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir`
-//! preopens directly, so the same case consts feed both the backend macros and
-//! the wasmtime suite (via [`run_fs_app_case`], called directly).
+//! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro (`qjs_file_io_e2e!`, `sqlite3_shell_dbfile_e2e!`, ...). The per-language instantiation glue is a named const passed to that macro: it writes out the class name, argv, env, and preopen *guest* paths literally and takes only the runtime host paths through the `{scratch}`/`{cache}` placeholders the runner fills. wasmtime does not use the glue: it overrides [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir` preopens directly, so the same case consts feed both the backend macros and the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
-//! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB
-//! binary), so the perf opt-out lives at the macro/feature level: each
-//! per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as
-//! `#[ignore]`d unless the expanding backend crate's `slow_test` feature is
-//! enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
+//! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB binary), so the perf opt-out lives at the macro/feature level: each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -30,9 +12,7 @@ use crate::backend::BackendUnderTest;
 use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, fresh_scratch_dir};
 use crate::glue::fill;
 
-/// One fixture-staging step, run into the case's fresh scratch dir before the
-/// guest runs. `src` is relative to [`apps_fixtures_dir`]; `dst` is relative to
-/// the scratch dir (`""` = the scratch root).
+/// One fixture-staging step, run into the case's fresh scratch dir before the guest runs. `src` is relative to [`apps_fixtures_dir`]; `dst` is relative to the scratch dir (`""` = the scratch root).
 pub enum Stage {
     /// Copy a single file `src` -> `dst`.
     File {
@@ -46,42 +26,28 @@ pub enum Stage {
     },
 }
 
-/// One invocation of a filesystem-app case. Multiple runs of a case share the
-/// same scratch dir (e.g. sqlite3: create the DB file, then reopen it).
+/// One invocation of a filesystem-app case. Multiple runs of a case share the same scratch dir (e.g. sqlite3: create the DB file, then reopen it).
 pub struct FsRun {
-    /// Full argv, argv0 included (backends bake it into the glue; wasmtime
-    /// injects argv0 itself and uses `args[1..]`).
+    /// Full argv, argv0 included (backends bake it into the glue; wasmtime injects argv0 itself and uses `args[1..]`).
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// The `include_str!` golden this run's stdout must match, or `None` when
-    /// only the host-side effect is asserted (e.g. the sqlite3 create run).
+    /// The `include_str!` golden this run's stdout must match, or `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
     pub expect_stdout: Option<&'static str>,
-    /// Host-side assertion over the scratch dir after this run (e.g. a file
-    /// the guest was supposed to write). `assert_none` when there is nothing
-    /// to check.
+    /// Host-side assertion over the scratch dir after this run (e.g. a file the guest was supposed to write). `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
 }
 
-/// A filesystem-exercising app case: convert `wasm` (cache stem) to library
-/// class `class`, stage `stage` into a scratch dir, preopen `preopens`, and
-/// run each of `runs`. The static `env`/`preopens`/`cache_preopens` are used by
-/// the wasmtime override (which execs the binary with those host mounts) and to
-/// stage/mount the scratch and cache trees; the backends read the same facts
-/// out of the glue const, where they are written literally.
+/// A filesystem-exercising app case: convert `wasm` (cache stem) to library class `class`, stage `stage` into a scratch dir, preopen `preopens`, and run each of `runs`. The static `env`/`preopens`/`cache_preopens` are used by the wasmtime override (which execs the binary with those host mounts) and to stage/mount the scratch and cache trees; the backends read the same facts out of the glue const, where they are written literally.
 pub struct FsAppCase {
     pub name: &'static str,
-    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the
-    /// conversion module name — every backend PascalCases it to `class`.
+    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the conversion module name — every backend PascalCases it to `class`.
     pub wasm: &'static str,
     /// The library class name the glue instantiates (PascalCase of `wasm`).
     pub class: &'static str,
     pub env: &'static [(&'static str, &'static str)],
     /// Guest path -> scratch-relative subdir (`""` = scratch root).
     pub preopens: &'static [(&'static str, &'static str)],
-    /// Guest path -> cache-relative subdir, preopened **directly from the app
-    /// cache** (`examples/apps/cache/<rel>`) rather than copied into scratch.
-    /// The language-runtime apps (CPython/CRuby) mount their multi-hundred-MB
-    /// stdlib trees this way — copying them per run would be prohibitive.
+    /// Guest path -> cache-relative subdir, preopened **directly from the app cache** (`examples/apps/cache/<rel>`) rather than copied into scratch. The language-runtime apps (CPython/CRuby) mount their multi-hundred-MB stdlib trees this way — copying them per run would be prohibitive.
     pub cache_preopens: &'static [(&'static str, &'static str)],
     pub stage: &'static [Stage],
     pub runs: &'static [FsRun],
@@ -111,9 +77,7 @@ fn assert_sqlite_dbfile(scratch: &Path) {
     );
 }
 
-/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file
-/// into the preopened dir, reads it back, and prints it. Asserts both guest
-/// stdout (golden) and the host-side file content.
+/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file into the preopened dir, reads it back, and prints it. Asserts both guest stdout (golden) and the host-side file content.
 pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     name: "qjs_file_io",
     wasm: "qjs",
@@ -135,8 +99,7 @@ pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     }],
 };
 
-/// QuickJS scripted REPL over piped stdin (Phase 5a #1b): the pinned
-/// read-eval-print loop fixture exercises the stdin-read + evalScript path.
+/// QuickJS scripted REPL over piped stdin (Phase 5a #1b): the pinned read-eval-print loop fixture exercises the stdin-read + evalScript path.
 pub const QJS_REPL: FsAppCase = FsAppCase {
     name: "qjs_repl",
     wasm: "qjs",
@@ -158,9 +121,7 @@ pub const QJS_REPL: FsAppCase = FsAppCase {
     }],
 };
 
-/// sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation
-/// creates and populates `/db/test.db`, a second reopens it and SELECTs. Both
-/// runs share the scratch dir.
+/// sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation creates and populates `/db/test.db`, a second reopens it and SELECTs. Both runs share the scratch dir.
 pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
     name: "sqlite3_shell_dbfile",
     wasm: "sqlite3-shell",
@@ -190,9 +151,7 @@ pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
     ],
 };
 
-/// ripgrep searching a small fixture directory tree (Phase 5b): recursive
-/// directory walking over a preopened tree. `--sort path` forces a
-/// deterministic order so the `wasmtime --dir` golden is stable.
+/// ripgrep searching a small fixture directory tree (Phase 5b): recursive directory walking over a preopened tree. `--sort path` forces a deterministic order so the `wasmtime --dir` golden is stable.
 pub const RG_SEARCH: FsAppCase = FsAppCase {
     name: "rg_search",
     wasm: "rg",
@@ -211,12 +170,7 @@ pub const RG_SEARCH: FsAppCase = FsAppCase {
     }],
 };
 
-/// CPython 3.14.6 executing a one-liner (Phase 5b), reading its stdlib from the
-/// cache-preopened `cache/cpython-lib/lib` tree at guest `/lib`. The heaviest
-/// interpreter case: a ~30 MB wasm. Ground truth (wasmtime):
-///   wasmtime --dir cache/cpython-lib/lib::/lib --env PYTHONHOME=/ \
-///     --env PYTHONPATH=/lib/python3.14 cache/cpython.wasm \
-///     -c 'print("hello from cpython", 6 * 7)'
+/// CPython 3.14.6 executing a one-liner (Phase 5b), reading its stdlib from the cache-preopened `cache/cpython-lib/lib` tree at guest `/lib`. The heaviest interpreter case: a ~30 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/cpython-lib/lib::/lib --env PYTHONHOME=/ \ --env PYTHONPATH=/lib/python3.14 cache/cpython.wasm \ -c 'print("hello from cpython", 6 * 7)'
 pub const CPYTHON_HELLO: FsAppCase = FsAppCase {
     name: "cpython_hello",
     wasm: "cpython",
@@ -233,12 +187,7 @@ pub const CPYTHON_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
-/// CRuby 3.4 executing a one-liner (Phase 5b) — the "Ruby on Ruby" north-star
-/// demo — reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree
-/// at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth
-/// (wasmtime):
-///   wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \
-///     -e 'puts "hello from cruby #{6*7}"'
+/// CRuby 3.4 executing a one-liner (Phase 5b) — the "Ruby on Ruby" north-star demo — reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \ -e 'puts "hello from cruby #{6*7}"'
 pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     name: "cruby_hello",
     wasm: "ruby",
@@ -269,11 +218,7 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue`
-/// unconditionally. The perf opt-out lives at the macro/feature level (see
-/// the module docs), so this runner — also called directly by the wasmtime
-/// suite, which passes an empty `glue` since its `run_app_fs` override
-/// ignores it — never needs to gate itself.
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let cache = apps_cache_dir();
     let fixtures = apps_fixtures_dir();
@@ -306,8 +251,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
             };
             (*guest, host)
         })
-        // Cache-preopened stdlib trees are mounted straight from the app cache
-        // (read-only), never copied into scratch (they are hundreds of MB).
+        // Cache-preopened stdlib trees are mounted straight from the app cache (read-only), never copied into scratch (they are hundreds of MB).
         .chain(case.cache_preopens.iter().map(|(guest, rel)| {
             let host = cache.join(rel);
             assert!(
@@ -330,15 +274,9 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
-    // Convert under `class`, not the cache stem: the stem and the class name
-    // diverge for CRuby (cache file `ruby.wasm`, but a `Ruby` class collides
-    // with MRI's predefined `Ruby` constant, so the class is `Cruby`). The class
-    // name is already PascalCase, and every backend's PascalCasing is
-    // idempotent, so this yields exactly `class` for every case. wasmtime
-    // ignores the name (it runs the bytes directly).
+    // Convert under `class`, not the cache stem: the stem and the class name diverge for CRuby (cache file `ruby.wasm`, but a `Ruby` class collides with MRI's predefined `Ruby` constant, so the class is `Cruby`). The class name is already PascalCase, and every backend's PascalCasing is idempotent, so this yields exactly `class` for every case. wasmtime ignores the name (it runs the bytes directly).
     let program = lang.convert_app(&bytes, Mode::Library, case.class);
-    // Resolve the runtime host paths the glue const left as placeholders. The
-    // scratch preopen and the cache root are all any current case needs.
+    // Resolve the runtime host paths the glue const left as placeholders. The scratch preopen and the cache root are all any current case needs.
     let filled_glue = fill(
         glue,
         &[

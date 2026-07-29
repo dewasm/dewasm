@@ -1,14 +1,4 @@
-//! Ruby end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`)
-//! wired up for the Ruby backend. Per the ADR-27 revision this file holds ONLY
-//! the [`BackendUnderTest`] impl, named glue string constants, and per-case
-//! macro invocations — every scenario's case content (fixtures, expectations,
-//! run logic) lives in a shared const, glue is a plain `&str` argument at the
-//! callsite, and which macros this file invokes is the capability declaration.
-//! The formerly Ruby-only scenarios (the ADR-7 provider model, embedded-runtime
-//! coexistence, cross-module table sharing, the sqlite3 C-API drive,
-//! WASI-filesystem internals, and the CPython/CRuby runtime demos) now run
-//! wherever a backend's declared capabilities cover them, with a REASON comment
-//! at any non-invocation.
+//! Ruby end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations — every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration. The formerly Ruby-only scenarios (the ADR-7 provider model, embedded-runtime coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-filesystem internals, and the CPython/CRuby runtime demos) now run wherever a backend's declared capabilities cover them, with a REASON comment at any non-invocation.
 
 use std::path::PathBuf;
 
@@ -39,11 +29,7 @@ impl BackendUnderTest for Ruby {
         find_ruby().expect("ruby not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
-    /// emits each module against a single top-level `::Rt` (Alias linkage) plus
-    /// one bundled runtime, so an imported table crosses modules (as the spec
-    /// harness's `register` path does); otherwise it emits independent Embedded
-    /// classes, each with its own nested `Rt`.
+    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) plus one bundled runtime, so an imported table crosses modules (as the spec harness's `register` path does); otherwise it emits independent Embedded classes, each with its own nested `Rt`.
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -78,8 +64,7 @@ impl BackendUnderTest for Ruby {
     }
 }
 
-// ---------------------------------------------------------------------
-// Library-case glue.
+// --------------------------------------------------------------------- Library-case glue.
 
 /// `add.wat`: call the exported functions and print each result.
 const RUBY_ADD_GLUE: &str = r#"inst = Add.new
@@ -88,9 +73,7 @@ print inst.invoke("add", 0xffffffff, 1), "\n"
 print inst.invoke("fib", 10), "\n"
 "#;
 
-/// The ADR-7 override/fallback glue (an explicit `fd_write` import wins,
-/// `random_get` falls back to the bundled WASI). Intercepts fd_write and prints
-/// the actual bytes the module wrote.
+/// The ADR-7 override/fallback glue (an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI). Intercepts fd_write and prints the actual bytes the module wrote.
 const RUBY_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
@@ -107,9 +90,7 @@ inst.invoke("_start") # random_get falls back to the bundled WASI
 print captured
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled
-/// WASI wholesale — `import(name)` resolves functions, `attach(instance)` binds
-/// the memory — so the bundled WASI is never constructed (`@wasi` stays nil).
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `import(name)` resolves functions, `attach(instance)` binds the memory — so the bundled WASI is never constructed (`@wasi` stays nil).
 const RUBY_CUSTOM_PROVIDER_GLUE: &str = r#"
 class MyWasi
   attr_reader :out
@@ -136,9 +117,7 @@ print wasi.out
 print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\n"
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: reuses the override
-/// glue (fd_write intercepted, random_get falls back) plus one line probing
-/// that the bundled WASI *was* lazily constructed (ADR-7's `@wasi ||= ...`).
+/// The `partial_override_falls_back_to_bundled_wasi` glue: reuses the override glue (fd_write intercepted, random_get falls back) plus one line probing that the bundled WASI *was* lazily constructed (ADR-7's `@wasi ||= ...`).
 const RUBY_PARTIAL_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
@@ -156,9 +135,7 @@ print captured
 print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\n"
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect `$stdout` to a StringIO before
-/// instantiation (the standard Ruby capture idiom) so the module's output flows
-/// into it, then print the captured string to the real stdout.
+/// The `wasi_stdio_capture` glue: redirect `$stdout` to a StringIO before instantiation (the standard Ruby capture idiom) so the module's output flows into it, then print the captured string to the real stdout.
 const RUBY_STDIO_CAPTURE_GLUE: &str = r#"
 require "stringio"
 captured = StringIO.new
@@ -174,12 +151,9 @@ end
 print captured.string
 "#;
 
-// ---------------------------------------------------------------------
-// WASI filesystem glue.
+// --------------------------------------------------------------------- WASI filesystem glue.
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
-/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a
-/// trailing decimal line.
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const RUBY_FS_GLUE: &str = r#"inst = Prog.new({}, preopens: { "{guest}" => "{host}" })
 begin
   inst.invoke("_start")
@@ -188,16 +162,13 @@ rescue Prog::Rt::Exit => e
 end
 "#;
 
-/// The root-preopen containment probe: call the WASI resolver directly with a
-/// `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
 const RUBY_CONTAINMENT_GLUE: &str = r#"wasi = Prog::Rt::WASI.new(preopens: { "/" => "/" })
 _path, err = wasi.send(:resolve_path, 3, "etc")
 print(err.nil? ? "contained" : "rejected", "\n")
 "#;
 
-// ---------------------------------------------------------------------
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
-// the host scratch/cache dirs come through {scratch}/{cache}.
+// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const RUBY_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs.new({}, args: ["qjs", "/work/qjs_file_io.js"], env: {}, preopens: {"/work" => "{scratch}"})
 begin
@@ -241,13 +212,9 @@ rescue Cruby::Rt::Exit
 end
 "#;
 
-// ---------------------------------------------------------------------
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No
-// wasmtime golden — the results live in guest memory — so each drive's output
-// is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No wasmtime golden — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
-/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
-/// `Rt::Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Rt::Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const RUBY_LIBSQLITE3_MEM: &str = r##"
 db_mod = Libsqlite3.new
 db_mod.invoke("_initialize")
@@ -295,9 +262,7 @@ db_mod.invoke("sqlite3_close", db)
 puts "C-API-OK"
 "##;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen,
-/// select — the file lifecycle through the C API (same ADR-14 fs stack as the
-/// shell).
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell).
 const RUBY_LIBSQLITE3_FILE: &str = r##"
 DB_MOD = Libsqlite3.new({}, preopens: { "/db" => "{scratch}" })
 DB_MOD.invoke("_initialize")
@@ -346,10 +311,7 @@ DB_MOD.invoke("sqlite3_close", db)
 puts "FILE-OK"
 "##;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports
-/// `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row
-/// to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7
-/// import-provider mechanism and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import-provider mechanism and collects the rows.
 const RUBY_SQLITE3_CALLBACK: &str = r##"
 ROWS = []
 MEM_HOLDER = {}
@@ -402,10 +364,7 @@ ROWS.each { |r| puts "row: #{r.join('|')}" }
 puts "CALLBACK-OK"
 "##;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80"
-/// (DLT_EN10MB, snaplen 65535), then walk the serialized program
-/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory,
-/// printing each instruction as `code jt jf k`.
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
 const RUBY_PCAP_COMPILE: &str = r##"
 inst = Libpcap.new
 inst.invoke("_initialize")
@@ -432,9 +391,7 @@ inst.invoke("free", prog)
 puts "BPF-OK"
 "##;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
-/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
-/// malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
 const RUBY_TREESITTER_PARSE: &str = r##"
 inst = Treesitter.new
 inst.invoke("_initialize")
@@ -456,20 +413,15 @@ inst.invoke("free", r)
 puts "TS-OK"
 "##;
 
-// ---------------------------------------------------------------------
-// Multi-module drive glue.
+// --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Driver for the shared-table case: instantiate the exporter and the importer
-/// linked against it, then print `call0` (call_indirect through the shared
-/// table -> 42).
+/// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
 const RUBY_SHARED_TABLE_GLUE: &str = r#"a = TableExp.new
 b = TableImp.new({ "a" => a })
 print b.invoke("call0"), "\n"
 "#;
 
-/// Two Embedded artifacts coexist, each with its own nested `Rt`: exercise both,
-/// prove their trap classes are distinct, and catch one's trap. Output is
-/// normalized (`distinct-rt`/`trapped`) so it matches across languages.
+/// Two Embedded artifacts coexist, each with its own nested `Rt`: exercise both, prove their trap classes are distinct, and catch one's trap. Output is normalized (`distinct-rt`/`trapped`) so it matches across languages.
 const RUBY_EMBEDDED_COEXIST_GLUE: &str = r#"
 a = Alpha.new
 b = Beta.new
@@ -483,8 +435,7 @@ rescue Alpha::Rt::Trap
 end
 "#;
 
-// ---------------------------------------------------------------------
-// Suite wiring (ADR-27): each per-case macro invocation declares participation.
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Ruby, RUBY_ADD_GLUE);
 wasi_import_override_e2e!(Ruby, RUBY_OVERRIDE_GLUE);

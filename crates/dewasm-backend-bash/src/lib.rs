@@ -1,27 +1,11 @@
-//! Bash backend: translates dewasm IR into a sourceable Bash script
-//! plus a bundled runtime of flat `rt_*`/`mem_*` functions.
+//! Bash backend: translates dewasm IR into a sourceable Bash script plus a bundled runtime of flat `rt_*`/`mem_*` functions.
 //!
 //! Lowering conventions (ADR-11; numeric conventions ADR-2):
-//! - i32 is a masked-unsigned value in [0, 2^32); i64 is stored as its
-//!   signed-64 two's-complement bit pattern (bash arithmetic is signed
-//!   64-bit only). Signed/unsigned views are derived inline.
-//! - f32/f64 are their bit patterns (u32 / signed-64), computed by the
-//!   pure-Bash softfloat units (ADR-5/ADR-13); reinterprets and float
-//!   loads/stores are the identity over the integer paths.
-//! - Structured control flow maps to `while :; do ...; break; done`
-//!   wrappers; `br` becomes `break N`/`continue N` (bash counts only
-//!   loops, `if` adds no level). Unreferenced labels emit no wrapper.
-//! - Functions return values through the globals `R0, R1, ...`; traps set
-//!   `TRAP_MSG` and propagate status 134 through `|| return $?` chains.
-//!   Every generated function ends with an explicit `return 0` because a
-//!   trailing arithmetic statement would leak status 1.
-//! - One module instance per generation-time prefix: functions `<p>f<i>`,
-//!   state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space
-//!   table), entry points `<p>init`,
-//!   `<p>invoke`, `<p>global_get`. Imported functions resolve from the
-//!   caller's `IMPORTS` array; other import kinds resolve through
-//!   `PROVIDERS` + per-kind export maps, with imported globals and imported
-//!   memory aliased in via `declare -gn` namerefs (ADR-35).
+//! - i32 is a masked-unsigned value in [0, 2^32); i64 is stored as its signed-64 two's-complement bit pattern (bash arithmetic is signed 64-bit only). Signed/unsigned views are derived inline.
+//! - f32/f64 are their bit patterns (u32 / signed-64), computed by the pure-Bash softfloat units (ADR-5/ADR-13); reinterprets and float loads/stores are the identity over the integer paths.
+//! - Structured control flow maps to `while :; do ...; break; done` wrappers; `br` becomes `break N`/`continue N` (bash counts only loops, `if` adds no level). Unreferenced labels emit no wrapper.
+//! - Functions return values through the globals `R0, R1, ...`; traps set `TRAP_MSG` and propagate status 134 through `|| return $?` chains. Every generated function ends with an explicit `return 0` because a trailing arithmetic statement would leak status 1.
+//! - One module instance per generation-time prefix: functions `<p>f<i>`, state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space table), entry points `<p>init`, `<p>invoke`, `<p>global_get`. Imported functions resolve from the caller's `IMPORTS` array; other import kinds resolve through `PROVIDERS` + per-kind export maps, with imported globals and imported memory aliased in via `declare -gn` namerefs (ADR-35).
 //!
 //! Requires bash >= 5 (namerefs, associative arrays).
 
@@ -81,15 +65,12 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime for the closure of `seeds`. Bash has no
-/// namespaces, so the "runtime" is just the flat function definitions.
+/// Emit a top-level shared runtime for the closure of `seeds`. Bash has no namespaces, so the "runtime" is just the flat function definitions.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     bundler().bundle(seeds, 0)
 }
 
-/// Locate a bash >= 5 interpreter able to run generated scripts: tries
-/// `$DEWASM_BASH`, then `bash` on PATH, then the common Homebrew/local
-/// install paths (macOS system bash is 3.2 and does not qualify).
+/// Locate a bash >= 5 interpreter able to run generated scripts: tries `$DEWASM_BASH`, then `bash` on PATH, then the common Homebrew/local install paths (macOS system bash is 3.2 and does not qualify).
 pub fn find_bash5() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -118,9 +99,7 @@ pub fn find_bash5() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one module for `module` with all names prefixed by `prefix`
-/// (e.g. `"m1_"`). Returns the source and the set of runtime units it
-/// needs; the caller decides whether to bundle them alongside.
+/// Generate one module for `module` with all names prefixed by `prefix` (e.g. `"m1_"`). Returns the source and the set of runtime units it needs; the caller decides whether to bundle them alongside.
 pub fn generate_module_with_units(
     module: &Module,
     prefix: &str,
@@ -167,31 +146,17 @@ impl Backend for BashBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // The ADR-5 softfloat covers the full float surface; the
-            // harness now treats any float skip as a hard failure (ADR-8).
+            // The ADR-5 softfloat covers the full float surface; the harness now treats any float skip as a hard failure (ADR-8).
             Feature::Floats => SupportStatus::Supported,
-            // Defined tables now live in per-index array families keyed by
-            // structural type keys, so more than one table lowers directly.
+            // Defined tables now live in per-index array families keyed by structural type keys, so more than one table lowers directly.
             Feature::MultipleTables => SupportStatus::Supported,
-            // Imported globals alias the provider's cell via a `declare -gn`
-            // nameref (ADR-35); mutable and immutable both work through it.
+            // Imported globals alias the provider's cell via a `declare -gn` nameref (ADR-35); mutable and immutable both work through it.
             Feature::ImportedGlobals => SupportStatus::Supported,
-            // Imported memory aliases the provider's mem/pages/max_pages
-            // triplet via `declare -gn` namerefs, keyed off the owning
-            // module's flattened prefix (ADR-35); every mem/WASI unit and
-            // the inline MemoryGrow/MemorySize lowering work unchanged.
+            // Imported memory aliases the provider's mem/pages/max_pages triplet via `declare -gn` namerefs, keyed off the owning module's flattened prefix (ADR-35); every mem/WASI unit and the inline MemoryGrow/MemorySize lowering work unchanged.
             Feature::ImportedMemories => SupportStatus::Supported,
-            // Imported tables alias the provider's array/type-key
-            // array/size triplet via `declare -gn` namerefs, keyed off the
-            // target table's own base name (ADR-35); tab_init, call_indirect,
-            // and active element segments into a shared table all work
-            // unchanged through the nameref.
+            // Imported tables alias the provider's array/type-key array/size triplet via `declare -gn` namerefs, keyed off the target table's own base name (ADR-35); tab_init, call_indirect, and active element segments into a shared table all work unchanged through the nameref.
             Feature::ImportedTables => SupportStatus::Supported,
-            // Passive/declared element segments, ref.null items, and
-            // table.init/copy/elem.drop all lower onto the same
-            // `<p>t<i>`/`<p>t<i>ty` table arrays and `<p>elem<n>`/
-            // `<p>elem<n>ty` staging arrays as the active-segment path
-            // (tab/init.sh, tab/copy.sh).
+            // Passive/declared element segments, ref.null items, and table.init/copy/elem.drop all lower onto the same `<p>t<i>`/`<p>t<i>ty` table arrays and `<p>elem<n>`/ `<p>elem<n>ty` staging arrays as the active-segment path (tab/init.sh, tab/copy.sh).
             Feature::TableBulkOps => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
@@ -200,8 +165,7 @@ impl Backend for BashBackend {
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         let prefix = func_prefix(&opts.module_name);
 
-        // The status mappings in the standalone main need these even when
-        // the module itself never references them.
+        // The status mappings in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
         if opts.mode == Mode::Standalone {
             extra_seeds.insert("rt/trap".to_string());
@@ -229,8 +193,7 @@ impl Backend for BashBackend {
                 out.push_str(&bundler().bundle(&units, 0)?);
                 out.push('\n');
             }
-            // Runtime functions are global names in bash; an alias has
-            // nothing to emit as long as the shared bundle is sourced.
+            // Runtime functions are global names in bash; an alias has nothing to emit as long as the shared bundle is sourced.
             dewasm_backend::RuntimeLinkage::Alias(_) => {}
         }
         out.push_str(&src);
@@ -240,23 +203,10 @@ impl Backend for BashBackend {
             w.line("");
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
-            // Each wasm call nests one native bash function call (ADR-11), and
-            // a deeply recursive guest (e.g. QuickJS's interactive REPL, whose
-            // startup alone reaches tens of thousands of frames) can exhaust the
-            // *process's* C stack — not the bounded, trappable wasm one
-            // (FUNCNEST) — and crash with a real SIGSEGV rather than a caught
-            // wasm trap. Raise the soft rlimit to the max this process is
-            // allowed before running any guest code; both attempts degrade
-            // silently (`|| true`) since a sandboxed environment may refuse
-            // both, in which case behavior is unchanged from before this line
-            // existed.
+            // Each wasm call nests one native bash function call (ADR-11), and a deeply recursive guest (e.g. QuickJS's interactive REPL, whose startup alone reaches tens of thousands of frames) can exhaust the *process's* C stack — not the bounded, trappable wasm one (FUNCNEST) — and crash with a real SIGSEGV rather than a caught wasm trap. Raise the soft rlimit to the max this process is allowed before running any guest code; both attempts degrade silently (`|| true`) since a sandboxed environment may refuse both, in which case behavior is unchanged from before this line existed.
             w.line("ulimit -s unlimited 2>/dev/null || ulimit -s \"$(ulimit -Hs)\" 2>/dev/null || true");
             if wasi_bundled(module, opts.default_wasi) {
-                // Standalone runtime interface (ADR-31): consume a leading run of
-                // `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style),
-                // stopping at `--` or the first non-flag token; the rest is the
-                // guest's argv[1..]. The Bash backend now honors --dir with real
-                // filesystem support (ADR-34), mirroring the Ruby standalone parser.
+                // Standalone runtime interface (ADR-31): consume a leading run of `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..]. The Bash backend now honors --dir with real filesystem support (ADR-34), mirroring the Ruby standalone parser.
                 w.line("WASI_DIRS=()");
                 w.line("while (( $# )); do");
                 w.line("  case \"$1\" in");
@@ -289,9 +239,7 @@ impl Backend for BashBackend {
     }
 }
 
-/// Sanitized state/function prefix for a module name: `add.wasm` -> `add_`.
-/// Public so multi-module e2e cases (`compose_modules`) can derive each
-/// module's prefix the same way `generate` does.
+/// Sanitized state/function prefix for a module name: `add.wasm` -> `add_`. Public so multi-module e2e cases (`compose_modules`) can derive each module's prefix the same way `generate` does.
 pub fn func_prefix(module_name: &str) -> String {
     let mut out = String::new();
     for c in module_name.chars() {
@@ -310,17 +258,14 @@ pub fn func_prefix(module_name: &str) -> String {
     out
 }
 
-/// `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for
-/// everything implemented here except fd_seek's whence encoding, and
-/// fd_seek is ESPIPE-only on this backend anyway.
+/// `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything implemented here except fd_seek's whence encoding, and fd_seek is ESPIPE-only on this backend anyway.
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
 }
 
-/// Whether the generated module bundles the built-in WASI as an import
-/// fallback (and therefore consumes the WASI_ARGS/WASI_ENV arrays).
+/// Whether the generated module bundles the built-in WASI as an import fallback (and therefore consumes the WASI_ARGS/WASI_ENV arrays).
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
         && module
@@ -344,8 +289,7 @@ struct Gen<'a> {
     prefix: &'a str,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// Per-statement scratch variable counter and its per-function peak
-    /// (`__t<n>` locals hold helper results used as nested operands).
+    /// Per-statement scratch variable counter and its per-function peak (`__t<n>` locals hold helper results used as nested operands).
     scratch: Cell<u32>,
     scratch_max: Cell<u32>,
     /// Whether the current function needs the call_indirect scratch vars.
@@ -363,9 +307,7 @@ impl<'a> Gen<'a> {
         self.invoke_fn(w);
         w.line("");
         self.global_get_fn(w);
-        // WASI units are prefix-parameterized flat functions; imports are
-        // bound to bare function names, so each bundled syscall gets a
-        // per-module wrapper baking the prefix in.
+        // WASI units are prefix-parameterized flat functions; imports are bound to bare function names, so each bundled syscall gets a per-module wrapper baking the prefix in.
         if self.default_wasi {
             let wrappers: BTreeSet<&str> = self
                 .module
@@ -396,32 +338,17 @@ impl<'a> Gen<'a> {
         let p = self.prefix;
         w.line(format!("{p}init() {{"));
         w.indent();
-        // Emission order mirrors the Ruby backend (ADR-35): import
-        // registries, memory, tables, WASI state, then imports resolved
-        // kind by kind, then defined state, then export maps, then start.
+        // Emission order mirrors the Ruby backend (ADR-35): import registries, memory, tables, WASI state, then imports resolved kind by kind, then defined state, then export maps, then start.
         let num_imported_globals = m.imported_globals.len();
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()
             || !m.imported_tables.is_empty()
             || m.imported_memory.is_some();
         if has_imports {
-            // Guard-declare the two import registries up front: memory
-            // resolution (right below) needs PROVIDERS before the
-            // func/global import loops that used to be the first users of
-            // it. `declare -gA` never clears an existing array, so a
-            // caller's pre-populated IMPORTS (func overrides) / PROVIDERS
-            // (per-module export-map prefixes) survive, while an unset one
-            // becomes an empty associative array rather than being treated
-            // as indexed with its keys evaluated as arithmetic.
+            // Guard-declare the two import registries up front: memory resolution (right below) needs PROVIDERS before the func/global import loops that used to be the first users of it. `declare -gA` never clears an existing array, so a caller's pre-populated IMPORTS (func overrides) / PROVIDERS (per-module export-map prefixes) survive, while an unset one becomes an empty associative array rather than being treated as indexed with its keys evaluated as arithmetic.
             w.line("declare -gA IMPORTS PROVIDERS");
         }
-        // Imported memory (ADR-35): resolve the provider's memown prefix
-        // and alias its mem/pages/max_pages triplet in via `declare -gn`
-        // namerefs, so every mem/WASI/MemoryGrow/MemorySize unit keeps
-        // working unchanged whether the memory is owned locally or by
-        // another module. `<p>memown` records the flattened owning
-        // prefix (not a nameref itself) so a re-export just forwards the
-        // string, keeping any further nameref chain at depth 1.
+        // Imported memory (ADR-35): resolve the provider's memown prefix and alias its mem/pages/max_pages triplet in via `declare -gn` namerefs, so every mem/WASI/MemoryGrow/MemorySize unit keeps working unchanged whether the memory is owned locally or by another module. `<p>memown` records the flattened owning prefix (not a nameref itself) so a re-export just forwards the string, keeping any further nameref chain at depth 1.
         if let Some(import) = &m.imported_memory {
             self.use_unit("rt/resolve_import");
             self.use_unit("rt/link_err");
@@ -443,13 +370,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
             w.line(format!("{p}memown={p}"));
         }
-        // Imported tables (ADR-35): resolve before the defined tables so
-        // both share the unified index space. Unlike memory, a table's
-        // derived state (`t<i>`/`t<i>ty`/`t<i>sz`) does share one base name,
-        // so `rt_resolve_import`'s table kind resolves to the target's
-        // variable name directly (already flattened by the exporting
-        // module's TABLE_EXPORTS, mirroring imported globals) and each
-        // nameref points straight at the real array, one hop.
+        // Imported tables (ADR-35): resolve before the defined tables so both share the unified index space. Unlike memory, a table's derived state (`t<i>`/`t<i>ty`/`t<i>sz`) does share one base name, so `rt_resolve_import`'s table kind resolves to the target's variable name directly (already flattened by the exporting module's TABLE_EXPORTS, mirroring imported globals) and each nameref points straight at the real array, one hop.
         for (i, import) in m.imported_tables.iter().enumerate() {
             self.use_unit("rt/resolve_import");
             self.use_unit("rt/link_err");
@@ -464,8 +385,7 @@ impl<'a> Gen<'a> {
                 "declare -gn {p}t{i}=$RESOLVED {p}t{i}ty=${{RESOLVED}}ty {p}t{i}sz=${{RESOLVED}}sz"
             ));
         }
-        // Per unified-index-space defined table (imported ++ defined). The
-        // index base keeps room for the imported ones just above.
+        // Per unified-index-space defined table (imported ++ defined). The index base keeps room for the imported ones just above.
         for (i, table) in m.tables.iter().enumerate() {
             let idx = m.num_imported_tables() as usize + i;
             w.line(format!("{p}t{idx}=()"));
@@ -473,12 +393,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}t{idx}sz={}", table.min));
         }
         if wasi_bundled(m, self.default_wasi) {
-            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init
-            // (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio
-            // fds are preopened and fd_read/fd_write track per-fd offsets. wnext
-            // is the next fd; wpush is poll_oneoff's one-byte stdin pushback slot;
-            // init_preopens registers the --dir mounts and the filesystem
-            // fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
+            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio fds are preopened and fd_read/fd_write track per-fd offsets. wnext is the next fd; wpush is poll_oneoff's one-byte stdin pushback slot; init_preopens registers the --dir mounts and the filesystem fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
             w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
             w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
             w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
@@ -495,9 +410,7 @@ impl<'a> Gen<'a> {
             w.line(format!("rt_resolve_import {mm} {nn} func || return $?"));
             w.line(format!("{p}if{i}=$RESOLVED"));
             if is_wasi_module(&import.module) && self.default_wasi {
-                // Fallback order (ADR-7's bash shape): resolved import ->
-                // bundled WASI unit via a per-module prefix wrapper ->
-                // ENOSYS stub for known-but-unimplemented syscalls.
+                // Fallback order (ADR-7's bash shape): resolved import -> bundled WASI unit via a per-module prefix wrapper -> ENOSYS stub for known-but-unimplemented syscalls.
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
                     self.use_unit(&unit);
@@ -517,10 +430,7 @@ impl<'a> Gen<'a> {
                 ));
             }
         }
-        // Imported globals: resolve the provider's cell and alias it in
-        // under the unified index with a `declare -gn` nameref, so reads
-        // (`(( x = <p>g<i> ))`), mutable writes (`(( <p>g<i> = v ))`), and
-        // init-expr `global.get` offsets all reach the shared cell (ADR-35).
+        // Imported globals: resolve the provider's cell and alias it in under the unified index with a `declare -gn` nameref, so reads (`(( x = <p>g<i> ))`), mutable writes (`(( <p>g<i> = v ))`), and init-expr `global.get` offsets all reach the shared cell (ADR-35).
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.use_unit("rt/resolve_import");
             self.use_unit("rt/link_err");
@@ -539,16 +449,7 @@ impl<'a> Gen<'a> {
             self.emit_assign(w, &format!("{p}g{idx}"), &global.init);
         }
         for (n, elem) in m.elems.iter().enumerate() {
-            // Stage the segment as a temporary element array (function
-            // command names, `''` for a `ref.null` item) plus its
-            // structural type keys (same convention, `''` for the null
-            // items), mirroring the data-segment mem_init staging below.
-            // `ElemItem::Global` never reaches here: a ref-typed global
-            // (the only kind `global.get` could target inside an elem
-            // expression) is rejected by dewasm-core's `val_type` as soon
-            // as the Global/Import section is parsed (module.rs), which
-            // happens before the Element section — so a module containing
-            // one never makes it past conversion in the first place.
+            // Stage the segment as a temporary element array (function command names, `''` for a `ref.null` item) plus its structural type keys (same convention, `''` for the null items), mirroring the data-segment mem_init staging below. `ElemItem::Global` never reaches here: a ref-typed global (the only kind `global.get` could target inside an elem expression) is rejected by dewasm-core's `val_type` as soon as the Global/Import section is parsed (module.rs), which happens before the Element section — so a module containing one never makes it past conversion in the first place.
             let mut names = Vec::new();
             let mut keys = Vec::new();
             for item in &elem.items {
@@ -568,9 +469,7 @@ impl<'a> Gen<'a> {
             }
             match &elem.kind {
                 ElemKind::Declared => {
-                    // Never copied into a table; keep the pair of arrays
-                    // empty so a stray table.init/elem.drop against this
-                    // index is a harmless no-op-shaped array.
+                    // Never copied into a table; keep the pair of arrays empty so a stray table.init/elem.drop against this index is a harmless no-op-shaped array.
                     w.line(format!("{p}elem{n}=()"));
                     w.line(format!("{p}elem{n}ty=()"));
                 }
@@ -591,12 +490,7 @@ impl<'a> Gen<'a> {
                         "tab_init {p}t{table_index} {p}elem{n} $(( {off} )) 0 {} || return $?",
                         elem.items.len()
                     ));
-                    // Active segments are auto-dropped right after
-                    // instantiation (spec: table.init then an implicit
-                    // elem.drop), so clear the staging array the same way
-                    // an explicit ElemDrop would — a later table.init
-                    // against this segment then traps 'out of bounds
-                    // table access' like a genuinely dropped one.
+                    // Active segments are auto-dropped right after instantiation (spec: table.init then an implicit elem.drop), so clear the staging array the same way an explicit ElemDrop would — a later table.init against this segment then traps 'out of bounds table access' like a genuinely dropped one.
                     w.line(format!("{p}elem{n}=()"));
                     w.line(format!("{p}elem{n}ty=()"));
                 }
@@ -639,11 +533,7 @@ impl<'a> Gen<'a> {
         let mut gentries = Vec::new();
         for export in &m.exports {
             if let ExportKind::Global(idx) = export.kind {
-                // Flatten to the underlying cell's variable name so a
-                // consumer's nameref stays depth <=1 (ADR-35): an exported
-                // imported global is itself a `<p>g<i>` nameref, so publish
-                // its target (`${!<p>g<i>}`); a defined global publishes its
-                // own literal variable name.
+                // Flatten to the underlying cell's variable name so a consumer's nameref stays depth <=1 (ADR-35): an exported imported global is itself a `<p>g<i>` nameref, so publish its target (`${!<p>g<i>}`); a defined global publishes its own literal variable name.
                 let value = if (idx as usize) < num_imported_globals {
                     format!("${{!{p}g{idx}}}")
                 } else {
@@ -659,12 +549,7 @@ impl<'a> Gen<'a> {
         let mut mentries = Vec::new();
         for export in &m.exports {
             if let ExportKind::Memory = export.kind {
-                // Same flattening as globals, but the value is the owning
-                // module's prefix (`<p>memown`), not a single variable name:
-                // memory's derived state (`mem`/`pages`/`max_pages`) needs
-                // the prefix to rebuild all three suffixes on the importing
-                // side, so `rt_resolve_import`'s memory kind resolves to a
-                // prefix rather than one variable name (ADR-35).
+                // Same flattening as globals, but the value is the owning module's prefix (`<p>memown`), not a single variable name: memory's derived state (`mem`/`pages`/`max_pages`) needs the prefix to rebuild all three suffixes on the importing side, so `rt_resolve_import`'s memory kind resolves to a prefix rather than one variable name (ADR-35).
                 mentries.push(format!("[{}]=${p}memown", bash_str(&export.name)));
             }
         }
@@ -676,11 +561,7 @@ impl<'a> Gen<'a> {
         let mut tentries = Vec::new();
         for export in &m.exports {
             if let ExportKind::Table(idx) = export.kind {
-                // Flatten to the underlying array's base name, exactly like
-                // a global export (ADR-35): an exported imported table is
-                // itself a `<p>t<i>` nameref, so publish its target
-                // (`${!<p>t<i>}`); a defined table publishes its own literal
-                // base name.
+                // Flatten to the underlying array's base name, exactly like a global export (ADR-35): an exported imported table is itself a `<p>t<i>` nameref, so publish its target (`${!<p>t<i>}`); a defined table publishes its own literal base name.
                 let value = if (idx as usize) < num_imported_tables {
                     format!("${{!{p}t{idx}}}")
                 } else {
@@ -748,12 +629,7 @@ impl<'a> Gen<'a> {
         self.type_key(ty)
     }
 
-    /// A structural key for a function type, e.g. `i32,i64->f32`.
-    /// call_indirect compares types structurally, and a table can be shared
-    /// across independently generated modules (imported tables), so the
-    /// runtime type tag must not be a module-local numeric index — those
-    /// disagree across modules. Deriving the tag from the type's shape
-    /// makes it match regardless of each module's type section.
+    /// A structural key for a function type, e.g. `i32,i64->f32`. call_indirect compares types structurally, and a table can be shared across independently generated modules (imported tables), so the runtime type tag must not be a module-local numeric index — those disagree across modules. Deriving the tag from the type's shape makes it match regardless of each module's type section.
     fn type_key(&self, type_idx: u32) -> String {
         let ty = &self.module.types[type_idx as usize];
         let names = |tys: &[ValType]| {
@@ -985,8 +861,7 @@ impl<'a> Gen<'a> {
                 ));
                 w.line(format!("__fn=${{{p}t{ti}[__x]-}}"));
                 w.line("[[ -n $__fn ]] || { rt_trap 'uninitialized element'; return $?; }");
-                // Structural string compare (see type_key): a numeric type
-                // id would not survive a table shared across modules.
+                // Structural string compare (see type_key): a numeric type id would not survive a table shared across modules.
                 w.line(format!(
                     "[[ ${{{p}t{ti}ty[__x]}} == '{}' ]] || {{ rt_trap 'indirect call type mismatch'; return $?; }}",
                     self.type_key(*type_idx)
@@ -1002,11 +877,7 @@ impl<'a> Gen<'a> {
             Stmt::MemoryGrow { dst, delta } => {
                 let p = self.prefix;
                 let d = self.value(w, delta);
-                // Evaluate the delta exactly once by snapshotting the candidate
-                // page count: a folded `memory.size` delta reads `pages`, which
-                // the grow mutates, so a second textual use of the fragment
-                // would see the already-updated value. The destination then
-                // takes the old size before `pages` is overwritten.
+                // Evaluate the delta exactly once by snapshotting the candidate page count: a folded `memory.size` delta reads `pages`, which the grow mutates, so a second textual use of the fragment would see the already-updated value. The destination then takes the old size before `pages` is overwritten.
                 let cand = self.as_var(w, &format!("{p}pages + ({d})"));
                 w.line(format!("if (( {cand} <= {p}max_pages )); then"));
                 w.indent();
@@ -1111,9 +982,7 @@ impl<'a> Gen<'a> {
                 self.use_unit("rt/trap");
                 w.line("rt_trap 'unreachable' || return $?");
             }
-            // REASON: DWARF source-line back-mapping is out of scope for Bash
-            // (ADR-38); the marker renders nothing, keeping output identical to
-            // a non-`--dwarf-line` build.
+            // REASON: DWARF source-line back-mapping is out of scope for Bash (ADR-38); the marker renders nothing, keeping output identical to a non-`--dwarf-line` build.
             Stmt::SourceLine(_) => {}
         }
     }
@@ -1145,8 +1014,7 @@ impl<'a> Gen<'a> {
     }
 
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
-        // Command-shaped values are copied into scratch first, so a later
-        // helper call cannot clobber an R<i> we already assigned.
+        // Command-shaped values are copied into scratch first, so a later helper call cannot clobber an R<i> we already assigned.
         let frags: Vec<String> = values.iter().map(|v| self.value(w, v)).collect();
         for (i, frag) in frags.iter().enumerate() {
             w.line(format!("R{i}=$(( {frag} ))"));
@@ -1202,8 +1070,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Evaluate `expr` to a pure arithmetic fragment, emitting helper
-    /// commands (with scratch copies) as needed.
+    /// Evaluate `expr` to a pure arithmetic fragment, emitting helper commands (with scratch copies) as needed.
     fn value(&self, w: &mut CodeWriter, expr: &Expr) -> String {
         if let Some(frag) = self.arith(expr) {
             return frag;
@@ -1220,10 +1087,7 @@ impl<'a> Gen<'a> {
             Expr::Bin(op, a, b) => {
                 let a = self.value(w, a);
                 let b = self.value(w, b);
-                // Several inline lowerings textually repeat an operand (e.g.
-                // I64ShrU references `b` four times); with folded operands that
-                // would blow up geometrically. Snapshot non-trivial operands
-                // into a scratch var first (as_var is a no-op for a bare var).
+                // Several inline lowerings textually repeat an operand (e.g. I64ShrU references `b` four times); with folded operands that would blow up geometrically. Snapshot non-trivial operands into a scratch var first (as_var is a no-op for a bare var).
                 let a = self.as_var(w, &a);
                 let b = self.as_var(w, &b);
                 if let Some(frag) = bin_inline(*op, &a, &b) {
@@ -1253,9 +1117,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit `expr` as one helper command leaving its result in R0, when it
-    /// is directly command-shaped with pure operands. Returns false to let
-    /// the caller take the generic scratch path.
+    /// Emit `expr` as one helper command leaving its result in R0, when it is directly command-shaped with pure operands. Returns false to let the caller take the generic scratch path.
     fn emit_command(&self, w: &mut CodeWriter, expr: &Expr) -> bool {
         match expr {
             Expr::Un(op, a) => {
@@ -1335,13 +1197,9 @@ impl<'a> Gen<'a> {
     fn arith(&self, expr: &Expr) -> Option<String> {
         match expr {
             Expr::I32Const(v) => Some(v.to_string()),
-            // i64 constants are emitted as their signed-64 bit pattern;
-            // an unsigned literal above INT64_MAX would be
-            // implementation-defined in bash.
+            // i64 constants are emitted as their signed-64 bit pattern; an unsigned literal above INT64_MAX would be implementation-defined in bash.
             Expr::I64Const(v) => Some(format!("{}", *v as i64)),
-            // Floats are their bit patterns (ADR-13): f32 as u32, f64 as
-            // the signed-64 pattern (a u64 decimal >= 2^63 would wrap
-            // implementation-defined in bash).
+            // Floats are their bit patterns (ADR-13): f32 as u32, f64 as the signed-64 pattern (a u64 decimal >= 2^63 would wrap implementation-defined in bash).
             Expr::F32Const(bits) => Some(bits.to_string()),
             Expr::F64Const(bits) => Some(format!("{}", *bits as i64)),
             Expr::Temp(t) => Some(temp(*t)),
@@ -1377,8 +1235,7 @@ impl Frames {
     }
 }
 
-/// Command argument for a pure fragment: decimal literals pass through,
-/// anything else is evaluated with `$(( ))`.
+/// Command argument for a pure fragment: decimal literals pass through, anything else is evaluated with `$(( ))`.
 fn cmd_arg(frag: &str) -> String {
     let digits = frag.strip_prefix('-').unwrap_or(frag);
     if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
@@ -1409,8 +1266,7 @@ fn un_inline(op: UnOp, a: &str) -> Option<String> {
         I64Extend8S => format!("(((({a}) & 0xff) ^ 0x80) - 0x80)"),
         I64Extend16S => format!("(((({a}) & 0xffff) ^ 0x8000) - 0x8000)"),
         I64Extend32S => format!("(((({a}) & 0xffffffff) ^ 0x80000000) - 0x80000000)"),
-        // Pure bit ops on the float patterns (payload-preserving, as the
-        // spec requires for the sign ops); reinterprets are the identity.
+        // Pure bit ops on the float patterns (payload-preserving, as the spec requires for the sign ops); reinterprets are the identity.
         F32Abs => format!("(({a}) & 0x7fffffff)"),
         F32Neg => format!("(({a}) ^ 0x80000000)"),
         F64Abs => format!("(({a}) & 0x7fffffffffffffff)"),
@@ -1493,9 +1349,7 @@ fn bin_inline(op: BinOp, a: &str, b: &str) -> Option<String> {
         I32ShrS => format!("(({} >> (({b}) & 31)) & 0xffffffff)", s32_view(a)),
         I64Shl => format!("(({a}) << (({b}) & 63))"),
         I64ShrS => format!("(({a}) >> (({b}) & 63))"),
-        // Logical right shift over the signed representation: mask off the
-        // dragged-in sign bits; a shift count of 0 must bypass the mask
-        // because bash takes shift counts mod 64.
+        // Logical right shift over the signed representation: mask off the dragged-in sign bits; a shift count of 0 must bypass the mask because bash takes shift counts mod 64.
         I64ShrU => format!(
             "(((({b}) & 63) == 0 ? ({a}) : ((({a}) >> (({b}) & 63)) & ~(-1 << (64 - (({b}) & 63))))))"
         ),
@@ -1578,8 +1432,7 @@ fn load_method(op: LoadOp) -> &'static str {
     match op {
         I32Load => "i32_load",
         I64Load => "i64_load",
-        // Floats travel as bit patterns; the integer memory units are
-        // exact (ADR-13).
+        // Floats travel as bit patterns; the integer memory units are exact (ADR-13).
         F32Load => "i32_load",
         F64Load => "i64_load",
         I32Load8S => "i32_load8_s",
@@ -1610,11 +1463,7 @@ fn store_method(op: StoreOp) -> &'static str {
     }
 }
 
-/// Lint for the bash runtime units: every reference a unit body makes to
-/// another unit must be declared in its `# requires:` header, and every
-/// unit function must end with an explicit `return`/`:` — a trailing
-/// arithmetic statement would leak status 1 into the `|| return $?` trap
-/// cascade (ADR-11). Static half of the ADR-6 drift defence.
+/// Lint for the bash runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header, and every unit function must end with an explicit `return`/`:` — a trailing arithmetic statement would leak status 1 into the `|| return $?` trap cascade (ADR-11). Static half of the ADR-6 drift defence.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1648,9 +1497,7 @@ mod units {
                     continue;
                 }
                 if !unit_ids.contains(dep.as_str()) {
-                    // Longest-match artifacts (e.g. rt_i32 inside rt_i32_clz)
-                    // cannot occur because the regex is greedy; anything else
-                    // unknown is a genuine typo.
+                    // Longest-match artifacts (e.g. rt_i32 inside rt_i32_clz) cannot occur because the regex is greedy; anything else unknown is a genuine typo.
                     problems.push(format!("{}: references unknown unit {dep}", unit.id));
                     continue;
                 }

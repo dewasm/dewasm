@@ -1,15 +1,6 @@
-//! End-to-end coverage for `--data-file` data-segment externalization
-//! (ADR-37). For Ruby, Go, Python and Java: convert a module both embedded and
-//! with a sidecar, run each generated program, and assert byte-identical
-//! stdout/exit plus a smaller source file. Also pins the loud rejections (the
-//! bash target, `-o -`).
+//! End-to-end coverage for `--data-file` data-segment externalization (ADR-37). For Ruby, Go, Python and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized
-//! via `memory.init` + `data.drop`, and a bulky third segment so the sidecar
-//! form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are
-//! `#[ignore]`d unless the `slow_test` feature is on, matching the project's
-//! tier convention (ADR-48) for cases that pay a multi-second `go build` /
-//! interpreter startup (run with `--features slow_test` or `--include-ignored`).
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's tier convention (ADR-48) for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -24,11 +15,7 @@ fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
 
-/// A standalone module exercising every data-emission path: an active segment
-/// (index 0), a passive segment written by `memory.init` then `data.drop`ped
-/// (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to
-/// make the embedded hex dwarf the externalized sidecar. `_start` prints
-/// `Active!\nPassive!\n`.
+/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized sidecar. `_start` prints `Active!\nPassive!\n`.
 fn fixture_wat() -> String {
     let bulk = "x".repeat(2000);
     format!(
@@ -83,8 +70,7 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// Run a Ruby program from its own directory (so `__dir__`-relative sidecar
-/// loads resolve), returning (stdout, exit code).
+/// Run a Ruby program from its own directory (so `__dir__`-relative sidecar loads resolve), returning (stdout, exit code).
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby = find_ruby().expect("ruby >= 3.4 not found on PATH — see docs/testing.md");
     let out = Command::new(ruby)
@@ -96,8 +82,7 @@ fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// `go build` a program in its own directory (so `//go:embed` resolves) and run
-/// the resulting binary, returning (stdout, exit code).
+/// `go build` a program in its own directory (so `//go:embed` resolves) and run the resulting binary, returning (stdout, exit code).
 fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
@@ -124,8 +109,7 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// Run a Python program from its own directory (so the sidecar, resolved via
-/// `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
+/// Run a Python program from its own directory (so the sidecar, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
 fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let python = find_python().expect("python3 not found on PATH — see docs/testing.md");
     let out = Command::new(python)
@@ -155,9 +139,7 @@ fn compile_java(src: &Path, classdir: &Path) {
     );
 }
 
-/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader
-/// resolves the sidecar sitting alongside `Main.class`), returning (stdout,
-/// exit code).
+/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the sidecar sitting alongside `Main.class`), returning (stdout, exit code).
 fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
     let out = Command::new(&java)
@@ -170,8 +152,7 @@ fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-// --------------------------------------------------------------------------
-// Inline-fixture parity (default gate).
+// -------------------------------------------------------------------------- Inline-fixture parity (default gate).
 
 #[test]
 fn ruby_data_file_matches_embedded() {
@@ -374,8 +355,7 @@ fn java_data_file_matches_embedded() {
     let embedded = dir.join("embedded").join("Main.java");
     let ecls = dir.join("embedded-cls");
     std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
-    // Externalized: the sidecar lands directly in the run-time class dir so the
-    // `DATA_BLOB` code-source loader finds it next to `Main.class`.
+    // Externalized: the sidecar lands directly in the run-time class dir so the `DATA_BLOB` code-source loader finds it next to `Main.class`.
     let ext = dir.join("ext").join("Main.java");
     let xcls = dir.join("ext-cls");
     std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
@@ -435,8 +415,7 @@ fn java_data_file_matches_embedded() {
     assert_eq!(code_e, code_x);
 }
 
-// --------------------------------------------------------------------------
-// Loud rejections (default gate).
+// -------------------------------------------------------------------------- Loud rejections (default gate).
 
 #[test]
 fn rejects_unsupported_targets_and_stdout() {
@@ -447,8 +426,7 @@ fn rejects_unsupported_targets_and_stdout() {
     let sidecar = dir.join("d.bin");
     let sc = sidecar.to_str().unwrap();
 
-    // Bash is the sole target that rejects `--data-file` (its data lives in the
-    // runtime, ADR-37); the error names the target.
+    // Bash is the sole target that rejects `--data-file` (its data lives in the runtime, ADR-37); the error names the target.
     let out = dir.join("out.bash");
     let r = run_dewasm(&[
         watp,
@@ -487,10 +465,7 @@ fn rejects_unsupported_targets_and_stdout() {
     );
 }
 
-/// A `--data-file` resolving to the same file as `-o` is rejected before
-/// anything is written: the blob would otherwise clobber the freshly written
-/// source (#30). Covers both the identical spelling and a `..`-hop alias of
-/// the same path.
+/// A `--data-file` resolving to the same file as `-o` is rejected before anything is written: the blob would otherwise clobber the freshly written source (#30). Covers both the identical spelling and a `..`-hop alias of the same path.
 #[test]
 fn rejects_data_file_colliding_with_output_path() {
     let dir = tempdir("collide-output");
@@ -521,8 +496,7 @@ fn rejects_data_file_colliding_with_output_path() {
     );
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 
-    // A differently spelled alias of the same file ("dir/../dir/out.py") must
-    // be caught too: the check compares resolved paths, not strings.
+    // A differently spelled alias of the same file ("dir/../dir/out.py") must be caught too: the check compares resolved paths, not strings.
     let alias = dir.join("..").join(dir.file_name().unwrap()).join("out.py");
     let r = run_dewasm(&[
         watp,
@@ -539,11 +513,7 @@ fn rejects_data_file_colliding_with_output_path() {
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 }
 
-/// A `--data-file` whose filename collides with a generated output file's
-/// name is rejected: routing is by name, so the java backend's fixed
-/// `Main.java` source would be misrouted to the sidecar path and clobbered by
-/// the blob (#30). Covered with data segments (source and sidecar share the
-/// name) and without (the lone source itself matches the sidecar name).
+/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the sidecar path and clobbered by the blob (#30). Covered with data segments (source and sidecar share the name) and without (the lone source itself matches the sidecar name).
 #[test]
 fn rejects_data_file_colliding_with_generated_name() {
     let dir = tempdir("collide-name");
@@ -575,9 +545,7 @@ fn rejects_data_file_colliding_with_generated_name() {
     assert!(!out.exists(), "no source may be written on rejection");
     assert!(!sidecar.exists(), "no sidecar may be written on rejection");
 
-    // Same collision with a data-less module: the backend emits no sidecar,
-    // so the lone `Main.java` source itself matches the sidecar name and
-    // would be misrouted; it must be rejected identically.
+    // Same collision with a data-less module: the backend emits no sidecar, so the lone `Main.java` source itself matches the sidecar name and would be misrouted; it must be rejected identically.
     let nodata = dir.join("nodata.wat");
     write(&nodata, "(module (func (export \"_start\")))\n");
     let r = run_dewasm(&[
@@ -599,9 +567,7 @@ fn rejects_data_file_colliding_with_generated_name() {
     assert!(!sidecar.exists(), "no sidecar may be written on rejection");
 }
 
-// --------------------------------------------------------------------------
-// Real-app parity (slow: `#[ignore]`d unless `--features slow_test`; also run
-// with --include-ignored).
+// -------------------------------------------------------------------------- Real-app parity (slow: `#[ignore]`d unless `--features slow_test`; also run with --include-ignored).
 
 fn qjs_wasm() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/qjs.wasm")

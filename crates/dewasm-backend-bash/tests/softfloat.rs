@@ -1,9 +1,4 @@
-//! Softfloat oracle (ADR-13): drives the bash float units with edge and
-//! seeded-random vectors and compares every result bit-for-bit against
-//! Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical
-//! NaN results, wasm min/max, the Ruby backend's trunc trap table). The
-//! spec harness remains the bar (ADR-3); this is the fast development
-//! net that pinpoints the exact op and operands on a regression.
+//! Softfloat oracle (ADR-13): drives the bash float units with edge and seeded-random vectors and compares every result bit-for-bit against Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical NaN results, wasm min/max, the Ruby backend's trunc trap table). The spec harness remains the bar (ADR-3); this is the fast development net that pinpoints the exact op and operands on a regression.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -94,8 +89,7 @@ impl Cases {
     }
 }
 
-/// Random f64 pattern pairs whose exponents are close enough to exercise
-/// alignment, cancellation, and gradual underflow.
+/// Random f64 pattern pairs whose exponents are close enough to exercise alignment, cancellation, and gradual underflow.
 fn correlated_pair(rng: &mut Lcg) -> (i64, i64) {
     let a = rng.next() as i64;
     let ea = ((a >> 52) & 0x7ff).clamp(1, 0x7fe);
@@ -422,8 +416,7 @@ const TRUNC_EDGES32: &[u32] = &[
     0x3f000000, // 0.5
 ];
 
-/// The Ruby backend's trunc semantics: NaN and out-of-range trap; the
-/// bound check is on the truncated value.
+/// The Ruby backend's trunc semantics: NaN and out-of-range trap; the bound check is on the truncated value.
 fn oracle_trunc(x: f64, lo: f64, hi_excl: f64) -> Result<f64, &'static str> {
     if x.is_nan() {
         return Err("invalid conversion to integer");
@@ -604,8 +597,7 @@ fn softfloat_conversions() {
     run_cases(&cases);
 }
 
-/// f32 arithmetic through promote/f64/demote: the empirical check of the
-/// double-rounding theorem, biased toward the 24-bit boundary.
+/// f32 arithmetic through promote/f64/demote: the empirical check of the double-rounding theorem, biased toward the 24-bit boundary.
 #[test]
 fn softfloat_f32_arith() {
     let mut cases = Cases::new();

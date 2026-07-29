@@ -1,7 +1,4 @@
-//! The adjacent active-data-segment merging pass (ADR-41): assert the
-//! `module.datas` shape the pass produces from small wat inputs — merged runs,
-//! zero-filled gaps, the gap threshold, and every bail condition (bulk-memory
-//! ops, overlapping/descending offsets, `global.get` offsets).
+//! The adjacent active-data-segment merging pass (ADR-41): assert the `module.datas` shape the pass produces from small wat inputs — merged runs, zero-filled gaps, the gap threshold, and every bail condition (bulk-memory ops, overlapping/descending offsets, `global.get` offsets).
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{DataSegment, Expr, Module};
@@ -22,9 +19,7 @@ fn const_offset(seg: &DataSegment) -> Option<u64> {
 
 #[test]
 fn adjacent_segments_merge_with_zero_filled_gap() {
-    // Two active segments at 0 (`ab`) and 4 (`cd`) with a 2-byte hole: they sit
-    // within the 64-byte threshold, so they collapse into one blob at offset 0
-    // whose gap is zero-filled.
+    // Two active segments at 0 (`ab`) and 4 (`cd`) with a 2-byte hole: they sit within the 64-byte threshold, so they collapse into one blob at offset 0 whose gap is zero-filled.
     let m = module(
         r#"(module (memory 1)
             (data (i32.const 0) "ab")
@@ -49,8 +44,7 @@ fn touching_segments_merge_without_a_gap() {
 
 #[test]
 fn gap_at_or_above_threshold_keeps_segments_separate() {
-    // The second segment starts 64 bytes past the end of the first (exactly the
-    // threshold, which is exclusive), so no merge happens.
+    // The second segment starts 64 bytes past the end of the first (exactly the threshold, which is exclusive), so no merge happens.
     let m = module(
         r#"(module (memory 1)
             (data (i32.const 0) "ab")
@@ -65,9 +59,7 @@ fn gap_at_or_above_threshold_keeps_segments_separate() {
 
 #[test]
 fn global_get_offset_bails_the_whole_pass() {
-    // A `global.get` offset writes to a runtime-unknown address, so its
-    // presence anywhere bails the pass: nothing merges, everything passes
-    // through unchanged.
+    // A `global.get` offset writes to a runtime-unknown address, so its presence anywhere bails the pass: nothing merges, everything passes through unchanged.
     let m = module(
         r#"(module
             (import "env" "base" (global $base i32))
@@ -95,11 +87,7 @@ fn global_get_offset_bails_the_whole_pass() {
 
 #[test]
 fn global_get_before_mergeable_consts_bails_the_whole_pass() {
-    // Issue #28 regression. With `base = 4` at instantiation, "XX" lands at
-    // 4..6 — inside the 2..8 gap that merging the two const segments would
-    // zero-fill. The merged blob is emitted *after* the global.get segment,
-    // so its zeros would clobber "XX". The pass must therefore leave every
-    // segment untouched, keeping the final memory image identical.
+    // Issue #28 regression. With `base = 4` at instantiation, "XX" lands at 4..6 — inside the 2..8 gap that merging the two const segments would zero-fill. The merged blob is emitted *after* the global.get segment, so its zeros would clobber "XX". The pass must therefore leave every segment untouched, keeping the final memory image identical.
     let m = module(
         r#"(module
             (import "env" "base" (global $base i32))
@@ -127,8 +115,7 @@ fn global_get_before_mergeable_consts_bails_the_whole_pass() {
 
 #[test]
 fn descending_offsets_bail_the_whole_pass() {
-    // The second segment starts before the first ends: not globally ascending,
-    // so the pass leaves every segment untouched (no merge anywhere).
+    // The second segment starts before the first ends: not globally ascending, so the pass leaves every segment untouched (no merge anywhere).
     let m = module(
         r#"(module (memory 1)
             (data (i32.const 4) "ab")
@@ -156,9 +143,7 @@ fn overlapping_offsets_bail_the_whole_pass() {
 
 #[test]
 fn memory_init_or_data_drop_bails_the_whole_pass() {
-    // Bulk-memory ops reference segments by index; merging would renumber them,
-    // so their presence bails the pass even for the mergeable active segments.
-    // (Mirrors the shape of the CLI data_file fixture.)
+    // Bulk-memory ops reference segments by index; merging would renumber them, so their presence bails the pass even for the mergeable active segments. (Mirrors the shape of the CLI data_file fixture.)
     let m = module(
         r#"(module (memory 1)
             (data (i32.const 0) "ab")
@@ -179,9 +164,7 @@ fn memory_init_or_data_drop_bails_the_whole_pass() {
 
 #[test]
 fn passive_interleaved_between_actives_lets_them_merge() {
-    // A passive segment carries no standalone memory effect (no `memory.init`
-    // here), so it does not close the active run: the actives on either side
-    // still merge, and the passive survives in the output.
+    // A passive segment carries no standalone memory effect (no `memory.init` here), so it does not close the active run: the actives on either side still merge, and the passive survives in the output.
     let m = module(
         r#"(module (memory 1)
             (data (i32.const 0) "ab")

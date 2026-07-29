@@ -1,5 +1,4 @@
-//! Embeds the runtime units from runtime/ruby/units/ as
-//! `UNIT_SOURCES: &[(&str, &str)]` (unit id, source).
+//! Embeds the runtime units from runtime/ruby/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source).
 
 use std::fmt::Write as _;
 use std::path::Path;

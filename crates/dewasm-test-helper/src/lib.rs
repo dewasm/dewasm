@@ -1,9 +1,4 @@
-//! Shared test harness, case tables, and per-feature test macros for the
-//! dewasm backend crates (ADR-27). This crate depends only on `dewasm-core`
-//! and `dewasm-backend` — never on a concrete backend crate — and is taken as
-//! a dev-dependency by each backend crate, which supplies a
-//! [`BackendUnderTest`] (and, for the spec harness, a [`SpecBackend`]) and
-//! wires up the suites it participates in via the macros below.
+//! Shared test harness, case tables, and per-feature test macros for the dewasm backend crates (ADR-27). This crate depends only on `dewasm-core` and `dewasm-backend` — never on a concrete backend crate — and is taken as a dev-dependency by each backend crate, which supplies a [`BackendUnderTest`] (and, for the spec harness, a [`SpecBackend`]) and wires up the suites it participates in via the macros below.
 
 mod apps;
 mod apps_capi;
@@ -58,12 +53,7 @@ pub use wasi::{
 pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
 pub use wasmtime_backend::Wasmtime;
 
-/// The `harness = false` `main` of a backend's spec integration test: builds
-/// one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and
-/// runs them with cargo's own test arguments (name filter,
-/// `--ignored`/`--include-ignored`, thread count). `$lang` must be a
-/// promotable-to-`'static` value — the backend `Spec` structs are unit structs,
-/// so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
+/// The `harness = false` `main` of a backend's spec integration test: builds one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and runs them with cargo's own test arguments (name filter, `--ignored`/`--include-ignored`, thread count). `$lang` must be a promotable-to-`'static` value — the backend `Spec` structs are unit structs, so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
 #[macro_export]
 macro_rules! spec_suite {
     ($lang:expr) => {
@@ -73,10 +63,7 @@ macro_rules! spec_suite {
     };
 }
 
-/// The `harness = false` `main` of a backend's WASI-testsuite integration test
-/// (ADR-36): builds one libtest-mimic trial per prebuilt `.wasm` for `$lang` (a
-/// [`WasiTestsuiteBackend`]) and runs them with cargo's own test arguments. Like
-/// [`spec_suite!`], `$lang` is a promotable-to-`'static` unit struct.
+/// The `harness = false` `main` of a backend's WASI-testsuite integration test (ADR-36): builds one libtest-mimic trial per prebuilt `.wasm` for `$lang` (a [`WasiTestsuiteBackend`]) and runs them with cargo's own test arguments. Like [`spec_suite!`], `$lang` is a promotable-to-`'static` unit struct.
 ///
 /// [`WasiTestsuiteBackend`]: crate::WasiTestsuiteBackend
 #[macro_export]
@@ -88,16 +75,10 @@ macro_rules! wasi_testsuite_suite {
     };
 }
 
-/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item
-/// (ADR-48). The per-case app macros below delegate here so a callsite can pick
-/// the tier without duplicating the gate:
+/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate:
 ///
-/// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep
-///   tier). This is the default for every slow-case macro.
-/// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a
-///   case measured at roughly a minute or more on a CI runner. These are kept
-///   out of CI and run only under `--features ultra_slow_test` or
-///   `-- --include-ignored`, in local pre-release verification.
+/// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep tier). This is the default for every slow-case macro.
+/// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
 #[macro_export]
 macro_rules! slow_tier_test {
     (slow, $item:item) => {
@@ -116,11 +97,7 @@ macro_rules! slow_tier_test {
     };
 }
 
-/// Per-case library macros (ADR-27 revision): each expands to one
-/// `#[test] fn <case>()` running the named [`LibraryCase`] const for `$lang`
-/// with `$glue` (a named `&str` const in the backend crate). A backend declares
-/// participation by invoking the macro and drops it (with a REASON comment) for
-/// a capability it lacks.
+/// Per-case library macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`LibraryCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a capability it lacks.
 ///
 /// [`LIBRARY_ADD`]: crate::LIBRARY_ADD
 #[macro_export]
@@ -177,12 +154,7 @@ macro_rules! stdio_capture_e2e {
     };
 }
 
-/// One `#[test]` running the WASI cases of a given feature kind for `$lang`.
-/// The no-glue form covers whole-program standalone kinds (`Stdio`, `ArgsEnv`,
-/// `ClockRandom`, `Poll`); the `Fs` form covers the filesystem cases
-/// (library-mode runs against a preopened host directory), taking a single
-/// per-backend glue **template** const whose `{guest}`/`{host}` placeholders the
-/// runner fills with each case's preopen pair (ADR-27 revision).
+/// One `#[test]` running the WASI cases of a given feature kind for `$lang`. The no-glue form covers whole-program standalone kinds (`Stdio`, `ArgsEnv`, `ClockRandom`, `Poll`); the `Fs` form covers the filesystem cases (library-mode runs against a preopened host directory), taking a single per-backend glue **template** const whose `{guest}`/`{host}` placeholders the runner fills with each case's preopen pair (ADR-27 revision).
 #[macro_export]
 macro_rules! wasi_suite {
     ($lang:expr, Stdio) => {
@@ -217,11 +189,7 @@ macro_rules! wasi_suite {
     };
 }
 
-/// One `#[test]` exercising the standalone `--dir` interface (ADR-31) for
-/// `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir`
-/// mount, and require the file round-trip to succeed. No glue — standalone needs
-/// none. Wired by every filesystem backend (and re-run under wasmtime as ground
-/// truth); Bash joined once its WASI filesystem landed (ADR-34).
+/// One `#[test]` exercising the standalone `--dir` interface (ADR-31) for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed. No glue — standalone needs none. Wired by every filesystem backend (and re-run under wasmtime as ground truth); Bash joined once its WASI filesystem landed (ADR-34).
 #[macro_export]
 macro_rules! standalone_dir_e2e {
     ($lang:expr) => {
@@ -232,14 +200,7 @@ macro_rules! standalone_dir_e2e {
     };
 }
 
-/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid
-/// guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame
-/// recursion) standalone, run it, and require the guest's `proc_exit(42)` as
-/// the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No
-/// glue — this exercises the emitted entrypoint itself. Wired by Python, whose
-/// entrypoint applies ADR-28's mitigation (issue #31); each other backend's
-/// host recursion depth is its own concern — it invokes this once its
-/// entrypoint needs (and has) such a mitigation.
+/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame recursion) standalone, run it, and require the guest's `proc_exit(42)` as the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No glue — this exercises the emitted entrypoint itself. Wired by Python, whose entrypoint applies ADR-28's mitigation (issue #31); each other backend's host recursion depth is its own concern — it invokes this once its entrypoint needs (and has) such a mitigation.
 #[macro_export]
 macro_rules! deep_recursion_e2e {
     ($lang:expr) => {
@@ -250,10 +211,7 @@ macro_rules! deep_recursion_e2e {
     };
 }
 
-/// One `#[test]` running the root-preopen containment probe for `$lang` with
-/// `$glue` (a named `&str` const that drives the WASI resolver directly). Split
-/// out of `wasi_suite!(Fs)` because it does not fit the shared preopen-and-run
-/// template — see [`run_wasi_containment`](crate::run_wasi_containment).
+/// One `#[test]` running the root-preopen containment probe for `$lang` with `$glue` (a named `&str` const that drives the WASI resolver directly). Split out of `wasi_suite!(Fs)` because it does not fit the shared preopen-and-run template — see [`run_wasi_containment`](crate::run_wasi_containment).
 #[macro_export]
 macro_rules! wasi_root_containment_e2e {
     ($lang:expr, $glue:expr) => {
@@ -264,15 +222,7 @@ macro_rules! wasi_root_containment_e2e {
     };
 }
 
-/// Per-case app macros (ADR-27 revision): each expands to one
-/// `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a
-/// [`BackendUnderTest`]). No glue argument — these are standalone-mode
-/// stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!`
-/// and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!`
-/// are slow — their generated `#[test]` is `#[ignore]`d unless the expanding
-/// backend crate's `slow_test` feature is enabled (run with `--features slow_test`
-/// or `cargo test -- --include-ignored`). A callsite may pass a trailing tier
-/// token (`slow`, the default, or `ultra`); see [`slow_tier_test!`] (ADR-48).
+/// Per-case app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test` or `cargo test -- --include-ignored`). A callsite may pass a trailing tier token (`slow`, the default, or `ultra`); see [`slow_tier_test!`] (ADR-48).
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -296,11 +246,7 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case.
-/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding
-/// backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with
-/// `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing
-/// `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48).
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
@@ -316,9 +262,7 @@ macro_rules! qjs_eval_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL)
-/// case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate
-/// and the trailing tier token.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
@@ -334,10 +278,7 @@ macro_rules! sqlite3_shell_e2e {
     };
 }
 
-/// One `#[test]` running the gzip byte-stdio stress cases (minigzip) for
-/// `$lang`. Separate from the app macros above because those cases carry
-/// binary stdin/stdout an `&str`/`include_str!` `AppCase` cannot represent
-/// (`run_gzip_cases`).
+/// One `#[test]` running the gzip byte-stdio stress cases (minigzip) for `$lang`. Separate from the app macros above because those cases carry binary stdin/stdout an `&str`/`include_str!` `AppCase` cannot represent (`run_gzip_cases`).
 #[macro_export]
 macro_rules! gzip_e2e {
     ($lang:expr) => {
@@ -348,10 +289,7 @@ macro_rules! gzip_e2e {
     };
 }
 
-/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for
-/// `$lang` and comparing the transcript byte-for-byte to the wasmtime golden
-/// (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature
-/// gate and the trailing tier token.
+/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime golden (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
@@ -367,14 +305,7 @@ macro_rules! qjs_repl_pty_e2e {
     };
 }
 
-/// Per-case filesystem-app macros (ADR-27 revision): each expands to one
-/// `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with
-/// `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}`
-/// placeholders the runner fills). A backend declares participation by invoking
-/// the macro and drops it (with a REASON comment) for a case it cannot run.
-/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend
-/// crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing
-/// tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]).
+/// Per-case filesystem-app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
@@ -472,14 +403,7 @@ macro_rules! cruby_hello_e2e {
     };
 }
 
-/// Per-case C-API macros (ADR-27 revision): each expands to one
-/// `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with
-/// `$glue` (a named `&str` const in the backend crate; the file-backed case's
-/// `{scratch}` placeholder is filled by the runner). Which backends invoke
-/// these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash
-/// (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the
-/// expanding backend crate's `slow_test` feature is enabled (see
-/// [`qjs_eval_e2e!`]).
+/// Per-case C-API macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate; the file-backed case's `{scratch}` placeholder is filled by the runner). Which backends invoke these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]).
 ///
 /// [`CApiCase`]: crate::CApiCase
 #[macro_export]
@@ -513,11 +437,7 @@ macro_rules! sqlite3_file_c_api_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the libpcap BPF-compile case
-/// [`PCAP_COMPILE`](crate::PCAP_COMPILE): drives `compile_filter` on
-/// "tcp port 80" and prints the serialized BPF program. Slow (a ~2 MB
-/// reactor artifact reconverted per run), so gated like the sqlite C-API
-/// cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the libpcap BPF-compile case [`PCAP_COMPILE`](crate::PCAP_COMPILE): drives `compile_filter` on "tcp port 80" and prints the serialized BPF program. Slow (a ~2 MB reactor artifact reconverted per run), so gated like the sqlite C-API cases.
 #[macro_export]
 macro_rules! pcap_compile_e2e {
     ($lang:expr, $glue:expr) => {
@@ -533,11 +453,7 @@ macro_rules! pcap_compile_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case
-/// [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a
-/// fixed JSON snippet and prints the parse tree's S-expression. Slow (a
-/// ~1.5 MB reactor artifact reconverted per run), so gated like the sqlite
-/// C-API cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a fixed JSON snippet and prints the parse tree's S-expression. Slow (a ~1.5 MB reactor artifact reconverted per run), so gated like the sqlite C-API cases.
 #[macro_export]
 macro_rules! treesitter_parse_e2e {
     ($lang:expr, $glue:expr) => {
@@ -569,13 +485,7 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// Per-case multi-module macros (ADR-27 revision): each expands to one
-/// `#[test] fn <case>()` running the named [`MultiModuleCase`] const for `$lang`
-/// with `$glue` (a named `&str` driver const in the backend crate). The backend
-/// must implement [`BackendUnderTest::compose_modules`]. Which backends invoke
-/// these is the capability declaration (ADR-27): the ImportedTables-capable
-/// backends for the shared-table case, and the nested-runtime backends for the
-/// coexistence case.
+/// Per-case multi-module macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`MultiModuleCase`] const for `$lang` with `$glue` (a named `&str` driver const in the backend crate). The backend must implement [`BackendUnderTest::compose_modules`]. Which backends invoke these is the capability declaration (ADR-27): the ImportedTables-capable backends for the shared-table case, and the nested-runtime backends for the coexistence case.
 ///
 /// [`MultiModuleCase`]: crate::MultiModuleCase
 #[macro_export]

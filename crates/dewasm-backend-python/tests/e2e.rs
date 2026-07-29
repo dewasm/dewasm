@@ -1,9 +1,4 @@
-//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`)
-//! wired up for the Python backend. Per the ADR-27 revision this file holds ONLY
-//! the [`BackendUnderTest`] impl, named glue string constants, and per-case
-//! macro invocations. Python covers full WASI preview 1 incl. the filesystem
-//! (ADR-28), so it wires every WASI kind, the slow-tier `apps`/`fs_apps`/`capi`
-//! suites, and the shared-table multi-module case.
+//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Python backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem (ADR-28), so it wires every WASI kind, the slow-tier `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
 
 use std::path::PathBuf;
 
@@ -34,10 +29,7 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one
-    /// top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so
-    /// an imported table crosses modules; otherwise it concatenates independent
-    /// Embedded conversions (only used by cases Python invokes).
+    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -77,8 +69,7 @@ impl BackendUnderTest for Python {
     }
 }
 
-// ---------------------------------------------------------------------
-// Library-case glue.
+// --------------------------------------------------------------------- Library-case glue.
 
 /// `add.wat`: call the exported functions and print each result.
 const PYTHON_ADD_GLUE: &str = r#"inst = Add()
@@ -87,8 +78,7 @@ print(inst.invoke("add", 0xffffffff, 1))
 print(inst.invoke("fib", 10))
 "#;
 
-/// The ADR-7 override/fallback glue: fd_write intercepted, random_get falls
-/// back to the bundled WASI. Prints the actual bytes written.
+/// The ADR-7 override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
 const PYTHON_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -109,9 +99,7 @@ inst.invoke("_start")  # random_get falls back to the bundled WASI
 sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* (`wasm_import`/`attach`,
-/// the Python analog of Ruby's duck-typed provider) covers every import, so the
-/// bundled WASI (`_wasi`) is never lazily constructed.
+/// The `custom_wasi_provider` glue: a provider *object* (`wasm_import`/`attach`, the Python analog of Ruby's duck-typed provider) covers every import, so the bundled WASI (`_wasi`) is never lazily constructed.
 const PYTHON_CUSTOM_PROVIDER_GLUE: &str = r#"import sys
 
 
@@ -144,8 +132,7 @@ sys.stdout.write(wasi.out.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted,
-/// random_get falls back — so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back — so the bundled WASI *was* lazily constructed.
 const PYTHON_PARTIAL_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -167,10 +154,7 @@ sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the
-/// bundled WASI captures on lazy construction) to a `BytesIO`, run, then print
-/// the captured bytes to the real stdout — the Python mirror of Ruby's StringIO
-/// idiom.
+/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout — the Python mirror of Ruby's StringIO idiom.
 const PYTHON_STDIO_CAPTURE_GLUE: &str = r#"import io
 import sys
 
@@ -192,12 +176,9 @@ sys.stdout.buffer.write(_data)
 sys.stdout.flush()
 "#;
 
-// ---------------------------------------------------------------------
-// WASI filesystem glue.
+// --------------------------------------------------------------------- WASI filesystem glue.
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
-/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a
-/// trailing decimal line.
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const PYTHON_FS_GLUE: &str = r#"inst = Prog({}, preopens={"{guest}": "{host}"})
 try:
     inst.invoke("_start")
@@ -205,16 +186,13 @@ except Rt.Exit as e:
     print(e.code)
 "#;
 
-/// The root-preopen containment probe: call the WASI resolver directly with a
-/// `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
 const PYTHON_CONTAINMENT_GLUE: &str = r#"wasi = Rt.WASI(preopens={"/": "/"})
 _path, err = wasi.resolve_path(3, "etc")
 print("contained" if err is None else "rejected")
 "#;
 
-// ---------------------------------------------------------------------
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
-// the host scratch/cache dirs come through {scratch}/{cache}.
+// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PYTHON_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_file_io.js"], env={}, preopens={"/work": "{scratch}"})
 try:
@@ -258,9 +236,7 @@ except Rt.Exit:
     pass
 "#;
 
-// ---------------------------------------------------------------------
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt.Memory. Only the
-// file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Rt.Memory. Only the file-backed case uses {scratch}.
 
 const PYTHON_LIBSQLITE3_MEM: &str = r#"
 db_mod = Libsqlite3({})
@@ -408,10 +384,7 @@ for r in ROWS:
 print("CALLBACK-OK")
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80"
-/// (DLT_EN10MB, snaplen 65535), then walk the serialized program
-/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory,
-/// printing each instruction as `code jt jf k`.
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
 const PYTHON_PCAP_COMPILE: &str = r#"
 inst = Libpcap({})
 inst.invoke("_initialize")
@@ -439,9 +412,7 @@ inst.invoke("free", prog)
 print("BPF-OK")
 "#;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
-/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
-/// malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
 const PYTHON_TREESITTER_PARSE: &str = r#"
 inst = Treesitter({})
 inst.invoke("_initialize")
@@ -465,19 +436,15 @@ inst.invoke("free", r)
 print("TS-OK")
 "#;
 
-// ---------------------------------------------------------------------
-// Multi-module drive glue.
+// --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Driver for the shared-table case: instantiate the exporter and the importer
-/// linked against it, then print `call0` (call_indirect through the shared
-/// table -> 42).
+/// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
 const PYTHON_SHARED_TABLE_GLUE: &str = r#"a = TableExp()
 b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-// ---------------------------------------------------------------------
-// Suite wiring (ADR-27): each per-case macro invocation declares participation.
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Python, PYTHON_ADD_GLUE);
 wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
@@ -515,7 +482,4 @@ pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 
 shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits
-// one top-level `class Rt:` (a sibling, redefined on concatenation), not a
-// per-class nested runtime, so two independent runtimes cannot coexist
-// (docs/apps-audit.md).
+// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).
