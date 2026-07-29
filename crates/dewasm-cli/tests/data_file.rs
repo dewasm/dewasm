@@ -486,6 +486,118 @@ fn rejects_unsupported_targets_and_stdout() {
     );
 }
 
+/// A `--data-file` resolving to the same file as `-o` is rejected before
+/// anything is written: the blob would otherwise clobber the freshly written
+/// source (#30). Covers both the identical spelling and a `..`-hop alias of
+/// the same path.
+#[test]
+fn rejects_data_file_colliding_with_output_path() {
+    let dir = tempdir("collide-output");
+    let wat = dir.join("mod.wat");
+    write(&wat, &fixture_wat());
+    let watp = wat.to_str().unwrap();
+
+    let out = dir.join("out.py");
+    // Pre-existing content must survive the rejected conversion untouched.
+    write(&out, "sentinel");
+
+    let r = run_dewasm(&[
+        watp,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        out.to_str().unwrap(),
+        "--data-file",
+        out.to_str().unwrap(),
+    ]);
+    assert!(!r.status.success(), "expected same-path rejection");
+    assert!(
+        String::from_utf8_lossy(&r.stderr).contains("same file"),
+        "error should say the paths are the same file, got: {}",
+        String::from_utf8_lossy(&r.stderr)
+    );
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
+
+    // A differently spelled alias of the same file ("dir/../dir/out.py") must
+    // be caught too: the check compares resolved paths, not strings.
+    let alias = dir.join("..").join(dir.file_name().unwrap()).join("out.py");
+    let r = run_dewasm(&[
+        watp,
+        "-t",
+        "python",
+        "-m",
+        "standalone",
+        "-o",
+        out.to_str().unwrap(),
+        "--data-file",
+        alias.to_str().unwrap(),
+    ]);
+    assert!(!r.status.success(), "expected aliased-path rejection");
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
+}
+
+/// A `--data-file` whose filename collides with a generated output file's
+/// name is rejected: routing is by name, so the java backend's fixed
+/// `Main.java` source would be misrouted to the sidecar path and clobbered by
+/// the blob (#30). Covered with data segments (source and sidecar share the
+/// name) and without (the lone source itself matches the sidecar name).
+#[test]
+fn rejects_data_file_colliding_with_generated_name() {
+    let dir = tempdir("collide-name");
+    let wat = dir.join("mod.wat");
+    write(&wat, &fixture_wat());
+
+    let out = dir.join("out").join("Main.java");
+    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+    let sidecar = dir.join("sidecar").join("Main.java");
+    std::fs::create_dir_all(sidecar.parent().unwrap()).unwrap();
+
+    let r = run_dewasm(&[
+        wat.to_str().unwrap(),
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        out.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap(),
+    ]);
+    assert!(!r.status.success(), "expected name-collision rejection");
+    assert!(
+        String::from_utf8_lossy(&r.stderr).contains("collides"),
+        "error should name the collision, got: {}",
+        String::from_utf8_lossy(&r.stderr)
+    );
+    assert!(!out.exists(), "no source may be written on rejection");
+    assert!(!sidecar.exists(), "no sidecar may be written on rejection");
+
+    // Same collision with a data-less module: the backend emits no sidecar,
+    // so the lone `Main.java` source itself matches the sidecar name and
+    // would be misrouted; it must be rejected identically.
+    let nodata = dir.join("nodata.wat");
+    write(&nodata, "(module (func (export \"_start\")))\n");
+    let r = run_dewasm(&[
+        nodata.to_str().unwrap(),
+        "-t",
+        "java",
+        "-m",
+        "standalone",
+        "-o",
+        out.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap(),
+    ]);
+    assert!(
+        !r.status.success(),
+        "expected name-collision rejection (no data segments)"
+    );
+    assert!(!out.exists(), "no source may be written on rejection");
+    assert!(!sidecar.exists(), "no sidecar may be written on rejection");
+}
+
 // --------------------------------------------------------------------------
 // Real-app parity (heavy: `#[ignore]`d; run with --include-ignored).
 
