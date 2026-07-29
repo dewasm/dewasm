@@ -1,45 +1,12 @@
-;; Trailing-slash pathname resolution (issue #42, ADR-49): the WASI spec is
-;; silent about trailing slashes, so dewasm follows wasmtime 47's observed
-;; behavior — every expected errno below was measured against wasmtime on
-;; both macOS and Linux (they agree except where noted). The runtimes must
-;; enforce these shapes even where their path plumbing (File.join,
-;; filepath.Join, Paths.get.normalize) would silently drop the slash before
-;; the host syscall could see it. Every probe prints "<tag><errno as two
-;; decimal digits>\n" so the expected stdout pins each errno exactly. Host
-;; layout (from the case's setup): a regular file "file", a second file
-;; "file2", a directory "dir".
-;;   a — path_rename with a slash-suffixed regular-file *source* (54 ENOTDIR),
-;;   b — path_rename with a slash-suffixed existing-file *destination* (54),
-;;   c — path_unlink_file of "file/" (54),
-;;   d — path_unlink_file of "missing/" (44 ENOENT),
-;;   e — path_filestat_get of "file/" with SYMLINK_FOLLOW (54),
-;;   f — path_open of "file/" read-only (54),
-;;   g — path_remove_directory of "file/" (54),
-;;   h — path_link with a slash-suffixed regular-file source (54),
-;;   i — path_rename with a missing slash-suffixed source (44),
-;;   j — path_rename of a file onto a *nonexistent* slash-suffixed
-;;       destination (00: wasmtime's cap-std strips the slash and renames —
-;;       "file2" becomes a plain file "newd"),
-;;   k — path_open O_CREAT through a nonexistent slash-suffixed name
-;;       (host-split, as wasmtime: 28 EINVAL on macOS from its manual path
-;;       resolution, 31 EISDIR on Linux via host passthrough; must not
-;;       create),
-;;   l — path_create_directory of "file/" (20 EEXIST: the slash is stripped —
-;;       mkdir names a directory by definition — matching wasmtime),
-;;   m — path_create_directory of "newdir/" (00: the slash is legal here),
-;;   n — path_remove_directory of "missing/" (44),
-;;   o — path_remove_directory of "dir/" (28 EINVAL on both hosts —
-;;       wasmtime/cap-std rejects removing a directory through a slash —
-;;       and "dir" must survive),
-;;   p — path_remove_directory of "dir" (00: the bare name still works).
-;; Deliberately untested, per ADR-49's "copy wasmtime, don't invent" rule:
-;; path_filestat_get of "file/" *without* SYMLINK_FOLLOW — wasmtime-on-Linux
-;; strips the slash internally and succeeds (00) where wasmtime-on-macOS and
-;; even a raw Linux lstat(2) say ENOTDIR, an artifact with no portable
-;; expectation — and the unlink/rename-of-a-directory shapes whose errno
-;; wasmtime inherits from the host split (macOS EPERM / Linux EISDIR),
-;; which the upstream wasi-testsuite already pins per host under the
-;; strict errno modes.
+;; Trailing-slash shapes across the path_* family (issue #42): unspecified by
+;; WASI, pinned to wasmtime 47 as measured on macOS and Linux (ADR-49). Each
+;; probe prints "<tag><errno as two decimal digits>\n"; per-probe intent is
+;; commented at each call, expectations live in the shared WASI_CASES entry.
+;; Setup provides a file "file", a file "file2", and a directory "dir".
+;; Probe k is wasmtime's own host split: EINVAL on macOS, EISDIR on Linux.
+;; Left unpinned: nofollow filestat of "file/" (wasmtime's two hosts
+;; disagree) and unlink/rename-of-directory errnos (host split, covered per
+;; host by the strict wasi-testsuite).
 (module
   (import "wasi_snapshot_preview1" "path_rename"
     (func $path_rename (param i32 i32 i32 i32 i32 i32) (result i32)))

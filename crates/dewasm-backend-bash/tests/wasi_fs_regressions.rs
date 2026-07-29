@@ -178,11 +178,8 @@ fn rename_trailing_slash_on_file_destination_is_enotdir() {
 }
 
 /// A trailing slash on a *nonexistent* destination is stripped and the
-/// rename proceeds, creating a plain file at the bare name — wasmtime 47's
-/// cap-std behavior on both hosts, which ADR-49 adopts over the POSIX
-/// reading (ENOENT) this pin used to assert. The raw hosts diverge here
-/// (macOS rename(2) ENOENT, Linux ENOTDIR), which is why the unit implements
-/// the stripped rename explicitly rather than passing the slash through.
+/// rename proceeds onto the bare name — wasmtime's behavior (ADR-49). The
+/// raw hosts diverge here (macOS ENOENT / Linux ENOTDIR), hence the pin.
 #[test]
 fn rename_trailing_slash_missing_destination_strips_and_renames() {
     let dir = scratch_dir("slash-dst-missing");

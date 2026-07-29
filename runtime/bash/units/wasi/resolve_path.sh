@@ -32,12 +32,9 @@ wasi_resolve_path() {
     R0=76 # ENOTCAPABLE: an absolute path escapes the preopen sandbox
     return 0
   fi
-  # A trailing slash constrains the final component to a directory (POSIX
-  # pathname resolution; issue #42). Strip it for resolution — the
-  # parent-plus-basename split below would otherwise read an empty basename
-  # and resolve the *whole* path as a directory (ENOENT for every
-  # slash-suffixed name over a non-directory, and even for "sub/" on mkdir) —
-  # and re-check the constraint against the resolved target before returning.
+  # Strip a trailing slash for resolution (the parent/basename split below
+  # would read an empty basename and misresolve every slash-suffixed name),
+  # remember it, and re-check the directory constraint below (issue #42).
   local __slash=0
   if [[ $__rel == */ ]]; then
     __slash=1
@@ -100,10 +97,8 @@ wasi_resolve_path() {
     fi
   fi
   if [[ $__real == "$__root" || $__real == "${__root%/}/"* ]]; then
-    # The trailing-slash directory gate: `-e` follows symlinks, exactly as the
-    # slash forces, so "link-to-file/" is ENOTDIR while "link-to-dir/" passes.
-    # A missing target passes too: which errno (or success, for a create) that
-    # becomes is each caller's own business.
+    # Slash-suffixed names may only resolve to a directory; `-e` follows
+    # symlinks as the slash requires. A missing target is each caller's case.
     if (( __slash )) && [[ -e $__real && ! -d $__real ]]; then
       R0=54 # ENOTDIR: a slash-suffixed name resolved to a non-directory
       return 0

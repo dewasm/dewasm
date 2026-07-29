@@ -10,11 +10,9 @@ private :within?
 # root. Every call re-validates against its own dirfd's root, so nested
 # path_opens can't be used to launder an escape one level cheaper.
 #
-# A trailing slash is stripped for resolution but preserved on the
-# returned host path, so the underlying File/Dir call enforces the POSIX
-# "must resolve to a directory" rule (issue #42, mirroring
-# runtime/python/units/wasi/resolve_path.py) — File.basename/File.join
-# would otherwise silently drop it before the host syscall could see it.
+# A trailing slash is stripped for resolution and re-appended to the
+# returned host path, so the host call enforces it (issue #42; mirrors
+# runtime/python/units/wasi/resolve_path.py).
 #
 # `follow_last: false` resolves the parent but leaves the final
 # component untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that

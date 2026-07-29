@@ -23,16 +23,11 @@
 #     ENOTEMPTY, since it cannot be replaced.
 #   - destination exists, both sides are non-directories: falls through to
 #     `mv`, which replaces the destination like rename(2) does.
-# Trailing slashes on either name are stripped before resolution so a
-# `mv`/`rmdir` on the clean physical path behaves, but the slash is
-# remembered: a slash-bearing name that resolves to an existing
-# non-directory is ENOTDIR on either side, and a nonexistent slash-bearing
-# source is ENOENT (the ordinary missing-source check). A nonexistent
-# slash-bearing destination simply loses its slash and the rename proceeds
-# — even from a non-directory source — matching wasmtime's cap-std
-# resolution (ADR-49; POSIX would refuse, but where the WASI spec is
-# silent dewasm follows wasmtime). Anything else `mv` still manages to
-# fail on (e.g. a permission error) defaults to EIO.
+# Trailing slashes on either name are stripped before resolution but
+# remembered: a slash-suffixed existing non-directory is ENOTDIR on either
+# side; a nonexistent slash-suffixed source is ENOENT; a nonexistent
+# slash-suffixed destination just loses the slash and the rename proceeds,
+# as wasmtime does (ADR-49). Anything else `mv` fails on defaults to EIO.
 wasi_path_rename() {
   local __p=$1 __old_dirfd=$2 __old_path_ptr=$3 __old_path_len=$4
   local __new_dirfd=$5 __new_path_ptr=$6 __new_path_len=$7

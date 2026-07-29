@@ -18,10 +18,8 @@ wasi_path_remove_directory() {
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" 0 || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
-  # wasmtime 47 (ADR-49) rejects removing an existing directory through a
-  # slash-suffixed name with EINVAL on both hosts (cap-std's final-component
-  # handling); a missing target stays ENOENT and a non-directory was already
-  # ENOTDIR in resolve_path.
+  # rmdir through a trailing slash on an existing directory is EINVAL per
+  # wasmtime (ADR-49); other shapes come from resolve_path or the probes.
   if [[ $__rel == */ && -d $__host ]]; then
     R0=28 # EINVAL
     return 0

@@ -1,11 +1,9 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 func (w *WASI) wasi_path_create_directory(dirfd, pathPtr, pathLen uint32) uint32 {
     rel := string(w.memory.read_string(uint64(pathPtr), uint64(pathLen)))
-    // mkdir names a directory by definition, so a trailing slash adds nothing
-    // but host-divergent errnos (macOS mkdir(2) reports ENOTDIR for "file/",
-    // Linux EEXIST): strip it — before resolve_path's directory gate — so the
-    // existing-target case is EEXIST uniformly and "sub/" still creates
-    // (issue #42).
+    // Strip a trailing slash before the resolver's directory gate: mkdir
+    // names a directory anyway, and EEXIST is wasmtime's answer for
+    // mkdir("file/") where the hosts split (ADR-49).
     if trimmed := strings.TrimRight(rel, "/"); trimmed != "" {
         rel = trimmed
     }

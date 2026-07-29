@@ -14,10 +14,8 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   follow = dirflags & 0x1 != 0 # lookupflags::SYMLINK_FOLLOW
   host_path, err = resolve_path(dirfd, rel, follow_last: follow)
   return err if err
-  # resolve_path preserves a trailing slash (issue #42); this unit's own
-  # probes and branches decide everything the slash implies, so work on the
-  # stripped path (stat on "file/" fails ENOTDIR and would misreport every
-  # probe below).
+  # This unit's branches decide the slash shapes, so strip the preserved
+  # slash (issue #42) — stat on "file/" fails ENOTDIR and misreads probes.
   trailing = host_path.end_with?("/")
   host_path = host_path.delete_suffix("/")
   # Without SYMLINK_FOLLOW, a symlink at the final component is an error
@@ -27,11 +25,8 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   exists = File.exist?(host_path) || File.symlink?(host_path)
   if trailing
     unless exists
-      # A trailing slash demands a directory, which open(2) can never
-      # create, so O_CREAT must not manufacture a plain file through the
-      # slash. The errno follows wasmtime 47 (ADR-49): EINVAL on macOS
-      # (its manual path resolution rejects the shape), EISDIR on Linux
-      # (host passthrough); a plain open is ENOENT on both.
+      # O_CREAT must not create through the slash; per wasmtime (ADR-49):
+      # EINVAL on macOS, EISDIR on Linux, plain open ENOENT on both.
       return ERRNO_NOENT if oflags & 0x1 == 0
       return RUBY_PLATFORM.include?("darwin") ? ERRNO_INVAL : ERRNO_ISDIR
     end

@@ -256,15 +256,10 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // Trailing-slash pathname resolution (issue #42, ADR-49): the WASI spec is
-    // silent here, so the expectations are wasmtime 47's measured behavior on
-    // both hosts — a signal the runtimes' path plumbing used to drop before
-    // the host syscall could enforce anything. The fixture's probes cover the
-    // whole path_* family; its header documents the one host-split probe (k,
-    // O_CREAT through a slash: EINVAL on macOS, EISDIR on Linux — wasmtime's
-    // own split, asserted per-host below) and the shapes deliberately left
-    // untested. The bash-only pins from PR #41 live in
-    // crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs.
+    // Trailing-slash shapes (issue #42): pinned to wasmtime 47 on both hosts
+    // (ADR-49). Probe k is wasmtime's own host split, asserted per host; the
+    // fixture header lists the unpinned shapes. The bash-only PR #41 pins
+    // live in crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs.
     WasiCase {
         name: "fs_trailing_slash",
         wat: "wasi_trailing_slash.wat",
@@ -313,11 +308,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // The symlink side of the trailing-slash rule (ADR-49): readlink through
-    // a slash follows to the target (ENOTDIR on a file), and a slash-suffixed
-    // symlink *destination* is EEXIST/ENOTDIR/ENOENT by what sits behind the
-    // slash — wasmtime's resolution order on both hosts, where a raw Linux
-    // symlinkat(2) would report EEXIST even over a plain file.
+    // The symlink side (ADR-49): readlink through a slash follows to the
+    // target; a slash-suffixed symlink destination errs by what sits behind
+    // the slash.
     WasiCase {
         name: "fs_trailing_slash_symlink",
         wat: "wasi_trailing_slash_symlink.wat",

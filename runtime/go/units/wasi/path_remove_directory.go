@@ -7,10 +7,8 @@ func (w *WASI) wasi_path_remove_directory(dirfd, pathPtr, pathLen uint32) uint32
     if err != wasiOk {
         return err
     }
-    // wasmtime 47 (ADR-49) rejects removing an existing directory through a
-    // slash-suffixed name with EINVAL on both hosts (cap-std's final-component
-    // handling); a missing target stays ENOENT (the syscall below) and a
-    // non-directory was already ENOTDIR in resolve_path.
+    // rmdir through a trailing slash on an existing directory is EINVAL per
+    // wasmtime (ADR-49); other shapes come from resolve_path or the syscall.
     if strings.HasSuffix(rel, "/") {
         if fi, e := os.Stat(hostPath); e == nil && fi.IsDir() {
             return wasiInval

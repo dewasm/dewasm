@@ -12,11 +12,9 @@ int wasi_path_readlink(int fd, int pathPtr, int pathLen, int bufPtr, int bufLen,
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
-    // A trailing slash forces following, so an existing slash-suffixed name
-    // resolves to a directory here (resolve_path already reported ENOTDIR for
-    // a non-directory, issue #42) — and a directory is never a readable
-    // symlink: EINVAL, as the host readlink(2) reports for "dir/" or
-    // "symlink-to-dir/". A missing target still falls through to ENOENT.
+    // An existing slash-suffixed name resolved (following) to a directory —
+    // non-directories were ENOTDIR in resolve_path — and a directory is not a
+    // symlink: EINVAL, like the host readlink(2). Missing falls through.
     if (rel.endsWith("/") && java.nio.file.Files.exists(p)) {
         return WASI_INVAL;
     }

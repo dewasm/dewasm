@@ -3,11 +3,9 @@ int wasi_path_create_directory(int dirfd, int pathPtr, int pathLen) {
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    // mkdir names a directory by definition, so a trailing slash adds nothing
-    // but host-divergent errnos (macOS mkdir(2) reports ENOTDIR for "file/",
-    // Linux EEXIST): strip it — before resolve_path's directory gate — so the
-    // existing-target case is EEXIST uniformly and "sub/" still creates
-    // (issue #42).
+    // Strip a trailing slash before the resolver's directory gate: mkdir
+    // names a directory anyway, and EEXIST is wasmtime's answer for
+    // mkdir("file/") where the hosts split (ADR-49).
     String trimmed = rel;
     while (trimmed.endsWith("/")) {
         trimmed = trimmed.substring(0, trimmed.length() - 1);

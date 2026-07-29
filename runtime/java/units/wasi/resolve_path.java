@@ -53,15 +53,11 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
-    // A trailing slash constrains the final component to a directory (POSIX
-    // pathname resolution; issue #42). Paths.get has already normalized it
-    // away — no later host call could enforce it — so enforce it here:
-    // Files.exists/isDirectory follow symlinks, exactly as the slash forces,
-    // so "link-to-file/" is ENOTDIR while "link-to-dir/" passes. A missing
-    // target falls through: which errno (or success, for a create) that
-    // becomes is each syscall's own business. The slash is also stripped from
-    // the final-component bookkeeping below, which would otherwise misread ""
-    // as the last component and silently degrade followLast.
+    // A slash-suffixed name may only resolve to a directory (issue #42):
+    // Paths.get has normalized the slash away, so enforce it here — the
+    // probes follow symlinks as the slash requires; a missing target is each
+    // syscall's case. The slash is also stripped from `last` below, which
+    // would otherwise be "" and silently degrade followLast.
     boolean trailing = rel.endsWith("/");
     String core = rel;
     while (core.endsWith("/")) {

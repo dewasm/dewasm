@@ -19,11 +19,9 @@ int wasi_path_rename(int oldDirfd, int oldPathPtr, int oldPathLen, int newDirfd,
     }
     java.nio.file.Path oldP = java.nio.file.Paths.get(oldR.path);
     java.nio.file.Path newP = java.nio.file.Paths.get(newR.path);
-    // Trailing slashes (issue #42, ADR-49: follow wasmtime): resolve_path
-    // already reported ENOTDIR for a slash-suffixed name over an existing
-    // non-directory on either side; a *nonexistent* slash-suffixed
-    // destination matches wasmtime's cap-std, which strips the slash and lets
-    // the rename proceed — exactly what the already-normalized Path does.
+    // Trailing slashes (issue #42, ADR-49): existing non-directories were
+    // ENOTDIR in resolve_path; a nonexistent slash-suffixed destination is
+    // renamed bare, as wasmtime strips it — the normalized Path already is.
     // rename(2) reports type mismatches between the endpoints with specific
     // errnos that Java's generic FileSystemException flattens to EIO, so
     // pre-check them: renaming a directory onto an existing non-directory is

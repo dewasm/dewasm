@@ -19,9 +19,8 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
     if (!java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOTDIR;
     }
-    // wasmtime 47 (ADR-49) rejects removing an existing directory through a
-    // slash-suffixed name with EINVAL on both hosts (cap-std's final-component
-    // handling).
+    // rmdir through a trailing slash on an existing directory is EINVAL per
+    // wasmtime (ADR-49).
     if (rel.endsWith("/")) {
         return WASI_INVAL;
     }

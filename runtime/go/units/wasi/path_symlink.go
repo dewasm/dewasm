@@ -14,10 +14,8 @@ func (w *WASI) wasi_path_symlink(oldPathPtr, oldPathLen, fd, newPathPtr, newPath
     if err != wasiOk {
         return err
     }
-    // A slash-suffixed link name can never be created; the errnos follow
-    // wasmtime 47 on both hosts (ADR-49) — an existing non-directory was
-    // already ENOTDIR in resolve_path, an existing directory is EEXIST, and
-    // nothing there at all is ENOENT.
+    // Slash-suffixed link name (ADR-49): EEXIST if something is there
+    // (non-directories were ENOTDIR in resolve_path), else ENOENT.
     if strings.HasSuffix(newRel, "/") {
         if _, e := os.Lstat(linkHost); e == nil {
             return wasiExist

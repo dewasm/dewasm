@@ -37,12 +37,9 @@ wasi_path_open() {
   if (( (__oflags & 0x8) && (__dir_base & 0x80000) == 0 )); then R0=76; return 0; fi # TRUNC needs PATH_FILESTAT_SET_SIZE
   # A symlink final component that was not followed cannot be opened (D3).
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
-  # A slash-suffixed name may only resolve to a directory (issue #42); an
-  # existing non-directory was already ENOTDIR in resolve_path, and the create
-  # branch below must never manufacture a plain *file* through the slash. The
-  # nonexistent case follows wasmtime 47 (ADR-49): with O_CREAT it is EINVAL
-  # on macOS (wasmtime's manual path resolution rejects the shape) and EISDIR
-  # on Linux (host passthrough); a plain open is ENOENT on both.
+  # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in
+  # resolve_path): O_CREAT must not create through the slash — per wasmtime
+  # (ADR-49) EINVAL on macOS / EISDIR on Linux; a plain open is ENOENT.
   if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
     if (( __oflags & 0x1 )); then
       if [[ $OSTYPE == darwin* ]]; then

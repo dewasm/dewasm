@@ -8,10 +8,8 @@ def wasi_path_symlink(old_ptr, old_len, dirfd, new_ptr, new_len)
   return ERRNO_NOTCAPABLE if target.start_with?("/")
   host_path, err = resolve_path(dirfd, new_rel, follow_last: false)
   return err if err
-  # A trailing slash on the link name demands an existing directory there;
-  # File.symlink would otherwise create a slash-suffixed name. The probes
-  # use the slash-stripped path — resolve_path preserves the slash (issue
-  # #42) and stat on "file/" fails ENOTDIR, misreading it as "missing".
+  # A slash-suffixed link name needs an existing directory there. Probe the
+  # slash-stripped path (stat on "file/" fails ENOTDIR, reads as missing).
   if new_rel.end_with?("/")
     bare = host_path.delete_suffix("/")
     if File.symlink?(bare) || File.exist?(bare)

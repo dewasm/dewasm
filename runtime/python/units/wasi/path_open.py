@@ -33,11 +33,8 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
         flags |= os.O_EXCL
     if oflags & 0x8 != 0:  # oflags::TRUNC
         flags |= os.O_TRUNC
-    # A trailing slash may only resolve to a directory (issue #42), which
-    # open(2) can never create, so O_CREAT must not manufacture a plain file
-    # through the slash. The errno follows wasmtime 47 (ADR-49): EINVAL on
-    # macOS (its manual path resolution rejects the shape), EISDIR on Linux
-    # (host passthrough); a plain open is ENOENT on both.
+    # O_CREAT must not create through a trailing slash (issue #42); per
+    # wasmtime (ADR-49): EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
     if host_path.endswith(os.sep) and not os.path.lexists(host_path[:-1]):
         if oflags & 0x1 == 0:  # no oflags::CREAT
             return self.ERRNO_NOENT

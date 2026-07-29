@@ -1,21 +1,8 @@
-;; Trailing slashes on the symlink-flavored syscalls (issue #42, ADR-49:
-;; follow wasmtime — every expected errno measured against wasmtime 47 on
-;; both macOS and Linux, where they agree). Host layout (from the case's
-;; setup): a regular file "file", a symlink "linkfile" -> "file", and a
-;; directory "sd1". Probes print "<tag><errno>\n" like
-;; wasi_trailing_slash.wat:
-;;   t — path_readlink of "linkfile/": the slash forces following, and the
-;;       target is a file (54 ENOTDIR) — never the link content,
-;;   u — path_symlink onto "sd1/" (existing directory): 20 EEXIST,
-;;   v — path_symlink onto "file/" (existing non-directory): 54 ENOTDIR —
-;;       wasmtime's resolution order, where a raw Linux symlinkat(2) would
-;;       say EEXIST,
-;;   w — path_symlink onto "dang/" (nothing there): 44 ENOENT.
-;; Deliberately untested: path_filestat_get of "linkfile/" without
-;; SYMLINK_FOLLOW — wasmtime-on-Linux strips the slash internally and stats
-;; the link itself (00) where wasmtime-on-macOS (and a raw lstat(2) on
-;; either host) says ENOTDIR, an artifact with no portable expectation
-;; (ADR-49's "copy wasmtime, don't invent" rule).
+;; Trailing slashes through symlinks (issue #42): pinned to wasmtime 47 on
+;; both hosts (ADR-49). Setup: file "file", symlink "linkfile" -> "file",
+;; directory "sd1". Probes print "<tag><errno>\n" and are commented at each
+;; call; expectations live in the shared WASI_CASES entry. Left unpinned:
+;; nofollow filestat of "linkfile/" (wasmtime's two hosts disagree).
 (module
   (import "wasi_snapshot_preview1" "path_readlink"
     (func $path_readlink (param i32 i32 i32 i32 i32 i32) (result i32)))
