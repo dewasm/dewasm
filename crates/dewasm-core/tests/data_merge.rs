@@ -1,7 +1,7 @@
 //! The adjacent active-data-segment merging pass (ADR-41): assert the
 //! `module.datas` shape the pass produces from small wat inputs — merged runs,
-//! zero-filled gaps, the gap threshold, the `global.get` barrier, and every
-//! bail condition (bulk-memory ops, overlapping/descending offsets).
+//! zero-filled gaps, the gap threshold, and every bail condition (bulk-memory
+//! ops, overlapping/descending offsets, `global.get` offsets).
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{DataSegment, Expr, Module};
@@ -64,9 +64,10 @@ fn gap_at_or_above_threshold_keeps_segments_separate() {
 }
 
 #[test]
-fn global_get_offset_is_a_barrier_that_flushes_the_run() {
-    // A `global.get` offset is opaque, so it neither merges nor lets the
-    // segments on either side merge across it.
+fn global_get_offset_bails_the_whole_pass() {
+    // A `global.get` offset writes to a runtime-unknown address, so its
+    // presence anywhere bails the pass: nothing merges, everything passes
+    // through unchanged.
     let m = module(
         r#"(module
             (import "env" "base" (global $base i32))
@@ -75,17 +76,53 @@ fn global_get_offset_is_a_barrier_that_flushes_the_run() {
             (data (global.get $base) "cd")
             (data (i32.const 4) "ef"))"#,
     );
-    assert_eq!(m.datas.len(), 3, "the barrier keeps all three separate");
+    assert_eq!(
+        m.datas.len(),
+        3,
+        "a global.get offset keeps all three apart"
+    );
     assert_eq!(const_offset(&m.datas[0]), Some(0));
     assert_eq!(m.datas[0].data, b"ab");
     assert!(
         matches!(m.datas[1].offset, Some(Expr::GlobalGet(_))),
-        "the barrier passes through unchanged: {:?}",
+        "the global.get segment passes through unchanged: {:?}",
         m.datas[1].offset
     );
     assert_eq!(m.datas[1].data, b"cd");
     assert_eq!(const_offset(&m.datas[2]), Some(4));
     assert_eq!(m.datas[2].data, b"ef");
+}
+
+#[test]
+fn global_get_before_mergeable_consts_bails_the_whole_pass() {
+    // Issue #28 regression. With `base = 4` at instantiation, "XX" lands at
+    // 4..6 — inside the 2..8 gap that merging the two const segments would
+    // zero-fill. The merged blob is emitted *after* the global.get segment,
+    // so its zeros would clobber "XX". The pass must therefore leave every
+    // segment untouched, keeping the final memory image identical.
+    let m = module(
+        r#"(module
+            (import "env" "base" (global $base i32))
+            (memory 1)
+            (data (global.get $base) "XX")
+            (data (i32.const 0) "ab")
+            (data (i32.const 8) "cd"))"#,
+    );
+    assert_eq!(
+        m.datas.len(),
+        3,
+        "no merge with a global.get segment present"
+    );
+    assert!(
+        matches!(m.datas[0].offset, Some(Expr::GlobalGet(_))),
+        "the global.get segment passes through unchanged: {:?}",
+        m.datas[0].offset
+    );
+    assert_eq!(m.datas[0].data, b"XX");
+    assert_eq!(const_offset(&m.datas[1]), Some(0));
+    assert_eq!(m.datas[1].data, b"ab", "no zero fill appended");
+    assert_eq!(const_offset(&m.datas[2]), Some(8));
+    assert_eq!(m.datas[2].data, b"cd");
 }
 
 #[test]
