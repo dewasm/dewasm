@@ -8,7 +8,14 @@ java.nio.ByteBuffer bb;
 int maxPages;
 
 Memory(int minPages, int maxPages) {
-    this.d = new byte[minPages * 65536];
+    // A spec-legal minimum of 32768+ pages (2 GiB+) exceeds what a Java
+    // byte[] can hold; fail instantiation with a clear trap instead of the
+    // NegativeArraySizeException the overflowing int multiply would throw.
+    long bytes = (long) minPages * 65536;
+    if (bytes > Integer.MAX_VALUE) {
+        Rt.trap("cannot allocate " + minPages + " pages of linear memory (exceeds Java's byte[] limit)");
+    }
+    this.d = new byte[(int) bytes];
     this.maxPages = maxPages;
     rewrap();
 }
