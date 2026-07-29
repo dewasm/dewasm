@@ -24,23 +24,23 @@ struct Cli {
     #[arg(short, long, default_value = "library")]
     mode: String,
 
-    /// Name used for the generated class/module (defaults to the input file stem)
-    #[arg(long)]
-    module_name: Option<String>,
-
     /// Output file path ("-" for stdout)
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Do not bundle the built-in WASI implementation as a fallback for wasi_snapshot_preview1 imports (all imports must then be provided by the embedder). Incompatible with --mode standalone.
+    /// Name used for the generated class/module (defaults to the input file stem)
+    #[arg(long)]
+    module_name: Option<String>,
+
+    /// Do not bundle the built-in WASI implementation for wasi_snapshot_preview1 imports. Incompatible with --mode standalone.
     #[arg(long)]
     no_default_wasi: bool,
 
-    /// Externalize data-segment bytes into a binary sidecar written to this path instead of embedding them as literals in the source (ADR-37). The generated program loads the sidecar relative to itself, so keep it next to the output file. Supported for ruby and go; incompatible with `-o -`.
+    /// Externalize data-segment bytes into a binary sidecar written to this path instead of embedding them as literals in the source.
     #[arg(long)]
     data_file: Option<PathBuf>,
 
-    /// Parse the module's DWARF `.debug_*` sections and emit source-position markers (Go `//line`, Ruby/Python comments) so generated-code stack traces point into the original source (ADR-38). A module without DWARF simply yields no markers.
+    /// Parse the module's DWARF `.debug_*` sections and emit source-position markers.
     #[arg(long)]
     dwarf_line: bool,
 }

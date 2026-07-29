@@ -1,10 +1,8 @@
-# dewasm
+![dewasm logo](./assets/dewasm_logo_hex_gradient.png)
 
-![logo](./assets/dewasm_logo_hex_gradient.png)
+`dewasm` translates a WebAssembly binary into the **source code** of an ordinary programming language.
 
-dewasm translates a WebAssembly binary into the **source code** of an ordinary programming language. The generated file embeds a small runtime and needs no wasm engine at all: a program compiled from C, C++, Rust, or Zig to `wasm32-wasip1` becomes a single `.rb`, `.sh`, `.py`, `.go`, or `.java` file that runs anywhere that language runs. One shared IR feeds every backend, so each new target is a lowering table plus runtime units rather than a fresh translator ([docs/related-work.md](docs/related-work.md) compares the prior art).
-
-Here is `cowsay`, a C program, converted to a **pure Bash script** and run with nothing but a shell:
+Here is [`cowsay`](https://wasmer.io/syrusakbary/cowsay), a WebAssembly binary, converted to a **pure Bash script** and run with nothing but `bash`:
 
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
@@ -19,107 +17,77 @@ $ echo "Hello from Bash" | bash cowsay.sh
                 ||     ||
 ```
 
-The same binary, and much larger ones, up to SQLite and CPython, convert to Ruby, Python, Go, and Java just as well.
+As a larger example, [QuickJS-NG](https://quickjs-ng.github.io/quickjs/), a JavaScript engine written in C, can be converted just as well, this time to **pure Ruby**:
 
-## Status
+```console
+$ dewasm examples/apps/cache/qjs.wasm --target ruby --mode standalone -o qjs.rb
+$ ruby qjs.rb -e 'console.log("2**16 =", 2**16); console.log(JSON.stringify(["Ruby", "JavaScript"].sort()))'
+2**16 = 65536
+["JavaScript","Ruby"]
+```
 
-**Early development, heading toward 0.1.** All five backends pass the WebAssembly core spec testsuite for the supported feature set (~29,000 assertions each) and implement WASI preview 1. This is real, tested output, not a demo: real-world binaries are proven byte-identical to `wasmtime` (see [what it can convert](#what-it-can-convert)).
+A WebAssembly binary can also be used as a **library** instead of a standalone command.
+Here, a small example [`add.wat`](examples/wat/add.wat) is converted and its `add` export is called directly from Ruby:
 
-## Target languages
+```console
+$ dewasm examples/wat/add.wat --target ruby --mode library -o add.rb
+```
 
-`--target <name>`; every backend shares the same input dialect and the same spec gate.
+```ruby
+require_relative "add"
 
-| Target | Character | Spec status |
-| --- | --- | --- |
-| `ruby` | The most complete backend; full WASI p1 incl. the filesystem; the SQLite/CRuby north-star host | spec-green |
-| `bash` | Runs where the only dependency is a shell; integer + a pure-Bash IEEE-754 softfloat, no external commands; WASI core, no filesystem | spec-green |
-| `python` | A plain importable module; full WASI p1 incl. the filesystem | spec-green |
-| `go` | One self-contained `package main` compiled with `go build`; full WASI p1 | spec-green |
-| `java` | One `.java` compiled with `javac`; splits huge modules across classes; full WASI p1 | spec-green |
+inst = Add.new
+inst.invoke("add", 2, 3) # => 5
+```
 
-The authoritative, generated feature/WASI matrix per backend is [`docs/support.md`](docs/support.md). Bash is the deliberate outlier: no WASI filesystem, and non-function imports / multiple tables / table bulk ops are rejected at conversion time.
+This scales to real libraries too: `dewasm` converts SQLite itself to pure Ruby in [examples/rails](examples/rails), which drives a minimal Rails app with it as the only database engine.
 
-Later target languages, deliberately out of 0.1 scope: Haskell, OCaml, C#, PHP, and Perl ([ADR-24](docs/adr/24-01-scope-reset.md), [ADR-10](docs/adr/10-csharp-target.md)).
+Finally, a quick summary of `dewasm`'s features:
 
-## Install
+- `dewasm` implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) feature set and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) API surface, so it can convert most real-world WebAssembly binaries.
+- `dewasm` is polyglot; it translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
+- `dewasm` can output either a standalone script or library source code.
+- `dewasm` bundles only the runtime that a WebAssembly binary actually needs; the output source code contains only the functions the binary uses.
 
-Build from source with the pinned Rust toolchain (picked up automatically from `rust-toolchain.toml`):
+## Installation
+
+Currently, `dewasm` is not published to [crates.io](https://crates.io).
 
 ```console
 $ cargo install --git https://github.com/dewasm/dewasm dewasm-cli
 ```
 
-or clone and build locally:
+or:
 
 ```console
-$ git clone https://github.com/dewasm/dewasm
-$ cd dewasm
-$ cargo build --release        # binary at target/release/dewasm
+$ git clone https://github.com/dewasm/dewasm && cd dewasm
+$ cargo build --release
 ```
-
-dewasm itself has no runtime dependency beyond Rust. *Running* the generated code needs only that language's own interpreter or toolchain — `ruby`, `bash` 5+, `python3` 3.9+, `go` 1.18+, or a JDK 11+. Per-target details are in [docs/backends/](docs/backends/).
 
 ## Usage
 
 ```console
-$ dewasm input.wasm --target <ruby|bash|python|go|java> --mode <standalone|library> -o out
+$ dewasm input.<wasm|wat>
+    --target <ruby|bash|python|go|java>
+    --mode <standalone|library>
+    -o output.<rb|sh|py|go|java>
 ```
 
-- `--target` selects the language (default `ruby`).
-- `--mode standalone` wires up WASI and runs the module's `_start`; `--mode library` (default) exposes the module's exports to the host language.
-- `.wat` text input is accepted directly (no separate assembler step).
-- `-o -` writes to stdout.
+- `input` is a WebAssembly binary to be translated.
+  * `dewasm` accepts a WebAssembly text (WAT) file too.
+- `--target` (or `-t`) selects the target language (default: `ruby`).
+- `--mode` (or `-m`) specifies the translation mode (default: `library`).
+  * `--mode standalone` wires up WASI and runs the module's `_start`.
+  * `--mode library` exposes the module's exports to the target language.
+- `--output` (or `-o`) specifies the output file (default: `-`).
+  * When `-` is specified, `dewasm` outputs the result to `stdout`.
 
-Standalone is the "run this program" shape:
+Note that `dewasm` has additional command-line options such as `--module-name`.
+Please see `dewasm --help` for the full list.
 
-```console
-$ dewasm hello.wat --target python --mode standalone -o hello.py
-$ python3 hello.py
-Hello, WASI!
-```
+## Copyright
 
-Standalone programs share one runtime interface across every backend, modelled on wasmtime's CLI — guest arguments after the program, host directories mounted with repeatable `--dir HOST::GUEST` flags — documented in [docs/standalone-interface.md](docs/standalone-interface.md).
+The MIT license.
+See the [LICENSE](./LICENSE) file.
 
-Library mode hands you the module as a class/type to call from your own code:
-
-```console
-$ dewasm add.wat --target ruby --mode library -o add.rb
-```
-
-```ruby
-require_relative "add"
-inst = Add.new                 # pass an imports table if the module needs one
-inst.invoke("add", 2, 3)       # => 5
-inst.memory                    # linear memory, if any
-```
-
-WASI imports work out of the box in library mode: any import the embedder does not supply falls back to a bundled WASI implementation (built only if actually used; disable with `--no-default-wasi`). You can also override individual imports or replace a whole namespace with a *provider* object — see the [getting-started guide](docs/getting-started.md) and [ADR-7](docs/adr/7-import-providers.md).
-
-A full walkthrough — standalone and library, with a provider override — lives in [docs/getting-started.md](docs/getting-started.md).
-
-## What it can convert
-
-Every app below is a pinned, real-world binary; the byte-for-byte comparison against `wasmtime` is a checked-in test gate ([docs/apps-audit.md](docs/apps-audit.md)). `examples/apps/fetch.sh` fetches or builds them into a local cache ([ADR-9](docs/adr/9-example-apps-from-registry.md)).
-
-- **cowsay** — the classic native application.
-- **minigzip** (zlib) — a binary-stdio gzip CLI, byte-exact compression on **all five backends** (including Bash — it has no floats).
-- **QuickJS** — a complete JavaScript engine as one generated file: one-shot `-e` eval on all backends, plus file I/O and a scripted REPL against a preopened directory on the filesystem-capable backends.
-- **SQLite** — the shell (in-memory and on a real DB file) plus a C-API library drive and a guest→host callback binding.
-- **ripgrep** — a recursive directory search.
-- **CPython** and **CRuby** — both language runtimes convert *and execute* on the Ruby backend, each reading its stdlib from a preopened directory.
-
-## How it works
-
-- `crates/dewasm-core` decodes and validates the binary (wasmparser) and builds a structured IR: wasm's control flow (block/loop/if/br) is kept as-is — no relooper — and the value stack is flattened into per-slot variables, wasm2c-style ([ADR-1](docs/adr/1-ir-design.md)).
-- `crates/dewasm-backend-*` lower that IR per language. The numeric strategy (masked-unsigned integers, f32 re-rounding, NaN bit exactness) is decided once and shared ([ADR-2](docs/adr/2-numeric-semantics.md)); per-backend lowering shapes have their own ADRs, linked from [docs/backends/](docs/backends/).
-- `runtime/<lang>/units/` holds the runtime as per-method units with declared dependencies; only the units a module actually needs are bundled into the output ([ADR-6](docs/adr/6-runtime-units.md)).
-
-## Documentation
-
-- [docs/getting-started.md](docs/getting-started.md) — a hands-on walkthrough.
-- [docs/backends/](docs/backends/) — per-target reference (output shape, how to run it, requirements, caveats).
-- [docs/support.md](docs/support.md) — the generated feature/WASI matrix.
-- [docs/apps-audit.md](docs/apps-audit.md) — the real-world app gate record.
-- [docs/testing.md](docs/testing.md) — for contributors: what `cargo test` needs.
-- [docs/adr/](docs/adr/README.md) — the design decisions; start at [ADR-0](docs/adr/0-foundation.md).
-- [docs/docs-policy.md](docs/docs-policy.md) — what goes where.
+Copyright (c) 2026 Hiroya Fujinami
