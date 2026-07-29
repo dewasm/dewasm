@@ -1,18 +1,11 @@
-//! Ruby backend: translates dewasm IR into a Ruby class plus a bundled
-//! lightweight runtime.
+//! Ruby backend: translates dewasm IR into a Ruby class plus a bundled lightweight runtime.
 //!
 //! Lowering conventions (ADR-4; numeric conventions ADR-2):
-//! - i32/i64 are unsigned (masked) Ruby Integers; signed views via
-//!   `Rt.s32/s64` only where an instruction needs them.
+//! - i32/i64 are unsigned (masked) Ruby Integers; signed views via `Rt.s32/s64` only where an instruction needs them.
 //! - f32/f64 are Ruby Floats; f32 results are re-rounded with `Rt.f32`.
-//! - `br` lowers to a method-local `__br` label-variable cascade: blocks and
-//!   referenced ifs are `begin...end while false`, loops are `while true`, and
-//!   a multi-level branch sets `__br` to the target label id and `break`s,
-//!   each crossed frame's epilogue relaying it until the target lands.
+//! - `br` lowers to a method-local `__br` label-variable cascade: blocks and referenced ifs are `begin...end while false`, loops are `while true`, and a multi-level branch sets `__br` to the target label id and `break`s, each crossed frame's epilogue relaying it until the target lands.
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by
-//! the relative name `Rt`, so linkage (embedded per class, shared, or a
-//! future gem) is the caller's choice.
+//! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
@@ -76,19 +69,12 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime (`module Rt ... end`) for the closure
-/// of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
+/// Emit a top-level shared runtime (`module Rt ... end`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a ruby interpreter able to run generated scripts. Unlike
-/// `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path
-/// search is needed (ruby is expected on `PATH`), but the generated
-/// runtime's memory model is `IO::Buffer`-backed (see
-/// docs/adr/33-ruby-io-buffer-memory.md), which requires Ruby >= 3.4. Per
-/// ADR-15, fail loud with a setup instruction rather than silently
-/// skipping.
+/// Locate a ruby interpreter able to run generated scripts. Unlike `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path search is needed (ruby is expected on `PATH`), but the generated runtime's memory model is `IO::Buffer`-backed (see docs/adr/33-ruby-io-buffer-memory.md), which requires Ruby >= 3.4. Per ADR-15, fail loud with a setup instruction rather than silently skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
     let out = std::process::Command::new("ruby")
         .args(["-e", "print RUBY_VERSION"])
@@ -104,8 +90,7 @@ pub fn find_ruby() -> Option<std::path::PathBuf> {
     ((major, minor) >= (3, 4)).then(|| std::path::PathBuf::from("ruby"))
 }
 
-/// Generate one class for `module`. Returns the class source and the set
-/// of runtime units it needs (already bundled inside for `Embedded`).
+/// Generate one class for `module`. Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_class_with_units(
     module: &Module,
     class_name: &str,
@@ -131,19 +116,14 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
-    // A global needs a shared mutable cell (`Rt::Global`, ADR-16) only if it
-    // can cross an instantiation boundary: imported (came from another
-    // instance) or exported (another instance may import it later). Every
-    // other global is local to this class and never observed from outside
-    // it, so it can be a plain ivar holding the value directly.
+    // A global needs a shared mutable cell (`Rt::Global`, ADR-16) only if it can cross an instantiation boundary: imported (came from another instance) or exported (another instance may import it later). Every other global is local to this class and never observed from outside it, so it can be a plain ivar holding the value directly.
     let boxed_globals: BTreeSet<u32> = (0..module.imported_globals.len() as u32)
         .chain(module.exports.iter().filter_map(|e| match e.kind {
             ExportKind::Global(idx) => Some(idx),
             _ => None,
         }))
         .collect();
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the
-    // concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob (ADR-37). Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -195,16 +175,14 @@ impl Backend for RubyBackend {
         "rb"
     }
 
-    // The flagship backend's remaining wasm-1.0 + WASI p1 gaps: a dozen
-    // WASI p1 functions and the import-limits ledger (ADR-16).
+    // The flagship backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits ledger (ADR-16).
     fn has_wasi_p1(&self, name: &str) -> bool {
         bundler().has_unit(&format!("wasi/{name}"))
     }
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Part of the wasm 1.0 baseline for Ruby; the row exists for
-            // backends whose language lacks floats (ADR-5).
+            // Part of the wasm 1.0 baseline for Ruby; the row exists for backends whose language lacks floats (ADR-5).
             Feature::Floats => SupportStatus::Supported,
             Feature::ImportedGlobals
             | Feature::ImportedMemories
@@ -218,8 +196,7 @@ impl Backend for RubyBackend {
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         let class_name = class_name(&opts.module_name);
 
-        // The Exit/Trap rescue clauses in the standalone main need these
-        // even when the module itself never references them.
+        // The Exit/Trap rescue clauses in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
         if opts.mode == Mode::Standalone {
             extra_seeds.insert("rt/trap".to_string());
@@ -246,10 +223,7 @@ impl Backend for RubyBackend {
             w.line("");
             w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
                 if wasi_kwargs {
-                    // Parse the standalone runtime interface (ADR-31): a leading
-                    // run of `--dir HOST::GUEST` flags mounts host directories at
-                    // guest paths (wasmtime-style), stopping at `--` or the first
-                    // non-flag token; the rest is the guest's argv[1..].
+                    // Parse the standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                     w.line("preopens = {}");
                     w.line("argv = ARGV.dup");
                     w.line("while (a = argv.first)");
@@ -306,10 +280,7 @@ impl Backend for RubyBackend {
             name: format!("{}.rb", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in
-        // segment order, matching the `data_offsets` prefix sums baked into the
-        // generated `DATA_BLOB.byteslice` calls. Only emitted when there is
-        // data to externalize (otherwise the generated code never reads it).
+        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -372,16 +343,10 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("[\"{hex}\"].pack(\"H*\")")
 }
 
-/// WASI import module names the bundled runtime answers for.
-/// `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything
-/// we implement except fd_seek's whence encoding (snapshot 0 modules that
-/// actually seek may misbehave; acceptable until snapshot 0 gets its own
-/// units).
+/// WASI import module names the bundled runtime answers for. `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything we implement except fd_seek's whence encoding (snapshot 0 modules that actually seek may misbehave; acceptable until snapshot 0 gets its own units).
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
-/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN`
-/// dispatch method (ADR-44); wider signatures fall back to the splat `call`.
-/// The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
+/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method (ADR-44); wider signatures fall back to the splat `call`. The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
 const MAX_FIXED_ARITY: usize = 8;
 
 fn is_wasi_module(name: &str) -> bool {
@@ -390,8 +355,7 @@ fn is_wasi_module(name: &str) -> bool {
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
-/// Whether the generated class bundles the built-in WASI as an import
-/// fallback (and therefore takes `args:`/`env:` keyword arguments).
+/// Whether the generated class bundles the built-in WASI as an import fallback (and therefore takes `args:`/`env:` keyword arguments).
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
         && module
@@ -403,32 +367,15 @@ fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
 /// Per-function frame classification for the label-variable cascade.
 #[derive(Default)]
 struct FrameSets {
-    /// Capturing frames (`Block`, `Loop`, or referenced-`If`) that a `br` from
-    /// strictly inside crosses, and so must carry a land-or-relay epilogue.
+    /// Capturing frames (`Block`, `Loop`, or referenced-`If`) that a `br` from strictly inside crosses, and so must carry a land-or-relay epilogue.
     crossed: HashSet<u32>,
-    /// Loops that a `br` targets from a *strictly nested* capturing frame, so
-    /// the branch reaches the loop head by a `break` out of an inner scope
-    /// rather than a direct `next`. Such a loop wraps its body in an inner
-    /// `begin ... end while false` (the break target) and takes its back-edge
-    /// through `__br`; every other loop keeps the lean `while true` with a
-    /// plain `next` back-edge.
+    /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`. Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
     wrapped: HashSet<u32>,
 }
 
 /// Compute the [`FrameSets`] for a function body.
 ///
-/// Walking with a stack of the open capturing frames (label id + is-loop), a
-/// `br` to target `T` at stack position `pos` (the innermost open frame is the
-/// top) is either a self-branch — `pos == top`, a plain `break`/`next` that
-/// leaves the innermost frame directly, marking nothing — or an outward
-/// branch, `pos < top`, which must traverse `stack[pos..=top]`: the target
-/// frame, all pass-through frames, *and* the innermost frame whose own `break`
-/// otherwise lands mid-body in its parent. Every frame on that inclusive path
-/// needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T`
-/// itself is a loop reached this way (from a nested frame), it is `wrapped`. A
-/// plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture,
-/// so they are not on the stack. `br_if`/`br_table` feed every target through
-/// the same routine.
+/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch — `pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing — or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
 fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
     let mut sets = FrameSets::default();
     let mut stack: Vec<(u32, bool)> = Vec::new();
@@ -479,12 +426,10 @@ fn walk_frame_sets(stmts: &[Stmt], stack: &mut Vec<(u32, bool)>, sets: &mut Fram
 fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets) {
     if let BrTarget::Label { label, .. } = target {
         if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
-            // Outward branch (target is not the innermost frame): mark the
-            // whole inclusive path from the target to the innermost frame.
+            // Outward branch (target is not the innermost frame): mark the whole inclusive path from the target to the innermost frame.
             if pos + 1 < stack.len() {
                 sets.crossed.extend(stack[pos..].iter().map(|(id, _)| *id));
-                // A loop targeted from a nested frame needs its body-scope
-                // wrapper so the relayed `break` re-enters via `next`.
+                // A loop targeted from a nested frame needs its body-scope wrapper so the relayed `break` re-enters via `next`.
                 if stack[pos].1 {
                     sets.wrapped.insert(*label);
                 }
@@ -498,34 +443,19 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// Per-function frame classification, set by `function()`: which frames
-    /// carry a land-or-relay epilogue and which loops wrap their body. See
-    /// `compute_frame_sets`.
+    /// Per-function frame classification, set by `function()`: which frames carry a land-or-relay epilogue and which loops wrap their body. See `compute_frame_sets`.
     frames: RefCell<FrameSets>,
-    /// Emission-time stack of capturing frames currently open (label ids),
-    /// pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
-    /// `branch()` compares the top of this stack against a `br`'s target to
-    /// decide between the depth-1 fast path (a plain `break`/`next` that
-    /// leaves the innermost frame directly) and the cascade (`__br = <id>;
-    /// break`, relayed by each crossed frame's epilogue until the target
-    /// lands).
+    /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares the top of this stack against a `br`'s target to decide between the depth-1 fast path (a plain `break`/`next` that leaves the innermost frame directly) and the cascade (`__br = <id>; break`, relayed by each crossed frame's epilogue until the target lands).
     frame_stack: RefCell<Vec<u32>>,
-    /// Global indices that need the `Rt::Global` box: imported globals
-    /// (index space `0..imported_globals.len()`) and every `ExportKind::
-    /// Global` target. Computed once in `generate_class_inner`. See the
-    /// boundary criterion in the comment there and ADR-16.
+    /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there and ADR-16.
     boxed_globals: BTreeSet<u32>,
-    /// When `Some`, data segments are externalized into a binary sidecar of
-    /// this filename (referenced via `__dir__`) instead of embedded as hex
-    /// literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
-    /// The Ruby expression yielding a data segment's bytes: a slice of the
-    /// externalized blob when `--data-file` is on, else an inline packed-hex
-    /// literal (ADR-37). Both yield an ASCII-8BIT (binary) string.
+    /// The Ruby expression yielding a data segment's bytes: a slice of the externalized blob when `--data-file` is on, else an inline packed-hex literal (ADR-37). Both yield an ASCII-8BIT (binary) string.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             format!(
@@ -542,36 +472,22 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// Whether `label_id`'s capturing frame is crossed by some `br` (see
-    /// `compute_frame_sets`), populated per-function by `function()`.
+    /// Whether `label_id`'s capturing frame is crossed by some `br` (see `compute_frame_sets`), populated per-function by `function()`.
     fn is_crossed(&self, label_id: u32) -> bool {
         self.frames.borrow().crossed.contains(&label_id)
     }
 
-    /// Whether `label_id`'s loop wraps its body in an inner scope because a
-    /// `br` targets it from a strictly nested frame (see `compute_frame_sets`).
+    /// Whether `label_id`'s loop wraps its body in an inner scope because a `br` targets it from a strictly nested frame (see `compute_frame_sets`).
     fn is_wrapped(&self, label_id: u32) -> bool {
         self.frames.borrow().wrapped.contains(&label_id)
     }
 
-    /// Whether the frame currently on top of `frame_stack` has an enclosing
-    /// capturing frame — i.e. a `break` emitted in its epilogue has a loop to
-    /// bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so
-    /// the outermost frame omits the relay arm (a pending branch can never
-    /// target something outside it, so that arm is also dead).
+    /// Whether the frame currently on top of `frame_stack` has an enclosing capturing frame — i.e. a `break` emitted in its epilogue has a loop to bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so the outermost frame omits the relay arm (a pending branch can never target something outside it, so that arm is also dead).
     fn has_enclosing_frame(&self) -> bool {
         self.frame_stack.borrow().len() > 1
     }
 
-    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted
-    /// *after* the frame's `end while false` (so a `break` out of the scope —
-    /// from a nested relay or a direct exit — skips any intervening body code
-    /// and reaches this decision): if the pending `__br` names this frame,
-    /// clear it and fall through (the wasm branch lands past the block);
-    /// otherwise a still-pending `__br` targets an ancestor, so `break` again
-    /// to relay it outward. Emitted as a single line: epilogues sit at every
-    /// crossed frame, often deeply indented, so each extra line costs its full
-    /// indent in output bytes.
+    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope — from a nested relay or a direct exit — skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward. Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
     fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
         if self.has_enclosing_frame() {
             w.line(format!(
@@ -582,9 +498,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// An access expression for global `idx`, whichever representation it
-    /// has: `@g{idx}.value` if it's boxed (crosses an instantiation
-    /// boundary), plain `@g{idx}` otherwise. Valid on both sides of `=`.
+    /// An access expression for global `idx`, whichever representation it has: `@g{idx}.value` if it's boxed (crosses an instantiation boundary), plain `@g{idx}` otherwise. Valid on both sides of `=`.
     fn global_ref(&self, idx: u32) -> String {
         if self.boxed_globals.contains(&idx) {
             format!("@g{idx}.value")
@@ -605,10 +519,7 @@ impl<'a> Gen<'a> {
         name
     }
 
-    /// Resolve one import and validate its kind (ADR-7's mechanism,
-    /// generalized to every import kind): a present-but-wrong-kind value
-    /// raises immediately (a link error), a missing one returns nil so the
-    /// caller's `|| fallback` applies.
+    /// Resolve one import and validate its kind (ADR-7's mechanism, generalized to every import kind): a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
     fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
         self.use_unit("rt/resolve_import");
         self.use_unit("rt/check_import_kind");
@@ -643,9 +554,7 @@ impl<'a> Gen<'a> {
             w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name)).value");
         });
         w.line("");
-        // The boxed Rt::Global itself (not its current value), for a host
-        // embedder or another dewasm instance to import as a shared
-        // mutable cell.
+        // The boxed Rt::Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell.
         w.block("def global_export(name)", "end", |w| {
             w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name))");
         });
@@ -654,11 +563,7 @@ impl<'a> Gen<'a> {
             w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
         });
         w.line("");
-        // ADR-7 provider protocol: an instance of a generated class is
-        // itself a valid value in another instance's `imports` table,
-        // exposing every export regardless of kind under its one
-        // (per-module) namespace — the mechanism the spec harness's
-        // `register` support (and any real cross-module linking) uses.
+        // ADR-7 provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace — the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
         w.block("def import(name)", "end", |w| {
             w.line("return @exports[name] if @exports.key?(name)");
             w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
@@ -707,9 +612,7 @@ impl<'a> Gen<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         w.line(format!("MEMORY_EXPORTS = [{memory_entries}].freeze"));
-        // Externalized data blob (ADR-37): read once at class-definition time,
-        // kept binary (ASCII-8BIT, as File.binread returns). Only emitted when
-        // there is data to externalize.
+        // Externalized data blob (ADR-37): read once at class-definition time, kept binary (ASCII-8BIT, as File.binread returns). Only emitted when there is data to externalize.
         if let Some(name) = &self.data_file {
             if !m.datas.is_empty() {
                 w.line(format!(
@@ -763,9 +666,7 @@ impl<'a> Gen<'a> {
                 w.line("@wasi = nil");
             }
             for (i, import) in m.imported_funcs.iter().enumerate() {
-                // Fallback order: explicit import -> bundled WASI
-                // (constructed only when first needed) -> ENOSYS stub;
-                // non-WASI imports stay mandatory.
+                // Fallback order: explicit import -> bundled WASI (constructed only when first needed) -> ENOSYS stub; non-WASI imports stay mandatory.
                 let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                     let unit = format!("wasi/{}", import.name);
                     if bundler().has_unit(&unit) {
@@ -805,8 +706,7 @@ impl<'a> Gen<'a> {
                 }
             }
             for (i, elem) in m.elems.iter().enumerate() {
-                // Built lazily: Declared segments emit an empty array and
-                // never need the rendered items.
+                // Built lazily: Declared segments emit an empty array and never need the rendered items.
                 let items = || {
                     elem.items
                         .iter()
@@ -863,8 +763,7 @@ impl<'a> Gen<'a> {
             }
             w.line(format!("@exports = {{ {} }}", export_entries.join(", ")));
 
-            // The instance is complete: let import providers bind to it
-            // (memory access etc.) before any wasm code can run.
+            // The instance is complete: let import providers bind to it (memory access etc.) before any wasm code can run.
             if !m.imported_funcs.is_empty() {
                 w.line("imports.each_value.to_a.uniq.each { |s| s.attach(self) if s.respond_to?(:attach) }");
             }
@@ -889,10 +788,7 @@ impl<'a> Gen<'a> {
         self.type_symbol(ty)
     }
 
-    /// call_indirect compares types structurally, and a table can be shared
-    /// across modules (imported tables), so the runtime type id must not come
-    /// from any module-local index space: derive an interned symbol from the
-    /// type's shape instead.
+    /// call_indirect compares types structurally, and a table can be shared across modules (imported tables), so the runtime type id must not come from any module-local index space: derive an interned symbol from the type's shape instead.
     fn type_symbol(&self, type_idx: u32) -> String {
         let ty = &self.module.types[type_idx as usize];
         let names = |tys: &[ValType]| {
@@ -919,8 +815,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_symbol, callable]` pair tables store
-    /// (ADR-16). Element items and `call_indirect` agree on this shape.
+    /// A funcref value: the `[type_symbol, callable]` pair tables store (ADR-16). Element items and `call_indirect` agree on this shape.
     fn func_pair(&self, func_idx: u32) -> String {
         format!(
             "[{}, {}]",
@@ -958,12 +853,7 @@ impl<'a> Gen<'a> {
                 let name = format!("l{}", ty.params.len() + i);
                 w.line(format!("{name} = {}", default_value(*local_ty)));
             }
-            // Hoist all temps to method scope: assignments inside the
-            // `begin`/`while` frames would otherwise be block-local in Ruby.
-            // The pending-branch variable `__br` is hoisted alongside them
-            // whenever the function has any crossed frame (a fallthrough
-            // epilogue reads `__br` before any branch assigns it); with no
-            // crossed frame nothing ever references it.
+            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them whenever the function has any crossed frame (a fallthrough epilogue reads `__br` before any branch assigns it); with no crossed frame nothing ever references it.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
             let mut decl = String::new();
@@ -1024,12 +914,7 @@ impl<'a> Gen<'a> {
                 let wrapped = self.is_wrapped(label.id);
                 self.frame_stack.borrow_mut().push(label.id);
                 if wrapped {
-                    // A `br` targets this loop from a nested frame, arriving
-                    // with `__br` set by `break`ing out of the inner `begin`
-                    // (skipping any code left in the body). The decision then
-                    // re-enters via `next`, or `break`s the `while` so the
-                    // post-loop relay can pass `__br` further out. A plain
-                    // fallthrough leaves `__br` nil and exits the loop.
+                    // A `br` targets this loop from a nested frame, arriving with `__br` set by `break`ing out of the inner `begin` (skipping any code left in the body). The decision then re-enters via `next`, or `break`s the `while` so the post-loop relay can pass `__br` further out. A plain fallthrough leaves `__br` nil and exits the loop.
                     w.block("while true", "end", |w| {
                         w.block("begin", "end while false", |w| self.stmts(w, body));
                         w.line(format!(
@@ -1038,18 +923,13 @@ impl<'a> Gen<'a> {
                         ));
                     });
                 } else {
-                    // No `br` reaches this loop from a nested frame: a back-edge
-                    // is a plain `next` (see `branch()`), a fallthrough exits
-                    // via the trailing `break`, and an outward `br` sets `__br`
-                    // and `break`s the `while` for the post-loop relay to pass
-                    // outward.
+                    // No `br` reaches this loop from a nested frame: a back-edge is a plain `next` (see `branch()`), a fallthrough exits via the trailing `break`, and an outward `br` sets `__br` and `break`s the `while` for the post-loop relay to pass outward.
                     w.block("while true", "end", |w| {
                         self.stmts(w, body);
                         w.line("break");
                     });
                 }
-                // A `br` that passes through this loop toward an ancestor left
-                // `__br` set and `break`ed the `while`; relay it outward.
+                // A `br` that passes through this loop toward an ancestor left `__br` set and `break`ed the `while`; relay it outward.
                 if crossed && self.has_enclosing_frame() {
                     w.line("break if __br");
                 }
@@ -1135,11 +1015,7 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids
-                // building a `*args` array on either side; the splat `call`
-                // stays as the fallback for signatures wider than
-                // MAX_FIXED_ARITY (unobserved in the real-world apps, whose
-                // call_indirect arities top out at 8).
+                // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids building a `*args` array on either side; the splat `call` stays as the fallback for signatures wider than MAX_FIXED_ARITY (unobserved in the real-world apps, whose call_indirect arities top out at 8).
                 let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
                 call_args.extend(args.iter().map(|a| self.expr(a)));
                 let method = if args.len() <= MAX_FIXED_ARITY {
@@ -1261,14 +1137,7 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                // Fast path — a br whose target is the innermost enclosing
-                // frame leaves it directly: `break` out of a block/if's
-                // `begin...end while false`, or `next` to take an unwrapped
-                // loop's back-edge. Everything else (a br to an outer frame, or
-                // a back-edge into a *wrapped* loop, whose body sits in an
-                // inner `begin`) sets the pending label variable and `break`s
-                // out of the innermost scope; each crossed frame's epilogue
-                // then relays `__br` outward until the target lands.
+                // Fast path — a br whose target is the innermost enclosing frame leaves it directly: `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
                 if via_var {
@@ -1440,13 +1309,7 @@ impl<'a> Gen<'a> {
             F32Mul => format!("{}({a} * {b})", self.rt("f32")),
             F32Div => format!("{}({a} / {b})", self.rt("f32")),
             F64Add => format!("({a} + {b})"),
-            // GCC-built MRI (any arch; every version probed) leaves a
-            // signaling NaN unquieted when the RHS is +0.0: the flonum decode
-            // returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`,
-            // skipping the FPU sub. The host `-` therefore cannot be trusted
-            // to return an arithmetic NaN. Quiet any NaN result explicitly;
-            // the `== r` self-compare is false only for NaN, keeping the
-            // common finite path allocation- and call-free. ADR-47, issue #11.
+            // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub. The host `-` therefore cannot be trusted to return an arithmetic NaN. Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free. ADR-47, issue #11.
             F64Sub => format!("((r = {a} - {b}) == r ? r : {}(r))", self.rt("quiet_nan")),
             F64Mul => format!("({a} * {b})"),
             F64Div => format!("({a} / {b})"),
@@ -1522,10 +1385,7 @@ fn store_method(op: StoreOp) -> &'static str {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to
-/// another unit must be declared in its `# requires:` header. This is the
-/// static half of the drift defence; the dynamic half is the spec harness
-/// running against minimal bundles (ADR-6).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles (ADR-6).
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1603,9 +1463,7 @@ mod units {
                 );
             }
 
-            // Bare sibling calls within the same scope (with parentheses; a
-            // parenless bare call cannot be told apart from a local variable,
-            // so those cases must keep their requires by hand).
+            // Bare sibling calls within the same scope (with parentheses; a parenless bare call cannot be told apart from a local variable, so those cases must keep their requires by hand).
             for (sibling, bare) in &bare_calls {
                 let Some(name) = sibling.strip_prefix(&format!("{scope}/")) else {
                     continue;
@@ -1626,8 +1484,7 @@ mod units {
     }
 }
 
-/// Codegen-shape checks for the label-variable cascade (ADR-42): a
-/// multi-level `br` must lower to the `__br` cascade, never to `catch`/`throw`.
+/// Codegen-shape checks for the label-variable cascade (ADR-42): a multi-level `br` must lower to the `__br` cascade, never to `catch`/`throw`.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1640,10 +1497,7 @@ mod cascade {
         src
     }
 
-    // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single
-    // `br_table` whose targets span all three nesting depths (self-exit,
-    // loop-continue from a nested frame, and outer-block-exit), exercising the
-    // fast path, a wrapped loop, and a relayed landing at once.
+    // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single `br_table` whose targets span all three nesting depths (self-exit, loop-continue from a nested frame, and outer-block-exit), exercising the fast path, a wrapped loop, and a relayed landing at once.
     const MIXED_DEPTHS: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)
@@ -1659,8 +1513,7 @@ mod cascade {
     #[test]
     fn multi_level_br_uses_label_cascade() {
         let src = convert(MIXED_DEPTHS);
-        // The cascade: a pending-label assignment, a landing compare, and a
-        // relay arm — plus the wrapped loop's back-edge `next`.
+        // The cascade: a pending-label assignment, a landing compare, and a relay arm — plus the wrapped loop's back-edge `next`.
         assert!(src.contains("__br ="), "no `__br =` in:\n{src}");
         assert!(src.contains("if __br =="), "no landing compare in:\n{src}");
         assert!(src.contains("elsif __br"), "no relay arm in:\n{src}");

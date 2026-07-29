@@ -1,7 +1,4 @@
-//! Fixture paths and the one conversion policy the e2e suites share. Paths
-//! resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate
-//! that uses this helper sits at `crates/<x>/`, so `../../` still reaches the
-//! repo root (ADR-27).
+//! Fixture paths and the one conversion policy the e2e suites share. Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root (ADR-27).
 
 use std::path::{Path, PathBuf};
 
@@ -17,20 +14,17 @@ pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }
 
-/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures
-/// (the QuickJS `.js` scripts the Phase 5a filesystem app cases run).
+/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures (the QuickJS `.js` scripts the Phase 5a filesystem app cases run).
 pub fn apps_fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")
 }
 
-/// `examples/apps/golden/`, the checked-in golden outputs captured from
-/// `wasmtime` (ADR-15).
+/// `examples/apps/golden/`, the checked-in golden outputs captured from `wasmtime` (ADR-15).
 pub fn apps_golden_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/golden")
 }
 
-/// A fresh, empty scratch directory under the temp dir keyed by `name`, so
-/// cases running in parallel never share host state.
+/// A fresh, empty scratch directory under the temp dir keyed by `name`, so cases running in parallel never share host state.
 pub fn fresh_scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dewasm-app-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -55,9 +49,7 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
         .expect("generate")
         .remove(0)
         .contents;
-    // The primary source is always UTF-8 (generated code); only the optional
-    // data sidecar is raw bytes, and this helper only ever asks for the
-    // primary file (`data_file: None`).
+    // The primary source is always UTF-8 (generated code); only the optional data sidecar is raw bytes, and this helper only ever asks for the primary file (`data_file: None`).
     String::from_utf8(source).expect("generated source is valid UTF-8")
 }
 
@@ -67,9 +59,7 @@ pub fn convert(backend: &dyn Backend, wat_path: &Path, mode: Mode, name: &str) -
     convert_bytes(backend, &bytes, mode, name)
 }
 
-/// Codegen recurses with the IR's control-flow nesting; SQLite's deepest
-/// functions exceed the 2 MiB test-thread default stack, so app conversion
-/// runs on a roomier stack.
+/// Codegen recurses with the IR's control-flow nesting; SQLite's deepest functions exceed the 2 MiB test-thread default stack, so app conversion runs on a roomier stack.
 pub fn convert_on_big_stack(
     backend: &(dyn Backend + Sync),
     bytes: &[u8],

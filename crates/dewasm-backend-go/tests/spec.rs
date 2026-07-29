@@ -1,23 +1,9 @@
-//! Go side of the shared spec harness (ADR-3, ADR-27, ADR-29): converts each
-//! module with the Go backend to package-level declarations, phrases every
-//! assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/
-//! `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/
-//! `math.Float64bits`), assembles one self-contained program per `.wast` file,
-//! and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
+//! Go side of the shared spec harness (ADR-3, ADR-27, ADR-29): converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
 //! Three Go facts shape the phrasing (ADR-29):
-//! - Go is statically typed and has no dynamic `invoke`, so each generated type
-//!   carries a reflective `invoke(name, args...) []any` / `globalGet(name) any`
-//!   dispatcher (built where the module — hence every export's signature — is
-//!   known); the harness asserts the boxed `any` results to the expected type.
-//! - Type/method declarations cannot live inside `func main`, so per-module
-//!   `Converted.source` is accumulated at package scope in the harness's
-//!   file-scoped `decls` buffer (hoisted ahead of the body by `assemble`) while
-//!   only instantiation/assertion statements go in the body.
-//! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable,
-//!   killing the process), so the spec build instruments every generated
-//!   function with a recursion guard (ADR-29) that turns exhaustion into a
-//!   catchable "call stack exhausted" trap the harness observes.
+//! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module — hence every export's signature — is known); the harness asserts the boxed `any` results to the expected type.
+//! - Type/method declarations cannot live inside `func main`, so per-module `Converted.source` is accumulated at package scope in the harness's file-scoped `decls` buffer (hoisted ahead of the body by `assemble`) while only instantiation/assertion statements go in the body.
+//! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable, killing the process), so the spec build instruments every generated function with a recursion guard (ADR-29) that turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
@@ -32,28 +18,12 @@ use dewasm_test_helper::{run_command_bytes, spec_suite, BackendUnderTest, Conver
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs
-/// so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its
-///   *kind* (func/global/table/memory) and, for functions and globals, the full
-///   value/signature type too — but not a global's mutability, nor a
-///   table/memory's min/max limits, against the import site's declared bounds.
-///   Every `assert_unlinkable` case testing one of those stays a known gap. The
-///   counts are *lower* than Ruby/Python's (ADR-16): the Go type assertion
-///   catches func-signature and global-value-type mismatches those backends'
-///   kind-only check misses, so only the mutability/limit cases remain (the two
-///   `linking` failures are both global-mutability mismatches).
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated*
-///   declared-unsupported feature (multi-memory) inside a module that also
-///   uses `register`; that module never converts, so a later assertion against
-///   the module it would have written into observes stale state. Not a
-///   cross-module-linking gap itself.
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too — but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's (ADR-16): the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
+/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 ///
-/// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056
-/// locals) is the one function in the suite whose frame cost trips the ADR-29
-/// recursion guard even at shallow depth, so all 10 of its exhaustion cases
-/// pass.
+/// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the ADR-29 recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -62,12 +32,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default (the non-ignored trials). Go compiles
-/// each `.wast` file to one program, so the default gate runs a curated list
-/// covering every semantic area (integers, floats, control flow, memory/table,
-/// globals, linking, bulk ops) plus the whole ledger; `cargo test --
-/// --include-ignored` sweeps every file (one `go build` per file — a few
-/// seconds each, dominated by compile latency).
+/// Files `cargo test` runs by default (the non-ignored trials). Go compiles each `.wast` file to one program, so the default gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps every file (one `go build` per file — a few seconds each, dominated by compile latency).
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
@@ -161,10 +126,7 @@ impl BackendUnderTest for GoSpec {
         &GoBackend
     }
 
-    /// Compile `source` to a content-addressed cache binary (identical programs
-    /// build once) and run it. A missing `go` toolchain fails loud (ADR-15); a
-    /// build failure is surfaced as the build command's `Output` so the harness
-    /// reports the compile error.
+    /// Compile `source` to a content-addressed cache binary (identical programs build once) and run it. A missing `go` toolchain fails loud (ADR-15); a build failure is surfaced as the build command's `Output` so the harness reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let go = find_go()
             .expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
@@ -218,12 +180,10 @@ impl SpecBackend for GoSpec {
             // check_trap / check_exhaust / check_unlinkable match these types.
             "rt/trap",
             "rt/link_error",
-            // float args are reconstructed bit-exactly; this also pulls in the
-            // `math` import the float result comparisons rely on.
+            // float args are reconstructed bit-exactly; this also pulls in the `math` import the float result comparisons rely on.
             "rt/f32_from_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE), not necessarily
-            // by the converted module itself.
+            // Referenced by the _spectest fixture (PREAMBLE), not necessarily by the converted module itself.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -260,8 +220,7 @@ impl SpecBackend for GoSpec {
             conv.handle,
             imports_expr(registered)
         );
-        // A module may be instantiated only for its side effects / to be
-        // registered; a never-read local is a Go compile error.
+        // A module may be instantiated only for its side effects / to be registered; a never-read local is a Go compile error.
         let _ = writeln!(script, "_ = {var}");
         var
     }
@@ -388,11 +347,7 @@ impl SpecBackend for GoSpec {
     }
 }
 
-/// The external packages the assembled program references. Every fragment
-/// scanned is controlled (runtime bundle, harness preamble, generated
-/// declarations, and a body whose only free-form strings are `file.wast:line`
-/// descriptions and wasm trap messages) so no user data can inject a false
-/// import (ADR-29).
+/// The external packages the assembled program references. Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import (ADR-29).
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -423,9 +378,7 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their
-/// registered name — each instance's `Exports` map doubles as an ADR-7 import
-/// provider (ADR-16).
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an ADR-7 import provider (ADR-16).
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
     for (name, var) in registered {
@@ -454,10 +407,7 @@ fn go_str(s: &str) -> String {
     out
 }
 
-/// Attribution for a ref heap type the harness cannot express as a Go value.
-/// Ref-typed args/results only occur in reference-types modules, which fail to
-/// convert (Feature::ReferenceTypes unsupported) and so are skipped upstream;
-/// this is defensive attribution.
+/// Attribution for a ref heap type the harness cannot express as a Go value. Ref-typed args/results only occur in reference-types modules, which fail to convert (Feature::ReferenceTypes unsupported) and so are skipped upstream; this is defensive attribution.
 fn heap_type_tag(hty: &HeapType<'_>) -> String {
     match hty {
         HeapType::Abstract {
@@ -531,8 +481,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
     }
 }
 
-/// Harness helpers + the `spectest` host fixture. `rtStack` is the recursion
-/// guard's shared counter (referenced only by spec-build generated functions).
+/// Harness helpers + the `spectest` host fixture. `rtStack` is the recursion guard's shared counter (referenced only by spec-build generated functions).
 const PREAMBLE: &str = r#"var rtStack int
 
 var _pass, _fail int
@@ -601,9 +550,7 @@ func check_exhaust(desc string, thunk func()) {
 	fmt.Printf("FAIL(want exhaustion, got %v): %s\n", r, desc)
 }
 
-// Upstream's assert_unlinkable message text never matches ours; a raised
-// rtLinkError confirms the import was correctly rejected as unlinkable. Any
-// other panic means the module linked and then crashed, which must not pass.
+// Upstream's assert_unlinkable message text never matches ours; a raised rtLinkError confirms the import was correctly rejected as unlinkable. Any other panic means the module linked and then crashed, which must not pass.
 func check_unlinkable(desc string, thunk func()) {
 	var r any
 	func() {

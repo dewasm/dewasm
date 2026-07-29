@@ -1,22 +1,11 @@
-//! Python backend: translates dewasm IR into a Python module (a class plus a
-//! bundled lightweight runtime).
+//! Python backend: translates dewasm IR into a Python module (a class plus a bundled lightweight runtime).
 //!
 //! Lowering conventions (ADR-28; numeric conventions ADR-2):
-//! - i32/i64 are unsigned (masked) Python ints; signed views via `Rt.s32/s64`
-//!   only where an instruction needs them.
-//! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`.
-//!   Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
-//! - Python has no goto and caps nested loops/`try` at ~20 ("too many
-//!   statically nested blocks"), while `if` nests ~100 deep. So only wasm
-//!   loops become real `while True`; every forward branch (block/if exit)
-//!   is lowered with a per-function branch register `_br` and guarded
-//!   statements, and block bodies are spliced inline so block nesting adds
-//!   no Python nesting (ADR-28).
+//! - i32/i64 are unsigned (masked) Python ints; signed views via `Rt.s32/s64` only where an instruction needs them.
+//! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`. Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
+//! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting (ADR-28).
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by
-//! the module-level name `Rt` (Python method scopes cannot see an enclosing
-//! class scope, so the runtime lives at module top level, not nested in the
-//! generated class as it is for Ruby).
+//! The runtime is composed from per-method units (ADR-6) and referenced by the module-level name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby).
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -80,16 +69,12 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime (`class Rt: ...`) for the closure of
-/// `seeds`; generated classes then use `RuntimeLinkage::Alias("Rt")`.
+/// Emit a top-level shared runtime (`class Rt: ...`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a python3 interpreter (>= 3.9) able to run generated scripts.
-/// Honors `$DEWASM_PYTHON`, then `python3`, then `python` (ADR-15: a missing
-/// or too-old interpreter is a loud failure at the call site, not here — this
-/// only reports what qualifies).
+/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (ADR-15: a missing or too-old interpreter is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_python() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -115,8 +100,7 @@ pub fn find_python() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one class for `module`. Returns the class source and the set of
-/// runtime units it needs (already bundled inside for `Embedded`).
+/// Generate one class for `module`. Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_class_with_units(
     module: &Module,
     class_name: &str,
@@ -142,8 +126,7 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the
-    // concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob (ADR-37). Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -196,12 +179,9 @@ impl Backend for PythonBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Python floats are IEEE doubles; f32 re-rounding and the NaN
-            // paths follow ADR-2 (mirroring Ruby).
+            // Python floats are IEEE doubles; f32 re-rounding and the NaN paths follow ADR-2 (mirroring Ruby).
             Feature::Floats => SupportStatus::Supported,
-            // The wasm-1.0 completion (ADR-16 model): boxed globals, imported
-            // globals/memories/tables, multiple tables, and the table half of
-            // bulk memory.
+            // The wasm-1.0 completion (ADR-16 model): boxed globals, imported globals/memories/tables, multiple tables, and the table half of bulk memory.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -214,8 +194,7 @@ impl Backend for PythonBackend {
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         let class_name = class_name(&opts.module_name);
 
-        // The Exit/Trap handlers in the standalone main need these even when
-        // the module itself never references them.
+        // The Exit/Trap handlers in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
         if opts.mode == Mode::Standalone {
             extra_seeds.insert("rt/trap".to_string());
@@ -244,10 +223,7 @@ impl Backend for PythonBackend {
             w.line("import threading");
         }
         w.line("import time");
-        // Externalized data blob (ADR-37): read once at import time from the
-        // sidecar next to this module, then sliced by the generated
-        // `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to
-        // externalize (otherwise the generated code never reads it).
+        // Externalized data blob (ADR-37): read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 w.line("");
@@ -268,10 +244,7 @@ impl Backend for PythonBackend {
             w.line("if __name__ == \"__main__\":");
             w.indent();
             if wasi_kwargs {
-                // Parse the standalone runtime interface (ADR-31): a leading run
-                // of `--dir HOST::GUEST` flags mounts host directories at guest
-                // paths (wasmtime-style), stopping at `--` or the first non-flag
-                // token; the rest is the guest's argv[1..].
+                // Parse the standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                 w.line("_pre = {}");
                 w.line("_argv = sys.argv[1:]");
                 w.line("_i = 0");
@@ -314,10 +287,7 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
-            // ADR-28: run the guest on a big-stack thread with a raised
-            // recursion limit (the spec harness's values). The thread carries
-            // exceptions back so proc_exit/traps still exit via the main
-            // thread; daemon so Ctrl-C during `join` still terminates.
+            // ADR-28: run the guest on a big-stack thread with a raised recursion limit (the spec harness's values). The thread carries exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");
@@ -368,10 +338,7 @@ impl Backend for PythonBackend {
             name: format!("{}.py", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in
-        // segment order, matching the `data_offsets` prefix sums baked into the
-        // generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data
-        // to externalize (otherwise the generated code never reads it).
+        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -437,8 +404,7 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("bytes.fromhex(\"{hex}\")")
 }
 
-/// WASI import module names the bundled runtime answers for. `wasi_unstable`
-/// (snapshot 0) shares preview 1's ABI for everything implemented here.
+/// WASI import module names the bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here.
 const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 fn is_wasi_module(name: &str) -> bool {
@@ -447,8 +413,7 @@ fn is_wasi_module(name: &str) -> bool {
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
-/// Whether the generated class bundles the built-in WASI as an import
-/// fallback (and therefore takes `args`/`env`/`preopens` keyword arguments).
+/// Whether the generated class bundles the built-in WASI as an import fallback (and therefore takes `args`/`env`/`preopens` keyword arguments).
 fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
     default_wasi
         && module
@@ -474,18 +439,13 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// When `Some`, data segments are externalized into a binary sidecar of
-    /// this filename (loaded once into the module-level `DATA_BLOB`) instead of
-    /// embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates
-    /// segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
-    /// The Python expression yielding a data segment's bytes: a slice of the
-    /// externalized `DATA_BLOB` when `--data-file` is on, else an inline
-    /// `bytes.fromhex` literal (ADR-37). Both yield a `bytes` object.
+    /// The Python expression yielding a data segment's bytes: a slice of the externalized `DATA_BLOB` when `--data-file` is on, else an inline `bytes.fromhex` literal (ADR-37). Both yield a `bytes` object.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -643,9 +603,7 @@ impl<'a> Gen<'a> {
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
-            // Fallback order (ADR-7): explicit import -> bundled WASI unit
-            // (constructed lazily) -> ENOSYS stub; non-WASI imports stay
-            // mandatory (a missing one is a link error).
+            // Fallback order (ADR-7): explicit import -> bundled WASI unit (constructed lazily) -> ENOSYS stub; non-WASI imports stay mandatory (a missing one is a link error).
             let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
@@ -782,9 +740,7 @@ impl<'a> Gen<'a> {
         w.line("return getattr(self, self.GLOBAL_EXPORTS[name]).value");
         w.dedent();
         w.line("");
-        // The boxed Rt.Global itself (not its current value), for a host
-        // embedder or another dewasm instance to import as a shared mutable
-        // cell (ADR-16).
+        // The boxed Rt.Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell (ADR-16).
         w.line("def global_export(self, name):");
         w.indent();
         w.line("return getattr(self, self.GLOBAL_EXPORTS[name])");
@@ -845,8 +801,7 @@ impl<'a> Gen<'a> {
         self.type_symbol(ty)
     }
 
-    /// A structural key for a function type (not a module-local index), so a
-    /// table shared across modules stays consistent.
+    /// A structural key for a function type (not a module-local index), so a table shared across modules stays consistent.
     fn type_symbol(&self, type_idx: u32) -> String {
         let ty = &self.module.types[type_idx as usize];
         let names = |tys: &[ValType]| {
@@ -902,8 +857,7 @@ impl<'a> Gen<'a> {
             let name = format!("l{}", ty.params.len() + i);
             w.line(format!("{name} = {}", default_value(*local_ty)));
         }
-        // Temps default to 0; every temp is assigned before any reachable read
-        // (valid wasm), so the value only guards against Python NameError.
+        // Temps default to 0; every temp is assigned before any reachable read (valid wasm), so the value only guards against Python NameError.
         let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
         depths.dedup();
         if !depths.is_empty() {
@@ -923,10 +877,7 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// Emit a statement sequence, threading the compile-time `guarded` flag
-    /// (whether a preceding statement may have left a branch pending in `_br`).
-    /// Block/Loop bodies are spliced inline so block nesting adds no Python
-    /// nesting; only real loops become `while` (ADR-28).
+    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while` (ADR-28).
     fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded: &mut bool) {
         for stmt in stmts {
             match stmt {
@@ -978,11 +929,7 @@ impl<'a> Gen<'a> {
                     *guarded = before || !stmt_free_targets(stmt).is_empty();
                 }
                 Stmt::SourceLine(_) => {
-                    // A comment carries no runtime effect, so render it outside
-                    // the `_br == 0` guard: a lone comment under an indented
-                    // guard block would be an empty suite Python rejects, and
-                    // the guard state must stay exactly as the surrounding
-                    // statements left it (ADR-38).
+                    // A comment carries no runtime effect, so render it outside the `_br == 0` guard: a lone comment under an indented guard block would be an empty suite Python rejects, and the guard state must stay exactly as the surrounding statements left it (ADR-38).
                     self.simple_stmt(w, stmt);
                 }
                 _ => {
@@ -1004,8 +951,7 @@ impl<'a> Gen<'a> {
 
     fn emit_if(&self, w: &mut CodeWriter, guarded: bool, cond: &Expr, then: &[Stmt], els: &[Stmt]) {
         let cond_s = self.expr(cond);
-        // When guarded, `_br == 0 and ...` short-circuits so `cond` (which may
-        // trap on a load) is not evaluated while a branch is pending.
+        // When guarded, `_br == 0 and ...` short-circuits so `cond` (which may trap on a load) is not evaluated while a branch is pending.
         if guarded {
             w.line(format!("if _br == 0 and ({cond_s}) != 0:"));
         } else {
@@ -1216,9 +1162,7 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                // is_loop is irrelevant here: the loop trailer turns `_br ==
-                // <loop id>` into a `continue`; a block/if exit is handled by
-                // the guards skipping to the label's reset marker (ADR-28).
+                // is_loop is irrelevant here: the loop trailer turns `_br == <loop id>` into a `continue`; a block/if exit is handled by the guards skipping to the label's reset marker (ADR-28).
                 w.line(format!("_br = {label}"));
             }
         }
@@ -1406,10 +1350,7 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// A Python float literal that round-trips to the same double. `{:?}` on f64
-/// gives the shortest round-tripping decimal, which Python's `float()` parses
-/// back exactly; only the spelling of infinities/`e` notation differs, and
-/// non-finite values never reach here.
+/// A Python float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which Python's `float()` parses back exactly; only the spelling of infinities/`e` notation differs, and non-finite values never reach here.
 fn py_float(v: f64) -> String {
     format!("{v:?}")
 }
@@ -1425,8 +1366,7 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-/// Whether `stmts` contains any branch to a label (as opposed to a return),
-/// i.e. whether the function needs the `_br` branch register at all.
+/// Whether `stmts` contains any branch to a label (as opposed to a return), i.e. whether the function needs the `_br` branch register at all.
 fn seq_has_label_branch(stmts: &[Stmt]) -> bool {
     stmts.iter().any(stmt_has_label_branch)
 }
@@ -1446,9 +1386,7 @@ fn stmt_has_label_branch(stmt: &Stmt) -> bool {
     }
 }
 
-/// The set of label ids a statement branches to that are *not* bound within
-/// it. Non-empty means the statement may leave `_br` set on fall-through,
-/// so following siblings must be guarded (ADR-28).
+/// The set of label ids a statement branches to that are *not* bound within it. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28).
 fn stmt_free_targets(stmt: &Stmt) -> BTreeSet<u32> {
     match stmt {
         Stmt::Br(t) | Stmt::BrIf { target: t, .. } => target_free(t),
@@ -1532,11 +1470,7 @@ fn store_method(op: StoreOp) -> &'static str {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another
-/// unit must be declared in its `# requires:` header. Mirrors the Ruby
-/// backend's units lint (ADR-6), adjusted for Python syntax (`Rt.<name>`
-/// staticmethod/const references, `self.memory.<name>` memory calls, and
-/// `self.<name>(...)` sibling calls within a scope's nested class).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby backend's units lint (ADR-6), adjusted for Python syntax (`Rt.<name>` staticmethod/const references, `self.memory.<name>` memory calls, and `self.<name>(...)` sibling calls within a scope's nested class).
 #[cfg(test)]
 mod units {
     use super::*;

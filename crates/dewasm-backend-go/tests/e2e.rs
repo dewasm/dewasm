@@ -1,18 +1,6 @@
-//! Go end-to-end suites (ADR-27): the shared library / WASI / apps case
-//! consts (`dewasm-test-helper`) wired up for the Go backend. Per the
-//! ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
-//! glue string constants, and per-case macro invocations; glue is a plain `&str`
-//! argument at the callsite, and which macros this file invokes is the
-//! capability declaration (with a REASON comment at any non-invocation).
+//! Go end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Go backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's
-//! hook) to compile-and-execute instead of interpreting: `go build` the
-//! generated file to a content-addressed cache binary (so identical sources —
-//! e.g. cowsay's args and stdin cases — build once), then run the binary
-//! directly. Running the binary (not `go run`) is required because `go run` does
-//! not propagate the guest exit code (it prints "exit status N" and exits 1);
-//! the WASI args/env case asserts an exact exit code. Go covers full WASI
-//! preview 1 incl. the filesystem (ADR-29).
+//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute instead of interpreting: `go build` the generated file to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem (ADR-29).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
@@ -42,22 +30,16 @@ impl BackendUnderTest for Go {
         &GoBackend
     }
 
-    /// Compile `source` to a cache binary (keyed by content hash) and run it
-    /// with `args`/`stdin`. A missing `go` toolchain is a loud failure
-    /// (ADR-15); a build failure is surfaced as the build command's `Output`
-    /// so the caller's `status.success()` assertion reports the compile error.
+    /// Compile `source` to a cache binary (keyed by content hash) and run it with `args`/`stdin`. A missing `go` toolchain is a loud failure (ADR-15); a build failure is surfaced as the build command's `Output` so the caller's `status.success()` assertion reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match build_go(source) {
-            // A build failure is surfaced as the build `Output` so the caller's
-            // `status.success()` assertion reports the compile error.
+            // A build failure is surfaced as the build `Output` so the caller's `status.success()` assertion reports the compile error.
             Err(build) => build,
             Ok(bin) => run_command_bytes(Command::new(&bin).args(args), stdin),
         }
     }
 
-    /// Build `source` to the cache binary and run it under a pty. A build
-    /// failure fails loud (ADR-15): there is no `status` for the caller to
-    /// inspect on the pty path, so panic with the compiler output.
+    /// Build `source` to the cache binary and run it under a pty. A build failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the compiler output.
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
         let bin = build_go(source).unwrap_or_else(|build| {
             panic!(
@@ -72,17 +54,7 @@ impl BackendUnderTest for Go {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime`
-    /// mirrors the spec harness (ADR-29): each module is emitted as bare
-    /// package-level declarations against one flat top-level runtime
-    /// (`generate_program_with_units`), the referenced units are unioned and
-    /// bundled once, and everything is assembled into a single `package main`
-    /// file — an import block covering the runtime's needs plus `fmt` (the
-    /// appended driver prints with it), the bundle, then the module decls. The
-    /// driver (`func main`) is appended afterwards by the runner, so no main is
-    /// emitted. `shared_runtime=false` (independent Embedded runtimes) is never
-    /// exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits
-    /// one flat top-level runtime shared by all modules (ADR-29).
+    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and everything is assembled into a single `package main` file — an import block covering the runtime's needs plus `fmt` (the appended driver prints with it), the bundle, then the module decls. The driver (`func main`) is appended afterwards by the runner, so no main is emitted. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits one flat top-level runtime shared by all modules (ADR-29).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         assert!(
             shared_runtime,
@@ -102,18 +74,13 @@ impl BackendUnderTest for Go {
             .bundle(&units, 0)
             .expect("bundle runtime");
         let decls = decls.join("\n");
-        // Cover whatever the runtime bundle and module decls reference, then
-        // force `fmt` in — the appended driver prints with it and Go forbids a
-        // later `import` after other declarations.
+        // Cover whatever the runtime bundle and module decls reference, then force `fmt` in — the appended driver prints with it and Go forbids a later `import` after other declarations.
         let mut imports = scan_imports(&format!("{bundle}\n{decls}"));
         if !imports.iter().any(|i| i == "fmt") {
             imports.push("fmt".to_string());
             imports.sort();
         }
-        // `generate_program_with_units` emits spec-mode declarations whose
-        // recursion guard references a shared `rtStack` counter, declared in the
-        // spec harness's PREAMBLE; the multi-module composition must declare it
-        // too (ADR-29).
+        // `generate_program_with_units` emits spec-mode declarations whose recursion guard references a shared `rtStack` counter, declared in the spec harness's PREAMBLE; the multi-module composition must declare it too (ADR-29).
         format!(
             "package main\n\n{}\nvar rtStack int\n\n{bundle}\n\n{decls}\n",
             import_block(&imports)
@@ -121,10 +88,7 @@ impl BackendUnderTest for Go {
     }
 }
 
-/// The external packages an assembled multi-module program references (mirrors
-/// the spec harness's scanner). Only controlled fragments — the runtime bundle
-/// and generated declarations — are scanned, so no user string can inject a
-/// false import (ADR-29).
+/// The external packages an assembled multi-module program references (mirrors the spec harness's scanner). Only controlled fragments — the runtime bundle and generated declarations — are scanned, so no user string can inject a false import (ADR-29).
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -157,10 +121,7 @@ fn import_block(imports: &[String]) -> String {
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Compile `source` to a content-addressed cache binary (so identical sources
-/// build once) and return its path. `Err(Output)` carries the `go build`
-/// failure so a piped run can report it via `status.success()` while a pty run
-/// panics on it. A missing `go` toolchain is a loud failure (ADR-15).
+/// Compile `source` to a content-addressed cache binary (so identical sources build once) and return its path. `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `go` toolchain is a loud failure (ADR-15).
 fn build_go(source: &str) -> Result<PathBuf, Output> {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
@@ -174,11 +135,7 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
     let bin = cache.join(format!("prog-{hash:016x}"));
 
     if !bin.exists() {
-        // Both the source and the binary get per-attempt unique names: two
-        // threads with the same hash (cowsay's args and stdin cases) may build
-        // concurrently, and a shared source path would let one truncate the
-        // file mid-read of the other's `go build` (issue #19). Only the final
-        // rename onto the cache key is shared, and that is atomic.
+        // Both the source and the binary get per-attempt unique names: two threads with the same hash (cowsay's args and stdin cases) may build concurrently, and a shared source path would let one truncate the file mid-read of the other's `go build` (issue #19). Only the final rename onto the cache key is shared, and that is atomic.
         let unique = format!(
             "{hash:016x}.{}.{}",
             std::process::id(),
@@ -204,9 +161,7 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-// ---------------------------------------------------------------------
-// Library-case glue. The appended `func main` carries no `import` — the
-// generated file already imports `fmt`.
+// --------------------------------------------------------------------- Library-case glue. The appended `func main` carries no `import` — the generated file already imports `fmt`.
 
 /// `add.wat`: call the exported functions and print each result.
 const GO_ADD_GLUE: &str = r#"func main() {
@@ -217,9 +172,7 @@ const GO_ADD_GLUE: &str = r#"func main() {
 }
 "#;
 
-/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins,
-/// `random_get` falls back to the bundled WASI. Mirrors the other backends'
-/// override glues — intercept fd_write and print the actual bytes written.
+/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
 const GO_OVERRIDE_GLUE: &str = r#"func main() {
 	var captured []byte
 	var inst *Prog
@@ -236,14 +189,9 @@ const GO_OVERRIDE_GLUE: &str = r#"func main() {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// WASI filesystem glue.
+// --------------------------------------------------------------------- WASI filesystem glue.
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
-/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (via
-/// rtExit) as a trailing decimal line. rt/exit is always seeded for library-mode
-/// WASI output, so `*rtExit` is defined even for fixtures that never import
-/// proc_exit.
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (via rtExit) as a trailing decimal line. rt/exit is always seeded for library-mode WASI output, so `*rtExit` is defined even for fixtures that never import proc_exit.
 const GO_FS_GLUE: &str = r#"func main() {
 	inst := NewProg(nil, nil, nil, map[string]string{"{guest}": "{host}"})
 	defer func() {
@@ -259,9 +207,7 @@ const GO_FS_GLUE: &str = r#"func main() {
 }
 "#;
 
-/// The root-preopen containment probe: probe the WASI resolver directly (no
-/// guest run). A `"/" => "/"` preopen must resolve a relative path rather than
-/// reject every one; fd 3 is the sole preopen, errno 0 (wasiOk) means contained.
+/// The root-preopen containment probe: probe the WASI resolver directly (no guest run). A `"/" => "/"` preopen must resolve a relative path rather than reject every one; fd 3 is the sole preopen, errno 0 (wasiOk) means contained.
 const GO_CONTAINMENT_GLUE: &str = r#"func main() {
 	w := newWASI(nil, nil, map[string]string{"/": "/"})
 	_, err := w.resolve_path(3, "etc", true)
@@ -273,11 +219,7 @@ const GO_CONTAINMENT_GLUE: &str = r#"func main() {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
-// the host scratch/cache dirs come through {scratch}/{cache}. One glue serves
-// both stdout-reporting and proc_exit fixtures: the former return from `_start`
-// normally, so nothing extra is printed.
+// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}. One glue serves both stdout-reporting and proc_exit fixtures: the former return from `_start` normally, so nothing extra is printed.
 
 const GO_QJS_FILE_IO_GLUE: &str = r#"func main() {
 	inst := NewQjs(nil, []string{"qjs", "/work/qjs_file_io.js"}, nil, map[string]string{"/work": "{scratch}"})
@@ -349,15 +291,9 @@ const GO_CPYTHON_GLUE: &str = r#"func main() {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the
-// unexported `inst.memory` (`*Memory`). The appended `func main` carries no
-// `import` (the library file already imports `fmt`). No wasmtime golden exists
-// (the results live in guest memory), so each drive's output is pinned in the
-// shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `func main` carries no `import` (the library file already imports `fmt`). No wasmtime golden exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
-/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
-/// `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const GO_LIBSQLITE3_MEM: &str = r#"func main() {
 	inst := NewLibsqlite3(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
@@ -425,9 +361,7 @@ const GO_LIBSQLITE3_MEM: &str = r#"func main() {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen,
-/// select — the file lifecycle through the C API (same ADR-14 fs stack as the
-/// shell).
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell).
 const GO_LIBSQLITE3_FILE: &str = r#"func main() {
 	inst := NewLibsqlite3(nil, nil, nil, map[string]string{"/db": "{scratch}"})
 	inst.Exports["_initialize"].(func())()
@@ -500,10 +434,7 @@ const GO_LIBSQLITE3_FILE: &str = r#"func main() {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports
-/// `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row
-/// to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7
-/// import-provider map and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import-provider map and collects the rows.
 const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 	var rows []string
 	var mem *Memory
@@ -577,10 +508,7 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 }
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80"
-/// (DLT_EN10MB, snaplen 65535), then walk the serialized program
-/// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory,
-/// printing each instruction as `code jt jf k`.
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
 const GO_PCAP_COMPILE: &str = r#"func main() {
 	inst := NewLibpcap(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
@@ -612,9 +540,7 @@ const GO_PCAP_COMPILE: &str = r#"func main() {
 }
 "#;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet
-/// `{"key": [1, true, null]}` and print the parse tree's S-expression (a
-/// malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
 const GO_TREESITTER_PARSE: &str = r#"func main() {
 	inst := NewTreesitter(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
@@ -643,13 +569,9 @@ const GO_TREESITTER_PARSE: &str = r#"func main() {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Multi-module drive glue.
+// --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Driver for the shared-table case: instantiate `TableExp` (exports the table),
-/// then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports`
-/// as the module provider, as the spec harness's cross-module `register` path
-/// does), and print its `call0` result (`42`).
+/// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`).
 const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 	a := NewTableExp(nil, nil, nil, nil)
 	b := NewTableImp(Imports{"a": a.Exports}, nil, nil, nil)
@@ -657,16 +579,11 @@ const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Suite wiring (ADR-27): each per-case macro invocation declares participation.
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Go, GO_ADD_GLUE);
 wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled
-// WASI is eagerly constructed in the ctor and there is no provider-object import
-// form (ADR-29), so the lazy-construction observable cannot hold.
-// stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no
-// io.Writer indirection to inject an in-memory buffer (ADR-29).
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold. stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no io.Writer indirection to inject an in-memory buffer (ADR-29).
 
 wasi_suite!(Go, Stdio);
 wasi_suite!(Go, ArgsEnv);
@@ -677,12 +594,7 @@ standalone_dir_e2e!(Go);
 
 cowsay_args_e2e!(Go);
 cowsay_stdin_e2e!(Go);
-// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s
-// that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's
-// memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under
-// `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds
-// (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`,
-// `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
+// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
 qjs_eval_e2e!(Go, ultra);
 sqlite3_shell_e2e!(Go, ultra);
 gzip_e2e!(Go);
@@ -692,9 +604,7 @@ qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source
-// exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured
-// >6 min); see docs/apps-audit.md.
+// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min); see docs/apps-audit.md.
 qjs_repl_pty_e2e!(Go);
 
 libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
@@ -704,5 +614,4 @@ pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 
 shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is
-// shared by all modules (ADR-29); two independent runtimes cannot coexist.
+// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.

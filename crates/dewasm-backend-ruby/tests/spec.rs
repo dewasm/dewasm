@@ -1,8 +1,4 @@
-//! Ruby side of the shared spec harness (ADR-3, ADR-27): converts modules
-//! with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/
-//! `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/
-//! `Rt.f64_bits`), and runs the script with the `ruby` on PATH. The generic
-//! harness lives in `dewasm-test-helper`.
+//! Ruby side of the shared spec harness (ADR-3, ADR-27): converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -15,25 +11,10 @@ use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs
-/// so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import
-///   is the right *kind* (func/global/table/memory/tag) but not the
-///   finer-grained wasm type — a function's param/result types, a global's
-///   mutability, a tag's parameter types, or a table/memory's min/max limits
-///   against the import site's declared bounds. Every `assert_unlinkable`
-///   case testing one of those (not a kind mismatch, which is caught) stays a
-///   known gap. The imports.wast count reverted 59 → 28 when exception
-///   handling was removed (ADR-24): its "test" fixture module exports tags, so
-///   it no longer converts — the tag export is now rejected at conversion time
-///   — and the downstream type-mismatch checks it exposed are no longer
-///   reached.
-/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated*
-///   declared-unsupported feature (multi-memory) inside a module that also
-///   happens to use `register`; that module never converts, so a later
-///   assertion against the module it would have written into observes stale
-///   state. Not a cross-module-linking gap itself.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type — a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count reverted 59 → 28 when exception handling was removed (ADR-24): its "test" fixture module exports tags, so it no longer converts — the tag export is now rejected at conversion time — and the downstream type-mismatch checks it exposed are no longer reached.
+/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -64,23 +45,20 @@ impl SpecBackend for RubySpec {
     }
 
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        // Ruby is fast enough to run the whole testsuite by default; nothing is
-        // marked ignored.
+        // Ruby is fast enough to run the whole testsuite by default; nothing is marked ignored.
         None
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable's rescue clause references Rt::LinkError even
-            // when the converted modules themselves don't.
+            // check_unlinkable's rescue clause references Rt::LinkError even when the converted modules themselves don't.
             "rt/link_error",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the $spectest fixture (PREAMBLE below), not
-            // necessarily by the converted module itself.
+            // Referenced by the $spectest fixture (PREAMBLE below), not necessarily by the converted module itself.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -223,9 +201,7 @@ impl SpecBackend for RubySpec {
     }
 }
 
-/// `$spectest`, plus any currently-`register`ed instances merged in under
-/// their registered name — each instance doubles as an ADR-7 import provider
-/// (`Gen::body`'s generated `import(name)` method).
+/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an ADR-7 import provider (`Gen::body`'s generated `import(name)` method).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "$spectest".to_string();
@@ -255,9 +231,7 @@ fn ruby_str(s: &str) -> String {
     out
 }
 
-/// Attribution for a null/ref heap type the harness cannot express as a Ruby
-/// value; the two reference-types hierarchies (and their bottoms, which are
-/// also just `nil`) are expressible.
+/// Attribution for a null/ref heap type the harness cannot express as a Ruby value; the two reference-types hierarchies (and their bottoms, which are also just `nil`) are expressible.
 fn heap_type_tag(hty: &HeapType<'_>) -> String {
     match hty {
         HeapType::Abstract {
@@ -299,8 +273,7 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
                 Err(heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value
-        // is the Integer itself (ADR-17: externref = raw host value).
+        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself (ADR-17: externref = raw host value).
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -344,13 +317,11 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         // `(ref.extern)`: any non-null externref.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("!{value}.nil?")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref — in ADR-17's representation, a
-        // `[type_symbol, callable]` pair.
+        // `(ref.func)`: any non-null funcref — in ADR-17's representation, a `[type_symbol, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),
-        // A specific function's identity: not expressible without an export
-        // map; no top-level testsuite file uses it.
+        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

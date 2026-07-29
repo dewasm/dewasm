@@ -1,8 +1,4 @@
-//! Rendering for `docs/support.md` (ADR-8): the support matrix is rendered
-//! from the code's own declarations, so the document cannot drift from
-//! reality. Shared by the compare-only `support_docs_in_sync` test
-//! (`tests/support_docs.rs`) and `cargo xtask update-support-docs`, which
-//! writes the rendered output to disk.
+//! Rendering for `docs/support.md` (ADR-8): the support matrix is rendered from the code's own declarations, so the document cannot drift from reality. Shared by the compare-only `support_docs_in_sync` test (`tests/support_docs.rs`) and `cargo xtask update-support-docs`, which writes the rendered output to disk.
 
 use std::fmt::Write as _;
 
@@ -14,12 +10,7 @@ use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 use dewasm_core::feature::Feature;
 
-/// The features a backend can meaningfully differ on post-excision
-/// (ADR-25): everything the core IR accepts unconditionally and leaves to
-/// each backend to reject or implement. The remaining `Feature` variants
-/// (SIMD, reference types, the component model, ...) are rejected by the
-/// core for every backend (ADR-24), so a per-backend row for them would
-/// always read "unsupported" and says nothing.
+/// The features a backend can meaningfully differ on post-excision (ADR-25): everything the core IR accepts unconditionally and leaves to each backend to reject or implement. The remaining `Feature` variants (SIMD, reference types, the component model, ...) are rejected by the core for every backend (ADR-24), so a per-backend row for them would always read "unsupported" and says nothing.
 const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::ImportedGlobals,
     Feature::ImportedMemories,
@@ -42,14 +33,10 @@ pub fn render_support_docs() -> String {
     let mut out = String::new();
     out.push_str("# Backend Support Matrix\n\n");
     out.push_str(
-        "<!-- AUTO-GENERATED from the backend declarations; do not edit by hand.\n     \
-         Regenerate: cargo xtask update-support-docs -->\n\n",
+        "<!-- AUTO-GENERATED from the backend declarations; do not edit by hand. Regenerate: cargo xtask update-support-docs -->\n\n",
     );
     out.push_str(
-        "The spec harness only tolerates test skips attributable to a feature that is\n\
-         not `Supported` here ([ADR-8](adr/8-latest-testsuite-support-matrix.md)); an\n\
-         unattributable failure is treated as a bug. Flipping a feature to supported\n\
-         turns its remaining skips into hard failures until the tests pass.\n\n",
+        "The spec harness only tolerates test skips attributable to a feature that is not `Supported` here ([ADR-8](adr/8-latest-testsuite-support-matrix.md)); an unattributable failure is treated as a bug. Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.\n\n",
     );
 
     let feature_cell =
@@ -61,8 +48,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("## Features\n\n");
     out.push_str(
-        "The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-tiers.md));\n\
-         every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).\n\n",
+        "The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-tiers.md)); every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).\n\n",
     );
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");
@@ -81,10 +67,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("\n## WASI preview 1\n\n");
     out.push_str(
-        "Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS\n\
-         stub ([ADR-7](adr/7-import-providers.md), bash conventions in\n\
-         [ADR-12](adr/12-bash-wasi.md)). `—` marks the out-of-scope surface (sockets,\n\
-         `proc_raise`) no toolchain output exercises (ADR-25).\n\n",
+        "Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS stub ([ADR-7](adr/7-import-providers.md), bash conventions in [ADR-12](adr/12-bash-wasi.md)). `—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises (ADR-25).\n\n",
     );
     let mut header = String::from("| Function ");
     let mut rule = String::from("| --- ");

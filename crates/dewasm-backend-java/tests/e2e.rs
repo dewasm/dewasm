@@ -1,15 +1,6 @@
-//! Java end-to-end suites (ADR-27): the shared library / WASI / apps case
-//! consts (`dewasm-test-helper`) wired up for the Java backend. Per
-//! the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named
-//! glue string constants, and per-case macro invocations; glue is a plain `&str`
-//! argument at the callsite, and which macros this file invokes is the
-//! capability declaration (with a REASON comment at any non-invocation).
+//! Java end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Java backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Java is a compiled backend, so it overrides `BackendUnderTest::run` (ADR-27's
-//! hook) to compile-and-execute: `javac` the generated `Main.java` into a
-//! content-addressed class-dir cache (so identical sources compile once), then
-//! run `java -cp <dir> Main` (ADR-30). Java covers full WASI preview 1 incl. the
-//! filesystem.
+//! Java is a compiled backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main` (ADR-30). Java covers full WASI preview 1 incl. the filesystem.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -31,11 +22,7 @@ pub struct Java;
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Compile `source` (a single `Main.java`) to a content-addressed class-dir
-/// cache (so identical sources compile once) and return its path. `Err(Output)`
-/// carries the `javac` failure so a piped run can report it via
-/// `status.success()` while a pty run panics on it. A missing `javac` is a loud
-/// failure (ADR-15).
+/// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache (so identical sources compile once) and return its path. `Err(Output)` carries the `javac` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `javac` is a loud failure (ADR-15).
 fn build_java(source: &str) -> Result<PathBuf, Output> {
     let javac =
         find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
@@ -49,8 +36,7 @@ fn build_java(source: &str) -> Result<PathBuf, Output> {
     let classdir = cache.join(format!("prog-{hash:016x}"));
 
     if !classdir.join("Main.class").exists() {
-        // Compile into a unique temp dir, then rename onto the cache key so
-        // concurrent test threads never hand out a half-written class dir.
+        // Compile into a unique temp dir, then rename onto the cache key so concurrent test threads never hand out a half-written class dir.
         let tmp = cache.join(format!(
             "prog-{hash:016x}.{}.{}",
             std::process::id(),
@@ -83,16 +69,12 @@ impl BackendUnderTest for Java {
         &JavaBackend
     }
 
-    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir
-    /// cache and run it with `args`/`stdin`. A missing `javac`/`java` is a loud
-    /// failure (ADR-15); a compile failure is surfaced as the `javac` `Output`
-    /// so the caller's `status.success()` assertion reports it.
+    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache and run it with `args`/`stdin`. A missing `javac`/`java` is a loud failure (ADR-15); a compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
         match build_java(source) {
-            // A compile failure is surfaced as the `javac` `Output` so the
-            // caller's `status.success()` assertion reports it.
+            // A compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
             Err(build) => build,
             Ok(classdir) => run_command_bytes(
                 Command::new(&java)
@@ -105,9 +87,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Compile `source` and run `java -cp <classdir> Main <args...>` under a
-    /// pty. A compile failure fails loud (ADR-15): there is no `status` for the
-    /// caller to inspect on the pty path, so panic with the `javac` output.
+    /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty. A compile failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
@@ -130,16 +110,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. Java only
-    /// composes against one shared runtime (mirroring the spec harness's
-    /// `register` path): generate each module's class with
-    /// `generate_program_with_units`, union the referenced runtime units, bundle
-    /// them once, and concatenate the runtime classes followed by both module
-    /// classes into ONE default-package compilation unit. The driver
-    /// `public class Main` is appended by the runner. `shared_runtime=false` is
-    /// never requested for Java — `embedded_coexist_e2e!` is not invoked because
-    /// Java emits one flat top-level runtime shared by all modules (ADR-30) — so
-    /// it is unimplemented.
+    /// Compose several `.wat` modules for the multi-module cases. Java only composes against one shared runtime (mirroring the spec harness's `register` path): generate each module's class with `generate_program_with_units`, union the referenced runtime units, bundle them once, and concatenate the runtime classes followed by both module classes into ONE default-package compilation unit. The driver `public class Main` is appended by the runner. `shared_runtime=false` is never requested for Java — `embedded_coexist_e2e!` is not invoked because Java emits one flat top-level runtime shared by all modules (ADR-30) — so it is unimplemented.
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         assert!(
             shared_runtime,
@@ -165,9 +136,7 @@ impl BackendUnderTest for Java {
     }
 }
 
-// ---------------------------------------------------------------------
-// Library-case glue (a `public class Main` appended after the generated module
-// class).
+// --------------------------------------------------------------------- Library-case glue (a `public class Main` appended after the generated module class).
 
 /// `add.wat`: call the exported functions and print each result.
 const JAVA_ADD_GLUE: &str = r#"public class Main {
@@ -180,9 +149,7 @@ const JAVA_ADD_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins,
-/// `random_get` falls back to the bundled WASI. Mirrors the other backends'
-/// override glues — intercept fd_write and print the actual bytes written.
+/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
 const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -209,12 +176,7 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `wasi_stdio_capture` glue: Java's bundled WASI is built eagerly in the
-/// module ctor and holds an `OutputStream` at fd 1, so inject a
-/// `ByteArrayOutputStream` into the (package-private, default-package-reachable)
-/// `wasi.fds` map after construction — the Java mirror of Ruby's `$stdout`
-/// redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the
-/// captured bytes to the real stdout.
+/// The `wasi_stdio_capture` glue: Java's bundled WASI is built eagerly in the module ctor and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction — the Java mirror of Ruby's `$stdout` redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
 const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, null);
@@ -230,13 +192,9 @@ const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// WASI filesystem glue.
+// --------------------------------------------------------------------- WASI filesystem glue.
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest
-/// `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (Rt.Exit)
-/// as a trailing decimal line. rt/exit is always seeded for library-mode WASI
-/// output, so `Rt.Exit` is defined even for fixtures that never import proc_exit.
+/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (Rt.Exit) as a trailing decimal line. rt/exit is always seeded for library-mode WASI output, so `Rt.Exit` is defined even for fixtures that never import proc_exit.
 const JAVA_FS_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, java.util.Map.of("{guest}", "{host}"));
@@ -249,9 +207,7 @@ const JAVA_FS_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The root-preopen containment probe: probe the WASI sandbox resolver directly
-/// (no guest run): with `/` preopened at host `/`, resolving a relative path off
-/// the preopen fd (3) must stay contained (errno WASI_OK == 0).
+/// The root-preopen containment probe: probe the WASI sandbox resolver directly (no guest run): with `/` preopened at host `/`, resolving a relative path off the preopen fd (3) must stay contained (errno WASI_OK == 0).
 const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         WASI w = new WASI(null, null, java.util.Map.of("/", "/"));
@@ -261,9 +217,7 @@ const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only
-// the host scratch dir comes through {scratch}.
+// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch dir comes through {scratch}.
 
 const JAVA_QJS_FILE_IO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -309,13 +263,9 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime
-// golden — the results live in guest memory — so each drive's output is pinned
-// in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime golden — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
-/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` +
-/// `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -380,9 +330,7 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen,
-/// select — the file lifecycle through the C API (same ADR-14 fs stack as the
-/// shell), leaving a nonzero DB file on the host.
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell), leaving a nonzero DB file on the host.
 const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -450,11 +398,7 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports
-/// `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row
-/// to the *imported* `env.host_row` (a `void(argc, argv_ptr)` — the lambda
-/// returns null). The glue provides `host_row` via the ADR-7 import provider and
-/// collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)` — the lambda returns null). The glue provides `host_row` via the ADR-7 import provider and collects the rows.
 const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Sqlite3Binding inst;
@@ -523,12 +467,9 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Multi-module drive glue.
+// --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Instantiate the table exporter, then the importer with the exporter's
-/// `Exports` map as its `"a"` import provider (the exporter's `"tab"` table),
-/// and print the `call0` result (call_indirect through the shared table → 42).
+/// Instantiate the table exporter, then the importer with the exporter's `Exports` map as its `"a"` import provider (the exporter's `"tab"` table), and print the `call0` result (call_indirect through the shared table → 42).
 const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         TableExp exp = new TableExp(null, null, null, null);
@@ -540,15 +481,12 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// ---------------------------------------------------------------------
-// Suite wiring (ADR-27): each per-case macro invocation declares participation.
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Java, JAVA_ADD_GLUE);
 wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
 stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled
-// WASI is eagerly constructed in the ctor and there is no provider-object import
-// form (ADR-30), so the lazy-construction observable cannot hold.
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-30), so the lazy-construction observable cannot hold.
 
 wasi_suite!(Java, Stdio);
 wasi_suite!(Java, ArgsEnv);
@@ -567,13 +505,7 @@ qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 qjs_repl_e2e!(Java, JAVA_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the
-// JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30
-// class-splitter does not subdivide individual methods (a hard limit; see
-// docs/apps-audit.md).
-// cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class
-// overflows the JVM 64 K constant-pool limit (`too many constants`), a hard
-// limit (docs/apps-audit.md).
+// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit (docs/apps-audit.md).
 qjs_repl_pty_e2e!(Java);
 
 libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
@@ -581,5 +513,4 @@ sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
 
 shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is
-// shared by all modules (ADR-30); two independent runtimes cannot coexist.
+// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.

@@ -1,6 +1,4 @@
-//! Parse a wasm module's `.debug_line` DWARF program into an
-//! address-to-source-position lookup, for the opt-in `--dwarf-line` back-mapping
-//! (ADR-38). gimli lives here and here only; backends never see it.
+//! Parse a wasm module's `.debug_line` DWARF program into an address-to-source-position lookup, for the opt-in `--dwarf-line` back-mapping (ADR-38). gimli lives here and here only; backends never see it.
 
 use std::collections::HashMap;
 
@@ -11,24 +9,14 @@ use crate::ir::SourcePos;
 
 /// The wasm DWARF code-address convention.
 ///
-/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF
-/// code address is the byte offset of the instruction **relative to the start
-/// of the code section's contents**, not an absolute module-file offset. But
-/// `wasmparser`'s `OperatorsReader` reports operator positions as absolute
-/// module-file offsets. So to look a resolved operator up in the line table we
-/// subtract the code section's content start — that is the address base.
+/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset. But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets. So to look a resolved operator up in the line table we subtract the code section's content start — that is the address base.
 ///
-/// This is calibrated, not assumed: the fixture test (ADR-38) asserts that a
-/// known function's directive lands on its real source line, which fails for
-/// any wrong base. Keeping it a single named function makes a re-calibration a
-/// one-line change should a toolchain ever emit a different convention.
+/// This is calibrated, not assumed: the fixture test (ADR-38) asserts that a known function's directive lands on its real source line, which fails for any wrong base. Keeping it a single named function makes a re-calibration a one-line change should a toolchain ever emit a different convention.
 fn address_base(code_section_start: u64) -> u64 {
     code_section_start
 }
 
-/// One decoded line-program row: a code address and the source position that
-/// begins there, or `None` for an `end_sequence` row (an exclusive upper bound
-/// with no mapping).
+/// One decoded line-program row: a code address and the source position that begins there, or `None` for an `end_sequence` row (an exclusive upper bound with no mapping).
 struct Row {
     address: u64,
     pos: Option<SourcePos>,
@@ -44,10 +32,7 @@ pub struct LineTable {
 }
 
 impl LineTable {
-    /// Parse the collected `.debug_*` section blobs (keyed by section name,
-    /// e.g. `.debug_line`). `code_section_start` is the module file offset of
-    /// the code section's contents, used only for address-base calibration.
-    /// Returns `None` when there is no line program to speak of.
+    /// Parse the collected `.debug_*` section blobs (keyed by section name, e.g. `.debug_line`). `code_section_start` is the module file offset of the code section's contents, used only for address-base calibration. Returns `None` when there is no line program to speak of.
     pub fn parse(
         sections: &HashMap<String, Vec<u8>>,
         code_section_start: u64,
@@ -77,11 +62,7 @@ impl LineTable {
             };
             let mut state = program.rows();
             while let Some((header, row)) = state.next_row().context("reading a line-table row")? {
-                // An `end_sequence` boundary, or a row DWARF marks as having no
-                // source line (line 0 — a compiler-generated prologue or
-                // epilogue), maps to nothing: record it as a gap so a lookup
-                // landing there yields no position rather than a bogus `line 0`
-                // directive (which Go's `//line` rejects).
+                // An `end_sequence` boundary, or a row DWARF marks as having no source line (line 0 — a compiler-generated prologue or epilogue), maps to nothing: record it as a gap so a lookup landing there yields no position rather than a bogus `line 0` directive (which Go's `//line` rejects).
                 if row.end_sequence() || row.line().is_none() {
                     rows.push(Row {
                         address: row.address(),
@@ -93,8 +74,7 @@ impl LineTable {
                     continue;
                 };
                 let file = intern(&mut files, &mut files_map, name);
-                // `line().is_none()` (line 0) is handled as a gap above, so a
-                // real row always has a nonzero line here.
+                // `line().is_none()` (line 0) is handled as a gap above, so a real row always has a nonzero line here.
                 let line = row.line().map_or(0, |l| l.get() as u32);
                 let col = match row.column() {
                     gimli::ColumnType::LeftEdge => 0,
@@ -107,10 +87,7 @@ impl LineTable {
             }
         }
 
-        // Rows come per-sequence (already ascending) but sequences and units
-        // are not globally ordered, so sort. At an equal address, order a real
-        // row after an `end_sequence` boundary so a lookup landing exactly on a
-        // sequence start resolves the mapped row, not the preceding gap.
+        // Rows come per-sequence (already ascending) but sequences and units are not globally ordered, so sort. At an equal address, order a real row after an `end_sequence` boundary so a lookup landing exactly on a sequence start resolves the mapped row, not the preceding gap.
         rows.sort_by_key(|r| (r.address, r.pos.is_some()));
 
         Ok(Some(LineTable {
@@ -120,9 +97,7 @@ impl LineTable {
         }))
     }
 
-    /// Resolve a module file offset (an operator's `original_position`) to the
-    /// source position of the greatest line-table row whose address is `<=` it,
-    /// honoring `end_sequence` rows (which map to `None`).
+    /// Resolve a module file offset (an operator's `original_position`) to the source position of the greatest line-table row whose address is `<=` it, honoring `end_sequence` rows (which map to `None`).
     pub fn lookup(&self, module_offset: u64) -> Option<SourcePos> {
         let addr = module_offset.checked_sub(self.base)?;
         let i = self.rows.partition_point(|r| r.address <= addr);
@@ -144,8 +119,7 @@ fn intern(files: &mut Vec<String>, map: &mut HashMap<String, u32>, name: String)
     id
 }
 
-/// Build a file path string from a line-program file entry: its directory
-/// entry joined with the file name (an absolute file name stands alone).
+/// Build a file path string from a line-program file entry: its directory entry joined with the file name (an absolute file name stands alone).
 fn resolve_file(
     dwarf: &gimli::Dwarf<EndianSlice<'_, LittleEndian>>,
     unit: &gimli::Unit<EndianSlice<'_, LittleEndian>>,

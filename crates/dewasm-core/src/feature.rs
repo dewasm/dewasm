@@ -1,8 +1,6 @@
 //! Feature taxonomy for the support matrix (ADR-8).
 //!
-//! Every "unsupported" conversion error is attributed to one or more
-//! `Feature`s so the spec harness can tell declared gaps from regressions,
-//! and so docs/support.md can be generated from code.
+//! Every "unsupported" conversion error is attributed to one or more `Feature`s so the spec harness can tell declared gaps from regressions, and so docs/support.md can be generated from code.
 
 use std::fmt;
 
@@ -10,19 +8,14 @@ use wasmparser::WasmFeatures;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Feature {
-    // Wasm 1.0 core capabilities dewasm has not implemented yet
-    // (explicit debt, first in line on the roadmap).
+    // Wasm 1.0 core capabilities dewasm has not implemented yet (explicit debt, first in line on the roadmap).
     ImportedGlobals,
     ImportedMemories,
     ImportedTables,
     MultipleTables,
-    /// The table half of bulk memory: passive/declared element segments,
-    /// expression element items, table.init/copy, elem.drop. (The memory
-    /// half is supported.)
+    /// The table half of bulk memory: passive/declared element segments, expression element items, table.init/copy, elem.drop. (The memory half is supported.)
     TableBulkOps,
-    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose
-    /// language has no usable floats (Bash, until the ADR-5 softfloat
-    /// lands) refuses float-using modules at conversion time.
+    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose language has no usable floats (Bash, until the ADR-5 softfloat lands) refuses float-using modules at conversion time.
     Floats,
     // Post-1.0 proposals.
     ReferenceTypes,
@@ -38,8 +31,7 @@ pub enum Feature {
     ExceptionHandling,
     WideArithmetic,
     CustomPageSizes,
-    /// The component model (and with it WASI preview 2): a layer-1 binary
-    /// wrapping core modules with canonical-ABI adapters.
+    /// The component model (and with it WASI preview 2): a layer-1 binary wrapping core modules with canonical-ABI adapters.
     ComponentModel,
 }
 
@@ -122,9 +114,7 @@ impl Feature {
         }
     }
 
-    /// Validator feature bits that this proposal gates, for attributing
-    /// validation failures. `None` for capabilities that validate fine
-    /// under the base feature set and are rejected during IR building.
+    /// Validator feature bits that this proposal gates, for attributing validation failures. `None` for capabilities that validate fine under the base feature set and are rejected during IR building.
     pub fn validator_bits(self) -> Option<WasmFeatures> {
         Some(match self {
             Feature::FunctionReferences => WasmFeatures::FUNCTION_REFERENCES,
@@ -151,9 +141,7 @@ impl fmt::Display for Feature {
     }
 }
 
-/// A conversion refusal attributed to declared-unsupported features.
-/// Anything the converter rejects *without* this attribution is treated
-/// as a bug by the spec harness.
+/// A conversion refusal attributed to declared-unsupported features. Anything the converter rejects *without* this attribution is treated as a bug by the spec harness.
 #[derive(Debug)]
 pub struct UnsupportedError {
     pub features: Vec<Feature>,

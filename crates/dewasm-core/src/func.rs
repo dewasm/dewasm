@@ -1,16 +1,6 @@
-//! Translate a wasm function body (stack machine) into structured IR with
-//! build-time expression folding.
+//! Translate a wasm function body (stack machine) into structured IR with build-time expression folding.
 //!
-//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is
-//! kept as a *pending* expression (with its read/trap `Effects` and node
-//! count) rather than being materialized into a temp immediately. A pending is
-//! spilled to a temp (`sN = <expr>`) only when a later statement's effects
-//! could be observed by it, when it crosses a control-flow boundary, or when a
-//! consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus
-//! fold directly into their consumer, cutting the statement count for every
-//! backend. Evaluation order and trap points are preserved by the spill
-//! discipline. Dead code after an unconditional branch is skipped while
-//! tracking block nesting only.
+//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately. A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus fold directly into their consumer, cutting the statement count for every backend. Evaluation order and trap points are preserved by the spill discipline. Dead code after an unconditional branch is skipped while tracking block nesting only.
 
 use std::collections::BTreeSet;
 
@@ -24,36 +14,24 @@ use crate::ir::{
 };
 use crate::module::{unsupported, val_type};
 
-/// Node-count cap for a folded expression tree. Once a consumer would build a
-/// tree larger than this, its operands are spilled to temps first. The cap
-/// keeps the generated expressions shallow enough not to blow the recursive
-/// descent parser of any target language (Ruby/Python and friends parse
-/// expressions recursively and have finite stack budgets), and bounds the
-/// worst-case textual blow-up of backends whose inline lowerings duplicate an
-/// operand.
+/// Node-count cap for a folded expression tree. Once a consumer would build a tree larger than this, its operands are spilled to temps first. The cap keeps the generated expressions shallow enough not to blow the recursive descent parser of any target language (Ruby/Python and friends parse expressions recursively and have finite stack budgets), and bounds the worst-case textual blow-up of backends whose inline lowerings duplicate an operand.
 const MAX_FOLD_SIZE: u32 = 32;
 
-/// Whether values fold. Kept as a knob so the pending-stack machinery can be
-/// introduced without behavioral change (every push materializes immediately),
-/// then flipped on once verified. Always `true` in shipped builds.
+/// Whether values fold. Kept as a knob so the pending-stack machinery can be introduced without behavioral change (every push materializes immediately), then flipped on once verified. Always `true` in shipped builds.
 const FOLD: bool = true;
 
-/// Side effects a pending expression carries, used to decide when it must be
-/// spilled before a later statement so it cannot observe that statement's
-/// effect (or so its own trap fires at the right point).
+/// Side effects a pending expression carries, used to decide when it must be spilled before a later statement so it cannot observe that statement's effect (or so its own trap fires at the right point).
 #[derive(Clone, Copy, Default)]
 struct Effects {
     /// Bitmask of read locals with index < 64.
     locals: u64,
-    /// A local with index >= 64 is read (a conservative catch-all so the
-    /// bitmask stays a single word).
+    /// A local with index >= 64 is read (a conservative catch-all so the bitmask stays a single word).
     any_high_local: bool,
     /// Reads a global.
     globals: bool,
     /// Reads memory (a load) or `memory.size`.
     memory: bool,
-    /// May trap (a load, a divide/remainder, or a non-saturating float->int
-    /// truncation).
+    /// May trap (a load, a divide/remainder, or a non-saturating float->int truncation).
     trap: bool,
 }
 
@@ -97,8 +75,7 @@ struct Pending {
     size: u32,
 }
 
-/// One operand-stack slot: its type, and a pending expression when the value
-/// has not been spilled to a temp yet.
+/// One operand-stack slot: its type, and a pending expression when the value has not been spilled to a temp yet.
 struct Slot {
     ty: ValType,
     pending: Option<Pending>,
@@ -106,8 +83,7 @@ struct Slot {
 
 pub struct FuncBuilder<'a> {
     module: &'a ir::Module,
-    /// Type indices of all defined functions (the code section is being
-    /// translated, so `module.funcs` is still incomplete).
+    /// Type indices of all defined functions (the code section is being translated, so `module.funcs` is still incomplete).
     defined_func_types: &'a [u32],
     type_idx: u32,
     /// params ++ declared locals
@@ -118,19 +94,11 @@ pub struct FuncBuilder<'a> {
     temps: BTreeSet<Temp>,
     next_label: u32,
     result: Option<ir::Func>,
-    /// DWARF line table for source back-mapping, when `--dwarf-line` is on
-    /// (ADR-38). `None` leaves the whole marker path inert.
+    /// DWARF line table for source back-mapping, when `--dwarf-line` is on (ADR-38). `None` leaves the whole marker path inert.
     line_table: Option<&'a LineTable>,
-    /// The most recent source position resolved from an operator's offset while
-    /// streaming this body. Updated per operator (holding its last *known* value
-    /// across offsets that map to nothing), then consulted when a statement is
-    /// emitted. Tracking it as operators stream — rather than resolving only the
-    /// emit-triggering operator — is what lets a folded expression (whose
-    /// consuming operator, e.g. the function `end`, may sit on a line-table gap)
-    /// still carry the source line of the operators that built it.
+    /// The most recent source position resolved from an operator's offset while streaming this body. Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted. Tracking it as operators stream — rather than resolving only the emit-triggering operator — is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
     cur_pos: Option<SourcePos>,
-    /// The last source position actually emitted as a marker in this function,
-    /// so only change points produce one (per-function: reset for every body).
+    /// The last source position actually emitted as a marker in this function, so only change points produce one (per-function: reset for every body).
     last_pos: Option<SourcePos>,
 }
 
@@ -181,9 +149,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Attach the DWARF line table so `emit` injects source-position markers
-    /// (ADR-38). A no-op with `None` (the default), keeping non-`--dwarf-line`
-    /// output byte-identical.
+    /// Attach the DWARF line table so `emit` injects source-position markers (ADR-38). A no-op with `None` (the default), keeping non-`--dwarf-line` output byte-identical.
     pub fn with_line_table(mut self, line_table: Option<&'a LineTable>) -> Self {
         self.line_table = line_table;
         self
@@ -224,11 +190,7 @@ impl<'a> FuncBuilder<'a> {
         self.cur().stmts.push(stmt);
     }
 
-    /// Resolve `offset` (an operator's module-file position) against the line
-    /// table and remember it as the current source position, so the next
-    /// emitted statement can be annotated. An offset that maps to nothing (a
-    /// line-table gap or `end_sequence` boundary) leaves the last known position
-    /// in place rather than clearing it. A no-op without a line table (ADR-38).
+    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated. An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it. A no-op without a line table (ADR-38).
     fn track_source_pos(&mut self, offset: usize) {
         let Some(table) = self.line_table else {
             return;
@@ -238,11 +200,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The [`Stmt::SourceLine`] marker to place before the statement about to be
-    /// emitted, or `None` when the current source position is unchanged from the
-    /// last marker emitted (change points only) or back-mapping is off (ADR-38).
-    /// The caller pushes the returned marker; the two emit paths (`emit` and the
-    /// function's fallthrough return) share this so both are annotated.
+    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off (ADR-38). The caller pushes the returned marker; the two emit paths (`emit` and the function's fallthrough return) share this so both are annotated.
     fn source_marker(&mut self) -> Option<Stmt> {
         self.line_table?;
         let pos = self.cur_pos?;
@@ -253,9 +211,7 @@ impl<'a> FuncBuilder<'a> {
         Some(Stmt::SourceLine(pos))
     }
 
-    /// Push a materialized value: allocate a temp for the top slot and record
-    /// it in `self.temps`. Used for values that are never folded (call
-    /// results, `memory.grow`) and by `spill`.
+    /// Push a materialized value: allocate a temp for the top slot and record it in `self.temps`. Used for values that are never folded (call results, `memory.grow`) and by `spill`.
     fn push_temp(&mut self, ty: ValType) -> Temp {
         let temp = Temp {
             depth: self.stack.len() as u32,
@@ -278,8 +234,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Pop the top slot as an expression: its pending expression if any, else
-    /// a reference to the temp it was materialized into.
+    /// Pop the top slot as an expression: its pending expression if any, else a reference to the temp it was materialized into.
     fn pop_expr(&mut self) -> (Expr, Effects, u32) {
         let slot = self.stack.pop().expect("value stack is not empty");
         match slot.pending {
@@ -303,8 +258,7 @@ impl<'a> FuncBuilder<'a> {
         self.stack[idx].pending.as_ref().is_some_and(|p| p.fx.trap)
     }
 
-    /// Materialize the pending value at stack index `idx` into its temp,
-    /// emitting the assignment. A no-op if already materialized.
+    /// Materialize the pending value at stack index `idx` into its temp, emitting the assignment. A no-op if already materialized.
     fn spill(&mut self, idx: usize) {
         let ty = self.stack[idx].ty;
         if let Some(p) = self.stack[idx].pending.take() {
@@ -320,9 +274,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Spill every pending whose effects match `pred`, in ascending depth
-    /// order (= wasm evaluation order, so their statements and traps land in
-    /// the right sequence).
+    /// Spill every pending whose effects match `pred`, in ascending depth order (= wasm evaluation order, so their statements and traps land in the right sequence).
     fn spill_if(&mut self, pred: impl Fn(&Effects) -> bool) {
         for idx in 0..self.stack.len() {
             let hit = match &self.stack[idx].pending {
@@ -403,8 +355,7 @@ impl<'a> FuncBuilder<'a> {
     fn store(&mut self, op: StoreOp, memarg: &wasmparser::MemArg) {
         let (value, _, _) = self.pop_expr();
         let (addr, _, _) = self.pop_expr();
-        // The store writes memory; earlier memory reads and pending traps must
-        // be resolved first.
+        // The store writes memory; earlier memory reads and pending traps must be resolved first.
         self.spill_if(|fx| fx.memory || fx.trap);
         self.emit(Stmt::Store {
             op,
@@ -415,10 +366,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn select(&mut self) {
-        // Stack: [then, els, cond] with cond on top. The backends lower Select
-        // to a conditionally-evaluated ternary, so a trapping then/els arm
-        // (which wasm evaluates eagerly) must be spilled to keep its trap. The
-        // cond folds freely.
+        // Stack: [then, els, cond] with cond on top. The backends lower Select to a conditionally-evaluated ternary, so a trapping then/els arm (which wasm evaluates eagerly) must be spilled to keep its trap. The cond folds freely.
         let n = self.stack.len();
         let cond_i = n - 1;
         let els_i = n - 2;
@@ -493,10 +441,7 @@ impl<'a> FuncBuilder<'a> {
         &self.module.types[ty_idx as usize]
     }
 
-    /// Resolve a branch depth into a target, computing the moves from the
-    /// current stack top into the target frame's result (or loop param)
-    /// slots. Marks the target label as referenced. The caller must have
-    /// spilled the stack first, so the sources read from materialized temps.
+    /// Resolve a branch depth into a target, computing the moves from the current stack top into the target frame's result (or loop param) slots. Marks the target label as referenced. The caller must have spilled the stack first, so the sources read from materialized temps.
     fn branch_target(&mut self, relative_depth: u32) -> BrTarget {
         let idx = self.frames.len() - 1 - relative_depth as usize;
         let (arity_tys, base, is_loop, is_func, label_id) = {
@@ -555,9 +500,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_else(&mut self) {
-        // Materialize the then-branch's fallthrough values (into the frame's
-        // result slots) before capturing its body. Skipped when the then
-        // branch ended unreachable (its stack shape is stale).
+        // Materialize the then-branch's fallthrough values (into the frame's result slots) before capturing its body. Skipped when the then branch ended unreachable (its stack shape is stale).
         if !self.cur().unreachable {
             self.spill_all();
         }
@@ -578,9 +521,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_end(&mut self) {
-        // Spill the frame's live values into its own body before it is popped
-        // (so control-boundary-crossing temps are materialized). The function
-        // frame folds its fallthrough return instead.
+        // Spill the frame's live values into its own body before it is popped (so control-boundary-crossing temps are materialized). The function frame folds its fallthrough return instead.
         let is_func = matches!(self.cur().kind, FrameKind::Func);
         if !self.cur().entered_dead && !self.cur().unreachable && !is_func {
             self.spill_all();
@@ -588,8 +529,7 @@ impl<'a> FuncBuilder<'a> {
 
         let frame = self.frames.pop().expect("frame stack is not empty");
         if frame.entered_dead {
-            // The whole frame was dead code; the parent stays unreachable and
-            // the stack was never touched.
+            // The whole frame was dead code; the parent stays unreachable and the stack was never touched.
             return;
         }
 
@@ -602,9 +542,7 @@ impl<'a> FuncBuilder<'a> {
                     for i in (0..arity).rev() {
                         values[i] = self.pop_expr().0;
                     }
-                    // The fallthrough return does not route through `emit`, so
-                    // annotate it here too (ADR-38); folded bodies frequently
-                    // collapse to just this statement.
+                    // The fallthrough return does not route through `emit`, so annotate it here too (ADR-38); folded bodies frequently collapse to just this statement.
                     if let Some(marker) = self.source_marker() {
                         body.push(marker);
                     }
@@ -620,8 +558,7 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             kind => {
-                // Fallthrough values already live at the result slots; formally
-                // rebuild the stack shape for the parent frame.
+                // Fallthrough values already live at the result slots; formally rebuild the stack shape for the parent frame.
                 self.stack.truncate(frame.base);
                 for ty in &frame.results {
                     self.push_temp(*ty);
@@ -713,8 +650,7 @@ impl<'a> FuncBuilder<'a> {
             // -- control flow
             Operator::Nop => {}
             Operator::Unreachable => {
-                // A pending OOB load must trap with its own message before the
-                // "unreachable" trap, so resolve trapping pendings first.
+                // A pending OOB load must trap with its own message before the "unreachable" trap, so resolve trapping pendings first.
                 self.spill_if(|fx| fx.trap);
                 self.emit(Stmt::Unreachable);
                 self.cur().unreachable = true;
@@ -747,9 +683,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::Br { relative_depth } => {
                 let idx = self.frames.len() - 1 - relative_depth as usize;
                 if matches!(self.frames[idx].kind, FrameKind::Func) {
-                    // A branch to the function frame is a return: fold the
-                    // values, but first flush any deeper trapping pending that
-                    // wasm would have evaluated before the branch.
+                    // A branch to the function frame is a return: fold the values, but first flush any deeper trapping pending that wasm would have evaluated before the branch.
                     let arity = self.frames[idx].results.len();
                     let mut values = vec![Expr::I32Const(0); arity];
                     for i in (0..arity).rev() {
@@ -766,10 +700,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::BrIf { relative_depth } => {
                 let (cond, _, _) = self.pop_expr();
-                // A not-taken br_if must leave the operands reusable, and
-                // branch_target reads them at canonical depths, so materialize
-                // the whole stack. Return values are not folded under br_if
-                // (the not-taken path would double-consume them).
+                // A not-taken br_if must leave the operands reusable, and branch_target reads them at canonical depths, so materialize the whole stack. Return values are not folded under br_if (the not-taken path would double-consume them).
                 self.spill_all();
                 let target = self.branch_target(relative_depth);
                 self.emit(Stmt::BrIf { cond, target });
@@ -801,9 +732,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Call { function_index } => {
                 let ty = self.func_type_of(function_index).clone();
-                // A call can read/write globals and memory and can trap;
-                // pending values that observe any of those must be spilled.
-                // Pure-local args survive and fold into the call.
+                // A call can read/write globals and memory and can trap; pending values that observe any of those must be spilled. Pure-local args survive and fold into the call.
                 self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
                 for i in (0..ty.params.len()).rev() {
@@ -821,10 +750,7 @@ impl<'a> FuncBuilder<'a> {
                 table_index,
                 ..
             } => {
-                // Spill effectful operands (and deeper pendings) first: this
-                // both preserves wasm order and makes the remaining index/arg
-                // fragments pure, so a backend that evaluates the index before
-                // the args cannot reorder an observable effect.
+                // Spill effectful operands (and deeper pendings) first: this both preserves wasm order and makes the remaining index/arg fragments pure, so a backend that evaluates the index before the args cannot reorder an observable effect.
                 self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let ty = self.module.types[type_index as usize].clone();
                 let (index, _, _) = self.pop_expr();
@@ -842,8 +768,7 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             Operator::Drop => {
-                // A dropped value with a pending trap must still evaluate so
-                // the trap fires; a pure one is simply discarded.
+                // A dropped value with a pending trap must still evaluate so the trap fires; a pure one is simply discarded.
                 let top = self.stack.len() - 1;
                 if self.slot_traps(top) {
                     self.spill(top);
@@ -851,8 +776,7 @@ impl<'a> FuncBuilder<'a> {
                 self.pop_expr();
             }
             Operator::TypedSelect { ty } => {
-                // A numeric typed select is just an annotated select; a
-                // ref-typed one is a reference-types construct (ADR-24).
+                // A numeric typed select is just an annotated select; a ref-typed one is a reference-types construct (ADR-24).
                 val_type(ty)?;
                 self.select();
             }
@@ -870,8 +794,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::LocalSet { local_index } => {
                 let (value, _, _) = self.pop_expr();
-                // Earlier pendings that read this local must observe its old
-                // value, so spill them before the assignment.
+                // Earlier pendings that read this local must observe its old value, so spill them before the assignment.
                 self.spill_if(|fx| fx.reads_local(local_index));
                 self.emit(Stmt::LocalSet {
                     idx: local_index,
@@ -886,8 +809,7 @@ impl<'a> FuncBuilder<'a> {
                     idx: local_index,
                     expr: value,
                 });
-                // The value stays on the stack; a later `local.set` on the
-                // same local spills this via the reads-local rule.
+                // The value stays on the stack; a later `local.set` on the same local spills this via the reads-local rule.
                 self.push_pending(
                     ty,
                     Expr::LocalGet(local_index),
@@ -905,8 +827,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::GlobalSet { global_index } => {
                 let (value, _, _) = self.pop_expr();
-                // Post-trap global state is observable (the spec asserts it),
-                // so spill both global reads and trapping pendings first.
+                // Post-trap global state is observable (the spec asserts it), so spill both global reads and trapping pendings first.
                 self.spill_if(|fx| fx.globals || fx.trap);
                 self.emit(Stmt::GlobalSet {
                     idx: global_index,
@@ -1013,9 +934,7 @@ impl<'a> FuncBuilder<'a> {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
-            // -- reference types: the validator tolerates the encoding
-            // (features() keeps the bit for overlong call_indirect
-            // immediates), but every actual construct is rejected (ADR-24).
+            // -- reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected (ADR-24).
             Operator::RefNull { .. }
             | Operator::RefFunc { .. }
             | Operator::RefIsNull
@@ -1216,8 +1135,7 @@ fn bin_traps(op: BinOp) -> bool {
     )
 }
 
-/// Unary ops that may trap: the non-saturating float->int truncations (the
-/// saturating `*_sat_*` forms do not trap).
+/// Unary ops that may trap: the non-saturating float->int truncations (the saturating `*_sat_*` forms do not trap).
 fn un_traps(op: UnOp) -> bool {
     use UnOp::*;
     matches!(
@@ -1233,10 +1151,7 @@ fn un_traps(op: UnOp) -> bool {
     )
 }
 
-/// Attribute an untranslated operator to a feature. Operators gated by
-/// validator features never reach this point; what does reach it are the
-/// families our base validation accepts — an unclassified operator here is
-/// a dewasm bug and the spec harness treats it as such.
+/// Attribute an untranslated operator to a feature. Operators gated by validator features never reach this point; what does reach it are the families our base validation accepts — an unclassified operator here is a dewasm bug and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[

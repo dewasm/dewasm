@@ -1,11 +1,6 @@
 # Standalone runtime interface
 
-A program converted with `--mode standalone` is a self-contained CLI: the
-generated `main` supplies the WASI guest its argv, environment, and filesystem
-preopens, and translates the guest's exit/trap into a process exit code. That
-interface is uniform across every backend and modelled on wasmtime's CLI, so a
-converted program behaves like the `.wasm` it came from. The decision and its
-rationale are [ADR-31](adr/31-standalone-runtime-interface.md).
+A program converted with `--mode standalone` is a self-contained CLI: the generated `main` supplies the WASI guest its argv, environment, and filesystem preopens, and translates the guest's exit/trap into a process exit code. That interface is uniform across every backend and modelled on wasmtime's CLI, so a converted program behaves like the `.wasm` it came from. The decision and its rationale are [ADR-31](adr/31-standalone-runtime-interface.md).
 
 ## Invocation
 
@@ -13,22 +8,13 @@ rationale are [ADR-31](adr/31-standalone-runtime-interface.md).
 <runner> <program> [--dir HOST::GUEST]... [--] [guest args...]
 ```
 
-The generated `main` consumes a **leading run of `--dir` flags** and hands
-everything after them to the guest as `argv[1..]`:
+The generated `main` consumes a **leading run of `--dir` flags** and hands everything after them to the guest as `argv[1..]`:
 
-- `--dir HOST::GUEST` (repeatable) preopens host directory `HOST` at guest path
-  `GUEST`, exactly like `wasmtime run --dir`. Both `--dir X` and `--dir=X` are
-  accepted. A value with no `::` mounts the same path on both sides
-  (`--dir /data` = `--dir /data::/data`).
-- `--` ends flag parsing; every following token is a guest argument (use it to
-  pass a guest a literal `--dir`).
-- The first token that is not a `--dir` flag also ends parsing; it and the rest
-  are guest arguments.
+- `--dir HOST::GUEST` (repeatable) preopens host directory `HOST` at guest path `GUEST`, exactly like `wasmtime run --dir`. Both `--dir X` and `--dir=X` are accepted. A value with no `::` mounts the same path on both sides (`--dir /data` = `--dir /data::/data`).
+- `--` ends flag parsing; every following token is a guest argument (use it to pass a guest a literal `--dir`).
+- The first token that is not a `--dir` flag also ends parsing; it and the rest are guest arguments.
 
-`<runner>` is the per-backend way to launch the program (below). `--dir` is a
-shim parsed *inside the generated program*, not a flag of the interpreter — so
-it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the
-`.wasm`.
+`<runner>` is the per-backend way to launch the program (below). `--dir` is a shim parsed *inside the generated program*, not a flag of the interpreter — so it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the `.wasm`.
 
 ### Per-backend runner lines
 
@@ -53,11 +39,7 @@ it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the
 
 ## Bash `--dir`
 
-The Bash backend honors `--dir` with real WASI filesystem support
-([ADR-34](adr/34-bash-wasi-filesystem.md)); a missing `--dir` argument fails
-loudly with exit 2. Bash reaches the same exit/trap surface as the other
-backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap;
-[ADR-11](adr/11-bash-backend-lowering.md)/[ADR-12](adr/12-bash-wasi.md)).
+The Bash backend honors `--dir` with real WASI filesystem support ([ADR-34](adr/34-bash-wasi-filesystem.md)); a missing `--dir` argument fails loudly with exit 2. Bash reaches the same exit/trap surface as the other backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap; [ADR-11](adr/11-bash-backend-lowering.md)/[ADR-12](adr/12-bash-wasi.md)).
 
 ## Example
 
@@ -70,7 +52,4 @@ $ cat /tmp/work/hello.txt
 hello, wasi fs!
 ```
 
-The same command under wasmtime — `wasmtime run --dir /tmp/work::/
-wasi_standalone_dir.wat` — produces identical output; the shared
-`wasi_standalone_dir` e2e case runs it on every filesystem backend and re-runs
-it under wasmtime as ground truth ([ADR-27](adr/27-test-helper-crate.md)).
+The same command under wasmtime — `wasmtime run --dir /tmp/work::/ wasi_standalone_dir.wat` — produces identical output; the shared `wasi_standalone_dir` e2e case runs it on every filesystem backend and re-runs it under wasmtime as ground truth ([ADR-27](adr/27-test-helper-crate.md)).

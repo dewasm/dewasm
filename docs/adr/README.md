@@ -1,21 +1,13 @@
 # Architecture Decision Records
 
-This directory contains the Architecture Decision Records (ADRs) for
-dewasm. Each document captures a significant design decision: its
-context, the decision with its rationale, the rejected alternatives, and
-the consequences.
+This directory contains the Architecture Decision Records (ADRs) for dewasm. Each document captures a significant design decision: its context, the decision with its rationale, the rejected alternatives, and the consequences.
 
 ## How to read
 
-- **ADR-0** is the foundation document — start there for the project's
-  goal, scope, and architecture.
+- **ADR-0** is the foundation document — start there for the project's goal, scope, and architecture.
 - Higher-numbered ADRs build on it and can be read as needed.
-- Each ADR opens with a **Status** paragraph: `Accepted`, `Proposed`, or
-  `Superseded`, with a date and a one-paragraph "what landed / what
-  remains" summary. Accepted ADRs whose implementation is still pending
-  carry a parenthetical note (e.g. *not yet implemented*).
-- ADR-0 through ADR-5 were backfilled on 2026-07-23 from decisions made
-  during initial planning and implementation.
+- Each ADR opens with a **Status** paragraph: `Accepted`, `Proposed`, or `Superseded`, with a date and a one-paragraph "what landed / what remains" summary. Accepted ADRs whose implementation is still pending carry a parenthetical note (e.g. *not yet implemented*).
+- ADR-0 through ADR-5 were backfilled on 2026-07-23 from decisions made during initial planning and implementation.
 
 ## Index
 
@@ -77,38 +69,21 @@ the consequences.
 When a decision with real alternatives is made:
 
 1. Take the next free number and create `docs/adr/<N>-<slug>.md`.
-2. Follow the structural contract: an opening **Status** paragraph
-   (state, date, what landed / what remains), then **Context**,
-   **Decision**, **Rejected alternatives**, **Consequences**.
+2. Follow the structural contract: an opening **Status** paragraph (state, date, what landed / what remains), then **Context**, **Decision**, **Rejected alternatives**, **Consequences**.
 3. Add a row to the index table above, in ascending order.
-4. Cross-reference: link related ADRs, and cite the ADR from `AGENTS.md`
-   or code comments where the rule is enforced.
+4. Cross-reference: link related ADRs, and cite the ADR from `AGENTS.md` or code comments where the rule is enforced.
 
 Quality bar:
 
-- An ADR records a **decision with rationale and rejected alternatives**,
-  or a standing policy. State the *criterion* that discriminated between
-  the options as a reusable rule, not just "we picked B".
-- A mechanical change with no live alternatives does not need an ADR —
-  the commit message is enough.
-- **Length tracks stakes.** The common failure mode is writing too much,
-  not too little. Move research material (surveys, comparison tables)
-  out of the ADR and cite it; keep the ADR the decision, not the
-  research.
-- Anchor claims to real code (`crates/.../file.rs`, `runtime/<lang>/`)
-  where possible.
-- The spec testsuite binds behaviour (ADR-3); an ADR records *why*, never
-  a normative description that the harness already enforces.
+- An ADR records a **decision with rationale and rejected alternatives**, or a standing policy. State the *criterion* that discriminated between the options as a reusable rule, not just "we picked B".
+- A mechanical change with no live alternatives does not need an ADR — the commit message is enough.
+- **Length tracks stakes.** The common failure mode is writing too much, not too little. Move research material (surveys, comparison tables) out of the ADR and cite it; keep the ADR the decision, not the research.
+- Anchor claims to real code (`crates/.../file.rs`, `runtime/<lang>/`) where possible.
+- The spec testsuite binds behaviour (ADR-3); an ADR records *why*, never a normative description that the harness already enforces.
 
 ## Relationship to other documents
 
-- **`AGENTS.md`** — the development contract for agents (and humans)
-  working in this repository; cites ADRs where a rule needs its why.
-- **`README.md`** — user-facing overview; links here for design
-  rationale.
-- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial
-  and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30)
-  for design rationale rather than restating it.
-- **`docs/docs-policy.md`** — the doc taxonomy (which file each kind of
-  content belongs in, and why `docs/support.md` is generated, never
-  hand-edited).
+- **`AGENTS.md`** — the development contract for agents (and humans) working in this repository; cites ADRs where a rule needs its why.
+- **`README.md`** — user-facing overview; links here for design rationale.
+- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30) for design rationale rather than restating it.
+- **`docs/docs-policy.md`** — the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).

@@ -1,6 +1,4 @@
-//! Build-time expression folding: assert the IR shapes the func builder
-//! produces from small wat inputs (single-use folding, the spill rules, the
-//! node-count cap, and what ends up in `Func.temps`).
+//! Build-time expression folding: assert the IR shapes the func builder produces from small wat inputs (single-use folding, the spill rules, the node-count cap, and what ends up in `Func.temps`).
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{BinOp, Expr, Func, Stmt};
@@ -81,8 +79,7 @@ fn count_assigns(stmts: &[Stmt]) -> usize {
 
 #[test]
 fn single_use_values_fold_into_the_consumer() {
-    // add(a, b) folds to a single `return a + b`: no temps, no assigns, the
-    // return value is the composed expression.
+    // add(a, b) folds to a single `return a + b`: no temps, no assigns, the return value is the composed expression.
     let f = func(
         "(module (func (param i32 i32) (result i32)
             local.get 0 local.get 1 i32.add))",
@@ -104,8 +101,7 @@ fn single_use_values_fold_into_the_consumer() {
 
 #[test]
 fn local_set_spills_a_pending_that_reads_the_local() {
-    // The first `local.get 0` must be spilled before `local.set 0` so it keeps
-    // the old value.
+    // The first `local.get 0` must be spilled before `local.set 0` so it keeps the old value.
     let f = func(
         "(module (func (param i32) (result i32)
             local.get 0
@@ -131,8 +127,7 @@ fn local_set_spills_a_pending_that_reads_the_local() {
 
 #[test]
 fn a_call_spills_pending_memory_reads() {
-    // A pending load cannot cross the call (which may write memory), so it is
-    // spilled before the call.
+    // A pending load cannot cross the call (which may write memory), so it is spilled before the call.
     let f = func(
         "(module
             (memory 1)
@@ -161,8 +156,7 @@ fn a_call_spills_pending_memory_reads() {
 
 #[test]
 fn local_tee_folds_its_value_and_leaves_a_local_read() {
-    // tee lowers to a local.set with the value inlined; the value left on the
-    // stack folds on into the following add.
+    // tee lowers to a local.set with the value inlined; the value left on the stack folds on into the following add.
     let f = func(
         "(module (func (param i32) (result i32)
             i32.const 5 local.tee 0
@@ -187,8 +181,7 @@ fn local_tee_folds_its_value_and_leaves_a_local_read() {
 
 #[test]
 fn select_spills_a_trapping_arm() {
-    // The backends lower select to a conditionally-evaluated ternary, so a
-    // trapping `then` arm (a load) must be spilled to keep its trap eager.
+    // The backends lower select to a conditionally-evaluated ternary, so a trapping `then` arm (a load) must be spilled to keep its trap eager.
     let f = func(
         "(module (memory 1)
             (func (param i32) (result i32)
@@ -217,8 +210,7 @@ fn select_spills_a_trapping_arm() {
 
 #[test]
 fn deep_expressions_are_capped() {
-    // Chain enough adds to exceed the node cap; the builder must spill so no
-    // single expression tree grows past MAX_FOLD_SIZE, and temps appear.
+    // Chain enough adds to exceed the node cap; the builder must spill so no single expression tree grows past MAX_FOLD_SIZE, and temps appear.
     let mut body = String::from("local.get 0\n");
     for _ in 0..40 {
         body.push_str("local.get 0 i32.add\n");
@@ -237,8 +229,7 @@ fn deep_expressions_are_capped() {
 
 #[test]
 fn return_value_is_inlined_and_temps_track_materialization() {
-    // A value produced by a call is materialized (call results never fold),
-    // then that single temp is the inlined return value.
+    // A value produced by a call is materialized (call results never fold), then that single temp is the inlined return value.
     let f = func(
         "(module
             (func $g (result i32) i32.const 7)

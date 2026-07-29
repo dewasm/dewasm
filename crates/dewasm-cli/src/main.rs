@@ -20,13 +20,11 @@ struct Cli {
     #[arg(short, long, default_value = "ruby")]
     target: String,
 
-    /// Output mode: "library" exposes exports to the host language,
-    /// "standalone" wires up WASI and runs _start.
+    /// Output mode: "library" exposes exports to the host language, "standalone" wires up WASI and runs _start.
     #[arg(short, long, default_value = "library")]
     mode: String,
 
-    /// Name used for the generated class/module (defaults to the input
-    /// file stem)
+    /// Name used for the generated class/module (defaults to the input file stem)
     #[arg(long)]
     module_name: Option<String>,
 
@@ -34,24 +32,15 @@ struct Cli {
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Do not bundle the built-in WASI implementation as a fallback for
-    /// wasi_snapshot_preview1 imports (all imports must then be provided
-    /// by the embedder). Incompatible with --mode standalone.
+    /// Do not bundle the built-in WASI implementation as a fallback for wasi_snapshot_preview1 imports (all imports must then be provided by the embedder). Incompatible with --mode standalone.
     #[arg(long)]
     no_default_wasi: bool,
 
-    /// Externalize data-segment bytes into a binary sidecar written to this
-    /// path instead of embedding them as literals in the source (ADR-37).
-    /// The generated program loads the sidecar relative to itself, so keep it
-    /// next to the output file. Supported for ruby and go; incompatible with
-    /// `-o -`.
+    /// Externalize data-segment bytes into a binary sidecar written to this path instead of embedding them as literals in the source (ADR-37). The generated program loads the sidecar relative to itself, so keep it next to the output file. Supported for ruby and go; incompatible with `-o -`.
     #[arg(long)]
     data_file: Option<PathBuf>,
 
-    /// Parse the module's DWARF `.debug_*` sections and emit source-position
-    /// markers (Go `//line`, Ruby/Python comments) so generated-code stack
-    /// traces point into the original source (ADR-38). A module without DWARF
-    /// simply yields no markers.
+    /// Parse the module's DWARF `.debug_*` sections and emit source-position markers (Go `//line`, Ruby/Python comments) so generated-code stack traces point into the original source (ADR-38). A module without DWARF simply yields no markers.
     #[arg(long)]
     dwarf_line: bool,
 }
@@ -77,10 +66,7 @@ fn main() -> Result<()> {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
     }
 
-    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java only,
-    // needs a real sidecar path (not stdout). Reject the unsupported
-    // combinations at the front with a clear, attributed error rather than
-    // mis-emitting.
+    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
@@ -98,8 +84,7 @@ fn main() -> Result<()> {
                      must be written to a real path next to the generated program"
                 );
             }
-            // A --data-file resolving to the same file as -o would clobber
-            // the generated source; fail before anything is written (ADR-0).
+            // A --data-file resolving to the same file as -o would clobber the generated source; fail before anything is written (ADR-0).
             if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
                 bail!(
                     "--data-file {} resolves to the same file as the output path {}: \
@@ -137,8 +122,7 @@ fn main() -> Result<()> {
         default_wasi: !cli.no_default_wasi,
         data_file,
     };
-    // Component-model binaries (layer 1) are out of scope (ADR-24): reject
-    // them at conversion time with a clear, attributed error (ADR-0).
+    // Component-model binaries (layer 1) are out of scope (ADR-24): reject them at conversion time with a clear, attributed error (ADR-0).
     if dewasm_core::is_component(&bytes) {
         return Err(dewasm_core::feature::UnsupportedError::new(
             dewasm_core::feature::Feature::ComponentModel,
@@ -154,14 +138,9 @@ fn main() -> Result<()> {
     )?;
     let files = backend.generate(&module, &opts)?;
 
-    // Route by name: the data sidecar (its `name` is the configured
-    // `sidecar_name`) goes to `--data-file`'s path, the primary source to
-    // `-o` (ADR-37).
+    // Route by name: the data sidecar (its `name` is the configured `sidecar_name`) goes to `--data-file`'s path, the primary source to `-o` (ADR-37).
     let sidecar_name = opts.data_file.as_ref().map(|c| c.sidecar_name.as_str());
-    // A generated source sharing `sidecar_name` (e.g. java's fixed
-    // `Main.java`) would be misrouted and clobbered: `matching > 1` = source
-    // and sidecar collide, `matching == files.len()` = no sidecar emitted and
-    // the match is the source itself (ADR-0).
+    // A generated source sharing `sidecar_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and sidecar collide, `matching == files.len()` = no sidecar emitted and the match is the source itself (ADR-0).
     if let Some(name) = sidecar_name {
         let matching = files.iter().filter(|f| f.name == name).count();
         if matching > 1 || matching == files.len() {
@@ -193,9 +172,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Canonicalize for the --data-file/-o collision check (the file, else
-/// parent + final component, else cwd-anchored absolute) so differently
-/// spelled paths compare equal.
+/// Canonicalize for the --data-file/-o collision check (the file, else parent + final component, else cwd-anchored absolute) so differently spelled paths compare equal.
 fn resolve_for_collision(path: &Path) -> PathBuf {
     if let Ok(resolved) = path.canonicalize() {
         return resolved;
