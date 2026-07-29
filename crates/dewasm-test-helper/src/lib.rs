@@ -52,8 +52,8 @@ pub use qjs_repl::{
 };
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
-    run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone, WasiCase,
-    WasiCheck, WasiKind, WASI_CASES,
+    run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,
+    WasiCase, WasiCheck, WasiKind, WASI_CASES,
 };
 pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
 pub use wasmtime_backend::Wasmtime;
@@ -200,6 +200,24 @@ macro_rules! standalone_dir_e2e {
         #[test]
         fn standalone_dir() {
             $crate::run_standalone_dir(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid
+/// guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame
+/// recursion) standalone, run it, and require the guest's `proc_exit(42)` as
+/// the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No
+/// glue — this exercises the emitted entrypoint itself. Wired by Python, whose
+/// entrypoint applies ADR-28's mitigation (issue #31); each other backend's
+/// host recursion depth is its own concern — it invokes this once its
+/// entrypoint needs (and has) such a mitigation.
+#[macro_export]
+macro_rules! deep_recursion_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn deep_recursion() {
+            $crate::run_deep_recursion(&$lang);
         }
     };
 }

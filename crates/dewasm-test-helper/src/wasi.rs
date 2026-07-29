@@ -368,6 +368,37 @@ pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
     );
 }
 
+/// Run the deep-recursion standalone case (`deep_recursion_e2e!`): convert
+/// `deep_recursion.wat` — whose `_start` recurses 5000 wasm frames, far past
+/// e.g. CPython's default ~1000-frame recursion limit — in *standalone* mode
+/// and run it with no arguments. The generated entrypoint must survive the
+/// recursion (Python: ADR-28's raised recursion limit plus a big-stack guest
+/// thread) and still surface the guest's `proc_exit(42)` as the process exit
+/// code (ADR-31). Like `run_standalone_dir`, this exercises the emitted
+/// entrypoint itself, so no glue.
+pub fn run_deep_recursion(lang: &dyn BackendUnderTest) {
+    let src = convert(
+        lang.backend(),
+        &examples_dir().join("deep_recursion.wat"),
+        Mode::Standalone,
+        "deep_recursion",
+    );
+    let output = lang.run(&src, &[], "");
+    assert_eq!(
+        output.status.code(),
+        Some(42),
+        "deep_recursion under {}: exit code\n{}",
+        lang.name(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "",
+        "deep_recursion under {}: stdout",
+        lang.name()
+    );
+}
+
 /// Run the root-preopen containment probe (`wasi_root_containment_e2e!`): a
 /// preopen whose realpath is the filesystem root must not reject every path
 /// (the containment check would otherwise build the prefix "//" and never
