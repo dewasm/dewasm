@@ -239,6 +239,11 @@ impl Backend for PythonBackend {
         w.line("import select");
         w.line("import struct");
         w.line("import sys");
+        if opts.mode == Mode::Standalone {
+            // Backs the ADR-28 big-stack guest thread in the standalone
+            // entrypoint below; library mode never needs it.
+            w.line("import threading");
+        }
         w.line("import time");
         // Externalized data blob (ADR-37): read once at import time from the
         // sidecar next to this module, then sliced by the generated
@@ -310,9 +315,47 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
+            // Deep-but-valid guest recursion needs far more than CPython's
+            // default ~1000-frame limit, and raising the limit alone risks a
+            // C-stack overflow, so the guest runs on a big-stack thread with a
+            // raised recursion limit — the same values the spec harness uses
+            // (ADR-28). The thread carries any exception back so proc_exit and
+            // traps still resolve to ADR-31's exit codes via `sys.exit` on the
+            // main thread. A daemon thread lets a KeyboardInterrupt delivered
+            // to the main thread (blocked in `join`) exit the process without
+            // waiting for the guest, as when the guest ran on the main thread.
+            w.line("_err = []");
+            w.line("");
+            w.line("def _run():");
+            w.indent();
             w.line("try:");
             w.indent();
             w.line("_inst.invoke(\"_start\")");
+            w.dedent();
+            w.line("except BaseException as _e:");
+            w.indent();
+            w.line("_err.append(_e)");
+            w.dedent();
+            w.dedent();
+            w.line("");
+            w.line("sys.setrecursionlimit(1000000)");
+            w.line("try:");
+            w.indent();
+            w.line("threading.stack_size(512 * 1024 * 1024)");
+            w.dedent();
+            w.line("except (ValueError, OverflowError, RuntimeError):");
+            w.indent();
+            w.line("pass");
+            w.dedent();
+            w.line("_t = threading.Thread(target=_run, daemon=True)");
+            w.line("_t.start()");
+            w.line("_t.join()");
+            w.line("try:");
+            w.indent();
+            w.line("if _err:");
+            w.indent();
+            w.line("raise _err[0]");
+            w.dedent();
             w.line("sys.exit(0)");
             w.dedent();
             w.line("except Rt.Exit as _e:");

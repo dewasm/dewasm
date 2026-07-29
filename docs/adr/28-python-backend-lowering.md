@@ -23,6 +23,10 @@ uses `os.listdir`, and the errno map keys on `OSError.errno` (the `errno`
 module) rather than exception classes. With this, `has_wasi_p1` reports the
 same surface as Ruby, and the shared WASI `Fs` suite plus the gzip byte-stdio
 and heavy filesystem app cases (QuickJS, SQLite, ripgrep) run under Python.
+**Revision, 2026-07-29 (issue #31):** the recursion/exhaustion mitigation below
+is no longer harness-only — the emitted standalone entrypoint applies the same
+raised recursion limit and big-stack guest thread itself, carrying the guest's
+exit/trap back to the main thread so ADR-31's exit codes are unchanged.
 
 ## Context
 
