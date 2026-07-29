@@ -14,13 +14,26 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   follow = dirflags & 0x1 != 0 # lookupflags::SYMLINK_FOLLOW
   host_path, err = resolve_path(dirfd, rel, follow_last: follow)
   return err if err
+  # resolve_path preserves a trailing slash (issue #42); this unit's own
+  # probes and branches decide everything the slash implies, so work on the
+  # stripped path (stat on "file/" fails ENOTDIR and would misreport every
+  # probe below).
+  trailing = host_path.end_with?("/")
+  host_path = host_path.delete_suffix("/")
   # Without SYMLINK_FOLLOW, a symlink at the final component is an error
   # (the caller asked us not to traverse it).
   return ERRNO_LOOP if !follow && File.symlink?(host_path)
 
   exists = File.exist?(host_path) || File.symlink?(host_path)
-  # A trailing slash demands a directory.
-  return ERRNO_NOTDIR if rel.end_with?("/") && exists && !File.directory?(host_path)
+  if trailing
+    # A trailing slash demands a directory. A nonexistent target is ENOENT
+    # even with O_CREAT — open(2) cannot create a directory — normalized
+    # here because the hosts disagree on the O_CREAT shape (macOS/POSIX
+    # ENOENT, Linux EISDIR) and letting it fall through would create a
+    # plain *file* through the slash.
+    return ERRNO_NOENT unless exists
+    return ERRNO_NOTDIR unless File.directory?(host_path)
+  end
 
   wants_dir = oflags & 0x2 != 0 # oflags::DIRECTORY
   parent_inheriting = @fd_meta[dirfd][1]

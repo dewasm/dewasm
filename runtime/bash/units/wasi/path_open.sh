@@ -37,6 +37,15 @@ wasi_path_open() {
   if (( (__oflags & 0x8) && (__dir_base & 0x80000) == 0 )); then R0=76; return 0; fi # TRUNC needs PATH_FILESTAT_SET_SIZE
   # A symlink final component that was not followed cannot be opened (D3).
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
+  # A slash-suffixed name may only resolve to a directory (issue #42); an
+  # existing non-directory was already ENOTDIR in resolve_path. A nonexistent
+  # one is ENOENT even with O_CREAT — open(2) cannot create a directory —
+  # normalized here (macOS/POSIX ENOENT, Linux EISDIR), so the create branch
+  # below can never manufacture a plain *file* through the slash.
+  if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
+    R0=44 # ENOENT
+    return 0
+  fi
   local __fd=$__wnext
   if (( __oflags & 0x2 )) || { [[ ! -h $__host ]] && [[ -d $__host ]]; }; then
     if (( __oflags & 0x2 )); then

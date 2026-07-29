@@ -16,6 +16,14 @@ wasi_path_create_directory() {
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?
   if (( R0 != 0 )); then return 0; fi
   local __rel=$R1
+  # mkdir names a directory by definition, so a trailing slash adds nothing
+  # but divergent errnos (the reference hosts split ENOTDIR/EEXIST on
+  # "file/"): strip it — before resolve_path's directory gate — so the
+  # existing-target probe below reports EEXIST uniformly and "sub/" still
+  # creates (issue #42).
+  local __stripped=$__rel
+  while [[ $__stripped == */ ]]; do __stripped=${__stripped%/}; done
+  [[ -n $__stripped ]] && __rel=$__stripped
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" 0 || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1

@@ -19,6 +19,19 @@ int wasi_path_rename(int oldDirfd, int oldPathPtr, int oldPathLen, int newDirfd,
     }
     java.nio.file.Path oldP = java.nio.file.Paths.get(oldR.path);
     java.nio.file.Path newP = java.nio.file.Paths.get(newR.path);
+    // A slash-suffixed destination may only name an existing directory or one
+    // the rename itself creates from a directory source (POSIX pathname
+    // resolution; issue #42). resolve_path already reported ENOTDIR for an
+    // existing non-directory; the nonexistent case must not fall through — the
+    // resolved path has lost the slash, so Files.move would silently create a
+    // plain *file* at the name. ENOENT is the macOS/POSIX errno (Linux would
+    // say ENOTDIR), the choice the other backends normalize to
+    // (runtime/bash/units/wasi/path_rename.sh).
+    if (newRel.endsWith("/")
+        && !java.nio.file.Files.exists(newP, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+        && !java.nio.file.Files.isDirectory(oldP, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+        return WASI_NOENT;
+    }
     // rename(2) reports type mismatches between the endpoints with specific
     // errnos that Java's generic FileSystemException flattens to EIO, so
     // pre-check them: renaming a directory onto an existing non-directory is

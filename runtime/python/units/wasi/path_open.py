@@ -33,6 +33,12 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
         flags |= os.O_EXCL
     if oflags & 0x8 != 0:  # oflags::TRUNC
         flags |= os.O_TRUNC
+    # A trailing slash may only resolve to a directory (issue #42). An existing
+    # non-directory is ENOTDIR from the host open below; the nonexistent case
+    # is normalized to ENOENT here — open(2) cannot create a directory, and the
+    # hosts disagree on the O_CREAT shape (macOS/POSIX ENOENT, Linux EISDIR).
+    if host_path.endswith(os.sep) and not os.path.lexists(host_path[:-1]):
+        return self.ERRNO_NOENT
     try:
         fd = os.open(host_path, flags, 0o644)
     except OSError as e:

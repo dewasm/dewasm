@@ -9,6 +9,12 @@ int wasi_path_unlink_file(int dirfd, int pathPtr, int pathLen) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
+    // A missing slash-suffixed target is ENOENT, not ENOTDIR: resolve_path's
+    // directory gate only rejects *existing* non-directories (issue #42).
+    if (rel.endsWith("/")
+        && !java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+        return WASI_NOENT;
+    }
     // Files.delete would remove an empty directory; unlink must fail (EISDIR)
     // on any directory, so pre-check.
     if (java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {

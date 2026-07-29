@@ -49,6 +49,15 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if strings.HasPrefix(rel, "/") {
         return "", wasiNotcapable
     }
+    // A trailing slash constrains the final component to a directory (POSIX
+    // pathname resolution; issue #42). filepath.Join Cleans it away *after*
+    // the final-component bookkeeping below would have misread "" as the last
+    // component (silently degrading followLast), so strip it up front and
+    // re-check the constraint against the resolved target before returning.
+    trailing := strings.HasSuffix(rel, "/")
+    if trailing {
+        rel = strings.TrimRight(rel, "/")
+    }
     base := entry.hostPath
     joined := filepath.Join(base, rel)
     // Lexical containment on the cleaned path, before touching the filesystem:
@@ -74,7 +83,11 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         if !w.within(base, realParent) {
             return "", wasiNotcapable
         }
-        return filepath.Join(realParent, last), wasiOk
+        host := filepath.Join(realParent, last)
+        if e := w.trailingDirGate(trailing, host); e != wasiOk {
+            return "", e
+        }
+        return host, wasiOk
     }
     if _, err := os.Lstat(joined); err == nil {
         real, err := filepath.EvalSymlinks(joined)
@@ -85,6 +98,9 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         }
         if !w.within(base, real) {
             return "", wasiNotcapable
+        }
+        if e := w.trailingDirGate(trailing, real); e != wasiOk {
+            return "", e
         }
         return real, wasiOk
     }
@@ -99,4 +115,20 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         return "", wasiNotcapable
     }
     return filepath.Join(realParent, filepath.Base(joined)), wasiOk
+}
+
+// trailingDirGate enforces the trailing-slash constraint on a resolved host
+// path: a slash-suffixed guest name may only resolve to a directory, so an
+// existing non-directory target is ENOTDIR (issue #42). os.Stat follows
+// symlinks — the slash forces following, so "link-to-file/" is ENOTDIR while
+// "link-to-dir/" passes. A missing target passes too: which errno (or
+// success, for a create) that becomes is each syscall's own business.
+func (w *WASI) trailingDirGate(trailing bool, host string) uint32 {
+    if !trailing {
+        return wasiOk
+    }
+    if fi, err := os.Stat(host); err == nil && !fi.IsDir() {
+        return wasiNotdir
+    }
+    return wasiOk
 }

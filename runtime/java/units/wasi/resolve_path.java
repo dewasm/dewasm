@@ -53,13 +53,31 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
+    // A trailing slash constrains the final component to a directory (POSIX
+    // pathname resolution; issue #42). Paths.get has already normalized it
+    // away — no later host call could enforce it — so enforce it here:
+    // Files.exists/isDirectory follow symlinks, exactly as the slash forces,
+    // so "link-to-file/" is ENOTDIR while "link-to-dir/" passes. A missing
+    // target falls through: which errno (or success, for a create) that
+    // becomes is each syscall's own business. The slash is also stripped from
+    // the final-component bookkeeping below, which would otherwise misread ""
+    // as the last component and silently degrade followLast.
+    boolean trailing = rel.endsWith("/");
+    String core = rel;
+    while (core.endsWith("/")) {
+        core = core.substring(0, core.length() - 1);
+    }
+    if (trailing && java.nio.file.Files.exists(joined)
+        && !java.nio.file.Files.isDirectory(joined)) {
+        return new Resolved(null, WASI_NOTDIR);
+    }
     // The final component as the *guest* wrote it (not joined.getFileName(),
     // which has Cleaned "." / ".." away). A trailing "." or ".." is never a
     // symlink, so those fall through to full resolution.
-    String last = rel;
-    int idx = rel.lastIndexOf('/');
+    String last = core;
+    int idx = core.lastIndexOf('/');
     if (idx >= 0) {
-        last = rel.substring(idx + 1);
+        last = core.substring(idx + 1);
     }
     if (!followLast && !last.equals(".") && !last.equals("..") && !last.isEmpty()) {
         java.nio.file.Path parent = joined.getParent();
