@@ -1,5 +1,7 @@
 # dewasm
 
+![logo](./assets/dewasm_logo_hex_gradient.png)
+
 dewasm translates a WebAssembly binary into the **source code** of an
 ordinary programming language. The generated file embeds a small runtime and
 needs no wasm engine at all: a program compiled from C, C++, Rust, or Zig to
