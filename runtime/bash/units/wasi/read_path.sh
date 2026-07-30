@@ -11,9 +11,10 @@ wasi_read_path() {
   local -n __m=${__p}mem
   mem_check "$__p" "$__ptr" "$__len" || return $?
   local LC_ALL=C
-  local __i __b __hh __fmt=''
+  local __i __b __hh __fmt='' __mk
   for (( __i = 0; __i < __len; __i++ )); do
-    __b=$(( __m[__ptr + __i] & 0xff ))
+    __mk=$(( __ptr + __i ))
+    __b=$(( __m[$__mk] & 0xff ))
     if (( __b == 0 )); then
       R0=25 # EILSEQ: embedded NUL in path
       return 0

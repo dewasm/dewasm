@@ -19,7 +19,7 @@ wasi_fd_read() {
     return 0
   fi
   local LC_ALL=C
-  local __i __j __ptr __len __total=0
+  local __i __j __ptr __len __total=0 __mk
   if [[ $__kind == 2 ]]; then
     local -n __wrbase=${__p}wrbase
     if (( (__wrbase[$__fd] & 0x2) == 0 )); then
@@ -36,7 +36,8 @@ wasi_fd_read() {
       if (( __len == 0 )); then continue; fi
       mem_check "$__p" "$__ptr" "$__len" || return $?
       for (( __j = 0; __j < __len && __pos < __buflen; __j++ )); do
-        __m[__ptr + __j]=$(( __buf[__pos] & 0xff ))
+        __mk=$(( __ptr + __j ))
+        __m[$__mk]=$(( __buf[__pos] & 0xff ))
         (( __pos++, __total++ ))
       done
     done
@@ -82,7 +83,8 @@ wasi_fd_read() {
           printf -v __b '%d' "'$__ch"
         fi
       fi
-      __m[__ptr + __j]=$(( __b & 0xff ))
+      __mk=$(( __ptr + __j ))
+      __m[$__mk]=$(( __b & 0xff ))
       (( __total += 1 ))
     done
   done

@@ -20,10 +20,11 @@ wasi_fd_prestat_dir_name() {
     return 0
   fi
   mem_check "$__p" "$__path_ptr" "$__n" || return $?
-  local __i __b
+  local __i __b __mk
   for (( __i = 0; __i < __n; __i++ )); do
     printf -v __b '%d' "'${__name:__i:1}"
-    __m[__path_ptr + __i]=$(( __b & 0xff ))
+    __mk=$(( __path_ptr + __i ))
+    __m[$__mk]=$(( __b & 0xff ))
   done
   R0=0
   return 0

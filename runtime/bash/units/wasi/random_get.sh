@@ -6,7 +6,7 @@ wasi_random_get() {
   local -n __m=${__p}mem
   mem_check "$__p" "$__ptr" "$__len" || return $?
   local LC_ALL=C
-  local __i __ch __b
+  local __i __ch __b __mk
   for (( __i = 0; __i < __len; __i++ )); do
     IFS= read -r -d '' -n 1 __ch || __ch=''
     if [[ -z $__ch ]]; then
@@ -14,7 +14,8 @@ wasi_random_get() {
     else
       printf -v __b '%d' "'$__ch"
     fi
-    __m[__ptr + __i]=$(( __b & 0xff ))
+    __mk=$(( __ptr + __i ))
+    __m[$__mk]=$(( __b & 0xff ))
   done < /dev/urandom
   R0=0
   return 0

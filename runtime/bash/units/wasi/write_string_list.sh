@@ -7,7 +7,7 @@ wasi_write_string_list() {
   local -n __m=${__p}mem
   local -n __strs=$2
   local LC_ALL=C
-  local __i __j __s __n __b
+  local __i __j __s __n __b __mk
   for (( __i = 0; __i < ${#__strs[@]}; __i++ )); do
     __s=${__strs[__i]}
     __n=${#__s}
@@ -15,9 +15,11 @@ wasi_write_string_list() {
     mem_check "$__p" "$__buf_ptr" $(( __n + 1 )) || return $?
     for (( __j = 0; __j < __n; __j++ )); do
       printf -v __b '%d' "'${__s:__j:1}"
-      __m[__buf_ptr + __j]=$(( __b & 0xff ))
+      __mk=$(( __buf_ptr + __j ))
+      __m[$__mk]=$(( __b & 0xff ))
     done
-    __m[__buf_ptr + __n]=0
+    __mk=$(( __buf_ptr + __n ))
+    __m[$__mk]=0
     (( __buf_ptr += __n + 1 ))
   done
   R0=0

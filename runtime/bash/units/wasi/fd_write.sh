@@ -19,7 +19,7 @@ wasi_fd_write() {
     return 0
   fi
   local LC_ALL=C
-  local __i __j __ptr __len __total=0
+  local __i __j __ptr __len __total=0 __mk
   if [[ $__kind == 2 ]]; then
     local -n __wrbase=${__p}wrbase
     local -n __wapp=${__p}wapp
@@ -42,7 +42,8 @@ wasi_fd_write() {
         __buf[__blen]=0
       done
       for (( __j = 0; __j < __len; __j++ )); do
-        __buf[__pos]=$(( __m[__ptr + __j] & 0xff ))
+        __mk=$(( __ptr + __j ))
+        __buf[__pos]=$(( __m[$__mk] & 0xff ))
         (( __pos++, __total++ ))
       done
     done
@@ -66,7 +67,8 @@ wasi_fd_write() {
     mem_check "$__p" "$__ptr" "$__len" || return $?
     __bytes=()
     for (( __j = 0; __j < __len; __j++ )); do
-      __bytes+=("$(( __m[__ptr + __j] ))")
+      __mk=$(( __ptr + __j ))
+      __bytes+=("$(( __m[$__mk] ))")
     done
     printf -v __chunk '\\x%02x' "${__bytes[@]}"
     __out+=$__chunk

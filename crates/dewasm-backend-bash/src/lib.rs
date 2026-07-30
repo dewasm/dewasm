@@ -365,7 +365,8 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}memown=$RESOLVED"));
         }
         if let Some(mem) = &m.memory {
-            w.line(format!("{p}mem=()"));
+            // Linear memory is an *associative* array, one byte per element (ADR-51): bash indexed arrays are linked lists (O(distance) access), assoc arrays are hash tables (O(1)), which is ~110x faster on the random multi-MB access real apps do. `declare -gA` (never plain `<p>mem=()`, which would create an indexed array) with `=()` also empties any array a re-instantiation left behind.
+            w.line(format!("declare -gA {p}mem=()"));
             w.line(format!("{p}pages={}", mem.min_pages));
             w.line(format!("{p}max_pages={}", mem.max_pages.unwrap_or(65536)));
             w.line(format!("{p}memown={p}"));

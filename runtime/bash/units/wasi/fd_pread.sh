@@ -30,7 +30,7 @@ wasi_fd_pread() {
   local -n __buf=${__p}wbuf${__fd}
   local __buflen=${#__buf[@]}
   local LC_ALL=C
-  local __i __j __ptr __len __total=0 __pos=$__offset
+  local __i __j __ptr __len __total=0 __pos=$__offset __mk
   for (( __i = 0; __i < __iovs_len && __pos < __buflen; __i++ )); do
     mem_i32_load "$__p" $(( __iovs + __i * 8 )) || return $?
     __ptr=$R0
@@ -39,7 +39,8 @@ wasi_fd_pread() {
     if (( __len == 0 )); then continue; fi
     mem_check "$__p" "$__ptr" "$__len" || return $?
     for (( __j = 0; __j < __len && __pos < __buflen; __j++ )); do
-      __m[__ptr + __j]=$(( __buf[__pos] & 0xff ))
+      __mk=$(( __ptr + __j ))
+      __m[$__mk]=$(( __buf[__pos] & 0xff ))
       (( __pos++, __total++ ))
     done
   done

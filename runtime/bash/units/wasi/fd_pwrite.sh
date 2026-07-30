@@ -29,7 +29,7 @@ wasi_fd_pwrite() {
   local -n __wdirty=${__p}wdirty
   local -n __buf=${__p}wbuf${__fd}
   local LC_ALL=C
-  local __i __j __ptr __len __total=0 __pos=$__offset __blen
+  local __i __j __ptr __len __total=0 __pos=$__offset __blen __mk
   for (( __i = 0; __i < __iovs_len; __i++ )); do
     mem_i32_load "$__p" $(( __iovs + __i * 8 )) || return $?
     __ptr=$R0
@@ -41,7 +41,8 @@ wasi_fd_pwrite() {
       __buf[__blen]=0
     done
     for (( __j = 0; __j < __len; __j++ )); do
-      __buf[__pos]=$(( __m[__ptr + __j] & 0xff ))
+      __mk=$(( __ptr + __j ))
+      __buf[__pos]=$(( __m[$__mk] & 0xff ))
       (( __pos++, __total++ ))
     done
   done
