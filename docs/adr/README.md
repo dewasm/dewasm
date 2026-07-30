@@ -63,6 +63,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
 | ADR-48 | [Two-Tier Slow-Test Gating (slow_test / ultra_slow_test)](48-slow-test-tiers.md) | Accepted |
 | ADR-49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
+| ADR-50 | [DOOM Demo: One Wasm Binary, Per-Language Native Frontends](50-doom-example-shape.md) | Accepted |
 
 ## Adding a new ADR
 
