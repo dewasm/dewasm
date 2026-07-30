@@ -32,10 +32,11 @@ wasi_path_readlink() {
   __n=$__tlen
   if (( __n > __buf_len )); then __n=$__buf_len; fi
   mem_check "$__p" "$__buf_ptr" "$__n" || return $?
-  local __i __b
+  local __i __b __mk
   for (( __i = 0; __i < __n; __i++ )); do
     printf -v __b '%d' "'${__target:__i:1}"
-    __m[__buf_ptr + __i]=$(( __b & 0xff ))
+    __mk=$(( __buf_ptr + __i ))
+    __m[$__mk]=$(( __b & 0xff ))
   done
   mem_i32_store "$__p" "$__bufused_ptr" "$__n" || return $?
   R0=0

@@ -64,6 +64,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-48 | [Two-Tier Slow-Test Gating (slow_test / ultra_slow_test)](48-slow-test-tiers.md) | Accepted |
 | ADR-49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
 | ADR-50 | [DOOM Demo: One Wasm Binary, Per-Language Native Frontends](50-doom-example-shape.md) | Accepted |
+| ADR-51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |
 
 ## Adding a new ADR
 

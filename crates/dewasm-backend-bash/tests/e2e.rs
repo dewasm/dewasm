@@ -74,9 +74,10 @@ const BASH_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   mem_i32_load prog_ $(( $2 + 4 )) || return $?
   local len=$R0
   local -n mem=prog_mem
-  local out='' chunk bytes=() j
+  local out='' chunk bytes=() j k
   for (( j = 0; j < len; j++ )); do
-    bytes+=("$(( mem[ptr + j] ))")
+    k=$(( ptr + j ))
+    bytes+=("$(( mem[$k] ))")
   done
   printf -v chunk '\\x%02x' "${bytes[@]}"
   out+=$chunk
