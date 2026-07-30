@@ -24,6 +24,12 @@ This is only feasible at all because of two prior perf changes to the Bash backe
 
 builds and takes over the terminal (alternate screen, hidden cursor, raw input) — budget about two minutes before the title screen even appears, and expect roughly one rendered frame every 34 seconds after that. `./run.sh --smoke` instead runs a headless self-check: it inits the game, ticks it twice (not 60 — at 34s/tick that alone is over a minute), sanity-checks the last frame, writes it to `screenshot.ppm` (ASCII PPM, P3 — plain text, so there's no risk of a stray NUL corrupting it, and Bash has no binary-safe way to write P6 cleanly either), and exits non-zero on failure. The whole self-check takes 4-5 minutes; it prints a progress line before every phase specifically so a few minutes of silence never look like a hang.
 
+## Single-file distribution
+
+`./dist.sh` builds `doom.bash`: the frontend with the generated library inlined behind a provenance header — one 19MB script that runs anywhere with bash >= 5, no dewasm checkout needed. A prebuilt copy is published as a Gist: **https://gist.github.com/makenowjust/b1e9c2a585183f41a5f8f61b4bc9924c**
+
+It is a Gist rather than a file in this repository on purpose: dewasm is MIT, but the built artifact embeds the GPL-2.0 DOOM engine (doomgeneric, via jacobenget/doom.wasm) and the shareware WAD, so it is distributed separately under the engine's terms, with the attribution and license notes in its header.
+
 ## Rendering
 
 Same half-block trick as `../ruby` and `../python`: each terminal cell shows two vertically-stacked source pixels as `▀`, colored with 24-bit truecolor SGR (`\e[38;2;R;G;Bm` for the top pixel, `\e[48;2;R;G;Bm` for the bottom). DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200) lives in `doom_mem`, the module's linear memory — a plain Bash associative array, one byte per address, read directly rather than copied out through a runtime call, so the renderer just samples it.

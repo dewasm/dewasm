@@ -6,7 +6,7 @@ One DOOM, two languages: the unmodified [jacobenget/doom.wasm](https://github.co
 - [`java/`](java/) — Java, rendering with Swing (plain JDK, zero dependencies)
 - [`ruby/`](ruby/) — Ruby, rendering *into the terminal* as 24-bit-color ANSI half-blocks (stdlib only, run with `--yjit`)
 - [`python/`](python/) — Python, the same terminal renderer (stdlib only; a proof of life at ~1.3 ticks/sec, not a game you can win)
-- [`bash/`](bash/) — pure Bash, same terminal renderer; ~2 minutes to boot and ~34 seconds per frame, an existence proof and likely a first
+- [`bash/`](bash/) — pure Bash, same terminal renderer; ~2 minutes to boot and ~34 seconds per frame, an existence proof and likely a first (also available as a [single-file `doom.bash` Gist](https://gist.github.com/makenowjust/b1e9c2a585183f41a5f8f61b4bc9924c) — separate from this MIT repo because the built artifact embeds the GPL-2.0 engine)
 
 Each frontend implements the same ten imports (framebuffer hand-off, monotonic clock, WAD loading, save games, console logging) in its own language and drives the exported `initGame`/`tickGame`/`reportKeyDown`/`reportKeyUp`. The wasm module is the portable artifact; only the host layer differs ([ADR-50](../../docs/adr/50-doom-example-shape.md)).
 
