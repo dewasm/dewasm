@@ -1,6 +1,6 @@
 # ADR-50 — DOOM Demo: One Wasm Binary, Per-Language Native Frontends
 
-Status: **Accepted, 2026-07-30.** `examples/doom` runs the unmodified [jacobenget/doom.wasm](https://github.com/jacobenget/doom.wasm) v0.1.0 release binary through `--mode library`, with an ebiten frontend for the Go backend and a Swing frontend for the Java backend; both pass a headless smoke that renders a real frame well above DOOM's native 35Hz tic rate.
+Status: **Accepted, 2026-07-30.** `examples/doom` runs the unmodified [jacobenget/doom.wasm](https://github.com/jacobenget/doom.wasm) v0.1.0 release binary through `--mode library`, with an ebiten frontend for the Go backend and a Swing frontend for the Java backend; both pass a headless smoke that renders a real frame well above DOOM's native 35Hz tic rate. Extended the same day with Ruby and Python frontends that render into the terminal (ANSI truecolor half-blocks, stdlib only) — the same criterion applied at slower tick rates, where a pixel window would be pointless but a diffed terminal frame costs under 1ms.
 
 ## Context
 
@@ -20,4 +20,4 @@ Convert **one upstream release binary, unmodified, once per language**, and impl
 
 - Positive: first interactive, real-time proof of the Go and Java backends (measured headless: ~70 and ~55 ticks/sec against DOOM's 35Hz target); a reference embedding for the library-mode import surface in both languages, complementing [ADR-45](45-rails-sqlite3-shim-example.md)'s export-driven shape.
 - Negative: the example is unguarded by CI (network fetch, GUI); upstream doom.wasm is pinned to v0.1.0 and interface drift would surface only when someone reruns `build.sh`. No sound — the module exposes no audio interface.
-- Carry-over: the same converted library boots under the Ruby and Python backends (measured ~15 ticks/sec under YJIT, ~1.3 under CPython), so a future perf-motivated Ruby/Python frontend needs only a new host layer, per the criterion.
+- Carry-over: the Ruby (~15 ticks/sec under YJIT) and Python (~1.3) frontends confirmed the criterion — each was a new host layer only, with the guest untouched. The terminal renderer doubles as the frontend shape for any future backend too slow for a window (Bash being the open question).
