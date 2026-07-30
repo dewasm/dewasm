@@ -40,7 +40,7 @@ inst = Add.new
 inst.invoke("add", 2, 3) # => 5
 ```
 
-This scales to real libraries too: `dewasm` converts SQLite itself to pure Ruby in [examples/rails](examples/rails), which drives a minimal Rails app with it as the only database engine. And it is not limited to command-line software: [examples/doom](examples/doom) converts DOOM to pure Go and pure Java and plays it in a window — and to pure Ruby and pure Python, played right in the terminal via ANSI art — with each language supplying its own rendering and input on top of the same wasm binary.
+This scales to real libraries too: `dewasm` converts SQLite itself to pure Ruby in [examples/rails](examples/rails), which drives a minimal Rails app with it as the only database engine. And it is not limited to command-line software: [examples/doom](examples/doom) converts DOOM to pure Go and pure Java and plays it in a window — and to pure Ruby, pure Python, and even pure Bash, played right in the terminal via ANSI art — with each language supplying its own rendering and input on top of the same wasm binary.
 
 Finally, a quick summary of `dewasm`'s features:
 
