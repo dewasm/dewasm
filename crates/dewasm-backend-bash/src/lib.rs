@@ -739,16 +739,15 @@ impl<'a> Gen<'a> {
                 value,
                 offset,
             } => {
-                let a = self.addr(w, addr, *offset);
-                let v = self.value(w, value);
                 let method = store_method(*op);
-                self.use_unit(&format!("mem/{method}"));
-                w.line(format!(
-                    "mem_{method} {} {} {} || return $?",
-                    self.prefix,
-                    cmd_arg(&a),
-                    cmd_arg(&v)
-                ));
+                let ea = self.eff_addr(w, addr, *offset);
+                let vfrag = self.value(w, value);
+                let v = self.as_var(w, &vfrag);
+                self.mem_bounds(w, &ea, access_bytes(method));
+                let mem = format!("{}mem", self.prefix);
+                for line in store_inline_stmts(method, &mem, &ea, &v) {
+                    w.line(line);
+                }
             }
             Stmt::Block { label, body } => {
                 if label.referenced {
@@ -1050,18 +1049,47 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Memory address fragment with the static offset folded in.
-    fn addr(&self, w: &mut CodeWriter, addr: &Expr, offset: u64) -> String {
+    /// Effective-address var for an inline mem access: the load/store address
+    /// with the static offset folded in (base+offset in the unsigned 33-bit
+    /// range fits bash's signed 64), snapshotted into a plain var so the bounds
+    /// check and every byte subscript share one canonical decimal key source.
+    fn eff_addr(&self, w: &mut CodeWriter, addr: &Expr, offset: u64) -> String {
         let a = self.value(w, addr);
-        if offset == 0 {
+        let frag = if offset == 0 {
             a
         } else {
-            format!("(({a}) + {offset})")
-        }
+            format!("({a}) + {offset}")
+        };
+        self.as_var(w, &frag)
+    }
+
+    /// Inline out-of-bounds check preserving the trap protocol (ADR-11):
+    /// compare the effective address against `pages * 65536` (a nameref read
+    /// for imported memory, so `memory.grow` on the owner is reflected) and
+    /// cascade status 134 on failure.
+    fn mem_bounds(&self, w: &mut CodeWriter, ea: &str, n: u32) {
+        self.use_unit("rt/trap");
+        let p = self.prefix;
+        w.line(format!(
+            "if (( {ea} + {n} > {p}pages * 65536 )); then rt_trap 'out of bounds memory access'; return $?; fi"
+        ));
+    }
+
+    /// Emit an inline load (address snapshot + bounds check), returning the
+    /// arithmetic fragment that composes its value directly from memory.
+    fn inline_load(&self, w: &mut CodeWriter, op: LoadOp, addr: &Expr, offset: u64) -> String {
+        let method = load_method(op);
+        let ea = self.eff_addr(w, addr, offset);
+        self.mem_bounds(w, &ea, access_bytes(method));
+        load_inline_expr(method, &format!("{}mem", self.prefix), &ea)
     }
 
     fn emit_assign(&self, w: &mut CodeWriter, dst: &str, expr: &Expr) {
         if let Some(frag) = self.arith(expr) {
+            w.line(format!("(( {dst} = {frag} ))"));
+        } else if let Expr::Load { op, addr, offset } = expr {
+            // Load straight into the destination, skipping the R0 hop.
+            let frag = self.inline_load(w, *op, addr, *offset);
             w.line(format!("(( {dst} = {frag} ))"));
         } else if self.emit_command(w, expr) {
             w.line(format!("(( {dst} = R0 ))"));
@@ -1098,15 +1126,10 @@ impl<'a> Gen<'a> {
                 self.grab_r0(w)
             }
             Expr::Load { op, addr, offset } => {
-                let a = self.addr(w, addr, *offset);
-                let method = load_method(*op);
-                self.use_unit(&format!("mem/{method}"));
-                w.line(format!(
-                    "mem_{method} {} {} || return $?",
-                    self.prefix,
-                    cmd_arg(&a)
-                ));
-                self.grab_r0(w)
+                // Snapshot the composed value into a scratch var so callers
+                // that repeat the operand don't re-read memory.
+                let frag = self.inline_load(w, *op, addr, *offset);
+                self.as_var(w, &frag)
             }
             Expr::Select { cond, then, els } => {
                 let c = self.value(w, cond);
@@ -1139,24 +1162,8 @@ impl<'a> Gen<'a> {
                 self.rt_cmd(w, bin_helper(*op), &[cmd_arg(&a), cmd_arg(&b)]);
                 true
             }
-            Expr::Load { op, addr, offset } => {
-                let Some(a) = self.arith(addr) else {
-                    return false;
-                };
-                let a = if *offset == 0 {
-                    a
-                } else {
-                    format!("(({a}) + {offset})")
-                };
-                let method = load_method(*op);
-                self.use_unit(&format!("mem/{method}"));
-                w.line(format!(
-                    "mem_{method} {} {} || return $?",
-                    self.prefix,
-                    cmd_arg(&a)
-                ));
-                true
-            }
+            // Loads inline directly into their destination via emit_assign /
+            // value(); they never take the R0 command path.
             _ => false,
         }
     }
@@ -1252,6 +1259,83 @@ fn s32_view(x: &str) -> String {
 
 fn u64_flip(x: &str) -> String {
     format!("(({x}) ^ (1 << 63))")
+}
+
+/// Bytes a load/store method touches, for the inline bounds check.
+fn access_bytes(method: &str) -> u32 {
+    match method {
+        "i32_load8_s" | "i32_load8_u" | "i64_load8_s" | "i64_load8_u" | "i32_store8"
+        | "i64_store8" => 1,
+        "i32_load16_s" | "i32_load16_u" | "i64_load16_s" | "i64_load16_u" | "i32_store16"
+        | "i64_store16" => 2,
+        "i32_load" | "i64_load32_s" | "i64_load32_u" | "i32_store" | "i64_store32" => 4,
+        "i64_load" | "i64_store" => 8,
+        _ => unreachable!("unknown mem method {method}"),
+    }
+}
+
+/// One little-endian byte cell of `<mem>` at effective address `ea` (already a
+/// plain integer var): `<mem>[$ea]` for byte 0, `<mem>[$((ea+k))]` for k>0 —
+/// the pre-expanded canonical-decimal key the assoc representation needs so it
+/// stays on bash's fast subscript path (ADR-51).
+fn mem_byte(mem: &str, ea: &str, k: u32) -> String {
+    if k == 0 {
+        format!("{mem}[${ea}]")
+    } else {
+        format!("{mem}[$(({ea}+{k}))]")
+    }
+}
+
+/// Little-endian composition of `n` bytes at `ea`: `b0 | b1<<8 | ...`.
+fn le_compose(mem: &str, ea: &str, n: u32) -> String {
+    (0..n)
+        .map(|k| match k {
+            0 => mem_byte(mem, ea, 0),
+            _ => format!("{}<<{}", mem_byte(mem, ea, k), k * 8),
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+/// Inline arithmetic reproducing a `mem_<method>` load body: little-endian
+/// byte composition with the unit's exact sign-extension form. The i64 top
+/// byte `<<56` wraps into the sign bit, which is the signed-64 bit pattern of
+/// i64 (ADR-11); narrow signed loads xor/sub the sign bit, and the i32 ones
+/// remask to masked-unsigned (ADR-2).
+fn load_inline_expr(method: &str, mem: &str, ea: &str) -> String {
+    match method {
+        "i32_load" => le_compose(mem, ea, 4),
+        "i64_load" => le_compose(mem, ea, 8),
+        "i32_load8_u" | "i64_load8_u" => mem_byte(mem, ea, 0),
+        "i32_load16_u" | "i64_load16_u" => le_compose(mem, ea, 2),
+        "i64_load32_u" => le_compose(mem, ea, 4),
+        "i32_load8_s" => format!("(({} ^ 0x80) - 0x80) & 0xffffffff", mem_byte(mem, ea, 0)),
+        "i32_load16_s" => format!(
+            "((({}) ^ 0x8000) - 0x8000) & 0xffffffff",
+            le_compose(mem, ea, 2)
+        ),
+        "i64_load8_s" => format!("({} ^ 0x80) - 0x80", mem_byte(mem, ea, 0)),
+        "i64_load16_s" => format!("((({}) ^ 0x8000) - 0x8000)", le_compose(mem, ea, 2)),
+        "i64_load32_s" => format!("((({}) ^ 0x80000000) - 0x80000000)", le_compose(mem, ea, 4)),
+        _ => unreachable!("unknown load method {method}"),
+    }
+}
+
+/// Inline byte-store statements reproducing a `mem_<method>` store body: low
+/// byte first, `v >> 8*k & 0xff` per cell. The arithmetic right shift on a
+/// negative i64 pattern is harmless — `& 0xff` masks the dragged-in sign bits
+/// (ADR-11).
+fn store_inline_stmts(method: &str, mem: &str, ea: &str, v: &str) -> Vec<String> {
+    (0..access_bytes(method))
+        .map(|k| {
+            let rhs = if k == 0 {
+                format!("{v} & 0xff")
+            } else {
+                format!("{v} >> {} & 0xff", k * 8)
+            };
+            format!("{}=$(( {rhs} ))", mem_byte(mem, ea, k))
+        })
+        .collect()
 }
 
 /// Inline arithmetic lowering for a unary op, if it has one.
