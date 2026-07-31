@@ -68,8 +68,9 @@ Two golden files are code-derived rather than hand-written, and each has a compa
 | --- | --- | --- |
 | `docs/support.md` | `cargo xtask update-support-docs` | `cargo test -p dewasm-cli --test support_docs` |
 | `examples/apps/golden/qjs_repl_interactive.transcript` | `cargo xtask update-repl-golden` | `cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime` |
+| `examples/doom/golden/frame.ppm` | `cargo xtask update-doom-golden` | `cargo test -p dewasm-backend-ruby --features ultra_slow_test --test e2e doom_frame` (and the other frame backends) |
 
-`update-repl-golden` needs `wasmtime` on `PATH` and the qjs app cached (`examples/apps/fetch-and-build.sh`) — the same requirements as the freshness test it feeds. `cargo xtask` is aliased in `.cargo/config.toml` to `cargo run -p xtask --`; run `cargo xtask` with no arguments (or `--help`) for the command list.
+`update-repl-golden` needs `wasmtime` on `PATH` and the qjs app cached (`examples/apps/fetch-and-build.sh`) — the same requirements as the freshness test it feeds. `update-doom-golden` instead embeds the `wasmtime` *crate* (an xtask-only dependency, never in the normal `cargo test` build) to drive `doom.wasm`'s custom-import interface, which the `wasmtime` CLI cannot; it needs only the doom app cached (`examples/apps/scripts/doom.sh`). Regenerate it after bumping the doom pin, then re-run the per-backend `doom_frame` cases (ADR-53). `cargo xtask` is aliased in `.cargo/config.toml` to `cargo run -p xtask --`; run `cargo xtask` with no arguments (or `--help`) for the command list.
 
 ## Useful environment variables
 

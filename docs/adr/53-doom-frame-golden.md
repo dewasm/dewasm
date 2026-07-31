@@ -1,10 +1,13 @@
 # ADR-53 — Test DOOM by a Deterministic Framebuffer Golden
 
-Status: **Proposed, 2026-07-31.** Extends the DOOM demo (ADR-50) into the test
-gate: drive the converted `doom.wasm` with a synthetic clock and a fixed,
-input-free tick count, then compare the raw framebuffer it renders — pixel for
-pixel — against a golden captured once from a wasmtime oracle. Nothing has
-landed yet; this ADR records the shape before the glue is written.
+Status: **Accepted, 2026-07-31.** Extends the DOOM demo (ADR-50) into the test
+gate: drive the converted `doom.wasm` with a self-advancing synthetic clock and
+a fixed, input-free tick count, then compare the raw framebuffer it renders —
+pixel for pixel — against a golden captured once from a wasmtime oracle.
+Implemented: the oracle (`cargo xtask update-doom-golden`), the shared contract
+and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed golden
+(`examples/doom/golden/frame.ppm`), and the frame case on Ruby/Python/Go/Java
+(byte-identical) plus the conversion smoke on all five backends.
 
 ## Context
 
@@ -27,8 +30,8 @@ Two facts make a golden possible where the module first looks untestable:
   clock: `runtimeControl.timeInMilliseconds` paces the tic loop, and all five
   frontends feed it a *wall* clock (`examples/doom/go/main.go:94`,
   `examples/doom/ruby/main.rb:73`). Override that import with a synthetic
-  monotonic value (`tick × Δ`) and drive `initGame` then N× `tickGame` with no
-  key events, and the rendered frame is reproducible.
+  counter that self-advances a fixed step on every read and drive `initGame`
+  then N× `tickGame` with no key events, and the rendered frame is reproducible.
 - **`ui.drawFrame(bufOff)` hands the host an offset into linear memory** where
   `FRAME_W*FRAME_H*4` bytes live in `B,G,R,A` order, the alpha byte padding
   (`examples/doom/go/main.go:101-113`). For this pinned binary FRAME is 640×400,
@@ -48,12 +51,15 @@ Add a **deterministic framebuffer golden** test, structured like the C-API cases
 mode, append per-backend glue, compare output — with three specifics:
 
 - **Driving contract (identical in the oracle and every backend).** Provide the
-  ten imports; `timeInMilliseconds` returns `tick × Δ` (Δ one tic period, so the
-  loop advances exactly one tic per call), `wadSizes`/`readWads` are no-ops (the
-  module falls back to its embedded shareware WAD when the out-params stay zero,
-  `examples/doom/go/main.go:116-124`), `gameSaving.*` are `0/0/len` no-ops (no
-  filesystem, as bash already proves at `examples/doom/bash/main.sh:89-96`). Call
-  `initGame`, then N× `tickGame` with no input, and dump the last `drawFrame`
+  ten imports; `timeInMilliseconds` is a counter that self-advances a fixed step
+  on every read (a value frozen between host steps would hang: DOOM's startup and
+  inter-tic waits spin on the clock, so it must keep moving; the read count — and
+  thus the exact clock sequence — is a pure function of the wasm, so it stays
+  identical across the oracle and every backend), `wadSizes`/`readWads` are no-ops
+  (the module falls back to its embedded shareware WAD when the out-params stay
+  zero, `examples/doom/go/main.go:116-124`), `gameSaving.*` are `0/0/len` no-ops
+  (no filesystem, as bash already proves at `examples/doom/bash/main.sh:89-96`).
+  Call `initGame`, then N× `tickGame` with no input, and dump the last `drawFrame`
   buffer as a 640×400 P6 PPM (alpha dropped). N is fixed and pinned by the golden
   — the smallest count that clears the demo intro to a stable, non-degenerate
   frame.
@@ -75,12 +81,16 @@ clock — pin the clock, fix the inputs, and diff the rendered artifact.* The
 oracle is an independent embedder (wasmtime), not backend consensus, because the
 value of the test is catching a bug the backends could share.
 
-**Tiering.** DOOM execution is heavy on every backend (bash `initGame` alone is
-~2 min; the Go/Java generated builds are already ultra-tier under ADR-48), so
-the per-backend frame-golden test lives in the **ultra_slow_test** tier — run in
-local pre-release, never in CI. A cheap **conversion-only** smoke (convert
-`doom.wasm` to each backend, assert success) rides the slow tier to catch
-converter breakage without executing.
+**Tiering.** DOOM execution is heavy on every backend (the Go/Java generated
+builds are already ultra-tier under ADR-48), so the per-backend frame-golden
+test lives in the **ultra_slow_test** tier — run in local pre-release, never in
+CI — on Ruby, Python, Go, and Java. **Bash runs the conversion smoke only, not
+the frame golden**: its `initGame` alone is ~2 min and serializing a 1 MB
+framebuffer out of the associative-array memory is disproportionate even for the
+ultra tier, and the frame is already pinned by the other four backends against
+the oracle. A cheap **conversion-only** smoke (convert `doom.wasm` to each
+backend, assert success) rides the slow tier on all five to catch converter
+breakage without executing.
 
 ## Rejected alternatives
 
