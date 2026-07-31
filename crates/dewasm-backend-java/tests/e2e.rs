@@ -10,12 +10,12 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest, PtyCommand,
+    cowsay_args_e2e, cowsay_stdin_e2e, doom_convert_smoke_e2e, doom_frame_e2e, examples_dir,
+    gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
+    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
+    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Java;
@@ -511,6 +511,59 @@ qjs_repl_pty_e2e!(Java);
 libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
+
+// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the
+// framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}`
+// filled by the runner.
+const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        final long[] ms = {0};
+        final int[] fw = {0}, fh = {0}, foff = {0};
+        java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
+        java.util.Map<String, Object> console = new java.util.HashMap<>();
+        console.put("onErrorMessage", (Rt.Fn)(args -> null));
+        console.put("onInfoMessage", (Rt.Fn)(args -> null));
+        imports.put("console", console);
+        java.util.Map<String, Object> gameSaving = new java.util.HashMap<>();
+        gameSaving.put("sizeOfSaveGame", (Rt.Fn)(args -> 0));
+        gameSaving.put("readSaveGame", (Rt.Fn)(args -> 0));
+        gameSaving.put("writeSaveGame", (Rt.Fn)(args -> args[2]));
+        imports.put("gameSaving", gameSaving);
+        java.util.Map<String, Object> runtimeControl = new java.util.HashMap<>();
+        runtimeControl.put("timeInMilliseconds", (Rt.Fn)(args -> { ms[0] += {clock_step}; return ms[0]; }));
+        imports.put("runtimeControl", runtimeControl);
+        java.util.Map<String, Object> ui = new java.util.HashMap<>();
+        ui.put("drawFrame", (Rt.Fn)(args -> { foff[0] = (int)(Integer) args[0]; return null; }));
+        imports.put("ui", ui);
+        java.util.Map<String, Object> loading = new java.util.HashMap<>();
+        loading.put("onGameInit", (Rt.Fn)(args -> { fw[0] = (int)(Integer) args[0]; fh[0] = (int)(Integer) args[1]; return null; }));
+        loading.put("wadSizes", (Rt.Fn)(args -> null));
+        loading.put("readWads", (Rt.Fn)(args -> null));
+        imports.put("loading", loading);
+
+        Doom doom = new Doom(imports, null, null, null);
+        ((Rt.Fn) doom.Exports.get("initGame")).invoke(new Object[]{});
+        Rt.Fn tick = (Rt.Fn) doom.Exports.get("tickGame");
+        for (int i = 0; i < {ticks}; i++) tick.invoke(new Object[]{});
+
+        int w = fw[0], h = fh[0], off = foff[0];
+        byte[] d = doom.memory.d;
+        byte[] out = new byte[w * h * 3];
+        int j = 0;
+        for (int i = 0; i < w * h * 4; i += 4) {
+            out[j++] = d[off + i + 2];
+            out[j++] = d[off + i + 1];
+            out[j++] = d[off + i];
+        }
+        System.out.write(("P6\n" + w + " " + h + "\n255\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        System.out.write(out);
+        System.out.flush();
+    }
+}
+"#;
+
+doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
+doom_convert_smoke_e2e!(Java);
 
 shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.
