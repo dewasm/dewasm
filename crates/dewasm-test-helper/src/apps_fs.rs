@@ -256,7 +256,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
             let host = cache.join(rel);
             assert!(
                 host.is_dir(),
-                "{} cache tree {rel} not present — run examples/apps/fetch.sh (see docs/testing.md)",
+                "{} cache tree {rel} not present — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
                 case.name
             );
             (*guest, host)
@@ -270,7 +270,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
     assert!(
         wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch.sh (see docs/testing.md)",
+        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");

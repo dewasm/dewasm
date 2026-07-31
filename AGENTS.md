@@ -23,7 +23,7 @@ Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` comman
 | `cargo test -p dewasm-backend-ruby --test spec i32` | Spec harness on `.wast` files whose name matches (cargo's built-in test-name filter — substring, add `--exact` for one file). Swap the crate (`-p dewasm-backend-bash`) to switch language. |
 | `cargo test -p dewasm-backend-bash --test spec -- --include-ignored` | Full-testsuite sweep for bash (curated files are the default; the rest are `#[ignore]`d trials); trials run in parallel. Use `-- --ignored` to run only the non-curated files. |
 | `cargo run -p dewasm-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
-| `examples/apps/fetch.sh` | Fetch/build the pinned real-world apps (cowsay, QuickJS, the three sqlite3 shapes, minigzip, ripgrep, CPython, CRuby) into the gitignored cache; needs a few build tools on PATH (`zig`, the `wasm32-wasip1` rustup target — see docs/testing.md). Enables the `apps` cases of the `e2e` test. |
+| `examples/apps/fetch-and-build.sh` | Fetch/build the pinned real-world apps (cowsay, QuickJS, the three sqlite3 shapes, minigzip, ripgrep, CPython, CRuby) into the gitignored cache; needs a few build tools on PATH (`zig`, the `wasm32-wasip1` rustup target — see docs/testing.md). Enables the `apps` cases of the `e2e` test. |
 
 ## Verification
 

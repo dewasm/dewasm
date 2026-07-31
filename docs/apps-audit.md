@@ -12,18 +12,18 @@ and record the verdict here. An app that needs a proposal outside the 0.1 scope 
 
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
-| cowsay 0.3.0 | pinned in `fetch.sh` | none | ✅ in scope (shipping) |
-| quickjs-ng v0.15.1 | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
-| sqlite3 3.53.3 (three shapes) | pinned in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**⁴) |
-| CPython 3.14.6 | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
-| CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
+| cowsay 0.3.0 | pinned in `fetch-and-build.sh` | none | ✅ in scope (shipping) |
+| quickjs-ng v0.15.1 | pinned in `fetch-and-build.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
+| sqlite3 3.53.3 (three shapes) | pinned in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
+| CPython 3.14.6 | pinned in `fetch-and-build.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
+| CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch-and-build.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
 | zeroperl (Perl 5.42) | see below | none (host-shim blocked) | ⛔ deferred |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
-| ripgrep 14.1.1 | pinned-source cargo build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
-| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **all five backends**⁷) |
-| libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go⁸) |
-| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `fetch.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go¹⁰) |
+| ripgrep 14.1.1 | pinned-source cargo build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
+| minigzip (zlib 1.3.1) | pinned-source zig build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, **all five backends**⁷) |
+| libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go⁸) |
+| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, C-API on Ruby + Python + Go¹⁰) |
 
 ¹ **Reference-types encoding tolerance.** LLVM-based toolchains (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index immediates as padded, overlong LEBs when the `reference-types` target feature is enabled — the default since LLVM 19. Such binaries *validate* only with the reference-types feature bit even though they use **no construct** from the proposal (the audit tool verifies this and prints "encoding only"). The converter therefore keeps the validator bit enabled as a pure encoding relaxation while rejecting every actual reference-types construct at conversion time. Real-world wasip1 binaries would otherwise be uniformly rejected, which would defeat the project.
 
@@ -42,7 +42,7 @@ The *interactive* REPL (bare `qjs`, its actual line editor) is a separate matter
 - *Library DB file* (`sqlite3_file_c_api_ruby`): the same file create/close/reopen/select through the sqlite3 C API, proving the C-API path hits the same fs stack (fixed-string expectation — a C-API flow `wasmtime` cannot drive).
 - *Callback binding* (`sqlite3_callback_binding_ruby`): the new `sqlite3-binding.wasm` (our own `examples/apps/src/sqlite3_binding.c`) exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to an imported `env.host_row`; the Ruby side provides `host_row` via the ADR-7 import-provider mechanism and collects the rows (fixed-string expectation).
 
-⁵ **CPython / CRuby executed across backends (Phase 5b; multi-backend as of the ADR-27 revision).** Both language-runtime binaries are converted *and run*, each reading its stdlib from a preopened directory (`fetch.sh` extracts the trees: `cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`). They are now shared per-case consts (`CPYTHON_HELLO`, `CRUBY_HELLO`, driven by `cpython_hello_e2e!`/`cruby_hello_e2e!`) — the stdlib trees mount straight from the app cache via the case's `cache_preopens` field (never copied), and each is ground-truthed against `wasmtime --dir`. The feature audit reports both as baseline-only (in scope). No new WASI unit was needed: the wide import lists below include functions no backend implements (CPython imports `poll_oneoff`/`path_link`/`path_symlink`/`path_readlink`/ `sock_*`; CRuby imports `fd_renumber`/`poll_oneoff`/`path_readlink`), but none is *called* on the interpreter boot + one-liner path, so the ADR-14 syscall set suffices (measured by running to success).
+⁵ **CPython / CRuby executed across backends (Phase 5b; multi-backend as of the ADR-27 revision).** Both language-runtime binaries are converted *and run*, each reading its stdlib from a preopened directory (`fetch-and-build.sh` extracts the trees: `cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`). They are now shared per-case consts (`CPYTHON_HELLO`, `CRUBY_HELLO`, driven by `cpython_hello_e2e!`/`cruby_hello_e2e!`) — the stdlib trees mount straight from the app cache via the case's `cache_preopens` field (never copied), and each is ground-truthed against `wasmtime --dir`. The feature audit reports both as baseline-only (in scope). No new WASI unit was needed: the wide import lists below include functions no backend implements (CPython imports `poll_oneoff`/`path_link`/`path_symlink`/`path_readlink`/ `sock_*`; CRuby imports `fd_renumber`/`poll_oneoff`/`path_readlink`), but none is *called* on the interpreter boot + one-liner path, so the ADR-14 syscall set suffices (measured by running to success).
 
 Measured on the dev machine (Apple Silicon), convert + (compile, compiled backends) + run:
 
@@ -68,7 +68,7 @@ Where included, each is comfortably under the ADR-24 ~5-minute bar, so it genuin
 
 ¹⁰ **tree-sitter (Track A).** The tree-sitter incremental-parsing runtime 0.26.11 (single-TU amalgamation `lib/src/lib.c`) plus the pre-generated tree-sitter-json 0.24.8 grammar (`src/parser.c`), built from the pinned upstream releases with `zig cc -mexec-model=reactor` as a C-API library. Audit: baseline only after the ADR-39 `wasm-opt` pass¹¹, in scope — unlike libpcap, the runtime needs no shim (no `setjmp`, no host lookups). Our own `examples/apps/src/treesitter_binding.c` exports `parse_source`, which parses a source string and returns the parse tree's S-expression (`ts_node_string`, a malloc'd C string) into guest memory. The C-API case (`treesitter_parse`, `treesitter_parse_e2e!`) parses the fixed snippet `{"key": [1, true, null]}` on Ruby, Python, and Go and pins the S-expression `(document (object (pair key: (string (string_content)) value: (array (number) (true) (null)))))` (deterministic — tree-sitter's node naming is fixed by the pinned grammar). `slow_test`-gated like the other reactor-library C-API cases; Bash does not participate (ADR-12).
 
-¹¹ **ADR-39 `wasm-opt` preprocessing.** The three modules `fetch.sh` builds locally (libpcap, tree-sitter, ripgrep) are run through `wasm-opt -O2` (baseline features only, no ctor-eval) before caching — see [ADR-39](adr/39-wasm-opt-preprocessing.md). Besides shrinking them, `wasm-opt` re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹ the downloaded/unoptimized artifacts carry.
+¹¹ **ADR-39 `wasm-opt` preprocessing.** Every module `fetch-and-build.sh` builds from source (the three sqlite3 shapes, minigzip, libpcap, tree-sitter, ripgrep — but not the DWARF fixture, which keeps its debug info) is run through `wasm-opt -O2` (baseline features only, no ctor-eval) before caching — see [ADR-39](adr/39-wasm-opt-preprocessing.md). Besides shrinking them, `wasm-opt` re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹ the downloaded artifacts (cowsay, qjs, CPython, CRuby) still carry.
 
 ## Deferred: pandoc
 
@@ -95,4 +95,4 @@ The audit also prints each binary's imported WASI functions; the widest candidat
 - **CPython**: 42 functions — the full p1 surface including `fd_pread`/ `fd_pwrite`/`fd_tell`/`fd_advise`/`fd_datasync`, `path_link`/`path_rename`/ `path_symlink`, `sched_yield`, and the four `sock_*` functions.
 - **CRuby**: 37 functions — CPython's list minus the `sock_*` family, `sched_yield`, and `fd_filestat_set_times`, plus `fd_renumber`.
 
-Importing is not calling: the out-of-scope `sock_*` imports still resolve to the ENOSYS stub, but a runtime implementation is not required for scripts that never open sockets — confirmed by running both to success (footnote ⁵). Both runtimes read their stdlib trees from a preopened directory at startup; `fetch.sh` now extracts those trees (`cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`) and the e2e cases preopen them at guest `/lib` and `/usr` respectively.
+Importing is not calling: the out-of-scope `sock_*` imports still resolve to the ENOSYS stub, but a runtime implementation is not required for scripts that never open sockets — confirmed by running both to success (footnote ⁵). Both runtimes read their stdlib trees from a preopened directory at startup; `fetch-and-build.sh` now extracts those trees (`cache/cpython-lib/lib/python3.14`, `cache/ruby-lib/usr/local/lib/ruby`) and the e2e cases preopen them at guest `/lib` and `/usr` respectively.

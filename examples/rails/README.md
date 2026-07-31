@@ -60,7 +60,7 @@ through the generated module's `invoke` + `Rt::Memory`, with `sqlite3_malloc`
 for guest-side buffers and ADR-2's masked-unsigned convention for i64.
 
 The C surface this needs is exported from `libsqlite3.wasm` — the
-`SQLITE_EXPORTS` list in `../apps/fetch.sh`.
+`SQLITE_EXPORTS` list in `../apps/fetch-and-build.sh`.
 
 ## Deliberate gaps
 

@@ -1,6 +1,6 @@
 //! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a golden output captured once from wasmtime and checked into `examples/apps/golden/` (ADR-15) — running these does not itself need `wasmtime` installed.
 //!
-//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/fetch.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the gating lives at the macro/feature level.
+//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/fetch-and-build.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the gating lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -63,7 +63,7 @@ fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
     assert!(
         wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch.sh (see docs/testing.md)",
+        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
         case.name
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
@@ -110,7 +110,7 @@ pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
     assert!(
         wasm_path.exists(),
-        "minigzip not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "minigzip not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
     let src = lang.convert_app(&bytes, Mode::Standalone, "minigzip");

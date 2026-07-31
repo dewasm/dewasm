@@ -19,7 +19,7 @@ Commands:
                            (examples/apps/golden/qjs_repl_interactive.transcript)
                            against a live wasmtime under a pty. Requires
                            `wasmtime` on PATH and the qjs app cached
-                           (examples/apps/fetch.sh). Checked by
+                           (examples/apps/fetch-and-build.sh). Checked by
                            `cargo test -p dewasm-test-helper --features
                            wasmtime_test --test apps_wasmtime`.
 ";

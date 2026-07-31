@@ -32,7 +32,7 @@ pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
     let wasm = apps_cache_dir().join("qjs.wasm");
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let bytes = std::fs::read(&wasm).expect("read qjs wasm");
     let source = lang.convert_app(&bytes, Mode::Standalone, "qjs");
