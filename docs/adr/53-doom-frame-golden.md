@@ -7,8 +7,8 @@ pixel for pixel — against a golden captured once from a wasmtime oracle.
 Implemented: the oracle (`cargo xtask update-doom-golden`), the shared contract
 and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed golden
 (`examples/doom/golden/frame.ppm`), and the frame case on Ruby/Python/Go/Java
-plus the frame case on all five backends (byte-identical) — Bash at a new
-ultra_heavy tier, the others at slow.
+plus the frame case on all five backends (byte-identical) — Bash at the
+ultra_slow tier, the others at slow.
 
 ## Context
 
@@ -52,11 +52,17 @@ Add a **deterministic framebuffer golden** test, structured like the C-API cases
 mode, append per-backend glue, compare output — with three specifics:
 
 - **Driving contract (identical in the oracle and every backend).** Provide the
-  ten imports; `timeInMilliseconds` is a counter that self-advances a fixed step
-  on every read (a value frozen between host steps would hang: DOOM's startup and
-  inter-tic waits spin on the clock, so it must keep moving; the read count — and
-  thus the exact clock sequence — is a pure function of the wasm, so it stays
-  identical across the oracle and every backend), `wadSizes`/`readWads` are no-ops
+  ten imports; `timeInMilliseconds` is a counter that self-advances a *large*
+  fixed step (1000 ms) on every read. Self-advancing (not frozen between host
+  steps) is what stops it hanging — DOOM's startup and inter-tic waits spin on
+  the clock, so it must keep moving — and the read count, hence the exact clock
+  sequence, is a pure function of the wasm, identical across the oracle and every
+  backend. The step is *large* so DOOM's spiral-of-death protection caps the tics
+  it simulates (a big jump makes it skip ahead, exactly as the real wall clock
+  does when it leaps between a slow backend's calls); a 1 ms step would creep to
+  seconds of simulated time and make DOOM run ~80 tics — byte-identical but tens
+  of times more work, turning the Bash run into ~an hour. `wadSizes`/`readWads`
+  are no-ops
   (the module falls back to its embedded shareware WAD when the out-params stay
   zero, `examples/doom/go/main.go:116-124`), `gameSaving.*` are `0/0/len` no-ops
   (no filesystem, as bash already proves at `examples/doom/bash/main.sh:89-96`).
@@ -85,12 +91,12 @@ value of the test is catching a bug the backends could share.
 **Tiering.** The frame-golden test runs on every backend, tiered to match each
 backend's convention for a comparably heavy execution case. Ruby/Python/Go/Java
 use the **slow_test** tier — CI's main sweep, like the qjs/sqlite e2e — so DOOM
-is actually exercised in CI. Bash uses a new **ultra_heavy_test** tier (a third
-level above ADR-48's `ultra_slow_test`): its run is several minutes (initGame
-~2 min + ticks + serializing a 1 MB framebuffer out of the associative-array
-memory), beyond the ~1 min ultra_slow cases, so it stays out of CI and runs only
-in local pre-release. There is no separate conversion smoke — the frame test
-already exercises the full convert-and-run path, and a convert-only assertion
+is actually exercised in CI. Bash uses the **ultra_slow_test** tier (ADR-48),
+like its qjs-REPL pty case: its run is minutes (initGame ~2 min + ticks +
+serializing a 1 MB framebuffer out of the associative-array memory), so it stays
+out of CI and runs only in local pre-release. There is no separate conversion
+smoke — the frame test already exercises the full convert-and-run path, and a
+convert-only assertion
 would be an idiom no other suite uses.
 
 ## Rejected alternatives
@@ -122,6 +128,5 @@ would be an idiom no other suite uses.
 - Negative: a new heavy `wasmtime`-crate dependency, quarantined to xtask; the
   golden must be regenerated (and reviewed) whenever the `doom.wasm` pin bumps.
 - Negative / carry-over: the frame test runs in CI for four backends but Bash's
-  is ultra_heavy (local pre-release only), a third test tier added to ADR-48 for
-  one case. The synthetic-clock tick count N is a magic constant the golden pins
-  — documented at the glue, not derived.
+  is ultra_slow (local pre-release only). The synthetic-clock tick count N is a
+  magic constant the golden pins — documented at the glue, not derived.

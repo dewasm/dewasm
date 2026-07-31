@@ -26,18 +26,27 @@ pub const DOOM_FRAME_W: u32 = 640;
 pub const DOOM_FRAME_H: u32 = 400;
 
 /// Ms the synthetic clock advances **per call** to `timeInMilliseconds`. A
-/// self-advancing counter (not a per-tick value) is what keeps the run
-/// deterministic *and* terminating: DOOM's startup and inter-tic waits spin on
-/// the clock, so a value frozen between host steps would hang forever; making
-/// every read move time forward guarantees those spins exit, while the read
-/// count — and thus the exact clock sequence — stays a pure function of the
-/// wasm, identical across the oracle and every backend.
-pub const DOOM_CLOCK_STEP_MS: i64 = 1;
+/// self-advancing counter (not a per-tick value) keeps the run both
+/// deterministic and terminating: DOOM's startup and inter-tic waits spin on the
+/// clock, so a value frozen between host steps hangs forever, while a counter
+/// that moves on every read exits those spins and stays a pure function of the
+/// wasm (identical call sequence across the oracle and every backend).
+///
+/// The step is *large* on purpose. DOOM caps how many game tics it simulates per
+/// frame (spiral-of-death protection): a big jump between clock reads makes it
+/// run only a tic or two and skip ahead, exactly as the real wall clock does
+/// when it leaps tens of seconds between a slow backend's `tickGame` calls. A
+/// small step (e.g. 1 ms) instead lets the clock creep up ~1 ms per read to a
+/// couple of *seconds* of simulated time, so DOOM dutifully simulates ~80 tics —
+/// which is byte-identical either way but tens of times more work, turning the
+/// Bash run from a few minutes into the better part of an hour. 1000 ms keeps
+/// the whole run to a couple dozen clock reads.
+pub const DOOM_CLOCK_STEP_MS: i64 = 1000;
 
 /// Number of `tickGame` calls before the frame is captured. Kept minimal — two
 /// ticks already clear DOOM's startup to a non-degenerate frame (the oracle
 /// asserts the colour count) — because each tick is ~tens of seconds under Bash,
-/// so every extra tick is real wall time on the ultra_heavy tier; pinned by the
+/// so every extra tick is real wall time on Bash's ultra tier; pinned by the
 /// golden.
 pub const DOOM_TICKS: u32 = 2;
 

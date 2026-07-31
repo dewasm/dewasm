@@ -19,9 +19,6 @@ workspace = true
 # out of CI and run only in local pre-release verification.
 slow_test = []
 ultra_slow_test = ["slow_test"]
-# `ultra_heavy_test` un-ignores the multi-minute cases above even ultra_slow
-# (here: the DOOM framebuffer-golden case under Bash, ADR-53).
-ultra_heavy_test = ["ultra_slow_test"]
 
 [dependencies]
 anyhow.workspace = true

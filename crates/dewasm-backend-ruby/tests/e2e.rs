@@ -435,6 +435,37 @@ rescue Alpha::Rt::Trap
 end
 "#;
 
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}` filled by the runner.
+const RUBY_DOOM_FRAME_GLUE: &str = r#"frame = { off: nil, w: 0, h: 0 }
+ms = [0]
+imports = {
+  "console" => { "onErrorMessage" => ->(o, n) {}, "onInfoMessage" => ->(o, n) {} },
+  "gameSaving" => {
+    "sizeOfSaveGame" => ->(i) { 0 },
+    "readSaveGame" => ->(i, d) { 0 },
+    "writeSaveGame" => ->(i, s, n) { n },
+  },
+  "runtimeControl" => { "timeInMilliseconds" => -> { ms[0] += {clock_step}; ms[0] } },
+  "ui" => { "drawFrame" => ->(off) { frame[:off] = off } },
+  "loading" => {
+    "onGameInit" => ->(w, h) { frame[:w] = w; frame[:h] = h },
+    "wadSizes" => ->(a, b) {},
+    "readWads" => ->(a, b) {},
+  },
+}
+doom = Doom.new(imports)
+doom.invoke("initGame")
+{ticks}.times { doom.invoke("tickGame") }
+w = frame[:w]
+h = frame[:h]
+pixels = doom.memory.buffer.get_string(frame[:off], w * h * 4).bytes
+rgb = []
+pixels.each_slice(4) { |b, g, r, _a| rgb.push(r, g, b) }
+$stdout.binmode
+$stdout.write("P6\n#{w} #{h}\n255\n")
+$stdout.write(rgb.pack("C*"))
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Ruby, RUBY_ADD_GLUE);
@@ -469,39 +500,6 @@ sqlite3_file_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Ruby, RUBY_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Ruby, RUBY_PCAP_COMPILE);
 treesitter_parse_e2e!(Ruby, RUBY_TREESITTER_PARSE);
-
-// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the
-// framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}`
-// filled by the runner.
-const RUBY_DOOM_FRAME_GLUE: &str = r#"frame = { off: nil, w: 0, h: 0 }
-ms = [0]
-imports = {
-  "console" => { "onErrorMessage" => ->(o, n) {}, "onInfoMessage" => ->(o, n) {} },
-  "gameSaving" => {
-    "sizeOfSaveGame" => ->(i) { 0 },
-    "readSaveGame" => ->(i, d) { 0 },
-    "writeSaveGame" => ->(i, s, n) { n },
-  },
-  "runtimeControl" => { "timeInMilliseconds" => -> { ms[0] += {clock_step}; ms[0] } },
-  "ui" => { "drawFrame" => ->(off) { frame[:off] = off } },
-  "loading" => {
-    "onGameInit" => ->(w, h) { frame[:w] = w; frame[:h] = h },
-    "wadSizes" => ->(a, b) {},
-    "readWads" => ->(a, b) {},
-  },
-}
-doom = Doom.new(imports)
-doom.invoke("initGame")
-{ticks}.times { doom.invoke("tickGame") }
-w = frame[:w]
-h = frame[:h]
-pixels = doom.memory.buffer.get_string(frame[:off], w * h * 4).bytes
-rgb = []
-pixels.each_slice(4) { |b, g, r, _a| rgb.push(r, g, b) }
-$stdout.binmode
-$stdout.write("P6\n#{w} #{h}\n255\n")
-$stdout.write(rgb.pack("C*"))
-"#;
 
 doom_frame_e2e!(Ruby, RUBY_DOOM_FRAME_GLUE);
 

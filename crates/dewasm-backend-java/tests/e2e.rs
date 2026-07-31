@@ -481,40 +481,7 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
-library_add_e2e!(Java, JAVA_ADD_GLUE);
-wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
-stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-30), so the lazy-construction observable cannot hold.
-
-wasi_suite!(Java, Stdio);
-wasi_suite!(Java, ArgsEnv);
-wasi_suite!(Java, Poll);
-wasi_suite!(Java, Fs, JAVA_FS_GLUE);
-wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Java);
-
-cowsay_args_e2e!(Java);
-cowsay_stdin_e2e!(Java);
-qjs_eval_e2e!(Java);
-sqlite3_shell_e2e!(Java);
-gzip_e2e!(Java);
-
-qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
-qjs_repl_e2e!(Java, JAVA_QJS_REPL_GLUE);
-sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit (docs/apps-audit.md).
-qjs_repl_pty_e2e!(Java);
-
-libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-
-// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the
-// framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}`
-// filled by the runner.
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}` filled by the runner.
 const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         final long[] ms = {0};
@@ -561,6 +528,37 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
     }
 }
 "#;
+
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
+
+library_add_e2e!(Java, JAVA_ADD_GLUE);
+wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
+stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-30), so the lazy-construction observable cannot hold.
+
+wasi_suite!(Java, Stdio);
+wasi_suite!(Java, ArgsEnv);
+wasi_suite!(Java, Poll);
+wasi_suite!(Java, Fs, JAVA_FS_GLUE);
+wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
+standalone_dir_e2e!(Java);
+
+cowsay_args_e2e!(Java);
+cowsay_stdin_e2e!(Java);
+qjs_eval_e2e!(Java);
+sqlite3_shell_e2e!(Java);
+gzip_e2e!(Java);
+
+qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Java, JAVA_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
+// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit (docs/apps-audit.md).
+qjs_repl_pty_e2e!(Java);
+
+libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
+sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
+sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
 
 doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 

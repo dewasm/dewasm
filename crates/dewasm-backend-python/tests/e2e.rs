@@ -444,46 +444,7 @@ b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
-library_add_e2e!(Python, PYTHON_ADD_GLUE);
-wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
-custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
-partial_override_e2e!(Python, PYTHON_PARTIAL_OVERRIDE_GLUE);
-stdio_capture_e2e!(Python, PYTHON_STDIO_CAPTURE_GLUE);
-
-wasi_suite!(Python, Stdio);
-wasi_suite!(Python, ArgsEnv);
-wasi_suite!(Python, Poll);
-wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
-wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Python);
-// The standalone entrypoint's ADR-28 recursion mitigation (issue #31).
-deep_recursion_e2e!(Python);
-
-cowsay_args_e2e!(Python);
-cowsay_stdin_e2e!(Python);
-qjs_eval_e2e!(Python);
-sqlite3_shell_e2e!(Python);
-gzip_e2e!(Python);
-
-qjs_file_io_e2e!(Python, PYTHON_QJS_FILE_IO_GLUE);
-qjs_repl_e2e!(Python, PYTHON_QJS_REPL_GLUE);
-sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
-cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
-cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-qjs_repl_pty_e2e!(Python);
-
-libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
-pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
-treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
-
-// DOOM (ADR-53): drive the converted library with the deterministic contract
-// (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the
-// wasmtime golden. `{ticks}`/`{ms_per_tick}` are filled by the runner.
+/// DOOM (ADR-53): drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
 _frame = {"off": None, "w": 0, "h": 0}
@@ -531,6 +492,43 @@ for i in range(0, len(frame), 4):
 out.write(rgb)
 out.flush()
 "#;
+
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
+
+library_add_e2e!(Python, PYTHON_ADD_GLUE);
+wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
+custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
+partial_override_e2e!(Python, PYTHON_PARTIAL_OVERRIDE_GLUE);
+stdio_capture_e2e!(Python, PYTHON_STDIO_CAPTURE_GLUE);
+
+wasi_suite!(Python, Stdio);
+wasi_suite!(Python, ArgsEnv);
+wasi_suite!(Python, Poll);
+wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
+wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
+standalone_dir_e2e!(Python);
+// The standalone entrypoint's ADR-28 recursion mitigation (issue #31).
+deep_recursion_e2e!(Python);
+
+cowsay_args_e2e!(Python);
+cowsay_stdin_e2e!(Python);
+qjs_eval_e2e!(Python);
+sqlite3_shell_e2e!(Python);
+gzip_e2e!(Python);
+
+qjs_file_io_e2e!(Python, PYTHON_QJS_FILE_IO_GLUE);
+qjs_repl_e2e!(Python, PYTHON_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
+cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
+cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
+qjs_repl_pty_e2e!(Python);
+
+libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
+sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
+sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
+pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
+treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 
 doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
 

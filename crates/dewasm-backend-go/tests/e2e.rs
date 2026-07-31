@@ -579,44 +579,7 @@ const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 }
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
-library_add_e2e!(Go, GO_ADD_GLUE);
-wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold. stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no io.Writer indirection to inject an in-memory buffer (ADR-29).
-
-wasi_suite!(Go, Stdio);
-wasi_suite!(Go, ArgsEnv);
-wasi_suite!(Go, Poll);
-wasi_suite!(Go, Fs, GO_FS_GLUE);
-wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Go);
-
-cowsay_args_e2e!(Go);
-cowsay_stdin_e2e!(Go);
-// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
-qjs_eval_e2e!(Go, ultra);
-sqlite3_shell_e2e!(Go, ultra);
-gzip_e2e!(Go);
-
-qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
-qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
-sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
-cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min); see docs/apps-audit.md.
-qjs_repl_pty_e2e!(Go);
-
-libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
-sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
-sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
-pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
-treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
-
-// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the
-// framebuffer as a P6 PPM matching the wasmtime golden. Library-mode Go imports
-// `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`.
-// `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
 const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 	var ms uint64
 	var frameOff, frameW, frameH uint32
@@ -658,6 +621,40 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 	fmt.Print(string(out))
 }
 "#;
+
+// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
+
+library_add_e2e!(Go, GO_ADD_GLUE);
+wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold. stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no io.Writer indirection to inject an in-memory buffer (ADR-29).
+
+wasi_suite!(Go, Stdio);
+wasi_suite!(Go, ArgsEnv);
+wasi_suite!(Go, Poll);
+wasi_suite!(Go, Fs, GO_FS_GLUE);
+wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
+standalone_dir_e2e!(Go);
+
+cowsay_args_e2e!(Go);
+cowsay_stdin_e2e!(Go);
+// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
+qjs_eval_e2e!(Go, ultra);
+sqlite3_shell_e2e!(Go, ultra);
+gzip_e2e!(Go);
+
+qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
+qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
+sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
+rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
+cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
+// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min); see docs/apps-audit.md.
+qjs_repl_pty_e2e!(Go);
+
+libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
+sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
+sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
+pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
+treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 
 doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
 

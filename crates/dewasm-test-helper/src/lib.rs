@@ -100,13 +100,6 @@ macro_rules! slow_tier_test {
         )]
         $item
     };
-    (heavy, $item:item) => {
-        #[cfg_attr(
-            not(feature = "ultra_heavy_test"),
-            ignore = "ultra-heavy app case (several minutes, ADR-48/53 — e.g. DOOM under Bash): --features ultra_heavy_test or -- --include-ignored"
-        )]
-        $item
-    };
 }
 
 /// Per-case library macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`LibraryCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a capability it lacks.
@@ -497,7 +490,7 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `heavy` for Bash (its run is several minutes, ADR-48's `ultra_heavy_test`). See [`slow_tier_test!`].
+/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {
