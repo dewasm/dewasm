@@ -9,7 +9,7 @@ pub fn examples_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/wat")
 }
 
-/// `examples/apps/cache/`, populated by `examples/apps/fetch.sh` (ADR-9).
+/// `examples/apps/cache/`, populated by `examples/apps/fetch-and-build.sh` (ADR-9).
 pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }

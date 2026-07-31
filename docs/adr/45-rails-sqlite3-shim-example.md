@@ -1,6 +1,6 @@
 # ADR-45 — Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3
 
-Status: **Accepted, 2026-07-28.** `examples/rails` runs an unmodified Rails 8 app on `libsqlite3.wasm` converted to Ruby; the sqlite3-gem-compatible shim, the extended `SQLITE_EXPORTS` list in `examples/apps/fetch.sh`, and the end-to-end `run.sh` all landed.
+Status: **Accepted, 2026-07-28.** `examples/rails` runs an unmodified Rails 8 app on `libsqlite3.wasm` converted to Ruby; the sqlite3-gem-compatible shim, the extended `SQLITE_EXPORTS` list in `examples/apps/fetch-and-build.sh`, and the end-to-end `run.sh` all landed.
 
 ## Context
 
@@ -10,7 +10,7 @@ The Ruby backend's north-star demo (`docs/backends/ruby.md`) is real software us
 
 Bridge at the **sqlite3 gem API layer**: a path gem named `sqlite3` (`examples/rails/sqlite3`) implements the surface Rails 8.1 actually calls — verified against the adapter and gem sources, not guessed — so Rails and ActiveRecord run unmodified. The criterion, reusable for future "run X on a converted library" work: **shim at the narrowest public API whose consumer you refuse to fork, and keep the guest callback-free** — every gem feature that would need a guest→host callback is re-expressed on guest-side primitives (`busy_handler_timeout=` → `sqlite3_busy_timeout`; `execute_batch2` → a prepare/`remainder` loop instead of `sqlite3_exec`).
 
-Each `SQLite3::Database` instantiates its own wasm module (isolated heap; a mutex serializes entry), so a connection-pool entry is an isolated SQLite and thread-safety never depends on guest-global state. The C surface this requires is exported by extending `SQLITE_EXPORTS` in `examples/apps/fetch.sh` (stamp now covers the export lists, so edits retrigger the build).
+Each `SQLite3::Database` instantiates its own wasm module (isolated heap; a mutex serializes entry), so a connection-pool entry is an isolated SQLite and thread-safety never depends on guest-global state. The C surface this requires is exported by extending `SQLITE_EXPORTS` in `examples/apps/fetch-and-build.sh` (stamp now covers the export lists, so edits retrigger the build).
 
 ## Rejected alternatives
 

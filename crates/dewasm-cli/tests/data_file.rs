@@ -586,7 +586,7 @@ fn ruby_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-ruby");
@@ -642,7 +642,7 @@ fn go_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-go");
@@ -702,7 +702,7 @@ fn python_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-python");
@@ -758,7 +758,7 @@ fn java_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/fetch.sh (see docs/testing.md)"
+        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-java");

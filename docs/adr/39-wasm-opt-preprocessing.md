@@ -1,6 +1,6 @@
 # ADR-39 — wasm-opt Preprocessing of Locally-Built App Modules
 
-Status: **Accepted, 2026-07-28.** Implemented in `examples/apps/fetch.sh`: a `wasm_opt_inplace` helper runs `wasm-opt -O2` (baseline features only) over the three modules the script builds locally — `cache/libpcap.wasm`, `cache/treesitter.wasm`, and `cache/rg.wasm` — with `wasm-opt --version` folded into each module's rebuild stamp.
+Status: **Accepted, 2026-07-28.** Implemented in `examples/apps/fetch-and-build.sh`: a `wasm_opt_inplace` helper runs `wasm-opt -O2` (baseline features only) over the three modules the script builds locally — `cache/libpcap.wasm`, `cache/treesitter.wasm`, and `cache/rg.wasm` — with `wasm-opt --version` folded into each module's rebuild stamp.
 
 ## Context
 
@@ -10,7 +10,7 @@ The example apps split into two kinds ([ADR-9](9-example-apps-from-registry.md),
 
 ## Decision
 
-Run `wasm-opt -O2` in-place over each locally-built module immediately after it is compiled, before it lands in the cache. The discriminating rule: **preprocess a module only if `fetch.sh` builds it from source (and can therefore re-verify it); never a downloaded artifact.** Concretely this is libpcap and tree-sitter (the Track A reactor libs) and ripgrep.
+Run `wasm-opt -O2` in-place over each locally-built module immediately after it is compiled, before it lands in the cache. The discriminating rule: **preprocess a module only if `fetch-and-build.sh` builds it from source (and can therefore re-verify it); never a downloaded artifact.** Concretely this is libpcap and tree-sitter (the Track A reactor libs) and ripgrep.
 
 Three constraints on how:
 
@@ -25,7 +25,7 @@ Each preprocessed module's rebuild stamp is extended from `<source-sha256>` to `
 ## Rejected alternatives
 
 - **Optimize every cached module, including downloaded artifacts.** Rewriting a checksum-pinned upstream binary breaks the "the cache is exactly the pinned artifact" contract (ADR-9) and would make the download's sha256 verification meaningless. Downloaded modules are out of scope.
-- **Commit the pre-optimized `.wasm`.** Third-party artifacts are never committed (ADR-9); the optimized output is derived from third-party source and stays in the gitignored cache like everything else `fetch.sh` produces.
+- **Commit the pre-optimized `.wasm`.** Third-party artifacts are never committed (ADR-9); the optimized output is derived from third-party source and stays in the gitignored cache like everything else `fetch-and-build.sh` produces.
 - **`wasm-ctor-eval` / `-O3` / SIMD-enabled `-O2`.** More aggressive transforms buy little for these modules and risk either behaviour changes (ctor-eval) or out-of-scope constructs (SIMD) that the converter would then reject. `-O2` with baseline features is the conservative floor that still wins big on size.
 - **Skip ripgrep.** ripgrep is a shipping app with a committed wasmtime golden, so preprocessing it carries golden-drift risk. It is included only because that golden is re-verifiable here (wasmtime installed); the rule stays "build it ⇒ eligible, and re-verify."
 

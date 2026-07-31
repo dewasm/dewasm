@@ -4,7 +4,7 @@ Prebuilt wasm binaries of real applications, each fetched from its own
 upstream, for demos and end-to-end tests.
 
 **No third-party artifact is committed to this repository** (ADR-9).
-`./fetch.sh` downloads version-pinned, sha256-verified files into
+`./fetch-and-build.sh` downloads version-pinned, sha256-verified files into
 `cache/` (gitignored); licensing of the binaries stays entirely with
 their upstream distribution. The `apps` cases
 (`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and
@@ -14,7 +14,11 @@ once from wasmtime; re-validated via `--features wasmtime_test`), run per
 backend as that backend's `e2e` test, e.g.
 `cargo test -p dewasm-backend-ruby --test e2e apps`. A missing cache or
 `ruby` fails the test loudly rather than skipping (ADR-15) — run
-`./fetch.sh` first.
+`./fetch-and-build.sh` first.
+
+`fetch-and-build.sh` just runs the per-app scripts in `scripts/` (shared
+boilerplate in `scripts/common.sh`); run one directly — e.g.
+`scripts/sqlite3.sh` — to rebuild a single app after bumping its pin.
 
 | App | Source | What it demonstrates |
 | --- | --- | --- |
@@ -29,7 +33,7 @@ backend as that backend's `e2e` test, e.g.
 | treesitter | [tree-sitter 0.26.11](https://github.com/tree-sitter/tree-sitter/releases/tag/v0.26.11) + [tree-sitter-json 0.24.8](https://github.com/tree-sitter/tree-sitter-json/releases/tag/v0.24.8), built from source with `zig` (reactor) | the tree-sitter parsing runtime as a C-API library: `parse_source("{...}")` returns the JSON parse tree's S-expression, driven on Ruby + Python + Go (heavy) |
 
 ```console
-$ ./fetch.sh
+$ ./fetch-and-build.sh
 $ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
 $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42

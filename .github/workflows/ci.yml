@@ -38,18 +38,18 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0 # keep in sync with local dev
-      - name: Install fetch.sh build tools (binaryen, bison, flex)
+      - name: Install fetch-and-build.sh build tools (binaryen, bison, flex)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends binaryen bison flex
-      - name: Add wasm32-wasip1 target (fetch.sh builds ripgrep with it)
+      - name: Add wasm32-wasip1 target (fetch-and-build.sh builds ripgrep with it)
         run: rustup target add wasm32-wasip1
-      # The libpcap/tree-sitter/ripgrep stamps in fetch.sh fold in
+      # The libpcap/tree-sitter/ripgrep stamps in fetch-and-build.sh fold in
       # `wasm-opt --version`, so the apps-cache key must too: a binaryen bump
       # must yield a new key so the rebuilt artifacts get re-saved.
       - name: Compute apps cache key
         id: appskey
-        run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-${{ hashFiles('examples/apps/fetch.sh', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
+        run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-${{ hashFiles('examples/apps/fetch-and-build.sh', 'examples/apps/scripts/**', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: examples/apps/cache
@@ -57,7 +57,7 @@ jobs:
           restore-keys: |
             apps-v1-${{ runner.os }}-
       - name: Populate apps cache (no-op on full cache hit)
-        run: examples/apps/fetch.sh
+        run: examples/apps/fetch-and-build.sh
 
   test:
     needs: apps-cache
