@@ -878,27 +878,32 @@ impl<'a> Gen<'a> {
     }
 
     /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while` (ADR-28).
-    fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded: &mut bool) {
+    ///
+    /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
+    fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded: &mut bool) -> BTreeSet<u32> {
+        let mut free = BTreeSet::new();
         for stmt in stmts {
             match stmt {
                 Stmt::Block { label, body } => {
                     let before = *guarded;
-                    self.emit_seq(w, body, guarded);
+                    let mut inner = self.emit_seq(w, body, guarded);
                     if label.referenced {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
                         w.dedent();
                     }
-                    *guarded = before || !stmt_free_targets(stmt).is_empty();
+                    inner.remove(&label.id);
+                    *guarded = before || !inner.is_empty();
+                    free.extend(inner);
                 }
                 Stmt::Loop { label, body } => {
                     if label.referenced {
                         let before = *guarded;
                         w.line("while True:");
                         w.indent();
-                        let mut inner = before;
-                        self.emit_seq(w, body, &mut inner);
+                        let mut inner_guarded = before;
+                        let mut inner = self.emit_seq(w, body, &mut inner_guarded);
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
@@ -906,10 +911,14 @@ impl<'a> Gen<'a> {
                         w.dedent();
                         w.line("break");
                         w.dedent();
-                        *guarded = before || !stmt_free_targets(stmt).is_empty();
+                        inner.remove(&label.id);
+                        *guarded = before || !inner.is_empty();
+                        free.extend(inner);
                     } else {
                         // No br targets this loop, so it never repeats.
-                        self.emit_seq(w, body, guarded);
+                        let mut inner = self.emit_seq(w, body, guarded);
+                        inner.remove(&label.id);
+                        free.extend(inner);
                     }
                 }
                 Stmt::If {
@@ -919,14 +928,16 @@ impl<'a> Gen<'a> {
                     els,
                 } => {
                     let before = *guarded;
-                    self.emit_if(w, before, cond, then, els);
+                    let mut inner = self.emit_if(w, before, cond, then, els);
                     if label.referenced {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
                         w.dedent();
                     }
-                    *guarded = before || !stmt_free_targets(stmt).is_empty();
+                    inner.remove(&label.id);
+                    *guarded = before || !inner.is_empty();
+                    free.extend(inner);
                 }
                 Stmt::SourceLine(_) => {
                     // A comment carries no runtime effect, so render it outside the `_br == 0` guard: a lone comment under an indented guard block would be an empty suite Python rejects, and the guard state must stay exactly as the surrounding statements left it (ADR-38).
@@ -941,15 +952,24 @@ impl<'a> Gen<'a> {
                     } else {
                         self.simple_stmt(w, stmt);
                     }
-                    if !stmt_free_targets(stmt).is_empty() {
+                    if collect_leaf_free_targets(stmt, &mut free) {
                         *guarded = true;
                     }
                 }
             }
         }
+        free
     }
 
-    fn emit_if(&self, w: &mut CodeWriter, guarded: bool, cond: &Expr, then: &[Stmt], els: &[Stmt]) {
+    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
+    fn emit_if(
+        &self,
+        w: &mut CodeWriter,
+        guarded: bool,
+        cond: &Expr,
+        then: &[Stmt],
+        els: &[Stmt],
+    ) -> BTreeSet<u32> {
         let cond_s = self.expr(cond);
         // When guarded, `_br == 0 and ...` short-circuits so `cond` (which may trap on a load) is not evaluated while a branch is pending.
         if guarded {
@@ -958,11 +978,12 @@ impl<'a> Gen<'a> {
             w.line(format!("if ({cond_s}) != 0:"));
         }
         w.indent();
+        let mut free = BTreeSet::new();
         if then.is_empty() {
             w.line("pass");
         } else {
             let mut it = false;
-            self.emit_seq(w, then, &mut it);
+            free = self.emit_seq(w, then, &mut it);
         }
         w.dedent();
         if !els.is_empty() {
@@ -973,9 +994,10 @@ impl<'a> Gen<'a> {
             }
             w.indent();
             let mut ie = false;
-            self.emit_seq(w, els, &mut ie);
+            free.extend(self.emit_seq(w, els, &mut ie));
             w.dedent();
         }
+        free
     }
 
     fn simple_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
@@ -1386,51 +1408,29 @@ fn stmt_has_label_branch(stmt: &Stmt) -> bool {
     }
 }
 
-/// The set of label ids a statement branches to that are *not* bound within it. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28).
-fn stmt_free_targets(stmt: &Stmt) -> BTreeSet<u32> {
+/// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28). Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
+fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
     match stmt {
-        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => target_free(t),
+        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => collect_target_free(t, free),
         Stmt::BrTable {
             targets, default, ..
         } => {
-            let mut s = target_free(default);
+            let mut any = collect_target_free(default, free);
             for t in targets {
-                s.extend(target_free(t));
+                any |= collect_target_free(t, free);
             }
-            s
+            any
         }
-        Stmt::Block { label, body } | Stmt::Loop { label, body } => {
-            let mut s = seq_free_targets(body);
-            s.remove(&label.id);
-            s
-        }
-        Stmt::If {
-            label, then, els, ..
-        } => {
-            let mut s = seq_free_targets(then);
-            s.extend(seq_free_targets(els));
-            s.remove(&label.id);
-            s
-        }
-        _ => BTreeSet::new(),
+        _ => false,
     }
 }
 
-fn seq_free_targets(stmts: &[Stmt]) -> BTreeSet<u32> {
-    let mut s = BTreeSet::new();
-    for stmt in stmts {
-        s.extend(stmt_free_targets(stmt));
-    }
-    s
-}
-
-fn target_free(t: &BrTarget) -> BTreeSet<u32> {
+fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) -> bool {
     match t {
-        BrTarget::Return { .. } => BTreeSet::new(),
+        BrTarget::Return { .. } => false,
         BrTarget::Label { label, .. } => {
-            let mut s = BTreeSet::new();
-            s.insert(*label);
-            s
+            free.insert(*label);
+            true
         }
     }
 }
