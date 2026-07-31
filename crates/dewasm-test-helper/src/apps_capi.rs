@@ -1,13 +1,14 @@
 //! C-API-driving app cases (ADR-27): a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime golden**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/fetch-and-build.sh`.
 //!
-//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`, `sqlite3_callback_binding_e2e!`). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path arrives through the `{scratch}` placeholder the runner fills. Which backends invoke a macro is the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash — it has no WASI filesystem and no host-language object model to plumb a C API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
+//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`, `sqlite3_callback_binding_e2e!`). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash — it has no WASI filesystem and no host-language object model to plumb a C API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
 use dewasm_backend::Mode;
 
+use crate::apps_fs::{stage_into, Stage};
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, fresh_scratch_dir};
+use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, fresh_scratch_dir};
 use crate::glue::fill;
 
 /// A C-API-driving case: convert `wasm` (cache stem) to library class `class`, append the backend's glue, run it, and require exactly `expect_stdout`.
@@ -19,6 +20,8 @@ pub struct CApiCase {
     pub class: &'static str,
     /// The fixed stdout the drive must produce (no wasmtime golden possible).
     pub expect_stdout: &'static str,
+    /// Fixtures staged into the fresh scratch dir before the run (relative to [`apps_fixtures_dir`]); the glue reaches them through `{scratch}`. Empty for the in-memory cases.
+    pub stage: &'static [Stage],
     /// Host-side assertion over the scratch dir after the run (file cases); `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
 }
@@ -44,6 +47,7 @@ pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     wasm: "libsqlite3",
     class: "Libsqlite3",
     expect_stdout: "version: 3.53.3\n20|y\n10|x\nC-API-OK\n",
+    stage: &[],
     assert_host: assert_none,
 };
 
@@ -53,6 +57,7 @@ pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     wasm: "libsqlite3",
     class: "Libsqlite3",
     expect_stdout: "10|x\n20|y\nFILE-OK\n",
+    stage: &[],
     assert_host: assert_dbfile,
 };
 
@@ -62,6 +67,7 @@ pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     wasm: "sqlite3-binding",
     class: "Sqlite3Binding",
     expect_stdout: "row: 2|y\nrow: 3|z\nCALLBACK-OK\n",
+    stage: &[],
     assert_host: assert_none,
 };
 
@@ -74,6 +80,7 @@ pub const PCAP_COMPILE: CApiCase = CApiCase {
                     21 12 0 80\n40 0 0 56\n21 10 11 80\n21 0 10 2048\n48 0 0 23\n\
                     21 0 8 6\n40 0 0 20\n69 6 0 8191\n177 0 0 14\n72 0 0 14\n\
                     21 2 0 80\n72 0 0 16\n21 0 1 80\n6 0 0 65535\n6 0 0 0\nBPF-OK\n",
+    stage: &[],
     assert_host: assert_none,
 };
 
@@ -84,6 +91,7 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
     class: "Treesitter",
     expect_stdout: "(document (object (pair key: (string (string_content)) \
                     value: (array (number) (true) (null)))))\nTS-OK\n",
+    stage: &[],
     assert_host: assert_none,
 };
 
@@ -105,10 +113,35 @@ pub const ZEROPERL_EVAL: CApiCase = CApiCase {
     wasm: "zeroperl",
     class: "Zeroperl",
     expect_stdout: "m=hello|world|42 sum=50\n",
+    stage: &[],
     assert_host: assert_none,
 };
 
-/// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the file-backed case's preopen; unused by the in-memory cases).
+/// ExifTool 13.42 on zeroperl (issue #70): the flattened `exiftool` CLI driver
+/// (6over3/exiftool `src/exiftool`, fetched into `cache/exiftool-lib/`) run on
+/// the *same* `cache/zeroperl.wasm` reactor — the `@6over3/zeroperl-ts` build
+/// embeds the full `Image::ExifTool` module tree in its SFS blob, so `use
+/// Image::ExifTool` resolves in-guest with no module preopen (only the driver
+/// script and the image are staged). The glue drives the embedding C API
+/// `_initialize` → `zeroperl_init` → `zeroperl_eval` of a driver snippet that
+/// sets `@ARGV`/`$0` and `do`es the script, then `zeroperl_flush`. Deterministic
+/// tags only (`-S -Make -Model -DateTimeOriginal`) over the committed
+/// `exif_fixture.jpg`, cross-checked against host exiftool. `/dev/null` is
+/// preopened for `zeroperl_init` (see [`ZEROPERL_EVAL`]); the image is staged
+/// into a fresh scratch dir preopened at `/img`, the driver at `/work`.
+pub const EXIFTOOL_EXTRACT: CApiCase = CApiCase {
+    name: "exiftool_extract",
+    wasm: "zeroperl",
+    class: "Zeroperl",
+    expect_stdout: "Make: DewasmCam\nModel: Model-X\nDateTimeOriginal: 2020:01:02 03:04:05\n",
+    stage: &[Stage::File {
+        src: "exif_fixture.jpg",
+        dst: "exif_fixture.jpg",
+    }],
+    assert_host: assert_none,
+};
+
+/// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Stages `case.stage` into a fresh scratch dir and fills `{scratch}`/`{cache}` in `glue` (the file-backed and exiftool cases' preopens; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let cache = apps_cache_dir();
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
@@ -121,7 +154,14 @@ pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let class = lang.convert_app(&bytes, Mode::Library, case.wasm);
 
     let scratch: PathBuf = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
-    let glue = fill(glue, &[("scratch", &scratch.to_string_lossy())]);
+    stage_into(&apps_fixtures_dir(), &scratch, case.stage);
+    let glue = fill(
+        glue,
+        &[
+            ("scratch", &scratch.to_string_lossy()),
+            ("cache", &cache.to_string_lossy()),
+        ],
+    );
     let output = lang.run(&format!("{class}\n{glue}"), &[], "");
     assert!(
         output.status.success(),

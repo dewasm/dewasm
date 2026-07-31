@@ -204,6 +204,28 @@ pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
+/// Apply each [`Stage`] step into `scratch`, copying from `fixtures` (the
+/// shared [`apps_fixtures_dir`]). Shared by the filesystem-app runner and the
+/// C-API runner (the exiftool case stages its image fixture the same way),
+/// so fixture staging lives in one place.
+pub(crate) fn stage_into(fixtures: &Path, scratch: &Path, stage: &[Stage]) {
+    for step in stage {
+        match step {
+            Stage::File { src, dst } => {
+                std::fs::copy(fixtures.join(src), scratch.join(dst)).unwrap();
+            }
+            Stage::Tree { src, dst } => {
+                let to = if dst.is_empty() {
+                    scratch.to_path_buf()
+                } else {
+                    scratch.join(dst)
+                };
+                copy_tree(&fixtures.join(src), &to);
+            }
+        }
+    }
+}
+
 /// Recursively copy the contents of `src` into `dst`, creating `dst`.
 fn copy_tree(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
@@ -224,21 +246,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
     let fixtures = apps_fixtures_dir();
     let scratch = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
 
-    for stage in case.stage {
-        match stage {
-            Stage::File { src, dst } => {
-                std::fs::copy(fixtures.join(src), scratch.join(dst)).unwrap();
-            }
-            Stage::Tree { src, dst } => {
-                let to = if dst.is_empty() {
-                    scratch.clone()
-                } else {
-                    scratch.join(dst)
-                };
-                copy_tree(&fixtures.join(src), &to);
-            }
-        }
-    }
+    stage_into(&fixtures, &scratch, case.stage);
 
     let preopen_paths: Vec<(&str, PathBuf)> = case
         .preopens
