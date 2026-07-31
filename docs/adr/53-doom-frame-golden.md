@@ -97,7 +97,11 @@ serializing a 1 MB framebuffer out of the associative-array memory), so it stays
 out of CI and runs only in local pre-release. There is no separate conversion
 smoke — the frame test already exercises the full convert-and-run path, and a
 convert-only assertion
-would be an idiom no other suite uses.
+would be an idiom no other suite uses. *(Amended by
+[ADR-54](54-apps-convert-suite.md): the convert-only assertion is now the idiom
+of a whole-cache per-backend convert suite, which includes a fast-tier `doom`
+convert trial on every backend — the frame-golden run above stays the
+convert-and-run gate; the two are complementary.)*
 
 ## Rejected alternatives
 

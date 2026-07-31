@@ -2,6 +2,7 @@
 
 mod apps;
 mod apps_capi;
+mod apps_convert;
 mod apps_fs;
 mod backend;
 mod doom;
@@ -24,6 +25,7 @@ pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
     SQLITE3_FILE_C_API, TREESITTER_PARSE,
 };
+pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
     run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
     RG_SEARCH, SQLITE3_SHELL_DBFILE,
@@ -64,6 +66,18 @@ macro_rules! spec_suite {
     ($lang:expr) => {
         fn main() {
             $crate::spec_main(&$lang, cfg!(feature = "slow_test"));
+        }
+    };
+}
+
+/// The `harness = false` `main` of a backend's whole-cache convert integration test (ADR-54): builds one libtest-mimic trial per cached app for `$backend` (a `Backend + Sync` value) and runs them with cargo's own test arguments. Unlike [`spec_suite!`] this takes the plain [`Backend`] — the convert suite only lowers, it never runs generated code, so it needs no interpreter or script-phrasing layer. `$backend` must be a promotable-to-`'static` value; the backend `Backend` structs are unit structs, so `apps_convert_suite!(RubyBackend)` promotes `&RubyBackend` to `&'static`. Heavy trials are `#[ignore]`d unless the expanding crate's `slow_test` feature is on (ADR-48).
+///
+/// [`Backend`]: dewasm_backend::Backend
+#[macro_export]
+macro_rules! apps_convert_suite {
+    ($backend:expr) => {
+        fn main() {
+            $crate::apps_convert_main(&$backend, cfg!(feature = "slow_test"));
         }
     };
 }
