@@ -1,0 +1,41 @@
+[package]
+name = "dewasm-backend-perl"
+description = "Perl backend for dewasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Opt-in: expands the slow per-case macros (dewasm-test-helper, ADR-27
+# revision) as active `#[test]`s instead of `#[ignore]`d ones, and runs the
+# full spec testsuite sweep — CI's main sweep tier. See docs/testing.md.
+slow_test = []
+
+[dependencies]
+anyhow.workspace = true
+dewasm-core.workspace = true
+dewasm-backend.workspace = true
+
+[dev-dependencies]
+regex.workspace = true
+wast.workspace = true
+wat.workspace = true
+dewasm-test-helper.workspace = true
+
+# The spec integration test is a libtest-mimic harness: one trial per
+# `.wast` file, so `harness = false` and its `main` comes from `spec_suite!`.
+[[test]]
+name = "spec"
+harness = false
+
+# The whole-cache convert suite (ADR-54) is likewise a libtest-mimic
+# harness: one trial per cached app, `harness = false`, `main` from
+# `apps_convert_suite!`.
+[[test]]
+name = "convert"
+harness = false
