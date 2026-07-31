@@ -4,6 +4,7 @@ mod apps;
 mod apps_capi;
 mod apps_fs;
 mod backend;
+mod doom;
 mod fixtures;
 mod glue;
 mod library;
@@ -30,6 +31,10 @@ pub use apps_fs::{
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
     BackendUnderTest,
+};
+pub use doom::{
+    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case, DOOM_CLOCK_STEP_MS,
+    DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
 };
 pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
@@ -480,6 +485,22 @@ macro_rules! sqlite3_callback_binding_e2e {
             #[test]
             fn sqlite3_callback_binding() {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
+            }
+        }
+    };
+}
+
+/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+#[macro_export]
+macro_rules! doom_frame_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::doom_frame_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn doom_frame() {
+                $crate::run_doom_frame_case(&$lang, $glue);
             }
         }
     };

@@ -16,7 +16,7 @@ Each frontend implements the same ten imports (framebuffer hand-off, monotonic c
 go/run.sh    # or: java/run.sh
 ```
 
-`fetch.sh` (invoked by the build scripts) downloads the wasm binary into the gitignored `cache/`; no other assets are needed. Each frontend also has a headless `-smoke`/`--smoke` mode that ticks the game without a window, sanity-checks the rendered frame, and writes it to `screenshot.png`.
+`build.sh` fetches the wasm binary (checksum-pinned, via `../apps/scripts/doom.sh`) into the gitignored apps cache; no other assets are needed. Each frontend also has a headless `-smoke`/`--smoke` mode that ticks the game without a window, sanity-checks the rendered frame, and writes it to `screenshot.png`.
 
 Measured on an Apple Silicon laptop, headless: Go ~70 ticks/sec, Java ~55 — both comfortably above DOOM's native 35Hz tic rate. Ruby reaches ~15 ticks/sec with YJIT and Python ~1.3, which is why those two render into the terminal instead of a window: the ANSI diff renderer costs well under 1ms/frame, so the wasm tick stays the only bottleneck. Bash, after the ADR-51/52 memory work, boots in ~2 minutes and draws a frame every ~34 seconds — not playable, but genuinely running. Terminals report key presses but not releases, so the terminal frontends synthesize key-up events after a short hold window, and fire is on `f` (Ctrl never reaches a terminal app as a plain key).
 

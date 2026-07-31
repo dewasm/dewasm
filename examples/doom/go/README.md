@@ -1,6 +1,6 @@
 # DOOM (Go, ebiten)
 
-An interactive frontend for the DOOM shareware episode, running as pure Go code. `../fetch.sh` downloads jacobenget/doom.wasm; `build.sh` converts it to Go with dewasm (`doom_gen.go`, ~10MB, gitignored, regenerated on every build) and links it against a small host program in `main.go` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery) and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten).
+An interactive frontend for the DOOM shareware episode, running as pure Go code. `build.sh` fetches jacobenget/doom.wasm (checksum-pinned into the shared apps cache) and converts it to Go with dewasm (`doom_gen.go`, ~10MB, gitignored, regenerated on every build) and links it against a small host program in `main.go` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery) and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten).
 
 ## Run
 

@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, examples_dir, gzip_e2e, library_add_e2e, qjs_eval_e2e,
-    qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, shared_table_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, BackendUnderTest,
+    cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
+    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, shared_table_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -147,6 +147,55 @@ sqlite3shell_invoke '_start'
 exit 0
 "#;
 
+/// DOOM (ADR-53): the frame golden, modelled on the Bash frontend (examples/doom/bash/main.sh) — imp_* handlers set `R0`, `IMPORTS[mod.name]` wires them, `doom_init`/`doom_invoke` drive, and `doom_mem` holds the pixels. The P6 frame goes out through a chunked `printf` `\xNN` format string (which carries the NUL bytes a Bash variable cannot). `{ticks}`/`{clock_step}` filled by the runner.
+const BASH_DOOM_FRAME_GLUE: &str = r#"DOOM_MS=0
+FRAME_BUF_OFF=0
+FRAME_W=0
+FRAME_H=0
+
+imp_noop() { R0=; return 0; }
+imp_zero() { R0=0; return 0; }
+imp_time_ms() { DOOM_MS=$(( DOOM_MS + {clock_step} )); R0=$DOOM_MS; return 0; }
+imp_draw_frame() { FRAME_BUF_OFF=$1; R0=; return 0; }
+imp_on_game_init() { FRAME_W=$1; FRAME_H=$2; R0=; return 0; }
+
+declare -A IMPORTS=(
+  ['console.onErrorMessage']=imp_noop
+  ['console.onInfoMessage']=imp_noop
+  ['gameSaving.sizeOfSaveGame']=imp_zero
+  ['gameSaving.readSaveGame']=imp_zero
+  ['gameSaving.writeSaveGame']=imp_zero
+  ['runtimeControl.timeInMilliseconds']=imp_time_ms
+  ['ui.drawFrame']=imp_draw_frame
+  ['loading.onGameInit']=imp_on_game_init
+  ['loading.wadSizes']=imp_noop
+  ['loading.readWads']=imp_noop
+)
+
+doom_init || { echo "doom_init failed" >&2; exit 1; }
+doom_invoke initGame || { echo "initGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+for (( _t = 0; _t < {ticks}; _t++ )); do
+  doom_invoke tickGame || { echo "tickGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+done
+
+w=$FRAME_W
+h=$FRAME_H
+off=$FRAME_BUF_OFF
+n=$(( w * h * 4 ))
+printf 'P6\n%d %d\n255\n' "$w" "$h"
+fmt=''
+cnt=0
+for (( i = 0; i < n; i += 4 )); do
+  r=${doom_mem[$(( off + i + 2 ))]-0}
+  g=${doom_mem[$(( off + i + 1 ))]-0}
+  b=${doom_mem[$(( off + i ))]-0}
+  printf -v px '\\x%02x\\x%02x\\x%02x' "$r" "$g" "$b"
+  fmt+=$px
+  if (( ++cnt >= 4096 )); then printf "$fmt"; fmt=''; cnt=0; fi
+done
+[[ -n $fmt ]] && printf "$fmt"
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Bash, BASH_ADD_GLUE);
@@ -175,6 +224,8 @@ sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here alongside them: it shares their standalone-mode QuickJS conversion. It is markedly slower than every other case — every keystroke of the scripted session re-enters QuickJS's interactive line editor (redraw/completion), and each successive evaluation measured slower than the last (first prompt ~135s, then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and timed out on CI (#22). It is therefore pinned to the `ultra` tier (ADR-48): kept out of CI's `slow_test` sweep and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification. Left wired rather than unwired per ADR-15 (fail loud, not silently skip): a timeout is still an honest signal.
 qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
+
+doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 
 shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
 // libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e! / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no host-language C API to plumb a pointer-returning binding through (ADR-12), and the multi-MB reactor artifacts are far past what Bash's parser can load in practice. embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).

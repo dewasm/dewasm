@@ -11,9 +11,9 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
-    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
+    cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, doom_frame_e2e, examples_dir, gzip_e2e,
+    library_add_e2e, libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
+    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
     sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
     sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e, wasi_import_override_e2e,
     wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
@@ -579,6 +579,49 @@ const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 }
 "#;
 
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
+const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
+	var ms uint64
+	var frameOff, frameW, frameH uint32
+	imports := Imports{
+		"console": {
+			"onErrorMessage": func(o, l uint32) {},
+			"onInfoMessage":  func(o, l uint32) {},
+		},
+		"gameSaving": {
+			"sizeOfSaveGame": func(id uint32) uint32 { return 0 },
+			"readSaveGame":   func(id, dst uint32) uint32 { return 0 },
+			"writeSaveGame":  func(id, src, n uint32) uint32 { return n },
+		},
+		"runtimeControl": {
+			"timeInMilliseconds": func() uint64 { ms += {clock_step}; return ms },
+		},
+		"ui": {
+			"drawFrame": func(off uint32) { frameOff = off },
+		},
+		"loading": {
+			"onGameInit": func(w, h uint32) { frameW, frameH = w, h },
+			"wadSizes":   func(a, b uint32) {},
+			"readWads":   func(a, b uint32) {},
+		},
+	}
+	inst := NewDoom(imports, nil, nil, nil)
+	inst.Exports["initGame"].(func())()
+	tick := inst.Exports["tickGame"].(func())
+	for i := 0; i < {ticks}; i++ {
+		tick()
+	}
+	data := inst.memory.data
+	header := fmt.Sprintf("P6\n%d %d\n255\n", frameW, frameH)
+	out := make([]byte, 0, len(header)+int(frameW*frameH*3))
+	out = append(out, header...)
+	for i := uint32(0); i < frameW*frameH*4; i += 4 {
+		out = append(out, data[frameOff+i+2], data[frameOff+i+1], data[frameOff+i])
+	}
+	fmt.Print(string(out))
+}
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Go, GO_ADD_GLUE);
@@ -612,6 +655,8 @@ sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
 sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
 pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
+
+doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
 
 shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.

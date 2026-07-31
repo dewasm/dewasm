@@ -8,10 +8,10 @@ cd "$(dirname "$0")"
 script_dir="$(pwd)"
 repo_root="$script_dir/../../.."
 
-"$script_dir/../fetch.sh"
+"$script_dir/../../apps/scripts/doom.sh"
 
 (cd "$repo_root" && cargo run -q -p dewasm-cli -- \
-  examples/doom/cache/doom.wasm --target java --mode library \
+  examples/apps/cache/doom.wasm --target java --mode library \
   --module-name Doom -o examples/doom/java/Doom.java)
 
 mkdir -p classes

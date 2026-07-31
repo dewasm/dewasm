@@ -14,12 +14,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 repo_root="$(cd ../../.. && pwd)"
 
-../fetch.sh
+../../apps/scripts/doom.sh
 
 (
   cd "$repo_root"
   cargo run -q -p dewasm-cli -- \
-    examples/doom/cache/doom.wasm \
+    examples/apps/cache/doom.wasm \
     --target bash --mode library --module-name doom \
     -o examples/doom/bash/doom_gen.sh
 )
