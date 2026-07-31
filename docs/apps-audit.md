@@ -18,7 +18,7 @@ and record the verdict here. An app that needs a proposal outside the 0.1 scope 
 | CPython 3.14.6 | pinned in `fetch-and-build.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python/Go**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `fetch-and-build.sh` | none | ✅ in scope (shipping, **executes on Ruby/Python**⁵) |
 | pandoc | see below | **simd** | ⛔ deferred |
-| zeroperl (Perl 5.42) | see below | none (host-shim blocked) | ⛔ deferred |
+| zeroperl (Perl 5.42) | [6over3/zeroperl](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` npm pin in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on Ruby**¹²) |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
 | ripgrep 14.1.1 | pinned-source cargo build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, Ruby + Python + Go + Java fs⁶) |
 | minigzip (zlib 1.3.1) | pinned-source zig build in `fetch-and-build.sh` | none (baseline after ADR-39 wasm-opt)¹¹ | ✅ in scope (shipping, **all five backends**⁷) |
@@ -70,17 +70,13 @@ Where included, each is comfortably under the ADR-24 ~5-minute bar, so it genuin
 
 ¹¹ **ADR-39 `wasm-opt` preprocessing.** Every module `fetch-and-build.sh` builds from source (the three sqlite3 shapes, minigzip, libpcap, tree-sitter, ripgrep — but not the DWARF fixture, which keeps its debug info) is run through `wasm-opt -O2` (baseline features only, no ctor-eval) before caching — see [ADR-39](adr/39-wasm-opt-preprocessing.md). Besides shrinking them, `wasm-opt` re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹ the downloaded artifacts (cowsay, qjs, CPython, CRuby) still carry.
 
+¹² **zeroperl retraction (audited 2026-08-01, issue #67).** This entry was previously *deferred* on three presumed host-environment blockers; converting and running the module proved all three were misreadings, so the verdict is retracted. (1) **asyncify** and the **setjmp/longjmp** shim are module-internal — asyncify is a binaryen transform baked into the wasm, and the setjmp implementation is a port of ruby.wasm's `rb_wasm_setjmp` that lowers to ordinary baseline instructions; neither asks anything of the runtime. (2) The imported **`env.call_host_function`** is only invoked when the guest registers a host callback, which the eval path never does, so a `->(_,_,_){0}` stub as an ADR-7 import provider satisfies the link with no host glue. (3) No **stdlib preopen** is needed — the Perl core is embedded in the module as an "SFS" blob served from guest memory; the only preopen `zeroperl_init` requires is `/dev/null` (mapped guest→host `/dev/null`; without it init returns 1). The prebuilt reactor exposes an embedding C API, so it is driven exactly like the other reactor-library C-API cases (footnotes ⁸/¹⁰): the `zeroperl_eval` case (`zeroperl_eval_e2e!`, `slow_test`-gated — the 25 MB module converts to a ~120 MB / ~1M-line Ruby program) evaluates a regex + `printf` Perl program and pins its stdout. Ruby only for now (it exercises Ruby's provider/guest-memory idioms, not a new WASI unit); Perl 5 joins CPython and CRuby as a marquee scripting-language demo. The pinnable distribution is the `@6over3/zeroperl-ts` npm wrapper (the `6over3/zeroperl` source repo — the org renamed from `uswriting` — cuts no releases); MIT source, Apache-2.0 npm wrapper.
+
 ## Deferred: pandoc
 
 - Source: https://haskell-wasm.github.io/pandoc-wasm/pandoc.wasm (gh-pages of `haskell-wasm/pandoc-wasm`, unversioned — record the serving commit when pinning; audited copy: commit `ed18ae6e337d`, sha256 `48d9ceed3ef805f6acc28e6f58c2439cdeb1f71864244fffcc155e2c045aa7fc`, 53 MB).
 - Audit: **needs simd** (first offense: a v128 operation at offset 0x24723a). Notably it does *not* need tail calls or exception handling — the GHC 9.12 wasm backend output is otherwise baseline-shaped — so SIMD support alone would unblock it.
 - Revisit when/if SIMD enters scope; the binary is otherwise a pure wasip1 stdio converter and would make a strong demo.
-
-## Deferred: zeroperl
-
-- Source: [github.com/6over3/zeroperl](https://github.com/6over3/zeroperl) — a WASI reactor build of Perl 5.42. A prebuilt artifact is redistributed in [github.com/lbe/go-exiftool-wasm](https://github.com/lbe/go-exiftool-wasm) as `internal/zeroperl/zeroperl.wasm` (pin the serving commit + sha256 when it is promoted).
-- Audit: **not blocked on a wasm feature** — the blocker is host shims. The build relies on binaryen **asyncify** plus a custom **setjmp/longjmp** shim and an imported `env.call_host_function`, none of which the runtime provides. This is an ABI/host-environment gap, not a proposal outside the 0.1 scope.
-- Revisit when a setjmp/asyncify story exists (a general asyncify unwinding shim plus the `call_host_function` host glue); Perl 5 would be a marquee scripting-language demo alongside CPython and CRuby.
 
 ## Deferred: LightningCSS
 

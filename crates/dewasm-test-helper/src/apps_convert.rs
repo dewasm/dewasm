@@ -40,10 +40,11 @@ struct AppConvert {
     mode: Mode,
     /// Heavy: dev-profile conversion exceeds ~2 s on every backend, measurably
     /// slowing the fast gate, so the trial is `#[ignore]`d unless the backend
-    /// crate's `slow_test` feature is on. Measured, not guessed: only the two
-    /// giant interpreter artifacts — `ruby` (~7–13 s) and `cpython` (~2.6–5 s)
-    /// — cross the line; the next-slowest, `rg`, stays ~1.1–2.1 s in the same
-    /// cluster as the sqlite cases and is left in the fast gate (ADR-54).
+    /// crate's `slow_test` feature is on. Measured, not guessed: only the three
+    /// giant artifacts — `ruby` (~7–13 s), `cpython` (~2.6–5 s), and the 25 MB
+    /// `zeroperl` (Perl 5.42, ~4–5 s on Ruby and Python) — cross the line; the
+    /// next-slowest, `rg`, stays ~1.1–2.1 s in the same cluster as the sqlite
+    /// cases and is left in the fast gate (ADR-54).
     heavy: bool,
 }
 
@@ -119,6 +120,11 @@ const MANIFEST: &[AppConvert] = &[
         stem: "treesitter",
         mode: Mode::Library,
         heavy: false,
+    },
+    AppConvert {
+        stem: "zeroperl",
+        mode: Mode::Library,
+        heavy: true,
     },
 ];
 

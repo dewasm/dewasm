@@ -87,6 +87,27 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
+/// zeroperl Perl-5.42 eval (ADR-54 retraction, issue #67): the prebuilt
+/// `@6over3/zeroperl-ts` reactor exposes an embedding C API; the glue drives it
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. Two host-environment pieces the
+/// deferred verdict presumed were blockers are supplied entirely from the glue,
+/// not the runtime: the imported `env.call_host_function` is a zero-returning
+/// stub (only ever called when the guest registers host callbacks, which this
+/// program does not), and `zeroperl_init` needs `/dev/null` resolvable so the
+/// glue preopens it (mapped guest→host `/dev/null`; without it init returns 1).
+/// The asyncify and setjmp/longjmp machinery the verdict also cited is
+/// module-internal (binaryen transforms; the setjmp is a port of ruby.wasm's
+/// `rb_wasm_setjmp`) and needs nothing from us. The pinned output is a regex +
+/// `printf` line — deterministic, exercising a real slice of the Perl core.
+pub const ZEROPERL_EVAL: CApiCase = CApiCase {
+    name: "zeroperl_eval",
+    wasm: "zeroperl",
+    class: "Zeroperl",
+    expect_stdout: "m=hello|world|42 sum=50\n",
+    assert_host: assert_none,
+};
+
 /// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the file-backed case's preopen; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let cache = apps_cache_dir();
