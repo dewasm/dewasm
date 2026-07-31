@@ -39,7 +39,7 @@ tar xzf "$tmp/ts.tar.gz" -C "$tmp"
 tar xzf "$tmp/tsjson.tar.gz" -C "$tmp"
 echo "treesitter: building treesitter.wasm (zig cc, reactor)"
 # --strip-debug drops the DWARF wasm-opt cannot process.
-zig cc -target wasm32-wasi -mexec-model=reactor -O2 -Wl,--strip-debug \
+zig_cc_wasi -mexec-model=reactor -O2 -Wl,--strip-debug \
   -I "$tmp/$TS_DIR/lib/include" -I "$tmp/$TS_DIR/lib/src" \
   -I "$tmp/$TSJSON_DIR/src" \
   "$tmp/$TS_DIR/lib/src/lib.c" "$tmp/$TSJSON_DIR/src/parser.c" src/treesitter_binding.c \

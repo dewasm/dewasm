@@ -23,7 +23,7 @@ fi
 require_tool dwarf-fixture zig "install zig (e.g. brew install zig) to build the DWARF fixture"
 
 echo "dwarf-fixture: building dwarf-fixture.wasm (zig cc -g -O1)"
-zig cc -target wasm32-wasi -g -O1 -o cache/dwarf-fixture.wasm "$DWARF_FIXTURE_SRC"
+zig_cc_wasi -g -O1 -o cache/dwarf-fixture.wasm "$DWARF_FIXTURE_SRC"
 
 write_stamp "$dwarf_stamp" "$DWARF_FIXTURE_SHA256"
 echo "dwarf-fixture: -> cache/dwarf-fixture.wasm"

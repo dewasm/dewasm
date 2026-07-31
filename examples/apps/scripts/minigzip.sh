@@ -23,12 +23,14 @@ ZLIB_SRCS=(
 )
 
 minigzip_stamp="cache/minigzip.src-sha256"
-if is_cached "$minigzip_stamp" "$ZLIB_SHA256" cache/minigzip.wasm; then
+minigzip_want="$(printf '%s\n%s' "$ZLIB_SHA256" "$(wasm_opt_version)")"
+if is_cached "$minigzip_stamp" "$minigzip_want" cache/minigzip.wasm; then
   echo "minigzip: cached"
   exit 0
 fi
 
 require_tool minigzip zig "install zig (e.g. brew install zig) to build the minigzip app"
+require_tool minigzip wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the minigzip app (ADR-39)"
 
 echo "minigzip: fetching $ZLIB_URL"
 new_tmpdir
@@ -37,9 +39,12 @@ tar xzf "$tmp/zlib.tar.gz" -C "$tmp"
 echo "minigzip: building minigzip.wasm (zig cc)"
 srcs=()
 for s in "${ZLIB_SRCS[@]}"; do srcs+=("$tmp/$ZLIB_DIR/$s"); done
-zig cc -target wasm32-wasi -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" \
+# --strip-debug drops the DWARF wasm-opt cannot parse (ADR-39).
+zig_cc_wasi -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" -Wl,--strip-debug \
   "${srcs[@]}" "$tmp/$ZLIB_DIR/test/minigzip.c" \
   -o cache/minigzip.wasm
+echo "minigzip: wasm-opt -O2 (ADR-39)"
+wasm_opt_inplace cache/minigzip.wasm
 
-write_stamp "$minigzip_stamp" "$ZLIB_SHA256"
+write_stamp "$minigzip_stamp" "$minigzip_want"
 echo "minigzip: -> cache/minigzip.wasm"

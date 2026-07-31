@@ -53,7 +53,7 @@ for s in "${PCAP_SRCS[@]}"; do psrcs+=("$pdir/$s"); done
 # pcap_compile_nopcap() is the documented filter-only entry point but is
 # marked deprecated (thread-safety of its error buffer); silence that here.
 # --strip-debug drops the DWARF wasm-opt cannot process.
-zig cc -target wasm32-wasi -mexec-model=reactor -O2 \
+zig_cc_wasi -mexec-model=reactor -O2 \
   -DBUILDING_PCAP -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal \
   -Wno-deprecated-declarations -Wl,--strip-debug -I "$pdir" \
   "${psrcs[@]}" src/pcap_binding.c \

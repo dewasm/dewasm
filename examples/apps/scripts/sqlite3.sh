@@ -51,9 +51,9 @@ BINDING_EXPORTS=(
   sqlite3_malloc sqlite3_free
 )
 
-# The stamp covers the source sha *and* the export lists, so editing either
-# retriggers the build.
-sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]}"
+# The stamp covers the source sha, the export lists, and the wasm-opt version
+# (ADR-39), so editing any of them retriggers the build.
+sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} wasm-opt:$(wasm_opt_version)"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if is_cached "$sqlite_stamp" "$sqlite_key" \
   cache/sqlite3-shell.wasm cache/libsqlite3.wasm cache/sqlite3-binding.wasm; then
@@ -63,19 +63,21 @@ fi
 
 require_tool sqlite3 zig "install zig (e.g. brew install zig) to build the sqlite3 apps"
 require_tool sqlite3 unzip
+require_tool sqlite3 wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the sqlite3 apps (ADR-39)"
 
 echo "sqlite3: fetching $SQLITE_URL"
 new_tmpdir
 fetch_verified "$SQLITE_URL" "$SQLITE_SHA256" "$tmp/sqlite.zip"
 unzip -q "$tmp/sqlite.zip" -d "$tmp"
+# --strip-debug (all three builds) drops the DWARF wasm-opt cannot parse (ADR-39).
 echo "sqlite3: building sqlite3-shell.wasm (zig cc)"
-zig cc -target wasm32-wasi "${SQLITE_CFLAGS[@]}" \
+zig_cc_wasi "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   "$tmp/$SQLITE_DIR/sqlite3.c" "$tmp/$SQLITE_DIR/shell.c" \
   -o cache/sqlite3-shell.wasm
 
 echo "sqlite3: building libsqlite3.wasm (zig cc, reactor)"
 mapfile -t exports < <(wl_exports "${SQLITE_EXPORTS[@]}")
-zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
+zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   -DSQLITE_OMIT_LOAD_EXTENSION \
   "$tmp/$SQLITE_DIR/sqlite3.c" \
   "${exports[@]}" \
@@ -87,12 +89,17 @@ zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
 # import_module/import_name attributes in src/sqlite3_binding.c.
 echo "sqlite3: building sqlite3-binding.wasm (zig cc, reactor + host callback)"
 mapfile -t binding_exports < <(wl_exports "${BINDING_EXPORTS[@]}")
-zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
+zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   -DSQLITE_OMIT_LOAD_EXTENSION \
   -I "$tmp/$SQLITE_DIR" \
   "$tmp/$SQLITE_DIR/sqlite3.c" src/sqlite3_binding.c \
   "${binding_exports[@]}" \
   -o cache/sqlite3-binding.wasm
+
+echo "sqlite3: wasm-opt -O2 (ADR-39)"
+for w in cache/sqlite3-shell.wasm cache/libsqlite3.wasm cache/sqlite3-binding.wasm; do
+  wasm_opt_inplace "$w"
+done
 
 write_stamp "$sqlite_stamp" "$sqlite_key"
 echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"

@@ -72,7 +72,8 @@ write_stamp() {
 }
 
 # --- wasm-opt -O2 preprocessing (ADR-39) for the locally-built modules.
-# Only modules we build here (the reactor C libs and ripgrep) are
+# Every module built from source here (sqlite3, minigzip, libpcap, tree-sitter,
+# ripgrep — but not the DWARF fixture, which needs its debug info) is
 # post-processed: it shrinks them and normalizes the overlong call_indirect
 # immediates the LLVM toolchain emits (so the converter sees pure baseline
 # wasm). Baseline features only — never SIMD/atomics/EH — and no
@@ -88,6 +89,13 @@ wasm_opt_inplace() {
 # The version string folded into a locally-built module's stamp (empty when
 # wasm-opt is absent, so the cache misses and the loud prereq check fires).
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
+
+# zig_cc_wasi <args...>: `zig cc` for the wasm32-wasi target — the one flag
+# every locally-compiled module shares. Per-app choices (the reactor exec
+# model, -O level, includes, --strip-debug) stay at the call site.
+zig_cc_wasi() {
+  zig cc -target wasm32-wasi "$@"
+}
 
 # wl_exports <sym...>: emit one -Wl,--export=<sym> per line, for mapfile into
 # a zig cc argument array.
