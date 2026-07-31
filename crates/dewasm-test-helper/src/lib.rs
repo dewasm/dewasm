@@ -2,6 +2,7 @@
 
 mod apps;
 mod apps_capi;
+mod apps_convert;
 mod apps_fs;
 mod backend;
 mod doom;
@@ -24,6 +25,7 @@ pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
     SQLITE3_FILE_C_API, TREESITTER_PARSE,
 };
+pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
     run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
     RG_SEARCH, SQLITE3_SHELL_DBFILE,
@@ -68,6 +70,18 @@ macro_rules! spec_suite {
     };
 }
 
+/// The `harness = false` `main` of a backend's whole-cache convert integration test (ADR-54): builds one libtest-mimic trial per cached app for `$backend` (a `Backend + Sync` value) and runs them with cargo's own test arguments. Unlike [`spec_suite!`] this takes the plain [`Backend`] — the convert suite only lowers, it never runs generated code, so it needs no interpreter or script-phrasing layer. `$backend` must be a promotable-to-`'static` value; the backend `Backend` structs are unit structs, so `apps_convert_suite!(RubyBackend)` promotes `&RubyBackend` to `&'static`. Heavy trials are `#[ignore]`d unless the expanding crate's `slow_test` feature is on (ADR-48).
+///
+/// [`Backend`]: dewasm_backend::Backend
+#[macro_export]
+macro_rules! apps_convert_suite {
+    ($backend:expr) => {
+        fn main() {
+            $crate::apps_convert_main(&$backend, cfg!(feature = "slow_test"));
+        }
+    };
+}
+
 /// The `harness = false` `main` of a backend's WASI-testsuite integration test (ADR-36): builds one libtest-mimic trial per prebuilt `.wasm` for `$lang` (a [`WasiTestsuiteBackend`]) and runs them with cargo's own test arguments. Like [`spec_suite!`], `$lang` is a promotable-to-`'static` unit struct.
 ///
 /// [`WasiTestsuiteBackend`]: crate::WasiTestsuiteBackend
@@ -80,23 +94,24 @@ macro_rules! wasi_testsuite_suite {
     };
 }
 
-/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate:
+/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::slow_tier_test!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
 ///
 /// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep tier). This is the default for every slow-case macro.
 /// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! slow_tier_test {
     (slow, $item:item) => {
         #[cfg_attr(
             not(feature = "slow_test"),
-            ignore = "slow app case: --features slow_test or -- --include-ignored"
+            ignore = "slow app case: --features slow_test"
         )]
         $item
     };
     (ultra, $item:item) => {
         #[cfg_attr(
             not(feature = "ultra_slow_test"),
-            ignore = "ultra-slow app case (~1min+ on a CI runner, ADR-48): --features ultra_slow_test or -- --include-ignored"
+            ignore = "ultra-slow app case (1min+ on a CI runner): --features ultra_slow_test"
         )]
         $item
     };

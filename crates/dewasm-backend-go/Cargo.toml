@@ -43,3 +43,10 @@ harness = false
 [[test]]
 name = "wasi_testsuite"
 harness = false
+
+# The whole-cache convert suite (ADR-54) is likewise a libtest-mimic
+# harness: one trial per cached app, `harness = false`, `main` from
+# `apps_convert_suite!`.
+[[test]]
+name = "convert"
+harness = false
