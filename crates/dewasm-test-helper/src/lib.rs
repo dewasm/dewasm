@@ -80,23 +80,24 @@ macro_rules! wasi_testsuite_suite {
     };
 }
 
-/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate:
+/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::slow_tier_test!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
 ///
 /// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep tier). This is the default for every slow-case macro.
 /// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! slow_tier_test {
     (slow, $item:item) => {
         #[cfg_attr(
             not(feature = "slow_test"),
-            ignore = "slow app case: --features slow_test or -- --include-ignored"
+            ignore = "slow app case: --features slow_test"
         )]
         $item
     };
     (ultra, $item:item) => {
         #[cfg_attr(
             not(feature = "ultra_slow_test"),
-            ignore = "ultra-slow app case (~1min+ on a CI runner, ADR-48): --features ultra_slow_test or -- --include-ignored"
+            ignore = "ultra-slow app case (1min+ on a CI runner): --features ultra_slow_test"
         )]
         $item
     };
