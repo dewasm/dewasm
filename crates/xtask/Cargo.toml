@@ -20,3 +20,7 @@ path = "src/main.rs"
 anyhow.workspace = true
 dewasm-cli = { path = "../dewasm-cli" }
 dewasm-test-helper.workspace = true
+# std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our
+# anyhow flow); cranelift+runtime is the embedder. No wasi/component/gc: the
+# DOOM oracle only instantiates a baseline module and calls exports (ADR-53).
+wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "std"] }

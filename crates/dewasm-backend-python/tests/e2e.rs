@@ -6,12 +6,13 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_python::{find_python, PythonBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    custom_wasi_provider_e2e, deep_recursion_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
-    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, BackendUnderTest,
+    custom_wasi_provider_e2e, deep_recursion_e2e, doom_convert_smoke_e2e, doom_frame_e2e,
+    examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e,
+    pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e,
+    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
+    treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
+    BackendUnderTest,
 };
 
 pub struct Python;
@@ -480,6 +481,60 @@ sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
+
+// DOOM (ADR-53): drive the converted library with the deterministic contract
+// (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the
+// wasmtime golden. `{ticks}`/`{ms_per_tick}` are filled by the runner.
+const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
+
+_frame = {"off": None, "w": 0, "h": 0}
+_ms = {"v": 0}
+
+def _clock():
+    # Self-advancing per call: matches the oracle so startup/inter-tic spins
+    # terminate and the frame stays deterministic (ADR-53).
+    _ms["v"] += {clock_step}
+    return _ms["v"]
+
+IMPORTS = {
+    "console": {"onErrorMessage": lambda o, n: None, "onInfoMessage": lambda o, n: None},
+    "gameSaving": {
+        "sizeOfSaveGame": lambda i: 0,
+        "readSaveGame": lambda i, d: 0,
+        "writeSaveGame": lambda i, s, n: n,
+    },
+    "runtimeControl": {"timeInMilliseconds": _clock},
+    "ui": {"drawFrame": lambda off: _frame.__setitem__("off", off)},
+    "loading": {
+        "onGameInit": lambda w, h: (_frame.__setitem__("w", w), _frame.__setitem__("h", h)),
+        "wadSizes": lambda a, b: None,
+        "readWads": lambda a, b: None,
+    },
+}
+
+doom = Doom(IMPORTS)
+doom.invoke("initGame")
+for _t in range(1, {ticks} + 1):
+    doom.invoke("tickGame")
+
+w, h = _frame["w"], _frame["h"]
+off = _frame["off"]
+frame = bytes(doom.memory.data[off:off + w * h * 4])
+out = sys.stdout.buffer
+out.write(b"P6\n%d %d\n255\n" % (w, h))
+rgb = bytearray(w * h * 3)
+j = 0
+for i in range(0, len(frame), 4):
+    rgb[j] = frame[i + 2]
+    rgb[j + 1] = frame[i + 1]
+    rgb[j + 2] = frame[i]
+    j += 3
+out.write(rgb)
+out.flush()
+"#;
+
+doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
+doom_convert_smoke_e2e!(Python);
 
 shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).

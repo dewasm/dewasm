@@ -4,6 +4,7 @@ mod apps;
 mod apps_capi;
 mod apps_fs;
 mod backend;
+mod doom;
 mod fixtures;
 mod glue;
 mod library;
@@ -30,6 +31,10 @@ pub use apps_fs::{
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
     BackendUnderTest,
+};
+pub use doom::{
+    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, run_doom_convert_smoke,
+    run_doom_frame_case, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
 };
 pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
@@ -480,6 +485,32 @@ macro_rules! sqlite3_callback_binding_e2e {
             #[test]
             fn sqlite3_callback_binding() {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
+            }
+        }
+    };
+}
+
+/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. Ultra-tier (heavy: init + ticks on a converted 4.5 MB module), so `#[ignore]`d unless the backend crate's `ultra_slow_test` feature is on (see [`slow_tier_test!`]).
+#[macro_export]
+macro_rules! doom_frame_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::slow_tier_test! { ultra,
+            #[test]
+            fn doom_frame() {
+                $crate::run_doom_frame_case(&$lang, $glue);
+            }
+        }
+    };
+}
+
+/// The DOOM conversion smoke (ADR-53): expands to `#[test] fn doom_convert_smoke()` requiring `doom.wasm` converts to `$lang` without error — CI-affordable coverage of the converter on the largest real module, without the ultra-tier execution [`doom_frame_e2e!`] carries. Slow-tier (one ~4.5 MB conversion), so `#[ignore]`d unless the backend crate's `slow_test` feature is on.
+#[macro_export]
+macro_rules! doom_convert_smoke_e2e {
+    ($lang:expr) => {
+        $crate::slow_tier_test! { slow,
+            #[test]
+            fn doom_convert_smoke() {
+                $crate::run_doom_convert_smoke(&$lang);
             }
         }
     };

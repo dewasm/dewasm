@@ -2,11 +2,15 @@
 //!
 //! No `clap` dependency: two subcommands and a help message do not need one.
 
+mod doom_golden;
+
 use std::path::Path;
 
 use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
 use dewasm_test_helper::{capture_qjs_repl_golden, qjs_repl_golden_path, Wasmtime};
+
+use crate::doom_golden::update_doom_golden;
 
 const USAGE: &str = "\
 Usage: cargo xtask <command>
@@ -22,6 +26,11 @@ Commands:
                            (examples/apps/fetch-and-build.sh). Checked by
                            `cargo test -p dewasm-test-helper --features
                            wasmtime_test --test apps_wasmtime`.
+    update-doom-golden     Recapture the DOOM framebuffer golden
+                           (examples/doom/golden/frame.ppm) from the original
+                           doom.wasm under the embedded wasmtime crate (ADR-53).
+                           Requires the doom app cached
+                           (examples/apps/scripts/doom.sh).
 ";
 
 fn main() -> Result<()> {
@@ -29,6 +38,7 @@ fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
         Some("update-repl-golden") => update_repl_golden(),
+        Some("update-doom-golden") => update_doom_golden(),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
