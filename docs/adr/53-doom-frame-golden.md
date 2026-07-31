@@ -3,7 +3,10 @@
 Status: **Accepted, 2026-07-31.** Extends the DOOM demo (ADR-50) into the test
 gate: drive the converted `doom.wasm` with a self-advancing synthetic clock and
 a fixed, input-free tick count, then compare the raw framebuffer it renders —
-pixel for pixel — against a golden captured once from a wasmtime oracle.
+pixel for pixel — against a golden captured once from a wasmtime oracle. Its
+"no separate conversion smoke" call below is superseded by
+[ADR-54](54-convert-only-app-smokes.md), which makes convert-only smokes the
+general idiom.
 Implemented: the oracle (`cargo xtask update-doom-golden`), the shared contract
 and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed golden
 (`examples/doom/golden/frame.ppm`), and the frame case on Ruby/Python/Go/Java
@@ -97,7 +100,9 @@ serializing a 1 MB framebuffer out of the associative-array memory), so it stays
 out of CI and runs only in local pre-release. There is no separate conversion
 smoke — the frame test already exercises the full convert-and-run path, and a
 convert-only assertion
-would be an idiom no other suite uses.
+would be an idiom no other suite uses. (Superseded by
+[ADR-54](54-convert-only-app-smokes.md): every tier-gated case now gets one, so
+it *is* the idiom, and `doom_frame_convert` runs a tier below `doom_frame`.)
 
 ## Rejected alternatives
 

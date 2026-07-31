@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, fresh_scratch_dir};
+use crate::fixtures::{
+    apps_cache_dir, apps_fixtures_dir, assert_converted, fresh_scratch_dir, require_cached_app,
+};
 use crate::glue::fill;
 
 /// One fixture-staging step, run into the case's fresh scratch dir before the guest runs. `src` is relative to [`apps_fixtures_dir`]; `dst` is relative to the scratch dir (`""` = the scratch root).
@@ -267,13 +269,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         .map(|(guest, host)| (*guest, host.as_path()))
         .collect();
 
-    let wasm_path = cache.join(format!("{}.wasm", case.wasm));
-    assert!(
-        wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
-        case.wasm
-    );
-    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let bytes = require_cached_app(case.wasm);
     // Convert under `class`, not the cache stem: the stem and the class name diverge for CRuby (cache file `ruby.wasm`, but a `Ruby` class collides with MRI's predefined `Ruby` constant, so the class is `Cruby`). The class name is already PascalCase, and every backend's PascalCasing is idempotent, so this yields exactly `class` for every case. wasmtime ignores the name (it runs the bytes directly).
     let program = lang.convert_app(&bytes, Mode::Library, case.class);
     // Resolve the runtime host paths the glue const left as placeholders. The scratch preopen and the cache root are all any current case needs.
@@ -316,4 +312,11 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         (run.assert_host)(&scratch);
     }
     println!("{} under {}: matches golden output", case.name, lang.name());
+}
+
+/// The convert-only smoke of a tier-gated [`FsAppCase`] (ADR-54): perform exactly the conversion [`run_fs_app_case`] would — same `Mode::Library`, same `class` name — and stop there (no staging, no preopens, no glue, no run). Emitted by the same per-case macro, one tier below the execution case.
+pub fn run_fs_app_case_convert(lang: &dyn BackendUnderTest, case: &FsAppCase) {
+    let bytes = require_cached_app(case.wasm);
+    let program = lang.convert_app(&bytes, Mode::Library, case.class);
+    assert_converted(&program, case.name, lang.name());
 }

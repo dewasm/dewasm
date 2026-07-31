@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, fresh_scratch_dir};
+use crate::fixtures::{assert_converted, fresh_scratch_dir, require_cached_app};
 use crate::glue::fill;
 
 /// A C-API-driving case: convert `wasm` (cache stem) to library class `class`, append the backend's glue, run it, and require exactly `expect_stdout`.
@@ -89,14 +89,7 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
 
 /// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Fills `{scratch}` in `glue` with a fresh scratch dir (the file-backed case's preopen; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
-    let cache = apps_cache_dir();
-    let wasm_path = cache.join(format!("{}.wasm", case.wasm));
-    assert!(
-        wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
-        case.wasm
-    );
-    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let bytes = require_cached_app(case.wasm);
     let class = lang.convert_app(&bytes, Mode::Library, case.wasm);
 
     let scratch: PathBuf = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
@@ -120,4 +113,11 @@ pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     );
     (case.assert_host)(&scratch);
     println!("{} under {}: C-API drive matches", case.name, lang.name());
+}
+
+/// The convert-only smoke of a tier-gated [`CApiCase`] (ADR-54): perform exactly the conversion [`run_capi_case`] would — same `Mode::Library`, same module name — and stop there (no glue, no run). Emitted by the same per-case macro, one tier below the execution case.
+pub fn run_capi_case_convert(lang: &dyn BackendUnderTest, case: &CApiCase) {
+    let bytes = require_cached_app(case.wasm);
+    let class = lang.convert_app(&bytes, Mode::Library, case.wasm);
+    assert_converted(&class, case.name, lang.name());
 }

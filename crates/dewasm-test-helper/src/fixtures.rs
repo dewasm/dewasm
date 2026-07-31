@@ -14,6 +14,24 @@ pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }
 
+/// Read the cached app binary `examples/apps/cache/<stem>.wasm`, failing loud (ADR-15) when the cache has not been populated by `examples/apps/fetch-and-build.sh`.
+pub fn require_cached_app(stem: &str) -> Vec<u8> {
+    let path = apps_cache_dir().join(format!("{stem}.wasm"));
+    assert!(
+        path.exists(),
+        "{stem} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
+    );
+    std::fs::read(&path).expect("read wasm")
+}
+
+/// The entire assertion of a convert-only smoke (ADR-54): the conversion returned at all (any backend error panics inside `convert_app`), and it returned something. Deliberately nothing more — no golden over generated size or shape, which would be pure noise.
+pub fn assert_converted(source: &str, case: &str, lang: &str) {
+    assert!(
+        !source.is_empty(),
+        "{case} under {lang}: conversion produced empty source"
+    );
+}
+
 /// `examples/apps/fixtures/`, home of our own committed app-driver fixtures (the QuickJS `.js` scripts the Phase 5a filesystem app cases run).
 pub fn apps_fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")

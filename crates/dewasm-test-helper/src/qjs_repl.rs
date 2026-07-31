@@ -10,7 +10,7 @@ use std::time::Duration;
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, apps_golden_dir};
+use crate::fixtures::{apps_golden_dir, assert_converted, require_cached_app};
 use crate::pty::run_under_pty;
 
 /// The scripted interactive session: three expressions and the `\q` quit command, each terminated by CR (what a tty sends on Enter — verified against wasmtime, whose guest sees the driver's CR->NL translation).
@@ -29,12 +29,7 @@ pub fn qjs_repl_golden_path() -> PathBuf {
 
 /// Convert the cached `qjs.wasm` to a standalone program for `lang` and drive its interactive REPL under a pty with [`QJS_REPL_SESSION`], returning the raw transcript. Shared by the gated per-backend runner and the wasmtime golden capture/freshness path.
 pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
-    let wasm = apps_cache_dir().join("qjs.wasm");
-    assert!(
-        wasm.exists(),
-        "qjs not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
-    );
-    let bytes = std::fs::read(&wasm).expect("read qjs wasm");
+    let bytes = require_cached_app("qjs");
     let source = lang.convert_app(&bytes, Mode::Standalone, "qjs");
     let cmd = lang.pty_command(&source, &[]);
     run_under_pty(cmd, QJS_REPL_SESSION, Some(QJS_PROMPT), PTY_TIMEOUT)
@@ -63,6 +58,13 @@ pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
         lang.name(),
         got.len()
     );
+}
+
+/// The convert-only smoke of the tier-gated pty case (ADR-54): perform exactly the conversion [`capture_qjs_repl_transcript`] would — same `Mode::Standalone`, same module name — and stop there (no pty, no transcript). Emitted by `qjs_repl_pty_e2e!` one tier below the execution case.
+pub fn run_qjs_repl_pty_convert(lang: &dyn BackendUnderTest) {
+    let bytes = require_cached_app("qjs");
+    let source = lang.convert_app(&bytes, Mode::Standalone, "qjs");
+    assert_converted(&source, "qjs_repl_pty", lang.name());
 }
 
 /// Byte-compare two transcripts, panicking with an escaped, human-readable dump (and the first differing offset) rather than the raw byte-array spew `assert_eq!` would produce for hundreds of bytes of ANSI escapes.

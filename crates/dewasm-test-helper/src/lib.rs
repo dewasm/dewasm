@@ -17,28 +17,28 @@ mod wasi_testsuite;
 mod wasmtime_backend;
 
 pub use apps::{
-    run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
-    SQLITE3_SHELL,
+    run_app_case, run_app_case_convert, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS,
+    COWSAY_STDIN, QJS_EVAL, SQLITE3_SHELL,
 };
 pub use apps_capi::{
-    run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
-    SQLITE3_FILE_C_API, TREESITTER_PARSE,
+    run_capi_case, run_capi_case_convert, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE,
+    SQLITE3_CALLBACK_BINDING, SQLITE3_FILE_C_API, TREESITTER_PARSE,
 };
 pub use apps_fs::{
-    run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
-    RG_SEARCH, SQLITE3_SHELL_DBFILE,
+    run_fs_app_case, run_fs_app_case_convert, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO,
+    QJS_FILE_IO, QJS_REPL, RG_SEARCH, SQLITE3_SHELL_DBFILE,
 };
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
     BackendUnderTest,
 };
 pub use doom::{
-    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case, DOOM_CLOCK_STEP_MS,
-    DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
+    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case,
+    run_doom_frame_case_convert, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
 };
 pub use fixtures::{
-    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
-    convert_on_big_stack, examples_dir, fresh_scratch_dir,
+    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, assert_converted, convert, convert_bytes,
+    convert_on_big_stack, examples_dir, fresh_scratch_dir, require_cached_app,
 };
 pub use library::{
     run_library_case, LibraryCase, CUSTOM_WASI_PROVIDER, LIBRARY_ADD, PARTIAL_OVERRIDE,
@@ -48,7 +48,7 @@ pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, 
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
     assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
-    qjs_repl_golden_path, run_qjs_repl_pty, QJS_REPL_SESSION,
+    qjs_repl_golden_path, run_qjs_repl_pty, run_qjs_repl_pty_convert, QJS_REPL_SESSION,
 };
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
@@ -97,6 +97,21 @@ macro_rules! slow_tier_test {
         #[cfg_attr(
             not(feature = "ultra_slow_test"),
             ignore = "ultra-slow app case (~1min+ on a CI runner, ADR-48): --features ultra_slow_test or -- --include-ignored"
+        )]
+        $item
+    };
+}
+
+/// Internal companion to [`slow_tier_test!`] (ADR-54): gate a generated convert-only smoke **one tier below** the execution case it was derived from, so the conversion of an app the tier gate skips is still exercised. `slow` -> ungated (the fast gate converts it); `ultra` -> gated on `slow_test` (CI's main sweep converts it). Every slow/ultra per-case app macro emits its `#[test] fn <case>()` through [`slow_tier_test!`] and a `#[test] fn <case>_convert()` through this one; the callsites are untouched (ADR-27 keeps `e2e.rs` free of anything but macro invocations).
+#[macro_export]
+macro_rules! convert_smoke_test {
+    (slow, $item:item) => {
+        $item
+    };
+    (ultra, $item:item) => {
+        #[cfg_attr(
+            not(feature = "slow_test"),
+            ignore = "convert-only smoke of an ultra-slow app case, gated one tier down (ADR-54): --features slow_test or -- --include-ignored"
         )]
         $item
     };
@@ -251,7 +266,7 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48).
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48). A convert-only `qjs_eval_convert` smoke is emitted alongside it, one tier down ([`convert_smoke_test!`], ADR-54).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
@@ -264,10 +279,16 @@ macro_rules! qjs_eval_e2e {
                 $crate::run_slow_app_case(&$lang, &$crate::QJS_EVAL);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn qjs_eval_convert() {
+                $crate::run_app_case_convert(&$lang, &$crate::QJS_EVAL);
+            }
+        }
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate, the trailing tier token, and the companion convert-only smoke.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
@@ -278,6 +299,12 @@ macro_rules! sqlite3_shell_e2e {
             #[test]
             fn sqlite3_shell() {
                 $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn sqlite3_shell_convert() {
+                $crate::run_app_case_convert(&$lang, &$crate::SQLITE3_SHELL);
             }
         }
     };
@@ -294,7 +321,7 @@ macro_rules! gzip_e2e {
     };
 }
 
-/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime golden (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime golden (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate, the trailing tier token, and the companion convert-only smoke.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
@@ -307,10 +334,16 @@ macro_rules! qjs_repl_pty_e2e {
                 $crate::run_qjs_repl_pty(&$lang);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn qjs_repl_pty_convert() {
+                $crate::run_qjs_repl_pty_convert(&$lang);
+            }
+        }
     };
 }
 
-/// Per-case filesystem-app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]).
+/// Per-case filesystem-app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]). Each also emits a convert-only `<case>_convert` smoke one tier down ([`convert_smoke_test!`], ADR-54).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
@@ -323,6 +356,12 @@ macro_rules! qjs_file_io_e2e {
             #[test]
             fn qjs_file_io() {
                 $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn qjs_file_io_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::QJS_FILE_IO);
             }
         }
     };
@@ -341,6 +380,12 @@ macro_rules! qjs_repl_e2e {
                 $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn qjs_repl_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::QJS_REPL);
+            }
+        }
     };
 }
 
@@ -355,6 +400,12 @@ macro_rules! sqlite3_shell_dbfile_e2e {
             #[test]
             fn sqlite3_shell_dbfile() {
                 $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn sqlite3_shell_dbfile_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::SQLITE3_SHELL_DBFILE);
             }
         }
     };
@@ -373,6 +424,12 @@ macro_rules! rg_search_e2e {
                 $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn rg_search_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::RG_SEARCH);
+            }
+        }
     };
 }
 
@@ -387,6 +444,12 @@ macro_rules! cpython_hello_e2e {
             #[test]
             fn cpython_hello() {
                 $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn cpython_hello_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::CPYTHON_HELLO);
             }
         }
     };
@@ -405,10 +468,16 @@ macro_rules! cruby_hello_e2e {
                 $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn cruby_hello_convert() {
+                $crate::run_fs_app_case_convert(&$lang, &$crate::CRUBY_HELLO);
+            }
+        }
     };
 }
 
-/// Per-case C-API macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate; the file-backed case's `{scratch}` placeholder is filled by the runner). Which backends invoke these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]).
+/// Per-case C-API macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate; the file-backed case's `{scratch}` placeholder is filled by the runner). Which backends invoke these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]), and each macro also emits a convert-only `<case>_convert` smoke one tier down ([`convert_smoke_test!`], ADR-54).
 ///
 /// [`CApiCase`]: crate::CApiCase
 #[macro_export]
@@ -421,6 +490,12 @@ macro_rules! libsqlite3_c_api_e2e {
             #[test]
             fn libsqlite3_c_api() {
                 $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn libsqlite3_c_api_convert() {
+                $crate::run_capi_case_convert(&$lang, &$crate::LIBSQLITE3_C_API);
             }
         }
     };
@@ -439,6 +514,12 @@ macro_rules! sqlite3_file_c_api_e2e {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn sqlite3_file_c_api_convert() {
+                $crate::run_capi_case_convert(&$lang, &$crate::SQLITE3_FILE_C_API);
+            }
+        }
     };
 }
 
@@ -453,6 +534,12 @@ macro_rules! pcap_compile_e2e {
             #[test]
             fn pcap_compile() {
                 $crate::run_capi_case(&$lang, &$crate::PCAP_COMPILE, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn pcap_compile_convert() {
+                $crate::run_capi_case_convert(&$lang, &$crate::PCAP_COMPILE);
             }
         }
     };
@@ -471,6 +558,12 @@ macro_rules! treesitter_parse_e2e {
                 $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn treesitter_parse_convert() {
+                $crate::run_capi_case_convert(&$lang, &$crate::TREESITTER_PARSE);
+            }
+        }
     };
 }
 
@@ -487,10 +580,16 @@ macro_rules! sqlite3_callback_binding_e2e {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
             }
         }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn sqlite3_callback_binding_convert() {
+                $crate::run_capi_case_convert(&$lang, &$crate::SQLITE3_CALLBACK_BINDING);
+            }
+        }
     };
 }
 
-/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`]. A convert-only `doom_frame_convert` smoke is emitted alongside, one tier down ([`convert_smoke_test!`], ADR-54).
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {
@@ -501,6 +600,12 @@ macro_rules! doom_frame_e2e {
             #[test]
             fn doom_frame() {
                 $crate::run_doom_frame_case(&$lang, $glue);
+            }
+        }
+        $crate::convert_smoke_test! { $tier,
+            #[test]
+            fn doom_frame_convert() {
+                $crate::run_doom_frame_case_convert(&$lang);
             }
         }
     };

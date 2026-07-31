@@ -5,7 +5,7 @@
 use dewasm_backend::Mode;
 
 use crate::backend::BackendUnderTest;
-use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, apps_golden_dir};
+use crate::fixtures::{apps_fixtures_dir, apps_golden_dir, assert_converted, require_cached_app};
 
 pub struct AppCase {
     pub name: &'static str,
@@ -60,13 +60,7 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
 
 /// Convert the cached app `case` names with `lang`'s backend, run it, and diff against the case's golden output.
 fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
-    let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
-    assert!(
-        wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
-        case.name
-    );
-    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let bytes = require_cached_app(case.name);
     let src = lang.convert_app(&bytes, Mode::Standalone, case.name);
     let output = lang.run(&src, case.args, case.stdin);
 
@@ -103,16 +97,18 @@ pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
+/// The convert-only smoke of a tier-gated [`AppCase`] (ADR-54): perform exactly the conversion [`run_slow_app_case`] would — same `Mode::Standalone`, same module name — and stop there. Emitted by the same per-case macro, one tier below the execution case, so the fast gate still covers the codegen path of an app it cannot afford to run.
+pub fn run_app_case_convert(lang: &dyn BackendUnderTest, case: &AppCase) {
+    let bytes = require_cached_app(case.name);
+    let src = lang.convert_app(&bytes, Mode::Standalone, case.name);
+    assert_converted(&src, case.name, lang.name());
+}
+
 /// The gzip byte-stdio stress cases (minigzip, the Phase 5b compression CLI): binary stdin/stdout the text-only app cases cannot carry (their `&str` stdin and `include_str!` goldens require valid UTF-8; a gz stream is neither). Runs under *every* backend — Ruby and Bash both — since it is integer-only (no softfloat) and therefore fast even under Bash. Two cases:
 ///
 /// * *compress* — feed a fixed text input on stdin, require the compressed stdout to be byte-identical to the golden captured from `wasmtime` (`examples/apps/golden/minigzip_compress.gz`). zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality. * *round trip* — compress, then decompress that output with `-d`, and require the result to equal the original input (self-checking; proves both directions of the binary stdio path).
 pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
-    let wasm_path = apps_cache_dir().join("minigzip.wasm");
-    assert!(
-        wasm_path.exists(),
-        "minigzip not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
-    );
-    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let bytes = require_cached_app("minigzip");
     let src = lang.convert_app(&bytes, Mode::Standalone, "minigzip");
 
     let input = std::fs::read(apps_fixtures_dir().join("gzip").join("input.txt"))

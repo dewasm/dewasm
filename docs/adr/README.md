@@ -67,6 +67,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |
 | ADR-52 | [Bash Emitter Inlines Linear-Memory Loads and Stores](52-bash-inline-memops.md) | Accepted |
 | ADR-53 | [Test DOOM by a Deterministic Framebuffer Golden](53-doom-frame-golden.md) | Accepted |
+| ADR-54 | [Convert-Only App Smokes, Gated One Tier Down](54-convert-only-app-smokes.md) | Accepted |
 
 ## Adding a new ADR
 

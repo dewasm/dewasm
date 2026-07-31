@@ -118,6 +118,13 @@ pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     );
 }
 
+/// The convert-only smoke of the tier-gated DOOM case (ADR-54): perform exactly the conversion [`run_doom_frame_case`] would — same `Mode::Library`, same module name — and stop there (no glue, no run, no golden). Emitted by `doom_frame_e2e!` one tier below the execution case.
+pub fn run_doom_frame_case_convert(lang: &dyn BackendUnderTest) {
+    let bytes = read_doom_wasm();
+    let class = lang.convert_app(&bytes, Mode::Library, "doom");
+    crate::fixtures::assert_converted(&class, "doom_frame", lang.name());
+}
+
 /// Read the cached `doom.wasm`, failing loud (ADR-15) when it is absent.
 fn read_doom_wasm() -> Vec<u8> {
     let wasm = doom_wasm_path();
