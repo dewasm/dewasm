@@ -22,6 +22,7 @@ The generated `main` consumes a **leading run of `--dir` flags** and hands every
 | --- | --- | --- |
 | Ruby | — | `ruby prog.rb [--dir H::G]... [args...]` |
 | Python | — | `python3 prog.py [--dir H::G]... [args...]` |
+| Perl | — | `perl prog.pl [--dir H::G]... [args...]` |
 | Bash | — | `bash prog.sh [--dir H::G]... [args...]` |
 | Go | `go build -o prog prog.go` | `./prog [--dir H::G]... [args...]` |
 | Java | `javac Main.java` | `java Main [--dir H::G]... [args...]` |
