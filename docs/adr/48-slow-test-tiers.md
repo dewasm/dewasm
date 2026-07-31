@@ -27,3 +27,4 @@ Local tiers: `cargo test` (fast gate) → `--features slow_test` (what CI's main
 - CI main legs run `--features <backend>/slow_test` (the core job: `dewasm-cli/slow_test,dewasm-test-helper/wasmtime_test`); #22 and #23 are resolved by reclassification rather than tuning timeouts and thread counts.
 - The ultra tier's coverage now depends on the local pre-release habit the criterion implies; the tier list is small (bash: 1 pty case, go: 8 builds) and each entry cites the evidence that promoted it.
 - A future case is promoted (or demoted) by editing one callsite and citing a CI run, mirroring the evidence-driven criterion of [ADR-47](47-ruby-f64-sub-quiet-guard.md).
+- Later extended by [ADR-53](53-doom-frame-golden.md) with a third tier, `ultra_heavy_test = ["ultra_slow_test"]`, for the multi-minute cases above the ~1 min ultra_slow band (the DOOM framebuffer golden under Bash) — same fail-loud, locally-verified, `slow_tier_test!`-gated shape as the two tiers here.

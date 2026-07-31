@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, doom_convert_smoke_e2e, examples_dir, gzip_e2e,
-    library_add_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
-    shared_table_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
+    cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
+    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, shared_table_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -176,12 +176,64 @@ sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
 qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
 
-// DOOM (ADR-53): Bash runs only the conversion smoke, not the framebuffer
-// golden — driving the converted DOOM to a captured frame is ~init(2 min) +
-// ticks(34 s each) plus serializing a 1 MB framebuffer out of the associative
-// memory array, disproportionate even for the ultra tier; the frame semantics
-// are already pinned by the other four backends against the wasmtime golden.
-doom_convert_smoke_e2e!(Bash);
+// DOOM (ADR-53): the same deterministic frame golden the other backends run,
+// modelled on the Bash frontend (examples/doom/bash/main.sh) — the imp_* import
+// handlers set `R0` and `return 0`, `IMPORTS[mod.name]` wires them, `doom_init`
+// instantiates, `doom_invoke` calls, and pixels come out of the `doom_mem`
+// associative array. The framebuffer is emitted as a P6 PPM, chunked through
+// `printf` (a `\xNN` format string carries the NUL bytes a Bash variable
+// cannot). Heavy tier: the run is several minutes (init ~2 min + ticks +
+// serializing 1 MB out of the sparse memory array), so it needs
+// `ultra_heavy_test`, above the ~1 min ultra_slow cases (ADR-48).
+const BASH_DOOM_FRAME_GLUE: &str = r#"DOOM_MS=0
+FRAME_BUF_OFF=0
+FRAME_W=0
+FRAME_H=0
+
+imp_noop() { R0=; return 0; }
+imp_zero() { R0=0; return 0; }
+imp_time_ms() { DOOM_MS=$(( DOOM_MS + {clock_step} )); R0=$DOOM_MS; return 0; }
+imp_draw_frame() { FRAME_BUF_OFF=$1; R0=; return 0; }
+imp_on_game_init() { FRAME_W=$1; FRAME_H=$2; R0=; return 0; }
+
+declare -A IMPORTS=(
+  ['console.onErrorMessage']=imp_noop
+  ['console.onInfoMessage']=imp_noop
+  ['gameSaving.sizeOfSaveGame']=imp_zero
+  ['gameSaving.readSaveGame']=imp_zero
+  ['gameSaving.writeSaveGame']=imp_zero
+  ['runtimeControl.timeInMilliseconds']=imp_time_ms
+  ['ui.drawFrame']=imp_draw_frame
+  ['loading.onGameInit']=imp_on_game_init
+  ['loading.wadSizes']=imp_noop
+  ['loading.readWads']=imp_noop
+)
+
+doom_init || { echo "doom_init failed" >&2; exit 1; }
+doom_invoke initGame || { echo "initGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+for (( _t = 0; _t < {ticks}; _t++ )); do
+  doom_invoke tickGame || { echo "tickGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+done
+
+w=$FRAME_W
+h=$FRAME_H
+off=$FRAME_BUF_OFF
+n=$(( w * h * 4 ))
+printf 'P6\n%d %d\n255\n' "$w" "$h"
+fmt=''
+cnt=0
+for (( i = 0; i < n; i += 4 )); do
+  r=${doom_mem[$(( off + i + 2 ))]-0}
+  g=${doom_mem[$(( off + i + 1 ))]-0}
+  b=${doom_mem[$(( off + i ))]-0}
+  printf -v px '\\x%02x\\x%02x\\x%02x' "$r" "$g" "$b"
+  fmt+=$px
+  if (( ++cnt >= 4096 )); then printf "$fmt"; fmt=''; cnt=0; fi
+done
+[[ -n $fmt ]] && printf "$fmt"
+"#;
+
+doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, heavy);
 
 shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
 // libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e! / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no host-language C API to plumb a pointer-returning binding through (ADR-12), and the multi-MB reactor artifacts are far past what Bash's parser can load in practice. embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).

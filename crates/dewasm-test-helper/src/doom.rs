@@ -34,10 +34,12 @@ pub const DOOM_FRAME_H: u32 = 400;
 /// wasm, identical across the oracle and every backend.
 pub const DOOM_CLOCK_STEP_MS: i64 = 1;
 
-/// Number of `tickGame` calls before the frame is captured. Small — even two
-/// ticks clear DOOM's startup to a non-degenerate frame — to keep the heavy
-/// backends' run time down; pinned by the golden.
-pub const DOOM_TICKS: u32 = 10;
+/// Number of `tickGame` calls before the frame is captured. Kept minimal — two
+/// ticks already clear DOOM's startup to a non-degenerate frame (the oracle
+/// asserts the colour count) — because each tick is ~tens of seconds under Bash,
+/// so every extra tick is real wall time on the ultra_heavy tier; pinned by the
+/// golden.
+pub const DOOM_TICKS: u32 = 2;
 
 /// The cached `doom.wasm` (populated by `examples/apps/scripts/doom.sh`).
 pub fn doom_wasm_path() -> PathBuf {
@@ -104,25 +106,6 @@ pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
         "doom frame under {}: matches golden ({} bytes)",
         lang.name(),
         golden.len()
-    );
-}
-
-/// Cheap CI-tier coverage: just convert `doom.wasm` to `lang` and require the
-/// generation succeeds and is non-empty — catches converter breakage on the
-/// largest, most import-heavy real module without the ultra-tier execution
-/// cost of [`run_doom_frame_case`] (ADR-53).
-pub fn run_doom_convert_smoke(lang: &dyn BackendUnderTest) {
-    let bytes = read_doom_wasm();
-    let class = lang.convert_app(&bytes, Mode::Library, "doom");
-    assert!(
-        !class.trim().is_empty(),
-        "doom conversion under {} produced empty output",
-        lang.name()
-    );
-    println!(
-        "doom conversion under {}: {} bytes generated",
-        lang.name(),
-        class.len()
     );
 }
 

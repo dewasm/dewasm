@@ -10,12 +10,12 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, doom_convert_smoke_e2e, doom_frame_e2e, examples_dir,
-    gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e,
-    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
-    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, wasi_import_override_e2e,
-    wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
+    cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
+    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
+    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
+    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
+    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
+    BackendUnderTest, PtyCommand,
 };
 
 pub struct Java;
@@ -563,7 +563,6 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
 "#;
 
 doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
-doom_convert_smoke_e2e!(Java);
 
 shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.

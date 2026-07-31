@@ -7,7 +7,8 @@ pixel for pixel — against a golden captured once from a wasmtime oracle.
 Implemented: the oracle (`cargo xtask update-doom-golden`), the shared contract
 and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed golden
 (`examples/doom/golden/frame.ppm`), and the frame case on Ruby/Python/Go/Java
-(byte-identical) plus the conversion smoke on all five backends.
+plus the frame case on all five backends (byte-identical) — Bash at a new
+ultra_heavy tier, the others at slow.
 
 ## Context
 
@@ -81,16 +82,16 @@ clock — pin the clock, fix the inputs, and diff the rendered artifact.* The
 oracle is an independent embedder (wasmtime), not backend consensus, because the
 value of the test is catching a bug the backends could share.
 
-**Tiering.** DOOM execution is heavy on every backend (the Go/Java generated
-builds are already ultra-tier under ADR-48), so the per-backend frame-golden
-test lives in the **ultra_slow_test** tier — run in local pre-release, never in
-CI — on Ruby, Python, Go, and Java. **Bash runs the conversion smoke only, not
-the frame golden**: its `initGame` alone is ~2 min and serializing a 1 MB
-framebuffer out of the associative-array memory is disproportionate even for the
-ultra tier, and the frame is already pinned by the other four backends against
-the oracle. A cheap **conversion-only** smoke (convert `doom.wasm` to each
-backend, assert success) rides the slow tier on all five to catch converter
-breakage without executing.
+**Tiering.** The frame-golden test runs on every backend, tiered to match each
+backend's convention for a comparably heavy execution case. Ruby/Python/Go/Java
+use the **slow_test** tier — CI's main sweep, like the qjs/sqlite e2e — so DOOM
+is actually exercised in CI. Bash uses a new **ultra_heavy_test** tier (a third
+level above ADR-48's `ultra_slow_test`): its run is several minutes (initGame
+~2 min + ticks + serializing a 1 MB framebuffer out of the associative-array
+memory), beyond the ~1 min ultra_slow cases, so it stays out of CI and runs only
+in local pre-release. There is no separate conversion smoke — the frame test
+already exercises the full convert-and-run path, and a convert-only assertion
+would be an idiom no other suite uses.
 
 ## Rejected alternatives
 
@@ -120,7 +121,7 @@ breakage without executing.
   (closing the ADR-9 gap the old `examples/doom/fetch.sh` left open).
 - Negative: a new heavy `wasmtime`-crate dependency, quarantined to xtask; the
   golden must be regenerated (and reviewed) whenever the `doom.wasm` pin bumps.
-- Negative / carry-over: the frame-golden test cannot run in CI (ultra-tier);
-  CI's DOOM coverage is the conversion-only smoke, with the frame diff a
-  pre-release check. The synthetic-clock tick count N is a magic constant the
-  golden pins — documented at the glue, not derived.
+- Negative / carry-over: the frame test runs in CI for four backends but Bash's
+  is ultra_heavy (local pre-release only), a third test tier added to ADR-48 for
+  one case. The synthetic-clock tick count N is a magic constant the golden pins
+  — documented at the glue, not derived.

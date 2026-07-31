@@ -15,9 +15,6 @@ workspace = true
 # revision) as active `#[test]`s instead of `#[ignore]`d ones, and runs the
 # full spec testsuite sweep — CI's main sweep tier. See docs/testing.md.
 slow_test = []
-# `ultra_slow_test` additionally un-ignores the ~1 min+ cases kept out of
-# CI (here: the DOOM framebuffer-golden case, ADR-53), for local pre-release.
-ultra_slow_test = ["slow_test"]
 
 [dependencies]
 anyhow.workspace = true

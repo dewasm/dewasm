@@ -6,13 +6,12 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    custom_wasi_provider_e2e, doom_convert_smoke_e2e, doom_frame_e2e, embedded_coexist_e2e,
-    examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e,
-    pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e,
-    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
-    treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest,
+    custom_wasi_provider_e2e, doom_frame_e2e, embedded_coexist_e2e, examples_dir, gzip_e2e,
+    library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e,
+    qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
+    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Ruby;
@@ -505,7 +504,6 @@ $stdout.write(rgb.pack("C*"))
 "#;
 
 doom_frame_e2e!(Ruby, RUBY_DOOM_FRAME_GLUE);
-doom_convert_smoke_e2e!(Ruby);
 
 shared_table_e2e!(Ruby, RUBY_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Ruby, RUBY_EMBEDDED_COEXIST_GLUE);
