@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
+
 # minigzip: zlib's stdio (de)compression demo, built from the pinned zlib
 # source release with zig (ADR-22). Integer-only and tiny, with binary
 # stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.
 # No upstream distributes a wasm32-wasi minigzip, so it is compiled locally.
 # The gz stream zlib writes here is fully deterministic (mtime 0, OS byte 3),
 # so wasmtime's output and the converted backends' output are byte-identical.
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=common.sh
+
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 ZLIB_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
@@ -27,6 +29,7 @@ if is_cached "$minigzip_stamp" "$ZLIB_SHA256" cache/minigzip.wasm; then
 fi
 
 require_tool minigzip zig "install zig (e.g. brew install zig) to build the minigzip app"
+
 echo "minigzip: fetching $ZLIB_URL"
 new_tmpdir
 fetch_verified "$ZLIB_URL" "$ZLIB_SHA256" "$tmp/zlib.tar.gz"
@@ -37,5 +40,6 @@ for s in "${ZLIB_SRCS[@]}"; do srcs+=("$tmp/$ZLIB_DIR/$s"); done
 zig cc -target wasm32-wasi -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" \
   "${srcs[@]}" "$tmp/$ZLIB_DIR/test/minigzip.c" \
   -o cache/minigzip.wasm
+
 write_stamp "$minigzip_stamp" "$ZLIB_SHA256"
 echo "minigzip: -> cache/minigzip.wasm"

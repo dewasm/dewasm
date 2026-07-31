@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# cowsay: the classic args+stdout demo, from the Wasmer registry.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
+
+# cowsay: the classic args+stdout demo, from the Wasmer registry.
+
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_app cowsay \

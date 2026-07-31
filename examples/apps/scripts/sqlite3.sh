@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
+
 # sqlite3: built from the pinned amalgamation source with zig (ADR-22).
 #
 # One pinned source release yields three artifacts:
@@ -11,8 +14,7 @@
 #                                a guest->host callback round-trip proof
 # No upstream distributes a C-API-exporting wasm32-wasi build, which is
 # why these are compiled locally rather than downloaded.
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=common.sh
+
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 SQLITE_URL="https://sqlite.org/2026/sqlite-amalgamation-3530300.zip"
@@ -61,6 +63,7 @@ fi
 
 require_tool sqlite3 zig "install zig (e.g. brew install zig) to build the sqlite3 apps"
 require_tool sqlite3 unzip
+
 echo "sqlite3: fetching $SQLITE_URL"
 new_tmpdir
 fetch_verified "$SQLITE_URL" "$SQLITE_SHA256" "$tmp/sqlite.zip"
@@ -69,6 +72,7 @@ echo "sqlite3: building sqlite3-shell.wasm (zig cc)"
 zig cc -target wasm32-wasi "${SQLITE_CFLAGS[@]}" \
   "$tmp/$SQLITE_DIR/sqlite3.c" "$tmp/$SQLITE_DIR/shell.c" \
   -o cache/sqlite3-shell.wasm
+
 echo "sqlite3: building libsqlite3.wasm (zig cc, reactor)"
 mapfile -t exports < <(wl_exports "${SQLITE_EXPORTS[@]}")
 zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
@@ -76,6 +80,7 @@ zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
   "$tmp/$SQLITE_DIR/sqlite3.c" \
   "${exports[@]}" \
   -o cache/libsqlite3.wasm
+
 # The binding artifact: the reactor library plus our own run_query, which
 # forwards each result row to the imported env.host_row (ADR-22). Only the
 # symbols this callback flow needs are exported; the import lands via the
@@ -88,5 +93,6 @@ zig cc -target wasm32-wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" \
   "$tmp/$SQLITE_DIR/sqlite3.c" src/sqlite3_binding.c \
   "${binding_exports[@]}" \
   -o cache/sqlite3-binding.wasm
+
 write_stamp "$sqlite_stamp" "$sqlite_key"
 echo "sqlite3: -> cache/sqlite3-shell.wasm, cache/libsqlite3.wasm, cache/sqlite3-binding.wasm"

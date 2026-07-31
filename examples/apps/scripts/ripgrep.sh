@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
+
 # ripgrep: built from the pinned source release with cargo for wasm32-wasip1.
 # Default features (which already exclude pcre2); no tweaks needed — ripgrep
 # 14.1.1 builds clean for wasip1 as-is. A Ruby-only filesystem demo (recursive
 # directory search over a preopened tree).
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=common.sh
+
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 RG_URL="https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.1.tar.gz"
@@ -24,6 +26,7 @@ rustup target list --installed 2>/dev/null | grep -qx wasm32-wasip1 || {
   echo "rg: wasm32-wasip1 target not installed — run: rustup target add wasm32-wasip1" >&2
   exit 1
 }
+
 echo "rg: fetching $RG_URL"
 new_tmpdir
 fetch_verified "$RG_URL" "$RG_SHA256" "$tmp/rg.tar.gz"
@@ -33,5 +36,6 @@ echo "rg: building rg.wasm (cargo build --release --target wasm32-wasip1)"
 cp "$tmp/$RG_DIR/target/wasm32-wasip1/release/rg.wasm" cache/rg.wasm
 echo "rg: wasm-opt -O2 (ADR-39)"
 wasm_opt_inplace cache/rg.wasm
+
 write_stamp "$rg_stamp" "$rg_want"
 echo "rg: -> cache/rg.wasm"

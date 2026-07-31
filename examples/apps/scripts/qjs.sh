@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# qjs: the quickjs-ng JavaScript engine, official WASI CLI release asset.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
+
+# qjs: the quickjs-ng JavaScript engine, official WASI CLI release asset.
+
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_app qjs \

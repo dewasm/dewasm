@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 # Shared helpers for the per-app fetch/build scripts in this directory.
 #
 # Every scripts/<name>.sh sources this file, then either downloads a pinned,
@@ -10,6 +11,7 @@
 # Sourcing this file cd's to examples/apps (so cache/ and src/ resolve the
 # same way whether a script is run directly or via fetch-and-build.sh) and
 # ensures cache/ exists.
+
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -117,4 +119,79 @@ fetch_app() {
   fi
   write_stamp "$stamp" "$sha256"
   echo "$name: -> $out"
+}
+
+# archive_extract_file <archive> <kind> <inner> <dest>: extract the single
+# member <inner> from a .zip / .tar.gz to <dest>. Goes through stdout
+# (unzip -p / tar -O), so only that one member is unpacked — no scratch tree,
+# and crucially none of the bulk (cruby's tarball carries a multi-hundred-MB
+# static lib we never want on disk).
+archive_extract_file() {
+  case "$2" in
+    zip) unzip -p "$1" "$3" >"$4" ;;
+    tar.gz) tar xzOf "$1" "$3" >"$4" ;;
+  esac
+}
+
+# archive_extract_tree <archive> <kind> <inner> <destdir> [strip]: extract the
+# subtree <inner> from a .zip / .tar.gz into a fresh <destdir>, dropping <strip>
+# leading path components (so it lands at <destdir>/<inner-minus-strip>). Only
+# <inner> is unpacked, not the whole archive. zip has no strip flag, so the zip
+# path only supports strip=0 (all it is asked for); a strip>0 zip would need
+# extend-and-relocate, added when something needs it (ADR-0: fail, don't guess).
+archive_extract_tree() {
+  local ar="$1" kind="$2" inner="$3" dest="$4" strip="${5:-0}"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  case "$kind" in
+    tar.gz)
+      tar xzf "$ar" -C "$dest" --strip-components="$strip" "$inner"
+      ;;
+    zip)
+      [ "$strip" = 0 ] || {
+        echo "archive_extract_tree: zip with strip=$strip is unimplemented" >&2
+        exit 1
+      }
+      unzip -qo "$ar" "$inner/*" -d "$dest"
+      ;;
+  esac
+}
+
+# fetch_runtime_with_stdlib <name> <url> <sha256> <wasm_inner> <tree_inner> [strip]
+# The prebuilt language-runtime pattern (cpython, cruby): a checksum-pinned
+# archive from which we take the interpreter binary (<wasm_inner> -> cache/
+# <name>.wasm) plus the stdlib tree it reads at startup (<tree_inner>, minus
+# <strip> leading components -> cache/<name>-lib/). The archive kind is inferred
+# from the URL, so callers stay format-agnostic. Stamp = the sha; skips on a
+# cache hit (the wasm and the stdlib-tree marker present, stamp matching).
+fetch_runtime_with_stdlib() {
+  local name="$1" url="$2" sha256="$3" wasm_inner="$4" tree_inner="$5" strip="${6:-0}"
+  local wasm="cache/$name.wasm" lib="cache/$name-lib"
+  # Marker = where the stdlib tree lands: tree_inner with `strip` leading
+  # components removed, under cache/<name>-lib/.
+  local stripped="$tree_inner" n="$strip"
+  while ((n-- > 0)); do stripped="${stripped#*/}"; done
+  local marker="$lib/$stripped" stamp="cache/$name.src-sha256"
+  local kind
+  case "$url" in
+    *.zip) kind=zip ;;
+    *.tar.gz | *.tgz) kind=tar.gz ;;
+    *)
+      echo "$name: unrecognized archive type in $url" >&2
+      exit 1
+      ;;
+  esac
+  if is_cached "$stamp" "$sha256" "$wasm" "$marker"; then
+    echo "$name: cached"
+    return
+  fi
+  [ "$kind" = zip ] && require_tool "$name" unzip
+  echo "$name: fetching $url"
+  new_tmpdir
+  local ar="$tmp/archive"
+  fetch_verified "$url" "$sha256" "$ar"
+  archive_extract_file "$ar" "$kind" "$wasm_inner" "$wasm"
+  archive_extract_tree "$ar" "$kind" "$tree_inner" "$lib" "$strip"
+  write_stamp "$stamp" "$sha256"
+  echo "$name: -> $wasm, $marker"
 }
