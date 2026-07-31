@@ -33,7 +33,7 @@ if (( BASH_VERSINFO[0] < 5 )); then
   exit 1
 fi
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 readonly ESC=$'\e'
 
@@ -129,6 +129,9 @@ imp_on_game_init() {
   return 0
 }
 
+# Read by rt_resolve_import in the sourced doom_gen.sh (IMPORTS[mod.name]),
+# not anywhere in this script — hence the unused-variable suppression.
+# shellcheck disable=SC2034
 declare -A IMPORTS=(
   ['console.onErrorMessage']=imp_on_error
   ['console.onInfoMessage']=imp_on_info
@@ -507,7 +510,8 @@ run_interactive() {
 
     (( tick++ ))
     render_frame
-    local status_text="dewasm DOOM (bash) | tick $tick | $(fmt_secs "$dt_ms")s/tick | q quit  f fire  space use  arrows move  ,/. strafe  tab automap  enter confirm"
+    local status_text
+    status_text="dewasm DOOM (bash) | tick $tick | $(fmt_secs "$dt_ms")s/tick | q quit  f fire  space use  arrows move  ,/. strafe  tab automap  enter confirm"
     printf '%s' "$RENDER_OUT${ESC}[$(( GRID_ROWS + 1 ));1H${ESC}[K${status_text}"
   done
 }

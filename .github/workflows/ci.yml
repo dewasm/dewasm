@@ -27,6 +27,13 @@ jobs:
           shared-key: lint
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      # Lint the standalone shell scripts (examples/apps builders, the doom
+      # and rails demos). The runtime/bash/units/*.sh are excluded: they are
+      # code fragments the bash emitter assembles, not standalone scripts
+      # (no shebang, shared globals), so shellcheck's own analysis does not
+      # apply — the Rust units-lint test covers them instead.
+      - name: shellcheck (standalone scripts)
+        run: git ls-files '*.sh' | grep -v '^runtime/bash/units/' | xargs shellcheck -x
 
   apps-cache:
     runs-on: ubuntu-latest
