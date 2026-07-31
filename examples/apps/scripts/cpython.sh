@@ -2,8 +2,9 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# CPython 3.14.6: the official wasm32-wasip1 build
-# (brettcannon/cpython-wasi-build). Beyond python.wasm we also extract the
+# CPython 3.14.6: an unofficial wasm32-wasip1 build
+# (brettcannon/cpython-wasi-build — the PSF distributes no WASI binaries; this
+# is a CPython core dev's build). Beyond python.wasm we also extract the
 # stdlib tree (lib/python3.14) the interpreter reads at startup from a
 # preopened directory: the e2e case preopens cache/cpython-lib/lib at guest
 # /lib (PYTHONHOME=/, PYTHONPATH=/lib/python3.14). Ruby-only, heavy —
