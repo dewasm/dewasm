@@ -1205,8 +1205,9 @@ impl<'a> Gen<'a> {
                 w.line(format!("{ret_ty} _ret = {ret_init};"));
             }
             let mut guarded = false;
+            let mut free = BTreeSet::new();
             for stmt in &func.body {
-                self.emit_stmt(w, stmt, &mut guarded);
+                self.emit_stmt(w, stmt, &mut guarded, &mut free);
             }
             if has_result {
                 w.line("return _ret;");
@@ -1283,26 +1284,35 @@ impl<'a> Gen<'a> {
     }
 
     /// Emit a statement sequence as the body of a construct (loop/if/block body or the function entry): inline when small, or split into chained `part` methods when the function is split and the sub-body is large.
-    fn emit_body(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded_in: bool) {
+    ///
+    /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
+    fn emit_body(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded_in: bool) -> BTreeSet<u32> {
+        let mut free = BTreeSet::new();
         if self.split.get() && seq_cost(stmts) > SPLIT_THRESHOLD {
             let part_args = if self.partitioned.get() {
                 "inst, f"
             } else {
                 "f"
             };
-            for name in self.emit_parts(stmts, guarded_in) {
+            for name in self.emit_parts(stmts, guarded_in, &mut free) {
                 w.line(format!("{name}({part_args});"));
             }
         } else {
             let mut guarded = guarded_in;
             for stmt in stmts {
-                self.emit_stmt(w, stmt, &mut guarded);
+                self.emit_stmt(w, stmt, &mut guarded, &mut free);
             }
         }
+        free
     }
 
     /// Split `stmts` into consecutive `part` methods (each below the threshold), threading the `guarded` flag across the boundaries. Parts are called unconditionally in order: control flow is carried by the `f.br` register and each part self-guards, so an escaped branch simply no-ops the rest.
-    fn emit_parts(&self, stmts: &[Stmt], guarded_in: bool) -> Vec<String> {
+    fn emit_parts(
+        &self,
+        stmts: &[Stmt],
+        guarded_in: bool,
+        free: &mut BTreeSet<u32>,
+    ) -> Vec<String> {
         let mut names = Vec::new();
         let mut w = CodeWriter::new("    ");
         let mut guarded = guarded_in;
@@ -1316,7 +1326,7 @@ impl<'a> Gen<'a> {
                 w = CodeWriter::new("    ");
                 cost = 0;
             }
-            self.emit_stmt(&mut w, stmt, &mut guarded);
+            self.emit_stmt(&mut w, stmt, &mut guarded, free);
             cost += c;
         }
         let name = self.new_part();
@@ -1325,19 +1335,28 @@ impl<'a> Gen<'a> {
         names
     }
 
-    fn emit_stmt(&self, w: &mut CodeWriter, stmt: &Stmt, guarded: &mut bool) {
+    /// Emit one statement, adding its free branch targets to `free` (see `emit_body`).
+    fn emit_stmt(
+        &self,
+        w: &mut CodeWriter,
+        stmt: &Stmt,
+        guarded: &mut bool,
+        free: &mut BTreeSet<u32>,
+    ) {
         match stmt {
             Stmt::Block { label, body } => {
-                self.emit_body(w, body, *guarded);
+                let mut inner = self.emit_body(w, body, *guarded);
                 self.reset_marker(w, label);
-                *guarded = *guarded || !stmt_free_targets(stmt).is_empty();
+                inner.remove(&label.id);
+                *guarded = *guarded || !inner.is_empty();
+                free.extend(inner);
             }
             Stmt::Loop { label, body } => {
                 if label.referenced {
                     let before = *guarded;
                     w.line("while (true) {");
                     w.indent();
-                    self.emit_body(w, body, before);
+                    let mut inner = self.emit_body(w, body, before);
                     w.line(format!(
                         "if ({0} == {1}) {{ {0} = 0; continue; }}",
                         self.br(),
@@ -1346,10 +1365,14 @@ impl<'a> Gen<'a> {
                     w.line("break;");
                     w.dedent();
                     w.line("}");
-                    *guarded = before || !stmt_free_targets(stmt).is_empty();
+                    inner.remove(&label.id);
+                    *guarded = before || !inner.is_empty();
+                    free.extend(inner);
                 } else {
-                    self.emit_body(w, body, *guarded);
-                    *guarded = *guarded || !stmt_free_targets(stmt).is_empty();
+                    let mut inner = self.emit_body(w, body, *guarded);
+                    inner.remove(&label.id);
+                    *guarded = *guarded || !inner.is_empty();
+                    free.extend(inner);
                 }
             }
             Stmt::If {
@@ -1358,9 +1381,11 @@ impl<'a> Gen<'a> {
                 then,
                 els,
             } => {
-                self.emit_if(w, *guarded, cond, then, els);
+                let mut inner = self.emit_if(w, *guarded, cond, then, els);
                 self.reset_marker(w, label);
-                *guarded = *guarded || !stmt_free_targets(stmt).is_empty();
+                inner.remove(&label.id);
+                *guarded = *guarded || !inner.is_empty();
+                free.extend(inner);
             }
             // REASON: DWARF source-line markers are out of scope for Java (ADR-38) — drop them here (not via the `_br` guard) so the guard state and emitted output stay byte-identical to a non-`--dwarf-line` build.
             Stmt::SourceLine(_) => {}
@@ -1374,7 +1399,7 @@ impl<'a> Gen<'a> {
                 } else {
                     self.simple_stmt(w, stmt);
                 }
-                if !stmt_free_targets(stmt).is_empty() {
+                if collect_leaf_free_targets(stmt, free) {
                     *guarded = true;
                 }
             }
@@ -1391,7 +1416,15 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn emit_if(&self, w: &mut CodeWriter, guarded: bool, cond: &Expr, then: &[Stmt], els: &[Stmt]) {
+    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
+    fn emit_if(
+        &self,
+        w: &mut CodeWriter,
+        guarded: bool,
+        cond: &Expr,
+        then: &[Stmt],
+        els: &[Stmt],
+    ) -> BTreeSet<u32> {
         let cond_s = self.expr(cond);
         if guarded {
             // `_br == 0 &&` short-circuits, so `cond` is not evaluated (and cannot trap) while a branch is pending.
@@ -1400,23 +1433,24 @@ impl<'a> Gen<'a> {
             w.line(format!("if (({cond_s}) != 0) {{"));
         }
         w.indent();
-        self.emit_body(w, then, guarded);
+        let mut free = self.emit_body(w, then, guarded);
         w.dedent();
         if els.is_empty() {
             w.line("}");
         } else if guarded {
             w.line(format!("}} else if ({} == 0) {{", self.br()));
             w.indent();
-            self.emit_body(w, els, guarded);
+            free.extend(self.emit_body(w, els, guarded));
             w.dedent();
             w.line("}");
         } else {
             w.line("} else {");
             w.indent();
-            self.emit_body(w, els, guarded);
+            free.extend(self.emit_body(w, els, guarded));
             w.dedent();
             w.line("}");
         }
+        free
     }
 
     fn simple_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
@@ -2018,60 +2052,39 @@ fn store_method(op: StoreOp) -> &'static str {
 
 // --- branch-target free sets (drive the `_br` guard placement) --------------
 
-/// The set of label ids a statement branches to that are *not* bound within it (a `Return` contributes the RETURN sentinel). Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28/ADR-30).
-fn stmt_free_targets(stmt: &Stmt) -> BTreeSet<u32> {
+/// Add the label ids a non-structured statement branches to into `free` (a `Return` contributes the RETURN sentinel), returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28/ADR-30). Structured statements get their free set from `emit_body`, which builds it bottom-up as it emits.
+fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
     match stmt {
-        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => target_free(t),
+        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => {
+            collect_target_free(t, free);
+            true
+        }
         Stmt::BrTable {
             targets, default, ..
         } => {
-            let mut s = target_free(default);
+            collect_target_free(default, free);
             for t in targets {
-                s.extend(target_free(t));
+                collect_target_free(t, free);
             }
-            s
+            true
         }
         Stmt::Return { .. } => {
-            let mut s = BTreeSet::new();
-            s.insert(RETURN_SENTINEL);
-            s
+            free.insert(RETURN_SENTINEL);
+            true
         }
-        Stmt::Block { label, body } | Stmt::Loop { label, body } => {
-            let mut s = seq_free_targets(body);
-            s.remove(&label.id);
-            s
-        }
-        Stmt::If {
-            label, then, els, ..
-        } => {
-            let mut s = seq_free_targets(then);
-            s.extend(seq_free_targets(els));
-            s.remove(&label.id);
-            s
-        }
-        _ => BTreeSet::new(),
+        _ => false,
     }
 }
 
-fn seq_free_targets(stmts: &[Stmt]) -> BTreeSet<u32> {
-    let mut s = BTreeSet::new();
-    for stmt in stmts {
-        s.extend(stmt_free_targets(stmt));
-    }
-    s
-}
-
-fn target_free(t: &BrTarget) -> BTreeSet<u32> {
-    let mut s = BTreeSet::new();
+fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) {
     match t {
         BrTarget::Return { .. } => {
-            s.insert(RETURN_SENTINEL);
+            free.insert(RETURN_SENTINEL);
         }
         BrTarget::Label { label, .. } => {
-            s.insert(*label);
+            free.insert(*label);
         }
     }
-    s
 }
 
 // --- cost estimate (drives the 64KB method split) ---------------------------
