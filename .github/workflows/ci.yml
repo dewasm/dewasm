@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [ruby, bash, python, go, java]
+        backend: [ruby, bash, python, go, java, perl]
     runs-on: ubuntu-latest
     # The slow-tier sweep (full spec suites + slow apps, ADR-48) has
     # unmeasured wall time; give it generous headroom and tighten later.
@@ -88,6 +88,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # The runner's system perl satisfies the backend's floor (>= 5.26 with
+      # ivsize=8/nvsize=8); verify loudly up front instead of skipping (ADR-15).
+      - if: matrix.backend == 'perl'
+        run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
       # ubuntu-24.04's system python 3.12.3 hits the static-block limit that
       # breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
       - if: matrix.backend == 'python'

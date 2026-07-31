@@ -485,6 +485,7 @@ dependencies = [
  "dewasm-backend-bash",
  "dewasm-backend-go",
  "dewasm-backend-java",
+ "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
  "dewasm-core",

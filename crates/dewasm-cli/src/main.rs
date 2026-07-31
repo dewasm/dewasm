@@ -6,6 +6,7 @@ use dewasm_backend::{Backend, DataFileConfig, GenOptions, Mode, RuntimeLinkage};
 use dewasm_backend_bash::BashBackend;
 use dewasm_backend_go::GoBackend;
 use dewasm_backend_java::JavaBackend;
+use dewasm_backend_perl::PerlBackend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 
@@ -52,6 +53,7 @@ fn main() -> Result<()> {
         "ruby" => Box::new(RubyBackend),
         "bash" => Box::new(BashBackend),
         "python" => Box::new(PythonBackend),
+        "perl" => Box::new(PerlBackend),
         "go" => Box::new(GoBackend),
         "java" => Box::new(JavaBackend),
         other => bail!("unsupported target language: {other}"),
@@ -66,11 +68,11 @@ fn main() -> Result<()> {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
     }
 
-    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
+    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
-                "ruby" | "go" | "python" | "java" => {}
+                "ruby" | "go" | "python" | "java" | "perl" => {}
                 "bash" => bail!(
                     "--data-file is not supported for the bash target: the bash \
                      backend embeds data segments in its runtime, not as a sidecar \
