@@ -8,12 +8,12 @@ cd "$(dirname "$0")"
 
 repo_root="$(cd ../../.. && pwd)"
 
-../fetch.sh
+../../apps/scripts/doom.sh
 
 (
   cd "$repo_root"
   cargo run -q -p dewasm-cli -- \
-    examples/doom/cache/doom.wasm \
+    examples/apps/cache/doom.wasm \
     --target ruby --mode library --module-name Doom \
     -o examples/doom/ruby/doom_gen.rb
 )

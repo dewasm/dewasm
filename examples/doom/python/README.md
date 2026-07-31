@@ -1,6 +1,6 @@
 # DOOM (Python, ANSI terminal)
 
-An interactive frontend for the DOOM shareware episode that renders straight into the terminal -- no window, no GPU. `../fetch.sh` downloads jacobenget/doom.wasm; `build.sh` converts it to Python with dewasm (`doom_gen.py`, ~11MB, gitignored, regenerated on every build) and links it against a small host program in `main.py` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery), draws the framebuffer as 24-bit-color half-blocks, and reads keys from the terminal in raw mode. Stdlib only: no third-party packages, nothing to `pip install`.
+An interactive frontend for the DOOM shareware episode that renders straight into the terminal -- no window, no GPU. `build.sh` fetches jacobenget/doom.wasm (checksum-pinned into the shared apps cache) and converts it to Python with dewasm (`doom_gen.py`, ~11MB, gitignored, regenerated on every build) and links it against a small host program in `main.py` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery), draws the framebuffer as 24-bit-color half-blocks, and reads keys from the terminal in raw mode. Stdlib only: no third-party packages, nothing to `pip install`.
 
 ## Run
 
