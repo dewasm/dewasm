@@ -7,8 +7,12 @@
 # subscription sets the wait deadline; if it elapses with no fd ready the
 # soonest clock(s) fire, exactly as Ruby (ready fd events win outright, so a
 # clock is never consulted once any fd is ready). stdin blocks via `read -t
-# <deadline>` and a byte that arrives is held in the one-byte pushback slot
-# (<p>wpush) for the next fd_read; a clock-only wait sleeps with a bash-only
+# <deadline>` and the bytes that arrive are held in the pushback buffer
+# (<p>wpush, a space-separated byte-ordinal list shared with fd_read); a
+# non-tty stdin waits for one byte with `read -d '' -n 1`, while a tty stdin
+# waits for a whole canonical line with a plain `read` (`-n 1` toggles ICANON
+# per byte and each restore makes the pty line discipline re-echo the pending
+# line — see fd_read); a clock-only wait sleeps with a bash-only
 # coproc timer (a process substitution opened `<>` is rejected on some hosts, so
 # a coproc that blocks on its own pipe is the portable sleep). `now` comes from
 # EPOCHREALTIME, with monotonic falling back to realtime (the ADR-12 clock
@@ -60,7 +64,8 @@ wasi_poll_oneoff() {
         __ev+=("$__ud 8 $__tag 0 0") # EBADF: unknown or directory fd
       elif (( __tag == 1 && __fd == 0 )); then
         if [[ -n $__push ]]; then
-          __ev+=("$__ud 0 1 1 0") # a pushed-back byte is already readable
+          local -a __pw=($__push)
+          __ev+=("$__ud 0 1 ${#__pw[@]} 0") # pushed-back bytes are readable
         else
           __wait+=("$__ud")
         fi
@@ -91,15 +96,40 @@ wasi_poll_oneoff() {
       printf -v __to '%d.%06d' $(( __min / 1000000000 )) $(( __min % 1000000000 / 1000 ))
     fi
     if (( ${#__wait[@]} > 0 )); then
-      local __ch __ord __rc
-      if (( __have_clock )); then
+      local __ch __ord __rc __line __kk
+      if [[ -t 0 ]]; then
+        if (( __have_clock )); then
+          IFS= read -r -t "$__to" __line
+          __rc=$?
+        else
+          IFS= read -r __line
+          __rc=$?
+        fi
+      elif (( __have_clock )); then
         IFS= read -r -d '' -n 1 -t "$__to" __ch
         __rc=$?
+        __line=''
       else
         IFS= read -r -d '' -n 1 __ch
         __rc=$?
+        __line=''
       fi
-      if (( __rc == 0 )); then
+      if [[ -n $__line ]] || { [[ -t 0 ]] && (( __rc == 0 )); }; then
+        # tty: buffer the whole line; the stripped newline is restored unless
+        # this was EOF (or timeout) without a delimiter.
+        for (( __kk = 0; __kk < ${#__line}; __kk++ )); do
+          printf -v __ord '%d' "'${__line:__kk:1}"
+          __push+=${__push:+ }
+          __push+=$__ord
+        done
+        if (( __rc == 0 )); then
+          __push+=${__push:+ }
+          __push+=10
+        fi
+        local -a __pw2=($__push)
+        for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 ${#__pw2[@]} 0"); done
+      elif (( __rc == 0 )); then
+        # non-tty: one byte arrived
         if [[ -z $__ch ]]; then __ord=0; else printf -v __ord '%d' "'$__ch"; fi
         __push=$__ord
         for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 1 0"); done
