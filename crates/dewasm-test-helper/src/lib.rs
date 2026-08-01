@@ -12,6 +12,7 @@ mod library;
 mod multimodule;
 mod pty;
 mod qjs_repl;
+mod snapshots;
 mod spec;
 mod wasi;
 mod wasi_testsuite;
@@ -49,9 +50,10 @@ pub use library::{
 pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
-    assert_transcript_eq, capture_qjs_repl_snapshot, capture_qjs_repl_transcript,
-    qjs_repl_snapshot_path, run_qjs_repl_pty, QJS_REPL_SESSION,
+    assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_snapshot_path, run_qjs_repl_pty,
+    QJS_REPL_SESSION,
 };
+pub use snapshots::{wasmtime_snapshots, WasmtimeSnapshot};
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
     run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,
@@ -521,7 +523,7 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/snapshots/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/apps/snapshots/doom_frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {

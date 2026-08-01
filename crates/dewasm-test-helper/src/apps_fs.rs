@@ -5,6 +5,7 @@
 //! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB binary), so the perf opt-out lives at the macro/feature level: each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
 use dewasm_backend::Mode;
 
@@ -218,8 +219,12 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
-pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
+/// Stage, preopen, convert, and run every [`FsRun`] of `case` under `lang` with its per-language `glue`, returning the fresh scratch dir and each run's [`Output`] (in `case.runs` order). The shared core of [`run_fs_app_case`] (which then asserts stdout + host effects) and [`capture_fs_app_stdout`] (which extracts one run's stdout for the snapshot). Every run must exit zero (fail loud, ADR-15) — the multi-run cases depend on earlier runs' host effects (e.g. sqlite3 creates the DB file before the reopen), so a broken run must stop both the compare and the capture.
+fn drive_fs_app_case(
+    lang: &dyn BackendUnderTest,
+    case: &FsAppCase,
+    glue: &str,
+) -> (PathBuf, Vec<Output>) {
     let cache = apps_cache_dir();
     let fixtures = apps_fixtures_dir();
     let scratch = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
@@ -271,24 +276,37 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         ],
     );
 
-    for run in case.runs {
-        let output = lang.run_app_fs(
-            &program,
-            &filled_glue,
-            run.args,
-            case.env,
-            run.stdin.as_bytes(),
-            &preopens,
-        );
-        assert!(
-            output.status.success(),
-            "{} {:?} under {}: nonzero exit {}\n{}",
-            case.name,
-            run.args,
-            lang.name(),
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
+    let outputs = case
+        .runs
+        .iter()
+        .map(|run| {
+            let output = lang.run_app_fs(
+                &program,
+                &filled_glue,
+                run.args,
+                case.env,
+                run.stdin.as_bytes(),
+                &preopens,
+            );
+            assert!(
+                output.status.success(),
+                "{} {:?} under {}: nonzero exit {}\n{}",
+                case.name,
+                run.args,
+                lang.name(),
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output
+        })
+        .collect();
+    (scratch, outputs)
+}
+
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
+pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
+    let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
+    for (run, output) in case.runs.iter().zip(&outputs) {
         if let Some(snapshot) = run.expect_stdout {
             assert_eq!(
                 String::from_utf8_lossy(&output.stdout),
@@ -306,4 +324,20 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         case.name,
         lang.name()
     );
+}
+
+/// Rerun a filesystem app `case` under `lang` (the wasmtime engine) and return the raw stdout of its snapshot-bearing run — the bytes to write into that case's `.stdout` snapshot (ADR-56). Only the cases with a checked-in snapshot file (`QJS_FILE_IO`, `SQLITE3_SHELL_DBFILE`, `RG_SEARCH`) are captured this way; each has exactly one run whose `expect_stdout` is `Some` (the others assert only host-side effects, or pin an inline string with no file). All runs execute in sequence — the earlier ones set up host state the captured run reads — but only that one run's stdout is returned, so it byte-matches the `include_str!` the case compares against.
+pub fn capture_fs_app_stdout(lang: &dyn BackendUnderTest, case: &FsAppCase) -> Vec<u8> {
+    let (_scratch, outputs) = drive_fs_app_case(lang, case, "");
+    let idx = case
+        .runs
+        .iter()
+        .position(|run| run.expect_stdout.is_some())
+        .unwrap_or_else(|| {
+            panic!(
+                "{}: no run with an expected stdout to capture a snapshot from",
+                case.name
+            )
+        });
+    outputs[idx].stdout.clone()
 }

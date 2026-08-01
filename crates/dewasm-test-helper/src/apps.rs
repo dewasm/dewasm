@@ -98,6 +98,49 @@ pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
+/// Rerun an [`AppCase`] under `lang` (the wasmtime engine) and return its raw stdout — the bytes to write into the case's snapshot file (ADR-56). Used by `cargo xtask update-snapshots`; the compare-only `apps` suites never call it. Fails loud (ADR-15) on a missing cache or a capture whose exit status is not the pinned `expect_code`.
+pub fn capture_app_stdout(lang: &dyn BackendUnderTest, case: &AppCase) -> Vec<u8> {
+    let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
+    assert!(
+        wasm_path.exists(),
+        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
+        case.name
+    );
+    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let src = lang.convert_app(&bytes, Mode::Standalone, case.name);
+    let output = lang.run(&src, case.args, case.stdin);
+    assert_eq!(
+        output.status.code(),
+        Some(case.expect_code),
+        "{} under {}: exit status differs while capturing the snapshot",
+        case.name,
+        lang.name()
+    );
+    output.stdout
+}
+
+/// Rerun the gzip *compress* case under `lang` and return its raw compressed stdout — the bytes for `examples/apps/snapshots/minigzip_compress.gz` (ADR-56). Fails loud on a missing cache or a nonzero exit.
+pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
+    let wasm_path = apps_cache_dir().join("minigzip.wasm");
+    assert!(
+        wasm_path.exists(),
+        "minigzip not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
+    );
+    let bytes = std::fs::read(&wasm_path).expect("read wasm");
+    let src = lang.convert_app(&bytes, Mode::Standalone, "minigzip");
+    let input = std::fs::read(apps_fixtures_dir().join("gzip").join("input.txt"))
+        .expect("read gzip input fixture");
+    let compressed = lang.run_bytes(&src, &[], &input);
+    assert!(
+        compressed.status.success(),
+        "minigzip compress under {}: nonzero exit {} while capturing the snapshot\n{}",
+        lang.name(),
+        compressed.status,
+        String::from_utf8_lossy(&compressed.stderr)
+    );
+    compressed.stdout
+}
+
 /// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature level (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs to gate itself.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);

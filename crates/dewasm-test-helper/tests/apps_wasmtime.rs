@@ -15,7 +15,7 @@ use dewasm_test_helper::{
     SQLITE3_SHELL_DBFILE,
 };
 
-// The wasmtime-backed `BackendUnderTest` (`Wasmtime`, plus the `NeverBackend` stand-in it uses to satisfy `BackendUnderTest::backend()`) lives in `dewasm_test_helper::wasmtime_backend` so `cargo xtask update-repl-snapshot` can drive it too; see that module for the implementation.
+// The wasmtime-backed `BackendUnderTest` (`Wasmtime`, plus the `NeverBackend` stand-in it uses to satisfy `BackendUnderTest::backend()`) lives in `dewasm_test_helper::wasmtime_backend` so `cargo xtask update-snapshots` can drive it too; see that module for the implementation.
 
 // Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros: those macros take a bare `$lang:expr` and forwarding an optional leading attribute onto the generated fn is a local macro-parsing ambiguity (`#` can begin an expr fragment). Calling the shared runners directly is the simplest honest way to attach the `wasmtime_test` ignore gate while still routing through the exact same runners the real backends use. The runners themselves are ungated (the slow per-case macros carry their own `slow_test`-feature `#[ignore]` instead, ADR-27 revision), so `wasmtime_test` alone gates every test in this file.
 
@@ -67,14 +67,14 @@ fn standalone_dir() {
     run_standalone_dir(&Wasmtime);
 }
 
-// Snapshot freshness for the interactive-REPL transcript (Fix 4): re-capture the bare qjs REPL under a real pty from a live wasmtime and require it to equal the checked-in `qjs_repl_interactive.transcript`. Compare-only; regenerate with `cargo xtask update-repl-snapshot` when the pinned qjs binary or the scripted session changes.
+// Snapshot freshness for the interactive-REPL transcript (Fix 4): re-capture the bare qjs REPL under a real pty from a live wasmtime and require it to equal the checked-in `qjs_repl_interactive.transcript`. Compare-only; regenerate with `cargo xtask update-snapshots` when the pinned qjs binary or the scripted session changes.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn qjs_repl_interactive_snapshot() {
     let snapshot = std::fs::read(qjs_repl_snapshot_path()).unwrap_or_else(|e| {
         panic!(
             "qjs repl snapshot {:?} not readable ({e}) — regenerate with \
-             `cargo xtask update-repl-snapshot` (see docs/testing.md)",
+             `cargo xtask update-snapshots` (see docs/testing.md)",
             qjs_repl_snapshot_path()
         )
     });

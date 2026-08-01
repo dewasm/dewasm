@@ -42,11 +42,10 @@ This runs wasmtime as a `BackendUnderTest` (`crates/dewasm-test-helper/tests/app
 
 ```console
 $ examples/apps/fetch-and-build.sh   # fetch the newly-pinned binary
-$ wasmtime run examples/apps/cache/<name>.wasm <args...> < <stdin-fixture> \
-    > examples/apps/snapshots/<case>.stdout
+$ cargo xtask update-snapshots       # or `update-snapshots <name>` for one app
 ```
 
-Then update the matching `AppCase` in `crates/dewasm-test-helper/src/apps.rs` (`expect_code` too, if the exit status changed), and confirm with the `wasmtime_test` command above before running the normal per-backend `cargo test -p dewasm-backend-<lang> --test e2e`.
+`update-snapshots` drives the same runners this freshness test does, so a regenerated file is exactly what the test then re-verifies (see "Regenerating snapshot files" below). After regenerating, update the matching `AppCase` in `crates/dewasm-test-helper/src/apps.rs` (`expect_code` too, if the exit status changed), and confirm with the `wasmtime_test` command above before running the normal per-backend `cargo test -p dewasm-backend-<lang> --test e2e`.
 
 ## Test layout
 
@@ -58,21 +57,24 @@ Tests live with the one backend they exercise; only a test that needs *every* ba
 - **The interactive-REPL pty case (`qjs_repl_pty`).** `qjs_repl_pty_e2e!` drives the *bare* QuickJS REPL (no script arg → interactive line editor) under a real pty (`crates/dewasm-test-helper/src/pty.rs`, `portable-pty`) and requires its transcript — ANSI escapes and all — to be byte-identical to the one wasmtime produces. A pty is required because qjs only enters that path when `fd_fdstat_get` on stdin reports a character device; a pipe does not. The scripted session is *prompt-driven*: each line is sent only after the `qjs > ` prompt reappears, so the transcript is stable regardless of how long a backend takes to start (Ruby parses a ~200 MB source first). Slow: like the other slow per-case macros, `qjs_repl_pty_e2e!`'s generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (perf opt-out, ADR-15). For bash it is promoted to the ultra tier (`ultra_slow_test`) because it timed out on CI ([ADR-48](adr/48-slow-test-tiers.md), #22); the snapshot lives at `examples/apps/snapshots/qjs_repl_interactive.transcript`.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units` unit tests at the bottom of each backend's `src/lib.rs`, run with `cargo test -p dewasm-backend-<lang> --lib`. **`softfloat.rs`** (bash) is the one remaining backend-local integration oracle, unchanged.
 - **`crates/dewasm-cli/tests/`** — only `support_docs.rs` (the `docs/support.md` generated-docs gate over all backends).
-- **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`** — wasmtime as a `BackendUnderTest`: the `apps`/`gzip`/`fs_apps` snapshot-freshness checks run through the shared runners, plus `qjs_repl_interactive_snapshot`, which re-captures the bare qjs REPL under a pty from a live wasmtime and compares it to the checked-in transcript (compare-only; regenerate with `cargo xtask update-repl-snapshot`). All behind the `wasmtime_test` feature, named for a future engine such as wasmer/wasmedge joining it.
+- **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`** — wasmtime as a `BackendUnderTest`: the `apps`/`gzip`/`fs_apps` snapshot-freshness checks run through the shared runners, plus `qjs_repl_interactive_snapshot`, which re-captures the bare qjs REPL under a pty from a live wasmtime and compares it to the checked-in transcript (compare-only; regenerate with `cargo xtask update-snapshots`). All behind the `wasmtime_test` feature, named for a future engine such as wasmer/wasmedge joining it.
 
 Onboarding a new backend to the e2e suites is: implement `BackendUnderTest` (and `SpecBackend` for the spec harness) in the new crate, then invoke the macros for the suites it participates in.
 
 ## Regenerating snapshot files
 
-Two snapshot files are code-derived rather than hand-written, and each has a compare-only test that fails with the exact command to regenerate it — no env-var modes:
+The checked-in snapshots are code-derived, not hand-written, and each has a compare-only test that fails with the exact command to regenerate it — no env-var "update mode" on the tests (ADR-27 revision, [ADR-56](adr/56-unified-snapshot-regeneration.md)):
 
 | Snapshot | Regenerate with | Compare-only test |
 | --- | --- | --- |
 | `docs/support.md` | `cargo xtask update-support-docs` | `cargo test -p dewasm-cli --test support_docs` |
-| `examples/apps/snapshots/qjs_repl_interactive.transcript` | `cargo xtask update-repl-snapshot` | `cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime` |
-| `examples/doom/snapshots/frame.ppm` | `cargo xtask update-doom-snapshot` | `cargo test -p dewasm-backend-ruby --features slow_test --test e2e doom_frame` (Bash needs `--features ultra_slow_test`) |
+| every execution snapshot (`examples/apps/snapshots/*`, incl. `doom_frame.ppm`) | `cargo xtask update-snapshots [filter]` | `cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime` (the DOOM frame: `cargo test -p dewasm-backend-ruby --features slow_test --test e2e doom_frame`, Bash needs `--features ultra_slow_test`) |
 
-`update-repl-snapshot` needs `wasmtime` on `PATH` and the qjs app cached (`examples/apps/fetch-and-build.sh`) — the same requirements as the freshness test it feeds. `update-doom-snapshot` instead embeds the `wasmtime` *crate* (an xtask-only dependency, never in the normal `cargo test` build) to drive `doom.wasm`'s custom-import interface, which the `wasmtime` CLI cannot; it needs only the doom app cached (`examples/apps/scripts/doom.sh`). Regenerate it after bumping the doom pin, then re-run the per-backend `doom_frame` cases (ADR-53). `cargo xtask` is aliased in `.cargo/config.toml` to `cargo run -p xtask --`; run `cargo xtask` with no arguments (or `--help`) for the command list.
+`update-support-docs` is separate because `docs/support.md` is generated *documentation*, not an execution snapshot — it needs no wasm engine at all.
+
+`update-snapshots` regenerates every execution snapshot from one command ([ADR-56](adr/56-unified-snapshot-regeneration.md)): the app-stdout files, the gzip stream, the filesystem-app stdout, and the interactive-REPL transcript are all captured by driving the pinned binary through a live `wasmtime` (on `PATH`), so it needs the apps cache populated (`examples/apps/fetch-and-build.sh`). An optional substring `filter` limits it to matching snapshots (e.g. `cargo xtask update-snapshots doom`, or `update-snapshots cowsay`); no filter regenerates all of them. On a clean tree it must reproduce every file byte-for-byte — a resulting `git status` diff is a real capture bug or genuine nondeterminism, not a routine update.
+
+The DOOM frame is the one target that can't go through the `wasmtime` CLI: `update-snapshots` drives it with the embedded `wasmtime` *crate* (an xtask-only dependency, never in the normal `cargo test` build) because `doom.wasm`'s custom-import interface can't run under `wasmtime run` (ADR-53). It writes two files — `doom_frame.ppm`, the compared oracle, plus a `doom_frame.png` rendering of the same frame for human inspection (not compared by any test). It needs only the doom app cached (`examples/apps/scripts/doom.sh`). After re-pinning an app in `fetch-and-build.sh`, run `update-snapshots` (a targeted filter is enough), re-run the `wasmtime_test` freshness suite above, and update the app's `expect_code` in `crates/dewasm-test-helper/src/apps.rs` if its exit status changed; for a doom pin bump, re-run the per-backend `doom_frame` cases (ADR-53). `cargo xtask` is aliased in `.cargo/config.toml` to `cargo run -p xtask --`; run `cargo xtask` with no arguments (or `--help`) for the command list.
 
 ## Useful environment variables
 

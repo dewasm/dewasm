@@ -1,7 +1,7 @@
 //! Shared constants and helpers for the DOOM framebuffer-snapshot test (ADR-53).
 //!
-//! The oracle (`cargo xtask update-doom-snapshot`, which embeds the wasmtime crate
-//! — kept out of this crate's own dependency tree) and the per-backend drivers
+//! The oracle (`cargo xtask update-snapshots`, whose DOOM target embeds the
+//! wasmtime crate — kept out of this crate's own dependency tree) and the per-backend drivers
 //! (the language glue below) must agree on exactly one driving contract: a
 //! synthetic clock self-advancing [`DOOM_CLOCK_STEP_MS`] ms per read, [`DOOM_TICKS`]
 //! `tickGame` calls, no input. The frame is then a deterministic, backend-independent
@@ -12,7 +12,7 @@
 //! `B,G,R,A` framebuffer is padding and is dropped, matching the demo frontends'
 //! own screenshot writers (`examples/doom/ruby/main.rb`).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use dewasm_backend::Mode;
 
@@ -55,9 +55,10 @@ pub fn doom_wasm_path() -> PathBuf {
     crate::fixtures::apps_cache_dir().join("doom.wasm")
 }
 
-/// `examples/doom/snapshots/frame.ppm`, the checked-in framebuffer snapshot.
+/// `examples/apps/snapshots/doom_frame.ppm`, the checked-in framebuffer snapshot
+/// (in the shared snapshots dir, so its stem carries the `doom_` prefix).
 pub fn doom_frame_snapshot_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/doom/snapshots/frame.ppm")
+    crate::fixtures::apps_snapshot_dir().join("doom_frame.ppm")
 }
 
 /// Encode a `B,G,R,A` framebuffer (row-major, 4 bytes/pixel, alpha padding) as a
@@ -102,7 +103,7 @@ pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot = std::fs::read(doom_frame_snapshot_path())
-        .expect("read doom frame snapshot — regenerate with `cargo xtask update-doom-snapshot`");
+        .expect("read doom frame snapshot — regenerate with `cargo xtask update-snapshots`");
     assert!(
         output.stdout == snapshot,
         "doom frame under {}: rendered frame differs from the snapshot ({} vs {} snapshot bytes)\nstderr: {}",
