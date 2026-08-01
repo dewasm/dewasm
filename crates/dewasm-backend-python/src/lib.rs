@@ -287,7 +287,7 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
-            // ADR-28: run the guest on a big-stack thread with a raised recursion limit (the spec harness's values). The thread carries exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
+            // ADR-28: run the guest on a big-stack thread with a raised recursion limit. Unlike the spec harness, which knows every recursion it drives is either shallow or deliberately runaway and sizes both down accordingly, a standalone guest may recurse arbitrarily deep for real work, so the pairing here stays generous: 1e6 frames at the ~1 KiB of C stack CPython <= 3.10 spends per frame. The thread carries exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");
