@@ -1,15 +1,14 @@
 //! Java side of the official WASI p1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Java backend's standalone interface. Java is compiled, so it overrides `pty_command` to `javac` the generated `Main.java` to a content-addressed class-dir cache — the launch recipe the shared `run_standalone_wasi` runs with the manifest's env/args/dirs applied. The generic harness lives in `dewasm-test-helper`.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
-use std::process::Output;
-
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, javac_command, JavaBackend};
+use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_test_helper::{
     wasi_testsuite_suite, BackendUnderTest, PtyCommand, WasiTestsuiteBackend,
 };
+
+mod common;
+
+use common::build_java;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)` — declared ENOSYS/out-of-scope syscalls, semantics-precision gaps on supported syscalls (tracked bugs in the shared WASI runtime), and environ entries the JVM host injects itself, which count-exact `environ_*` assertions cannot absorb (ADR-40).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
@@ -39,8 +38,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES_LINUX: &[(&str, &str)] = &[(
     "rust/symlink_filestat",
     "path_filestat_set_times: Linux JDK sets NOFOLLOW symlink times via microsecond lutimes, truncating ns",
 )];
-
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 struct JavaWasi;
 
@@ -73,40 +70,6 @@ impl BackendUnderTest for JavaWasi {
             cwd: None,
         }
     }
-}
-
-/// Compile `source` to a content-addressed class-dir cache (identical programs compile once).
-fn build_java(source: &str) -> Result<PathBuf, Output> {
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    let cache = std::env::temp_dir().join("dewasm-java-cache");
-    std::fs::create_dir_all(&cache).unwrap();
-    let classdir = cache.join(format!("wasitest-{hash:016x}"));
-
-    if !classdir.join("Main.class").exists() {
-        let tmp = cache.join(format!(
-            "wasitest-{hash:016x}.{}.{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let src = tmp.join("Main.java");
-        std::fs::write(&src, source).unwrap();
-        let build = javac_command()
-            .arg("-d")
-            .arg(&tmp)
-            .arg(&src)
-            .output()
-            .expect("spawn javac");
-        if !build.status.success() {
-            return Err(build);
-        }
-        let _ = std::fs::rename(&tmp, &classdir);
-    }
-
-    Ok(classdir)
 }
 
 impl WasiTestsuiteBackend for JavaWasi {
