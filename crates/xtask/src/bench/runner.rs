@@ -1,0 +1,587 @@
+//! The runner matrix: every execution environment a workload is measured on, how to tell whether it is usable on this host, and how to turn a `.wasm` into something runnable on it.
+//!
+//! Three families:
+//!
+//! * **wasmtime** — the AOT ceiling, and the correctness reference every other runner's stdout is diffed against.
+//! * **dewasm-\*** — a dewasm backend's generated source run on the host language. Codegen goes through the [`Backend`] trait directly, never by shelling out to the `dewasm` binary; the compiled backends (Go, Java) additionally build the generated source, mirroring what their e2e suites do (`go build` then run the binary, because `go run` swallows the guest exit code; `javac -d <classdir> Main.java` then `java -cp <classdir> Main`, because the generated Java always declares `public class Main`).
+//! * **pywasm / wardite** — third-party wasm interpreters written in Python and Ruby, driven through the scripts in `benchmarks/drivers/`. Their dependencies come from `benchmarks/setup.sh`; a missing one is reported as skipped-with-reason, never silently dropped.
+//!
+//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (ADR-15's fail-loud-not-skip policy, applied to a tool rather than a test: the harness keeps going, but the gap is named in both the JSON and the doc).
+
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::OnceLock;
+
+use anyhow::{bail, Context, Result};
+use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+
+use crate::bench::{bench_cache_dir, display_path, drivers_dir};
+
+/// A launchable recipe: `program args... <workload args...>`, with `env` overlaid on the inherited environment.
+#[derive(Clone)]
+pub struct Launch {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+}
+
+/// Which dewasm backend a `dewasm-*` runner generates with, and on what.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    /// CRuby with the given JIT flag (`--disable-yjit`, `--yjit`, `--zjit`).
+    Ruby(&'static str),
+    /// The Python backend's output on CPython.
+    Python,
+    /// The *same* Python output on PyPy — a JIT'd Python, and by far the fastest interpreted-language runner we have. Not installed by `benchmarks/setup.sh`; it has to already be on the host.
+    PyPy,
+    Perl,
+    Bash,
+    Go,
+    Java,
+}
+
+/// Which third-party wasm interpreter a driver runner drives, and on which host interpreter.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Driver {
+    /// `benchmarks/drivers/pywasm.py` on the `benchmarks/setup.sh` venv.
+    PywasmCPython,
+    /// The same driver on a host PyPy, which needs `pywasm` importable there.
+    PywasmPyPy,
+    /// `benchmarks/drivers/wardite.rb` with the given ruby JIT flag, against the `GEM_HOME` under `benchmarks/cache/`.
+    Wardite(&'static str),
+}
+
+pub enum Kind {
+    Wasmtime,
+    Dewasm(Target),
+    Driver(Driver),
+}
+
+pub struct Runner {
+    pub label: &'static str,
+    pub kind: Kind,
+}
+
+/// The full matrix, in report order: the ceiling first, then dewasm's backends, then the third-party interpreters we are actually competing with.
+pub fn runners() -> Vec<Runner> {
+    let r = |label, kind| Runner { label, kind };
+    vec![
+        r("wasmtime", Kind::Wasmtime),
+        r("dewasm-ruby", Kind::Dewasm(Target::Ruby("--disable-yjit"))),
+        r("dewasm-ruby-yjit", Kind::Dewasm(Target::Ruby("--yjit"))),
+        r("dewasm-ruby-zjit", Kind::Dewasm(Target::Ruby("--zjit"))),
+        r("dewasm-python", Kind::Dewasm(Target::Python)),
+        r("dewasm-pypy", Kind::Dewasm(Target::PyPy)),
+        r("dewasm-perl", Kind::Dewasm(Target::Perl)),
+        r("dewasm-go", Kind::Dewasm(Target::Go)),
+        r("dewasm-java", Kind::Dewasm(Target::Java)),
+        r("dewasm-bash", Kind::Dewasm(Target::Bash)),
+        r("pywasm-cpython", Kind::Driver(Driver::PywasmCPython)),
+        r("pywasm-pypy", Kind::Driver(Driver::PywasmPyPy)),
+        r("wardite", Kind::Driver(Driver::Wardite("--disable-yjit"))),
+        r("wardite-yjit", Kind::Driver(Driver::Wardite("--yjit"))),
+    ]
+}
+
+impl Runner {
+    /// `Ok(())` when this runner can run here; otherwise the setup instruction that would make it available. Never silently downgraded — the caller reports the reason in both outputs.
+    pub fn availability(&self) -> Result<(), String> {
+        match &self.kind {
+            Kind::Wasmtime => wasmtime_bin()
+                .map(|_| ())
+                .ok_or_else(|| "wasmtime not found on PATH — see docs/testing.md".to_string()),
+            Kind::Dewasm(target) => target.availability(),
+            Kind::Driver(driver) => driver.availability(),
+        }
+    }
+
+    /// A version string captured by *executing* the runtime, so the result file records what actually ran rather than what was pinned.
+    pub fn version(&self) -> Option<String> {
+        match &self.kind {
+            Kind::Wasmtime => capture_version(&wasmtime_bin()?, &["--version"]),
+            Kind::Dewasm(target) => target.version(),
+            Kind::Driver(driver) => driver.version(),
+        }
+    }
+}
+
+impl Target {
+    fn availability(&self) -> Result<(), String> {
+        match self {
+            Target::Ruby(flag) => {
+                let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
+                    "ruby >= 3.4 not found on PATH — see docs/testing.md".to_string()
+                })?;
+                // `--yjit`/`--zjit` are build-time options: a ruby that has the flag but was compiled without the JIT exits non-zero here, which is a real unavailability, not a harness bug.
+                probe(&ruby, &[flag, "-e", "0"])
+                    .then_some(())
+                    .ok_or_else(|| format!("this ruby does not accept {flag}"))
+            }
+            Target::Python => dewasm_backend_python::find_python()
+                .map(|_| ())
+                .ok_or_else(|| {
+                    "python3 >= 3.9 not found on PATH — see docs/testing.md".to_string()
+                }),
+            Target::PyPy => pypy_bin().map(|_| ()).ok_or_else(|| {
+                "pypy3 not found on PATH (or $DEWASM_PYPY); benchmarks/setup.sh does not install it"
+                    .to_string()
+            }),
+            Target::Perl => dewasm_backend_perl::find_perl()
+                .map(|_| ())
+                .ok_or_else(|| "perl >= 5.26 not found on PATH — see docs/testing.md".to_string()),
+            Target::Bash => dewasm_backend_bash::find_bash5()
+                .map(|_| ())
+                .ok_or_else(|| "bash >= 5 not found on PATH — see docs/testing.md".to_string()),
+            Target::Go => dewasm_backend_go::find_go()
+                .map(|_| ())
+                .ok_or_else(|| "go toolchain not found on PATH — see docs/testing.md".to_string()),
+            Target::Java => {
+                dewasm_backend_java::find_java().ok_or_else(|| {
+                    "java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md".to_string()
+                })?;
+                dewasm_backend_java::find_javac()
+                    .map(|_| ())
+                    .ok_or_else(|| {
+                        "javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md"
+                            .to_string()
+                    })
+            }
+        }
+    }
+
+    fn version(&self) -> Option<String> {
+        match self {
+            Target::Ruby(_) => capture_version(&dewasm_backend_ruby::find_ruby()?, &["-v"]),
+            Target::Python => capture_version(&dewasm_backend_python::find_python()?, &["-VV"]),
+            Target::PyPy => capture_version(&pypy_bin()?, &["-VV"]),
+            Target::Perl => {
+                capture_version(&dewasm_backend_perl::find_perl()?, &["-e", "print $^V"])
+            }
+            Target::Bash => capture_version(
+                &dewasm_backend_bash::find_bash5()?,
+                &["-c", "echo $BASH_VERSION"],
+            ),
+            Target::Go => capture_version(&dewasm_backend_go::find_go()?, &["version"]),
+            // `java -version` writes to stderr on every JDK that predates the `--version` spelling; `capture_version` reads both streams for exactly this reason.
+            Target::Java => capture_version(&dewasm_backend_java::find_java()?, &["-version"]),
+        }
+    }
+
+    /// The dewasm backend behind this target. Ruby's three JIT modes and Python/PyPy share one backend, so they also share one generated artifact.
+    fn backend(&self) -> &'static (dyn Backend + Sync) {
+        match self {
+            Target::Ruby(_) => &dewasm_backend_ruby::RubyBackend,
+            Target::Python | Target::PyPy => &dewasm_backend_python::PythonBackend,
+            Target::Perl => &dewasm_backend_perl::PerlBackend,
+            Target::Bash => &dewasm_backend_bash::BashBackend,
+            Target::Go => &dewasm_backend_go::GoBackend,
+            Target::Java => &dewasm_backend_java::JavaBackend,
+        }
+    }
+}
+
+impl Driver {
+    fn availability(&self) -> Result<(), String> {
+        let script = self.script();
+        if !script.is_file() {
+            return Err(format!(
+                "{} missing — it ships with the repo",
+                display_path(&script)
+            ));
+        }
+        match self {
+            Driver::PywasmCPython => {
+                let python = venv_python().ok_or_else(|| {
+                    "benchmarks/cache/venv missing — run benchmarks/setup.sh".to_string()
+                })?;
+                probe(&python, &["-c", "import pywasm"])
+                    .then_some(())
+                    .ok_or_else(|| {
+                        "pywasm not importable in benchmarks/cache/venv — run benchmarks/setup.sh"
+                            .to_string()
+                    })
+            }
+            Driver::PywasmPyPy => {
+                let pypy = pypy_bin().ok_or_else(|| {
+                    "pypy3 not found on PATH (or $DEWASM_PYPY); benchmarks/setup.sh does not install it"
+                        .to_string()
+                })?;
+                probe(&pypy, &["-c", "import pywasm"]).then_some(()).ok_or_else(|| {
+                    "pywasm not importable under pypy3 — install it there (benchmarks/setup.sh only provisions the CPython venv)"
+                        .to_string()
+                })
+            }
+            Driver::Wardite(flag) => {
+                let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
+                    "ruby >= 3.4 not found on PATH — see docs/testing.md".to_string()
+                })?;
+                let gem_home = wardite_gem_home().ok_or_else(|| {
+                    "no GEM_HOME with wardite under benchmarks/cache/ — run benchmarks/setup.sh"
+                        .to_string()
+                })?;
+                let ok = Command::new(&ruby)
+                    .args([flag, "-e", "require 'wardite'"])
+                    .env("GEM_HOME", &gem_home)
+                    .env("GEM_PATH", &gem_home)
+                    .output()
+                    .map(|out| out.status.success())
+                    .unwrap_or(false);
+                ok.then_some(()).ok_or_else(|| {
+                    format!(
+                        "wardite not loadable from {} — run benchmarks/setup.sh",
+                        display_path(&gem_home)
+                    )
+                })
+            }
+        }
+    }
+
+    fn version(&self) -> Option<String> {
+        match self {
+            Driver::PywasmCPython => pywasm_version(&venv_python()?, &[]),
+            Driver::PywasmPyPy => pywasm_version(&pypy_bin()?, &[]),
+            Driver::Wardite(flag) => {
+                let ruby = dewasm_backend_ruby::find_ruby()?;
+                let gem_home = wardite_gem_home()?;
+                let out = Command::new(ruby)
+                    .args([
+                        flag,
+                        "-e",
+                        "require 'wardite'; print Gem.loaded_specs['wardite']&.version",
+                    ])
+                    .env("GEM_HOME", &gem_home)
+                    .env("GEM_PATH", &gem_home)
+                    .output()
+                    .ok()?;
+                let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                (!v.is_empty()).then(|| format!("wardite {v}"))
+            }
+        }
+    }
+
+    /// The driver script this runner executes.
+    fn script(&self) -> PathBuf {
+        match self {
+            Driver::PywasmCPython | Driver::PywasmPyPy => drivers_dir().join("pywasm.py"),
+            Driver::Wardite(_) => drivers_dir().join("wardite.rb"),
+        }
+    }
+}
+
+/// Prepares (and caches) the runnable artifact for each `(module, backend)` pair.
+///
+/// Two levels of caching, both load-bearing: an in-process map so the three Ruby JIT modes convert once, and a content-addressed `/tmp` cache so a re-run of the suite does not repeat a multi-minute `go build` of a SQLite-class module. The disk key is the hash of the wasm bytes plus the backend name, so a rebuilt kernel invalidates itself.
+#[derive(Default)]
+pub struct Workshop {
+    artifacts: HashMap<(u64, &'static str), Artifact>,
+}
+
+/// What a backend's output is once it is ready to run.
+#[derive(Clone)]
+enum Artifact {
+    /// An interpreted backend: a generated script on disk.
+    Script(PathBuf),
+    /// Go: a built executable.
+    Binary(PathBuf),
+    /// Java: a class directory holding `Main.class`.
+    ClassDir(PathBuf),
+}
+
+impl Workshop {
+    /// The launch recipe for `runner` on `wasm`. For a dewasm runner this converts (and, for Go/Java, compiles) on first use.
+    pub fn launch(&mut self, runner: &Runner, wasm: &Path, module_name: &str) -> Result<Launch> {
+        match &runner.kind {
+            Kind::Wasmtime => Ok(Launch {
+                program: wasmtime_bin().context("wasmtime not found on PATH")?,
+                args: vec!["run".to_string(), path_arg(wasm)],
+                env: Vec::new(),
+            }),
+            Kind::Dewasm(target) => self.dewasm_launch(*target, wasm, module_name),
+            Kind::Driver(driver) => driver_launch(*driver, wasm),
+        }
+    }
+
+    fn dewasm_launch(&mut self, target: Target, wasm: &Path, module_name: &str) -> Result<Launch> {
+        let bytes =
+            std::fs::read(wasm).with_context(|| format!("failed to read {}", wasm.display()))?;
+        let backend = target.backend();
+        let key = (hash_bytes(&bytes), backend.name());
+        let artifact = match self.artifacts.get(&key) {
+            Some(cached) => cached.clone(),
+            None => {
+                let built = build_artifact(target, &bytes, key.0, module_name)?;
+                self.artifacts.insert(key, built.clone());
+                built
+            }
+        };
+        Ok(match (target, artifact) {
+            (Target::Ruby(flag), Artifact::Script(path)) => Launch {
+                program: dewasm_backend_ruby::find_ruby().context("ruby not found")?,
+                args: vec![flag.to_string(), path_arg(&path)],
+                env: Vec::new(),
+            },
+            (Target::Python, Artifact::Script(path)) => Launch {
+                program: dewasm_backend_python::find_python().context("python3 not found")?,
+                args: vec![path_arg(&path)],
+                env: Vec::new(),
+            },
+            (Target::PyPy, Artifact::Script(path)) => Launch {
+                program: pypy_bin().context("pypy3 not found")?,
+                args: vec![path_arg(&path)],
+                env: Vec::new(),
+            },
+            (Target::Perl, Artifact::Script(path)) => Launch {
+                program: dewasm_backend_perl::find_perl().context("perl not found")?,
+                args: vec![path_arg(&path)],
+                env: Vec::new(),
+            },
+            (Target::Bash, Artifact::Script(path)) => Launch {
+                program: dewasm_backend_bash::find_bash5().context("bash >= 5 not found")?,
+                args: vec![path_arg(&path)],
+                env: Vec::new(),
+            },
+            // `go run` prints "exit status N" and exits 1 instead of propagating the guest's exit code, so the built binary is executed directly (same reason the Go e2e suite does).
+            (Target::Go, Artifact::Binary(bin)) => Launch {
+                program: bin,
+                args: Vec::new(),
+                env: Vec::new(),
+            },
+            (Target::Java, Artifact::ClassDir(dir)) => Launch {
+                program: dewasm_backend_java::find_java().context("java not found")?,
+                args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
+                env: Vec::new(),
+            },
+            _ => bail!("internal: artifact kind does not match the target"),
+        })
+    }
+}
+
+/// Convert `bytes` with `target`'s backend and get it into runnable shape, reusing the content-addressed `/tmp` cache when a previous run already produced it.
+fn build_artifact(target: Target, bytes: &[u8], hash: u64, module_name: &str) -> Result<Artifact> {
+    let backend = target.backend();
+    let cache = bench_tmp_dir()?;
+    let stem = format!("{}-{hash:016x}", backend.name());
+
+    match target {
+        Target::Go => {
+            let bin = cache.join(format!("{stem}.bin"));
+            if !bin.is_file() {
+                let src = cache.join(format!("{stem}.go"));
+                write_if_absent(&src, &convert(backend, bytes, module_name)?)?;
+                let go = dewasm_backend_go::find_go()
+                    .context("go toolchain not found on PATH (or $DEWASM_GO)")?;
+                let tmp = cache.join(format!("{stem}.bin.tmp"));
+                let out = Command::new(go)
+                    .arg("build")
+                    .arg("-o")
+                    .arg(&tmp)
+                    .arg(&src)
+                    .output()
+                    .context("spawn go build")?;
+                if !out.status.success() {
+                    bail!("go build failed:\n{}", String::from_utf8_lossy(&out.stderr));
+                }
+                std::fs::rename(&tmp, &bin).context("install the built go binary")?;
+            }
+            Ok(Artifact::Binary(bin))
+        }
+        Target::Java => {
+            let dir = cache.join(&stem);
+            if !dir.join("Main.class").is_file() {
+                // The generated Java always declares `public class Main`, so the source file must literally be `Main.java` whatever the module name is.
+                let tmp = cache.join(format!("{stem}.build"));
+                let _ = std::fs::remove_dir_all(&tmp);
+                std::fs::create_dir_all(&tmp)?;
+                let src = tmp.join("Main.java");
+                std::fs::write(&src, convert(backend, bytes, module_name)?)?;
+                let out = dewasm_backend_java::javac_command()
+                    .arg("-d")
+                    .arg(&tmp)
+                    .arg(&src)
+                    .output()
+                    .context("spawn javac")?;
+                if !out.status.success() {
+                    bail!("javac failed:\n{}", String::from_utf8_lossy(&out.stderr));
+                }
+                let _ = std::fs::remove_dir_all(&dir);
+                std::fs::rename(&tmp, &dir).context("install the compiled class dir")?;
+            }
+            Ok(Artifact::ClassDir(dir))
+        }
+        _ => {
+            let path = cache.join(format!("{stem}.{}", backend.file_extension()));
+            if !path.is_file() {
+                write_if_absent(&path, &convert(backend, bytes, module_name)?)?;
+            }
+            Ok(Artifact::Script(path))
+        }
+    }
+}
+
+/// Convert `bytes` to standalone source with `backend`, on a 64 MiB stack.
+///
+/// Codegen recurses with the IR's control-flow nesting, and a SQLite-class module's deepest functions overflow the default stack — the same reason `dewasm_test_helper::convert_on_big_stack` exists. That helper panics on a codegen error, which here would take down the whole suite instead of marking one cell failed, so this mirrors it over `Result`.
+fn convert(backend: &(dyn Backend + Sync), bytes: &[u8], module_name: &str) -> Result<String> {
+    let source = std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn_scoped(scope, || -> Result<Vec<u8>> {
+                let module = dewasm_core::build_module(bytes)?;
+                Ok(backend
+                    .generate(
+                        &module,
+                        &GenOptions {
+                            mode: Mode::Standalone,
+                            module_name: module_name.to_string(),
+                            runtime: RuntimeLinkage::Embedded,
+                            default_wasi: true,
+                            data_file: None,
+                        },
+                    )?
+                    .remove(0)
+                    .contents)
+            })
+            .context("spawn the codegen thread")?
+            .join()
+            .map_err(|_| anyhow::anyhow!("the codegen thread panicked"))?
+    })?;
+    String::from_utf8(source).context("generated source is not valid UTF-8")
+}
+
+/// Write `contents` to `path` via a unique temp file plus a rename, so two concurrent suites never let one read a half-written script.
+fn write_if_absent(path: &Path, contents: &str) -> Result<()> {
+    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+    std::fs::write(&tmp, contents).with_context(|| format!("failed to write {}", tmp.display()))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("failed to install {}", path.display()))
+}
+
+/// The launch recipe for a third-party interpreter: its host interpreter, the driver script, and the module path. Guest args are appended by the caller, matching the drivers' `<module.wasm> [guest-args...]` contract.
+fn driver_launch(driver: Driver, wasm: &Path) -> Result<Launch> {
+    let script = path_arg(&driver.script());
+    Ok(match driver {
+        Driver::PywasmCPython => Launch {
+            program: venv_python().context("benchmarks/cache/venv missing")?,
+            args: vec![script, path_arg(wasm)],
+            env: Vec::new(),
+        },
+        Driver::PywasmPyPy => Launch {
+            program: pypy_bin().context("pypy3 not found")?,
+            args: vec![script, path_arg(wasm)],
+            env: Vec::new(),
+        },
+        Driver::Wardite(flag) => {
+            let gem_home =
+                wardite_gem_home().context("no GEM_HOME with wardite under benchmarks/cache/")?;
+            Launch {
+                program: dewasm_backend_ruby::find_ruby().context("ruby not found")?,
+                args: vec![flag.to_string(), script, path_arg(wasm)],
+                env: vec![
+                    ("GEM_HOME".to_string(), path_arg(&gem_home)),
+                    ("GEM_PATH".to_string(), path_arg(&gem_home)),
+                ],
+            }
+        }
+    })
+}
+
+/// `wasmtime` on PATH, if it runs at all.
+pub fn wasmtime_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let candidate = std::env::var_os("DEWASM_WASMTIME")
+            .map_or_else(|| PathBuf::from("wasmtime"), PathBuf::from);
+        probe(&candidate, &["--version"]).then_some(candidate)
+    })
+    .clone()
+}
+
+/// A host PyPy 3. Deliberately not provisioned by `benchmarks/setup.sh` — it is a whole alternative Python — so its absence is a normal, reported skip.
+fn pypy_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_PYPY") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.extend(["pypy3", "pypy3.11", "pypy3.10", "pypy"].map(PathBuf::from));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["-c", "import sys"]))
+    })
+    .clone()
+}
+
+/// The interpreter inside `benchmarks/cache/venv`, where `benchmarks/setup.sh` pins pywasm.
+fn venv_python() -> Option<PathBuf> {
+    let bin = bench_cache_dir().join("venv/bin");
+    ["python3", "python"]
+        .iter()
+        .map(|name| bin.join(name))
+        .find(|path| path.is_file())
+}
+
+/// The `GEM_HOME` under `benchmarks/cache/` that holds wardite. Found by looking for the `<gem_home>/gems/wardite-*` layout rather than by hardcoding a directory name, so the exact name `benchmarks/setup.sh` picks does not matter here.
+fn wardite_gem_home() -> Option<PathBuf> {
+    let entries = std::fs::read_dir(bench_cache_dir()).ok()?;
+    entries.flatten().map(|entry| entry.path()).find(|dir| {
+        std::fs::read_dir(dir.join("gems")).is_ok_and(|gems| {
+            gems.flatten()
+                .any(|gem| gem.file_name().to_string_lossy().starts_with("wardite-"))
+        })
+    })
+}
+
+/// The pywasm version as the installed distribution metadata reports it, under whichever host interpreter is asked.
+fn pywasm_version(python: &Path, extra: &[&str]) -> Option<String> {
+    let out = Command::new(python)
+        .args(extra)
+        .args([
+            "-c",
+            "import importlib.metadata as m; print('pywasm ' + m.version('pywasm'))",
+        ])
+        .output()
+        .ok()?;
+    let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!v.is_empty()).then_some(v)
+}
+
+/// The temp directory holding generated sources and built binaries.
+fn bench_tmp_dir() -> Result<PathBuf> {
+    let dir = std::env::temp_dir().join("dewasm-bench");
+    std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
+    Ok(dir)
+}
+
+/// Whether `program args...` runs and exits 0. Used for every availability probe.
+fn probe(program: &Path, args: &[&str]) -> bool {
+    Command::new(program)
+        .args(args)
+        .output()
+        .is_ok_and(|out| out.status.success())
+}
+
+/// The first non-empty line of `program args...`, reading stdout and stderr both — `java -version` and `perl -v` each pick a different one.
+fn capture_version(program: &Path, args: &[&str]) -> Option<String> {
+    let out = Command::new(program).args(args).output().ok()?;
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push('\n');
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(str::to_string)
+}
+
+fn hash_bytes(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// A path as a process argument. Benchmark artifacts live under paths the harness itself chose, so a lossy conversion cannot lose anything real here.
+fn path_arg(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
