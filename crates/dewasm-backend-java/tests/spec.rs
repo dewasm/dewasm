@@ -11,7 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::{run_command_bytes, spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
@@ -127,8 +127,6 @@ impl BackendUnderTest for JavaSpec {
 
     /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache (identical programs compile once) and run it. A missing `javac`/`java` fails loud (ADR-15); a `javac` failure is surfaced as its `Output` so the harness reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        let javac =
-            find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
 
@@ -149,7 +147,7 @@ impl BackendUnderTest for JavaSpec {
             std::fs::create_dir_all(&tmp).unwrap();
             let src = tmp.join("Main.java");
             std::fs::write(&src, source).unwrap();
-            let build = Command::new(&javac)
+            let build = javac_command()
                 .arg("-d")
                 .arg(&tmp)
                 .arg(&src)

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend_go::find_go;
-use dewasm_backend_java::{find_java, find_javac};
+use dewasm_backend_java::{find_java, javac_command};
 use dewasm_backend_perl::find_perl;
 use dewasm_backend_python::find_python;
 use dewasm_backend_ruby::find_ruby;
@@ -137,10 +137,8 @@ fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 
 /// Compile `Main.java` into `classdir` (mirrors the java spec harness recipe).
 fn compile_java(src: &Path, classdir: &Path) {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
     std::fs::create_dir_all(classdir).unwrap();
-    let build = Command::new(&javac)
+    let build = javac_command()
         .arg("-d")
         .arg(classdir)
         .arg(src)

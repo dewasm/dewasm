@@ -3,10 +3,10 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Output;
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 use dewasm_test_helper::{
     wasi_testsuite_suite, BackendUnderTest, PtyCommand, WasiTestsuiteBackend,
 };
@@ -77,9 +77,6 @@ impl BackendUnderTest for JavaWasi {
 
 /// Compile `source` to a content-addressed class-dir cache (identical programs compile once).
 fn build_java(source: &str) -> Result<PathBuf, Output> {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
-
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     let hash = hasher.finish();
@@ -97,7 +94,7 @@ fn build_java(source: &str) -> Result<PathBuf, Output> {
         std::fs::create_dir_all(&tmp).unwrap();
         let src = tmp.join("Main.java");
         std::fs::write(&src, source).unwrap();
-        let build = Command::new(&javac)
+        let build = javac_command()
             .arg("-d")
             .arg(&tmp)
             .arg(&src)

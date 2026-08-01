@@ -5,13 +5,11 @@
 use std::process::{Command, Output};
 
 use dewasm_backend::Mode;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 use dewasm_test_helper::convert_bytes;
 
 /// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit into a fresh scratch dir keyed by `name`, and run `java -cp <dir> Main`.
 fn convert_and_run(wat: &str, glue: &str, name: &str) -> Output {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
 
     let bytes = wat::parse_str(wat).expect("parse wat");
@@ -25,7 +23,7 @@ fn convert_and_run(wat: &str, glue: &str, name: &str) -> Output {
     std::fs::create_dir_all(&dir).unwrap();
     let src = dir.join("Main.java");
     std::fs::write(&src, source).unwrap();
-    let build = Command::new(&javac)
+    let build = javac_command()
         .arg("-d")
         .arg(&dir)
         .arg(&src)

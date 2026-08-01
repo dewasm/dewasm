@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
     libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e,
@@ -23,9 +23,6 @@ static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 
 /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache (so identical sources compile once) and return its path. `Err(Output)` carries the `javac` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `javac` is a loud failure (ADR-15).
 fn build_java(source: &str) -> Result<PathBuf, Output> {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
-
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     let hash = hasher.finish();
@@ -44,7 +41,7 @@ fn build_java(source: &str) -> Result<PathBuf, Output> {
         std::fs::create_dir_all(&tmp).unwrap();
         let src = tmp.join("Main.java");
         std::fs::write(&src, source).unwrap();
-        let build = Command::new(&javac)
+        let build = javac_command()
             .arg("-d")
             .arg(&tmp)
             .arg(&src)
