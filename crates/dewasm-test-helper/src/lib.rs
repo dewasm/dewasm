@@ -12,6 +12,7 @@ mod library;
 mod multimodule;
 mod pty;
 mod qjs_repl;
+mod snapshots;
 mod spec;
 mod wasi;
 mod wasi_testsuite;
@@ -49,9 +50,10 @@ pub use library::{
 pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
-    assert_transcript_eq, capture_qjs_repl_snapshot, capture_qjs_repl_transcript,
-    qjs_repl_snapshot_path, run_qjs_repl_pty, QJS_REPL_SESSION,
+    assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_snapshot_path, run_qjs_repl_pty,
+    QJS_REPL_SESSION,
 };
+pub use snapshots::{wasmtime_snapshots, WasmtimeSnapshot};
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
     run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,

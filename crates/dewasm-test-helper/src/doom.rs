@@ -1,7 +1,7 @@
 //! Shared constants and helpers for the DOOM framebuffer-snapshot test (ADR-53).
 //!
-//! The oracle (`cargo xtask update-doom-snapshot`, which embeds the wasmtime crate
-//! — kept out of this crate's own dependency tree) and the per-backend drivers
+//! The oracle (`cargo xtask update-snapshots`, whose DOOM target embeds the
+//! wasmtime crate — kept out of this crate's own dependency tree) and the per-backend drivers
 //! (the language glue below) must agree on exactly one driving contract: a
 //! synthetic clock self-advancing [`DOOM_CLOCK_STEP_MS`] ms per read, [`DOOM_TICKS`]
 //! `tickGame` calls, no input. The frame is then a deterministic, backend-independent
@@ -102,7 +102,7 @@ pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot = std::fs::read(doom_frame_snapshot_path())
-        .expect("read doom frame snapshot — regenerate with `cargo xtask update-doom-snapshot`");
+        .expect("read doom frame snapshot — regenerate with `cargo xtask update-snapshots`");
     assert!(
         output.stdout == snapshot,
         "doom frame under {}: rendered frame differs from the snapshot ({} vs {} snapshot bytes)\nstderr: {}",

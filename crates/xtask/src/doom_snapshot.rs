@@ -6,8 +6,7 @@
 
 use anyhow::{ensure, Context, Result};
 use dewasm_test_helper::{
-    doom_frame_snapshot_path, doom_wasm_path, frame_to_ppm, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H,
-    DOOM_FRAME_W, DOOM_TICKS,
+    doom_wasm_path, frame_to_ppm, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
 };
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
@@ -125,10 +124,14 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     Ok((frame, w, h))
 }
 
-/// Recapture `examples/doom/snapshots/frame.ppm` from a live wasmtime. The matching
-/// per-backend test (`crates/dewasm-test-helper/src/doom.rs`) is compare-only
-/// and names this command in its failure message.
-pub fn update_doom_snapshot() -> Result<()> {
+/// Recapture the DOOM framebuffer from a live (embedded) wasmtime and return the
+/// P6 PPM bytes for `examples/doom/snapshots/frame.ppm`. The `update-snapshots`
+/// command writes them; the matching per-backend test
+/// (`crates/dewasm-test-helper/src/doom.rs`) is compare-only. This target stays
+/// on the embedded `wasmtime` crate — not the `Wasmtime` CLI backend the other
+/// snapshots use — because `doom.wasm`'s custom-import interface can't be driven
+/// through `wasmtime run` (ADR-53).
+pub fn capture_doom_ppm() -> Result<Vec<u8>> {
     let wasm_path = doom_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
         format!(
@@ -155,14 +158,5 @@ pub fn update_doom_snapshot() -> Result<()> {
         "captured frame looks degenerate ({distinct} distinct colors) — check the tick count/clock"
     );
 
-    let ppm = frame_to_ppm(&frame, w, h);
-    let snapshot = doom_frame_snapshot_path();
-    std::fs::create_dir_all(snapshot.parent().unwrap())?;
-    std::fs::write(&snapshot, &ppm)?;
-    println!(
-        "wrote {} ({} bytes, {w}x{h}, {distinct} distinct colors)",
-        snapshot.display(),
-        ppm.len()
-    );
-    Ok(())
+    Ok(frame_to_ppm(&frame, w, h))
 }
