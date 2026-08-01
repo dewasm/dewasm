@@ -95,7 +95,7 @@ jobs:
       # ubuntu-24.04's system python 3.12.3 hits the static-block limit that
       # breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
       - if: matrix.backend == 'python'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - uses: Swatinem/rust-cache@v2
@@ -144,7 +144,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
       - uses: Swatinem/rust-cache@v2
