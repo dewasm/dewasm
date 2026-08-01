@@ -108,9 +108,13 @@ sub new {
     my $next_fd = 3;
     my $preopens = $opts{preopens} // {};
     for my $guest (sort keys %$preopens) {
+        # The host path must resolve, but need not be a directory: like the
+        # Ruby runtime, a single-file preopen (e.g. '/dev/null' for the
+        # zeroperl reactor's init probe) is accepted — the guest resolves
+        # it as the preopen root itself.
         my $real = Cwd::realpath($preopens->{$guest});
-        die "preopen '$guest' => '$preopens->{$guest}': not a directory\n"
-            unless defined $real && -d $real;
+        die "preopen '$guest' => '$preopens->{$guest}': does not exist\n"
+            unless defined $real;
         $self->{fds}{$next_fd} = { dir => 1, path => $real, preopen => "$guest", entries => undef };
         $self->{meta}{$next_fd} = [DIR_RIGHTS_BASE, DIR_RIGHTS_INHERITING, 0];
         $next_fd++;
