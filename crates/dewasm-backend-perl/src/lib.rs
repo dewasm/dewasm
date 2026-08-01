@@ -841,10 +841,11 @@ impl<'a> Gen<'a> {
         w.line(format!("sub _f{idx} {{"));
         w.indent();
         w.line(format!("my ($self{params}) = @_;"));
-        // The explicit call-depth cutoff (ADR-55): `local` restores the counter on every exit path, including a trap's die-unwind.
+        // The explicit call-depth cutoff (ADR-55): `local` restores the counter on every exit path, including a trap's die-unwind. Each call adds a frame-size weight, not 1 — a pure count lets a fat-frame runaway (spec `skip-stack-guard-page`: 1056 locals) heap-allocate gigabytes before tripping the limit, where byte-bounded native stacks exhaust in a few hundred frames.
         self.use_unit("rt/exhausted");
+        let frame_weight = 1 + (ty.params.len() + func.locals.len() + func.temps.len()) / 8;
         w.line(format!(
-            "local ${0}::DEPTH = ${0}::DEPTH + 1;",
+            "local ${0}::DEPTH = ${0}::DEPTH + {frame_weight};",
             self.rt_name
         ));
         w.line(format!(
@@ -1433,6 +1434,29 @@ mod branch_shape {
         );
         assert!(source.contains("$_bt == 0"), "dispatch:\n{source}");
         assert!(source.matches("last L").count() >= 3, "targets:\n{source}");
+    }
+
+    #[test]
+    fn depth_accounting_is_frame_weighted() {
+        // A fat frame must weigh in proportionally (1 + 32/8 = 5 here), so
+        // runaway recursion with page-sized locals traps in ~LIMIT/weight
+        // frames instead of hoarding LIMIT full frames on the heap (issue
+        // #75, spec `skip-stack-guard-page`); a small frame stays weight 1.
+        let source = generate(
+            r#"(module
+              (func (export "fat")
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64)
+                (local i64) (local i64) (local i64) (local i64))
+              (func (export "slim") (result i32) (i32.const 0)))"#,
+        );
+        assert!(source.contains("::DEPTH + 5;"), "fat weight:\n{source}");
+        assert!(source.contains("::DEPTH + 1;"), "slim weight:\n{source}");
     }
 }
 
