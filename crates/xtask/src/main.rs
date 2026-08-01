@@ -12,7 +12,7 @@ use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
 use dewasm_test_helper::{doom_frame_snapshot_path, wasmtime_snapshots};
 
-use crate::doom_snapshot::capture_doom_ppm;
+use crate::doom_snapshot::capture_doom_frame;
 
 const USAGE: &str = "\
 Usage: cargo xtask <command> [args]
@@ -25,10 +25,11 @@ Commands:
                                from a live wasmtime: the app/gzip/filesystem
                                stdout files and the interactive-REPL transcript
                                under examples/apps/snapshots/, plus the DOOM
-                               frame under examples/doom/snapshots/. An optional
-                               substring `filter` limits it to matching snapshots
-                               (e.g. `update-snapshots doom`). Needs `wasmtime`
-                               on PATH and the apps cache populated
+                               frame there (doom_frame.ppm, the compared oracle,
+                               and a doom_frame.png rendering for human eyes). An
+                               optional substring `filter` limits it to matching
+                               snapshots (e.g. `update-snapshots doom`). Needs
+                               `wasmtime` on PATH and the apps cache populated
                                (examples/apps/fetch-and-build.sh; the DOOM frame
                                needs examples/apps/scripts/doom.sh). Checked by
                                the compare-only wasmtime freshness suite
@@ -66,29 +67,34 @@ fn update_support_docs() -> Result<()> {
     Ok(())
 }
 
-/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter), its write `path`, and a `capture` closure that reruns the case and returns the bytes. Capture fails loud (ADR-15) on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
+/// A capture closure's output: the `(path, bytes)` files to write for one target. Most targets yield one file; the DOOM frame yields two (the compared PPM plus a human-facing PNG sidecar).
+type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
+
+/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud (ADR-15) on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
 struct SnapshotTarget {
     label: String,
-    path: PathBuf,
-    capture: Box<dyn Fn() -> Result<Vec<u8>>>,
+    capture: Box<dyn Fn() -> Result<CapturedFiles>>,
 }
 
-/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM frame, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency (ADR-53).
+/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM frame, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency (ADR-53). The DOOM target emits two files — the compared `doom_frame.ppm` and a `doom_frame.png` rendering of the same frame for human inspection (never compared by a test).
 fn snapshot_targets() -> Vec<SnapshotTarget> {
     let mut targets: Vec<SnapshotTarget> = wasmtime_snapshots()
         .into_iter()
         .map(|snap| SnapshotTarget {
             label: snap.label,
-            path: snap.path,
             // Wrap the fail-loud capture (it panics with an ADR-15 setup
             // message) in `Ok` so every target shares one `Result` signature.
-            capture: Box::new(move || Ok((snap.capture)())),
+            capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
         })
         .collect();
     targets.push(SnapshotTarget {
-        label: "examples/doom/snapshots/frame.ppm".to_string(),
-        path: doom_frame_snapshot_path(),
-        capture: Box::new(capture_doom_ppm),
+        label: "examples/apps/snapshots/doom_frame.ppm".to_string(),
+        capture: Box::new(|| {
+            let ppm_path = doom_frame_snapshot_path();
+            let png_path = ppm_path.with_extension("png");
+            let (ppm, png) = capture_doom_frame()?;
+            Ok(vec![(ppm_path, ppm), (png_path, png)])
+        }),
     });
     targets
 }
@@ -102,13 +108,14 @@ fn update_snapshots(filter: Option<&str>) -> Result<()> {
                 continue;
             }
         }
-        let bytes = (target.capture)()?;
-        if let Some(parent) = target.path.parent() {
-            std::fs::create_dir_all(parent)?;
+        for (path, bytes) in (target.capture)()? {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&path, &bytes)?;
+            println!("wrote {} ({} bytes)", path.display(), bytes.len());
+            wrote += 1;
         }
-        std::fs::write(&target.path, &bytes)?;
-        println!("wrote {} ({} bytes)", target.path.display(), bytes.len());
-        wrote += 1;
     }
     if wrote == 0 {
         match filter {

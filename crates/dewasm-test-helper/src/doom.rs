@@ -12,7 +12,7 @@
 //! `B,G,R,A` framebuffer is padding and is dropped, matching the demo frontends'
 //! own screenshot writers (`examples/doom/ruby/main.rb`).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use dewasm_backend::Mode;
 
@@ -55,9 +55,10 @@ pub fn doom_wasm_path() -> PathBuf {
     crate::fixtures::apps_cache_dir().join("doom.wasm")
 }
 
-/// `examples/doom/snapshots/frame.ppm`, the checked-in framebuffer snapshot.
+/// `examples/apps/snapshots/doom_frame.ppm`, the checked-in framebuffer snapshot
+/// (in the shared snapshots dir, so its stem carries the `doom_` prefix).
 pub fn doom_frame_snapshot_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/doom/snapshots/frame.ppm")
+    crate::fixtures::apps_snapshot_dir().join("doom_frame.ppm")
 }
 
 /// Encode a `B,G,R,A` framebuffer (row-major, 4 bytes/pixel, alpha padding) as a

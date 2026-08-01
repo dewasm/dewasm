@@ -523,7 +523,7 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/snapshots/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/apps/snapshots/doom_frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {
