@@ -99,28 +99,6 @@ pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     }],
 };
 
-/// QuickJS scripted REPL over piped stdin (Phase 5a #1b): the pinned read-eval-print loop fixture exercises the stdin-read + evalScript path.
-pub const QJS_REPL: FsAppCase = FsAppCase {
-    name: "qjs_repl",
-    wasm: "qjs",
-    class: "Qjs",
-    env: &[],
-    preopens: &[("/work", "")],
-    cache_preopens: &[],
-    stage: &[Stage::File {
-        src: "qjs_repl.js",
-        dst: "qjs_repl.js",
-    }],
-    runs: &[FsRun {
-        args: &["qjs", "/work/qjs_repl.js"],
-        stdin: "1+2\n[3,1,2].sort()\nMath.max(4,9)\n\\q\n",
-        expect_stdout: Some(include_str!(
-            "../../../examples/apps/golden/qjs_repl.stdout"
-        )),
-        assert_host: assert_none,
-    }],
-};
-
 /// sqlite3 shell reading/writing a DB *file* (Phase 5a #2a): one invocation creates and populates `/db/test.db`, a second reopens it and SELECTs. Both runs share the scratch dir.
 pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
     name: "sqlite3_shell_dbfile",

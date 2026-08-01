@@ -13,7 +13,7 @@ use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, doom_frame_e2e, examples_dir, gzip_e2e,
     library_add_e2e, libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
-    qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
+    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
     sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
     sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e, wasi_import_override_e2e,
     wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
@@ -223,20 +223,6 @@ const GO_CONTAINMENT_GLUE: &str = r#"func main() {
 
 const GO_QJS_FILE_IO_GLUE: &str = r#"func main() {
 	inst := NewQjs(nil, []string{"qjs", "/work/qjs_file_io.js"}, nil, map[string]string{"/work": "{scratch}"})
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(*rtExit); ok {
-				return
-			}
-			panic(r)
-		}
-	}()
-	inst.Exports["_start"].(func())()
-}
-"#;
-
-const GO_QJS_REPL_GLUE: &str = r#"func main() {
-	inst := NewQjs(nil, []string{"qjs", "/work/qjs_repl.js"}, nil, map[string]string{"/work": "{scratch}"})
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(*rtExit); ok {
@@ -637,13 +623,12 @@ standalone_dir_e2e!(Go);
 
 cowsay_args_e2e!(Go);
 cowsay_stdin_e2e!(Go);
-// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl`, `qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
+// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
 qjs_eval_e2e!(Go, ultra);
 sqlite3_shell_e2e!(Go, ultra);
 gzip_e2e!(Go);
 
 qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
-qjs_repl_e2e!(Go, GO_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);

@@ -11,11 +11,10 @@ use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, find_javac, JavaBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest, PtyCommand,
+    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e,
+    run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
 };
 
 pub struct Java;
@@ -222,17 +221,6 @@ const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
 const JAVA_QJS_FILE_IO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Qjs inst = new Qjs(null, new String[]{"qjs", "/work/qjs_file_io.js"}, null, java.util.Map.of("/work", "{scratch}"));
-        try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
-        }
-    }
-}
-"#;
-
-const JAVA_QJS_REPL_GLUE: &str = r#"public class Main {
-    public static void main(String[] a) throws Exception {
-        Qjs inst = new Qjs(null, new String[]{"qjs", "/work/qjs_repl.js"}, null, java.util.Map.of("/work", "{scratch}"));
         try {
             ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
         } catch (Rt.Exit e) {
@@ -550,7 +538,6 @@ sqlite3_shell_e2e!(Java);
 gzip_e2e!(Java);
 
 qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
-qjs_repl_e2e!(Java, JAVA_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
 // cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit (docs/apps-audit.md).
