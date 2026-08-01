@@ -4,7 +4,7 @@
 
 # doom: the jacobenget/doom.wasm v0.1.0 release binary (DOOM shareware, WAD
 # embedded). Shared between the examples/doom demo frontends (ADR-50) and the
-# deterministic framebuffer-golden test (ADR-53), so it lives in the apps
+# deterministic framebuffer-snapshot test (ADR-53), so it lives in the apps
 # cache like every other fixture — checksum-pinned here, unlike the old
 # examples/doom/fetch.sh which downloaded it unverified.
 

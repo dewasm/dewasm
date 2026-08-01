@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Developer-facing workspace tasks (golden-file regeneration) run via `cargo xtask`"
+description = "Developer-facing workspace tasks (snapshot-file regeneration) run via `cargo xtask`"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -20,6 +20,9 @@ path = "src/main.rs"
 anyhow.workspace = true
 dewasm-cli = { path = "../dewasm-cli" }
 dewasm-test-helper.workspace = true
+# Encodes the human-facing PNG sidecar of the DOOM frame snapshot; default
+# settings kept fixed so regeneration is byte-stable.
+png = "0.18.1"
 # std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our
 # anyhow flow); cranelift+runtime is the embedder. No wasi/component/gc: the
 # DOOM oracle only instantiates a baseline module and calls exports (ADR-53).

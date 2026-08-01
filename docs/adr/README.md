@@ -69,6 +69,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-53 | [Test DOOM by a Deterministic Framebuffer Golden](53-doom-frame-golden.md) | Accepted |
 | ADR-54 | [Whole-Cache Per-Backend Conversion Suite](54-apps-convert-suite.md) | Accepted |
 | ADR-55 | [Perl Backend Lowering Conventions](55-perl-backend-lowering.md) | Accepted |
+| ADR-56 | [One Command Regenerates Every Execution Snapshot](56-unified-snapshot-regeneration.md) | Accepted |
 
 ## Adding a new ADR
 

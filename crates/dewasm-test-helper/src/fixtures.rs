@@ -19,9 +19,9 @@ pub fn apps_fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")
 }
 
-/// `examples/apps/golden/`, the checked-in golden outputs captured from `wasmtime` (ADR-15).
-pub fn apps_golden_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/golden")
+/// `examples/apps/snapshots/`, the checked-in snapshot outputs captured from `wasmtime` (ADR-15).
+pub fn apps_snapshot_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/snapshots")
 }
 
 /// A fresh, empty scratch directory under the temp dir keyed by `name`, so cases running in parallel never share host state.

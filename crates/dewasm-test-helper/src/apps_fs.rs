@@ -1,10 +1,11 @@
-//! Filesystem-exercising app cases (ADR-27), shared across every backend with WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the ground-truth engine. Each case converts a cached app to a library-mode class, stages fixtures into a fresh scratch dir preopened into the guest, and runs one or more invocations, diffing stdout against the same `examples/apps/golden/` files the always-on `apps` suite uses (ADR-15) and asserting the host-side effects the guest was supposed to produce.
+//! Filesystem-exercising app cases (ADR-27), shared across every backend with WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the ground-truth engine. Each case converts a cached app to a library-mode class, stages fixtures into a fresh scratch dir preopened into the guest, and runs one or more invocations, diffing stdout against the same `examples/apps/snapshots/` files the always-on `apps` suite uses (ADR-15) and asserting the host-side effects the guest was supposed to produce.
 //!
 //! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro (`qjs_file_io_e2e!`, `sqlite3_shell_dbfile_e2e!`, ...). The per-language instantiation glue is a named const passed to that macro: it writes out the class name, argv, env, and preopen *guest* paths literally and takes only the runtime host paths through the `{scratch}`/`{cache}` placeholders the runner fills. wasmtime does not use the glue: it overrides [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir` preopens directly, so the same case consts feed both the backend macros and the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
 //! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB binary), so the perf opt-out lives at the macro/feature level: each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
+use std::process::Output;
 
 use dewasm_backend::Mode;
 
@@ -31,7 +32,7 @@ pub struct FsRun {
     /// Full argv, argv0 included (backends bake it into the glue; wasmtime injects argv0 itself and uses `args[1..]`).
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// The `include_str!` golden this run's stdout must match, or `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
+    /// The `include_str!` snapshot this run's stdout must match, or `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
     pub expect_stdout: Option<&'static str>,
     /// Host-side assertion over the scratch dir after this run (e.g. a file the guest was supposed to write). `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
@@ -77,7 +78,7 @@ fn assert_sqlite_dbfile(scratch: &Path) {
     );
 }
 
-/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file into the preopened dir, reads it back, and prints it. Asserts both guest stdout (golden) and the host-side file content.
+/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file into the preopened dir, reads it back, and prints it. Asserts both guest stdout (snapshot) and the host-side file content.
 pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     name: "qjs_file_io",
     wasm: "qjs",
@@ -93,7 +94,7 @@ pub const QJS_FILE_IO: FsAppCase = FsAppCase {
         args: &["qjs", "/work/qjs_file_io.js"],
         stdin: "",
         expect_stdout: Some(include_str!(
-            "../../../examples/apps/golden/qjs_file_io.stdout"
+            "../../../examples/apps/snapshots/qjs_file_io.stdout"
         )),
         assert_host: assert_qjs_io_out,
     }],
@@ -122,14 +123,14 @@ pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
             args: &["sqlite3"],
             stdin: ".open /db/test.db\nSELECT id, v FROM t ORDER BY id;\n.exit\n",
             expect_stdout: Some(include_str!(
-                "../../../examples/apps/golden/sqlite3_shell_dbfile.stdout"
+                "../../../examples/apps/snapshots/sqlite3_shell_dbfile.stdout"
             )),
             assert_host: assert_none,
         },
     ],
 };
 
-/// ripgrep searching a small fixture directory tree (Phase 5b): recursive directory walking over a preopened tree. `--sort path` forces a deterministic order so the `wasmtime --dir` golden is stable.
+/// ripgrep searching a small fixture directory tree (Phase 5b): recursive directory walking over a preopened tree. `--sort path` forces a deterministic order so the `wasmtime --dir` snapshot is stable.
 pub const RG_SEARCH: FsAppCase = FsAppCase {
     name: "rg_search",
     wasm: "rg",
@@ -142,7 +143,7 @@ pub const RG_SEARCH: FsAppCase = FsAppCase {
         args: &["rg", "--sort", "path", "needle", "/work"],
         stdin: "",
         expect_stdout: Some(include_str!(
-            "../../../examples/apps/golden/rg_search.stdout"
+            "../../../examples/apps/snapshots/rg_search.stdout"
         )),
         assert_host: assert_none,
     }],
@@ -218,8 +219,12 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
-pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
+/// Stage, preopen, convert, and run every [`FsRun`] of `case` under `lang` with its per-language `glue`, returning the fresh scratch dir and each run's [`Output`] (in `case.runs` order). The shared core of [`run_fs_app_case`] (which then asserts stdout + host effects) and [`capture_fs_app_stdout`] (which extracts one run's stdout for the snapshot). Every run must exit zero (fail loud, ADR-15) — the multi-run cases depend on earlier runs' host effects (e.g. sqlite3 creates the DB file before the reopen), so a broken run must stop both the compare and the capture.
+fn drive_fs_app_case(
+    lang: &dyn BackendUnderTest,
+    case: &FsAppCase,
+    glue: &str,
+) -> (PathBuf, Vec<Output>) {
     let cache = apps_cache_dir();
     let fixtures = apps_fixtures_dir();
     let scratch = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
@@ -271,29 +276,42 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         ],
     );
 
-    for run in case.runs {
-        let output = lang.run_app_fs(
-            &program,
-            &filled_glue,
-            run.args,
-            case.env,
-            run.stdin.as_bytes(),
-            &preopens,
-        );
-        assert!(
-            output.status.success(),
-            "{} {:?} under {}: nonzero exit {}\n{}",
-            case.name,
-            run.args,
-            lang.name(),
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-        if let Some(golden) = run.expect_stdout {
+    let outputs = case
+        .runs
+        .iter()
+        .map(|run| {
+            let output = lang.run_app_fs(
+                &program,
+                &filled_glue,
+                run.args,
+                case.env,
+                run.stdin.as_bytes(),
+                &preopens,
+            );
+            assert!(
+                output.status.success(),
+                "{} {:?} under {}: nonzero exit {}\n{}",
+                case.name,
+                run.args,
+                lang.name(),
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output
+        })
+        .collect();
+    (scratch, outputs)
+}
+
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
+pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
+    let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
+    for (run, output) in case.runs.iter().zip(&outputs) {
+        if let Some(snapshot) = run.expect_stdout {
             assert_eq!(
                 String::from_utf8_lossy(&output.stdout),
-                golden,
-                "{} {:?} under {}: stdout differs from the wasmtime golden",
+                snapshot,
+                "{} {:?} under {}: stdout differs from the wasmtime snapshot",
                 case.name,
                 run.args,
                 lang.name()
@@ -301,5 +319,25 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         }
         (run.assert_host)(&scratch);
     }
-    println!("{} under {}: matches golden output", case.name, lang.name());
+    println!(
+        "{} under {}: matches snapshot output",
+        case.name,
+        lang.name()
+    );
+}
+
+/// Rerun a filesystem app `case` under `lang` (the wasmtime engine) and return the raw stdout of its snapshot-bearing run — the bytes to write into that case's `.stdout` snapshot (ADR-56). Only the cases with a checked-in snapshot file (`QJS_FILE_IO`, `SQLITE3_SHELL_DBFILE`, `RG_SEARCH`) are captured this way; each has exactly one run whose `expect_stdout` is `Some` (the others assert only host-side effects, or pin an inline string with no file). All runs execute in sequence — the earlier ones set up host state the captured run reads — but only that one run's stdout is returned, so it byte-matches the `include_str!` the case compares against.
+pub fn capture_fs_app_stdout(lang: &dyn BackendUnderTest, case: &FsAppCase) -> Vec<u8> {
+    let (_scratch, outputs) = drive_fs_app_case(lang, case, "");
+    let idx = case
+        .runs
+        .iter()
+        .position(|run| run.expect_stdout.is_some())
+        .unwrap_or_else(|| {
+            panic!(
+                "{}: no run with an expected stdout to capture a snapshot from",
+                case.name
+            )
+        });
+    outputs[idx].stdout.clone()
 }

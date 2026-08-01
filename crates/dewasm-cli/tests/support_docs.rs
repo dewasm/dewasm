@@ -1,4 +1,4 @@
-//! Golden-file gate for docs/support.md (ADR-8): the support matrix is rendered from the code's own declarations, so the document cannot drift from reality. Compare-only; regenerate with:
+//! Generated-docs gate for docs/support.md (ADR-8): the support matrix is rendered from the code's own declarations, so the document cannot drift from reality. Compare-only; regenerate with:
 //!
 //! cargo xtask update-support-docs
 

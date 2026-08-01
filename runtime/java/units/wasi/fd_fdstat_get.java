@@ -10,7 +10,7 @@ int wasi_fd_fdstat_get(int fd, int outPtr) {
     } else if (isStdio(e)) {
         // A tty reports as a character device (2); a pipe/redirect reports as a
         // regular file (4), so guests' isatty() stays false under piped I/O —
-        // matching the wasmtime golden captured with piped stdin (ADR-30).
+        // matching the wasmtime snapshot captured with piped stdin (ADR-30).
         filetype = (System.console() != null) ? 2 : 4;
     }
     // The stored per-fd rights and open fdflags (ADR-40); an fd with no meta

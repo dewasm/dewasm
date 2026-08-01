@@ -1,44 +1,48 @@
-//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former golden-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
+//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former snapshot-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
 //!
-//! No `clap` dependency: two subcommands and a help message do not need one.
+//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command (ADR-56): the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM frame, which stays on the embedded `wasmtime` crate because its custom-import interface can't run through `wasmtime run` (ADR-53). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
+//!
+//! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
-mod doom_golden;
+mod doom_snapshot;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
-use dewasm_test_helper::{capture_qjs_repl_golden, qjs_repl_golden_path, Wasmtime};
+use dewasm_test_helper::{doom_frame_snapshot_path, wasmtime_snapshots};
 
-use crate::doom_golden::update_doom_golden;
+use crate::doom_snapshot::capture_doom_frame;
 
 const USAGE: &str = "\
-Usage: cargo xtask <command>
+Usage: cargo xtask <command> [args]
 
 Commands:
-    update-support-docs   Regenerate docs/support.md from the backends' own
-                           capability declarations. Checked by
-                           `cargo test -p dewasm-cli --test support_docs`.
-    update-repl-golden     Recapture the interactive QuickJS REPL transcript
-                           (examples/apps/golden/qjs_repl_interactive.transcript)
-                           against a live wasmtime under a pty. Requires
-                           `wasmtime` on PATH and the qjs app cached
-                           (examples/apps/fetch-and-build.sh). Checked by
-                           `cargo test -p dewasm-test-helper --features
-                           wasmtime_test --test apps_wasmtime`.
-    update-doom-golden     Recapture the DOOM framebuffer golden
-                           (examples/doom/golden/frame.ppm) from the original
-                           doom.wasm under the embedded wasmtime crate (ADR-53).
-                           Requires the doom app cached
-                           (examples/apps/scripts/doom.sh).
+    update-support-docs        Regenerate docs/support.md from the backends' own
+                               capability declarations. Checked by
+                               `cargo test -p dewasm-cli --test support_docs`.
+    update-snapshots [filter]  Regenerate every checked-in execution snapshot
+                               from a live wasmtime: the app/gzip/filesystem
+                               stdout files and the interactive-REPL transcript
+                               under examples/apps/snapshots/, plus the DOOM
+                               frame there (doom_frame.ppm, the compared oracle,
+                               and a doom_frame.png rendering for human eyes). An
+                               optional substring `filter` limits it to matching
+                               snapshots (e.g. `update-snapshots doom`). Needs
+                               `wasmtime` on PATH and the apps cache populated
+                               (examples/apps/fetch-and-build.sh; the DOOM frame
+                               needs examples/apps/scripts/doom.sh). Checked by
+                               the compare-only wasmtime freshness suite
+                               (`cargo test -p dewasm-test-helper --features
+                               wasmtime_test --test apps_wasmtime`) and the
+                               per-backend `doom_frame` cases.
 ";
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
-        Some("update-repl-golden") => update_repl_golden(),
-        Some("update-doom-golden") => update_doom_golden(),
+        Some("update-snapshots") => update_snapshots(args.next().as_deref()),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
@@ -54,7 +58,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Render `docs/support.md` from the backends' own declarations and write it to disk (ADR-8). The corresponding test (`crates/dewasm-cli/tests/ support_docs.rs`) is compare-only and names this command in its failure message.
+/// Render `docs/support.md` from the backends' own declarations and write it to disk (ADR-8). The corresponding test (`crates/dewasm-cli/tests/support_docs.rs`) is compare-only and names this command in its failure message.
 fn update_support_docs() -> Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
     let rendered = render_support_docs();
@@ -63,13 +67,61 @@ fn update_support_docs() -> Result<()> {
     Ok(())
 }
 
-/// Recapture the interactive QuickJS REPL transcript against a live wasmtime under a pty and write it to the checked-in golden path (Fix 4, `crates/dewasm-test-helper/src/qjs_repl.rs`). The corresponding freshness test (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) is compare-only and names this command in its failure message.
-fn update_repl_golden() -> Result<()> {
-    let bytes = capture_qjs_repl_golden(&Wasmtime);
-    println!(
-        "wrote {} ({} bytes)",
-        qjs_repl_golden_path().display(),
-        bytes.len()
-    );
+/// A capture closure's output: the `(path, bytes)` files to write for one target. Most targets yield one file; the DOOM frame yields two (the compared PPM plus a human-facing PNG sidecar).
+type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
+
+/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud (ADR-15) on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
+struct SnapshotTarget {
+    label: String,
+    capture: Box<dyn Fn() -> Result<CapturedFiles>>,
+}
+
+/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM frame, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency (ADR-53). The DOOM target emits two files — the compared `doom_frame.ppm` and a `doom_frame.png` rendering of the same frame for human inspection (never compared by a test).
+fn snapshot_targets() -> Vec<SnapshotTarget> {
+    let mut targets: Vec<SnapshotTarget> = wasmtime_snapshots()
+        .into_iter()
+        .map(|snap| SnapshotTarget {
+            label: snap.label,
+            // Wrap the fail-loud capture (it panics with an ADR-15 setup
+            // message) in `Ok` so every target shares one `Result` signature.
+            capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
+        })
+        .collect();
+    targets.push(SnapshotTarget {
+        label: "examples/apps/snapshots/doom_frame.ppm".to_string(),
+        capture: Box::new(|| {
+            let ppm_path = doom_frame_snapshot_path();
+            let png_path = ppm_path.with_extension("png");
+            let (ppm, png) = capture_doom_frame()?;
+            Ok(vec![(ppm_path, ppm), (png_path, png)])
+        }),
+    });
+    targets
+}
+
+/// Regenerate every execution snapshot (ADR-56), or only those whose repo-relative label contains `filter`. One line per file written (path + byte count). An unmatched filter is an error, so a typo fails loud rather than silently doing nothing.
+fn update_snapshots(filter: Option<&str>) -> Result<()> {
+    let mut wrote = 0usize;
+    for target in snapshot_targets() {
+        if let Some(needle) = filter {
+            if !target.label.contains(needle) {
+                continue;
+            }
+        }
+        for (path, bytes) in (target.capture)()? {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(&path, &bytes)?;
+            println!("wrote {} ({} bytes)", path.display(), bytes.len());
+            wrote += 1;
+        }
+    }
+    if wrote == 0 {
+        match filter {
+            Some(needle) => bail!("no snapshot label matched filter {needle:?}"),
+            None => bail!("no snapshots to regenerate"),
+        }
+    }
     Ok(())
 }

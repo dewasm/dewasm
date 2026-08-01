@@ -11,6 +11,10 @@ One DOOM, six languages: the unmodified [jacobenget/doom.wasm](https://github.co
 
 Each frontend implements the same ten imports (framebuffer hand-off, monotonic clock, WAD loading, save games, console logging) in its own language and drives the exported `initGame`/`tickGame`/`reportKeyDown`/`reportKeyUp`. The wasm module is the portable artifact; only the host layer differs ([ADR-50](../../docs/adr/50-doom-example-shape.md)).
 
+![The deterministic DOOM frame snapshot](../apps/snapshots/doom_frame.png)
+
+*The frame the framebuffer-snapshot test pins: driving the converted module under a fixed synthetic clock renders these exact pixels on every backend and the wasmtime oracle, so it doubles as a cross-backend conformance snapshot ([ADR-53](../../docs/adr/53-doom-frame-golden.md)). The compared oracle is `doom_frame.ppm`; this PNG is the same frame for human eyes.*
+
 ## Run
 
 ```sh

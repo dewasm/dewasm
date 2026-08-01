@@ -467,7 +467,7 @@ $inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
 $inst->invoke('zeroperl_flush');
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
 const PERL_DOOM_FRAME_GLUE: &str = r#"my $frame = { off => undef, w => 0, h => 0 };
 my $ms = 0;
 my $doom = Doom->new({
