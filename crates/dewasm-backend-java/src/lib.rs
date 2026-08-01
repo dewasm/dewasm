@@ -92,14 +92,20 @@ pub fn bundler() -> &'static RuntimeBundler {
 
 /// Locate a `java` launcher (ADR-15: a missing toolchain is a loud failure at the call site, not here). Honors `$DEWASM_JAVA`, then `java` on `PATH`.
 pub fn find_java() -> Option<std::path::PathBuf> {
-    find_tool("DEWASM_JAVA", "java")
+    static JAVA: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    JAVA.get_or_init(|| find_tool("DEWASM_JAVA", "java"))
+        .clone()
 }
 
 /// Locate a `javac` compiler. Honors `$DEWASM_JAVAC`, then `javac` on `PATH`.
 pub fn find_javac() -> Option<std::path::PathBuf> {
-    find_tool("DEWASM_JAVAC", "javac")
+    static JAVAC: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    JAVAC
+        .get_or_init(|| find_tool("DEWASM_JAVAC", "javac"))
+        .clone()
 }
 
+/// The probe behind [`find_java`]/[`find_javac`]. Each spawns a JVM (~0.35 s for `javac -version`), so both callers memoize the answer for the process: a test binary asks once per trial, and the toolchain cannot change under a running process.
 fn find_tool(env: &str, default: &str) -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();

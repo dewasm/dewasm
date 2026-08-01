@@ -77,6 +77,12 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 
 /// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts. Honors `$DEWASM_PERL`, then `perl` (ADR-15: a missing or unsuitable interpreter is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_perl() -> Option<std::path::PathBuf> {
+    static PERL: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    PERL.get_or_init(find_perl_uncached).clone()
+}
+
+/// The probe behind [`find_perl`], memoized there: it spawns a process per candidate per call, and the interpreter cannot change under a running process.
+fn find_perl_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(env) = std::env::var("DEWASM_PERL") {
