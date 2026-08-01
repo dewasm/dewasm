@@ -1,8 +1,9 @@
 ![dewasm logo](./assets/dewasm_logo_hex_gradient.png)
 
-`dewasm` translates a WebAssembly binary into the **source code** of an ordinary programming language.
+`dewasm` converts WebAssembly binaries into **pure source code** for languages like Ruby, Bash, and Go.
+No WebAssembly runtime is *required*.
 
-Here is [`cowsay`](https://wasmer.io/syrusakbary/cowsay), a WebAssembly binary, converted to a **pure Bash script** and run with nothing but `bash`:
+Here is [`cowsay`](https://wasmer.io/syrusakbary/cowsay), a WebAssembly binary, converted to a **pure Bash script** and run with *nothing but* `bash`:
 
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
@@ -26,7 +27,7 @@ $ ruby qjs.rb -e 'console.log("2**16 =", 2**16); console.log(JSON.stringify(["Ru
 ["JavaScript","Ruby"]
 ```
 
-A WebAssembly binary can also be used as a **library** instead of a standalone command.
+A WebAssembly binary can also be used as a library instead of a standalone application.
 Here, a small example [`add.wat`](examples/wat/add.wat) is converted and its `add` export is called directly from Ruby:
 
 ```console
@@ -40,14 +41,17 @@ inst = Add.new
 inst.invoke("add", 2, 3) # => 5
 ```
 
-This scales to real libraries too: `dewasm` converts SQLite itself to pure Ruby in [examples/rails](examples/rails), which drives a minimal Rails app with it as the only database engine. And it is not limited to command-line software: [examples/doom](examples/doom) converts DOOM to pure Go and pure Java and plays it in a window — and to pure Ruby, pure Python, and even pure Bash, played right in the terminal via ANSI art — with each language supplying its own rendering and input on top of the same wasm binary.
+Beyond simple examples, `dewasm` scales to *real libraries and applications* too:
 
-Finally, a quick summary of `dewasm`'s features:
+- [examples/rails](examples/rails) demonstrates that **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, can be used as the database engine for a Rails app.
+- [examples/doom](examples/doom) shows how `dewasm` can port the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple programming languages, *including Bash*.
 
-- `dewasm` implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) feature set and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) API surface, so it can convert most real-world WebAssembly binaries.
-- `dewasm` is polyglot; it translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
-- `dewasm` can output either a standalone script or library source code.
-- `dewasm` bundles only the runtime that a WebAssembly binary actually needs; the output source code contains only the functions the binary uses.
+Here is a quick summary of what `dewasm` can do:
+
+- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs to convert existing WebAssembly binaries.
+- **Target multiple languages**: Translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
+- **Adapt to your needs**: Generates either standalone scripts or importable library source code.
+- **Keep it minimal**: Bundles only the specific runtime code that the WebAssembly binary actually requires.
 
 ## Installation
 
@@ -79,7 +83,7 @@ $ dewasm input.<wasm|wat>
 - `--mode` (or `-m`) specifies the translation mode (default: `library`).
   * `--mode standalone` wires up WASI and runs the module's `_start`.
   * `--mode library` exposes the module's exports to the target language.
-- `--output` (or `-o`) specifies the output file (default: `-`).
+- `--output` (or `-o`) sets the output file (default: `-`).
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
 
 Note that `dewasm` has additional command-line options such as `--module-name`.

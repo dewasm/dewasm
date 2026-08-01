@@ -6,12 +6,13 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_perl::{find_perl, PerlBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    custom_wasi_provider_e2e, deep_recursion_e2e, embedded_coexist_e2e, examples_dir, gzip_e2e,
-    library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e,
-    qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
-    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
+    custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e, embedded_coexist_e2e,
+    examples_dir, exiftool_extract_e2e, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e,
+    partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
+    rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
+    treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
+    zeroperl_eval_e2e, BackendUnderTest,
 };
 
 pub struct Perl;
@@ -399,6 +400,101 @@ $inst->invoke('free', $r);
 print "TS-OK\n";
 "#;
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
+/// zero-returning `env.call_host_function` import stub (only invoked when the
+/// guest registers host callbacks — this program registers none) and a
+/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. Perl-on-Perl: the guest snippet
+/// (a non-interpolating `<<'GUEST_PROGRAM'` heredoc, delimiter chosen not to
+/// collide with either Perl layer) is byte-identical to the other backends'.
+const PERL_ZEROPERL_EVAL: &str = r#"
+my $inst = Zeroperl->new(
+    { 'env' => { 'call_host_function' => sub { 0 } } },
+    preopens => { '/dev/null' => '/dev/null' },
+);
+$inst->invoke('_initialize');
+my $rc = $inst->invoke('zeroperl_init');
+die "zeroperl_init rc=$rc" unless $rc == 0;
+my $mem = $inst->{memory};
+
+my $prog = <<'GUEST_PROGRAM';
+my $s = "hello world 42";
+if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
+  printf("m=%s|%s|%d sum=%d\n", $1, $2, $3, $3 + 8);
+}
+GUEST_PROGRAM
+my $bytes = $prog . "\0";
+my $ptr = $inst->invoke('malloc', length($bytes));
+$mem->init($ptr, $bytes, 0, length($bytes));
+$inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
+$inst->invoke('zeroperl_flush');
+"#;
+
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
+/// (`{cache}/exiftool-lib`, preopened at `/work`) run on the same
+/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
+/// module tree. Instantiated like [`PERL_ZEROPERL_EVAL`] plus the staged image
+/// at `/img`. The guest driver snippet (identical bytes to the other backends')
+/// overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit`
+/// unwinds back into `eval_pv` instead of tripping `proc_exit`, sets
+/// `@ARGV`/`$0`, and `do`es the script; `zeroperl_flush` then pushes ExifTool's
+/// buffered stdout out through fd 1.
+const PERL_EXIFTOOL: &str = r#"
+my $inst = Zeroperl->new(
+    { 'env' => { 'call_host_function' => sub { 0 } } },
+    preopens => {
+        '/dev/null' => '/dev/null',
+        '/work' => '{cache}/exiftool-lib',
+        '/img' => '{scratch}',
+    },
+);
+$inst->invoke('_initialize');
+my $rc = $inst->invoke('zeroperl_init');
+die "zeroperl_init rc=$rc" unless $rc == 0;
+my $mem = $inst->{memory};
+
+my $driver = <<'GUEST_PROGRAM';
+BEGIN { *CORE::GLOBAL::exit = sub (;$) { die "zeroperl_exit\n" }; }
+@ARGV = ('-S', '-Make', '-Model', '-DateTimeOriginal', '/img/exif_fixture.jpg');
+$0 = '/work/exiftool';
+do '/work/exiftool';
+GUEST_PROGRAM
+my $bytes = $driver . "\0";
+my $ptr = $inst->invoke('malloc', length($bytes));
+$mem->init($ptr, $bytes, 0, length($bytes));
+$inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
+$inst->invoke('zeroperl_flush');
+"#;
+
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
+const PERL_DOOM_FRAME_GLUE: &str = r#"my $frame = { off => undef, w => 0, h => 0 };
+my $ms = 0;
+my $doom = Doom->new({
+    'console' => { 'onErrorMessage' => sub { }, 'onInfoMessage' => sub { } },
+    'gameSaving' => {
+        'sizeOfSaveGame' => sub { 0 },
+        'readSaveGame' => sub { 0 },
+        'writeSaveGame' => sub { $_[2] },
+    },
+    'runtimeControl' => { 'timeInMilliseconds' => sub { $ms += {clock_step}; return $ms; } },
+    'ui' => { 'drawFrame' => sub { $frame->{off} = $_[0] } },
+    'loading' => {
+        'onGameInit' => sub { ($frame->{w}, $frame->{h}) = @_ },
+        'wadSizes' => sub { },
+        'readWads' => sub { },
+    },
+});
+$doom->invoke('initGame');
+$doom->invoke('tickGame') for 1 .. {ticks};
+my ($w, $h) = ($frame->{w}, $frame->{h});
+my $rgb = substr($doom->{memory}{data}, $frame->{off}, $w * $h * 4);
+$rgb =~ s/(.)(.)(.)./$3$2$1/gs;    # memory is B,G,R,A; PPM wants R,G,B (alpha dropped)
+binmode(STDOUT);
+print "P6\n$w $h\n255\n";
+print $rgb;
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
@@ -454,8 +550,12 @@ sqlite3_file_c_api_e2e!(Perl, PERL_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
 treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
+zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
+// Ultra tier (ADR-48): measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at the slow tier.
+exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
-// doom_frame_e2e!: not invoked — DOOM is deferred to a follow-up (issue #69 scope note).
+// Slow tier like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
+doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
 
 shared_table_e2e!(Perl, PERL_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Perl, PERL_EMBEDDED_COEXIST_GLUE);
