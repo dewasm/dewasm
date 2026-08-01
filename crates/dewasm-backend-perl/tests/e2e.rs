@@ -8,10 +8,10 @@ use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
     custom_wasi_provider_e2e, deep_recursion_e2e, embedded_coexist_e2e, examples_dir, gzip_e2e,
     library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e,
-    qjs_file_io_e2e, qjs_repl_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, BackendUnderTest,
+    qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
+    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Perl;
@@ -176,11 +176,6 @@ print defined $err ? "rejected\n" : "contained\n";
 // --------------------------------------------------------------------- Filesystem app glue: package/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PERL_QJS_FILE_IO_GLUE: &str = r#"my $inst = Qjs->new({}, args => ['qjs', '/work/qjs_file_io.js'], env => {}, preopens => { '/work' => '{scratch}' });
-eval { $inst->invoke('_start'); };
-die $@ if $@ && !(ref($@) && $@->isa('Qjs::Rt::Exit'));
-"#;
-
-const PERL_QJS_REPL_GLUE: &str = r#"my $inst = Qjs->new({}, args => ['qjs', '/work/qjs_repl.js'], env => {}, preopens => { '/work' => '{scratch}' });
 eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Qjs::Rt::Exit'));
 "#;
@@ -447,13 +442,12 @@ sqlite3_shell_e2e!(Perl);
 gzip_e2e!(Perl);
 
 qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
-qjs_repl_e2e!(Perl, PERL_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
 cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
 // Ultra tier (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under.
 cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
-// qjs_repl_pty_e2e!: not invoked — the interactive-REPL pty case is deferred with DOOM to a follow-up (issue #69 scope note); the file-driven qjs_repl case above covers the REPL loop itself.
+qjs_repl_pty_e2e!(Perl);
 
 libsqlite3_c_api_e2e!(Perl, PERL_LIBSQLITE3_MEM);
 sqlite3_file_c_api_e2e!(Perl, PERL_LIBSQLITE3_FILE);

@@ -7,9 +7,9 @@ use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, shared_table_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e,
-    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
+    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, shared_table_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -131,14 +131,6 @@ qjs_invoke '_start'
 exit 0
 "#;
 
-const BASH_QJS_REPL_GLUE: &str = r#"WASI_ARGS=(qjs /work/qjs_repl.js)
-WASI_ENV=()
-WASI_DIRS=('{scratch}::/work')
-qjs_init || { echo "init failed" >&2; exit 1; }
-qjs_invoke '_start'
-exit 0
-"#;
-
 const BASH_SQLITE3_SHELL_DBFILE_GLUE: &str = r#"WASI_ARGS=(sqlite3)
 WASI_ENV=()
 WASI_DIRS=('{scratch}::/db')
@@ -219,7 +211,6 @@ gzip_e2e!(Bash);
 
 // Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens, path_open, and positioned I/O, so the three small-fixture fs apps are wired (all slow, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
 qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
-qjs_repl_e2e!(Bash, BASH_QJS_REPL_GLUE);
 sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here alongside them: it shares their standalone-mode QuickJS conversion. It is markedly slower than every other case — every keystroke of the scripted session re-enters QuickJS's interactive line editor (redraw/completion), and each successive evaluation measured slower than the last (first prompt ~135s, then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and timed out on CI (#22). It is therefore pinned to the `ultra` tier (ADR-48): kept out of CI's `slow_test` sweep and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification. Left wired rather than unwired per ADR-15 (fail loud, not silently skip): a timeout is still an honest signal.
 qjs_repl_pty_e2e!(Bash, ultra);
