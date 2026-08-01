@@ -2,7 +2,7 @@
 //!
 //! Two Python facts shape the phrasing (ADR-28):
 //! - Assertions are passed as zero-arg lambdas because Python has no statement blocks; the value under test is bound inside the lambda with an inner `(lambda __r: (<cmp>, __r))(<call>)`.
-//! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash — the guest-side analogue of the harness's `convert_on_big_stack`.
+//! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash — the guest-side analogue of the harness's `convert_on_big_stack`. `check_exhaust` lowers the limit around itself, because there the limit is not headroom but the entire cost of the check; see the comment on `_EXHAUST_RECURSION_LIMIT`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -24,7 +24,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default. Python executes wasm ~30x slower than Ruby (the full 257-file sweep takes ~2 min versus Ruby's ~4 s, dominated by per-file `python3` startup and the pure-Python numeric runtime), so — like Bash (ADR-3 pre-accepts this) — the gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps everything.
+/// Files `cargo test` runs by default. Python executes wasm several times slower than Ruby — the full 257-file sweep takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file — so, like Bash (ADR-3 pre-accepts this), the gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps everything.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
@@ -473,8 +473,24 @@ def check_trap(desc, msg, thunk):
     print("FAIL(no trap, want %r): %s" % (msg, desc))
 
 
+# Exhaustion is detected by descending until the recursion limit trips, so the
+# limit is a direct multiplier on how long every assert_exhaustion case takes.
+# No such case in the testsuite has a reachable base case: call/call_indirect's
+# `runaway`/`mutual-runaway` and skip-stack-guard-page's
+# `function-with-many-locals` recurse unconditionally, and fac's
+# `fac-rec 0x40000000` would need 2^30 frames — so a lower limit changes only how
+# fast the descent ends, never whether it ends. The deepest bounded
+# prefix any of them walks before entering the runaway part is 908 Python frames
+# (`test-guard-page-skip 900`: 901 guest frames plus the harness), so 20000
+# leaves ~20x headroom, and 20x CPython's own default limit of 1000. The global
+# limit set in the postamble stays high for the checks that legitimately recurse.
+_EXHAUST_RECURSION_LIMIT = 20000
+
+
 def check_exhaust(desc, thunk):
     global _pass, _fail
+    _prev = sys.getrecursionlimit()
+    sys.setrecursionlimit(_EXHAUST_RECURSION_LIMIT)
     try:
         thunk()
     except RecursionError:
@@ -484,6 +500,8 @@ def check_exhaust(desc, thunk):
         _fail += 1
         print("FAIL(%s: %s, want exhaustion): %s" % (type(e).__name__, e, desc))
         return
+    finally:
+        sys.setrecursionlimit(_prev)
     _fail += 1
     print("FAIL(no exhaustion): %s" % desc)
 
@@ -527,9 +545,18 @@ _spectest = {
 
 const POSTAMBLE: &str = r#"
 
+# The limit is a ceiling for the checks that legitimately recurse, not a budget:
+# with check_exhaust capping itself at _EXHAUST_RECURSION_LIMIT, the deepest
+# descent the whole 257-file sweep performs is that cap, and no other check comes
+# near it (the sweep still passes with this global limit lowered to the cap). The
+# thread stack is sized for that descent: CPython <= 3.10 keeps a C frame per
+# Python frame and needs ~1 KiB each (20000 frames measured to fault below 24 MiB
+# and survive above it), 3.11+ moves them off the C stack entirely, so 64 MiB is
+# ~3x the worst-case need. Oversizing is not free — every parallel spec trial
+# reserves this much.
 sys.setrecursionlimit(1000000)
 try:
-    threading.stack_size(512 * 1024 * 1024)
+    threading.stack_size(64 * 1024 * 1024)
 except (ValueError, OverflowError, RuntimeError):
     pass
 _t = threading.Thread(target=_main)
