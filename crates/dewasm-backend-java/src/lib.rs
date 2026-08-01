@@ -8,7 +8,7 @@
 //! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` / `Memory` / `Table` / `WASI`.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -243,6 +243,7 @@ fn new_gen(
         cur_base: RefCell::new(String::new()),
         cur_frame_ty: RefCell::new(String::new()),
         part_defs: RefCell::new(Vec::new()),
+        costs: CostMemo::default(),
         elem_capture: Cell::new(false),
         partitioned: Cell::new(false),
         in_partition: Cell::new(false),
@@ -488,6 +489,8 @@ struct Gen<'a> {
     cur_frame_ty: RefCell<String>,
     /// Part-method definitions produced while emitting the current function, flushed after its entry method.
     part_defs: RefCell<Vec<String>>,
+    /// Memoized body costs for the current function, driving the split decision (see `CostMemo`).
+    costs: CostMemo,
     /// When true, a function value (`func_value`) captures the module instance as `inst.` rather than referencing `this` implicitly. Set while emitting the nested `Elem` helper class's static methods, whose funcref lambdas live in a separate constant pool (ADR-30 third milestone).
     elem_capture: Cell<bool>,
     /// Whether this module's functions are split across nested `P{k}` classes (its function count crosses `FN_PARTITION_THRESHOLD`). When set, defined functions are `static` methods taking the module instance, called class-qualified (ADR-30 third milestone).
@@ -1136,7 +1139,9 @@ impl<'a> Gen<'a> {
         let mut local_types = ty.params.clone();
         local_types.extend(func.locals.iter().copied());
 
-        let split = seq_cost(&func.body) > SPLIT_THRESHOLD;
+        // The memo is keyed by node address, so it is only valid while the nodes it covers are live; this is the single entry point for a function body, so clearing here bounds it to one function's statements.
+        self.costs.clear();
+        let split = self.costs.seq(&func.body) > SPLIT_THRESHOLD;
         self.split.set(split);
         self.next_part.set(0);
         *self.cur_base.borrow_mut() = format!("f{idx}");
@@ -1288,7 +1293,7 @@ impl<'a> Gen<'a> {
     /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
     fn emit_body(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded_in: bool) -> BTreeSet<u32> {
         let mut free = BTreeSet::new();
-        if self.split.get() && seq_cost(stmts) > SPLIT_THRESHOLD {
+        if self.split.get() && self.costs.seq(stmts) > SPLIT_THRESHOLD {
             let part_args = if self.partitioned.get() {
                 "inst, f"
             } else {
@@ -1318,7 +1323,7 @@ impl<'a> Gen<'a> {
         let mut guarded = guarded_in;
         let mut cost = 0usize;
         for stmt in stmts {
-            let c = stmt_cost(stmt);
+            let c = self.costs.stmt(stmt);
             if cost > 0 && cost + c > SPLIT_THRESHOLD {
                 let name = self.new_part();
                 self.push_part(&name, w.finish());
@@ -2089,45 +2094,81 @@ fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) {
 
 // --- cost estimate (drives the 64KB method split) ---------------------------
 
-fn seq_cost(stmts: &[Stmt]) -> usize {
-    stmts.iter().map(stmt_cost).sum()
-}
+/// Statement-cost queries for the function being emitted, memoized by node identity.
+///
+/// The split decision needs a body's cost *before* that body is emitted, so unlike the free-branch-target set (which `emit_body` now derives bottom-up while emitting) the cost cannot ride along with emission. Asked naively it is re-derived top-down at every enclosing level and again per sibling in `emit_parts`, which is the same O(nodes x nesting depth) shape that made the target query quadratic — see issue #62.
+///
+/// Entries are keyed by the *address* of the `Stmt` node. That is sound because `Gen` borrows its `Module` immutably for the whole of `generate_source`, nothing mutates the IR while emitting, and there is no threading: every statement reachable from a function body sits at a fixed, unique address for at least as long as this table. `Gen::function` clears it per function anyway, to bound it.
+///
+/// Only `Block`/`Loop`/`If` are memoized. That alone makes the whole query linear — a leaf's cost is recomputed a bounded number of times, while a structured statement's would be recomputed once per enclosing level — and it keeps hashing off the hot leaf path.
+#[derive(Default)]
+struct CostMemo(RefCell<HashMap<usize, usize>>);
 
-fn stmt_cost(stmt: &Stmt) -> usize {
-    1 + match stmt {
-        Stmt::Assign { expr, .. } | Stmt::LocalSet { expr, .. } | Stmt::GlobalSet { expr, .. } => {
-            expr_cost(expr)
+impl CostMemo {
+    fn clear(&self) {
+        self.0.borrow_mut().clear();
+    }
+
+    fn seq(&self, stmts: &[Stmt]) -> usize {
+        stmts.iter().map(|s| self.stmt(s)).sum()
+    }
+
+    fn stmt(&self, stmt: &Stmt) -> usize {
+        match stmt {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+                let key = stmt as *const Stmt as usize;
+                // Copy the hit out and drop the borrow before recursing: `compute` re-enters and takes the table mutably.
+                let hit = self.0.borrow().get(&key).copied();
+                if let Some(c) = hit {
+                    return c;
+                }
+                let c = self.compute(stmt);
+                self.0.borrow_mut().insert(key, c);
+                c
+            }
+            _ => self.compute(stmt),
         }
-        Stmt::Store { addr, value, .. } => expr_cost(addr) + expr_cost(value),
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_cost(body),
-        Stmt::If {
-            cond, then, els, ..
-        } => expr_cost(cond) + seq_cost(then) + seq_cost(els),
-        Stmt::Br(t) => target_cost(t),
-        Stmt::BrIf { cond, target } => expr_cost(cond) + target_cost(target),
-        Stmt::BrTable {
-            index,
-            targets,
-            default,
-        } => {
-            expr_cost(index) + target_cost(default) + targets.iter().map(target_cost).sum::<usize>()
-        }
-        Stmt::Return { values } => values.iter().map(expr_cost).sum(),
-        Stmt::Call { args, .. } => args.iter().map(expr_cost).sum(),
-        Stmt::CallIndirect { index, args, .. } => {
-            expr_cost(index) + args.iter().map(expr_cost).sum::<usize>()
-        }
-        Stmt::MemoryGrow { delta, .. } => expr_cost(delta),
-        Stmt::MemoryCopy { dst, src, len }
-        | Stmt::MemoryFill { dst, val: src, len }
-        | Stmt::MemoryInit { dst, src, len, .. } => {
-            expr_cost(dst) + expr_cost(src) + expr_cost(len)
-        }
-        Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
-            expr_cost(dst) + expr_cost(src) + expr_cost(len)
-        }
-        Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable | Stmt::SourceLine(_) => {
-            0
+    }
+
+    fn compute(&self, stmt: &Stmt) -> usize {
+        1 + match stmt {
+            Stmt::Assign { expr, .. }
+            | Stmt::LocalSet { expr, .. }
+            | Stmt::GlobalSet { expr, .. } => expr_cost(expr),
+            Stmt::Store { addr, value, .. } => expr_cost(addr) + expr_cost(value),
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => self.seq(body),
+            Stmt::If {
+                cond, then, els, ..
+            } => expr_cost(cond) + self.seq(then) + self.seq(els),
+            Stmt::Br(t) => target_cost(t),
+            Stmt::BrIf { cond, target } => expr_cost(cond) + target_cost(target),
+            Stmt::BrTable {
+                index,
+                targets,
+                default,
+            } => {
+                expr_cost(index)
+                    + target_cost(default)
+                    + targets.iter().map(target_cost).sum::<usize>()
+            }
+            Stmt::Return { values } => values.iter().map(expr_cost).sum(),
+            Stmt::Call { args, .. } => args.iter().map(expr_cost).sum(),
+            Stmt::CallIndirect { index, args, .. } => {
+                expr_cost(index) + args.iter().map(expr_cost).sum::<usize>()
+            }
+            Stmt::MemoryGrow { delta, .. } => expr_cost(delta),
+            Stmt::MemoryCopy { dst, src, len }
+            | Stmt::MemoryFill { dst, val: src, len }
+            | Stmt::MemoryInit { dst, src, len, .. } => {
+                expr_cost(dst) + expr_cost(src) + expr_cost(len)
+            }
+            Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
+                expr_cost(dst) + expr_cost(src) + expr_cost(len)
+            }
+            Stmt::DataDrop { .. }
+            | Stmt::ElemDrop { .. }
+            | Stmt::Unreachable
+            | Stmt::SourceLine(_) => 0,
         }
     }
 }
