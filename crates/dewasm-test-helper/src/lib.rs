@@ -22,8 +22,8 @@ pub use apps::{
     SQLITE3_SHELL,
 };
 pub use apps_capi::{
-    run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
-    SQLITE3_FILE_C_API, TREESITTER_PARSE, ZEROPERL_EVAL,
+    run_capi_case, CApiCase, EXIFTOOL_EXTRACT, LIBSQLITE3_C_API, PCAP_COMPILE,
+    SQLITE3_CALLBACK_BINDING, SQLITE3_FILE_C_API, TREESITTER_PARSE, ZEROPERL_EVAL,
 };
 pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
@@ -500,6 +500,22 @@ macro_rules! zeroperl_eval_e2e {
             #[test]
             fn zeroperl_eval() {
                 $crate::run_capi_case(&$lang, &$crate::ZEROPERL_EVAL, $glue);
+            }
+        }
+    };
+}
+
+/// See [`libsqlite3_c_api_e2e!`]. Runs the ExifTool-on-zeroperl case [`EXIFTOOL_EXTRACT`](crate::EXIFTOOL_EXTRACT): drives the flattened `exiftool` CLI driver on `cache/zeroperl.wasm` through the embedding C API and pins the extracted EXIF tags. Slow (the same 25 MB reactor reconverted per run), so gated like the other C-API cases.
+#[macro_export]
+macro_rules! exiftool_extract_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::exiftool_extract_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn exiftool_extract() {
+                $crate::run_capi_case(&$lang, &$crate::EXIFTOOL_EXTRACT, $glue);
             }
         }
     };
