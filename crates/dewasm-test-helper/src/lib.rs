@@ -27,8 +27,8 @@ pub use apps_capi::{
 };
 pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
-    run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, QJS_REPL,
-    RG_SEARCH, SQLITE3_SHELL_DBFILE,
+    run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, RG_SEARCH,
+    SQLITE3_SHELL_DBFILE,
 };
 pub use backend::{
     run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
@@ -338,22 +338,6 @@ macro_rules! qjs_file_io_e2e {
             #[test]
             fn qjs_file_io() {
                 $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
-            }
-        }
-    };
-}
-
-/// See [`qjs_file_io_e2e!`]. Runs [`QJS_REPL`](crate::QJS_REPL).
-#[macro_export]
-macro_rules! qjs_repl_e2e {
-    ($lang:expr, $glue:expr) => {
-        $crate::qjs_repl_e2e!($lang, $glue, slow);
-    };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
-            #[test]
-            fn qjs_repl() {
-                $crate::run_fs_app_case(&$lang, &$crate::QJS_REPL, $glue);
             }
         }
     };

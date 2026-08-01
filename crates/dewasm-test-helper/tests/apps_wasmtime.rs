@@ -11,8 +11,8 @@
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_golden_path, run_app_case,
     run_fs_app_case, run_gzip_cases, run_slow_app_case, run_standalone_dir, Wasmtime, COWSAY_ARGS,
-    COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, QJS_REPL, RG_SEARCH,
-    SQLITE3_SHELL, SQLITE3_SHELL_DBFILE,
+    COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, RG_SEARCH, SQLITE3_SHELL,
+    SQLITE3_SHELL_DBFILE,
 };
 
 // The wasmtime-backed `BackendUnderTest` (`Wasmtime`, plus the `NeverBackend` stand-in it uses to satisfy `BackendUnderTest::backend()`) lives in `dewasm_test_helper::wasmtime_backend` so `cargo xtask update-repl-golden` can drive it too; see that module for the implementation.
@@ -54,7 +54,6 @@ fn gzip() {
 #[test]
 fn fs_apps() {
     run_fs_app_case(&Wasmtime, &QJS_FILE_IO, "");
-    run_fs_app_case(&Wasmtime, &QJS_REPL, "");
     run_fs_app_case(&Wasmtime, &SQLITE3_SHELL_DBFILE, "");
     run_fs_app_case(&Wasmtime, &RG_SEARCH, "");
     run_fs_app_case(&Wasmtime, &CPYTHON_HELLO, "");
