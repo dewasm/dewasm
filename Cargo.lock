@@ -437,6 +437,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dewasm-backend-perl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-core",
+ "dewasm-test-helper",
+ "regex",
+ "wast",
+ "wat",
+]
+
+[[package]]
 name = "dewasm-backend-python"
 version = "0.1.0"
 dependencies = [
@@ -472,6 +485,7 @@ dependencies = [
  "dewasm-backend-bash",
  "dewasm-backend-go",
  "dewasm-backend-java",
+ "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
  "dewasm-core",

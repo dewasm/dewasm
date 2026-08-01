@@ -15,6 +15,7 @@ dewasm-backend = { path = "crates/dewasm-backend" }
 dewasm-backend-ruby = { path = "crates/dewasm-backend-ruby" }
 dewasm-backend-bash = { path = "crates/dewasm-backend-bash" }
 dewasm-backend-python = { path = "crates/dewasm-backend-python" }
+dewasm-backend-perl = { path = "crates/dewasm-backend-perl" }
 dewasm-backend-go = { path = "crates/dewasm-backend-go" }
 dewasm-backend-java = { path = "crates/dewasm-backend-java" }
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }

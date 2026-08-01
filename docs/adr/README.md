@@ -68,6 +68,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-52 | [Bash Emitter Inlines Linear-Memory Loads and Stores](52-bash-inline-memops.md) | Accepted |
 | ADR-53 | [Test DOOM by a Deterministic Framebuffer Golden](53-doom-frame-golden.md) | Accepted |
 | ADR-54 | [Whole-Cache Per-Backend Conversion Suite](54-apps-convert-suite.md) | Accepted |
+| ADR-55 | [Perl Backend Lowering Conventions](55-perl-backend-lowering.md) | Accepted |
 
 ## Adding a new ADR
 
@@ -90,5 +91,5 @@ Quality bar:
 
 - **`AGENTS.md`** — the development contract for agents (and humans) working in this repository; cites ADRs where a rule needs its why.
 - **`README.md`** — user-facing overview; links here for design rationale.
-- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30) for design rationale rather than restating it.
+- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30/55) for design rationale rather than restating it.
 - **`docs/docs-policy.md`** — the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).
