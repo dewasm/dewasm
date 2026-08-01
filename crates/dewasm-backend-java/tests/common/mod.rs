@@ -40,7 +40,10 @@ pub fn build_java(source: &str) -> Result<PathBuf, Output> {
         if !build.status.success() {
             return Err(build);
         }
-        let _ = std::fs::rename(&tmp, &classdir);
+        // A concurrent builder of the same source may have claimed the key first, in which case the rename fails and this attempt's dir is redundant — drop it rather than leave it in /tmp.
+        if std::fs::rename(&tmp, &classdir).is_err() {
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
     }
 
     Ok(classdir)
