@@ -437,7 +437,7 @@ b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-/// DOOM (ADR-53): drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime golden. `{ticks}`/`{clock_step}` are filled by the runner.
+/// DOOM (ADR-53): drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
 _frame = {"off": None, "w": 0, "h": 0}

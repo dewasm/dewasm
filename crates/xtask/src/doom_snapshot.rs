@@ -1,12 +1,12 @@
-//! The DOOM framebuffer-golden oracle (ADR-53): run the *original* `doom.wasm`
+//! The DOOM framebuffer-snapshot oracle (ADR-53): run the *original* `doom.wasm`
 //! under the wasmtime crate with the deterministic driving contract, and write
-//! the rendered frame to `examples/doom/golden/frame.ppm`. wasmtime lives here,
+//! the rendered frame to `examples/doom/snapshots/frame.ppm`. wasmtime lives here,
 //! in dev tooling, not in `dewasm-test-helper` — the per-backend comparison
-//! never needs an embedder, only the committed golden this produces.
+//! never needs an embedder, only the committed snapshot this produces.
 
 use anyhow::{ensure, Context, Result};
 use dewasm_test_helper::{
-    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H,
+    doom_frame_snapshot_path, doom_wasm_path, frame_to_ppm, DOOM_CLOCK_STEP_MS, DOOM_FRAME_H,
     DOOM_FRAME_W, DOOM_TICKS,
 };
 use wasmtime::{Caller, Engine, Linker, Module, Store};
@@ -125,10 +125,10 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     Ok((frame, w, h))
 }
 
-/// Recapture `examples/doom/golden/frame.ppm` from a live wasmtime. The matching
+/// Recapture `examples/doom/snapshots/frame.ppm` from a live wasmtime. The matching
 /// per-backend test (`crates/dewasm-test-helper/src/doom.rs`) is compare-only
 /// and names this command in its failure message.
-pub fn update_doom_golden() -> Result<()> {
+pub fn update_doom_snapshot() -> Result<()> {
     let wasm_path = doom_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
         format!(
@@ -156,12 +156,12 @@ pub fn update_doom_golden() -> Result<()> {
     );
 
     let ppm = frame_to_ppm(&frame, w, h);
-    let golden = doom_frame_golden_path();
-    std::fs::create_dir_all(golden.parent().unwrap())?;
-    std::fs::write(&golden, &ppm)?;
+    let snapshot = doom_frame_snapshot_path();
+    std::fs::create_dir_all(snapshot.parent().unwrap())?;
+    std::fs::write(&snapshot, &ppm)?;
     println!(
         "wrote {} ({} bytes, {w}x{h}, {distinct} distinct colors)",
-        golden.display(),
+        snapshot.display(),
         ppm.len()
     );
     Ok(())

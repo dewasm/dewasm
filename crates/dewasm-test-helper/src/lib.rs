@@ -35,11 +35,11 @@ pub use backend::{
     BackendUnderTest,
 };
 pub use doom::{
-    doom_frame_golden_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case, DOOM_CLOCK_STEP_MS,
-    DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
+    doom_frame_snapshot_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case,
+    DOOM_CLOCK_STEP_MS, DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,
 };
 pub use fixtures::{
-    apps_cache_dir, apps_fixtures_dir, apps_golden_dir, convert, convert_bytes,
+    apps_cache_dir, apps_fixtures_dir, apps_snapshot_dir, convert, convert_bytes,
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
 };
 pub use library::{
@@ -49,8 +49,8 @@ pub use library::{
 pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
-    assert_transcript_eq, capture_qjs_repl_golden, capture_qjs_repl_transcript,
-    qjs_repl_golden_path, run_qjs_repl_pty, QJS_REPL_SESSION,
+    assert_transcript_eq, capture_qjs_repl_snapshot, capture_qjs_repl_transcript,
+    qjs_repl_snapshot_path, run_qjs_repl_pty, QJS_REPL_SESSION,
 };
 pub use spec::{spec_main, spec_trials, Converted, SpecBackend};
 pub use wasi::{
@@ -309,7 +309,7 @@ macro_rules! gzip_e2e {
     };
 }
 
-/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime golden (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime snapshot (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
@@ -521,7 +521,7 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// The DOOM framebuffer-golden case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/golden/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/doom/snapshots/frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {

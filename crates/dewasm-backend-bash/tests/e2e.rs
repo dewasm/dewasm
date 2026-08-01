@@ -139,7 +139,7 @@ sqlite3shell_invoke '_start'
 exit 0
 "#;
 
-/// DOOM (ADR-53): the frame golden, modelled on the Bash frontend (examples/doom/bash/main.sh) — imp_* handlers set `R0`, `IMPORTS[mod.name]` wires them, `doom_init`/`doom_invoke` drive, and `doom_mem` holds the pixels. The P6 frame goes out through a chunked `printf` `\xNN` format string (which carries the NUL bytes a Bash variable cannot). `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM (ADR-53): the frame snapshot, modelled on the Bash frontend (examples/doom/bash/main.sh) — imp_* handlers set `R0`, `IMPORTS[mod.name]` wires them, `doom_init`/`doom_invoke` drive, and `doom_mem` holds the pixels. The P6 frame goes out through a chunked `printf` `\xNN` format string (which carries the NUL bytes a Bash variable cannot). `{ticks}`/`{clock_step}` filled by the runner.
 const BASH_DOOM_FRAME_GLUE: &str = r#"DOOM_MS=0
 FRAME_BUF_OFF=0
 FRAME_W=0

@@ -14,7 +14,7 @@
 # Regenerate (writes examples/apps/fixtures/exif_fixture.jpg) with:
 #   python3 examples/apps/fixtures/exif_fixture.py
 # Committing the resulting binary is intentional (the repo already commits
-# binary goldens); the sha is stable across runs.
+# binary snapshots); the sha is stable across runs.
 
 import struct
 from pathlib import Path

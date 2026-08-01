@@ -160,7 +160,7 @@ jobs:
           fail-on-cache-miss: true
       # Tiers (ADR-48): the slow tier feature-gates what `--include-ignored`
       # used to un-ignore. `dewasm-test-helper/wasmtime_test` runs the
-      # apps_wasmtime golden-freshness suite (execs `wasmtime run`, installed
+      # apps_wasmtime snapshot-freshness suite (execs `wasmtime run`, installed
       # below, ADR-15); `dewasm-cli/slow_test` runs the slow cross-backend
       # `--data-file` real-app cases.
       - uses: bytecodealliance/actions/wasmtime/setup@v1

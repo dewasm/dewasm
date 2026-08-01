@@ -277,7 +277,7 @@ const GO_CPYTHON_GLUE: &str = r#"func main() {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `func main` carries no `import` (the library file already imports `fmt`). No wasmtime golden exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `func main` carries no `import` (the library file already imports `fmt`). No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const GO_LIBSQLITE3_MEM: &str = r#"func main() {
@@ -565,7 +565,7 @@ const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 }
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime golden. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
 const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 	var ms uint64
 	var frameOff, frameW, frameH uint32

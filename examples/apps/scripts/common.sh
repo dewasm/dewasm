@@ -55,7 +55,7 @@ new_tmpdir() {
 # is_cached <stamp> <key> <output...>: true when every output exists and the
 # stamp matches key. The stamp records which pinned inputs the cached copy
 # came from; a re-pin refetches/rebuilds instead of silently keeping a stale
-# copy (which would fail the golden comparison inscrutably).
+# copy (which would fail the snapshot comparison inscrutably).
 is_cached() {
   local stamp="$1" key="$2"
   shift 2

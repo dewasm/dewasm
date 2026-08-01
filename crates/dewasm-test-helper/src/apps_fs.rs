@@ -1,4 +1,4 @@
-//! Filesystem-exercising app cases (ADR-27), shared across every backend with WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the ground-truth engine. Each case converts a cached app to a library-mode class, stages fixtures into a fresh scratch dir preopened into the guest, and runs one or more invocations, diffing stdout against the same `examples/apps/golden/` files the always-on `apps` suite uses (ADR-15) and asserting the host-side effects the guest was supposed to produce.
+//! Filesystem-exercising app cases (ADR-27), shared across every backend with WASI filesystem support (Ruby/Python/Go/Java) and re-run by wasmtime as the ground-truth engine. Each case converts a cached app to a library-mode class, stages fixtures into a fresh scratch dir preopened into the guest, and runs one or more invocations, diffing stdout against the same `examples/apps/snapshots/` files the always-on `apps` suite uses (ADR-15) and asserting the host-side effects the guest was supposed to produce.
 //!
 //! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro (`qjs_file_io_e2e!`, `sqlite3_shell_dbfile_e2e!`, ...). The per-language instantiation glue is a named const passed to that macro: it writes out the class name, argv, env, and preopen *guest* paths literally and takes only the runtime host paths through the `{scratch}`/`{cache}` placeholders the runner fills. wasmtime does not use the glue: it overrides [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir` preopens directly, so the same case consts feed both the backend macros and the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
@@ -31,7 +31,7 @@ pub struct FsRun {
     /// Full argv, argv0 included (backends bake it into the glue; wasmtime injects argv0 itself and uses `args[1..]`).
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// The `include_str!` golden this run's stdout must match, or `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
+    /// The `include_str!` snapshot this run's stdout must match, or `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
     pub expect_stdout: Option<&'static str>,
     /// Host-side assertion over the scratch dir after this run (e.g. a file the guest was supposed to write). `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
@@ -77,7 +77,7 @@ fn assert_sqlite_dbfile(scratch: &Path) {
     );
 }
 
-/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file into the preopened dir, reads it back, and prints it. Asserts both guest stdout (golden) and the host-side file content.
+/// QuickJS with file I/O (Phase 5a #1a): the `qjs:std` module writes a file into the preopened dir, reads it back, and prints it. Asserts both guest stdout (snapshot) and the host-side file content.
 pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     name: "qjs_file_io",
     wasm: "qjs",
@@ -93,7 +93,7 @@ pub const QJS_FILE_IO: FsAppCase = FsAppCase {
         args: &["qjs", "/work/qjs_file_io.js"],
         stdin: "",
         expect_stdout: Some(include_str!(
-            "../../../examples/apps/golden/qjs_file_io.stdout"
+            "../../../examples/apps/snapshots/qjs_file_io.stdout"
         )),
         assert_host: assert_qjs_io_out,
     }],
@@ -122,14 +122,14 @@ pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
             args: &["sqlite3"],
             stdin: ".open /db/test.db\nSELECT id, v FROM t ORDER BY id;\n.exit\n",
             expect_stdout: Some(include_str!(
-                "../../../examples/apps/golden/sqlite3_shell_dbfile.stdout"
+                "../../../examples/apps/snapshots/sqlite3_shell_dbfile.stdout"
             )),
             assert_host: assert_none,
         },
     ],
 };
 
-/// ripgrep searching a small fixture directory tree (Phase 5b): recursive directory walking over a preopened tree. `--sort path` forces a deterministic order so the `wasmtime --dir` golden is stable.
+/// ripgrep searching a small fixture directory tree (Phase 5b): recursive directory walking over a preopened tree. `--sort path` forces a deterministic order so the `wasmtime --dir` snapshot is stable.
 pub const RG_SEARCH: FsAppCase = FsAppCase {
     name: "rg_search",
     wasm: "rg",
@@ -142,7 +142,7 @@ pub const RG_SEARCH: FsAppCase = FsAppCase {
         args: &["rg", "--sort", "path", "needle", "/work"],
         stdin: "",
         expect_stdout: Some(include_str!(
-            "../../../examples/apps/golden/rg_search.stdout"
+            "../../../examples/apps/snapshots/rg_search.stdout"
         )),
         assert_host: assert_none,
     }],
@@ -289,11 +289,11 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
             output.status,
             String::from_utf8_lossy(&output.stderr)
         );
-        if let Some(golden) = run.expect_stdout {
+        if let Some(snapshot) = run.expect_stdout {
             assert_eq!(
                 String::from_utf8_lossy(&output.stdout),
-                golden,
-                "{} {:?} under {}: stdout differs from the wasmtime golden",
+                snapshot,
+                "{} {:?} under {}: stdout differs from the wasmtime snapshot",
                 case.name,
                 run.args,
                 lang.name()
@@ -301,5 +301,9 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
         }
         (run.assert_host)(&scratch);
     }
-    println!("{} under {}: matches golden output", case.name, lang.name());
+    println!(
+        "{} under {}: matches snapshot output",
+        case.name,
+        lang.name()
+    );
 }

@@ -1,16 +1,16 @@
-//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former golden-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
+//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former snapshot-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
 //!
 //! No `clap` dependency: two subcommands and a help message do not need one.
 
-mod doom_golden;
+mod doom_snapshot;
 
 use std::path::Path;
 
 use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
-use dewasm_test_helper::{capture_qjs_repl_golden, qjs_repl_golden_path, Wasmtime};
+use dewasm_test_helper::{capture_qjs_repl_snapshot, qjs_repl_snapshot_path, Wasmtime};
 
-use crate::doom_golden::update_doom_golden;
+use crate::doom_snapshot::update_doom_snapshot;
 
 const USAGE: &str = "\
 Usage: cargo xtask <command>
@@ -19,15 +19,15 @@ Commands:
     update-support-docs   Regenerate docs/support.md from the backends' own
                            capability declarations. Checked by
                            `cargo test -p dewasm-cli --test support_docs`.
-    update-repl-golden     Recapture the interactive QuickJS REPL transcript
-                           (examples/apps/golden/qjs_repl_interactive.transcript)
+    update-repl-snapshot   Recapture the interactive QuickJS REPL transcript
+                           (examples/apps/snapshots/qjs_repl_interactive.transcript)
                            against a live wasmtime under a pty. Requires
                            `wasmtime` on PATH and the qjs app cached
                            (examples/apps/fetch-and-build.sh). Checked by
                            `cargo test -p dewasm-test-helper --features
                            wasmtime_test --test apps_wasmtime`.
-    update-doom-golden     Recapture the DOOM framebuffer golden
-                           (examples/doom/golden/frame.ppm) from the original
+    update-doom-snapshot   Recapture the DOOM framebuffer snapshot
+                           (examples/doom/snapshots/frame.ppm) from the original
                            doom.wasm under the embedded wasmtime crate (ADR-53).
                            Requires the doom app cached
                            (examples/apps/scripts/doom.sh).
@@ -37,8 +37,8 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
-        Some("update-repl-golden") => update_repl_golden(),
-        Some("update-doom-golden") => update_doom_golden(),
+        Some("update-repl-snapshot") => update_repl_snapshot(),
+        Some("update-doom-snapshot") => update_doom_snapshot(),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
@@ -63,12 +63,12 @@ fn update_support_docs() -> Result<()> {
     Ok(())
 }
 
-/// Recapture the interactive QuickJS REPL transcript against a live wasmtime under a pty and write it to the checked-in golden path (Fix 4, `crates/dewasm-test-helper/src/qjs_repl.rs`). The corresponding freshness test (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) is compare-only and names this command in its failure message.
-fn update_repl_golden() -> Result<()> {
-    let bytes = capture_qjs_repl_golden(&Wasmtime);
+/// Recapture the interactive QuickJS REPL transcript against a live wasmtime under a pty and write it to the checked-in snapshot path (Fix 4, `crates/dewasm-test-helper/src/qjs_repl.rs`). The corresponding freshness test (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) is compare-only and names this command in its failure message.
+fn update_repl_snapshot() -> Result<()> {
+    let bytes = capture_qjs_repl_snapshot(&Wasmtime);
     println!(
         "wrote {} ({} bytes)",
-        qjs_repl_golden_path().display(),
+        qjs_repl_snapshot_path().display(),
         bytes.len()
     );
     Ok(())

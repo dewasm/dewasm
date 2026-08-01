@@ -9,7 +9,7 @@ upstream, for demos and end-to-end tests.
 their upstream distribution. The `apps` cases
 (`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and
 `apps_fs.rs` for the C-API and filesystem shapes) convert each cached app
-and compare its output against the golden files in `golden/` (captured
+and compare its output against the snapshot files in `snapshots/` (captured
 once from wasmtime; re-validated via `--features wasmtime_test`), run per
 backend as that backend's `e2e` test, e.g.
 `cargo test -p dewasm-backend-ruby --test e2e apps`. A missing cache or
