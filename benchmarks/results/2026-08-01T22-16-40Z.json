@@ -1,0 +1,4492 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-01T22:16:40Z",
+  "host": {
+    "os": "macOS 26.5.2",
+    "arch": "aarch64",
+    "kernel": "Darwin 25.5.0",
+    "cpu": "Apple M1 Pro"
+  },
+  "settings": {
+    "reps": 3,
+    "target_ms": 300,
+    "timeout_s": 900,
+    "filter": null
+  },
+  "runtimes": [
+    {
+      "runner": "wasmtime",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wasmtime 47.0.3 (5554cc1a6 2026-07-31)"
+    },
+    {
+      "runner": "dewasm-ruby",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-ruby-yjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-ruby-zjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-python",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "Python 3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]"
+    },
+    {
+      "runner": "dewasm-pypy",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "Python 3.11.15 (194f9f44b505, Jul 15 2026, 12:14:56)"
+    },
+    {
+      "runner": "dewasm-perl",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "v5.42.2"
+    },
+    {
+      "runner": "dewasm-go",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "go version go1.26.2 darwin/arm64"
+    },
+    {
+      "runner": "dewasm-java",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "java version \"25.0.4\" 2026-07-21 LTS"
+    },
+    {
+      "runner": "dewasm-bash",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "5.3.15(1)-release"
+    },
+    {
+      "runner": "pywasm-cpython",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "pywasm 2.2.3"
+    },
+    {
+      "runner": "pywasm-pypy",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "pywasm 2.2.3"
+    },
+    {
+      "runner": "wardite",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wardite 0.9.0"
+    },
+    {
+      "runner": "wardite-yjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wardite 0.9.0"
+    }
+  ],
+  "results": [
+    {
+      "workload": "kernel/call_direct",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 82282767,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005678459,
+        "median_s": 0.006111041,
+        "samples_s": [
+          0.006111041,
+          0.006288125,
+          0.005678459
+        ]
+      },
+      "total": {
+        "min_s": 0.304652875,
+        "median_s": 0.305710125,
+        "samples_s": [
+          0.305710125,
+          0.304652875,
+          0.30753275
+        ]
+      },
+      "compute_s": 0.29897441599999997,
+      "ns_per_op_min": 3.633499782524328,
+      "ns_per_op_median": 3.6410915058313487,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1264892,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.041277917,
+        "median_s": 0.043098583,
+        "samples_s": [
+          0.043098583,
+          0.041277917,
+          0.043884375
+        ]
+      },
+      "total": {
+        "min_s": 0.328215458,
+        "median_s": 0.329518958,
+        "samples_s": [
+          0.329518958,
+          0.328215458,
+          0.329544667
+        ]
+      },
+      "compute_s": 0.286937541,
+      "ns_per_op_min": 226.84746286639492,
+      "ns_per_op_median": 226.43860108214767,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 2315198,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040793583,
+        "median_s": 0.04115,
+        "samples_s": [
+          0.040793583,
+          0.04115,
+          0.041470917
+        ]
+      },
+      "total": {
+        "min_s": 0.326047709,
+        "median_s": 0.327017584,
+        "samples_s": [
+          0.327447,
+          0.327017584,
+          0.326047709
+        ]
+      },
+      "compute_s": 0.285254126,
+      "ns_per_op_min": 123.20938684293957,
+      "ns_per_op_median": 123.47435683686663,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 2353072,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.041715625,
+        "median_s": 0.042526584,
+        "samples_s": [
+          0.041715625,
+          0.042526584,
+          0.04425475
+        ]
+      },
+      "total": {
+        "min_s": 0.39426125,
+        "median_s": 0.394803417,
+        "samples_s": [
+          0.39426125,
+          0.394803417,
+          0.396101541
+        ]
+      },
+      "compute_s": 0.35254562500000003,
+      "ns_per_op_min": 149.8235604350398,
+      "ns_per_op_median": 149.70933018624166,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 626242,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.030358292,
+        "median_s": 0.031093125,
+        "samples_s": [
+          0.031093125,
+          0.030358292,
+          0.031134042
+        ]
+      },
+      "total": {
+        "min_s": 0.320816167,
+        "median_s": 0.320944084,
+        "samples_s": [
+          0.320944084,
+          0.322696709,
+          0.320816167
+        ]
+      },
+      "compute_s": 0.290457875,
+      "ns_per_op_min": 463.8109149498117,
+      "ns_per_op_median": 462.84177522427433,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 2282357,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.043243292,
+        "median_s": 0.043604083,
+        "samples_s": [
+          0.043604083,
+          0.046185958,
+          0.043243292
+        ]
+      },
+      "total": {
+        "min_s": 0.253316958,
+        "median_s": 0.254818625,
+        "samples_s": [
+          0.253316958,
+          0.257382208,
+          0.254818625
+        ]
+      },
+      "compute_s": 0.210073666,
+      "ns_per_op_min": 92.0424219348682,
+      "ns_per_op_median": 92.54228939644412,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 252328,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.011883041,
+        "median_s": 0.012429083,
+        "samples_s": [
+          0.012499041,
+          0.011883041,
+          0.012429083
+        ]
+      },
+      "total": {
+        "min_s": 0.301370125,
+        "median_s": 0.30318925,
+        "samples_s": [
+          0.30318925,
+          0.301370125,
+          0.303285417
+        ]
+      },
+      "compute_s": 0.289487084,
+      "ns_per_op_min": 1147.2650042801433,
+      "ns_per_op_median": 1152.3103539837039,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 70120542,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002996084,
+        "median_s": 0.003132125,
+        "samples_s": [
+          0.003333584,
+          0.003132125,
+          0.002996084
+        ]
+      },
+      "total": {
+        "min_s": 0.304362875,
+        "median_s": 0.305175209,
+        "samples_s": [
+          0.305548458,
+          0.304362875,
+          0.305175209
+        ]
+      },
+      "compute_s": 0.30136679099999997,
+      "ns_per_op_min": 4.297838870098864,
+      "ns_per_op_median": 4.307483590186739,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 65160473,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.065562667,
+        "median_s": 0.066047208,
+        "samples_s": [
+          0.066047208,
+          0.06737375,
+          0.065562667
+        ]
+      },
+      "total": {
+        "min_s": 0.310167958,
+        "median_s": 0.310608167,
+        "samples_s": [
+          0.310167958,
+          0.310608167,
+          0.312755917
+        ]
+      },
+      "compute_s": 0.244605291,
+      "ns_per_op_min": 3.753890660063195,
+      "ns_per_op_median": 3.7532103089552464,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 5152,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.012919875,
+        "median_s": 0.013020041,
+        "samples_s": [
+          0.012919875,
+          0.01346975,
+          0.013020041
+        ]
+      },
+      "total": {
+        "min_s": 0.308754417,
+        "median_s": 0.309301125,
+        "samples_s": [
+          0.310230041,
+          0.308754417,
+          0.309301125
+        ]
+      },
+      "compute_s": 0.295834542,
+      "ns_per_op_min": 57421.30085403727,
+      "ns_per_op_median": 57507.97437888199,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 5409,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.042430625,
+        "median_s": 0.043560959,
+        "samples_s": [
+          0.043560959,
+          0.042430625,
+          0.044992375
+        ]
+      },
+      "total": {
+        "min_s": 0.302844625,
+        "median_s": 0.314179125,
+        "samples_s": [
+          0.318306334,
+          0.314179125,
+          0.302844625
+        ]
+      },
+      "compute_s": 0.260414,
+      "ns_per_op_min": 48144.57385838417,
+      "ns_per_op_median": 50031.09003512664,
+      "load_ms": 0.655,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 24068,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.078617375,
+        "median_s": 0.079642958,
+        "samples_s": [
+          0.078617375,
+          0.080837375,
+          0.079642958
+        ]
+      },
+      "total": {
+        "min_s": 0.317746959,
+        "median_s": 0.318496084,
+        "samples_s": [
+          0.317746959,
+          0.321090208,
+          0.318496084
+        ]
+      },
+      "compute_s": 0.239129584,
+      "ns_per_op_min": 9935.581851420973,
+      "ns_per_op_median": 9924.095313279044,
+      "load_ms": 3.694,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 15717,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.051876416,
+        "median_s": 0.052236834,
+        "samples_s": [
+          0.054486542,
+          0.052236834,
+          0.051876416
+        ]
+      },
+      "total": {
+        "min_s": 0.339302833,
+        "median_s": 0.33995,
+        "samples_s": [
+          0.339302833,
+          0.33995,
+          0.34012475
+        ]
+      },
+      "compute_s": 0.28742641700000005,
+      "ns_per_op_min": 18287.61322135268,
+      "ns_per_op_median": 18305.857733664183,
+      "load_ms": 3.601,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_direct",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 32454,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.102421208,
+        "median_s": 0.102950166,
+        "samples_s": [
+          0.102950166,
+          0.103307334,
+          0.102421208
+        ]
+      },
+      "total": {
+        "min_s": 0.3777035,
+        "median_s": 0.378304459,
+        "samples_s": [
+          0.378304459,
+          0.384435208,
+          0.3777035
+        ]
+      },
+      "compute_s": 0.27528229200000004,
+      "ns_per_op_min": 8482.229987058608,
+      "ns_per_op_median": 8484.448542552536,
+      "load_ms": 10.62,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 16777216,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005439167,
+        "median_s": 0.00562275,
+        "samples_s": [
+          0.005890875,
+          0.00562275,
+          0.005439167
+        ]
+      },
+      "total": {
+        "min_s": 0.186785584,
+        "median_s": 0.188056292,
+        "samples_s": [
+          0.188381084,
+          0.188056292,
+          0.186785584
+        ]
+      },
+      "compute_s": 0.181346417,
+      "ns_per_op_min": 10.80908876657486,
+      "ns_per_op_median": 10.873886466026306,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 423033,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.0392765,
+        "median_s": 0.039853583,
+        "samples_s": [
+          0.0412975,
+          0.0392765,
+          0.039853583
+        ]
+      },
+      "total": {
+        "min_s": 0.334183584,
+        "median_s": 0.334806417,
+        "samples_s": [
+          0.334183584,
+          0.334806417,
+          0.33585575
+        ]
+      },
+      "compute_s": 0.294907084,
+      "ns_per_op_min": 697.1254819363974,
+      "ns_per_op_median": 697.2336295277202,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 628525,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039906583,
+        "median_s": 0.041044458,
+        "samples_s": [
+          0.041044458,
+          0.041668375,
+          0.039906583
+        ]
+      },
+      "total": {
+        "min_s": 0.306642292,
+        "median_s": 0.310262708,
+        "samples_s": [
+          0.312703958,
+          0.306642292,
+          0.310262708
+        ]
+      },
+      "compute_s": 0.266735709,
+      "ns_per_op_min": 424.3836108348912,
+      "ns_per_op_median": 428.33339962610876,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 517534,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040425667,
+        "median_s": 0.040738375,
+        "samples_s": [
+          0.040425667,
+          0.040738375,
+          0.0410225
+        ]
+      },
+      "total": {
+        "min_s": 0.299253833,
+        "median_s": 0.302612584,
+        "samples_s": [
+          0.302612584,
+          0.304042125,
+          0.299253833
+        ]
+      },
+      "compute_s": 0.258828166,
+      "ns_per_op_min": 500.11818740411263,
+      "ns_per_op_median": 506.00387414160235,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 328663,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.030124833,
+        "median_s": 0.030218417,
+        "samples_s": [
+          0.030124833,
+          0.030780875,
+          0.030218417
+        ]
+      },
+      "total": {
+        "min_s": 0.333297125,
+        "median_s": 0.334173916,
+        "samples_s": [
+          0.379985167,
+          0.333297125,
+          0.334173916
+        ]
+      },
+      "compute_s": 0.303172292,
+      "ns_per_op_min": 922.4411996482719,
+      "ns_per_op_median": 924.8242089921896,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 1594365,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039350792,
+        "median_s": 0.040137583,
+        "samples_s": [
+          0.042470417,
+          0.039350792,
+          0.040137583
+        ]
+      },
+      "total": {
+        "min_s": 0.269698709,
+        "median_s": 0.270363125,
+        "samples_s": [
+          0.269698709,
+          0.271940167,
+          0.270363125
+        ]
+      },
+      "compute_s": 0.23034791699999999,
+      "ns_per_op_min": 144.47627550780405,
+      "ns_per_op_median": 144.399520812361,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 115875,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010798833,
+        "median_s": 0.011012,
+        "samples_s": [
+          0.010798833,
+          0.011012,
+          0.011220167
+        ]
+      },
+      "total": {
+        "min_s": 0.305624958,
+        "median_s": 0.306225667,
+        "samples_s": [
+          0.306225667,
+          0.306331041,
+          0.305624958
+        ]
+      },
+      "compute_s": 0.294826125,
+      "ns_per_op_min": 2544.346278317152,
+      "ns_per_op_median": 2547.6907615965474,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 16777216,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002489375,
+        "median_s": 0.002706208,
+        "samples_s": [
+          0.0030635,
+          0.002706208,
+          0.002489375
+        ]
+      },
+      "total": {
+        "min_s": 0.1877665,
+        "median_s": 0.188045666,
+        "samples_s": [
+          0.188045666,
+          0.188358833,
+          0.1877665
+        ]
+      },
+      "compute_s": 0.18527712500000001,
+      "ns_per_op_min": 11.043377220630646,
+      "ns_per_op_median": 11.04709255695343,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 3477687,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.063737584,
+        "median_s": 0.063749917,
+        "samples_s": [
+          0.063737584,
+          0.063749917,
+          0.065241292
+        ]
+      },
+      "total": {
+        "min_s": 0.265711541,
+        "median_s": 0.266266125,
+        "samples_s": [
+          0.267717792,
+          0.266266125,
+          0.265711541
+        ]
+      },
+      "compute_s": 0.20197395699999998,
+      "ns_per_op_min": 58.07709463215061,
+      "ns_per_op_median": 58.233017519978084,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 3633,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.012494708,
+        "median_s": 0.012823333,
+        "samples_s": [
+          0.012858417,
+          0.012823333,
+          0.012494708
+        ]
+      },
+      "total": {
+        "min_s": 0.295168583,
+        "median_s": 0.295675917,
+        "samples_s": [
+          0.295675917,
+          0.297495459,
+          0.295168583
+        ]
+      },
+      "compute_s": 0.28267387499999996,
+      "ns_per_op_min": 77807.28736581336,
+      "ns_per_op_median": 77856.47784200385,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 3432,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.042956042,
+        "median_s": 0.043348791,
+        "samples_s": [
+          0.042956042,
+          0.044511875,
+          0.043348791
+        ]
+      },
+      "total": {
+        "min_s": 0.328408042,
+        "median_s": 0.329029417,
+        "samples_s": [
+          0.329029417,
+          0.329340875,
+          0.328408042
+        ]
+      },
+      "compute_s": 0.28545200000000004,
+      "ns_per_op_min": 83173.65967365968,
+      "ns_per_op_median": 83240.27564102564,
+      "load_ms": 0.744,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 4156,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.078361792,
+        "median_s": 0.080079292,
+        "samples_s": [
+          0.080862084,
+          0.080079292,
+          0.078361792
+        ]
+      },
+      "total": {
+        "min_s": 0.257350708,
+        "median_s": 0.258374584,
+        "samples_s": [
+          0.257350708,
+          0.258448375,
+          0.258374584
+        ]
+      },
+      "compute_s": 0.178988916,
+      "ns_per_op_min": 43067.592877767085,
+      "ns_per_op_median": 42900.695861405206,
+      "load_ms": 4.322,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 8353,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.051554459,
+        "median_s": 0.052930834,
+        "samples_s": [
+          0.052930834,
+          0.051554459,
+          0.053038791
+        ]
+      },
+      "total": {
+        "min_s": 0.289104875,
+        "median_s": 0.289465667,
+        "samples_s": [
+          0.289104875,
+          0.292224709,
+          0.289465667
+        ]
+      },
+      "compute_s": 0.237550416,
+      "ns_per_op_min": 28438.934035675804,
+      "ns_per_op_median": 28317.35101161259,
+      "load_ms": 4.063,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/call_indirect",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 16182,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.099885625,
+        "median_s": 0.100773208,
+        "samples_s": [
+          0.099885625,
+          0.100948125,
+          0.100773208
+        ]
+      },
+      "total": {
+        "min_s": 0.332530416,
+        "median_s": 0.333606791,
+        "samples_s": [
+          0.333606791,
+          0.332530416,
+          0.335871625
+        ]
+      },
+      "compute_s": 0.232644791,
+      "ns_per_op_min": 14376.763749845508,
+      "ns_per_op_median": 14388.43054010629,
+      "load_ms": 9.557,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 302252841,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005590458,
+        "median_s": 0.005629,
+        "samples_s": [
+          0.005805208,
+          0.005590458,
+          0.005629
+        ]
+      },
+      "total": {
+        "min_s": 0.307719125,
+        "median_s": 0.308688958,
+        "samples_s": [
+          0.309590709,
+          0.307719125,
+          0.308688958
+        ]
+      },
+      "compute_s": 0.30212866699999996,
+      "ns_per_op_min": 0.9995891717689428,
+      "ns_per_op_median": 1.002670337183034,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 2642462,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.0381205,
+        "median_s": 0.038547625,
+        "samples_s": [
+          0.039792209,
+          0.038547625,
+          0.0381205
+        ]
+      },
+      "total": {
+        "min_s": 0.345223417,
+        "median_s": 0.346182917,
+        "samples_s": [
+          0.345223417,
+          0.346182917,
+          0.346224083
+        ]
+      },
+      "compute_s": 0.307102917,
+      "ns_per_op_min": 116.2184799630042,
+      "ns_per_op_median": 116.419949274578,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 4429191,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039481375,
+        "median_s": 0.040029916,
+        "samples_s": [
+          0.040029916,
+          0.039481375,
+          0.045787
+        ]
+      },
+      "total": {
+        "min_s": 0.42509275,
+        "median_s": 0.428381792,
+        "samples_s": [
+          0.428381792,
+          0.428576584,
+          0.42509275
+        ]
+      },
+      "compute_s": 0.38561137500000003,
+      "ns_per_op_min": 87.06135612575751,
+      "ns_per_op_median": 87.68009236901275,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 2350617,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038358333,
+        "median_s": 0.03917625,
+        "samples_s": [
+          0.038358333,
+          0.03917625,
+          0.040506375
+        ]
+      },
+      "total": {
+        "min_s": 0.2632395,
+        "median_s": 0.263534958,
+        "samples_s": [
+          0.2632395,
+          0.263534958,
+          0.264661833
+        ]
+      },
+      "compute_s": 0.22488116700000002,
+      "ns_per_op_min": 95.668995416948,
+      "ns_per_op_median": 95.44673079451054,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 1603452,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.028678208,
+        "median_s": 0.029328917,
+        "samples_s": [
+          0.029328917,
+          0.029334833,
+          0.028678208
+        ]
+      },
+      "total": {
+        "min_s": 0.312841291,
+        "median_s": 0.313004375,
+        "samples_s": [
+          0.312841291,
+          0.313004375,
+          0.313234291
+        ]
+      },
+      "compute_s": 0.28416308300000004,
+      "ns_per_op_min": 177.21957564055555,
+      "ns_per_op_median": 176.9154661318206,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 106123022,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.0394585,
+        "median_s": 0.039514625,
+        "samples_s": [
+          0.039514625,
+          0.040402083,
+          0.0394585
+        ]
+      },
+      "total": {
+        "min_s": 0.273605333,
+        "median_s": 0.275654875,
+        "samples_s": [
+          0.273605333,
+          0.275654875,
+          0.275916667
+        ]
+      },
+      "compute_s": 0.234146833,
+      "ns_per_op_min": 2.206371705095243,
+      "ns_per_op_median": 2.2251557253995276,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 340166,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.014835042,
+        "median_s": 0.0152705,
+        "samples_s": [
+          0.015574833,
+          0.014835042,
+          0.0152705
+        ]
+      },
+      "total": {
+        "min_s": 0.305696333,
+        "median_s": 0.306203709,
+        "samples_s": [
+          0.306203709,
+          0.306340375,
+          0.305696333
+        ]
+      },
+      "compute_s": 0.29086129099999997,
+      "ns_per_op_min": 855.0569163290862,
+      "ns_per_op_median": 855.2683366356426,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 83323300,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002821167,
+        "median_s": 0.002942875,
+        "samples_s": [
+          0.002942875,
+          0.002821167,
+          0.00308775
+        ]
+      },
+      "total": {
+        "min_s": 0.302780708,
+        "median_s": 0.3045325,
+        "samples_s": [
+          0.3045325,
+          0.302780708,
+          0.306817875
+        ]
+      },
+      "compute_s": 0.299959541,
+      "ns_per_op_min": 3.599947925730258,
+      "ns_per_op_median": 3.619511289159215,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 166861750,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.060011584,
+        "median_s": 0.060351042,
+        "samples_s": [
+          0.060351042,
+          0.060011584,
+          0.060464625
+        ]
+      },
+      "total": {
+        "min_s": 0.339217625,
+        "median_s": 0.339266125,
+        "samples_s": [
+          0.339217625,
+          0.342558625,
+          0.339266125
+        ]
+      },
+      "compute_s": 0.279206041,
+      "ns_per_op_min": 1.6732776744820188,
+      "ns_per_op_median": 1.6715339674910514,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 497,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.012605292,
+        "median_s": 0.012900709,
+        "samples_s": [
+          0.012900709,
+          0.013496583,
+          0.012605292
+        ]
+      },
+      "total": {
+        "min_s": 0.304392542,
+        "median_s": 0.307378417,
+        "samples_s": [
+          0.304392542,
+          0.308440042,
+          0.307378417
+        ]
+      },
+      "compute_s": 0.29178725,
+      "ns_per_op_min": 587097.0824949698,
+      "ns_per_op_median": 592510.4788732395,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 9310,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.042012875,
+        "median_s": 0.04245175,
+        "samples_s": [
+          0.043819167,
+          0.04245175,
+          0.042012875
+        ]
+      },
+      "total": {
+        "min_s": 0.32171925,
+        "median_s": 0.322044292,
+        "samples_s": [
+          0.322775375,
+          0.322044292,
+          0.32171925
+        ]
+      },
+      "compute_s": 0.279706375,
+      "ns_per_op_min": 30043.649301825993,
+      "ns_per_op_median": 30031.422341568206,
+      "load_ms": 0.682,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 35536,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.078333833,
+        "median_s": 0.078557625,
+        "samples_s": [
+          0.078333833,
+          0.078557625,
+          0.079100084
+        ]
+      },
+      "total": {
+        "min_s": 0.300148042,
+        "median_s": 0.301677708,
+        "samples_s": [
+          0.302170417,
+          0.300148042,
+          0.301677708
+        ]
+      },
+      "compute_s": 0.22181420899999998,
+      "ns_per_op_min": 6241.957704862673,
+      "ns_per_op_median": 6278.705622467356,
+      "load_ms": 3.556,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 31919,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.051899709,
+        "median_s": 0.052908417,
+        "samples_s": [
+          0.052908417,
+          0.051899709,
+          0.05309825
+        ]
+      },
+      "total": {
+        "min_s": 0.298595667,
+        "median_s": 0.300166333,
+        "samples_s": [
+          0.301018542,
+          0.298595667,
+          0.300166333
+        ]
+      },
+      "compute_s": 0.246695958,
+      "ns_per_op_min": 7728.8122434913375,
+      "ns_per_op_median": 7746.41799555124,
+      "load_ms": 4.16,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/f64_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 71709,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.102807292,
+        "median_s": 0.103597291,
+        "samples_s": [
+          0.102807292,
+          0.104468541,
+          0.103597291
+        ]
+      },
+      "total": {
+        "min_s": 0.360510292,
+        "median_s": 0.361822625,
+        "samples_s": [
+          0.361822625,
+          0.364878333,
+          0.360510292
+        ]
+      },
+      "compute_s": 0.257703,
+      "ns_per_op_min": 3593.7330042254116,
+      "ns_per_op_median": 3601.017082932408,
+      "load_ms": 9.951,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 124589451,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005419833,
+        "median_s": 0.005572542,
+        "samples_s": [
+          0.005572542,
+          0.005419833,
+          0.005927042
+        ]
+      },
+      "total": {
+        "min_s": 0.302090666,
+        "median_s": 0.302392417,
+        "samples_s": [
+          0.302392417,
+          0.30394975,
+          0.302090666
+        ]
+      },
+      "compute_s": 0.296670833,
+      "ns_per_op_min": 2.3811874169025753,
+      "ns_per_op_median": 2.382383681905782,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1324071,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038601375,
+        "median_s": 0.038639666,
+        "samples_s": [
+          0.038601375,
+          0.038893625,
+          0.038639666
+        ]
+      },
+      "total": {
+        "min_s": 0.321448417,
+        "median_s": 0.3228895,
+        "samples_s": [
+          0.3228895,
+          0.321448417,
+          0.323242416
+        ]
+      },
+      "compute_s": 0.282847042,
+      "ns_per_op_min": 213.61924096215384,
+      "ns_per_op_median": 214.67869472256396,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 1523255,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038965292,
+        "median_s": 0.0393425,
+        "samples_s": [
+          0.0393425,
+          0.038965292,
+          0.039536375
+        ]
+      },
+      "total": {
+        "min_s": 0.296899584,
+        "median_s": 0.298790375,
+        "samples_s": [
+          0.301418083,
+          0.298790375,
+          0.296899584
+        ]
+      },
+      "compute_s": 0.257934292,
+      "ns_per_op_min": 169.330999734122,
+      "ns_per_op_median": 170.32465017347718,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 1217796,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038588667,
+        "median_s": 0.039992375,
+        "samples_s": [
+          0.038588667,
+          0.040162042,
+          0.039992375
+        ]
+      },
+      "total": {
+        "min_s": 0.256910916,
+        "median_s": 0.257298042,
+        "samples_s": [
+          0.258767125,
+          0.256910916,
+          0.257298042
+        ]
+      },
+      "compute_s": 0.218322249,
+      "ns_per_op_min": 179.2765364642354,
+      "ns_per_op_median": 178.44176446629814,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 420499,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.028765375,
+        "median_s": 0.02883,
+        "samples_s": [
+          0.029947416,
+          0.028765375,
+          0.02883
+        ]
+      },
+      "total": {
+        "min_s": 0.319532625,
+        "median_s": 0.321851125,
+        "samples_s": [
+          0.319532625,
+          0.324105708,
+          0.321851125
+        ]
+      },
+      "compute_s": 0.29076725000000003,
+      "ns_per_op_min": 691.4814303957918,
+      "ns_per_op_median": 696.8414312519174,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 25182154,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.04058525,
+        "median_s": 0.040870042,
+        "samples_s": [
+          0.04058525,
+          0.041129,
+          0.040870042
+        ]
+      },
+      "total": {
+        "min_s": 0.305321125,
+        "median_s": 0.305497,
+        "samples_s": [
+          0.307839708,
+          0.305321125,
+          0.305497
+        ]
+      },
+      "compute_s": 0.264735875,
+      "ns_per_op_min": 10.512836789100726,
+      "ns_per_op_median": 10.508511622953304,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 399718,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010800125,
+        "median_s": 0.011023209,
+        "samples_s": [
+          0.010800125,
+          0.011023209,
+          0.011649875
+        ]
+      },
+      "total": {
+        "min_s": 0.301969,
+        "median_s": 0.303474041,
+        "samples_s": [
+          0.301969,
+          0.303474041,
+          0.309637542
+        ]
+      },
+      "compute_s": 0.291168875,
+      "ns_per_op_min": 728.4357346929586,
+      "ns_per_op_median": 731.6428882362067,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 95814674,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.00323975,
+        "median_s": 0.003358541,
+        "samples_s": [
+          0.00323975,
+          0.003358541,
+          0.003559292
+        ]
+      },
+      "total": {
+        "min_s": 0.304706584,
+        "median_s": 0.3048435,
+        "samples_s": [
+          0.305634166,
+          0.304706584,
+          0.3048435
+        ]
+      },
+      "compute_s": 0.301466834,
+      "ns_per_op_min": 3.146353490698095,
+      "ns_per_op_median": 3.146542657964896,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 120817251,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.059221042,
+        "median_s": 0.060581208,
+        "samples_s": [
+          0.061435667,
+          0.060581208,
+          0.059221042
+        ]
+      },
+      "total": {
+        "min_s": 0.350420625,
+        "median_s": 0.351493833,
+        "samples_s": [
+          0.350420625,
+          0.351493833,
+          0.352369917
+        ]
+      },
+      "compute_s": 0.291199583,
+      "ns_per_op_min": 2.4102483758714226,
+      "ns_per_op_median": 2.4078732349240424,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 11229,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.013193917,
+        "median_s": 0.01336675,
+        "samples_s": [
+          0.01336675,
+          0.013381417,
+          0.013193917
+        ]
+      },
+      "total": {
+        "min_s": 0.298417834,
+        "median_s": 0.298974083,
+        "samples_s": [
+          0.298417834,
+          0.300211875,
+          0.298974083
+        ]
+      },
+      "compute_s": 0.285223917,
+      "ns_per_op_min": 25400.651616350522,
+      "ns_per_op_median": 25434.796776204472,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 5097,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.04241475,
+        "median_s": 0.043155792,
+        "samples_s": [
+          0.043155792,
+          0.04241475,
+          0.043454583
+        ]
+      },
+      "total": {
+        "min_s": 0.322799625,
+        "median_s": 0.323523916,
+        "samples_s": [
+          0.322799625,
+          0.323523916,
+          0.324903042
+        ]
+      },
+      "compute_s": 0.280384875,
+      "ns_per_op_min": 55009.78516774573,
+      "ns_per_op_median": 55006.49872474004,
+      "load_ms": 0.696,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 9120,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.080276208,
+        "median_s": 0.080816833,
+        "samples_s": [
+          0.080816833,
+          0.081203667,
+          0.080276208
+        ]
+      },
+      "total": {
+        "min_s": 0.275083167,
+        "median_s": 0.277297625,
+        "samples_s": [
+          0.277297625,
+          0.278362291,
+          0.275083167
+        ]
+      },
+      "compute_s": 0.194806959,
+      "ns_per_op_min": 21360.41217105263,
+      "ns_per_op_median": 21543.94649122807,
+      "load_ms": 3.672,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 12607,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.05127525,
+        "median_s": 0.052274208,
+        "samples_s": [
+          0.053800917,
+          0.05127525,
+          0.052274208
+        ]
+      },
+      "total": {
+        "min_s": 0.247768083,
+        "median_s": 0.24851325,
+        "samples_s": [
+          0.248630917,
+          0.247768083,
+          0.24851325
+        ]
+      },
+      "compute_s": 0.196492833,
+      "ns_per_op_min": 15586.01039105259,
+      "ns_per_op_median": 15565.87943206155,
+      "load_ms": 4.178,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i32_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 29970,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.0993725,
+        "median_s": 0.100809667,
+        "samples_s": [
+          0.100809667,
+          0.0993725,
+          0.10138775
+        ]
+      },
+      "total": {
+        "min_s": 0.315260125,
+        "median_s": 0.3165925,
+        "samples_s": [
+          0.316981542,
+          0.3165925,
+          0.315260125
+        ]
+      },
+      "compute_s": 0.215887625,
+      "ns_per_op_min": 7203.457624290958,
+      "ns_per_op_median": 7199.961061061061,
+      "load_ms": 9.161,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 123386326,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005181042,
+        "median_s": 0.005749833,
+        "samples_s": [
+          0.005977625,
+          0.005749833,
+          0.005181042
+        ]
+      },
+      "total": {
+        "min_s": 0.299479458,
+        "median_s": 0.299665791,
+        "samples_s": [
+          0.299776583,
+          0.299479458,
+          0.299665791
+        ]
+      },
+      "compute_s": 0.29429841599999995,
+      "ns_per_op_min": 2.3851785326681982,
+      "ns_per_op_median": 2.3820788536972892,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 186137,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.03798625,
+        "median_s": 0.03825375,
+        "samples_s": [
+          0.03825375,
+          0.03947775,
+          0.03798625
+        ]
+      },
+      "total": {
+        "min_s": 0.325976334,
+        "median_s": 0.326744666,
+        "samples_s": [
+          0.325976334,
+          0.329267125,
+          0.326744666
+        ]
+      },
+      "compute_s": 0.287990084,
+      "ns_per_op_min": 1547.1941849283055,
+      "ns_per_op_median": 1549.884848256929,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 255044,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038641333,
+        "median_s": 0.038994458,
+        "samples_s": [
+          0.039642041,
+          0.038641333,
+          0.038994458
+        ]
+      },
+      "total": {
+        "min_s": 0.325825334,
+        "median_s": 0.3270555,
+        "samples_s": [
+          0.3270555,
+          0.325825334,
+          0.328585542
+        ]
+      },
+      "compute_s": 0.287184001,
+      "ns_per_op_min": 1126.0174754160066,
+      "ns_per_op_median": 1129.4562585279402,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 205156,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038453667,
+        "median_s": 0.039141542,
+        "samples_s": [
+          0.039259333,
+          0.038453667,
+          0.039141542
+        ]
+      },
+      "total": {
+        "min_s": 0.299879583,
+        "median_s": 0.302311,
+        "samples_s": [
+          0.304756291,
+          0.302311,
+          0.299879583
+        ]
+      },
+      "compute_s": 0.261425916,
+      "ns_per_op_min": 1274.2786757394372,
+      "ns_per_op_median": 1282.7772914270117,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 408794,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.028155083,
+        "median_s": 0.029082042,
+        "samples_s": [
+          0.029151667,
+          0.028155083,
+          0.029082042
+        ]
+      },
+      "total": {
+        "min_s": 0.316592458,
+        "median_s": 0.316918125,
+        "samples_s": [
+          0.321455209,
+          0.316918125,
+          0.316592458
+        ]
+      },
+      "compute_s": 0.288437375,
+      "ns_per_op_min": 705.5812340689932,
+      "ns_per_op_median": 704.1103416390652,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 832576,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040133458,
+        "median_s": 0.040784125,
+        "samples_s": [
+          0.040133458,
+          0.040784125,
+          0.041055792
+        ]
+      },
+      "total": {
+        "min_s": 0.246756875,
+        "median_s": 0.2486935,
+        "samples_s": [
+          0.2486935,
+          0.246756875,
+          0.250133541
+        ]
+      },
+      "compute_s": 0.20662341699999998,
+      "ns_per_op_min": 248.1736406045814,
+      "ns_per_op_median": 249.71819389461143,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 289547,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010896625,
+        "median_s": 0.011349459,
+        "samples_s": [
+          0.0113975,
+          0.011349459,
+          0.010896625
+        ]
+      },
+      "total": {
+        "min_s": 0.311420334,
+        "median_s": 0.314239875,
+        "samples_s": [
+          0.311420334,
+          0.320905542,
+          0.314239875
+        ]
+      },
+      "compute_s": 0.300523709,
+      "ns_per_op_min": 1037.909938628271,
+      "ns_per_op_median": 1046.083765329981,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 110340325,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002642833,
+        "median_s": 0.002880042,
+        "samples_s": [
+          0.002642833,
+          0.002965875,
+          0.002880042
+        ]
+      },
+      "total": {
+        "min_s": 0.300863625,
+        "median_s": 0.301100875,
+        "samples_s": [
+          0.301100875,
+          0.301316583,
+          0.300863625
+        ]
+      },
+      "compute_s": 0.298220792,
+      "ns_per_op_min": 2.702736211806518,
+      "ns_per_op_median": 2.7027365833841794,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 134979580,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.059785541,
+        "median_s": 0.060878875,
+        "samples_s": [
+          0.065462042,
+          0.059785541,
+          0.060878875
+        ]
+      },
+      "total": {
+        "min_s": 0.385586042,
+        "median_s": 0.385687542,
+        "samples_s": [
+          0.385687542,
+          0.386074792,
+          0.385586042
+        ]
+      },
+      "compute_s": 0.325800501,
+      "ns_per_op_min": 2.4137021392420985,
+      "ns_per_op_median": 2.406354109266009,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 10175,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.013502125,
+        "median_s": 0.013766083,
+        "samples_s": [
+          0.013766083,
+          0.013502125,
+          0.013810917
+        ]
+      },
+      "total": {
+        "min_s": 0.297602792,
+        "median_s": 0.298349,
+        "samples_s": [
+          0.298858833,
+          0.298349,
+          0.297602792
+        ]
+      },
+      "compute_s": 0.28410066700000003,
+      "ns_per_op_min": 27921.441474201474,
+      "ns_per_op_median": 27968.837051597053,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 4985,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.04323525,
+        "median_s": 0.043248667,
+        "samples_s": [
+          0.04323525,
+          0.043248667,
+          0.043454
+        ]
+      },
+      "total": {
+        "min_s": 0.334034625,
+        "median_s": 0.337708083,
+        "samples_s": [
+          0.3412135,
+          0.334034625,
+          0.337708083
+        ]
+      },
+      "compute_s": 0.29079937499999997,
+      "ns_per_op_min": 58334.87963891675,
+      "ns_per_op_median": 59069.090471414245,
+      "load_ms": 0.649,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 517,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.081835625,
+        "median_s": 0.083408708,
+        "samples_s": [
+          0.083875834,
+          0.081835625,
+          0.083408708
+        ]
+      },
+      "total": {
+        "min_s": 0.277661125,
+        "median_s": 0.27875825,
+        "samples_s": [
+          0.280540708,
+          0.27875825,
+          0.277661125
+        ]
+      },
+      "compute_s": 0.1958255,
+      "ns_per_op_min": 378772.7272727273,
+      "ns_per_op_median": 377852.11218568665,
+      "load_ms": 3.579,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 17630,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.050240208,
+        "median_s": 0.052119666,
+        "samples_s": [
+          0.053256375,
+          0.050240208,
+          0.052119666
+        ]
+      },
+      "total": {
+        "min_s": 0.350990958,
+        "median_s": 0.351466333,
+        "samples_s": [
+          0.350990958,
+          0.351466333,
+          0.353060958
+        ]
+      },
+      "compute_s": 0.30075075,
+      "ns_per_op_min": 17059.03289846852,
+      "ns_per_op_median": 16979.391208167897,
+      "load_ms": 4.191,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/i64_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 34764,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.099336791,
+        "median_s": 0.100119,
+        "samples_s": [
+          0.100198417,
+          0.099336791,
+          0.100119
+        ]
+      },
+      "total": {
+        "min_s": 0.421443792,
+        "median_s": 0.423491583,
+        "samples_s": [
+          0.421443792,
+          0.423491583,
+          0.425428166
+        ]
+      },
+      "compute_s": 0.322107001,
+      "ns_per_op_min": 9265.53333908641,
+      "ns_per_op_median": 9301.938298239558,
+      "load_ms": 9.581,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 3304567,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005502334,
+        "median_s": 0.005530875,
+        "samples_s": [
+          0.005530875,
+          0.005502334,
+          0.005695291
+        ]
+      },
+      "total": {
+        "min_s": 0.331162167,
+        "median_s": 0.331913459,
+        "samples_s": [
+          0.331948666,
+          0.331162167,
+          0.331913459
+        ]
+      },
+      "compute_s": 0.325659833,
+      "ns_per_op_min": 98.54841284803727,
+      "ns_per_op_median": 98.76712561736532,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 63134,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038670333,
+        "median_s": 0.038928459,
+        "samples_s": [
+          0.0397815,
+          0.038670333,
+          0.038928459
+        ]
+      },
+      "total": {
+        "min_s": 0.35727475,
+        "median_s": 0.357668542,
+        "samples_s": [
+          0.359711125,
+          0.35727475,
+          0.357668542
+        ]
+      },
+      "compute_s": 0.318604417,
+      "ns_per_op_min": 5046.479187125796,
+      "ns_per_op_median": 5048.6280451104,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 44114,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038925583,
+        "median_s": 0.039150542,
+        "samples_s": [
+          0.039150542,
+          0.04093875,
+          0.038925583
+        ]
+      },
+      "total": {
+        "min_s": 0.258491292,
+        "median_s": 0.258832166,
+        "samples_s": [
+          0.258491292,
+          0.259573708,
+          0.258832166
+        ]
+      },
+      "compute_s": 0.219565709,
+      "ns_per_op_min": 4977.234188692932,
+      "ns_per_op_median": 4979.861812576506,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 59824,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039578333,
+        "median_s": 0.0396275,
+        "samples_s": [
+          0.0396275,
+          0.040284084,
+          0.039578333
+        ]
+      },
+      "total": {
+        "min_s": 0.33946575,
+        "median_s": 0.339873167,
+        "samples_s": [
+          0.339873167,
+          0.33946575,
+          0.34075225
+        ]
+      },
+      "compute_s": 0.299887417,
+      "ns_per_op_min": 5012.827911874833,
+      "ns_per_op_median": 5018.81631117946,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 47290,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.029436917,
+        "median_s": 0.029825875,
+        "samples_s": [
+          0.029825875,
+          0.030374792,
+          0.029436917
+        ]
+      },
+      "total": {
+        "min_s": 0.287689708,
+        "median_s": 0.287882917,
+        "samples_s": [
+          0.287689708,
+          0.28892225,
+          0.287882917
+        ]
+      },
+      "compute_s": 0.258252791,
+      "ns_per_op_min": 5461.044427997462,
+      "ns_per_op_median": 5456.905096214845,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 1655889,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040294667,
+        "median_s": 0.042223417,
+        "samples_s": [
+          0.043263833,
+          0.042223417,
+          0.040294667
+        ]
+      },
+      "total": {
+        "min_s": 0.286125042,
+        "median_s": 0.286841833,
+        "samples_s": [
+          0.291201083,
+          0.286125042,
+          0.286841833
+        ]
+      },
+      "compute_s": 0.245830375,
+      "ns_per_op_min": 148.45824508768402,
+      "ns_per_op_median": 147.72633672909234,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 5024,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010498958,
+        "median_s": 0.01079025,
+        "samples_s": [
+          0.01079025,
+          0.011302625,
+          0.010498958
+        ]
+      },
+      "total": {
+        "min_s": 0.300473416,
+        "median_s": 0.301225292,
+        "samples_s": [
+          0.301225292,
+          0.301944167,
+          0.300473416
+        ]
+      },
+      "compute_s": 0.289974458,
+      "ns_per_op_min": 57717.84593949045,
+      "ns_per_op_median": 57809.522691082806,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 1250368,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002691792,
+        "median_s": 0.002837,
+        "samples_s": [
+          0.003260917,
+          0.002691792,
+          0.002837
+        ]
+      },
+      "total": {
+        "min_s": 0.304354708,
+        "median_s": 0.304518792,
+        "samples_s": [
+          0.305113417,
+          0.304354708,
+          0.304518792
+        ]
+      },
+      "compute_s": 0.30166291599999995,
+      "ns_per_op_min": 241.2593060602958,
+      "ns_per_op_median": 241.27440241592876,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 2279210,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.059257291,
+        "median_s": 0.06031425,
+        "samples_s": [
+          0.06031425,
+          0.059257291,
+          0.060886
+        ]
+      },
+      "total": {
+        "min_s": 0.291876667,
+        "median_s": 0.29192575,
+        "samples_s": [
+          0.293051417,
+          0.29192575,
+          0.291876667
+        ]
+      },
+      "compute_s": 0.232619376,
+      "ns_per_op_min": 102.06140548698892,
+      "ns_per_op_median": 101.61920138995528,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 105,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.012637666,
+        "median_s": 0.013229459,
+        "samples_s": [
+          0.013333167,
+          0.012637666,
+          0.013229459
+        ]
+      },
+      "total": {
+        "min_s": 2.216041875,
+        "median_s": 2.217044917,
+        "samples_s": [
+          2.217044917,
+          2.216041875,
+          2.218833666
+        ]
+      },
+      "compute_s": 2.2034042090000003,
+      "ns_per_op_min": 20984801.990476195,
+      "ns_per_op_median": 20988718.647619046,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 256,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.043423542,
+        "median_s": 0.043767917,
+        "samples_s": [
+          0.043767917,
+          0.043423542,
+          0.044128958
+        ]
+      },
+      "total": {
+        "min_s": 0.43125025,
+        "median_s": 0.43154475,
+        "samples_s": [
+          0.43372725,
+          0.43154475,
+          0.43125025
+        ]
+      },
+      "compute_s": 0.387826708,
+      "ns_per_op_min": 1514948.078125,
+      "ns_per_op_median": 1514753.25390625,
+      "load_ms": 0.885,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 256,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.079985708,
+        "median_s": 0.081177458,
+        "samples_s": [
+          0.081177458,
+          0.081578291,
+          0.079985708
+        ]
+      },
+      "total": {
+        "min_s": 0.359881541,
+        "median_s": 0.361261583,
+        "samples_s": [
+          0.359881541,
+          0.361261583,
+          0.366390625
+        ]
+      },
+      "compute_s": 0.27989583300000004,
+      "ns_per_op_min": 1093343.0976562502,
+      "ns_per_op_median": 1094078.61328125,
+      "load_ms": 5.486,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 757,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.052631833,
+        "median_s": 0.054611542,
+        "samples_s": [
+          0.054611542,
+          0.052631833,
+          0.055395916
+        ]
+      },
+      "total": {
+        "min_s": 0.344269625,
+        "median_s": 0.346993459,
+        "samples_s": [
+          0.344269625,
+          0.348339333,
+          0.346993459
+        ]
+      },
+      "compute_s": 0.291637792,
+      "ns_per_op_min": 385254.678996037,
+      "ns_per_op_median": 386237.6710700132,
+      "load_ms": 4.338,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mandelbrot",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 1409,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.100789458,
+        "median_s": 0.101058292,
+        "samples_s": [
+          0.100789458,
+          0.101594417,
+          0.101058292
+        ]
+      },
+      "total": {
+        "min_s": 0.364236,
+        "median_s": 0.365159,
+        "samples_s": [
+          0.364236,
+          0.365159,
+          0.368083792
+        ]
+      },
+      "compute_s": 0.263446542,
+      "ns_per_op_min": 186974.1249112846,
+      "ns_per_op_median": 187438.40170333572,
+      "load_ms": 9.55,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 284454684,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005267167,
+        "median_s": 0.005556541,
+        "samples_s": [
+          0.005721375,
+          0.005267167,
+          0.005556541
+        ]
+      },
+      "total": {
+        "min_s": 0.299027084,
+        "median_s": 0.300007458,
+        "samples_s": [
+          0.301163209,
+          0.299027084,
+          0.300007458
+        ]
+      },
+      "compute_s": 0.293759917,
+      "ns_per_op_min": 1.0327125321655803,
+      "ns_per_op_median": 1.0351417415928366,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1704724,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038700458,
+        "median_s": 0.038782125,
+        "samples_s": [
+          0.038700458,
+          0.038782125,
+          0.039739125
+        ]
+      },
+      "total": {
+        "min_s": 0.330166958,
+        "median_s": 0.330216916,
+        "samples_s": [
+          0.330216916,
+          0.33554025,
+          0.330166958
+        ]
+      },
+      "compute_s": 0.2914665,
+      "ns_per_op_min": 170.97577085792187,
+      "ns_per_op_median": 170.9571701929462,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 1689344,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.03901225,
+        "median_s": 0.039444791,
+        "samples_s": [
+          0.03901225,
+          0.039444791,
+          0.039628708
+        ]
+      },
+      "total": {
+        "min_s": 0.287669,
+        "median_s": 0.288019292,
+        "samples_s": [
+          0.288019292,
+          0.287669,
+          0.289300084
+        ]
+      },
+      "compute_s": 0.24865675,
+      "ns_per_op_min": 147.19130621116835,
+      "ns_per_op_median": 147.14261926522957,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 1792090,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.038062792,
+        "median_s": 0.038614625,
+        "samples_s": [
+          0.038614625,
+          0.038062792,
+          0.038715542
+        ]
+      },
+      "total": {
+        "min_s": 0.316019709,
+        "median_s": 0.316482125,
+        "samples_s": [
+          0.316482125,
+          0.316019709,
+          0.3165865
+        ]
+      },
+      "compute_s": 0.27795691699999997,
+      "ns_per_op_min": 155.10209699289652,
+      "ns_per_op_median": 155.05220161933832,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 394188,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.028411625,
+        "median_s": 0.029045084,
+        "samples_s": [
+          0.029045084,
+          0.028411625,
+          0.029529541
+        ]
+      },
+      "total": {
+        "min_s": 0.335731458,
+        "median_s": 0.336217542,
+        "samples_s": [
+          0.337311458,
+          0.335731458,
+          0.336217542
+        ]
+      },
+      "compute_s": 0.307319833,
+      "ns_per_op_min": 779.6275711082022,
+      "ns_per_op_median": 779.2537012795925,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 5355863,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.041209875,
+        "median_s": 0.041606792,
+        "samples_s": [
+          0.042065,
+          0.041606792,
+          0.041209875
+        ]
+      },
+      "total": {
+        "min_s": 0.336371,
+        "median_s": 0.339253083,
+        "samples_s": [
+          0.342792875,
+          0.336371,
+          0.339253083
+        ]
+      },
+      "compute_s": 0.29516112499999997,
+      "ns_per_op_min": 55.10990945810226,
+      "ns_per_op_median": 55.57391796616157,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 299846,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010796125,
+        "median_s": 0.011364917,
+        "samples_s": [
+          0.012127917,
+          0.011364917,
+          0.010796125
+        ]
+      },
+      "total": {
+        "min_s": 0.309181625,
+        "median_s": 0.30989,
+        "samples_s": [
+          0.31076275,
+          0.309181625,
+          0.30989
+        ]
+      },
+      "compute_s": 0.2983855,
+      "ns_per_op_min": 995.1291663053701,
+      "ns_per_op_median": 995.5946819367275,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 193324570,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002560667,
+        "median_s": 0.002666834,
+        "samples_s": [
+          0.002666834,
+          0.002746541,
+          0.002560667
+        ]
+      },
+      "total": {
+        "min_s": 0.302177042,
+        "median_s": 0.302247625,
+        "samples_s": [
+          0.302177042,
+          0.302247625,
+          0.303154916
+        ]
+      },
+      "compute_s": 0.299616375,
+      "ns_per_op_min": 1.5498101198414667,
+      "ns_per_op_median": 1.549626056325898,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 142731626,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.059902167,
+        "median_s": 0.061017417,
+        "samples_s": [
+          0.061017417,
+          0.059902167,
+          0.061333541
+        ]
+      },
+      "total": {
+        "min_s": 0.322494958,
+        "median_s": 0.322589834,
+        "samples_s": [
+          0.323770292,
+          0.322589834,
+          0.322494958
+        ]
+      },
+      "compute_s": 0.262592791,
+      "ns_per_op_min": 1.8397659885132955,
+      "ns_per_op_median": 1.832617089361821,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 9263,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.012399291,
+        "median_s": 0.012695125,
+        "samples_s": [
+          0.013224959,
+          0.012399291,
+          0.012695125
+        ]
+      },
+      "total": {
+        "min_s": 0.306354542,
+        "median_s": 0.309129041,
+        "samples_s": [
+          0.306354542,
+          0.310487458,
+          0.309129041
+        ]
+      },
+      "compute_s": 0.29395525100000003,
+      "ns_per_op_min": 31734.346432041457,
+      "ns_per_op_median": 32001.93414660477,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 5843,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.042384917,
+        "median_s": 0.042888667,
+        "samples_s": [
+          0.043165125,
+          0.042384917,
+          0.042888667
+        ]
+      },
+      "total": {
+        "min_s": 0.277167916,
+        "median_s": 0.278757625,
+        "samples_s": [
+          0.277167916,
+          0.279008375,
+          0.278757625
+        ]
+      },
+      "compute_s": 0.23478299900000002,
+      "ns_per_op_min": 40181.92692110218,
+      "ns_per_op_median": 40367.783330480925,
+      "load_ms": 0.747,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 28356,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.079556209,
+        "median_s": 0.080176875,
+        "samples_s": [
+          0.080631292,
+          0.079556209,
+          0.080176875
+        ]
+      },
+      "total": {
+        "min_s": 0.311834917,
+        "median_s": 0.312952625,
+        "samples_s": [
+          0.313784375,
+          0.311834917,
+          0.312952625
+        ]
+      },
+      "compute_s": 0.232278708,
+      "ns_per_op_min": 8191.518831993229,
+      "ns_per_op_median": 8209.047467908027,
+      "load_ms": 4.466,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 24525,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.052418334,
+        "median_s": 0.052434708,
+        "samples_s": [
+          0.052418334,
+          0.052434708,
+          0.052749541
+        ]
+      },
+      "total": {
+        "min_s": 0.372036416,
+        "median_s": 0.376256041,
+        "samples_s": [
+          0.376256041,
+          0.372036416,
+          0.377058334
+        ]
+      },
+      "compute_s": 0.31961808199999997,
+      "ns_per_op_min": 13032.337696228336,
+      "ns_per_op_median": 13203.724077471967,
+      "load_ms": 3.929,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/mem_rw",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 40651,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.100935291,
+        "median_s": 0.101161708,
+        "samples_s": [
+          0.101161708,
+          0.103290708,
+          0.100935291
+        ]
+      },
+      "total": {
+        "min_s": 0.356966916,
+        "median_s": 0.357847667,
+        "samples_s": [
+          0.356966916,
+          0.359792,
+          0.357847667
+        ]
+      },
+      "compute_s": 0.25603162500000004,
+      "ns_per_op_min": 6298.286020024108,
+      "ns_per_op_median": 6314.382401416939,
+      "load_ms": 8.728,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 1004085,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005408166,
+        "median_s": 0.005468292,
+        "samples_s": [
+          0.005408166,
+          0.005468292,
+          0.005632959
+        ]
+      },
+      "total": {
+        "min_s": 0.306824208,
+        "median_s": 0.307161666,
+        "samples_s": [
+          0.307161666,
+          0.307951542,
+          0.306824208
+        ]
+      },
+      "compute_s": 0.301416042,
+      "ns_per_op_min": 300.18976680261136,
+      "ns_per_op_median": 300.46597051046473,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 3510,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039223667,
+        "median_s": 0.04014775,
+        "samples_s": [
+          0.039223667,
+          0.040576625,
+          0.04014775
+        ]
+      },
+      "total": {
+        "min_s": 0.326699791,
+        "median_s": 0.328875292,
+        "samples_s": [
+          0.328875292,
+          0.326699791,
+          0.33085975
+        ]
+      },
+      "compute_s": 0.287476124,
+      "ns_per_op_min": 81902.02962962963,
+      "ns_per_op_median": 82258.55897435898,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 4805,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.0392275,
+        "median_s": 0.040162041,
+        "samples_s": [
+          0.04085625,
+          0.0392275,
+          0.040162041
+        ]
+      },
+      "total": {
+        "min_s": 0.298471875,
+        "median_s": 0.301882542,
+        "samples_s": [
+          0.298471875,
+          0.302296,
+          0.301882542
+        ]
+      },
+      "compute_s": 0.25924437499999997,
+      "ns_per_op_min": 53953.0437044745,
+      "ns_per_op_median": 54468.366493236215,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 4634,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.039374584,
+        "median_s": 0.03974625,
+        "samples_s": [
+          0.039374584,
+          0.040153167,
+          0.03974625
+        ]
+      },
+      "total": {
+        "min_s": 0.308484,
+        "median_s": 0.309678417,
+        "samples_s": [
+          0.310265333,
+          0.309678417,
+          0.308484
+        ]
+      },
+      "compute_s": 0.269109416,
+      "ns_per_op_min": 58072.81312041433,
+      "ns_per_op_median": 58250.3597324126,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 1017,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.030084167,
+        "median_s": 0.030166334,
+        "samples_s": [
+          0.030166334,
+          0.030084167,
+          0.030736542
+        ]
+      },
+      "total": {
+        "min_s": 0.329629375,
+        "median_s": 0.330590584,
+        "samples_s": [
+          0.330590584,
+          0.3325,
+          0.329629375
+        ]
+      },
+      "compute_s": 0.299545208,
+      "ns_per_op_min": 294538.0609636185,
+      "ns_per_op_median": 295402.40904621436,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 22674,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.041599084,
+        "median_s": 0.042080875,
+        "samples_s": [
+          0.042080875,
+          0.041599084,
+          0.042191125
+        ]
+      },
+      "total": {
+        "min_s": 0.355671708,
+        "median_s": 0.355812083,
+        "samples_s": [
+          0.355671708,
+          0.358267666,
+          0.355812083
+        ]
+      },
+      "compute_s": 0.31407262399999997,
+      "ns_per_op_min": 13851.663755843694,
+      "ns_per_op_median": 13836.606156831613,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 894,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.010642458,
+        "median_s": 0.011105625,
+        "samples_s": [
+          0.011228291,
+          0.011105625,
+          0.010642458
+        ]
+      },
+      "total": {
+        "min_s": 0.301454375,
+        "median_s": 0.304867875,
+        "samples_s": [
+          0.307109209,
+          0.304867875,
+          0.301454375
+        ]
+      },
+      "compute_s": 0.290811917,
+      "ns_per_op_min": 325292.97203579417,
+      "ns_per_op_median": 328593.1208053691,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 839923,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002712,
+        "median_s": 0.002990667,
+        "samples_s": [
+          0.003274333,
+          0.002990667,
+          0.002712
+        ]
+      },
+      "total": {
+        "min_s": 0.303135041,
+        "median_s": 0.303215416,
+        "samples_s": [
+          0.303670625,
+          0.303215416,
+          0.303135041
+        ]
+      },
+      "compute_s": 0.300423041,
+      "ns_per_op_min": 357.6792646468783,
+      "ns_per_op_median": 357.44318110112476,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 404890,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.059842375,
+        "median_s": 0.059986875,
+        "samples_s": [
+          0.059986875,
+          0.059842375,
+          0.060602583
+        ]
+      },
+      "total": {
+        "min_s": 0.272231292,
+        "median_s": 0.275887542,
+        "samples_s": [
+          0.272231292,
+          0.275887542,
+          0.305130125
+        ]
+      },
+      "compute_s": 0.212388917,
+      "ns_per_op_min": 524.5595519770802,
+      "ns_per_op_median": 533.2328953542938,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 17,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.01446375,
+        "median_s": 0.014953333,
+        "samples_s": [
+          0.014953333,
+          0.015173125,
+          0.01446375
+        ]
+      },
+      "total": {
+        "min_s": 0.286191833,
+        "median_s": 0.286551417,
+        "samples_s": [
+          0.286551417,
+          0.286191833,
+          0.286700958
+        ]
+      },
+      "compute_s": 0.271728083,
+      "ns_per_op_min": 15984004.88235294,
+      "ns_per_op_median": 15976357.882352937,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 22,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.044526083,
+        "median_s": 0.044839917,
+        "samples_s": [
+          0.047153042,
+          0.044839917,
+          0.044526083
+        ]
+      },
+      "total": {
+        "min_s": 0.366756125,
+        "median_s": 0.368262166,
+        "samples_s": [
+          0.366756125,
+          0.368794417,
+          0.368262166
+        ]
+      },
+      "compute_s": 0.322230042,
+      "ns_per_op_min": 14646820.090909092,
+      "ns_per_op_median": 14701011.318181818,
+      "load_ms": 1.359,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 28,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.088216959,
+        "median_s": 0.088613958,
+        "samples_s": [
+          0.088216959,
+          0.090092541,
+          0.088613958
+        ]
+      },
+      "total": {
+        "min_s": 0.290382667,
+        "median_s": 0.291863166,
+        "samples_s": [
+          0.291863166,
+          0.293555875,
+          0.290382667
+        ]
+      },
+      "compute_s": 0.202165708,
+      "ns_per_op_min": 7220203.857142857,
+      "ns_per_op_median": 7258900.285714285,
+      "load_ms": 7.456,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 49,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.051015042,
+        "median_s": 0.052094041,
+        "samples_s": [
+          0.051015042,
+          0.053077708,
+          0.052094041
+        ]
+      },
+      "total": {
+        "min_s": 0.258297042,
+        "median_s": 0.260417708,
+        "samples_s": [
+          0.260417708,
+          0.258297042,
+          0.260494666
+        ]
+      },
+      "compute_s": 0.20728199999999997,
+      "ns_per_op_min": 4230244.897959183,
+      "ns_per_op_median": 4251503.408163266,
+      "load_ms": 4.065,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/sha256",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 136,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.103385083,
+        "median_s": 0.104026375,
+        "samples_s": [
+          0.103385083,
+          0.107128292,
+          0.104026375
+        ]
+      },
+      "total": {
+        "min_s": 0.359647541,
+        "median_s": 0.366267083,
+        "samples_s": [
+          0.359647541,
+          0.369100417,
+          0.366267083
+        ]
+      },
+      "compute_s": 0.256262458,
+      "ns_per_op_min": 1884282.7794117648,
+      "ns_per_op_median": 1928240.5,
+      "load_ms": 9.769,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 159301150,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.005285,
+        "median_s": 0.005419333,
+        "samples_s": [
+          0.005285,
+          0.005607959,
+          0.005419333
+        ]
+      },
+      "total": {
+        "min_s": 0.279438042,
+        "median_s": 0.28211775,
+        "samples_s": [
+          0.28211775,
+          0.279438042,
+          0.294349208
+        ]
+      },
+      "compute_s": 0.274153042,
+      "ns_per_op_min": 1.7209734016358325,
+      "ns_per_op_median": 1.7369517859726686,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 706376,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040552667,
+        "median_s": 0.040963333,
+        "samples_s": [
+          0.040552667,
+          0.04128675,
+          0.040963333
+        ]
+      },
+      "total": {
+        "min_s": 0.335965834,
+        "median_s": 0.336720583,
+        "samples_s": [
+          0.336720583,
+          0.340316416,
+          0.335965834
+        ]
+      },
+      "compute_s": 0.29541316700000003,
+      "ns_per_op_min": 418.20951872657065,
+      "ns_per_op_median": 418.6966289907924,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 881609,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.040058333,
+        "median_s": 0.040774208,
+        "samples_s": [
+          0.040058333,
+          0.040774208,
+          0.040919125
+        ]
+      },
+      "total": {
+        "min_s": 0.304375708,
+        "median_s": 0.305805292,
+        "samples_s": [
+          0.304375708,
+          0.305805292,
+          0.307101959
+        ]
+      },
+      "compute_s": 0.264317375,
+      "ns_per_op_min": 299.8124735568716,
+      "ns_per_op_median": 300.62202631778945,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 898856,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.04085475,
+        "median_s": 0.041821,
+        "samples_s": [
+          0.042414916,
+          0.04085475,
+          0.041821
+        ]
+      },
+      "total": {
+        "min_s": 0.332592875,
+        "median_s": 0.333497292,
+        "samples_s": [
+          0.333497292,
+          0.332592875,
+          0.336546958
+        ]
+      },
+      "compute_s": 0.291738125,
+      "ns_per_op_min": 324.56603171141984,
+      "ns_per_op_median": 324.49724093736927,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 306165,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.032792917,
+        "median_s": 0.034301833,
+        "samples_s": [
+          0.034301833,
+          0.034317917,
+          0.032792917
+        ]
+      },
+      "total": {
+        "min_s": 0.330939625,
+        "median_s": 0.333265333,
+        "samples_s": [
+          0.334962917,
+          0.333265333,
+          0.330939625
+        ]
+      },
+      "compute_s": 0.29814670800000004,
+      "ns_per_op_min": 973.8105531331147,
+      "ns_per_op_median": 976.4783695066386,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 4759868,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.046557667,
+        "median_s": 0.047163542,
+        "samples_s": [
+          0.047311542,
+          0.046557667,
+          0.047163542
+        ]
+      },
+      "total": {
+        "min_s": 0.324387792,
+        "median_s": 0.325394833,
+        "samples_s": [
+          0.325394833,
+          0.324387792,
+          0.326526917
+        ]
+      },
+      "compute_s": 0.27783012500000004,
+      "ns_per_op_min": 58.369291963558666,
+      "ns_per_op_median": 58.45357287218889,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 194262,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.018599875,
+        "median_s": 0.019354916,
+        "samples_s": [
+          0.019573416,
+          0.019354916,
+          0.018599875
+        ]
+      },
+      "total": {
+        "min_s": 0.310745208,
+        "median_s": 0.311523834,
+        "samples_s": [
+          0.311523834,
+          0.312552417,
+          0.310745208
+        ]
+      },
+      "compute_s": 0.292145333,
+      "ns_per_op_min": 1503.872774912232,
+      "ns_per_op_median": 1503.994183113527,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 116076853,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.002709917,
+        "median_s": 0.002846875,
+        "samples_s": [
+          0.002846875,
+          0.002930709,
+          0.002709917
+        ]
+      },
+      "total": {
+        "min_s": 0.292789958,
+        "median_s": 0.295141375,
+        "samples_s": [
+          0.292789958,
+          0.296562042,
+          0.295141375
+        ]
+      },
+      "compute_s": 0.290080041,
+      "ns_per_op_min": 2.499034333744386,
+      "ns_per_op_median": 2.518111858184163,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 46491286,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.062138667,
+        "median_s": 0.062150917,
+        "samples_s": [
+          0.0623205,
+          0.062138667,
+          0.062150917
+        ]
+      },
+      "total": {
+        "min_s": 0.239338375,
+        "median_s": 0.241056333,
+        "samples_s": [
+          0.241056333,
+          0.241968875,
+          0.239338375
+        ]
+      },
+      "compute_s": 0.17719970799999998,
+      "ns_per_op_min": 3.8114606681346688,
+      "ns_per_op_median": 3.8481494360039856,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 6652,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.126653375,
+        "median_s": 0.126768375,
+        "samples_s": [
+          0.126653375,
+          0.126768375,
+          0.127340125
+        ]
+      },
+      "total": {
+        "min_s": 0.416802583,
+        "median_s": 0.418199167,
+        "samples_s": [
+          0.416802583,
+          0.418199167,
+          0.4209945
+        ]
+      },
+      "compute_s": 0.290149208,
+      "ns_per_op_min": 43618.34155141311,
+      "ns_per_op_median": 43811.003006614555,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 4954,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.28725825,
+        "median_s": 0.287536542,
+        "samples_s": [
+          0.28725825,
+          0.29383925,
+          0.287536542
+        ]
+      },
+      "total": {
+        "min_s": 0.584971292,
+        "median_s": 0.585606459,
+        "samples_s": [
+          0.584971292,
+          0.586412417,
+          0.585606459
+        ]
+      },
+      "compute_s": 0.297713042,
+      "ns_per_op_min": 60095.48687928946,
+      "ns_per_op_median": 60167.52462656438,
+      "load_ms": 1.434,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 12164,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.194614834,
+        "median_s": 0.195888667,
+        "samples_s": [
+          0.194614834,
+          0.195888667,
+          0.196298417
+        ]
+      },
+      "total": {
+        "min_s": 0.390305917,
+        "median_s": 0.396150166,
+        "samples_s": [
+          0.396877709,
+          0.390305917,
+          0.396150166
+        ]
+      },
+      "compute_s": 0.19569108300000002,
+      "ns_per_op_min": 16087.724679381785,
+      "ns_per_op_median": 16463.457661953307,
+      "load_ms": 8.17,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 11826,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.122402625,
+        "median_s": 0.122687542,
+        "samples_s": [
+          0.122402625,
+          0.123258,
+          0.122687542
+        ]
+      },
+      "total": {
+        "min_s": 0.370972541,
+        "median_s": 0.372970791,
+        "samples_s": [
+          0.373791166,
+          0.372970791,
+          0.370972541
+        ]
+      },
+      "compute_s": 0.248569916,
+      "ns_per_op_min": 21018.934212751563,
+      "ns_per_op_median": 21163.812700828687,
+      "load_ms": 4.15,
+      "verification": "match"
+    },
+    {
+      "workload": "kernel/wordcount",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 25866,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.141444458,
+        "median_s": 0.14329275,
+        "samples_s": [
+          0.143648291,
+          0.141444458,
+          0.14329275
+        ]
+      },
+      "total": {
+        "min_s": 0.39747575,
+        "median_s": 0.403788708,
+        "samples_s": [
+          0.403788708,
+          0.39747575,
+          0.404922083
+        ]
+      },
+      "compute_s": 0.256031292,
+      "ns_per_op_min": 9898.372071445141,
+      "ns_per_op_median": 10070.979587102762,
+      "load_ms": 10.284,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.009808166,
+        "median_s": 0.009982833,
+        "samples_s": [
+          0.009982833,
+          0.010090208,
+          0.009808166
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.183706209,
+        "median_s": 0.184049542,
+        "samples_s": [
+          0.184049542,
+          0.184369333,
+          0.183706209
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.256417917,
+        "median_s": 0.260207541,
+        "samples_s": [
+          0.26175725,
+          0.256417917,
+          0.260207541
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.336017417,
+        "median_s": 0.336726792,
+        "samples_s": [
+          0.336017417,
+          0.336726792,
+          0.344370875
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.567621625,
+        "median_s": 0.572591083,
+        "samples_s": [
+          0.567621625,
+          0.572920416,
+          0.572591083
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.823231834,
+        "median_s": 0.829258792,
+        "samples_s": [
+          0.823231834,
+          0.829258792,
+          0.832359208
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.118162708,
+        "median_s": 0.119374708,
+        "samples_s": [
+          0.119374708,
+          0.1195995,
+          0.118162708
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.004024625,
+        "median_s": 0.004377041,
+        "samples_s": [
+          0.004822167,
+          0.004377041,
+          0.004024625
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.131696084,
+        "median_s": 0.132995417,
+        "samples_s": [
+          0.132995417,
+          0.134370917,
+          0.131696084
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 1.438650959,
+        "median_s": 1.44232875,
+        "samples_s": [
+          1.438650959,
+          1.44232875,
+          1.444086041
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.530980958,
+        "median_s": 0.551709208,
+        "samples_s": [
+          0.551709208,
+          0.530980958,
+          0.55247675
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 280.755,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.977728333,
+        "median_s": 0.982770792,
+        "samples_s": [
+          0.982770792,
+          0.984422625,
+          0.977728333
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 476.669,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.251902417,
+        "median_s": 0.257838625,
+        "samples_s": [
+          0.258156625,
+          0.257838625,
+          0.251902417
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 109.032,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.283792375,
+        "median_s": 0.285857,
+        "samples_s": [
+          0.283792375,
+          0.2935635,
+          0.285857
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 86.501,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.01756725,
+        "median_s": 0.017667042,
+        "samples_s": [
+          0.018484083,
+          0.01756725,
+          0.017667042
+        ]
+      },
+      "total": {
+        "min_s": 0.075946459,
+        "median_s": 0.076146291,
+        "samples_s": [
+          0.075946459,
+          0.076146291,
+          0.07616425
+        ]
+      },
+      "compute_s": 0.058379208999999994,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.712472541,
+        "median_s": 0.714885083,
+        "samples_s": [
+          0.715028292,
+          0.712472541,
+          0.714885083
+        ]
+      },
+      "total": {
+        "min_s": 35.083720583,
+        "median_s": 35.093197833,
+        "samples_s": [
+          35.083720583,
+          35.154458,
+          35.093197833
+        ]
+      },
+      "compute_s": 34.371248042000005,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.787210666,
+        "median_s": 0.792703583,
+        "samples_s": [
+          0.792703583,
+          0.796979458,
+          0.787210666
+        ]
+      },
+      "total": {
+        "min_s": 26.873249166,
+        "median_s": 26.880222292,
+        "samples_s": [
+          26.880222292,
+          26.936023125,
+          26.873249166
+        ]
+      },
+      "compute_s": 26.0860385,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.904174208,
+        "median_s": 0.916442208,
+        "samples_s": [
+          0.916442208,
+          0.917840792,
+          0.904174208
+        ]
+      },
+      "total": {
+        "min_s": 32.643329917,
+        "median_s": 32.713185583,
+        "samples_s": [
+          32.726104667,
+          32.643329917,
+          32.713185583
+        ]
+      },
+      "compute_s": 31.739155709000002,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 2.185977625,
+        "median_s": 2.195004542,
+        "samples_s": [
+          2.213089,
+          2.185977625,
+          2.195004542
+        ]
+      },
+      "total": {
+        "min_s": 207.770710792,
+        "median_s": 208.905032541,
+        "samples_s": [
+          207.770710792,
+          208.905032541,
+          213.488856917
+        ]
+      },
+      "compute_s": 205.584733167,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 3.2162565,
+        "median_s": 3.217726625,
+        "samples_s": [
+          3.224511583,
+          3.217726625,
+          3.2162565
+        ]
+      },
+      "total": {
+        "min_s": 17.398414125,
+        "median_s": 17.470420875,
+        "samples_s": [
+          17.470420875,
+          17.398414125,
+          17.533059042
+        ]
+      },
+      "compute_s": 14.182157624999999,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.471460292,
+        "median_s": 0.471783959,
+        "samples_s": [
+          0.4720075,
+          0.471460292,
+          0.471783959
+        ]
+      },
+      "total": {
+        "min_s": 113.848508583,
+        "median_s": 113.859951083,
+        "samples_s": [
+          113.848508583,
+          113.859951083,
+          114.183875209
+        ]
+      },
+      "compute_s": 113.377048291,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.007886833,
+        "median_s": 0.008494333,
+        "samples_s": [
+          0.008631125,
+          0.008494333,
+          0.007886833
+        ]
+      },
+      "total": {
+        "min_s": 0.17504625,
+        "median_s": 0.175554959,
+        "samples_s": [
+          0.176150625,
+          0.175554959,
+          0.17504625
+        ]
+      },
+      "compute_s": 0.16715941699999998,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "reps": 3,
+      "cold_start": {
+        "min_s": 0.260791625,
+        "median_s": 0.264546875,
+        "samples_s": [
+          0.265545083,
+          0.260791625,
+          0.264546875
+        ]
+      },
+      "total": {
+        "min_s": 6.53211925,
+        "median_s": 6.585628167,
+        "samples_s": [
+          6.665188,
+          6.585628167,
+          6.53211925
+        ]
+      },
+      "compute_s": 6.271327625,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-bash",
+      "status": "skipped",
+      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "pywasm-cpython",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "pywasm-pypy",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wardite",
+      "status": "skipped",
+      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wardite-yjit",
+      "status": "skipped",
+      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    }
+  ]
+}

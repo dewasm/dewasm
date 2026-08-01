@@ -15,7 +15,7 @@ const DEFAULT_ITER_CAP: u64 = 100_000_000;
 
 /// Per-kernel iteration caps, in units of the kernel's own `<iterations>` parameter. A **ceiling**, not a fixed count: the harness calibrates each runner separately (a single fixed count is useless across a ~1000x spread of runner speeds) and stops at whichever comes first, the compute target or this cap.
 ///
-/// So the cap only ever binds the *fastest* runners — nothing else gets near it — and its job is to stop a kernel whose per-iteration cost is not constant (one that allocates, or grows a buffer) from being driven somewhere silly. Each entry is generous enough that wasmtime still reaches the compute target: the micro-kernels' unit is one trip through a tight loop (~2 ns there), the C kernels' unit is a whole hash / image / document pass. These are first-cut numbers — retune them against the real kernels once `benchmarks/kernels/build.sh` has produced them.
+/// So the cap only ever binds the *fastest* runners — nothing else gets near it — and its job is to stop a kernel whose per-iteration cost is not constant (one that allocates, or grows a buffer) from being driven somewhere silly. Each entry is generous enough that wasmtime still reaches the compute target: the micro-kernels' unit is one trip through a tight loop (~2 ns there), the C kernels' unit is a whole hash / image / document pass. Each cap is set to roughly 3x the iteration count wasmtime needs to reach the default 300 ms compute target at its measured per-iteration cost, so raising `--target-ms` a little does not silently start clipping the baseline. Retune whenever a kernel's body changes.
 const KERNEL_ITER_CAPS: &[(&str, u64)] = &[
     ("i32_alu", 500_000_000),
     ("i64_alu", 500_000_000),
@@ -23,19 +23,21 @@ const KERNEL_ITER_CAPS: &[(&str, u64)] = &[
     ("mem_rw", 500_000_000),
     ("call_direct", 500_000_000),
     ("call_indirect", 500_000_000),
-    ("sha256", 2_000_000),
-    ("mandelbrot", 200_000),
-    ("wordcount", 2_000_000),
+    ("sha256", 10_000_000),
+    ("mandelbrot", 20_000_000),
+    ("wordcount", 500_000_000),
 ];
 
-/// The SQL script the `sqlite3_query` app case feeds to `sqlite3-shell.wasm`: build a 20k-row table inside one transaction (a recursive CTE, so the work is the engine's, not the parser's), then an aggregate and a `LIKE` scan over it. `.quit` is implicit at EOF, but stating it keeps the two sqlite cases visibly the same shape.
+/// The SQL script the `sqlite3_query` app case feeds to `sqlite3-shell.wasm`: build a 100k-row table inside one transaction (a recursive CTE, so the work is the engine's, not the parser's), then an aggregate and a `LIKE` scan over it.
+///
+/// The row count exists to make wasmtime resolvable: at 20k rows it finished the whole script in ~30 ms, nearly all of it process startup, leaving the baseline indistinguishable from noise and every ratio against it meaningless. Unlike a kernel this case is not calibrated per runner — a *fixed* script is what makes it a realistic workload rather than a synthetic one — so the size is one compromise for everybody, and it is why the slowest runners are excluded rather than measured at their own size.
 const SQLITE_QUERY_SQL: &str = "\
 .bail on
 PRAGMA journal_mode = memory;
 CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT, v REAL);
 BEGIN;
 INSERT INTO t(id, name, v)
-  WITH RECURSIVE seq(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 20000)
+  WITH RECURSIVE seq(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 100000)
   SELECT i, 'row-' || i, i * 1.5 FROM seq;
 COMMIT;
 SELECT count(*), sum(v), avg(v) FROM t;
@@ -43,8 +45,10 @@ SELECT count(*) FROM t WHERE name LIKE '%7%';
 .quit
 ";
 
-/// The cold-start script: load the 1.3 MB module, start the shell, quit. No SQL at all, so the whole wall time is process startup + module load + instantiation — the one axis on which an interpreter legitimately beats an AOT compiler, and the reason `t(0)` is reported as its own column everywhere.
-const SQLITE_QUIT_SQL: &str = ".quit\n";
+/// The query case's zero run: load the 1.3 MB module, start the shell, run one trivial query, quit. Subtracted from the timed run like a kernel's `<iterations> = 0`, and reported on its own as the cold-start figure for the largest module in the suite — the axis where an interpreter legitimately beats an AOT compiler, since it reads wasm while a dewasm backend must first parse megabytes of generated source.
+///
+/// `SELECT 1;` is here for the oracle, not the timing. `.quit` alone produces no stdout at all, which made the cross-check vacuous: a runner that loaded nothing and exited 0 matched wasmtime's empty output exactly. That is not hypothetical — wardite passed this way until the query was added, and then failed outright.
+const SQLITE_QUIT_SQL: &str = "SELECT 1;\n.quit\n";
 
 /// What a workload is and how to invoke it.
 pub enum Kind {
@@ -144,61 +148,65 @@ fn discovered_kernel_stems() -> Vec<String> {
         .collect()
 }
 
-/// The declared app cases. SQLite carries the suite's realistic workload: one case does real SQL work, the other measures nothing but load, and the pair also lets the query case subtract its own cold start.
+/// The declared app cases: `cowsay` for startup on a mid-sized module, `sqlite3_query` for sustained real work.
+///
+/// Together with each kernel's `t(0)` these give three module sizes on the startup axis — ~20 KB kernel, 772 KB cowsay, 1.3 MB sqlite (the query case's own `t(0)`) — which is what makes the startup comparison say something. A dewasm backend must parse generated source that grows with the module, while an interpreter only reads the wasm, so the two curves cross somewhere; one module size cannot show that and would just report whichever side of the crossing it happened to land on.
+///
+/// cowsay is the case where the interpreters can actually compete: they run it correctly (verified byte-identical against wasmtime), it is large enough for load cost to dominate, and it finishes fast enough that every runner in the matrix can be measured on it.
 fn app_workloads() -> Vec<Workload> {
     let cache = apps_cache_dir();
     vec![
+        Workload {
+            label: "app/cowsay".to_string(),
+            module_name: "cowsay".to_string(),
+            wasm: cache.join("cowsay.wasm"),
+            kind: Kind::App {
+                args: ["Hello", "from", "dewasm!"]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
+                stdin: String::new(),
+                // No zero run: cowsay's work is a few milliseconds of text formatting, so the whole wall time already *is* the startup measurement this case exists for.
+                zero_stdin: None,
+            },
+            exclude: &[],
+        },
         Workload {
             label: "app/sqlite3_query".to_string(),
             module_name: "sqlite3_shell".to_string(),
             wasm: cache.join("sqlite3-shell.wasm"),
             kind: Kind::App {
-                args: Vec::new(),
+                // `-batch` forces non-interactive mode. Without it the shell decides how to behave from `isatty`, and a runtime that misreports the standard fds gets a different program: pywasm reports all three as character devices (`wasi.py:429`), so the shell printed a version banner and rendered results as a box-drawing table where wasmtime printed a bare value. `-batch` removes that confound for every runner rather than special-casing one.
+                args: ["-batch", ":memory:"]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
                 stdin: SQLITE_QUERY_SQL.to_string(),
                 zero_stdin: Some(SQLITE_QUIT_SQL.to_string()),
             },
             exclude: SQLITE_QUERY_EXCLUDES,
         },
-        Workload {
-            label: "app/sqlite3_cold_start".to_string(),
-            module_name: "sqlite3_shell".to_string(),
-            wasm: cache.join("sqlite3-shell.wasm"),
-            kind: Kind::App {
-                args: Vec::new(),
-                stdin: SQLITE_QUIT_SQL.to_string(),
-                zero_stdin: None,
-            },
-            exclude: SQLITE_COLD_EXCLUDES,
-        },
     ]
 }
 
-/// Runners excluded from the SQL query case. Every entry is a *declared* judgement about cost, not a measurement — revisit each after the first full run rather than trusting the wording. They are reported as skipped-with-reason, so an excluded cell never reads as a covered one.
+/// Runners excluded from the SQL query case.
+///
+/// Only the Bash entry is a cost judgement. The four interpreter entries are **measured facts**: neither pure-language interpreter can run this program at all, which is a more interesting result than a slow number would have been and is stated rather than left as an empty cell. An earlier draft of this table guessed that all four merely "do not finish in a practical time"; that was wrong, and the harness's own cross-check is what proved it.
 const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
     (
         "dewasm-bash",
-        "excluded: bash runs ~1000x slower than wasmtime, so 20k SQL inserts do not finish in a practical time",
+        "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time",
     ),
-    (
-        "pywasm-cpython",
-        "excluded: a wasm interpreter written in Python over a 1.3 MB module does not finish 20k SQL inserts in a practical time",
-    ),
-    (
-        "pywasm-pypy",
-        "excluded: same interpreter, same order of magnitude — see pywasm-cpython",
-    ),
-    (
-        "wardite",
-        "excluded: a wasm interpreter written in Ruby over a 1.3 MB module does not finish 20k SQL inserts in a practical time",
-    ),
-    (
-        "wardite-yjit",
-        "excluded: same interpreter, same order of magnitude — see wardite",
-    ),
+    ("pywasm-cpython", PYWASM_SQLITE_REASON),
+    ("pywasm-pypy", PYWASM_SQLITE_REASON),
+    ("wardite", WARDITE_SQLITE_REASON),
+    ("wardite-yjit", WARDITE_SQLITE_REASON),
 ];
 
-/// Runners excluded from the cold-start case. Only Bash: sourcing its generated program *is* the load, and that program is tens of MB, so the case measures the shell's parser rather than a comparable load path. The wasm interpreters stay in — cold start is exactly where they are expected to win.
-const SQLITE_COLD_EXCLUDES: &[(&str, &str)] = &[(
-    "dewasm-bash",
-    "excluded: the generated Bash program is tens of MB, so this measures the shell's parser rather than a comparable module load",
-)];
+/// Why wardite cannot run the sqlite shell. It loads the module fine (~440 ms) and handles a bare `.quit`, but any actual query dies with `Wardite::EvalError: maybe empty or invalid stack` from `convert.generated.rb:200`. Worth stating rather than hiding: it is the concrete limit of what a pure-Ruby interpreter reaches today, and it is why the cold-start script runs `SELECT 1;` — under `.quit` alone wardite exited 0 with empty output, matching wasmtime's empty output and passing a check it had not actually earned.
+const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
+
+/// Why pywasm is not measured on the SQL case. It *can* run this program: under `-batch` its output is byte-identical to wasmtime's, and saying otherwise would be false — "pure-Python wasm cannot run SQLite" is not the finding here. It is excluded on measured cost: ~17.9 ms per row, flat across sizes (19 s at 1k rows, 89 s at 5k, 358 s at 20k), putting the 100k-row script near half an hour per sample.
+///
+/// The row count cannot simply be lowered to accommodate it, which is the real tension. At 5k rows wasmtime finishes the whole script in ~20 ms, nearly all of it process startup, so the baseline stops being resolvable exactly where pywasm becomes affordable. No single size serves both, and unlike a kernel this workload is deliberately not calibrated per runner — a fixed script is what makes it a realistic case rather than a synthetic one.
+const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";

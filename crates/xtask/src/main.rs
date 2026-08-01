@@ -44,7 +44,8 @@ Commands:
                                cases) on every dewasm backend, on wasmtime, and
                                on the pywasm/wardite interpreters. Writes a
                                dated result file to benchmarks/results/ and
-                               regenerates docs/benchmarks.md. An optional
+                               regenerates docs/benchmarks.md plus the SVG
+                               charts it embeds (docs/benchmarks/). An optional
                                substring `filter` limits it to matching
                                workload/runner labels (wasmtime always runs, as
                                the baseline and the correctness reference); an
@@ -61,7 +62,10 @@ Commands:
                                --target-ms MS (compute time the iteration
                                calibrator aims at, default 300),
                                --timeout SECS (per-process ceiling, default
-                               900).
+                               900), --render FILE (re-render
+                               docs/benchmarks.md and its charts from a stored
+                               benchmarks/results/*.json without measuring
+                               anything, for when only the wording changed).
 ";
 
 fn main() -> Result<()> {

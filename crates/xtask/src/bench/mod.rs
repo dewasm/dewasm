@@ -4,13 +4,15 @@
 //!
 //! The layout mirrors what has to be got right:
 //!
-//! * [`workload`] — what is measured: `<module> <iterations>` kernels discovered from `benchmarks/cache/`, and real cached apps with fixed argv/stdin (SQLite doing real SQL, and the same shell fed only `.quit` as a cold-start case).
+//! * [`workload`] — what is measured: `<module> <iterations>` kernels discovered from `benchmarks/cache/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
 //! * [`runner`] — where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
 //! * [`measure`] — how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
 //! * [`report`] — the JSON record and the markdown rendering of it.
+//! * [`chart`] — the static SVGs `docs/benchmarks.md` embeds, regenerated from the same record.
 //!
 //! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one (ADR-15's fail-loud-not-skip policy).
 
+mod chart;
 mod measure;
 mod report;
 mod runner;
@@ -41,6 +43,8 @@ struct Options {
     target: Duration,
     timeout: Duration,
     list: bool,
+    /// Re-render `docs/benchmarks.md` from a stored result file instead of measuring. A sweep takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
+    render: Option<PathBuf>,
 }
 
 impl Options {
@@ -51,6 +55,7 @@ impl Options {
             target: Duration::from_millis(DEFAULT_TARGET_MS),
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_S),
             list: false,
+            render: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -59,6 +64,7 @@ impl Options {
             };
             match arg.as_str() {
                 "--list" => opts.list = true,
+                "--render" => opts.render = Some(PathBuf::from(value("--render")?)),
                 "--reps" => {
                     opts.reps = value("--reps")?
                         .parse()
@@ -93,6 +99,17 @@ impl Options {
 /// Entry point for the `bench` subcommand.
 pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
     let opts = Options::parse(args)?;
+
+    // Re-rendering needs neither the runner probes nor the workloads on disk: everything it reports already lives in the stored record.
+    if let Some(path) = &opts.render {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", display_path(path)))?;
+        let report: report::Report = serde_json::from_str(&text)
+            .with_context(|| format!("{} is not a bench result file", display_path(path)))?;
+        write_doc(&report)?;
+        return Ok(());
+    }
+
     let runners = runner::runners();
     let workloads = workload::workloads();
 
@@ -258,8 +275,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
 
     let json_path = results_dir().join(format!("{}.json", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
-    let doc_path = docs_dir().join("benchmarks.md");
-    write_file(&doc_path, &report::render_doc(&report))?;
+    write_doc(&report)?;
 
     let failures: Vec<&Cell> = report
         .results
@@ -279,6 +295,25 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
         failures.len(),
         json_path.display()
     );
+}
+
+/// The doc half of the output: the charts under `docs/benchmarks/`, then `docs/benchmarks.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
+fn write_doc(report: &report::Report) -> Result<()> {
+    let charts = chart::charts(report);
+    for chart in &charts {
+        write_file(
+            &charts_dir().join(format!("{}.svg", chart.stem)),
+            &chart.light,
+        )?;
+        write_file(
+            &charts_dir().join(format!("{}-dark.svg", chart.stem)),
+            &chart.dark,
+        )?;
+    }
+    write_file(
+        &docs_dir().join("benchmarks.md"),
+        &report::render_doc(report, &charts),
+    )
 }
 
 /// Measure every selected runner for one workload, appending a [`Cell`] per pair — including the skips, which is what keeps a gap from reading as coverage.
@@ -546,6 +581,11 @@ fn results_dir() -> PathBuf {
 
 fn docs_dir() -> PathBuf {
     repo_root().join("docs")
+}
+
+/// `docs/benchmarks/` — the generated SVG charts `docs/benchmarks.md` embeds.
+fn charts_dir() -> PathBuf {
+    docs_dir().join("benchmarks")
 }
 
 /// `examples/apps/cache/`, where the app workloads' modules live (ADR-9).

@@ -12,6 +12,7 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 | [docs/apps-audit.md](apps-audit.md) | The real-world app gate record and feature verdicts | Contributors, evaluators | By hand |
 | [docs/testing.md](testing.md) | What `cargo test` needs and why it fails loud | Contributors | By hand |
 | [docs/related-work.md](related-work.md) | Comparison with prior art | Evaluators | By hand |
+| [docs/benchmarks.md](benchmarks.md) | Measured performance against wasmtime, pywasm, and wardite | Evaluators | **Generated — never hand-edit** |
 | [docs/adr/](adr/README.md) | Design decisions with rationale and rejected alternatives | Contributors, future maintainers | By hand (via the `adr-author` skill) |
 
 ## Rules
@@ -26,3 +27,4 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 - A contributor-facing setup requirement → `docs/testing.md`.
 - A design decision → a new ADR (see [docs/adr/README.md](adr/README.md)).
 - A new real-world app target → an audited row in `docs/apps-audit.md`.
+- A performance number → a workload under `benchmarks/`, measured by `cargo xtask bench`. Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload ([ADR-57](adr/57-benchmark-harness.md)).
