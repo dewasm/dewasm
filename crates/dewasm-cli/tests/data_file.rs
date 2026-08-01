@@ -1,4 +1,4 @@
-//! End-to-end coverage for `--data-file` data-segment externalization (ADR-37). For Ruby, Go, Python and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
+//! End-to-end coverage for `--data-file` data-segment externalization (ADR-37). For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
 //!
 //! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's tier convention (ADR-48) for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
 
@@ -7,6 +7,7 @@ use std::process::{Command, Output};
 
 use dewasm_backend_go::find_go;
 use dewasm_backend_java::{find_java, find_javac};
+use dewasm_backend_perl::find_perl;
 use dewasm_backend_python::find_python;
 use dewasm_backend_ruby::find_ruby;
 
@@ -118,6 +119,19 @@ fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
         .current_dir(prog.parent().unwrap())
         .output()
         .expect("spawn python");
+    (out.stdout, out.status.code().unwrap_or(-1))
+}
+
+/// Run a Perl program from its own directory (so the sidecar, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
+fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
+    let perl = find_perl()
+        .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md");
+    let out = Command::new(perl)
+        .arg(prog)
+        .args(args)
+        .current_dir(prog.parent().unwrap())
+        .output()
+        .expect("spawn perl");
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
@@ -335,6 +349,67 @@ fn python_data_file_matches_embedded() {
 
     let (out_e, code_e) = run_python(&embedded, &[]);
     let (out_x, code_x) = run_python(&ext, &[]);
+    assert_eq!(out_e, FIXTURE_STDOUT.as_bytes());
+    assert_eq!(
+        out_e, out_x,
+        "stdout differs between embedded and externalized"
+    );
+    assert_eq!(code_e, 0);
+    assert_eq!(code_e, code_x);
+}
+
+#[test]
+fn perl_data_file_matches_embedded() {
+    let dir = tempdir("perl");
+    let wat = dir.join("mod.wat");
+    write(&wat, &fixture_wat());
+    let watp = wat.to_str().unwrap();
+
+    let embedded = dir.join("embedded.pl");
+    let ext = dir.join("ext.pl");
+    let sidecar = dir.join("ext.bin");
+
+    let e = run_dewasm(&[
+        watp,
+        "-t",
+        "perl",
+        "-m",
+        "standalone",
+        "-o",
+        embedded.to_str().unwrap(),
+    ]);
+    assert!(
+        e.status.success(),
+        "embedded convert: {}",
+        String::from_utf8_lossy(&e.stderr)
+    );
+    let x = run_dewasm(&[
+        watp,
+        "-t",
+        "perl",
+        "-m",
+        "standalone",
+        "-o",
+        ext.to_str().unwrap(),
+        "--data-file",
+        sidecar.to_str().unwrap(),
+    ]);
+    assert!(
+        x.status.success(),
+        "data-file convert: {}",
+        String::from_utf8_lossy(&x.stderr)
+    );
+
+    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    let src_embedded = std::fs::metadata(&embedded).unwrap().len();
+    let src_ext = std::fs::metadata(&ext).unwrap().len();
+    assert!(
+        src_ext < src_embedded,
+        "externalized .pl ({src_ext} B) should be smaller than embedded ({src_embedded} B)"
+    );
+
+    let (out_e, code_e) = run_perl(&embedded, &[]);
+    let (out_x, code_x) = run_perl(&ext, &[]);
     assert_eq!(out_e, FIXTURE_STDOUT.as_bytes());
     assert_eq!(
         out_e, out_x,

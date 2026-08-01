@@ -57,12 +57,11 @@ pub fn bundler() -> &'static RuntimeBundler {
                     close: "",
                     prelude: Some("global/_package"),
                 },
-                // WASI preview 1 lands with the follow-up issue; the scope is declared so its units slot in without bundler changes.
                 RuntimeScope {
                     prefix: "wasi",
                     open: "package Rt::WASI;",
                     close: "",
-                    prelude: None,
+                    prelude: Some("wasi/_package"),
                 },
             ],
             UNIT_SOURCES,
@@ -252,10 +251,44 @@ impl Backend for PerlBackend {
                 RuntimeLinkage::Embedded => format!("{package_name}::Rt"),
                 RuntimeLinkage::Alias(_) => "Rt".to_string(),
             };
+            let wasi = wasi_bundled(module, opts.default_wasi);
             w.line("");
             w.line("package main;");
             w.line("");
-            w.line(format!("my $_inst = {package_name}->new({{}});"));
+            if wasi {
+                // The standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                w.line("use File::Basename ();");
+                w.line("");
+                w.line("my %_preopens;");
+                w.line("my @_guest_args = @ARGV;");
+                w.line("while (@_guest_args) {");
+                w.indent();
+                w.line("my $_a = $_guest_args[0];");
+                w.line("if ($_a eq '--') { shift @_guest_args; last; }");
+                w.line("if ($_a ne '--dir' && rindex($_a, '--dir=', 0) != 0) { last; }");
+                w.line("shift @_guest_args;");
+                w.line("my $_spec;");
+                w.line("if ($_a eq '--dir') {");
+                w.indent();
+                w.line("if (!@_guest_args) { print STDERR \"--dir requires a HOST::GUEST argument\\n\"; exit(1); }");
+                w.line("$_spec = shift @_guest_args;");
+                w.dedent();
+                w.line("} else {");
+                w.indent();
+                w.line("$_spec = substr($_a, 6);");
+                w.dedent();
+                w.line("}");
+                w.line("my $_sep = index($_spec, '::');");
+                w.line("if ($_sep >= 0) { $_preopens{substr($_spec, $_sep + 2)} = substr($_spec, 0, $_sep); }");
+                w.line("else { $_preopens{$_spec} = $_spec; }");
+                w.dedent();
+                w.line("}");
+                w.line(format!(
+                    "my $_inst = {package_name}->new({{}}, args => [File::Basename::basename($0), @_guest_args], env => {{ %ENV }}, preopens => \\%_preopens);"
+                ));
+            } else {
+                w.line(format!("my $_inst = {package_name}->new({{}});"));
+            }
             w.line("eval { $_inst->invoke('_start'); };");
             w.line("if (my $_e = $@) {");
             w.indent();
@@ -344,6 +377,15 @@ const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
+}
+
+/// Whether the generated package will carry the bundled WASI fallback (and so its constructor takes the `args`/`env`/`preopens` options and the standalone main parses `--dir`): any WASI import the runtime has a unit for, with `default_wasi` on.
+fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
+    default_wasi
+        && module
+            .imported_funcs
+            .iter()
+            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
 }
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
@@ -473,11 +515,22 @@ impl<'a> Gen<'a> {
 
     fn initialize(&self, w: &mut CodeWriter) {
         let m = self.module;
+        let wasi_fallback = wasi_bundled(m, self.default_wasi);
         w.line("sub new {");
         w.indent();
-        w.line("my ($class, $imports) = @_;");
+        if wasi_fallback {
+            w.line("my ($class, $imports, %opts) = @_;");
+        } else {
+            w.line("my ($class, $imports) = @_;");
+        }
         w.line("$imports = {} unless defined $imports;");
         w.line("my $self = bless({}, $class);");
+        if wasi_fallback {
+            w.line("$self->{_wasi} = undef;");
+            w.line("$self->{_wasi_args} = $opts{args} // [];");
+            w.line("$self->{_wasi_env} = $opts{env} // {};");
+            w.line("$self->{_wasi_preopens} = $opts{preopens} // {};");
+        }
 
         if let Some(import) = &m.imported_memory {
             w.line(format!(
@@ -529,6 +582,7 @@ impl<'a> Gen<'a> {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
                     self.use_unit(&unit);
+                    self.use_unit("wasi/_package");
                     format!("$self->_wasi_import({})", perl_string(&import.name))
                 } else {
                     "sub { return 52 }".to_string() // ENOSYS: not implemented yet
@@ -632,6 +686,19 @@ impl<'a> Gen<'a> {
             export_entries.join(", ")
         ));
 
+        // Let import providers bind to the fully-constructed instance (ADR-7).
+        if !m.imported_funcs.is_empty() {
+            w.line("for my $_p (values %$imports) {");
+            w.indent();
+            w.line("my $_r = ref($_p);");
+            w.line("$_p->attach($self) if $_r && $_r ne 'HASH' && $_r ne 'ARRAY' && $_r ne 'CODE' && $_p->can('attach');");
+            w.dedent();
+            w.line("}");
+        }
+        if wasi_fallback {
+            w.line("$self->{_wasi}->attach($self) if defined $self->{_wasi};");
+        }
+
         if let Some(start) = m.start {
             w.line(format!("{};", self.call_string(start, &[])));
         }
@@ -691,6 +758,22 @@ impl<'a> Gen<'a> {
         ));
         w.dedent();
         w.line("}");
+        if wasi_bundled(self.module, self.default_wasi) {
+            // The bundled-WASI fallback (ADR-7): constructed lazily on the first unresolved WASI import, so a provider that covers every import keeps it unbuilt.
+            w.line("");
+            w.line("sub _wasi_import {");
+            w.indent();
+            w.line("my ($self, $name) = @_;");
+            w.line(format!(
+                "$self->{{_wasi}} = {}::WASI->new(args => $self->{{_wasi_args}}, env => $self->{{_wasi_env}}, preopens => $self->{{_wasi_preopens}}) unless defined $self->{{_wasi}};",
+                self.rt_name
+            ));
+            w.line("my $wasi = $self->{_wasi};");
+            w.line("my $method = \"wasi_$name\";");
+            w.line("return sub { return $wasi->$method(@_); };");
+            w.dedent();
+            w.line("}");
+        }
     }
 
     fn func_type_symbol(&self, func_idx: u32) -> String {
