@@ -2,13 +2,10 @@
 //!
 //! Java is a compiled backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main` (ADR-30). Java covers full WASI preview 1 incl. the filesystem.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
     libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e,
@@ -17,47 +14,11 @@ use dewasm_test_helper::{
     wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
 };
 
+mod common;
+
+use common::build_java;
+
 pub struct Java;
-
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache (so identical sources compile once) and return its path. `Err(Output)` carries the `javac` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `javac` is a loud failure (ADR-15).
-fn build_java(source: &str) -> Result<PathBuf, Output> {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
-
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    let cache = std::env::temp_dir().join("dewasm-java-cache");
-    std::fs::create_dir_all(&cache).unwrap();
-    let classdir = cache.join(format!("prog-{hash:016x}"));
-
-    if !classdir.join("Main.class").exists() {
-        // Compile into a unique temp dir, then rename onto the cache key so concurrent test threads never hand out a half-written class dir.
-        let tmp = cache.join(format!(
-            "prog-{hash:016x}.{}.{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let src = tmp.join("Main.java");
-        std::fs::write(&src, source).unwrap();
-        let build = Command::new(&javac)
-            .arg("-d")
-            .arg(&tmp)
-            .arg(&src)
-            .output()
-            .expect("spawn javac");
-        if !build.status.success() {
-            return Err(build);
-        }
-        let _ = std::fs::rename(&tmp, &classdir);
-    }
-
-    Ok(classdir)
-}
 
 impl BackendUnderTest for Java {
     fn name(&self) -> &'static str {

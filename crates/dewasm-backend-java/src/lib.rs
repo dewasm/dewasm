@@ -92,14 +92,37 @@ pub fn bundler() -> &'static RuntimeBundler {
 
 /// Locate a `java` launcher (ADR-15: a missing toolchain is a loud failure at the call site, not here). Honors `$DEWASM_JAVA`, then `java` on `PATH`.
 pub fn find_java() -> Option<std::path::PathBuf> {
-    find_tool("DEWASM_JAVA", "java")
+    static JAVA: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    JAVA.get_or_init(|| find_tool("DEWASM_JAVA", "java"))
+        .clone()
 }
 
 /// Locate a `javac` compiler. Honors `$DEWASM_JAVAC`, then `javac` on `PATH`.
 pub fn find_javac() -> Option<std::path::PathBuf> {
-    find_tool("DEWASM_JAVAC", "javac")
+    static JAVAC: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    JAVAC
+        .get_or_init(|| find_tool("DEWASM_JAVAC", "javac"))
+        .clone()
 }
 
+/// The one way dewasm's suites invoke `javac`: the located compiler, tuned for a one-shot compile. A missing `javac` is the loud failure ADR-15 asks for, with the setup instruction in the message.
+///
+/// C2 cannot repay its own compilation cost inside a single ~1 s `javac` run, and N of these JVMs running concurrently — each with two C2 compiler threads and a G1 thread pool sized for the whole machine — is what destroys parallel scaling on a small CI runner. So: cap the JIT at C1, take the serial collector, and stop each JVM from sizing its pools for every core. The heap is deliberately left at the default; the slow tier's qjs/DOOM sources need the headroom.
+///
+/// The `.class` output is byte-identical with and without these flags (verified on the 4.2 MB cowsay and 15 MB qjs standalone sources) — they change only how the JVM runs the compiler.
+pub fn javac_command() -> std::process::Command {
+    let javac =
+        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
+    let mut cmd = std::process::Command::new(javac);
+    cmd.args([
+        "-J-XX:TieredStopAtLevel=1",
+        "-J-XX:+UseSerialGC",
+        "-J-XX:ActiveProcessorCount=1",
+    ]);
+    cmd
+}
+
+/// The probe behind [`find_java`]/[`find_javac`]. Each spawns a JVM (~0.35 s for `javac -version`), so both callers memoize the answer for the process: a test binary asks once per trial, and the toolchain cannot change under a running process.
 fn find_tool(env: &str, default: &str) -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -2281,14 +2304,12 @@ mod units {
     /// The whole runtime — every unit, not just the subset cowsay uses — must be valid Java. Compile the full bundle with `javac` (ADR-15).
     #[test]
     fn all_units_compile_as_java() {
-        let javac =
-            find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
         let source = full_bundle_java().expect("full bundle assembles");
         let dir = std::env::temp_dir().join(format!("dewasm-java-units-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let src = dir.join("Main.java");
         std::fs::write(&src, &source).unwrap();
-        let out = std::process::Command::new(&javac)
+        let out = javac_command()
             .arg("-d")
             .arg(&dir)
             .arg(&src)

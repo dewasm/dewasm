@@ -71,6 +71,12 @@ pub fn bundler() -> &'static RuntimeBundler {
 
 /// Locate a `go` toolchain able to compile generated programs. Honors `$DEWASM_GO`, then `go` on `PATH` (ADR-15: a missing toolchain is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_go() -> Option<std::path::PathBuf> {
+    static GO: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    GO.get_or_init(find_go_uncached).clone()
+}
+
+/// The probe behind [`find_go`], memoized there: it spawns a process per call, and the toolchain cannot change under a running process.
+fn find_go_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(env) = std::env::var("DEWASM_GO") {

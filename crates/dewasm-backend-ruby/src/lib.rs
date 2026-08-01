@@ -76,6 +76,12 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 
 /// Locate a ruby interpreter able to run generated scripts. Unlike `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path search is needed (ruby is expected on `PATH`), but the generated runtime's memory model is `IO::Buffer`-backed (see docs/adr/33-ruby-io-buffer-memory.md), which requires Ruby >= 3.4. Per ADR-15, fail loud with a setup instruction rather than silently skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
+    static RUBY: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    RUBY.get_or_init(find_ruby_uncached).clone()
+}
+
+/// The probe behind [`find_ruby`], memoized there: it spawns a process per call, and the interpreter cannot change under a running process.
+fn find_ruby_uncached() -> Option<std::path::PathBuf> {
     let out = std::process::Command::new("ruby")
         .args(["-e", "print RUBY_VERSION"])
         .output()

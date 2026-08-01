@@ -72,6 +72,12 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 
 /// Locate a bash >= 5 interpreter able to run generated scripts: tries `$DEWASM_BASH`, then `bash` on PATH, then the common Homebrew/local install paths (macOS system bash is 3.2 and does not qualify).
 pub fn find_bash5() -> Option<std::path::PathBuf> {
+    static BASH: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    BASH.get_or_init(find_bash5_uncached).clone()
+}
+
+/// The probe behind [`find_bash5`], memoized there: it spawns a process per candidate per call, and the interpreter cannot change under a running process.
+fn find_bash5_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(env) = std::env::var("DEWASM_BASH") {

@@ -4,14 +4,12 @@
 //! - A JVM `StackOverflowError` is *catchable* (unlike Go's fatal goroutine overflow), so exhaustion maps directly: `check_exhaust` catches it, exactly as Ruby catches `SystemStackError`. No spec-build recursion guard is instrumented into the generated functions — each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later, independent check.
 //! - Type/class declarations cannot live inside a method, so per-module classes are accumulated in the harness's file-scoped `decls` buffer (hoisted ahead of `main`'s body by `assemble`) while only instantiation/assertion statements go in `main`.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::hash::{Hash, Hasher};
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::{run_command_bytes, spec_suite, BackendUnderTest, Converted, SpecBackend};
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
@@ -112,9 +110,9 @@ const CURATED_FILES: &[&str] = &[
     "utf8-invalid-encoding",
 ];
 
-pub struct JavaSpec;
+mod common;
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub struct JavaSpec;
 
 impl BackendUnderTest for JavaSpec {
     fn name(&self) -> &'static str {
@@ -127,39 +125,13 @@ impl BackendUnderTest for JavaSpec {
 
     /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache (identical programs compile once) and run it. A missing `javac`/`java` fails loud (ADR-15); a `javac` failure is surfaced as its `Output` so the harness reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        let javac =
-            find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
-
-        let mut hasher = DefaultHasher::new();
-        source.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let cache = std::env::temp_dir().join("dewasm-java-spec-cache");
-        std::fs::create_dir_all(&cache).unwrap();
-        let classdir = cache.join(format!("spec-{hash:016x}"));
-
-        if !classdir.join("Main.class").exists() {
-            let tmp = cache.join(format!(
-                "spec-{hash:016x}.{}.{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            std::fs::create_dir_all(&tmp).unwrap();
-            let src = tmp.join("Main.java");
-            std::fs::write(&src, source).unwrap();
-            let build = Command::new(&javac)
-                .arg("-d")
-                .arg(&tmp)
-                .arg(&src)
-                .output()
-                .expect("spawn javac");
-            if !build.status.success() {
-                return build;
-            }
-            let _ = std::fs::rename(&tmp, &classdir);
-        }
+        let classdir = match common::build_java(source) {
+            // A compile failure is surfaced as the `javac` `Output` so the harness reports the compile error.
+            Err(build) => return build,
+            Ok(classdir) => classdir,
+        };
 
         run_command_bytes(
             // A generous per-thread stack keeps genuinely deep but terminating recursions (fac, deep br chains) under the limit while a runaway still overflows into a catchable StackOverflowError (ADR-30).

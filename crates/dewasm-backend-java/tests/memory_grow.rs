@@ -1,17 +1,17 @@
 //! Regression tests for issue #27's memory-size overflow: Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes, so a spec-legal size of 32768+ pages (2 GiB+) cannot be represented. `memory.grow` must answer -1 (never `NegativeArraySizeException` from the overflowing int multiply), and instantiating a module whose *initial* size already exceeds the cap must fail with a clear trap, not the raw exception.
 //!
-//! These cases are Java-only (the cap is a JVM artifact — the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here with their own minimal `javac`-and-run plumbing, mirroring the e2e suite's compile-and-execute recipe (ADR-30). A missing `javac`/`java` fails loud (ADR-15).
+//! These cases are Java-only (the cap is a JVM artifact — the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe (ADR-30). A missing `javac`/`java` fails loud (ADR-15).
 
 use std::process::{Command, Output};
 
 use dewasm_backend::Mode;
-use dewasm_backend_java::{find_java, find_javac, JavaBackend};
+use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_test_helper::convert_bytes;
 
-/// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit into a fresh scratch dir keyed by `name`, and run `java -cp <dir> Main`.
-fn convert_and_run(wat: &str, glue: &str, name: &str) -> Output {
-    let javac =
-        find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC) — see docs/testing.md");
+mod common;
+
+/// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit, and run `java -cp <classdir> Main`. Generated code that does not compile is a bug here, not an observable, so a `javac` failure panics.
+fn convert_and_run(wat: &str, glue: &str) -> Output {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
 
     let bytes = wat::parse_str(wat).expect("parse wat");
@@ -20,25 +20,12 @@ fn convert_and_run(wat: &str, glue: &str, name: &str) -> Output {
         convert_bytes(&JavaBackend, &bytes, Mode::Library, "prog")
     );
 
-    let dir = std::env::temp_dir().join(format!("dewasm-java-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let src = dir.join("Main.java");
-    std::fs::write(&src, source).unwrap();
-    let build = Command::new(&javac)
-        .arg("-d")
-        .arg(&dir)
-        .arg(&src)
-        .output()
-        .expect("spawn javac");
-    assert!(
-        build.status.success(),
-        "javac failed:\n{}",
-        String::from_utf8_lossy(&build.stderr)
-    );
+    let classdir = common::build_java(&source).unwrap_or_else(|build| {
+        panic!("javac failed:\n{}", String::from_utf8_lossy(&build.stderr))
+    });
     Command::new(&java)
         .arg("-cp")
-        .arg(&dir)
+        .arg(&classdir)
         .arg("Main")
         .output()
         .expect("spawn java")
@@ -60,7 +47,7 @@ fn grow_beyond_byte_array_cap_returns_minus_one() {
     }
 }
 "#;
-    let out = convert_and_run(wat, glue, "grow-cap");
+    let out = convert_and_run(wat, glue);
     assert!(
         out.status.success(),
         "run failed: {}\n{}",
@@ -85,7 +72,7 @@ fn initial_memory_beyond_byte_array_cap_traps_clearly() {
     }
 }
 "#;
-    let out = convert_and_run(wat, glue, "grow-initial-cap");
+    let out = convert_and_run(wat, glue);
     assert!(
         out.status.success(),
         "run failed: {}\n{}",

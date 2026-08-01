@@ -76,6 +76,12 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
 
 /// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (ADR-15: a missing or too-old interpreter is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_python() -> Option<std::path::PathBuf> {
+    static PYTHON: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+    PYTHON.get_or_init(find_python_uncached).clone()
+}
+
+/// The probe behind [`find_python`], memoized there: it spawns a process per call, and the interpreter cannot change under a running process.
+fn find_python_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(env) = std::env::var("DEWASM_PYTHON") {
