@@ -1,9 +1,15 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
 # Byte-wise binary-safe reads. A file fd (kind 2) copies from its whole-file
-# byte buffer at the current offset (ADR-34); stdin (kind 1, fd 0) reads live via
-# `read -d '' -n 1`, where '' with success is a NUL byte and failure is EOF, and
-# consumes any pushed-back byte first (<p>wpush, set by poll_oneoff). A directory
-# fd is EISDIR. LC_ALL=C keeps reads and ordinal conversion byte-granular.
+# byte buffer at the current offset (ADR-34); stdin (kind 1, fd 0) consumes the
+# pushback buffer first (<p>wpush, a space-separated byte-ordinal list shared
+# with poll_oneoff), then reads live. A non-tty stdin reads via `read -d '' -n
+# 1`, where '' with success is a NUL byte and failure is EOF. A tty stdin
+# instead reads a whole canonical line into the pushback buffer with a plain
+# `read`: bash's `-n`/`-N`/`-t` reads toggle ICANON per call and each restore
+# makes the pty line discipline re-echo the still-pending line, so the tty path
+# must not use them. Bash strings cannot hold NUL, but canonical tty line input
+# never contains one. A directory fd is EISDIR. LC_ALL=C keeps reads and
+# ordinal conversion byte-granular.
 wasi_fd_read() {
   local __p=$1 __fd=$2 __iovs=$3 __iovs_len=$4 __nread_ptr=$5
   local -n __m=${__p}mem
@@ -51,7 +57,8 @@ wasi_fd_read() {
     return 0
   fi
   local -n __push=${__p}wpush
-  local __ch __b __stop=0
+  local __ch __b __stop=0 __line __rc __k __tty=0
+  [[ -t 0 ]] && __tty=1
   for (( __i = 0; __i < __iovs_len && __stop == 0; __i++ )); do
     mem_i32_load "$__p" $(( __iovs + __i * 8 )) || return $?
     __ptr=$R0
@@ -61,8 +68,35 @@ wasi_fd_read() {
     mem_check "$__p" "$__ptr" "$__len" || return $?
     for (( __j = 0; __j < __len; __j++ )); do
       if [[ -n $__push ]]; then
-        __b=$__push
-        __push=''
+        __b=${__push%% *}
+        if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
+      elif (( __tty )); then
+        # Short-read gating as below: only the first byte of the call blocks.
+        # Once the buffered line is drained, return what was delivered rather
+        # than blocking on the next line.
+        if (( __total > 0 )); then
+          __stop=1
+          break
+        fi
+        IFS= read -r __line
+        __rc=$?
+        if (( __rc != 0 )) && [[ -z $__line ]]; then
+          __stop=1 # EOF
+          break
+        fi
+        for (( __k = 0; __k < ${#__line}; __k++ )); do
+          printf -v __b '%d' "'${__line:__k:1}"
+          __push+=${__push:+ }
+          __push+=$__b
+        done
+        if (( __rc == 0 )); then
+          # `read` strips the delimiter; restore it (rc != 0 with content is
+          # EOF without a trailing newline).
+          __push+=${__push:+ }
+          __push+=10
+        fi
+        __b=${__push%% *}
+        if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
       else
         # Short-read gating: only the first byte of the call blocks; each
         # further byte is taken only while input is already available. `read

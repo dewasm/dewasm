@@ -394,7 +394,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}t{idx}sz={}", table.min));
         }
         if wasi_bundled(m, self.default_wasi) {
-            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio fds are preopened and fd_read/fd_write track per-fd offsets. wnext is the next fd; wpush is poll_oneoff's one-byte stdin pushback slot; init_preopens registers the --dir mounts and the filesystem fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
+            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio fds are preopened and fd_read/fd_write track per-fd offsets. wnext is the next fd; wpush is the stdin pushback buffer (a space-separated byte-ordinal list) shared by fd_read and poll_oneoff; init_preopens registers the --dir mounts and the filesystem fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
             w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
             w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
             w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
