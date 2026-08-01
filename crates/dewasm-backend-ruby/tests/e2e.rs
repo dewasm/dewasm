@@ -11,7 +11,8 @@ use dewasm_test_helper::{
     qjs_file_io_e2e, qjs_repl_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
     sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
     sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, zeroperl_eval_e2e,
+    BackendUnderTest,
 };
 
 pub struct Ruby;
@@ -413,6 +414,36 @@ inst.invoke("free", r)
 puts "TS-OK"
 "##;
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
+/// zero-returning `env.call_host_function` import stub (only invoked when the
+/// guest registers host callbacks — this program registers none) and a
+/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex capture
+/// + `printf`, so its stdout is deterministic.
+const RUBY_ZEROPERL_EVAL: &str = r##"
+inst = Zeroperl.new(
+  { "env" => { "call_host_function" => ->(_, _, _) { 0 } } },
+  preopens: { "/dev/null" => "/dev/null" },
+)
+inst.invoke("_initialize")
+rc = inst.invoke("zeroperl_init")
+raise "zeroperl_init rc=#{rc}" unless rc.zero?
+mem = inst.memory
+
+prog = <<~'PERL'
+my $s = "hello world 42";
+if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
+  printf("m=%s|%s|%d sum=%d\n", $1, $2, $3, $3 + 8);
+}
+PERL
+bytes = "#{prog}\0"
+ptr = inst.invoke("malloc", bytes.bytesize)
+mem.init(ptr, bytes, 0, bytes.bytesize)
+inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
+inst.invoke("zeroperl_flush")
+"##;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
@@ -500,6 +531,7 @@ sqlite3_file_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Ruby, RUBY_SQLITE3_CALLBACK);
 pcap_compile_e2e!(Ruby, RUBY_PCAP_COMPILE);
 treesitter_parse_e2e!(Ruby, RUBY_TREESITTER_PARSE);
+zeroperl_eval_e2e!(Ruby, RUBY_ZEROPERL_EVAL);
 
 doom_frame_e2e!(Ruby, RUBY_DOOM_FRAME_GLUE);
 

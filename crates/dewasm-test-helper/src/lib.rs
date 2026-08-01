@@ -23,7 +23,7 @@ pub use apps::{
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, LIBSQLITE3_C_API, PCAP_COMPILE, SQLITE3_CALLBACK_BINDING,
-    SQLITE3_FILE_C_API, TREESITTER_PARSE,
+    SQLITE3_FILE_C_API, TREESITTER_PARSE, ZEROPERL_EVAL,
 };
 pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
@@ -484,6 +484,22 @@ macro_rules! treesitter_parse_e2e {
             #[test]
             fn treesitter_parse() {
                 $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
+            }
+        }
+    };
+}
+
+/// See [`libsqlite3_c_api_e2e!`]. Runs the zeroperl Perl-5.42 eval case [`ZEROPERL_EVAL`](crate::ZEROPERL_EVAL): drives the embedding C API to evaluate a Perl program and pins its stdout. Slow (a 25 MB reactor artifact reconverted to a ~120 MB / ~1M-line program per run), so gated like the other C-API cases.
+#[macro_export]
+macro_rules! zeroperl_eval_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::zeroperl_eval_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn zeroperl_eval() {
+                $crate::run_capi_case(&$lang, &$crate::ZEROPERL_EVAL, $glue);
             }
         }
     };
