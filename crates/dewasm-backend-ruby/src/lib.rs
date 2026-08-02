@@ -522,16 +522,15 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// The trap raised when `IO::Buffer` reports an out-of-range access.
+    fn rt_trap_line(&self, msg: &str) -> String {
+        format!("{}({})", self.rt("trap"), ruby_string(msg))
+    }
+
     /// Reference a module-level runtime helper, recording its unit.
     fn rt(&self, name: &str) -> String {
         self.use_unit(&format!("rt/{name}"));
         format!("Rt.{name}")
-    }
-
-    /// Reference a Memory method, recording its unit.
-    fn mem<'n>(&self, name: &'n str) -> &'n str {
-        self.use_unit(&format!("memory/{name}"));
-        name
     }
 
     /// Resolve one import and validate its kind (ADR-7's mechanism, generalized to every import kind): a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
@@ -563,6 +562,11 @@ impl<'a> Gen<'a> {
         w.line("");
         w.block("def invoke(name, *args)", "end", |w| {
             w.line("@exports.fetch(name).call(*args)");
+            w.line("rescue ArgumentError => e");
+            w.indent();
+            w.line("raise unless e.message.include?(\"beyond end of buffer\")");
+            w.line(self.rt_trap_line("out of bounds memory access"));
+            w.dedent();
         });
         w.line("");
         w.block("def global_get(name)", "end", |w| {
@@ -659,6 +663,15 @@ impl<'a> Gen<'a> {
                     .map(|p| p.to_string())
                     .unwrap_or_else(|| "nil".to_string());
                 w.line(format!("@memory = Rt::Memory.new({}, {})", mem.min_pages, max));
+            }
+            // Loads and stores go straight to this buffer. `Rt::Memory`'s
+            // accessors were a Ruby-level send per access — which neither JIT
+            // inlines — wrapping a bounds check `IO::Buffer` already performs
+            // itself. `grow` calls `IO::Buffer#resize`, which mutates in place,
+            // so the cached object stays correct across growth, including growth
+            // driven by another instance sharing an imported memory.
+            if m.memory.is_some() || m.imported_memory.is_some() {
+                w.line("@mb = @memory.buffer");
             }
             for (i, import) in m.imported_tables.iter().enumerate() {
                 w.line(format!(
@@ -886,6 +899,9 @@ impl<'a> Gen<'a> {
             if !decl.is_empty() {
                 w.line(format!("{decl}nil"));
             }
+            if self.module.memory.is_some() || self.module.imported_memory.is_some() {
+                w.line("mb = @mb");
+            }
             let plan = flat::plan(&func.body, &self.frames.borrow().crossed);
             match plan {
                 None => {
@@ -1044,11 +1060,15 @@ impl<'a> Gen<'a> {
                 value,
                 offset,
             } => {
+                let (ty, mask) = store_inline(*op);
+                let v = match mask {
+                    None => self.expr(value),
+                    Some("f32bits") => format!("{}({})", self.rt("f32_bits"), self.expr(value)),
+                    Some(m) => format!("(({}) & {m})", self.expr(value)),
+                };
                 w.line(format!(
-                    "@memory.{}({}, {})",
-                    self.mem(store_method(*op)),
-                    self.addr(addr, *offset),
-                    self.expr(value)
+                    "mb.set_value(:{ty}, {}, {v})",
+                    self.addr(addr, *offset)
                 ));
             }
             Stmt::Block { label, body } => {
@@ -1395,11 +1415,13 @@ impl<'a> Gen<'a> {
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
-                format!(
-                    "@memory.{}({})",
-                    self.mem(load_method(*op)),
-                    self.addr(addr, *offset)
-                )
+                let (ty, wrap) = load_inline(*op);
+                let core = format!("mb.get_value(:{ty}, {})", self.addr(addr, *offset));
+                match wrap {
+                    None => core,
+                    Some("&m32") => format!("({core} & 0xffffffff)"),
+                    Some(f) => format!("{}({core})", self.rt(f)),
+                }
             }
             Expr::Select { cond, then, els } => {
                 format!(
@@ -1687,38 +1709,39 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-fn load_method(op: LoadOp) -> &'static str {
+/// `IO::Buffer` type and result wrapper for each load, mirroring
+/// `runtime/ruby/units/memory/*.rb`. The bounds check is gone: `IO::Buffer`
+/// raises on an out-of-range access and `invoke` turns that into a trap, which
+/// is where a wasm trap surfaces anyway.
+fn load_inline(op: LoadOp) -> (&'static str, Option<&'static str>) {
     use LoadOp::*;
     match op {
-        I32Load => "i32_load",
-        I64Load => "i64_load",
-        F32Load => "f32_load",
-        F64Load => "f64_load",
-        I32Load8S => "i32_load8_s",
-        I32Load8U => "i32_load8_u",
-        I32Load16S => "i32_load16_s",
-        I32Load16U => "i32_load16_u",
-        I64Load8S => "i64_load8_s",
-        I64Load8U => "i64_load8_u",
-        I64Load16S => "i64_load16_s",
-        I64Load16U => "i64_load16_u",
-        I64Load32S => "i64_load32_s",
-        I64Load32U => "i64_load32_u",
+        I32Load | I64Load32U => ("u32", None),
+        I64Load => ("u64", None),
+        F64Load => ("f64", None),
+        F32Load => ("u32", Some("f32_from_bits")),
+        I32Load8S => ("S8", Some("&m32")),
+        I32Load8U | I64Load8U => ("U8", None),
+        I32Load16S => ("s16", Some("&m32")),
+        I32Load16U | I64Load16U => ("u16", None),
+        I64Load8S => ("S8", Some("m64")),
+        I64Load16S => ("s16", Some("m64")),
+        I64Load32S => ("s32", Some("m64")),
     }
 }
 
-fn store_method(op: StoreOp) -> &'static str {
+/// `IO::Buffer` type and value mask for each store. See [`load_inline`].
+fn store_inline(op: StoreOp) -> (&'static str, Option<&'static str>) {
     use StoreOp::*;
     match op {
-        I32Store => "i32_store",
-        I64Store => "i64_store",
-        F32Store => "f32_store",
-        F64Store => "f64_store",
-        I32Store8 => "i32_store8",
-        I32Store16 => "i32_store16",
-        I64Store8 => "i64_store8",
-        I64Store16 => "i64_store16",
-        I64Store32 => "i64_store32",
+        I32Store => ("u32", None),
+        // The i64 value is wider than the slot; `IO::Buffer` rejects it unmasked.
+        I64Store32 => ("u32", Some("0xffffffff")),
+        I64Store => ("u64", None),
+        F64Store => ("f64", None),
+        F32Store => ("u32", Some("f32bits")),
+        I32Store8 | I64Store8 => ("U8", Some("0xff")),
+        I32Store16 | I64Store16 => ("u16", Some("0xffff")),
     }
 }
 
