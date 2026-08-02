@@ -40,18 +40,20 @@ Commands:
                                wasmtime_test --test apps_wasmtime`) and the
                                per-backend `doom_frame` cases.
     bench [filter] [options]   Run the cross-runtime benchmark suite: every
-                               workload in benchmarks/ (and the SQLite app
-                               cases) on every dewasm backend, on wasmtime, and
-                               on the pywasm/wardite interpreters. Writes a
-                               dated result file to benchmarks/results/ and
-                               regenerates docs/benchmarks.md plus the SVG
-                               charts it embeds (docs/benchmarks/). An optional
-                               substring `filter` limits it to matching
-                               workload/runner labels (wasmtime always runs, as
-                               the baseline and the correctness reference); an
-                               unmatched filter is an error. Needs `wasmtime` on
-                               PATH, the kernels built (benchmarks/kernels/
-                               build.sh), the interpreter deps installed
+                               workload in benchmarks/ (and the app cases) on
+                               every dewasm backend, on wasmtime and the other
+                               native runtimes (wasmer, wasmedge, wazero,
+                               wasm3), and on the pywasm/wardite interpreters.
+                               Writes a dated result file to benchmarks/results/
+                               and regenerates docs/benchmarks.md plus the SVG
+                               charts it embeds (docs/benchmarks/, one per
+                               workload). An optional substring `filter` limits
+                               it to matching workload/runner labels (wasmtime
+                               always runs, as the baseline and the correctness
+                               reference); an unmatched filter is an error.
+                               Needs `wasmtime` on PATH, the microbenchmarks built
+                               (benchmarks/wat/build.sh, benchmarks/c/build.sh),
+                               the interpreter deps installed
                                (benchmarks/setup.sh) and the apps cache
                                populated; anything missing is reported as
                                skipped-with-reason rather than dropped. Not a

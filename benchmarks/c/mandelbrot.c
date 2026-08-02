@@ -15,13 +15,13 @@
  * the escape loop's trip count varies wildly, which is the point.
  */
 
-#include "kernel.h"
+#include "bench.h"
 
 #define MAX_ESCAPE 100
 
-static void kernel_setup(void) {}
+static void bench_setup(void) {}
 
-static u64 kernel_run(u32 iterations) {
+static u64 bench_run(u32 iterations) {
   u64 total = 0;
 
   for (u32 k = 0; k < iterations; k++) {

@@ -6,14 +6,14 @@
  * self-contained and the result depends on the iteration count.
  *
  * SHA-256 is almost entirely 32-bit add / xor / and / rotate, which makes it a
- * realistic counterpart to the synthetic i32_alu micro-kernel: same op mix, but
+ * realistic counterpart to the hand-written wat/i32_alu microbenchmark: same op mix, but
  * with a 64-word message schedule in memory and a 64-round loop the backend
  * cannot keep entirely in registers.
  *
  * The result is the first two state words joined into one u64.
  */
 
-#include "kernel.h"
+#include "bench.h"
 
 static const u32 K[64] = {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -60,9 +60,9 @@ static void compress(u32 state[8], const u8 block[64]) {
   state[4] += e; state[5] += f; state[6] += g; state[7] += h;
 }
 
-static void kernel_setup(void) {}
+static void bench_setup(void) {}
 
-static u64 kernel_run(u32 iterations) {
+static u64 bench_run(u32 iterations) {
   u32 state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
   u8 block[64];

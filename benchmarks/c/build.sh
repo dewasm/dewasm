@@ -1,33 +1,31 @@
 #!/usr/bin/env bash
 
-# Build every benchmark kernel into benchmarks/cache/<id>.wasm, so that every
-# runner in the suite consumes byte-identical modules: the hand-written .wat
-# kernels through wat2wasm, the C kernels through zig cc.
+# Compile the C microbenchmarks into benchmarks/cache/c/<id>.wasm with zig cc, so that
+# every runner in the suite consumes byte-identical modules.
 #
-# Both sources are checked in; the built .wasm is not, like everything else
-# under cache/. Run this after editing a kernel, or via `benchmarks/setup.sh`,
-# which calls it.
+# The .c sources are checked in; the built .wasm is not, like everything else
+# under cache/. Run this after editing one, or via `benchmarks/setup.sh`,
+# which calls it together with the .wat family's benchmarks/wat/build.sh.
 #
 # Idempotent, and cheap enough that it just rebuilds unconditionally.
 
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-mkdir -p cache
+mkdir -p cache/c
 
 # Fail loudly with an actionable message rather than half-building (ADR-15).
 require_tool() {
   command -v "$1" >/dev/null && return
-  echo "benchmarks/kernels/build.sh: $1 not found — $2" >&2
+  echo "benchmarks/c/build.sh: $1 not found — $2" >&2
   exit 1
 }
 
-require_tool wat2wasm "install wabt (brew install wabt / apt install wabt)"
 require_tool zig "install zig (brew install zig), as examples/apps/fetch-and-build.sh also needs"
 
-# --- C kernel flags. Each one is load-bearing; see benchmarks/README.md.
+# --- C microbenchmark flags. Each one is load-bearing; see benchmarks/README.md.
 #
-# -nostdlib      The kernels define their own _start and use no libc. Linking
+# -nostdlib      The microbenchmarks define their own _start and use no libc. Linking
 #                wasi-libc's stdio would import fd_seek and fd_close, which
 #                wardite does not implement — and imports are resolved at
 #                instantiation, so the module would not even load there.
@@ -61,14 +59,8 @@ CFLAGS=(
   '-Wl,-z,stack-size=65536'
 )
 
-for src in kernels/*.wat; do
-  id=$(basename "$src" .wat)
-  wat2wasm "$src" -o "cache/$id.wasm"
-  echo "$id: $src -> cache/$id.wasm"
-done
-
-for src in kernels/src/*.c; do
+for src in c/*.c; do
   id=$(basename "$src" .c)
-  zig cc "${CFLAGS[@]}" -o "cache/$id.wasm" "$src"
-  echo "$id: $src -> cache/$id.wasm"
+  zig cc "${CFLAGS[@]}" -o "cache/c/$id.wasm" "$src"
+  echo "$id: $src -> cache/c/$id.wasm"
 done

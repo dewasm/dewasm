@@ -4,11 +4,11 @@
 //!
 //! The layout mirrors what has to be got right:
 //!
-//! * [`workload`] — what is measured: `<module> <iterations>` kernels discovered from `benchmarks/cache/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
+//! * [`workload`] — what is measured: `<module> <iterations>` microbenchmarks discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
 //! * [`runner`] — where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
 //! * [`measure`] — how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
 //! * [`report`] — the JSON record and the markdown rendering of it.
-//! * [`chart`] — the static SVGs `docs/benchmarks.md` embeds, regenerated from the same record.
+//! * [`chart`] — the static SVGs `docs/benchmarks.md` embeds, one per workload, regenerated from the same record.
 //!
 //! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one (ADR-15's fail-loud-not-skip policy).
 
@@ -24,7 +24,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 
-use crate::bench::measure::{calibrate, describe_diff, repeat, run_once, stats};
+use crate::bench::measure::{calibrate, describe_diff, repeat, repeat_app, run_once, stats};
 use crate::bench::report::{Cell, Measurement, Outcome, Samples, Verification};
 use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
@@ -43,7 +43,7 @@ struct Options {
     target: Duration,
     timeout: Duration,
     list: bool,
-    /// Re-render `docs/benchmarks.md` from a stored result file instead of measuring. A sweep takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
+    /// Re-render `docs/benchmarks.md` from a stored result file instead of measuring. A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
     render: Option<PathBuf>,
 }
 
@@ -129,7 +129,7 @@ pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
     run(&opts, &runners, &workloads)
 }
 
-/// Whether `workload` has at least one runner selected by `filter`. A filter matches on either side of the pair: it can name a workload (`sqlite`), a runner (`bash`), or a family (`kernel/`).
+/// Whether `workload` has at least one runner selected by `filter`. A filter matches on either side of the pair: it can name a workload (`sqlite`), a runner (`bash`), or a family (`wat/`, `c/`, `app/`).
 fn matches(filter: &Option<String>, workload: &Workload, runners: &[Runner]) -> bool {
     let Some(needle) = filter else {
         return true;
@@ -208,10 +208,10 @@ fn list(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()
 /// One line describing a ready workload for `--list`.
 fn describe(workload: &Workload) -> String {
     match &workload.kind {
-        workload::Kind::Kernel { iter_cap } => {
-            format!("kernel, calibrated up to a cap of {iter_cap} iterations")
+        workload::Kind::Micro { iter_cap } => {
+            format!("microbenchmark, calibrated up to a cap of {iter_cap} iterations")
         }
-        workload::Kind::App { args, stdin, .. } => {
+        workload::Kind::App { args, stdin } => {
             format!("app, argv {args:?}, {} bytes of stdin", stdin.len())
         }
     }
@@ -298,22 +298,45 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
 }
 
 /// The doc half of the output: the charts under `docs/benchmarks/`, then `docs/benchmarks.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
+///
+/// Charts not covered by the record are deleted: an orphan SVG looks current while nothing links it. The doc and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);
+    let mut written: Vec<String> = Vec::new();
     for chart in &charts {
-        write_file(
-            &charts_dir().join(format!("{}.svg", chart.stem)),
-            &chart.light,
-        )?;
-        write_file(
-            &charts_dir().join(format!("{}-dark.svg", chart.stem)),
-            &chart.dark,
-        )?;
+        for (suffix, contents) in [("", &chart.light), ("-dark", &chart.dark)] {
+            let name = format!("{}{suffix}.svg", chart.stem);
+            write_file(&charts_dir().join(&name), contents)?;
+            written.push(name);
+        }
     }
+    prune_charts(&written)?;
     write_file(
         &docs_dir().join("benchmarks.md"),
         &report::render_doc(report, &charts),
     )
+}
+
+/// Remove every `.svg` under `docs/benchmarks/` that this render did not write.
+fn prune_charts(written: &[String]) -> Result<()> {
+    let Ok(entries) = std::fs::read_dir(charts_dir()) else {
+        return Ok(());
+    };
+    for path in entries.flatten().map(|entry| entry.path()) {
+        if path.extension().is_none_or(|ext| ext != "svg") {
+            continue;
+        }
+        let stale = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| !written.iter().any(|kept| kept == name));
+        if stale {
+            std::fs::remove_file(&path)
+                .with_context(|| format!("failed to remove the stale chart {}", path.display()))?;
+            println!("removed {}", path.display());
+        }
+    }
+    Ok(())
 }
 
 /// Measure every selected runner for one workload, appending a [`Cell`] per pair — including the skips, which is what keeps a gap from reading as coverage.
@@ -389,7 +412,7 @@ fn skipped(workload: &Workload, runner: &Runner, reason: String) -> Cell {
     }
 }
 
-/// The whole measurement of one (workload, runner) pair: time the zero run, calibrate the iteration count against it, take the timed repetitions, then diff the resulting stdout against wasmtime at the same count.
+/// The whole measurement of one (workload, runner) pair. A microbenchmark times the zero run, calibrates the iteration count against it, then takes the timed repetitions; an app just takes the timed repetitions of one whole run. Either way the resulting stdout is diffed against wasmtime at the same iteration count.
 fn measure_cell(
     opts: &Options,
     workload: &Workload,
@@ -398,8 +421,9 @@ fn measure_cell(
     references: &mut HashMap<u64, Vec<u8>>,
 ) -> Result<Outcome> {
     let launch = workshop.launch(runner, &workload.wasm, &workload.module_name)?;
+    let mut runs_per_sample = None;
     let (iterations, zero, total, last) = match &workload.kind {
-        workload::Kind::Kernel { iter_cap } => {
+        workload::Kind::Micro { iter_cap } => {
             let (zero_samples, _) = repeat(
                 &launch,
                 &["0".to_string()],
@@ -430,34 +454,19 @@ fn measure_cell(
                 last,
             )
         }
-        workload::Kind::App {
-            args,
-            stdin,
-            zero_stdin,
-        } => {
-            let zero = match zero_stdin {
-                Some(script) => {
-                    let (samples, _) = repeat(
-                        &launch,
-                        args,
-                        script.as_bytes(),
-                        opts.reps,
-                        opts.timeout,
-                        "the do-nothing run",
-                    )?;
-                    Some(samples_of_slice(&samples))
-                }
-                None => None,
-            };
-            let (samples, last) = repeat(
+        workload::Kind::App { args, stdin } => {
+            // Apps are timed as whole wall time (ADR-57): no zero run, so cold_start stays `None`.
+            let (k, samples, last) = repeat_app(
                 &launch,
                 args,
                 stdin.as_bytes(),
                 opts.reps,
+                opts.target,
                 opts.timeout,
                 "the timed run",
             )?;
-            (None, zero, samples_of_slice(&samples), last)
+            runs_per_sample = Some(k);
+            (None, None, samples_of_slice(&samples), last)
         }
     };
 
@@ -490,6 +499,7 @@ fn measure_cell(
 
     Ok(Outcome::Ok(Measurement {
         iterations,
+        runs_per_sample,
         reps: opts.reps,
         cold_start: zero,
         total,
@@ -521,9 +531,9 @@ fn reference_stdout(
         env: Vec::new(),
     };
     let (args, stdin): (Vec<String>, &[u8]) = match (&workload.kind, iterations) {
-        (workload::Kind::Kernel { .. }, Some(n)) => (vec![n.to_string()], b""),
-        (workload::Kind::App { args, stdin, .. }, _) => (args.clone(), stdin.as_bytes()),
-        _ => bail!("internal: a kernel workload must carry an iteration count"),
+        (workload::Kind::Micro { .. }, Some(n)) => (vec![n.to_string()], b""),
+        (workload::Kind::App { args, stdin }, _) => (args.clone(), stdin.as_bytes()),
+        _ => bail!("internal: a microbenchmark must carry an iteration count"),
     };
     let outcome = run_once(&launch, &args, stdin, opts.timeout)?;
     outcome.require_success("the wasmtime reference run")?;
@@ -560,12 +570,12 @@ pub fn display_path(path: &Path) -> String {
         .to_string()
 }
 
-/// `benchmarks/`, the suite's own tree: `kernels/` (sources + `build.sh`), `cache/` (built kernels, the pywasm venv, the wardite `GEM_HOME`), `drivers/`, `results/`.
+/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`, `results/`.
 fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
 
-/// `benchmarks/cache/` — built kernel modules *and* the interpreter dependencies `benchmarks/setup.sh` provisions.
+/// `benchmarks/cache/` — built microbenchmark modules, one subdirectory per family (`wat/`, `c/`), *and* the interpreter dependencies `benchmarks/setup.sh` provisions.
 pub fn bench_cache_dir() -> PathBuf {
     bench_root().join("cache")
 }

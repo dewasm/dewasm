@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-# Run a benchmark kernel under wardite, the pure-Ruby wasm interpreter, with
+# Run a benchmark module under wardite, the pure-Ruby wasm interpreter, with
 # the same command line every other runner in the suite gets:
 #
 #   ruby benchmarks/drivers/wardite.rb <module.wasm> [guest-args...]
 #
 # The guest sees argv = [basename(module), *guest-args], matching what wasmtime
-# passes, so a kernel's `<module> <iterations>` contract holds identically here.
+# passes, so the `<module> <iterations>` contract holds identically here.
 # (wardite's own CLI hardcodes argv[0] to "wardite"; we set argv ourselves
 # instead of shelling out to it.)
 #

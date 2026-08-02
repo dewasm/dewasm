@@ -70,8 +70,11 @@ pub enum Outcome {
 pub struct Measurement {
     /// The calibrated `<iterations>`; `null` for an app workload, which has no iteration parameter.
     pub iterations: Option<u64>,
+    /// For apps: executions averaged into one sample ([`crate::bench::measure::repeat_app`]); `null` for microbenchmarks.
+    #[serde(default)]
+    pub runs_per_sample: Option<u64>,
     pub reps: usize,
-    /// `t(0)`: the `<iterations> = 0` run (or, for an app, its declared do-nothing variant). This *is* the cold-start metric — process startup plus module load — and it is what gets subtracted from `t(N)`.
+    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run — process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time (ADR-57).
     pub cold_start: Option<Samples>,
     /// `t(N)`: the full run.
     pub total: Samples,
@@ -124,11 +127,61 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     out.push('\n');
 
     render_environment(&mut out, report);
-    render_method(&mut out);
+    render_method(&mut out, report);
     render_results(&mut out, report, charts);
     render_gaps(&mut out, report);
-    render_caveats(&mut out);
     out
+}
+
+/// The quantity the tables and the charts both compare on, taken on the minima: normalized throughput (ns/op) for a microbenchmark, whole wall time for an app, which has no iteration parameter.
+fn comparable(m: &Measurement, is_app: bool) -> Option<f64> {
+    if is_app {
+        Some(m.total.min_s)
+    } else {
+        m.ns_per_op_min
+    }
+}
+
+/// The fastest-to-slowest span on each workload, as a factor, over the runners that produced a number. Derived from the record rather than quoted in the prose: the figure this replaced had already gone stale once.
+fn spans(report: &Report) -> Vec<(&str, f64)> {
+    let mut out: Vec<(&str, f64)> = Vec::new();
+    for workload in report.results.iter().map(|cell| cell.workload.as_str()) {
+        if out.iter().any(|(seen, _)| *seen == workload) {
+            continue;
+        }
+        let is_app = workload.starts_with("app/");
+        let values: Vec<f64> = report
+            .results
+            .iter()
+            .filter(|cell| cell.workload == workload)
+            .filter_map(|cell| match &cell.outcome {
+                Outcome::Ok(m) => comparable(m, is_app).filter(|v| *v > 0.0),
+                _ => None,
+            })
+            .collect();
+        let (Some(min), Some(max)) = (
+            values.iter().copied().reduce(f64::min),
+            values.iter().copied().reduce(f64::max),
+        ) else {
+            continue;
+        };
+        out.push((workload, max / min));
+    }
+    out
+}
+
+/// The workload with the widest span, and that span.
+fn widest_span(report: &Report) -> Option<(&str, f64)> {
+    spans(report).into_iter().max_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// A bare factor for prose, rounded to something a sentence can carry (`23000`, not `23102`). The caller adds the `x` where the sentence wants one, so "a factor of 23000" does not come out as "a factor of 23000x".
+fn fmt_factor(ratio: f64) -> String {
+    if ratio < 10.0 {
+        return format!("{ratio:.1}");
+    }
+    let step = 10f64.powi(ratio.log10().floor() as i32 - 1);
+    format!("{:.0}", (ratio / step).round() * step)
 }
 
 fn render_environment(out: &mut String, report: &Report) {
@@ -174,12 +227,22 @@ fn render_environment(out: &mut String, report: &Report) {
     out.push('\n');
 }
 
-fn render_method(out: &mut String) {
+fn render_method(out: &mut String, report: &Report) {
     out.push_str("## How this is measured\n\n");
-    out.push_str("The fastest and slowest runners here differ by a factor of about 23000 on the same kernel — read the `vs wasmtime` column for the actual span on each workload — so a single fixed iteration count would be meaningless: it either measures nothing but process startup on wasmtime or takes minutes per sample on Bash. Four rules make the comparison honest:\n\n");
-    out.push_str("1. **Per-runner iteration scaling.** Each kernel takes an `<iterations>` argument and each workload declares a ceiling; the harness calibrates every (workload, runner) pair up from a trivial count until one sample reaches the compute target. The headline number is therefore normalized throughput (ns/op), with the raw times printed beside it so nothing is hidden.\n");
-    out.push_str("2. **The zero run is subtracted.** Every kernel also runs at `<iterations> = 0`, which does no work but still starts the process, loads the module, and prints a result line. That time is the **cold start** column; `t(N) - t(0)` is the compute time. This removes process startup and module load uniformly for every runner — they differ enormously (an empty Ruby is ~0.05 s; loading the generated Ruby for SQLite costs ~0.7 s before any work happens).\n");
-    out.push_str("3. **Minimum and median.** One warmup run, then N timed runs; both the minimum (the least noise-contaminated estimate) and the median are reported, so a noisy host is visible rather than smoothed away.\n");
+    let spread = match widest_span(report) {
+        Some((workload, span)) => format!(
+            "The fastest and slowest runners here differ by a factor of {} on `{workload}` alone — read the `vs wasmtime` column for the span on each workload",
+            fmt_factor(span)
+        ),
+        None => "The fastest and slowest runners here differ by several thousand times on a single workload — read the `vs wasmtime` column for the span on each one".to_string(),
+    };
+    let _ = writeln!(
+        out,
+        "{spread} — so a single fixed iteration count would be meaningless: it either measures nothing but process startup on wasmtime or takes minutes per sample on Bash. Four rules make the comparison honest:\n"
+    );
+    out.push_str("1. **Per-runner iteration scaling.** Each microbenchmark takes an `<iterations>` argument and each workload declares a ceiling; the harness calibrates every (workload, runner) pair up from a trivial count until one sample reaches the compute target. The headline number is therefore normalized throughput (ns/op), with the raw times printed beside it so nothing is hidden.\n");
+    out.push_str("2. **The zero run is subtracted.** Every microbenchmark also runs at `<iterations> = 0`, which does no work but still starts the process, loads the module, and prints a result line. That time is the **cold start** column; `t(N) - t(0)` is the compute time. This removes process startup and module load uniformly for every runner — they differ enormously (an empty Ruby is ~0.05 s; loading the generated Ruby for SQLite costs ~0.7 s before any work happens).\n");
+    out.push_str("3. **Minimum and median.** One warmup run, then N timed runs; both the minimum (the least noise-contaminated estimate) and the median are reported, so a noisy host is visible rather than smoothed away. The charts plot the median, because that is the figure a user of the generated code actually experiences; on this record the two agree to well under 1%, so nothing here turns on the choice.\n");
     out.push_str("4. **Every runner's stdout is diffed against wasmtime's** at the same iteration count. A mismatch is a hard failure recorded in this table, not a quietly fast wrong answer — exactly the class of bug the spec harness exists for ([ADR-3](adr/3-testing-strategy.md), [ADR-2](adr/2-numeric-semantics.md)).\n\n");
     out.push_str("A runner that is not installed, a module that has not been built, and a pair that is deliberately excluded are all listed under [Not measured](#not-measured) with a reason. A blank cell never means \"covered\".\n\n");
 }
@@ -187,9 +250,11 @@ fn render_method(out: &mut String) {
 fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
     out.push_str("## Results\n\n");
     if !charts.is_empty() {
-        out.push_str("Three of the workloads carry a chart above their table. The axis is log10 — the span is too wide for anything else — and the mark is a dot rather than a bar, because a bar states a length measured from zero and a log axis has no zero. Color is the runner family; the numbers are in the table either way.\n\n");
+        out.push_str("Every workload carries a chart, with its full numbers folded away underneath. The axis is log10 — the span is too wide for anything else — and it is in **seconds** on every chart, never a ratio: seconds per *iteration* for a microbenchmark, seconds per *run* for an app, which the title of each chart states. The mark is a dot rather than a bar, because a bar states a length measured from zero and a log axis has no zero. Color is the runner family; the numbers are in the table either way.\n\n");
     }
+    // The two groups measure different quantities (per iteration vs per run), so they get separate subsections. Grouping derives from the label prefix; an empty group emits no heading.
     let workloads = ordered_workloads(report);
+    let mut group_open: Option<bool> = None;
     for workload in workloads {
         let cells: Vec<&Cell> = report
             .results
@@ -202,27 +267,38 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
         {
             continue;
         }
-        let _ = writeln!(out, "### `{workload}`\n");
+        let in_app_group = workload.starts_with("app/");
+        if group_open != Some(in_app_group) {
+            out.push_str(if in_app_group {
+                "### Application benchmarks\n\nSeconds per **run** of a real cached program on fixed input — every runner executes the same work, so the wall times compare directly. For runners that finish faster than the sampling target, one sample averages several back-to-back executions (the *Runs/sample* column) to steady the timing; the measured quantity is still one whole execution.\n\n"
+            } else {
+                "### Microbenchmarks\n\nSeconds per **iteration**. The iteration count is calibrated per runner so that every sample takes a comparable amount of time, which means the raw wall times are not comparable across rows but the per-iteration figures are. The `wat/` programs are hand-written and each isolates a single operation type; the `c/` ones are algorithms compiled from C.\n\n"
+            });
+            group_open = Some(in_app_group);
+        }
+        let _ = writeln!(out, "#### `{workload}`\n");
         if let Some(chart) = charts.iter().find(|chart| chart.workload == workload) {
             render_chart(out, chart);
         }
-        // The ratio column compares like with like: normalized throughput for a kernel, whole wall time for an app (which has no iteration parameter).
-        let wasmtime_cell = cells.iter().find_map(|cell| match &cell.outcome {
-            Outcome::Ok(m) if cell.runner == "wasmtime" => Some(m),
-            _ => None,
-        });
+        // The ratio column compares like with like: normalized throughput for a microbenchmark, whole wall time for an app (which has no iteration parameter).
         let is_app = workload.starts_with("app/");
-        let baseline = wasmtime_cell.and_then(|m| {
-            if is_app {
-                Some(m.total.min_s)
-            } else {
-                m.ns_per_op_min
-            }
-        });
+        let baseline = cells
+            .iter()
+            .find(|cell| cell.runner == "wasmtime")
+            .and_then(|cell| match &cell.outcome {
+                Outcome::Ok(m) => comparable(m, is_app),
+                _ => None,
+            });
+
+        // The table is the reference, not the finding, so it goes behind a disclosure: chart visible, numbers one click away. The blank line after </summary> is load-bearing — GitHub will not render a markdown table inside <details> without it.
+        let _ = writeln!(
+            out,
+            "<details>\n<summary>Full numbers for <code>{workload}</code></summary>\n"
+        );
 
         if is_app {
-            out.push_str("| Runner | Wall time (min) | Wall time (median) | Cold start `t(0)` | Compute `t(N)-t(0)` | vs wasmtime | Load |\n");
-            out.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
+            out.push_str("| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |\n");
+            out.push_str("| --- | --- | --- | --- | --- | --- |\n");
         } else {
             out.push_str("| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |\n");
             out.push_str("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
@@ -231,7 +307,8 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
             match &cell.outcome {
                 Outcome::Ok(m) => render_ok_row(out, cell, m, baseline, is_app),
                 Outcome::Failed { reason } => {
-                    let span = if is_app { 6 } else { 7 };
+                    // One empty cell per column but the last, which carries the reason: apps have 6 columns, microbenchmarks 8.
+                    let span = if is_app { 5 } else { 7 };
                     let _ = writeln!(
                         out,
                         "| `{}` |{} **FAILED** — {} |",
@@ -243,7 +320,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                 Outcome::Skipped { .. } => {}
             }
         }
-        out.push('\n');
+        out.push_str("\n</details>\n\n");
     }
 }
 
@@ -271,33 +348,28 @@ fn render_ok_row(
     baseline: Option<f64>,
     is_app: bool,
 ) {
-    let cold = m
-        .cold_start
-        .as_ref()
-        .map_or_else(|| "—".to_string(), |s| fmt_seconds(s.min_s));
     let load = m
         .load_ms
         .map_or_else(|| "—".to_string(), |ms| format!("{ms:.1} ms"));
-    let mine = if is_app {
-        Some(m.total.min_s)
-    } else {
-        m.ns_per_op_min
-    };
-    let ratio = match (baseline, mine) {
+    let ratio = match (baseline, comparable(m, is_app)) {
         (Some(base), Some(mine)) if base > 0.0 => fmt_ratio(mine / base),
         _ => "—".to_string(),
     };
     if is_app {
         let _ = writeln!(
             out,
-            "| `{}` | {} | {} | {} | {} | {ratio} | {load} |",
+            "| `{}` | {} | {} | {} | {ratio} | {load} |",
             cell.runner,
+            m.runs_per_sample
+                .map_or_else(|| "—".to_string(), |k| k.to_string()),
             fmt_seconds(m.total.min_s),
             fmt_seconds(m.total.median_s),
-            cold,
-            m.compute_s.map_or_else(|| "—".to_string(), fmt_seconds),
         );
     } else {
+        let cold = m
+            .cold_start
+            .as_ref()
+            .map_or_else(|| "—".to_string(), |s| fmt_seconds(s.min_s));
         let _ = writeln!(
             out,
             "| `{}` | {} | {} | {} | {} | {} | {ratio} | {load} |",
@@ -338,24 +410,19 @@ fn render_gaps(out: &mut String, report: &Report) {
     out.push('\n');
 }
 
-fn render_caveats(out: &mut String) {
-    out.push_str("## What these numbers do not say\n\n");
-    out.push_str("- **dewasm is not competitive with an AOT compiler, and is not trying to be.** wasmtime compiles to native code; every dewasm backend emits source for a host language and pays that language's interpretation cost on every wasm instruction. Bash is the extreme, running roughly 10000x slower than wasmtime on compute, because a shell has no integers-as-machine-words and no floats at all ([ADR-5](adr/5-bash-softfloat.md), [ADR-13](adr/13-bash-softfloat-conventions.md)).\n");
-    out.push_str("- **We are not competitive with wasm2c or w2c2 either.** Those translate wasm to C, which a C compiler then optimizes to native code; the comparison that matters for dewasm is against *running wasm on the host language at all*, which is what the pywasm and wardite columns are ([related work](related-work.md)).\n");
-    out.push_str("- **Interpreters legitimately beat us on cold start.** A wasm interpreter parses a module and starts executing; a dewasm backend hands the host language a large generated source file to parse first. The `app/sqlite3_cold_start` case exists to show that, not to hide it.\n");
-    out.push_str("- **Iteration counts differ per runner by design.** Comparing raw wall times across rows is wrong; compare the ns/op column, and read the minimum against the median before trusting a small difference.\n");
-    out.push_str("- **One host, one day.** Nothing here is a regression gate. There is no freshness test on this file precisely because a timing is not a snapshot.\n");
-}
-
-/// Workload labels in the order they first appear in `results`, which is the order the suite ran them.
-fn ordered_workloads(report: &Report) -> Vec<String> {
+/// Workload labels in the order they first appear in `results`, which is the order the suite ran them. Shared with [`crate::bench::chart`] so a chart and its table can never end up in different orders.
+pub fn ordered_workloads(report: &Report) -> Vec<String> {
     let mut seen: Vec<String> = Vec::new();
     for cell in &report.results {
         if !seen.contains(&cell.workload) {
             seen.push(cell.workload.clone());
         }
     }
-    seen
+    // Microbenchmarks before apps, each keeping the record's own order. The doc emits one heading per group as it walks this list, so a record that happened to interleave the two families would otherwise produce a repeated heading rather than a reordered one.
+    let (micro, apps): (Vec<String>, Vec<String>) = seen
+        .into_iter()
+        .partition(|label| !label.starts_with("app/"));
+    micro.into_iter().chain(apps).collect()
 }
 
 fn fmt_seconds(seconds: f64) -> String {

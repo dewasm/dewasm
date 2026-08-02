@@ -1,12 +1,14 @@
 //! The static SVG charts that ride above the tables in `docs/benchmarks.md`.
 //!
-//! Why files rather than a Mermaid block: the measured span is a factor of ~23000, so the value axis has to be log10, and Mermaid's `xychart` has no log scale. Why two files per chart rather than one that switches on `prefers-color-scheme`: GitHub's markdown sanitizer is unreliable about CSS inside an SVG, so each mode's colors are baked into their own file and a `<picture>` element picks between them.
+//! SVG files, not Mermaid: the span forces a log10 axis, which Mermaid's `xychart` lacks. Two files per chart, not CSS `prefers-color-scheme`: GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between baked-in modes.
 //!
-//! The form is a horizontal lollipop — a hairline rule from the axis minimum out to a dot, one row per runner, fastest at the top. Deliberately not bars: a bar encodes length measured from zero, and a log axis has no zero, so a bar's length would state a quantity that does not exist. The dot is the value; the rule only ties it back to the axis. Color carries the runner *family* (baseline / dewasm / interpreter), never the rank, and every row is direct-labelled as well, so nothing depends on telling two hues apart.
+//! The form is a horizontal lollipop, fastest at the top — not bars, because a bar encodes length from a zero that a log axis does not have. Color carries the runner family, never the rank, and every row is direct-labelled.
+//!
+//! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app — the title says which), never a ratio, so charts can be read against each other. The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
 
 use std::fmt::Write as _;
 
-use crate::bench::report::{Outcome, Report};
+use crate::bench::report::{ordered_workloads, Outcome, Report};
 
 /// Overall image width. Height is derived from the row count.
 const WIDTH: f64 = 820.0;
@@ -27,83 +29,63 @@ const FONT: f64 = 12.0;
 /// One workload's chart, rendered in both modes plus the alt text they share.
 pub struct Chart {
     /// The workload label this illustrates, used to place it above the matching table.
-    pub workload: &'static str,
+    pub workload: String,
     /// File stem under `docs/benchmarks/`; the dark file is `<stem>-dark.svg`.
-    pub stem: &'static str,
+    pub stem: String,
     pub alt: String,
     pub light: String,
     pub dark: String,
 }
 
-/// What the x axis measures.
+/// What one point on the axis is a duration *of*. Both arms are seconds — this only names the denominator, which the title and alt text have to state or the two kinds of chart would look comparable when they are not.
 #[derive(Clone, Copy, PartialEq)]
-enum Metric {
-    /// Slowdown against wasmtime on the same workload — the same quantity as the table's `vs wasmtime` column.
-    Ratio,
-    /// Wall time in seconds (rendered in whatever unit reads naturally).
-    Wall,
+enum Quantity {
+    /// A microbenchmark: compute time `t(N) - t(0)` divided by the calibrated iteration count.
+    PerIteration,
+    /// An app: the whole wall time of one run, startup included.
+    PerRun,
 }
 
-struct Spec {
-    workload: &'static str,
-    stem: &'static str,
-    metric: Metric,
-    title: &'static str,
-    /// Names the quantity in the alt text.
-    quantity: &'static str,
+impl Quantity {
+    /// How the axis names itself, in the title and in the alt text.
+    fn phrase(self) -> &'static str {
+        match self {
+            Quantity::PerIteration => "seconds per iteration",
+            Quantity::PerRun => "seconds per run",
+        }
+    }
 }
 
-/// The three charts, chosen for the three things the suite actually answers: raw compute, startup, and a real application. A workload that is absent from the record simply produces no chart.
-const SPECS: &[Spec] = &[
-    Spec {
-        workload: "kernel/i32_alu",
-        stem: "i32-alu",
-        metric: Metric::Ratio,
-        title: "kernel/i32_alu — compute cost relative to wasmtime (log scale)",
-        quantity: "compute cost relative to wasmtime",
-    },
-    Spec {
-        workload: "app/cowsay",
-        stem: "cowsay",
-        metric: Metric::Wall,
-        title: "app/cowsay — wall time, fastest of the timed runs (log scale)",
-        quantity: "wall time",
-    },
-    Spec {
-        workload: "app/sqlite3_query",
-        stem: "sqlite3-query",
-        metric: Metric::Wall,
-        title: "app/sqlite3_query — wall time, fastest of the timed runs (log scale)",
-        quantity: "wall time",
-    },
-];
-
-/// Which of the three colors a runner wears. Assigned by family so that a filter or a re-sort never repaints a runner.
+/// Which of the four colors a runner wears. Assigned by family so that a filter or a re-sort never repaints a runner.
 #[derive(Clone, Copy, PartialEq)]
 enum Family {
     Baseline,
     Dewasm,
+    /// A wasm runtime executing the module natively — wasmer, wasmedge, wazero, wasm3. Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
+    Native,
+    /// A wasm interpreter written in a host language — pywasm, wardite. The comparison dewasm actually cares about.
     Interpreter,
 }
 
 fn family(runner: &str) -> Family {
-    if runner.starts_with("dewasm-") {
-        Family::Dewasm
-    } else if runner.starts_with("pywasm") || runner.starts_with("wardite") {
-        Family::Interpreter
-    } else {
-        // wasmtime, and anything later added beside it as a reference runtime.
-        Family::Baseline
+    match runner {
+        "wasmtime" => Family::Baseline,
+        "wasmer" | "wasmedge" | "wazero" | "wasm3" => Family::Native,
+        r if r.starts_with("dewasm-") => Family::Dewasm,
+        r if r.starts_with("pywasm") || r.starts_with("wardite") => Family::Interpreter,
+        // Anything later added beside wasmtime as a reference runtime.
+        _ => Family::Baseline,
     }
 }
 
-/// Slots 1-3 of the validated categorical palette, plus the surface and text tokens. Dark is a selected variant — its own steps for the dark surface, not an inversion of the light one.
+/// Slots 1-4 of the validated categorical palette, plus the surface and text tokens. Dark is a selected variant — its own steps for the dark surface, not an inversion of the light one.
 struct Theme {
     surface: &'static str,
     text_primary: &'static str,
     text_secondary: &'static str,
     baseline: &'static str,
     dewasm: &'static str,
+    native: &'static str,
     interpreter: &'static str,
 }
 
@@ -113,6 +95,7 @@ const LIGHT: Theme = Theme {
     text_secondary: "#52514e",
     baseline: "#2a78d6",
     dewasm: "#008300",
+    native: "#eda100",
     interpreter: "#e87ba4",
 };
 
@@ -122,6 +105,7 @@ const DARK: Theme = Theme {
     text_secondary: "#c3c2b7",
     baseline: "#3987e5",
     dewasm: "#008300",
+    native: "#c98500",
     interpreter: "#d55181",
 };
 
@@ -130,6 +114,7 @@ impl Theme {
         match family {
             Family::Baseline => self.baseline,
             Family::Dewasm => self.dewasm,
+            Family::Native => self.native,
             Family::Interpreter => self.interpreter,
         }
     }
@@ -138,68 +123,66 @@ impl Theme {
 /// One plotted runner.
 struct Row {
     label: String,
+    /// Seconds, per the chart's [`Quantity`].
     value: f64,
     family: Family,
 }
 
-/// Every chart the record has the data for, in document order. A workload the sweep did not run is skipped rather than fatal — `--render` has to work on an old or filtered record too.
+/// A chart for every workload the record has at least two measurements for, in document order. A workload the run did not cover simply produces none — `--render` has to work on an old or filtered record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
-    SPECS
-        .iter()
-        .filter_map(|spec| build(report, spec))
+    ordered_workloads(report)
+        .into_iter()
+        .filter_map(|workload| build(report, &workload))
         .collect()
 }
 
-fn build(report: &Report, spec: &Spec) -> Option<Chart> {
-    let rows = rows(report, spec)?;
-    let alt = alt_text(spec, &rows);
+fn build(report: &Report, workload: &str) -> Option<Chart> {
+    // The same split the tables use, so the chart and the numbers under it cannot disagree: an app has no iteration parameter, so its comparable quantity is whole wall time.
+    let quantity = if workload.starts_with("app/") {
+        Quantity::PerRun
+    } else {
+        Quantity::PerIteration
+    };
+    let rows = rows(report, workload, quantity)?;
+    let title = format!(
+        "{workload} — {}, median of the timed runs (log scale)",
+        quantity.phrase()
+    );
+    let alt = alt_text(workload, quantity, &rows);
     Some(Chart {
-        workload: spec.workload,
-        stem: spec.stem,
-        light: svg(spec, &rows, &LIGHT, &alt),
-        dark: svg(spec, &rows, &DARK, &alt),
+        workload: workload.to_string(),
+        stem: stem(workload),
+        light: svg(&title, &rows, &LIGHT, &alt),
+        dark: svg(&title, &rows, &DARK, &alt),
         alt,
     })
 }
 
-/// The measured runners for one workload, sorted fastest first. `None` when the workload is missing, when the ratio has no wasmtime baseline to divide by, or when there is only one row (which is a number, not a chart).
-fn rows(report: &Report, spec: &Spec) -> Option<Vec<Row>> {
-    // The same rule the table uses, so the chart and the numbers under it cannot disagree: an app has no iteration parameter, so its comparable quantity is whole wall time.
-    let is_app = spec.workload.starts_with("app/");
-    let measured: Vec<(&str, f64)> = report
+/// A workload label as a file stem: `wat/i32_alu` becomes `wat-i32-alu`. One flat directory, and the family stays visible in the filename.
+fn stem(workload: &str) -> String {
+    workload.replace(['/', '_'], "-")
+}
+
+/// The measured runners for one workload in seconds, sorted fastest first. `None` when fewer than two runners produced a number, which is a value rather than a chart.
+fn rows(report: &Report, workload: &str, quantity: Quantity) -> Option<Vec<Row>> {
+    let mut rows: Vec<Row> = report
         .results
         .iter()
-        .filter(|cell| cell.workload == spec.workload)
+        .filter(|cell| cell.workload == workload)
         .filter_map(|cell| match &cell.outcome {
             Outcome::Ok(m) => {
-                let value = if is_app {
-                    Some(m.total.min_s)
-                } else {
-                    m.ns_per_op_min
+                let seconds = match quantity {
+                    // ns/op is what the table publishes; seconds is what the axis needs.
+                    Quantity::PerIteration => m.ns_per_op_median.map(|ns| ns / 1e9),
+                    Quantity::PerRun => Some(m.total.median_s),
                 };
-                value
-                    .filter(|v| *v > 0.0)
-                    .map(|v| (cell.runner.as_str(), v))
+                seconds.filter(|v| *v > 0.0).map(|value| Row {
+                    label: cell.runner.clone(),
+                    value,
+                    family: family(&cell.runner),
+                })
             }
             _ => None,
-        })
-        .collect();
-
-    // A ratio needs the baseline the table divides by; without it there is no chart, not a chart of raw times.
-    let scale = match spec.metric {
-        Metric::Ratio => measured
-            .iter()
-            .find(|(runner, _)| *runner == "wasmtime")
-            .map(|(_, value)| *value)?,
-        Metric::Wall => 1.0,
-    };
-
-    let mut rows: Vec<Row> = measured
-        .into_iter()
-        .map(|(runner, value)| Row {
-            label: runner.to_string(),
-            value: value / scale,
-            family: family(runner),
         })
         .collect();
     if rows.len() < 2 {
@@ -210,26 +193,25 @@ fn rows(report: &Report, spec: &Spec) -> Option<Vec<Row>> {
 }
 
 /// Alt text derived from the data rather than written by hand, so it states the finding and cannot go stale when the suite is re-run.
-fn alt_text(spec: &Spec, rows: &[Row]) -> String {
+fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
     let fastest = &rows[0];
     let slowest = &rows[rows.len() - 1];
     let span = slowest.value / fastest.value;
     format!(
-        "{}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {} — a span of {}. The table below carries every number.",
-        spec.workload,
-        spec.quantity,
+        "{workload}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {} — a span of {}. The table below carries every number.",
+        quantity.phrase(),
         rows.len(),
         fastest.label,
-        fmt_value(spec.metric, fastest.value),
+        fmt_time(fastest.value),
         rows[1].label,
-        fmt_value(spec.metric, rows[1].value),
+        fmt_time(rows[1].value),
         slowest.label,
-        fmt_value(spec.metric, slowest.value),
+        fmt_time(slowest.value),
         fmt_ratio(span),
     )
 }
 
-fn svg(spec: &Spec, rows: &[Row], theme: &Theme, alt: &str) -> String {
+fn svg(title: &str, rows: &[Row], theme: &Theme, alt: &str) -> String {
     let plot_bottom = PLOT_TOP + ROW_H * rows.len() as f64;
     let height = plot_bottom + 30.0;
 
@@ -280,7 +262,7 @@ fn svg(spec: &Spec, rows: &[Row], theme: &Theme, alt: &str) -> String {
             r#"<text x="{x:.1}" y="{:.1}" text-anchor="middle" font-size="11" fill="{}">{}</text>"#,
             plot_bottom + 16.0,
             theme.text_secondary,
-            escape(&fmt_tick(spec.metric, value))
+            escape(&fmt_tick(value))
         );
         tick += 1;
     }
@@ -318,7 +300,7 @@ fn svg(spec: &Spec, rows: &[Row], theme: &Theme, alt: &str) -> String {
             r#"<text x="{VALUE_RIGHT:.1}" y="{:.1}" text-anchor="end" font-size="{FONT}" font-weight="600" fill="{}">{}</text>"#,
             cy + 4.0,
             theme.text_primary,
-            escape(&fmt_value(spec.metric, row.value))
+            escape(&fmt_time(row.value))
         );
     }
 
@@ -326,19 +308,20 @@ fn svg(spec: &Spec, rows: &[Row], theme: &Theme, alt: &str) -> String {
         out,
         r#"<text x="{PAD:.1}" y="24" font-size="15" font-weight="600" fill="{}">{}</text>"#,
         theme.text_primary,
-        escape(spec.title)
+        escape(title)
     );
     render_legend(&mut out, theme);
     out.push_str("</svg>\n");
     out
 }
 
-/// The legend is required even though every row is labelled: it is what names the three families, which the row labels only imply.
+/// The legend is required even though every row is labelled: it is what names the four families, which the row labels only imply.
 fn render_legend(out: &mut String, theme: &Theme) {
     let entries = [
         (theme.baseline, "wasmtime (baseline)"),
         (theme.dewasm, "dewasm backends"),
-        (theme.interpreter, "wasm interpreters"),
+        (theme.native, "native runtimes"),
+        (theme.interpreter, "wasm interpreters in a host language"),
     ];
     let y = 48.0;
     let mut x = PAD;
@@ -357,7 +340,7 @@ fn render_legend(out: &mut String, theme: &Theme) {
             theme.text_secondary,
             escape(label)
         );
-        x += 17.0 + text_width(label, FONT) + 22.0;
+        x += 17.0 + text_width(label, FONT) + 18.0;
     }
 }
 
@@ -366,14 +349,7 @@ fn text_width(text: &str, font_size: f64) -> f64 {
     text.chars().count() as f64 * font_size * 0.55
 }
 
-fn fmt_value(metric: Metric, value: f64) -> String {
-    match metric {
-        Metric::Ratio => fmt_ratio(value),
-        Metric::Wall => fmt_time(value),
-    }
-}
-
-/// A slowdown factor. Spelled exactly as the table spells it below 1000x, and rounded to three significant figures above it — a chart label reads `23100x`, not `23102x`.
+/// A slowdown factor, used only for the span sentence in the alt text. Rounded to three significant figures above 1000x — `23100x`, not `23102x`.
 fn fmt_ratio(ratio: f64) -> String {
     if ratio < 10.0 {
         format!("{ratio:.2}x")
@@ -384,33 +360,43 @@ fn fmt_ratio(ratio: f64) -> String {
     }
 }
 
-/// Wall time at three significant figures, in the unit a reader would say out loud.
-fn fmt_time(seconds: f64) -> String {
-    if seconds < 1.0 {
-        format!("{} ms", sig3(seconds * 1000.0))
-    } else {
-        format!("{} s", sig3(seconds))
-    }
+/// The SI prefix a duration reads best in: the largest unit that still leaves a mantissa of at least 1. The `0.999999` slack is there because `10f64.powi(-6)` is not exactly `1e-6`, and a tick that landed one ULP low would otherwise be labelled `1000 ns` instead of `1 µs`.
+fn si_unit(seconds: f64) -> (f64, &'static str) {
+    const UNITS: [(f64, &str); 4] = [(1.0, "s"), (1e-3, "ms"), (1e-6, "µs"), (1e-9, "ns")];
+    UNITS
+        .into_iter()
+        .find(|(scale, _)| seconds >= scale * 0.999999)
+        .unwrap_or((1e-9, "ns"))
 }
 
-/// A power-of-ten gridline label.
-fn fmt_tick(metric: Metric, value: f64) -> String {
-    match metric {
-        Metric::Ratio => {
-            if value >= 1.0 {
-                format!("{value:.0}x")
-            } else {
-                format!("{value}x")
-            }
-        }
-        Metric::Wall => {
-            if value < 1.0 {
-                format!("{:.0} ms", value * 1000.0)
-            } else {
-                format!("{value:.0} s")
-            }
-        }
+/// A duration at three significant figures with an SI prefix — `2.41 ns`, `55.0 µs`, `1.23 s`. The unit is chosen from the *rounded* value, so 999.6 ns reads `1.00 µs` rather than `1000 ns`.
+fn fmt_time(seconds: f64) -> String {
+    let rounded = round3(seconds);
+    let (scale, unit) = si_unit(rounded);
+    let mantissa = rounded / scale;
+    let decimals = if mantissa < 10.0 {
+        2
+    } else if mantissa < 100.0 {
+        1
+    } else {
+        0
+    };
+    format!("{mantissa:.decimals$} {unit}")
+}
+
+/// A power-of-ten gridline label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`. Bare mantissa and unit, no decimals — an exponent (`1e-9`) is a notation a reader has to decode, and these labels are read at a glance.
+fn fmt_tick(seconds: f64) -> String {
+    let (scale, unit) = si_unit(seconds);
+    format!("{:.0} {unit}", seconds / scale)
+}
+
+/// `value` rounded to three significant figures.
+fn round3(value: f64) -> f64 {
+    if !value.is_finite() || value <= 0.0 {
+        return value;
     }
+    let step = 10f64.powi(value.log10().floor() as i32 - 2);
+    (value / step).round() * step
 }
 
 /// `value` at three significant figures, with no trailing zeros beyond them.
@@ -418,11 +404,8 @@ fn sig3(value: f64) -> String {
     if !value.is_finite() || value <= 0.0 {
         return format!("{value:.0}");
     }
-    let exponent = value.log10().floor() as i32;
-    let step = 10f64.powi(exponent - 2);
-    let rounded = (value / step).round() * step;
-    let decimals = (2 - exponent).max(0) as usize;
-    format!("{rounded:.decimals$}")
+    let decimals = (2 - value.log10().floor() as i32).max(0) as usize;
+    format!("{:.decimals$}", round3(value))
 }
 
 /// XML text escaping. Runner labels are safe, titles and generated alt text are not guaranteed to be.

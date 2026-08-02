@@ -2,7 +2,7 @@
  *
  * One iteration consumes one byte of text: a load, a handful of unpredictable
  * branches, and a scattered histogram update. Where sha256 is a straight-line
- * arithmetic pipeline, this kernel is what a backend's branch and array
+ * arithmetic pipeline, this microbenchmark is what a backend's branch and array
  * lowering actually costs -- the buffer is pseudo-random, so no branch here
  * predicts and no histogram slot stays hot.
  *
@@ -14,7 +14,7 @@
  * The result folds words, lines and the longest word into one u64.
  */
 
-#include "kernel.h"
+#include "bench.h"
 
 #define TEXT_SIZE 8192
 
@@ -26,7 +26,7 @@ static const char ALPHABET[] = "abcdefghijklmnopqrstuvwxyz    \n\n";
 static char text[TEXT_SIZE];
 
 /* Runs before _start reads argv, so the generation cost is in the baseline. */
-static void kernel_setup(void) {
+static void bench_setup(void) {
   u32 h = 0x9e3779b9u;
   for (u32 i = 0; i < TEXT_SIZE; i++) {
     h = h * 1664525u + 1013904223u;
@@ -39,7 +39,7 @@ static void kernel_setup(void) {
  * the engine zeroes at instantiation for free. */
 static u32 histogram[26];
 
-static u64 kernel_run(u32 iterations) {
+static u64 bench_run(u32 iterations) {
   u64 words = 0, lines = 0;
   u32 max_len = 0, cur_len = 0;
   u32 pos = 0;

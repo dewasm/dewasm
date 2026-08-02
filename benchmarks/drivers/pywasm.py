@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-"""Run a benchmark kernel under pywasm, the pure-Python wasm interpreter, with
+"""Run a benchmark module under pywasm, the pure-Python wasm interpreter, with
 the same command line every other runner in the suite gets:
 
     python benchmarks/drivers/pywasm.py <module.wasm> [guest-args...]
 
 The guest sees argv = [basename(module), *guest-args], matching what wasmtime
-passes, so a kernel's `<module> <iterations>` contract holds identically here.
+passes, so the `<module> <iterations>` contract holds identically here.
 
 stdout carries guest output and nothing else -- the harness compares it byte
 for byte against the wasmtime oracle. Diagnostics, including the

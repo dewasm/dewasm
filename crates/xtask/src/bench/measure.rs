@@ -1,10 +1,8 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
-//! Three things happen here, and each exists to remove a specific way this comparison could lie:
-//!
-//! * [`run_once`] times one whole process — spawn to exit — with stdin fed and both output streams drained concurrently, under a hard timeout. The timer starts *before* `spawn`, so process startup is inside the measurement; that is deliberate, because the `<iterations> = 0` run subtracts it back out again.
-//! * [`calibrate`] picks the iteration count *per runner*. The spread between the fastest and slowest runner here is around 1000x, so one fixed count either measures nothing but startup on wasmtime or takes minutes per sample on Bash. Calibration ramps from a trivial count until the compute time reaches the target, capped by the workload's own ceiling — so nothing in the suite depends on a hand-guessed per-runner divisor.
-//! * [`stats`] reports the minimum *and* the median of the timed repetitions. The minimum is the least noise-contaminated estimate; publishing the median next to it is what makes the noise visible instead of hidden.
+//! * [`run_once`] times one whole process, spawn to exit, under a hard timeout. The timer starts *before* `spawn` — startup is deliberately inside, because the `<iterations> = 0` run subtracts it back out.
+//! * [`calibrate`] ramps the iteration count per runner until the compute time reaches the target; a fixed count cannot serve runners thousands of times apart.
+//! * [`stats`] reports minimum *and* median, so noise is visible instead of hidden.
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
@@ -135,6 +133,35 @@ pub fn run_once(
         code: status.code(),
         timed_out: killed.load(Ordering::Relaxed),
     })
+}
+
+/// App sampling: one sample is the mean of `k` back-to-back executions, with `k` chosen from the warmup's wall time so a sample lasts roughly `target` — the iteration calibration applied at the process level, since an app has no `<iterations>` to scale. A run slower than the target keeps `k = 1`. Returns `(k, samples, last outcome)`; the measured quantity is still one whole execution, batching only steadies it.
+pub fn repeat_app(
+    launch: &Launch,
+    args: &[String],
+    stdin: &[u8],
+    reps: usize,
+    target: Duration,
+    timeout: Duration,
+    what: &str,
+) -> Result<(u64, Vec<f64>, RunOutcome)> {
+    let warmup = run_once(launch, args, stdin, timeout)?;
+    warmup.require_success(what)?;
+    let wall = warmup.wall.as_secs_f64().max(1e-6);
+    let k = ((target.as_secs_f64() / wall).ceil() as u64).clamp(1, 64);
+    let mut samples = Vec::with_capacity(reps);
+    let mut last = warmup;
+    for _ in 0..reps {
+        let mut sum = 0.0;
+        for _ in 0..k {
+            let outcome = run_once(launch, args, stdin, timeout)?;
+            outcome.require_success(what)?;
+            sum += outcome.wall.as_secs_f64();
+            last = outcome;
+        }
+        samples.push(sum / k as f64);
+    }
+    Ok((k, samples, last))
 }
 
 /// One repetition series: a warmup run (discarded) followed by `reps` timed runs. Returns the samples in seconds together with the last run's output, which is what the correctness cross-check compares.

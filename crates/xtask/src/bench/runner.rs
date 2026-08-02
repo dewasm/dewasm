@@ -1,12 +1,13 @@
 //! The runner matrix: every execution environment a workload is measured on, how to tell whether it is usable on this host, and how to turn a `.wasm` into something runnable on it.
 //!
-//! Three families:
+//! Four families:
 //!
-//! * **wasmtime** — the AOT ceiling, and the correctness reference every other runner's stdout is diffed against.
-//! * **dewasm-\*** — a dewasm backend's generated source run on the host language. Codegen goes through the [`Backend`] trait directly, never by shelling out to the `dewasm` binary; the compiled backends (Go, Java) additionally build the generated source, mirroring what their e2e suites do (`go build` then run the binary, because `go run` swallows the guest exit code; `javac -d <classdir> Main.java` then `java -cp <classdir> Main`, because the generated Java always declares `public class Main`).
-//! * **pywasm / wardite** — third-party wasm interpreters written in Python and Ruby, driven through the scripts in `benchmarks/drivers/`. Their dependencies come from `benchmarks/setup.sh`; a missing one is reported as skipped-with-reason, never silently dropped.
+//! * **wasmtime** — the AOT ceiling and the correctness reference.
+//! * **native runtimes** — wasmer, wasmedge, wazero, wasm3: consume the `.wasm` directly; [`Native`] holds the per-runtime command-line spelling. Cross-checked like everything else.
+//! * **dewasm-\*** — generated source on the host language. Codegen goes through the [`Backend`] trait, never the CLI binary. Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`).
+//! * **pywasm / wardite** — third-party interpreters, driven via `benchmarks/drivers/`, provisioned by `benchmarks/setup.sh`.
 //!
-//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (ADR-15's fail-loud-not-skip policy, applied to a tool rather than a test: the harness keeps going, but the gap is named in both the JSON and the doc).
+//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (ADR-15 applied to tools: the harness keeps going, the gap is named in both outputs).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -54,8 +55,54 @@ pub enum Driver {
     Wardite(&'static str),
 }
 
+/// A third-party wasm runtime that consumes the `.wasm` directly, described entirely by how its command line is spelled.
+///
+/// The three fields are the whole difference between these runtimes: `wasmer` wants `run <module> -- <guest args>`, `wazero` wants `run <module> <guest args>`, and `wasmedge` and `wasm3` take the module as their first argument with no subcommand at all. The version flag differs too — `wazero` answers `version`, not `--version`.
+#[derive(Clone, Copy)]
+pub struct Native {
+    /// Executable name, overridable through `DEWASM_<NAME uppercased>` like [`wasmtime_bin`].
+    bin: &'static str,
+    /// Argv between the executable and the module path.
+    lead: &'static [&'static str],
+    /// Argv between the module path and the guest's own arguments.
+    separator: &'static [&'static str],
+    /// How this runtime is asked for its version.
+    version_args: &'static [&'static str],
+}
+
+const WASMER: Native = Native {
+    bin: "wasmer",
+    lead: &["run"],
+    // Without `--`, wasmer parses the guest's arguments as its own.
+    separator: &["--"],
+    version_args: &["--version"],
+};
+
+/// Measured at its default, which is the interpreter — each runtime runs as shipped. `--run-mode jit` was tried: 13x faster on `wat/i32_alu`, but it segfaults on `sqlite3-shell.wasm` (exit 139, reproducible; also logs to stdout, needing `--log-level=off`). A JIT column, if ever wanted, would be a separately labeled runner like `dewasm-ruby-yjit`, not a substitution.
+const WASMEDGE: Native = Native {
+    bin: "wasmedge",
+    lead: &[],
+    separator: &[],
+    version_args: &["--version"],
+};
+
+const WAZERO: Native = Native {
+    bin: "wazero",
+    lead: &["run"],
+    separator: &[],
+    version_args: &["version"],
+};
+
+const WASM3: Native = Native {
+    bin: "wasm3",
+    lead: &[],
+    separator: &[],
+    version_args: &["--version"],
+};
+
 pub enum Kind {
     Wasmtime,
+    Native(Native),
     Dewasm(Target),
     Driver(Driver),
 }
@@ -65,11 +112,15 @@ pub struct Runner {
     pub kind: Kind,
 }
 
-/// The full matrix, in report order: the ceiling first, then dewasm's backends, then the third-party interpreters we are actually competing with.
+/// The full matrix, in report order: the ceiling first, then the other native runtimes beside it, then dewasm's backends, then the third-party interpreters we are actually competing with.
 pub fn runners() -> Vec<Runner> {
     let r = |label, kind| Runner { label, kind };
     vec![
         r("wasmtime", Kind::Wasmtime),
+        r("wasmer", Kind::Native(WASMER)),
+        r("wasmedge", Kind::Native(WASMEDGE)),
+        r("wazero", Kind::Native(WAZERO)),
+        r("wasm3", Kind::Native(WASM3)),
         r("dewasm-ruby", Kind::Dewasm(Target::Ruby("--disable-yjit"))),
         r("dewasm-ruby-yjit", Kind::Dewasm(Target::Ruby("--yjit"))),
         r("dewasm-ruby-zjit", Kind::Dewasm(Target::Ruby("--zjit"))),
@@ -93,6 +144,13 @@ impl Runner {
             Kind::Wasmtime => wasmtime_bin()
                 .map(|_| ())
                 .ok_or_else(|| "wasmtime not found on PATH — see docs/testing.md".to_string()),
+            Kind::Native(native) => native.bin_path().map(|_| ()).ok_or_else(|| {
+                format!(
+                    "{} not found on PATH (or ${})",
+                    native.bin,
+                    native.env_var()
+                )
+            }),
             Kind::Dewasm(target) => target.availability(),
             Kind::Driver(driver) => driver.availability(),
         }
@@ -102,9 +160,39 @@ impl Runner {
     pub fn version(&self) -> Option<String> {
         match &self.kind {
             Kind::Wasmtime => capture_version(&wasmtime_bin()?, &["--version"]),
+            Kind::Native(native) => capture_version(&native.bin_path()?, native.version_args),
             Kind::Dewasm(target) => target.version(),
             Kind::Driver(driver) => driver.version(),
         }
+    }
+}
+
+impl Native {
+    /// The environment variable that overrides this runtime's executable, matching `DEWASM_WASMTIME`.
+    fn env_var(&self) -> String {
+        format!("DEWASM_{}", self.bin.to_uppercase())
+    }
+
+    /// The executable, if it runs at all here. Probed with the version command, which is the one invocation every one of these accepts without a module.
+    fn bin_path(&self) -> Option<PathBuf> {
+        let candidate =
+            std::env::var_os(self.env_var()).map_or_else(|| PathBuf::from(self.bin), PathBuf::from);
+        probe(&candidate, self.version_args).then_some(candidate)
+    }
+
+    /// The argv prefix that runs `wasm` on this runtime, up to but excluding the guest's own arguments.
+    fn launch(&self, wasm: &Path) -> Result<Launch> {
+        let bin = self
+            .bin_path()
+            .with_context(|| format!("{} not found on PATH", self.bin))?;
+        let mut args: Vec<String> = self.lead.iter().copied().map(String::from).collect();
+        args.push(path_arg(wasm));
+        args.extend(self.separator.iter().copied().map(String::from));
+        Ok(Launch {
+            program: bin,
+            args,
+            env: Vec::new(),
+        })
     }
 }
 
@@ -273,7 +361,7 @@ impl Driver {
 
 /// Prepares (and caches) the runnable artifact for each `(module, backend)` pair.
 ///
-/// Two levels of caching, both load-bearing: an in-process map so the three Ruby JIT modes convert once, and a content-addressed `/tmp` cache so a re-run of the suite does not repeat a multi-minute `go build` of a SQLite-class module. The disk key is the hash of the wasm bytes plus the backend name, so a rebuilt kernel invalidates itself.
+/// Two levels of caching, both load-bearing: an in-process map so the three Ruby JIT modes convert once, and a content-addressed `/tmp` cache so a re-run of the suite does not repeat a multi-minute `go build` of a SQLite-class module. The disk key is the hash of the wasm bytes plus the backend name, so a rebuilt module invalidates itself.
 #[derive(Default)]
 pub struct Workshop {
     artifacts: HashMap<(u64, &'static str), Artifact>,
@@ -299,6 +387,7 @@ impl Workshop {
                 args: vec!["run".to_string(), path_arg(wasm)],
                 env: Vec::new(),
             }),
+            Kind::Native(native) => native.launch(wasm),
             Kind::Dewasm(target) => self.dewasm_launch(*target, wasm, module_name),
             Kind::Driver(driver) => driver_launch(*driver, wasm),
         }
