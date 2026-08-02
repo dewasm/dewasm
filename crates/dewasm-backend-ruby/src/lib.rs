@@ -999,7 +999,7 @@ impl<'a> Gen<'a> {
                 } => {
                     // The arms stay inline — `if` is not a Ruby loop, so a `next`
                     // inside one already reaches the dispatch loop.
-                    st[cur].line(format!("if {} != 0", self.expr(cond)));
+                    st[cur].line(format!("if {}", self.cond(cond)));
                     st[cur].indent();
                     let a = self.flat_seq(st, cur, then);
                     st[a].line(format!("state = {after}; next"));
@@ -1104,7 +1104,7 @@ impl<'a> Gen<'a> {
                 els,
             } => {
                 let emit_if = |w: &mut CodeWriter, gen: &Self| {
-                    w.line(format!("if {} != 0", gen.expr(cond)));
+                    w.line(format!("if {}", gen.cond(cond)));
                     w.indent();
                     if then.is_empty() {
                         w.line("nil");
@@ -1134,7 +1134,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
-                w.block(format!("if {} != 0", self.expr(cond)), "end", |w| {
+                w.block(format!("if {}", self.cond(cond)), "end", |w| {
                     self.branch(w, target);
                 });
             }
@@ -1315,6 +1315,49 @@ impl<'a> Gen<'a> {
                     w.line(if *is_loop { "next" } else { "break" });
                 }
             }
+        }
+    }
+
+    /// An expression in boolean context (an `if`/`br_if` test).
+    ///
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context
+    /// then compares that against 0 — so the lowering built a ternary only to
+    /// undo it one operation later. In `sqlite3-shell` 24,794 of the 25,716
+    /// emitted ternaries are immediately tested this way. Emitting the
+    /// comparison as a Ruby boolean drops both the ternary and the test; the
+    /// operands are untouched, so signed views still go through `Rt.s32`/`s64`.
+    fn cond(&self, e: &Expr) -> String {
+        use BinOp::*;
+        let rel = |op: &BinOp| -> Option<(&'static str, Option<&'static str>)> {
+            Some(match op {
+                I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
+                I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
+                I32LtU | I64LtU | F32Lt | F64Lt => ("<", None),
+                I32GtU | I64GtU | F32Gt | F64Gt => (">", None),
+                I32LeU | I64LeU | F32Le | F64Le => ("<=", None),
+                I32GeU | I64GeU | F32Ge | F64Ge => (">=", None),
+                I32LtS => ("<", Some("s32")),
+                I32GtS => (">", Some("s32")),
+                I32LeS => ("<=", Some("s32")),
+                I32GeS => (">=", Some("s32")),
+                I64LtS => ("<", Some("s64")),
+                I64GtS => (">", Some("s64")),
+                I64LeS => ("<=", Some("s64")),
+                I64GeS => (">=", Some("s64")),
+                _ => return None,
+            })
+        };
+        match e {
+            Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => format!("{} == 0", self.expr(a)),
+            Expr::Bin(op, a, b) => match rel(op) {
+                Some((r, None)) => format!("{} {r} {}", self.expr(a), self.expr(b)),
+                Some((r, Some(sign))) => {
+                    let f = self.rt(sign);
+                    format!("{f}({}) {r} {f}({})", self.expr(a), self.expr(b))
+                }
+                None => format!("{} != 0", self.expr(e)),
+            },
+            _ => format!("{} != 0", self.expr(e)),
         }
     }
 
