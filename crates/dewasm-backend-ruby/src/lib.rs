@@ -7,6 +7,8 @@
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
 
+mod switch;
+
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
@@ -142,6 +144,7 @@ fn generate_class_inner(
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(FrameSets::default()),
         frame_stack: RefCell::new(Vec::new()),
+        label_refs: RefCell::new(std::collections::BTreeMap::new()),
         boxed_globals,
         data_file: data_file.map(str::to_string),
         data_offsets,
@@ -453,6 +456,8 @@ struct Gen<'a> {
     frames: RefCell<FrameSets>,
     /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares the top of this stack against a `br`'s target to decide between the depth-1 fast path (a plain `break`/`next` that leaves the innermost frame directly) and the cascade (`__br = <id>; break`, relayed by each crossed frame's epilogue until the target lands).
     frame_stack: RefCell<Vec<u32>>,
+    /// `br` reference counts per label for the function being emitted, used by [`switch::recognize`] to tell a tower's private labels from ones that carry independent meaning.
+    label_refs: RefCell<std::collections::BTreeMap<u32, usize>>,
     /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there and ADR-16.
     boxed_globals: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
@@ -842,6 +847,11 @@ impl<'a> Gen<'a> {
     }
 
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
+        {
+            let mut refs = self.label_refs.borrow_mut();
+            refs.clear();
+            switch::count_label_refs(&func.body, &mut refs);
+        }
         *self.frames.borrow_mut() = compute_frame_sets(&func.body);
         self.frame_stack.borrow_mut().clear();
         let ty = &self.module.types[func.type_idx as usize];
@@ -876,6 +886,39 @@ impl<'a> Gen<'a> {
         });
     }
 
+    /// Emit a recovered switch as `case … when …`. Integer-literal `when`s let Ruby compile the dispatch to `opt_case_dispatch` (a hash jump) rather than a chain of compares.
+    fn switch_stmt(&self, w: &mut CodeWriter, sw: &switch::Switch) {
+        self.stmts(w, sw.prelude);
+        w.line(format!("case {}", self.expr(sw.index)));
+        let arm = |w: &mut CodeWriter, a: &switch::Arm| {
+            w.indent();
+            match a {
+                // Falling out of the `case` lands exactly where a branch to the tower's outermost label did.
+                switch::Arm::Leave => w.line("nil"),
+                switch::Arm::Body(chain) if chain.iter().all(|c| c.is_empty()) => w.line("nil"),
+                switch::Arm::Body(chain) => {
+                    for part in chain {
+                        self.stmts(w, part);
+                    }
+                }
+                switch::Arm::Branch(t) => self.branch(w, t),
+            }
+            w.dedent();
+        };
+        for (values, a) in &sw.arms {
+            let vs = values
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            w.line(format!("when {vs}"));
+            arm(w, a);
+        }
+        w.line("else");
+        arm(w, &sw.default);
+        w.line("end");
+    }
+
     fn stmts(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
         for stmt in stmts {
             self.stmt(w, stmt);
@@ -907,6 +950,17 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::Block { label, body } => {
+                // A recovered `switch` keeps only its outermost frame — arms branch to it as the join — and replaces the rest of the tower with one `case`, so those branches stop relaying through the ladder entirely (see `switch`).
+                if let Ok(sw) = switch::recognize(label.id, body, &self.label_refs.borrow()) {
+                    let crossed = self.is_crossed(label.id);
+                    self.frame_stack.borrow_mut().push(label.id);
+                    w.block("begin", "end while false", |w| self.switch_stmt(w, &sw));
+                    if crossed {
+                        self.emit_land_or_relay(w, label.id);
+                    }
+                    self.frame_stack.borrow_mut().pop();
+                    return;
+                }
                 let crossed = self.is_crossed(label.id);
                 self.frame_stack.borrow_mut().push(label.id);
                 w.block("begin", "end while false", |w| self.stmts(w, body));
