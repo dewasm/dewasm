@@ -7,6 +7,7 @@
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
 
+mod flat;
 mod switch;
 
 use std::cell::RefCell;
@@ -144,6 +145,7 @@ fn generate_class_inner(
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(FrameSets::default()),
         frame_stack: RefCell::new(Vec::new()),
+        flat: RefCell::new(None),
         label_refs: RefCell::new(std::collections::BTreeMap::new()),
         boxed_globals,
         data_file: data_file.map(str::to_string),
@@ -456,6 +458,8 @@ struct Gen<'a> {
     frames: RefCell<FrameSets>,
     /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares the top of this stack against a `br`'s target to decide between the depth-1 fast path (a plain `break`/`next` that leaves the innermost frame directly) and the cascade (`__br = <id>; break`, relayed by each crossed frame's epilogue until the target lands).
     frame_stack: RefCell<Vec<u32>>,
+    /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]). `branch()` consults it to emit `state = N; next` instead of the cascade.
+    flat: RefCell<Option<flat::Plan>>,
     /// `br` reference counts per label for the function being emitted, used by [`switch::recognize`] to tell a tower's private labels from ones that carry independent meaning.
     label_refs: RefCell<std::collections::BTreeMap<u32, usize>>,
     /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there and ADR-16.
@@ -882,7 +886,41 @@ impl<'a> Gen<'a> {
             if !decl.is_empty() {
                 w.line(format!("{decl}nil"));
             }
-            self.stmts(w, &func.body);
+            let plan = flat::plan(&func.body, &self.frames.borrow().crossed);
+            match plan {
+                None => {
+                    *self.flat.borrow_mut() = None;
+                    self.stmts(w, &func.body);
+                }
+                Some(plan) => {
+                    let n = plan.nstates as usize;
+                    *self.flat.borrow_mut() = Some(plan);
+                    let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("  ")).collect();
+                    let last = self.flat_seq(&mut st, 0, &func.body);
+                    // Falling off the body ends the function; leave the dispatch loop.
+                    st[last].line(format!("state = {n}; next"));
+                    let texts = clean_states(st.into_iter().map(|c| c.finish()).collect());
+                    w.line("state = 0");
+                    w.block("while true", "end", |w| {
+                        w.line("case state");
+                        for (i, body) in texts.iter().enumerate() {
+                            let Some(body) = body else { continue };
+                            w.line(format!("when {i}"));
+                            w.indent();
+                            for line in body.lines() {
+                                w.line(line);
+                            }
+                            w.dedent();
+                        }
+                        w.line("else");
+                        w.indent();
+                        w.line("break");
+                        w.dedent();
+                        w.line("end");
+                    });
+                    *self.flat.borrow_mut() = None;
+                }
+            }
         });
     }
 
@@ -917,6 +955,70 @@ impl<'a> Gen<'a> {
         w.line("else");
         arm(w, &sw.default);
         w.line("end");
+    }
+
+    /// Emit `stmts` into a state machine, splitting at each dissolved frame.
+    /// Returns the state control is in afterwards.
+    fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
+        for stmt in stmts {
+            let plan_hit = {
+                let p = self.flat.borrow();
+                let p = p.as_ref().unwrap();
+                match stmt {
+                    Stmt::Block { label, .. }
+                    | Stmt::Loop { label, .. }
+                    | Stmt::If { label, .. }
+                        if p.dissolved.contains(&label.id) =>
+                    {
+                        Some((label.id, p.state_of[&label.id], p.after[&label.id]))
+                    }
+                    _ => None,
+                }
+            };
+            let Some((_id, target, after)) = plan_hit else {
+                self.stmt(&mut st[cur], stmt);
+                continue;
+            };
+            match stmt {
+                Stmt::Block { body, .. } => {
+                    cur = self.flat_seq(st, cur, body);
+                    st[cur].line(format!("state = {after}; next"));
+                    cur = after as usize;
+                }
+                Stmt::Loop { body, .. } => {
+                    // `target` is the head: entering the loop and taking its
+                    // back-edge are the same transition.
+                    st[cur].line(format!("state = {target}; next"));
+                    cur = target as usize;
+                    cur = self.flat_seq(st, cur, body);
+                    st[cur].line(format!("state = {after}; next"));
+                    cur = after as usize;
+                }
+                Stmt::If {
+                    cond, then, els, ..
+                } => {
+                    // The arms stay inline — `if` is not a Ruby loop, so a `next`
+                    // inside one already reaches the dispatch loop.
+                    st[cur].line(format!("if {} != 0", self.expr(cond)));
+                    st[cur].indent();
+                    let a = self.flat_seq(st, cur, then);
+                    st[a].line(format!("state = {after}; next"));
+                    st[cur].dedent();
+                    if !els.is_empty() {
+                        st[cur].line("else");
+                        st[cur].indent();
+                        let b = self.flat_seq(st, cur, els);
+                        st[b].line(format!("state = {after}; next"));
+                        st[cur].dedent();
+                    }
+                    st[cur].line("end");
+                    st[cur].line(format!("state = {after}; next"));
+                    cur = after as usize;
+                }
+                _ => unreachable!(),
+            }
+        }
+        cur
     }
 
     fn stmts(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
@@ -1197,6 +1299,13 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
+                // Addressed by value: one assignment plus a hash dispatch, the same cost from any depth.
+                if let Some(plan) = self.flat.borrow().as_ref() {
+                    if let Some(st) = plan.state_of.get(label) {
+                        w.line(format!("state = {st}; next"));
+                        return;
+                    }
+                }
                 // Fast path — a br whose target is the innermost enclosing frame leaves it directly: `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
@@ -1387,6 +1496,131 @@ impl<'a> Gen<'a> {
     }
 }
 
+/// Clean up the emitted state bodies.
+///
+/// Three passes, in order:
+///
+/// 1. **Dead code.** `flat_seq` appends a frame's exit transition whether or not
+///    the body already ended in one, so anything after an unconditional
+///    transition at an arm's top level is unreachable. On `sqlite3-shell` that
+///    was **52.7% of every line in `_f99`'s states** — code the JIT still has to
+///    compile and the instruction cache still has to hold.
+/// 2. **Merge.** With the dead copies gone, a state whose only remaining entry
+///    is one predecessor's trailing transition is just that predecessor's
+///    continuation, so it is spliced in and its arm disappears.
+/// 3. **Trailing `next`.** A transition that ends an arm can fall out of the
+///    `case` instead: the `while` loops anyway.
+fn clean_states(texts: Vec<String>) -> Vec<Option<String>> {
+    let is_goto = |l: &str| -> Option<usize> {
+        let t = l.trim();
+        if l.starts_with(char::is_whitespace) {
+            return None; // nested in an `if`: does not end the arm
+        }
+        t.strip_prefix("state = ")
+            .map(|r| r.strip_suffix("; next").unwrap_or(r))
+            .and_then(|r| r.parse().ok())
+    };
+
+    // 1. drop unreachable tails
+    let mut out: Vec<Option<String>> = texts
+        .into_iter()
+        .map(|body| {
+            let mut keep = Vec::new();
+            for l in body.lines() {
+                keep.push(l.to_string());
+                if is_goto(l).is_some() {
+                    break;
+                }
+            }
+            Some(
+                keep.join(
+                    "
+",
+                ) + "
+",
+            )
+        })
+        .collect();
+
+    // 2. splice single-entry states into their sole predecessor
+    let n = out.len();
+    loop {
+        let mut refs = vec![0usize; n + 1];
+        for body in out.iter().flatten() {
+            for l in body.lines() {
+                if let Some(t) = l
+                    .trim()
+                    .strip_prefix("state = ")
+                    .map(|r| r.strip_suffix("; next").unwrap_or(r))
+                    .and_then(|r| r.parse::<usize>().ok())
+                {
+                    if t <= n {
+                        refs[t] += 1;
+                    }
+                }
+            }
+        }
+        let mut merged = false;
+        for p in 0..n {
+            let Some(body) = out[p].clone() else { continue };
+            let Some(t) = body.lines().next_back().and_then(is_goto) else {
+                continue;
+            };
+            if t == 0 || t >= n || t == p || refs[t] != 1 || out[t].is_none() {
+                continue;
+            }
+            let head: String = body
+                .lines()
+                .take(body.lines().count() - 1)
+                .map(|l| {
+                    format!(
+                        "{l}
+"
+                    )
+                })
+                .collect();
+            let tail = out[t].take().unwrap();
+            out[p] = Some(format!("{head}{tail}"));
+            merged = true;
+            break;
+        }
+        if !merged {
+            break;
+        }
+    }
+
+    // 3. an arm-final transition can fall out of the `case`
+    out.into_iter()
+        .map(|b| {
+            b.map(|body| {
+                let Some(tail) = body.lines().next_back() else {
+                    return body;
+                };
+                let Some(rest) = tail.strip_suffix("; next") else {
+                    return body;
+                };
+                if is_goto(tail).is_none() {
+                    return body;
+                }
+                let head: String = body
+                    .lines()
+                    .take(body.lines().count() - 1)
+                    .map(|l| {
+                        format!(
+                            "{l}
+"
+                        )
+                    })
+                    .collect();
+                format!(
+                    "{head}{rest}
+"
+                )
+            })
+        })
+        .collect()
+}
+
 fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
@@ -1544,7 +1778,7 @@ mod units {
     }
 }
 
-/// Codegen-shape checks for the label-variable cascade (ADR-42): a multi-level `br` must lower to the `__br` cascade, never to `catch`/`throw`.
+/// Codegen-shape checks for control flow: a multi-level `br` must be addressed by *value* — a state assignment plus `next` into the dispatch loop — never by walking scopes (the ADR-42 `__br` cascade) and never by `catch`/`throw` (ADR-4).
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1571,14 +1805,18 @@ mod cascade {
     "#;
 
     #[test]
-    fn multi_level_br_uses_label_cascade() {
+    fn multi_level_br_is_addressed_by_value() {
         let src = convert(MIXED_DEPTHS);
-        // The cascade: a pending-label assignment, a landing compare, and a relay arm — plus the wrapped loop's back-edge `next`.
-        assert!(src.contains("__br ="), "no `__br =` in:\n{src}");
-        assert!(src.contains("if __br =="), "no landing compare in:\n{src}");
-        assert!(src.contains("elsif __br"), "no relay arm in:\n{src}");
-        assert!(src.contains("next"), "no loop back-edge in:\n{src}");
-        // ...and never the retired catch/throw shape.
+        // The dispatch loop, and a branch that names its target as a number.
+        assert!(src.contains("state = 0"), "no dispatch entry in:\n{src}");
+        assert!(src.contains("case state"), "no dispatch in:\n{src}");
+        assert!(src.contains("; next"), "no state transition in:\n{src}");
+        // The retired shapes: scope-walking relay (ADR-42) and catch/throw (ADR-4).
+        assert!(!src.contains("elsif __br"), "relay arm survived in:\n{src}");
+        assert!(
+            !src.contains("end while false"),
+            "cascade frame survived in:\n{src}"
+        );
         assert!(!src.contains("catch("), "catch survived in:\n{src}");
         assert!(!src.contains("throw "), "throw survived in:\n{src}");
     }
