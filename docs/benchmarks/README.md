@@ -1,7 +1,7 @@
 # Running the benchmarks
 
 How to run the cross-runtime benchmark suite and how to read its numbers.
-The results are in [results.md](results.md) (generated, never hand-edited) with its figures under `figs/`; the workloads live under [`benchmarks/`](../../benchmarks/README.md).
+The results are in [results.md](results.md) with its figures under `figs/`; the workloads live under [`benchmarks/`](../../benchmarks/README.md).
 
 ## Running
 
@@ -39,9 +39,9 @@ Useful options:
 
 ## Pitfalls when measuring by hand
 
+- Measure on mains power.
+  On battery an Apple silicon host runs the whole suite roughly 25% slower, with extra variance early in a run.
 - `wasmtime` keeps an on-disk compilation cache by default.
   Warm and cold runs differ by an order of ten; `-C cache=n` disables it.
 - Ruby's YJIT has no on-stack replacement.
   A single long-running loop is never JIT-compiled, so results swing on whether work is split across method calls.
-- Comparing two backend builds requires converting with each build.
-  Interleave the runs and use the same day's baseline; a clean sweep of exactly 1.00x usually means both sides measured the same artifact.

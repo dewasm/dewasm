@@ -1,6 +1,7 @@
 # benchmarks
 
-Everything the cross-runtime benchmark suite measures and compares against. How to run it and read the numbers is [docs/benchmarks/README.md](../docs/benchmarks/README.md).
+Everything the cross-runtime benchmark suite measures and compares against.
+How to run it and read the numbers is [docs/benchmarks/README.md](../docs/benchmarks/README.md).
 
 - `wat/` hand-written microbenchmarks, each isolating one instruction axis.
 - `c/` microbenchmarks compiled from C with `zig cc`, for workloads with realistic shape.

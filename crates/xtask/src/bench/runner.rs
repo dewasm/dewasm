@@ -203,10 +203,7 @@ impl Target {
                 let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
                     "ruby >= 3.4 not found on PATH — see docs/testing.md".to_string()
                 })?;
-                // `--yjit`/`--zjit` are build-time options: a ruby that has the flag but was compiled without the JIT exits non-zero here, which is a real unavailability, not a harness bug.
-                probe(&ruby, &[flag, "-e", "0"])
-                    .then_some(())
-                    .ok_or_else(|| format!("this ruby does not accept {flag}"))
+                ruby_jit_available(&ruby, flag)
             }
             Target::Python => dewasm_backend_python::find_python()
                 .map(|_| ())
@@ -306,6 +303,7 @@ impl Driver {
                 let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
                     "ruby >= 3.4 not found on PATH — see docs/testing.md".to_string()
                 })?;
+                ruby_jit_available(&ruby, flag)?;
                 let gem_home = wardite_gem_home().ok_or_else(|| {
                     "no GEM_HOME with wardite under benchmarks/cache/ — run benchmarks/setup.sh"
                         .to_string()
@@ -642,6 +640,20 @@ fn bench_tmp_dir() -> Result<PathBuf> {
     let dir = std::env::temp_dir().join("dewasm-bench");
     std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
     Ok(dir)
+}
+
+/// Whether `ruby <flag>` actually delivers the JIT the flag names. Exit codes cannot be trusted here: a ruby built without YJIT accepts `--yjit`, prints a warning, and exits 0, which would put no-JIT timings in a JIT column. So ask the VM itself.
+fn ruby_jit_available(ruby: &Path, flag: &str) -> Result<(), String> {
+    let check = match flag {
+        "--yjit" => "exit(defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled? ? 0 : 1)",
+        "--zjit" => "exit(defined?(RubyVM::ZJIT) && RubyVM::ZJIT.enabled? ? 0 : 1)",
+        _ => "exit 0",
+    };
+    probe(ruby, &[flag, "-e", check])
+        .then_some(())
+        .ok_or_else(|| {
+            format!("this ruby does not enable the JIT behind {flag} (built without it?)")
+        })
 }
 
 /// Whether `program args...` runs and exits 0. Used for every availability probe.

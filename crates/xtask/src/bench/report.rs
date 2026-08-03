@@ -122,7 +122,7 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
 
     let _ = writeln!(
         out,
-        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day. How to run and read these measurements is [README.md](README.md)."
+        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day.\nHow to run and read these measurements is [README.md](README.md)."
     );
     out.push('\n');
 
@@ -151,7 +151,7 @@ fn render_environment(out: &mut String, report: &Report) {
     let _ = writeln!(out, "| Arch | {} |", md_cell(&report.host.arch));
     out.push('\n');
 
-    out.push_str("Version strings are captured by executing each runtime. A runner missing from this table was unavailable on this host; its cells appear under [Not measured](#not-measured).\n\n");
+    out.push_str("Version strings are captured by executing each runtime.\nA runner missing from this table was unavailable on this host; its cells appear under [Not measured](#not-measured).\n\n");
     out.push_str("| Runner | Version |\n| --- | --- |\n");
     for runtime in report.runtimes.iter().filter(|runtime| runtime.available) {
         let version = runtime.version.as_deref().unwrap_or("unknown");
@@ -163,7 +163,7 @@ fn render_environment(out: &mut String, report: &Report) {
 fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
     out.push_str("## Results\n\n");
     if !charts.is_empty() {
-        out.push_str("Each workload has a chart (log axis, seconds; the title states the unit) with its full numbers folded underneath. Color is the runner family.\n\n");
+        out.push_str("Each workload has a chart (log axis, seconds; the title states the unit) with its full numbers folded underneath.\nColor is the runner family.\n\n");
     }
     // The two groups measure different quantities (per iteration vs per run), so they get separate subsections. Grouping derives from the label prefix; an empty group emits no heading.
     let workloads = ordered_workloads(report);
@@ -183,9 +183,9 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
         let in_app_group = workload.starts_with("app/");
         if group_open != Some(in_app_group) {
             out.push_str(if in_app_group {
-                "### Application benchmarks\n\nSeconds per **run** of a real cached program on fixed input. Every runner executes the same work, so wall times compare directly.\n\n"
+                "### Application benchmarks\n\nSeconds per **run** of a real cached program on fixed input.\nEvery runner executes the same work, so wall times compare directly.\n\n"
             } else {
-                "### Microbenchmarks\n\nSeconds per **iteration**. Iteration counts are calibrated per runner, so compare the per-iteration figures, not the raw wall times.\n\n"
+                "### Microbenchmarks\n\nSeconds per **iteration**.\nIteration counts are calibrated per runner, so compare the per-iteration figures, not the raw wall times.\n\n"
             });
             group_open = Some(in_app_group);
         }
@@ -307,7 +307,7 @@ fn render_gaps(out: &mut String, report: &Report) {
         out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
         return;
     }
-    out.push_str("Every pair the suite did not measure, and why. A missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\n\n");
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\n\n");
     out.push_str("| Workload | Runner | Reason |\n| --- | --- | --- |\n");
     for cell in skipped {
         if let Outcome::Skipped { reason } = &cell.outcome {
