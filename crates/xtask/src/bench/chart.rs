@@ -145,7 +145,7 @@ fn build(report: &Report, workload: &str) -> Option<Chart> {
     };
     let rows = rows(report, workload, quantity)?;
     let title = format!(
-        "{workload} — {}, median of the timed runs (log scale)",
+        "{workload}: {}, median of the timed runs (log scale)",
         quantity.phrase()
     );
     let alt = alt_text(workload, quantity, &rows);
@@ -198,7 +198,7 @@ fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
     let slowest = &rows[rows.len() - 1];
     let span = slowest.value / fastest.value;
     format!(
-        "{workload}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {} — a span of {}. The table below carries every number.",
+        "{workload}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {}, a span of {}. The table below carries every number.",
         quantity.phrase(),
         rows.len(),
         fastest.label,

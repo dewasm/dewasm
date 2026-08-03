@@ -6579,25 +6579,25 @@
       "workload": "app/sqlite3_query",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "reason": "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     }
   ]
 }

@@ -193,7 +193,7 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
 ];
 
 /// wardite loads the module and handles a bare `.quit`, but any actual query dies.
-const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query — it raises Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
+const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
 
 /// Cost, not capability: pywasm runs this correctly (byte-identical under `-batch`) at ~17.9 ms/row, so 100k rows is ~half an hour per sample. The row count cannot be lowered to meet it — below ~20k rows wasmtime's side is all process startup and the baseline dissolves.
-const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row — measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";
+const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";
