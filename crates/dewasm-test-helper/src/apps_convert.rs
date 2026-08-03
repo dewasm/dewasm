@@ -156,7 +156,7 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
     let wasm = apps_cache_dir().join(format!("{}.wasm", entry.stem));
     if !wasm.exists() {
         return Err(Failed::from(format!(
-            "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
+            "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
             entry.stem
         )));
     }

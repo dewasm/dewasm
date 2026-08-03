@@ -1,0 +1,392 @@
+//! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks/results.md`.
+//!
+//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them — unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots (ADR-56). The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
+
+use std::fmt::Write as _;
+
+use serde::{Deserialize, Serialize};
+
+use crate::bench::chart::Chart;
+
+/// The full result record. `schema` exists so a later reader can tell an old drop from a new one.
+#[derive(Serialize, Deserialize)]
+pub struct Report {
+    pub schema: u32,
+    /// UTC, `YYYY-MM-DDTHH:MM:SSZ`.
+    pub generated_at: String,
+    pub host: Host,
+    pub settings: Settings,
+    /// Every runner in the matrix, available or not, in matrix order.
+    pub runtimes: Vec<Runtime>,
+    pub results: Vec<Cell>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Host {
+    pub os: String,
+    pub arch: String,
+    pub kernel: String,
+    pub cpu: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Settings {
+    pub reps: usize,
+    pub target_ms: u64,
+    pub timeout_s: u64,
+    pub filter: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Runtime {
+    pub runner: String,
+    pub available: bool,
+    /// Why not, when `available` is false. Phrased as the setup step that would fix it.
+    pub unavailable_reason: Option<String>,
+    /// Captured by running the runtime, not hardcoded.
+    pub version: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Cell {
+    pub workload: String,
+    pub runner: String,
+    #[serde(flatten)]
+    pub outcome: Outcome,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum Outcome {
+    /// Measured.
+    Ok(Measurement),
+    /// Deliberately not run (unavailable runner, unbuilt module, declared exclusion). Always reported, never silently dropped.
+    Skipped { reason: String },
+    /// Attempted and broke. A stdout mismatch against wasmtime lands here too — a wrong answer is a hard failure, not a slow pass.
+    Failed { reason: String },
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Measurement {
+    /// The calibrated `<iterations>`; `null` for an app workload, which has no iteration parameter.
+    pub iterations: Option<u64>,
+    /// For apps: executions averaged into one sample ([`crate::bench::measure::repeat_app`]); `null` for microbenchmarks.
+    #[serde(default)]
+    pub runs_per_sample: Option<u64>,
+    pub reps: usize,
+    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run — process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time (ADR-57).
+    pub cold_start: Option<Samples>,
+    /// `t(N)`: the full run.
+    pub total: Samples,
+    /// `t(N) - t(0)` on the minima. `null` when there is no `t(0)` to subtract, or when the difference came out non-positive (pure noise — the workload is too small to see on this runner).
+    pub compute_s: Option<f64>,
+    pub ns_per_op_min: Option<f64>,
+    pub ns_per_op_median: Option<f64>,
+    /// Module load/instantiate time as the third-party driver reports it on stderr (`load_ms=`). Only the pywasm/wardite runners produce this.
+    pub load_ms: Option<f64>,
+    pub verification: Verification,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Samples {
+    pub min_s: f64,
+    pub median_s: f64,
+    pub samples_s: Vec<f64>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verification {
+    /// This runner *is* the reference (wasmtime).
+    Reference,
+    /// stdout was byte-identical to wasmtime's at the same iteration count. A mismatch never reaches here — it is an [`Outcome::Failed`].
+    Match,
+}
+
+impl Report {
+    /// Pretty-printed JSON, newline-terminated.
+    pub fn to_json(&self) -> anyhow::Result<String> {
+        let mut text = serde_json::to_string_pretty(self)?;
+        text.push('\n');
+        Ok(text)
+    }
+}
+
+/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables, inline ADR links — plus the generated-file marker `docs/support.md` carries.
+///
+/// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`; each one is embedded above the table for its own workload. Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
+pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
+    let mut out = String::new();
+    out.push_str("# Benchmarks\n\n");
+    out.push_str("<!-- AUTO-GENERATED by `cargo xtask bench`; do not edit by hand. Unlike docs/support.md there is no freshness test: timings are not reproducible byte-for-byte, so this file is a dated measurement, not a compared snapshot. -->\n\n");
+
+    let _ = writeln!(
+        out,
+        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day.\nHow to run and read these measurements is [README.md](README.md)."
+    );
+    out.push('\n');
+
+    render_environment(&mut out, report);
+    render_results(&mut out, report, charts);
+    render_gaps(&mut out, report);
+    out
+}
+
+/// The quantity the tables and the charts both compare on, taken on the minima: normalized throughput (ns/op) for a microbenchmark, whole wall time for an app, which has no iteration parameter.
+fn comparable(m: &Measurement, is_app: bool) -> Option<f64> {
+    if is_app {
+        Some(m.total.min_s)
+    } else {
+        m.ns_per_op_min
+    }
+}
+
+fn render_environment(out: &mut String, report: &Report) {
+    out.push_str("## Environment\n\n");
+    let _ = writeln!(out, "Measured {}.\n", report.generated_at);
+    out.push_str("| | |\n| --- | --- |\n");
+    let _ = writeln!(out, "| OS | {} |", md_cell(&report.host.os));
+    let _ = writeln!(out, "| Kernel | {} |", md_cell(&report.host.kernel));
+    let _ = writeln!(out, "| CPU | {} |", md_cell(&report.host.cpu));
+    let _ = writeln!(out, "| Arch | {} |", md_cell(&report.host.arch));
+    out.push('\n');
+
+    out.push_str("Version strings are captured by executing each runtime.\nA runner missing from this table was unavailable on this host; its cells appear under [Not measured](#not-measured).\n\n");
+    out.push_str("| Runner | Version |\n| --- | --- |\n");
+    for runtime in report.runtimes.iter().filter(|runtime| runtime.available) {
+        let version = runtime.version.as_deref().unwrap_or("unknown");
+        let _ = writeln!(out, "| `{}` | {} |", runtime.runner, md_cell(version));
+    }
+    out.push('\n');
+}
+
+fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
+    out.push_str("## Results\n\n");
+    if !charts.is_empty() {
+        out.push_str("Each workload has a chart (log axis, seconds; the title states the unit) with its full numbers folded underneath.\nColor is the runner family.\n\n");
+    }
+    // The two groups measure different quantities (per iteration vs per run), so they get separate subsections. Grouping derives from the label prefix; an empty group emits no heading.
+    let workloads = ordered_workloads(report);
+    let mut group_open: Option<bool> = None;
+    for workload in workloads {
+        let cells: Vec<&Cell> = report
+            .results
+            .iter()
+            .filter(|cell| cell.workload == workload)
+            .collect();
+        if !cells
+            .iter()
+            .any(|cell| matches!(cell.outcome, Outcome::Ok(_)))
+        {
+            continue;
+        }
+        let in_app_group = workload.starts_with("app/");
+        if group_open != Some(in_app_group) {
+            out.push_str(if in_app_group {
+                "### Application benchmarks\n\nSeconds per **run** of a real cached program on fixed input.\nEvery runner executes the same work, so wall times compare directly.\n\n"
+            } else {
+                "### Microbenchmarks\n\nSeconds per **iteration**.\nIteration counts are calibrated per runner, so compare the per-iteration figures, not the raw wall times.\n\n"
+            });
+            group_open = Some(in_app_group);
+        }
+        let _ = writeln!(out, "#### `{workload}`\n");
+        if let Some(chart) = charts.iter().find(|chart| chart.workload == workload) {
+            render_chart(out, chart);
+        }
+        // The ratio column compares like with like: normalized throughput for a microbenchmark, whole wall time for an app (which has no iteration parameter).
+        let is_app = workload.starts_with("app/");
+        let baseline = cells
+            .iter()
+            .find(|cell| cell.runner == "wasmtime")
+            .and_then(|cell| match &cell.outcome {
+                Outcome::Ok(m) => comparable(m, is_app),
+                _ => None,
+            });
+
+        // The table is the reference, not the finding, so it goes behind a disclosure: chart visible, numbers one click away. The blank line after </summary> is load-bearing — GitHub will not render a markdown table inside <details> without it.
+        let _ = writeln!(
+            out,
+            "<details>\n<summary>Full numbers for <code>{workload}</code></summary>\n"
+        );
+
+        if is_app {
+            out.push_str("| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |\n");
+            out.push_str("| --- | --- | --- | --- | --- | --- |\n");
+        } else {
+            out.push_str("| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |\n");
+            out.push_str("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        }
+        for cell in &cells {
+            match &cell.outcome {
+                Outcome::Ok(m) => render_ok_row(out, cell, m, baseline, is_app),
+                Outcome::Failed { reason } => {
+                    // One empty cell per column but the last, which carries the reason: apps have 6 columns, microbenchmarks 8.
+                    let span = if is_app { 5 } else { 7 };
+                    let _ = writeln!(
+                        out,
+                        "| `{}` |{} **FAILED** — {} |",
+                        cell.runner,
+                        " |".repeat(span - 1),
+                        md_cell(reason)
+                    );
+                }
+                Outcome::Skipped { .. } => {}
+            }
+        }
+        out.push_str("\n</details>\n\n");
+    }
+}
+
+/// A chart, above the table it summarizes. `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file: GitHub honours the `prefers-color-scheme` source, and a renderer that does not falls back to the light `<img>`. Paths are relative to `docs/benchmarks/results.md`, which sits beside the `figs/` directory the SVGs are written into.
+fn render_chart(out: &mut String, chart: &Chart) {
+    out.push_str("<picture>\n");
+    let _ = writeln!(
+        out,
+        "  <source media=\"(prefers-color-scheme: dark)\" srcset=\"figs/{}-dark.svg\">",
+        chart.stem
+    );
+    let _ = writeln!(
+        out,
+        "  <img alt=\"{}\" src=\"figs/{}.svg\">",
+        html_attr(&chart.alt),
+        chart.stem
+    );
+    out.push_str("</picture>\n\n");
+}
+
+fn render_ok_row(
+    out: &mut String,
+    cell: &Cell,
+    m: &Measurement,
+    baseline: Option<f64>,
+    is_app: bool,
+) {
+    let load = m
+        .load_ms
+        .map_or_else(|| "—".to_string(), |ms| format!("{ms:.1} ms"));
+    let ratio = match (baseline, comparable(m, is_app)) {
+        (Some(base), Some(mine)) if base > 0.0 => fmt_ratio(mine / base),
+        _ => "—".to_string(),
+    };
+    if is_app {
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} | {ratio} | {load} |",
+            cell.runner,
+            m.runs_per_sample
+                .map_or_else(|| "—".to_string(), |k| k.to_string()),
+            fmt_seconds(m.total.min_s),
+            fmt_seconds(m.total.median_s),
+        );
+    } else {
+        let cold = m
+            .cold_start
+            .as_ref()
+            .map_or_else(|| "—".to_string(), |s| fmt_seconds(s.min_s));
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} | {} | {} | {ratio} | {load} |",
+            cell.runner,
+            m.iterations.map_or_else(|| "—".to_string(), fmt_count),
+            m.ns_per_op_min.map_or_else(|| "—".to_string(), fmt_ns),
+            m.ns_per_op_median.map_or_else(|| "—".to_string(), fmt_ns),
+            cold,
+            fmt_seconds(m.total.min_s),
+        );
+    }
+}
+
+fn render_gaps(out: &mut String, report: &Report) {
+    out.push_str("## Not measured\n\n");
+    let skipped: Vec<&Cell> = report
+        .results
+        .iter()
+        .filter(|cell| matches!(cell.outcome, Outcome::Skipped { .. }))
+        .collect();
+    if skipped.is_empty() {
+        out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
+        return;
+    }
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\n\n");
+    out.push_str("| Workload | Runner | Reason |\n| --- | --- | --- |\n");
+    for cell in skipped {
+        if let Outcome::Skipped { reason } = &cell.outcome {
+            let _ = writeln!(
+                out,
+                "| `{}` | `{}` | {} |",
+                cell.workload,
+                cell.runner,
+                md_cell(reason)
+            );
+        }
+    }
+    out.push('\n');
+}
+
+/// Workload labels in the order they first appear in `results`, which is the order the suite ran them. Shared with [`crate::bench::chart`] so a chart and its table can never end up in different orders.
+pub fn ordered_workloads(report: &Report) -> Vec<String> {
+    let mut seen: Vec<String> = Vec::new();
+    for cell in &report.results {
+        if !seen.contains(&cell.workload) {
+            seen.push(cell.workload.clone());
+        }
+    }
+    // Microbenchmarks before apps, each keeping the record's own order. The doc emits one heading per group as it walks this list, so a record that happened to interleave the two families would otherwise produce a repeated heading rather than a reordered one.
+    let (micro, apps): (Vec<String>, Vec<String>) = seen
+        .into_iter()
+        .partition(|label| !label.starts_with("app/"));
+    micro.into_iter().chain(apps).collect()
+}
+
+fn fmt_seconds(seconds: f64) -> String {
+    if seconds < 1.0 {
+        format!("{:.1} ms", seconds * 1000.0)
+    } else {
+        format!("{seconds:.2} s")
+    }
+}
+
+/// A slowdown factor against wasmtime. Sub-1.0 ratios (an interpreter winning on cold start) need a decimal to be readable at all.
+fn fmt_ratio(ratio: f64) -> String {
+    if ratio < 10.0 {
+        format!("{ratio:.2}x")
+    } else {
+        format!("{ratio:.0}x")
+    }
+}
+
+fn fmt_ns(ns: f64) -> String {
+    if ns >= 1000.0 {
+        format!("{ns:.0}")
+    } else if ns >= 10.0 {
+        format!("{ns:.1}")
+    } else {
+        format!("{ns:.2}")
+    }
+}
+
+/// A thousands-separated iteration count, so a reader can tell 30000000 from 3000000 at a glance.
+fn fmt_count(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(' ');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Escape the one character that would break a markdown table row.
+fn md_cell(text: &str) -> String {
+    text.replace('|', "\\|")
+}
+
+/// Escape text going into a double-quoted HTML attribute (the chart alt text, which is generated from runner labels and numbers).
+fn html_attr(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}

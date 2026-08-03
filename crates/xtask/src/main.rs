@@ -2,8 +2,11 @@
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command (ADR-56): the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM frame, which stays on the embedded `wasmtime` crate because its custom-import interface can't run through `wasmtime run` (ADR-53). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
+//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
+//!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
+mod bench;
 mod doom_snapshot;
 
 use std::path::{Path, PathBuf};
@@ -30,12 +33,41 @@ Commands:
                                optional substring `filter` limits it to matching
                                snapshots (e.g. `update-snapshots doom`). Needs
                                `wasmtime` on PATH and the apps cache populated
-                               (examples/apps/fetch-and-build.sh; the DOOM frame
+                               (examples/apps/setup.sh; the DOOM frame
                                needs examples/apps/scripts/doom.sh). Checked by
                                the compare-only wasmtime freshness suite
                                (`cargo test -p dewasm-test-helper --features
                                wasmtime_test --test apps_wasmtime`) and the
                                per-backend `doom_frame` cases.
+    bench [filter] [options]   Run the cross-runtime benchmark suite: every
+                               workload in benchmarks/ (and the app cases) on
+                               every dewasm backend, on wasmtime and the other
+                               native runtimes (wasmer, wasmedge, wazero,
+                               wasm3), and on the pywasm/wardite interpreters.
+                               Writes a dated result file to benchmarks/results/
+                               and regenerates docs/benchmarks/results.md plus
+                               the SVG charts it embeds (docs/benchmarks/figs/, one per
+                               workload). An optional substring `filter` limits
+                               it to matching workload/runner labels (wasmtime
+                               always runs, as the baseline and the correctness
+                               reference); an unmatched filter is an error.
+                               Needs `wasmtime` on PATH, the microbenchmarks built
+                               (benchmarks/wat/build.sh, benchmarks/c/build.sh),
+                               the interpreter deps installed
+                               (benchmarks/setup.sh) and the apps cache
+                               populated; anything missing is reported as
+                               skipped-with-reason rather than dropped. Not a
+                               compared snapshot: no freshness test.
+                               Options: --list (print the matrix and each
+                               runner's availability, run nothing), --reps N
+                               (timed runs per measurement, default 5),
+                               --target-ms MS (compute time the iteration
+                               calibrator aims at, default 300),
+                               --timeout SECS (per-process ceiling, default
+                               900), --render FILE (re-render
+                               the results doc and its charts from a stored
+                               benchmarks/results/*.json without measuring
+                               anything, for when only the wording changed).
 ";
 
 fn main() -> Result<()> {
@@ -43,6 +75,7 @@ fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
         Some("update-snapshots") => update_snapshots(args.next().as_deref()),
+        Some("bench") => bench::main(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())

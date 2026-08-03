@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-(cd ../apps && ./fetch-and-build.sh)
+(cd ../apps && ./setup.sh)
 
 echo "rails example: converting libsqlite3.wasm -> sqlite3/lib/sqlite3/sqlite3_wasm.rb"
 cargo run --release -q -p dewasm-cli -- \

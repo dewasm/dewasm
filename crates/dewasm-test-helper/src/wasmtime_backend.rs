@@ -67,7 +67,7 @@ impl BackendUnderTest for Wasmtime {
         let path = Path::new(source);
         assert!(
             path.exists(),
-            "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
+            "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
             source
         );
         run_command_bytes(

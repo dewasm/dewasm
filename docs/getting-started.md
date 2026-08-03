@@ -62,7 +62,7 @@ $ javac Main.java && java Main
 Hello, WASI!
 ```
 
-A real binary works the same way. If you have run `examples/apps/fetch-and-build.sh`, try the cowsay showpiece:
+A real binary works the same way. If you have run `examples/apps/setup.sh`, try the cowsay showpiece:
 
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
