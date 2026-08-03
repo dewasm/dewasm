@@ -1017,8 +1017,8 @@ impl<'a> Gen<'a> {
                         st[cur].dedent();
                     }
                     st[cur].line("end");
-                    // Reachable unless neither arm can fall out of the `if`.
-                    if els.is_empty() || !(terminates(then) && terminates(els)) {
+                    // Reachable only through the condition-false fallthrough. With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
+                    if els.is_empty() {
                         st[cur].line(format!("state = {after}; next"));
                     }
                     cur = after as usize;
@@ -1711,6 +1711,35 @@ mod cascade {
               (local.set 1 (i32.const 7))))
           (local.get 1)))
     "#;
+
+    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so ADR-58's exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial green and only costs tight-loop speed.
+    const SOLE_LOOP_EXIT: &str = r#"
+      (module
+        (func (export "f") (param i32) (result i32)
+          (local i32)
+          (block $done
+            (loop $l
+              (br_if $done (i32.eqz (local.get 0)))
+              (local.set 0 (i32.sub (local.get 0) (i32.const 1)))
+              (local.set 1 (i32.add (local.get 1) (i32.const 3)))
+              (br $l)))
+          (local.get 1)))
+    "#;
+
+    #[test]
+    fn sole_statement_loop_exit_stays_structured() {
+        let src = convert(SOLE_LOOP_EXIT);
+        assert!(src.contains("while true"), "no structured loop in:\n{src}");
+        assert!(
+            src.contains("break"),
+            "no plain break for the exit in:\n{src}"
+        );
+        assert!(
+            !src.contains("case state"),
+            "sole-statement loop was dissolved into a dispatch in:\n{src}"
+        );
+        assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
+    }
 
     #[test]
     fn multi_level_br_is_addressed_by_value() {
