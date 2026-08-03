@@ -1,9 +1,9 @@
 # benchmarks
 
-The workloads for the cross-runtime benchmark suite, and the driver scripts for the two pure-source wasm interpreters it compares against ([wardite](https://github.com/udzura/wardite) and [pywasm](https://github.com/mohanson/pywasm)).
+Everything the cross-runtime benchmark suite measures and compares against. How to run it and read the numbers is [docs/benchmarks/README.md](../docs/benchmarks/README.md).
 
-- `wat/` holds hand-written microbenchmarks that each isolate one instruction axis,
-- `c/` ones compiled from C with `zig cc` for workloads with realistic shape;
-- `benchmarks/setup.sh` builds both into the gitignored `cache/` and pins the interpreters there.
-
-The harness that runs everything is `cargo xtask bench` in `crates/xtask`, its results land in `results/` and `docs/benchmarks/results.md`, and the measurement design — including why every workload is confined to the feature intersection all runners support — is [ADR-57](../docs/adr/57-benchmark-harness.md).
+- `wat/` hand-written microbenchmarks, each isolating one instruction axis.
+- `c/` microbenchmarks compiled from C with `zig cc`, for workloads with realistic shape.
+- `drivers/` scripts that run a module under the two pure-source wasm interpreters, [wardite](https://github.com/udzura/wardite) (Ruby) and [pywasm](https://github.com/mohanson/pywasm) (Python), with the same command line every other runner gets.
+- `cache/` gitignored build output: the compiled modules and the pinned interpreter installs, produced by `setup.sh`.
+- `results/` one dated JSON record per full benchmark run; the generated results page is rendered from such a record.

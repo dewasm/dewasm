@@ -122,7 +122,7 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
 
     let _ = writeln!(
         out,
-        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day. How to run and read these measurements is [README.md](README.md); the design rationale is [ADR-57](../adr/57-benchmark-harness.md)."
+        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day. How to run and read these measurements is [README.md](README.md)."
     );
     out.push('\n');
 
