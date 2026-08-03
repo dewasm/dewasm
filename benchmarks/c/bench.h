@@ -17,7 +17,7 @@
  * bypassing crt1 and libc entirely. Everything they need -- argv
  * parsing, decimal output -- is here, and it is deliberately small.
  *
- * See benchmarks/README.md for the full contract and the build flags.
+ * The measurement design and the runner-intersection constraint are ADR-57; the flags are documented in c/build.sh.
  */
 
 #ifndef DEWASM_BENCH_H

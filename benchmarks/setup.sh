@@ -19,7 +19,6 @@
 #
 #   pypy3 -m pip install pywasm==2.2.3
 #
-# See benchmarks/README.md.
 
 set -euo pipefail
 

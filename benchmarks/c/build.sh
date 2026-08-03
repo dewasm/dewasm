@@ -23,7 +23,7 @@ require_tool() {
 
 require_tool zig "install zig (brew install zig), as examples/apps/fetch-and-build.sh also needs"
 
-# --- C microbenchmark flags. Each one is load-bearing; see benchmarks/README.md.
+# --- C microbenchmark flags. Each one is load-bearing.
 #
 # -nostdlib      The microbenchmarks define their own _start and use no libc. Linking
 #                wasi-libc's stdio would import fd_seek and fd_close, which
