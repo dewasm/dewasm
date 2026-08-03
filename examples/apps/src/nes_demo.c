@@ -11,7 +11,7 @@
  * test-helper's frame_to_ppm and the per-backend glue are reused unchanged.
  *
  * Import-free is a goal: we avoid stdio/assert so wasi-libc pulls nothing in,
- * leaving the module's import section empty (verified with wasm-objdump -x in
+ * leaving the module's import section empty (verified with wasm-dis in
  * nes.sh). Only malloc/memset (no imports) and agnes itself are used.
  */
 #include <stdlib.h>

@@ -140,6 +140,10 @@ load_rom() {
     exit 1
   fi
   local i
+  # nes_mem is associative (ADR-51), so the subscript is NOT an arithmetic
+  # context and must be pre-evaluated — SC2321's "remove the $((" assumes an
+  # indexed array and would store under the literal key "ptr + i".
+  # shellcheck disable=SC2321
   for (( i = 0; i < size; i++ )); do
     nes_mem[$(( ptr + i ))]=${bytes[i]}
   done

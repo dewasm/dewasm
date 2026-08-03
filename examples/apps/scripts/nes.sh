@@ -51,7 +51,7 @@ fi
 require_tool nes zig "install zig (e.g. brew install zig) to build the nes app"
 require_tool nes unzip
 require_tool nes wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the nes app (ADR-39)"
-require_tool nes wasm-objdump "install wabt (e.g. brew install wabt) to verify the nes import section"
+require_tool nes wasm-dis "install binaryen (e.g. brew install binaryen) to verify the nes import section"
 
 echo "nes: fetching $ROM_URL"
 new_tmpdir
@@ -76,10 +76,11 @@ echo "nes: wasm-opt -O2 (ADR-39)"
 wasm_opt_inplace cache/nes.wasm
 
 # Import-free is a load-bearing property (the snapshot oracle wires no imports):
-# fail loud if agnes/wasi-libc pulled anything in.
-if wasm-objdump -x -j Import cache/nes.wasm | grep -q '\- func\['; then
+# fail loud if agnes/wasi-libc pulled anything in. wasm-dis ships with binaryen,
+# which the build already requires for wasm-opt.
+if wasm-dis cache/nes.wasm | grep -q '^ (import '; then
   echo "nes: nes.wasm has wasm imports (expected none):" >&2
-  wasm-objdump -x -j Import cache/nes.wasm >&2
+  wasm-dis cache/nes.wasm | grep '^ (import ' >&2
   exit 1
 fi
 
