@@ -1,6 +1,6 @@
 # ADR-42 — Ruby Backend: Label-Variable Cascade for Multi-Level `br`
 
-Status: **Accepted, 2026-07-28.** Implemented in `crates/dewasm-backend-ruby/src/lib.rs`; supersedes the multi-level-`br` and loop-`catch`-value decisions of [ADR-4](4-ruby-backend-lowering.md) (its temps-hoisting and `call_indirect` decisions stand).
+Status: **Accepted, 2026-07-28.** Implemented in `crates/dewasm-backend-ruby/src/lib.rs`; supersedes the multi-level-`br` and loop-`catch`-value decisions of [ADR-4](4-ruby-backend-lowering.md) (its temps-hoisting and `call_indirect` decisions stand). The cross-frame relay protocol below — `__br`, the land-or-relay epilogue, the omitted outermost arm — is in turn superseded by [ADR-58](58-ruby-branch-by-value.md) and no longer runs on any path; the lean frame shapes and the depth-1 fast path stand, and remain the lowering for every function with no crossed frame.
 
 ## Context
 
