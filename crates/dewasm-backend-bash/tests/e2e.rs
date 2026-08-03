@@ -7,9 +7,9 @@ use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, shared_table_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, BackendUnderTest,
+    nes_frame_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, shared_table_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e,
+    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
 };
 
 pub struct Bash;
@@ -188,6 +188,53 @@ done
 [[ -n $fmt ]] && printf "$fmt"
 "#;
 
+/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
+/// `allocRom`'s buffer via `mem_init` (the same runtime helper active data
+/// segments use), tick `{frames}` times with no input, dump the framebuffer
+/// through the same chunked `printf` `\xNN` pipeline as DOOM. `ROM_BYTES` is
+/// built with `od`/`mapfile` rather than a bash loop — the ROM is 41 KB, and
+/// `mem_init`'s own copy loop already walks it once. `{rom}` (the cached
+/// ROM's host path) and `{frames}` filled by the runner. The trailing `exit
+/// 0` matters here in a way it doesn't for DOOM: at NES's 256x240 the pixel
+/// count divides the 4096-pixel flush chunk exactly, so the final `[[ -n
+/// $fmt ]]` is false (everything already flushed inside the loop) and,
+/// uncorrected, that would leave the script's own exit status at the `[[
+/// ]]`'s 1 — a false failure despite a byte-correct frame on stdout.
+const BASH_NES_FRAME_GLUE: &str = r#"mapfile -t ROM_BYTES < <(od -An -v -tu1 "{rom}" | tr -s ' \n' '\n' | sed '/^$/d')
+
+nes_init || { echo "nes_init failed" >&2; exit 1; }
+rom_len=${#ROM_BYTES[@]}
+nes_invoke allocRom "$rom_len" || { echo "allocRom failed: ${TRAP_MSG-}" >&2; exit 1; }
+rom_ptr=$R0
+mem_init nes_ ROM_BYTES "$rom_ptr" 0 "$rom_len" || { echo "mem_init failed: ${TRAP_MSG-}" >&2; exit 1; }
+nes_invoke initGame || { echo "initGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+[[ $R0 == 1 ]] || { echo "initGame returned $R0" >&2; exit 1; }
+for (( _t = 0; _t < {frames}; _t++ )); do
+  nes_invoke tickGame || { echo "tickGame failed: ${TRAP_MSG-}" >&2; exit 1; }
+done
+
+nes_invoke frameWidth || { echo "frameWidth failed: ${TRAP_MSG-}" >&2; exit 1; }
+w=$R0
+nes_invoke frameHeight || { echo "frameHeight failed: ${TRAP_MSG-}" >&2; exit 1; }
+h=$R0
+nes_invoke frameOffset || { echo "frameOffset failed: ${TRAP_MSG-}" >&2; exit 1; }
+off=$R0
+n=$(( w * h * 4 ))
+printf 'P6\n%d %d\n255\n' "$w" "$h"
+fmt=''
+cnt=0
+for (( i = 0; i < n; i += 4 )); do
+  r=${nes_mem[$(( off + i + 2 ))]-0}
+  g=${nes_mem[$(( off + i + 1 ))]-0}
+  b=${nes_mem[$(( off + i ))]-0}
+  printf -v px '\\x%02x\\x%02x\\x%02x' "$r" "$g" "$b"
+  fmt+=$px
+  if (( ++cnt >= 4096 )); then printf "$fmt"; fmt=''; cnt=0; fi
+done
+[[ -n $fmt ]] && printf "$fmt"
+exit 0
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Bash, BASH_ADD_GLUE);
@@ -217,6 +264,8 @@ qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
 
 doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
+// Ultra tier (ADR-48): measured ~25s/tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~17 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above.
+nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
 shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
 // libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e! / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no host-language C API to plumb a pointer-returning binding through (ADR-12), and the multi-MB reactor artifacts are far past what Bash's parser can load in practice. embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).

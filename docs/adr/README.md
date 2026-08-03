@@ -72,6 +72,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-56 | [One Command Regenerates Every Execution Snapshot](56-unified-snapshot-regeneration.md) | Accepted |
 | ADR-57 | [Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline](57-benchmark-harness.md) | Accepted |
 | ADR-58 | [Ruby Backend: Address a Branch by Value, Not by Lexical Scope](58-ruby-branch-by-value.md) | Accepted |
+| ADR-59 | [NES Demo: A Self-Built Guest with a File-Based ROM and an Export-Only Interface](59-nes-example-agnes.md) | Accepted |
 
 ## Adding a new ADR
 

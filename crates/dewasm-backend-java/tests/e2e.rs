@@ -8,10 +8,11 @@ use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_test_helper::{
     cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e,
-    run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
+    libsqlite3_c_api_e2e, nes_frame_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
+    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
+    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
+    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
+    BackendUnderTest, PtyCommand,
 };
 
 mod common;
@@ -478,6 +479,40 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
 }
 "#;
 
+/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
+/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
+/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
+/// cached ROM's host path) and `{frames}` filled by the runner.
+const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        byte[] rom = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("{rom}"));
+        Nes nes = new Nes(null, null, null, null);
+        ((Rt.Fn) nes.Exports.get("_initialize")).invoke(new Object[]{});
+        int ptr = (int)(Integer) ((Rt.Fn) nes.Exports.get("allocRom")).invoke(new Object[]{rom.length});
+        nes.memory.init(Integer.toUnsignedLong(ptr), rom, 0, rom.length);
+        int ok = (int)(Integer) ((Rt.Fn) nes.Exports.get("initGame")).invoke(new Object[]{});
+        if (ok != 1) throw new RuntimeException("initGame failed: " + ok);
+        Rt.Fn tick = (Rt.Fn) nes.Exports.get("tickGame");
+        for (int i = 0; i < {frames}; i++) tick.invoke(new Object[]{});
+
+        int w = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameWidth")).invoke(new Object[]{});
+        int h = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameHeight")).invoke(new Object[]{});
+        int off = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameOffset")).invoke(new Object[]{});
+        byte[] d = nes.memory.d;
+        byte[] out = new byte[w * h * 3];
+        int j = 0;
+        for (int i = 0; i < w * h * 4; i += 4) {
+            out[j++] = d[off + i + 2];
+            out[j++] = d[off + i + 1];
+            out[j++] = d[off + i];
+        }
+        System.out.write(("P6\n" + w + " " + h + "\n255\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        System.out.write(out);
+        System.out.flush();
+    }
+}
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Java, JAVA_ADD_GLUE);
@@ -509,6 +544,7 @@ sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
 
 doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
+nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
 
 shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.

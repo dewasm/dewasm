@@ -45,6 +45,7 @@ Beyond simple examples, `dewasm` scales to *real libraries and applications* too
 
 - [examples/rails](examples/rails) demonstrates that **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, can be used as the database engine for a Rails app.
 - [examples/doom](examples/doom) shows how `dewasm` can port the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple programming languages, *including Bash*.
+- [examples/nes](examples/nes) converts a **NES emulator** ([agnes](https://github.com/kgabis/agnes)) once and turns every backend language into a native NES player — the ROM is a file you pass in, not part of the artifact.
 
 Here is a quick summary of what `dewasm` can do:
 
