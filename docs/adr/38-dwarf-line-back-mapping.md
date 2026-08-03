@@ -42,6 +42,6 @@ Density (first-party `dwarf-fixture.wasm`, Go standalone): 1266 `//line` directi
 
 Caveats: the address base is calibrated against clang/lld output (`zig cc`); a toolchain emitting a different code-address convention would need `address_base` re-pinned (a one-line change, guarded by the fixture test). Most *released* wasm (e.g. the cached `qjs.wasm`, `ruby.wasm`) ships stripped of DWARF, so `--dwarf-line` simply yields no markers there — the feature pays off for locally built, debug modules. Column info is emitted for Go where present; Ruby/Python drop it.
 
-Fixture: `examples/apps/src/dwarf_fixture.c` is first-party (ADR-9), built by `examples/apps/fetch-and-build.sh` with `zig cc -target wasm32-wasi -g -O1`; its line numbers are load-bearing for the calibration test.
+Fixture: `examples/apps/src/dwarf_fixture.c` is first-party (ADR-9), built by `examples/apps/setup.sh` with `zig cc -target wasm32-wasi -g -O1`; its line numbers are load-bearing for the calibration test.
 
 Cross-refs: ADR-1 (IR design — semantics-neutral additions), ADR-3 (the spec harness binds; the flag never changes it), ADR-9 (first-party fixture source), ADR-29 (Go lowering — the `raw`/column-1 constraint), ADR-32 (expression folding — the folded-return marker subtlety), ADR-37 (the sibling opt-in `--data-file`, same flag-not-default shape).

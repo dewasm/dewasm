@@ -60,7 +60,7 @@ never run the generated program.
   the mode is chosen deliberately per artifact rather than guessed from the file.
 
 - **Fail loud, never skip** (ADR-15). A missing cache file fails the trial with
-  the standard `run examples/apps/fetch-and-build.sh` message; it does not skip.
+  the standard `run examples/apps/setup.sh` message; it does not skip.
 
 - **Two-tier gating by measurement** (ADR-48). Heavy trials are `#[ignore]`d
   unless the backend crate's `slow_test` feature is on. "Heavy" is *measured*,

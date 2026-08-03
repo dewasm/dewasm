@@ -21,7 +21,7 @@ require_tool() {
   exit 1
 }
 
-require_tool zig "install zig (brew install zig), as examples/apps/fetch-and-build.sh also needs"
+require_tool zig "install zig (brew install zig), as examples/apps/setup.sh also needs"
 
 # --- C microbenchmark flags. Each one is load-bearing.
 #

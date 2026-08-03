@@ -33,7 +33,7 @@ Commands:
                                optional substring `filter` limits it to matching
                                snapshots (e.g. `update-snapshots doom`). Needs
                                `wasmtime` on PATH and the apps cache populated
-                               (examples/apps/fetch-and-build.sh; the DOOM frame
+                               (examples/apps/setup.sh; the DOOM frame
                                needs examples/apps/scripts/doom.sh). Checked by
                                the compare-only wasmtime freshness suite
                                (`cargo test -p dewasm-test-helper --features
