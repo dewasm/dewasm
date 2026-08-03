@@ -1,91 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="536" viewBox="0 0 820 536" font-family="system-ui, -apple-system, Segoe UI, sans-serif" role="img" aria-label="wat/i64_alu: seconds per iteration for 18 runners on a log scale, fastest first. wasmer is fastest at 2.39 ns, then wasmtime at 2.39 ns; pywasm-pypy is slowest at 326 µs, a span of 137000x. The table below carries every number.">
-<title>wat/i64_alu: seconds per iteration for 18 runners on a log scale, fastest first. wasmer is fastest at 2.39 ns, then wasmtime at 2.39 ns; pywasm-pypy is slowest at 326 µs, a span of 137000x. The table below carries every number.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="536" viewBox="0 0 820 536" font-family="system-ui, -apple-system, Segoe UI, sans-serif" role="img" aria-label="wat/i64_alu: seconds per iteration for 18 runners on a log scale, fastest first. wasmtime is fastest at 2.39 ns, then wasmer at 2.39 ns; pywasm-pypy is slowest at 333 µs, a span of 140000x. The table below carries every number.">
+<title>wat/i64_alu: seconds per iteration for 18 runners on a log scale, fastest first. wasmtime is fastest at 2.39 ns, then wasmer at 2.39 ns; pywasm-pypy is slowest at 333 µs, a span of 140000x. The table below carries every number.</title>
 <rect width="820" height="536" fill="#1a1a19"/>
 <line x1="168.0" y1="68.0" x2="168.0" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
 <text x="168.0" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">1 ns</text>
-<line x1="267.7" y1="68.0" x2="267.7" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
-<text x="267.7" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">10 ns</text>
-<line x1="367.5" y1="68.0" x2="367.5" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
-<text x="367.5" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">100 ns</text>
-<line x1="467.2" y1="68.0" x2="467.2" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
-<text x="467.2" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">1 µs</text>
-<line x1="567.0" y1="68.0" x2="567.0" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
-<text x="567.0" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">10 µs</text>
-<line x1="666.7" y1="68.0" x2="666.7" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
-<text x="666.7" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">100 µs</text>
+<line x1="267.6" y1="68.0" x2="267.6" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
+<text x="267.6" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">10 ns</text>
+<line x1="367.2" y1="68.0" x2="367.2" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
+<text x="367.2" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">100 ns</text>
+<line x1="466.8" y1="68.0" x2="466.8" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
+<text x="466.8" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">1 µs</text>
+<line x1="566.4" y1="68.0" x2="566.4" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
+<text x="566.4" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">10 µs</text>
+<line x1="666.0" y1="68.0" x2="666.0" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
+<text x="666.0" y="522.0" text-anchor="middle" font-size="11" fill="#c3c2b7">100 µs</text>
 <line x1="168.0" y1="506.0" x2="726.0" y2="506.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.4"/>
-<text x="152.0" y="90.0" text-anchor="end" font-size="12" fill="#ffffff">wasmer</text>
-<line x1="168.0" y1="86.0" x2="205.7" y2="86.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="205.7" cy="86.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
+<text x="152.0" y="90.0" text-anchor="end" font-size="12" fill="#ffffff">wasmtime</text>
+<line x1="168.0" y1="86.0" x2="205.6" y2="86.0" stroke="#3987e5" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="205.6" cy="86.0" r="5.5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="90.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.39 ns</text>
-<text x="152.0" y="114.0" text-anchor="end" font-size="12" fill="#ffffff">wasmtime</text>
-<line x1="168.0" y1="110.0" x2="205.7" y2="110.0" stroke="#3987e5" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="205.7" cy="110.0" r="5.5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
+<text x="152.0" y="114.0" text-anchor="end" font-size="12" fill="#ffffff">wasmer</text>
+<line x1="168.0" y1="110.0" x2="205.7" y2="110.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="205.7" cy="110.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.39 ns</text>
 <text x="152.0" y="138.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-java</text>
-<line x1="168.0" y1="134.0" x2="206.3" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="206.3" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.42 ns</text>
+<line x1="168.0" y1="134.0" x2="206.0" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="206.0" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.40 ns</text>
 <text x="152.0" y="162.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-go</text>
-<line x1="168.0" y1="158.0" x2="211.2" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="211.2" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.71 ns</text>
+<line x1="168.0" y1="158.0" x2="211.0" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="211.0" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.70 ns</text>
 <text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">wazero</text>
-<line x1="168.0" y1="182.0" x2="211.6" y2="182.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="211.6" cy="182.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="182.0" x2="211.5" y2="182.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="211.5" cy="182.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="186.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.73 ns</text>
 <text x="152.0" y="210.0" text-anchor="end" font-size="12" fill="#ffffff">wasm3</text>
-<line x1="168.0" y1="206.0" x2="277.0" y2="206.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="277.0" cy="206.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">12.4 ns</text>
+<line x1="168.0" y1="206.0" x2="276.6" y2="206.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="276.6" cy="206.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">12.3 ns</text>
 <text x="152.0" y="234.0" text-anchor="end" font-size="12" fill="#ffffff">wasmedge</text>
-<line x1="168.0" y1="230.0" x2="387.9" y2="230.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="387.9" cy="230.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="230.0" x2="387.6" y2="230.0" stroke="#c98500" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="387.6" cy="230.0" r="5.5" fill="#c98500" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="234.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">160 ns</text>
 <text x="152.0" y="258.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-pypy</text>
-<line x1="168.0" y1="254.0" x2="406.8" y2="254.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="406.8" cy="254.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="258.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">248 ns</text>
+<line x1="168.0" y1="254.0" x2="406.9" y2="254.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="406.9" cy="254.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="258.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">250 ns</text>
 <text x="152.0" y="282.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-python</text>
-<line x1="168.0" y1="278.0" x2="451.9" y2="278.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="451.9" cy="278.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="282.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">702 ns</text>
+<line x1="168.0" y1="278.0" x2="452.6" y2="278.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="452.6" cy="278.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="282.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">720 ns</text>
 <text x="152.0" y="306.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-perl</text>
-<line x1="168.0" y1="302.0" x2="469.0" y2="302.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="469.0" cy="302.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="302.0" x2="468.4" y2="302.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="468.4" cy="302.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="306.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.04 µs</text>
 <text x="152.0" y="330.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-ruby-yjit</text>
-<line x1="168.0" y1="326.0" x2="472.4" y2="326.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="472.4" cy="326.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="326.0" x2="472.0" y2="326.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="472.0" cy="326.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="330.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.13 µs</text>
 <text x="152.0" y="354.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-ruby-zjit</text>
-<line x1="168.0" y1="350.0" x2="478.1" y2="350.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="478.1" cy="350.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="350.0" x2="477.5" y2="350.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="477.5" cy="350.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="354.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.28 µs</text>
 <text x="152.0" y="378.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-ruby</text>
-<line x1="168.0" y1="374.0" x2="486.2" y2="374.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="486.2" cy="374.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="374.0" x2="485.7" y2="374.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="485.7" cy="374.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="378.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.55 µs</text>
 <text x="152.0" y="402.0" text-anchor="end" font-size="12" fill="#ffffff">wardite-yjit</text>
-<line x1="168.0" y1="398.0" x2="564.5" y2="398.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="564.5" cy="398.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="402.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">9.43 µs</text>
+<line x1="168.0" y1="398.0" x2="563.9" y2="398.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="563.9" cy="398.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="402.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">9.44 µs</text>
 <text x="152.0" y="426.0" text-anchor="end" font-size="12" fill="#ffffff">wardite</text>
-<line x1="168.0" y1="422.0" x2="589.9" y2="422.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="589.9" cy="422.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="422.0" x2="589.3" y2="422.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="589.3" cy="422.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="426.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">17.0 µs</text>
 <text x="152.0" y="450.0" text-anchor="end" font-size="12" fill="#ffffff">dewasm-bash</text>
-<line x1="168.0" y1="446.0" x2="611.7" y2="446.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="611.7" cy="446.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="450.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">28.0 µs</text>
+<line x1="168.0" y1="446.0" x2="611.0" y2="446.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="611.0" cy="446.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="450.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">28.1 µs</text>
 <text x="152.0" y="474.0" text-anchor="end" font-size="12" fill="#ffffff">pywasm-cpython</text>
-<line x1="168.0" y1="470.0" x2="643.6" y2="470.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="643.6" cy="470.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="474.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">58.6 µs</text>
+<line x1="168.0" y1="470.0" x2="643.4" y2="470.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="643.4" cy="470.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="474.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">59.4 µs</text>
 <text x="152.0" y="498.0" text-anchor="end" font-size="12" fill="#ffffff">pywasm-pypy</text>
 <line x1="168.0" y1="494.0" x2="718.0" y2="494.0" stroke="#d55181" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="718.0" cy="494.0" r="5.5" fill="#d55181" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="498.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">326 µs</text>
+<text x="806.0" y="498.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">333 µs</text>
 <text x="14.0" y="24" font-size="15" font-weight="600" fill="#ffffff">wat/i64_alu: seconds per iteration, median of the timed runs (log scale)</text>
 <circle cx="19.5" cy="48.0" r="5.5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
 <text x="31.0" y="52.0" font-size="12" fill="#c3c2b7">wasmtime (baseline)</text>
