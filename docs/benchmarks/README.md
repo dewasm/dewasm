@@ -6,7 +6,7 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ## Running
 
 ```console
-$ examples/apps/fetch-and-build.sh   # the cached apps (sqlite3-shell, cowsay, ...)
+$ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
 $ cargo xtask bench                  # the full matrix, roughly an hour
 ```

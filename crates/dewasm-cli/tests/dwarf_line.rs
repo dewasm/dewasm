@@ -20,7 +20,7 @@ fn fixture_wasm() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");
     assert!(
         p.exists(),
-        "dwarf-fixture not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)"
+        "dwarf-fixture not cached — run examples/apps/setup.sh (see docs/testing.md)"
     );
     p
 }

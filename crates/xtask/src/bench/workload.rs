@@ -72,7 +72,7 @@ impl Workload {
         // Each microbenchmark family has its own build script, named by the family segment of the label.
         let build = match self.kind {
             Kind::Micro { .. } => format!("benchmarks/{}/build.sh", self.family()),
-            Kind::App { .. } => "examples/apps/fetch-and-build.sh".to_string(),
+            Kind::App { .. } => "examples/apps/setup.sh".to_string(),
         };
         Some(format!(
             "{} not built — run {build}",

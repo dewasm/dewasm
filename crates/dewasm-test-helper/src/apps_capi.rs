@@ -1,4 +1,4 @@
-//! C-API-driving app cases (ADR-27): a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/fetch-and-build.sh`.
+//! C-API-driving app cases (ADR-27): a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
 //!
 //! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`, `sqlite3_callback_binding_e2e!`). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration (ADR-27 revision): Ruby/Python/Go/Java, not Bash — it has no WASI filesystem and no host-language object model to plumb a C API through (ADR-12). These cases reconvert the ~5 MB sqlite3 artifacts, so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
 
@@ -147,7 +147,7 @@ pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
     assert!(
         wasm_path.exists(),
-        "{} not cached — run examples/apps/fetch-and-build.sh (see docs/testing.md)",
+        "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");

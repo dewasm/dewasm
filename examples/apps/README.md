@@ -4,7 +4,7 @@ Prebuilt wasm binaries of real applications, each fetched from its own
 upstream, for demos and end-to-end tests.
 
 **No third-party artifact is committed to this repository** (ADR-9).
-`./fetch-and-build.sh` downloads version-pinned, sha256-verified files into
+`./setup.sh` downloads version-pinned, sha256-verified files into
 `cache/` (gitignored); licensing of the binaries stays entirely with
 their upstream distribution. The `apps` cases
 (`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and
@@ -14,9 +14,9 @@ once from wasmtime; re-validated via `--features wasmtime_test`), run per
 backend as that backend's `e2e` test, e.g.
 `cargo test -p dewasm-backend-ruby --test e2e apps`. A missing cache or
 `ruby` fails the test loudly rather than skipping (ADR-15) — run
-`./fetch-and-build.sh` first.
+`./setup.sh` first.
 
-`fetch-and-build.sh` just runs the per-app scripts in `scripts/` (shared
+`setup.sh` just runs the per-app scripts in `scripts/` (shared
 boilerplate in `scripts/common.sh`); run one directly — e.g.
 `scripts/sqlite3.sh` — to rebuild a single app after bumping its pin.
 
@@ -35,7 +35,7 @@ boilerplate in `scripts/common.sh`); run one directly — e.g.
 | exiftool | [6over3/exiftool](https://github.com/6over3/exiftool) `src/exiftool` (ExifTool 13.42, Phil Harvey's pure-Perl `Image::ExifTool`, flattened) — the driver script only, into `cache/exiftool-lib/`; runs on the cached `zeroperl.wasm` | a real Perl app: the ExifTool CLI extracts EXIF tags from a committed image fixture through the converted Perl reactor, exercising the SFS-embedded module tree + preopened script/image (Ruby, heavy; no new wasm) |
 
 ```console
-$ ./fetch-and-build.sh
+$ ./setup.sh
 $ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --mode standalone -o qjs.rb
 $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42

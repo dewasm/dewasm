@@ -9,7 +9,7 @@
 # loudly when the cache is absent (ADR-15).
 #
 # Sourcing this file cd's to examples/apps (so cache/ and src/ resolve the
-# same way whether a script is run directly or via fetch-and-build.sh) and
+# same way whether a script is run directly or via setup.sh) and
 # ensures cache/ exists.
 
 set -euo pipefail
