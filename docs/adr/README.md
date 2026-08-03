@@ -55,7 +55,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
 | ADR-40 | [WASI p1 Completion: Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment](40-wasi-p1-completion.md) | Accepted |
 | ADR-41 | [Merge Adjacent Active Data Segments at Build Time](41-adjacent-data-segment-merging.md) | Accepted |
-| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted |
+| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
 | ADR-43 | [Ruby Backend: i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | ADR-44 | [Ruby Backend: Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
 | ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
@@ -71,6 +71,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-55 | [Perl Backend Lowering Conventions](55-perl-backend-lowering.md) | Accepted |
 | ADR-56 | [One Command Regenerates Every Execution Snapshot](56-unified-snapshot-regeneration.md) | Accepted |
 | ADR-57 | [Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline](57-benchmark-harness.md) | Accepted |
+| ADR-58 | [Ruby Backend: Address a Branch by Value, Not by Lexical Scope](58-ruby-branch-by-value.md) | Accepted |
 
 ## Adding a new ADR
 

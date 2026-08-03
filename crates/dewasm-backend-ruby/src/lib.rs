@@ -7,6 +7,8 @@
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
 
+mod flat;
+
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
@@ -142,6 +144,7 @@ fn generate_class_inner(
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(FrameSets::default()),
         frame_stack: RefCell::new(Vec::new()),
+        flat: RefCell::new(None),
         boxed_globals,
         data_file: data_file.map(str::to_string),
         data_offsets,
@@ -377,29 +380,60 @@ struct FrameSets {
     crossed: HashSet<u32>,
     /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`. Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
     wrapped: HashSet<u32>,
+    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve — the `while` compiles to a `while`.
+    break_ok: HashSet<u32>,
 }
 
 /// Compute the [`FrameSets`] for a function body.
 ///
 /// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch — `pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing — or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
+///
+/// The one outward shape that marks nothing is `break_ok`: a branch crossing a
+/// single loop that is the **sole** statement of the block it targets. Ruby's
+/// `break` leaves that loop and lands at the block's end — the same place, in
+/// O(1) — so the frames stay structured. `sole` rather than `last` is a
+/// correctness requirement, not conservatism; see the comment on the check.
+/// It is also not propagated through `if` arms: a `break` from inside an `if`
+/// lands after the `if`, and proving that is still the block's end is more than
+/// this rule needs to claim.
 fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
     let mut sets = FrameSets::default();
     let mut stack: Vec<(u32, bool)> = Vec::new();
-    walk_frame_sets(body, &mut stack, &mut sets);
+    walk_frame_sets(body, true, &mut stack, &mut sets);
     sets
 }
 
-fn walk_frame_sets(stmts: &[Stmt], stack: &mut Vec<(u32, bool)>, sets: &mut FrameSets) {
-    for stmt in stmts {
+fn walk_frame_sets(
+    stmts: &[Stmt],
+    direct: bool,
+    stack: &mut Vec<(u32, bool)>,
+    sets: &mut FrameSets,
+) {
+    // "Sole statement", not merely "last": if the block held anything besides the
+    // loop, that other statement could dissolve, which dissolves the block by the
+    // ancestor rule while the loop itself stays a Ruby `while` — and then a
+    // `state = N; next` aimed at the dispatch loop is captured by that `while`.
+    // Requiring the loop to be the whole body makes the block dissolvable only
+    // through the loop, so the two always dissolve together.
+    let sole = direct
+        && stmts
+            .iter()
+            .filter(|s| !matches!(s, Stmt::SourceLine(_)))
+            .count()
+            == 1;
+    for stmt in stmts.iter() {
         match stmt {
             Stmt::Block { label, body } => {
                 stack.push((label.id, false));
-                walk_frame_sets(body, stack, sets);
+                walk_frame_sets(body, true, stack, sets);
                 stack.pop();
             }
             Stmt::Loop { label, body } => {
+                if sole && matches!(stack.last(), Some((_, is_loop)) if !is_loop) {
+                    sets.break_ok.insert(label.id);
+                }
                 stack.push((label.id, true));
-                walk_frame_sets(body, stack, sets);
+                walk_frame_sets(body, true, stack, sets);
                 stack.pop();
             }
             Stmt::If {
@@ -408,8 +442,8 @@ fn walk_frame_sets(stmts: &[Stmt], stack: &mut Vec<(u32, bool)>, sets: &mut Fram
                 if label.referenced {
                     stack.push((label.id, false));
                 }
-                walk_frame_sets(then, stack, sets);
-                walk_frame_sets(els, stack, sets);
+                walk_frame_sets(then, false, stack, sets);
+                walk_frame_sets(els, false, stack, sets);
                 if label.referenced {
                     stack.pop();
                 }
@@ -434,6 +468,12 @@ fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets)
         if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
             // Outward branch (target is not the innermost frame): mark the whole inclusive path from the target to the innermost frame.
             if pos + 1 < stack.len() {
+                // Unless it is Ruby's `break`: crossing exactly one loop that
+                // ends the block being targeted. That already lands where the
+                // branch wants to go, at O(1), so nothing on the path dissolves.
+                if pos + 2 == stack.len() && sets.break_ok.contains(&stack[pos + 1].0) {
+                    return;
+                }
                 sets.crossed.extend(stack[pos..].iter().map(|(id, _)| *id));
                 // A loop targeted from a nested frame needs its body-scope wrapper so the relayed `break` re-enters via `next`.
                 if stack[pos].1 {
@@ -453,6 +493,8 @@ struct Gen<'a> {
     frames: RefCell<FrameSets>,
     /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares the top of this stack against a `br`'s target to decide between the depth-1 fast path (a plain `break`/`next` that leaves the innermost frame directly) and the cascade (`__br = <id>; break`, relayed by each crossed frame's epilogue until the target lands).
     frame_stack: RefCell<Vec<u32>>,
+    /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]). `branch()` consults it to emit `state = N; next` instead of the cascade.
+    flat: RefCell<Option<flat::Plan>>,
     /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there and ADR-16.
     boxed_globals: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
@@ -859,11 +901,12 @@ impl<'a> Gen<'a> {
                 let name = format!("l{}", ty.params.len() + i);
                 w.line(format!("{name} = {}", default_value(*local_ty)));
             }
-            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them whenever the function has any crossed frame (a fallthrough epilogue reads `__br` before any branch assigns it); with no crossed frame nothing ever references it.
+            let plan = flat::plan(&func.body, &self.frames.borrow().crossed);
+            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it — a flattened function addresses every crossed frame by state, so nothing ever reads `__br`, and with no crossed frame at all nothing references it either.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
             let mut decl = String::new();
-            if !self.frames.borrow().crossed.is_empty() {
+            if plan.is_none() && !self.frames.borrow().crossed.is_empty() {
                 decl.push_str("__br = ");
             }
             for d in &depths {
@@ -872,8 +915,118 @@ impl<'a> Gen<'a> {
             if !decl.is_empty() {
                 w.line(format!("{decl}nil"));
             }
-            self.stmts(w, &func.body);
+            match plan {
+                None => {
+                    *self.flat.borrow_mut() = None;
+                    self.stmts(w, &func.body);
+                }
+                Some(plan) => {
+                    let n = plan.nstates as usize;
+                    *self.flat.borrow_mut() = Some(plan);
+                    let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("  ")).collect();
+                    let last = self.flat_seq(&mut st, 0, &func.body);
+                    // Falling off the body ends the function; leave the dispatch
+                    // loop. A body that cannot fall off needs no such exit.
+                    if !terminates(&func.body) {
+                        st[last].line(format!("state = {n}; next"));
+                    }
+                    let texts: Vec<String> = st.into_iter().map(|c| c.finish()).collect();
+                    w.line("state = 0");
+                    w.block("while true", "end", |w| {
+                        w.line("case state");
+                        for (i, body) in texts.iter().enumerate() {
+                            w.line(format!("when {i}"));
+                            w.indent();
+                            for line in body.lines() {
+                                w.line(line);
+                            }
+                            w.dedent();
+                        }
+                        w.line("else");
+                        w.indent();
+                        w.line("break");
+                        w.dedent();
+                        w.line("end");
+                    });
+                    *self.flat.borrow_mut() = None;
+                }
+            }
         });
+    }
+
+    /// Emit `stmts` into a state machine, splitting at each dissolved frame.
+    /// Returns the state control is in afterwards.
+    fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
+        for stmt in stmts {
+            let plan_hit = {
+                let p = self.flat.borrow();
+                let p = p.as_ref().unwrap();
+                match stmt {
+                    Stmt::Block { label, .. }
+                    | Stmt::Loop { label, .. }
+                    | Stmt::If { label, .. }
+                        if p.dissolved.contains(&label.id) =>
+                    {
+                        Some((label.id, p.state_of[&label.id], p.after[&label.id]))
+                    }
+                    _ => None,
+                }
+            };
+            let Some((_id, target, after)) = plan_hit else {
+                self.stmt(&mut st[cur], stmt);
+                continue;
+            };
+            match stmt {
+                Stmt::Block { body, .. } => {
+                    cur = self.flat_seq(st, cur, body);
+                    if !terminates(body) {
+                        st[cur].line(format!("state = {after}; next"));
+                    }
+                    cur = after as usize;
+                }
+                Stmt::Loop { body, .. } => {
+                    // `target` is the head: entering the loop and taking its
+                    // back-edge are the same transition.
+                    st[cur].line(format!("state = {target}; next"));
+                    cur = target as usize;
+                    cur = self.flat_seq(st, cur, body);
+                    if !terminates(body) {
+                        st[cur].line(format!("state = {after}; next"));
+                    }
+                    cur = after as usize;
+                }
+                Stmt::If {
+                    cond, then, els, ..
+                } => {
+                    // The arms stay inline — `if` is not a Ruby loop, so a `next`
+                    // inside one already reaches the dispatch loop.
+                    st[cur].line(format!("if {} != 0", self.expr(cond)));
+                    st[cur].indent();
+                    let a = self.flat_seq(st, cur, then);
+                    if !terminates(then) {
+                        st[a].line(format!("state = {after}; next"));
+                    }
+                    st[cur].dedent();
+                    if !els.is_empty() {
+                        st[cur].line("else");
+                        st[cur].indent();
+                        let b = self.flat_seq(st, cur, els);
+                        if !terminates(els) {
+                            st[b].line(format!("state = {after}; next"));
+                        }
+                        st[cur].dedent();
+                    }
+                    st[cur].line("end");
+                    // Reachable unless neither arm can fall out of the `if`.
+                    if els.is_empty() || !(terminates(then) && terminates(els)) {
+                        st[cur].line(format!("state = {after}; next"));
+                    }
+                    cur = after as usize;
+                }
+                _ => unreachable!(),
+            }
+        }
+        cur
     }
 
     fn stmts(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
@@ -1143,6 +1296,27 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
+                // Addressed by value: one assignment plus a hash dispatch, the same cost from any depth.
+                if let Some(plan) = self.flat.borrow().as_ref() {
+                    if let Some(st) = plan.state_of.get(label) {
+                        w.line(format!("state = {st}; next"));
+                        return;
+                    }
+                }
+                // `break_ok` (see `compute_frame_sets`): leaving the innermost
+                // loop lands at the end of the block enclosing it, which is
+                // where this branch is going. Neither frame dissolved, so the
+                // plain `break` is still available and still O(1).
+                {
+                    let fs = self.frame_stack.borrow();
+                    if fs.len() >= 2
+                        && fs[fs.len() - 2] == *label
+                        && self.frames.borrow().break_ok.contains(&fs[fs.len() - 1])
+                    {
+                        w.line("break");
+                        return;
+                    }
+                }
                 // Fast path — a br whose target is the innermost enclosing frame leaves it directly: `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
@@ -1333,6 +1507,28 @@ impl<'a> Gen<'a> {
     }
 }
 
+/// Whether `stmts` unconditionally leaves the current dispatch state, so a
+/// transition appended after it would be unreachable. `flat_seq` appends a
+/// frame's exit transition on the way out, and for a body already ending in a
+/// `br`, `return` or `unreachable` that copy is dead. Deliberately conservative
+/// — answering `false` only re-emits the transition that used to be there
+/// unconditionally.
+fn terminates(stmts: &[Stmt]) -> bool {
+    let Some(last) = stmts
+        .iter()
+        .rev()
+        .find(|s| !matches!(s, Stmt::SourceLine(_)))
+    else {
+        return false;
+    };
+    match last {
+        Stmt::Br(_) | Stmt::Return { .. } | Stmt::Unreachable => true,
+        // Neither arm falling through means the `if` itself does not.
+        Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
+        _ => false,
+    }
+}
+
 fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
@@ -1490,7 +1686,7 @@ mod units {
     }
 }
 
-/// Codegen-shape checks for the label-variable cascade (ADR-42): a multi-level `br` must lower to the `__br` cascade, never to `catch`/`throw`.
+/// Codegen-shape checks for control flow: a multi-level `br` must be addressed by *value* — a state assignment plus `next` into the dispatch loop — never by walking scopes (the ADR-42 `__br` cascade) and never by `catch`/`throw` (ADR-4).
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1517,14 +1713,18 @@ mod cascade {
     "#;
 
     #[test]
-    fn multi_level_br_uses_label_cascade() {
+    fn multi_level_br_is_addressed_by_value() {
         let src = convert(MIXED_DEPTHS);
-        // The cascade: a pending-label assignment, a landing compare, and a relay arm — plus the wrapped loop's back-edge `next`.
-        assert!(src.contains("__br ="), "no `__br =` in:\n{src}");
-        assert!(src.contains("if __br =="), "no landing compare in:\n{src}");
-        assert!(src.contains("elsif __br"), "no relay arm in:\n{src}");
-        assert!(src.contains("next"), "no loop back-edge in:\n{src}");
-        // ...and never the retired catch/throw shape.
+        // The dispatch loop, and a branch that names its target as a number.
+        assert!(src.contains("state = 0"), "no dispatch entry in:\n{src}");
+        assert!(src.contains("case state"), "no dispatch in:\n{src}");
+        assert!(src.contains("; next"), "no state transition in:\n{src}");
+        // The retired shapes: scope-walking relay (ADR-42) and catch/throw (ADR-4).
+        assert!(!src.contains("elsif __br"), "relay arm survived in:\n{src}");
+        assert!(
+            !src.contains("end while false"),
+            "cascade frame survived in:\n{src}"
+        );
         assert!(!src.contains("catch("), "catch survived in:\n{src}");
         assert!(!src.contains("throw "), "throw survived in:\n{src}");
     }
