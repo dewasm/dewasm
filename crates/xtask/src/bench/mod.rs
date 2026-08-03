@@ -1,6 +1,6 @@
 //! `cargo xtask bench` — the cross-runtime benchmark suite.
 //!
-//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks.md`. Neither is a compared snapshot — a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast ADR-56's execution snapshots).
+//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`. Neither is a compared snapshot — a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast ADR-56's execution snapshots).
 //!
 //! The layout mirrors what has to be got right:
 //!
@@ -8,7 +8,7 @@
 //! * [`runner`] — where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
 //! * [`measure`] — how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
 //! * [`report`] — the JSON record and the markdown rendering of it.
-//! * [`chart`] — the static SVGs `docs/benchmarks.md` embeds, one per workload, regenerated from the same record.
+//! * [`chart`] — the static SVGs `docs/benchmarks/results.md` embeds, one per workload, regenerated from the same record.
 //!
 //! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one (ADR-15's fail-loud-not-skip policy).
 
@@ -43,7 +43,7 @@ struct Options {
     target: Duration,
     timeout: Duration,
     list: bool,
-    /// Re-render `docs/benchmarks.md` from a stored result file instead of measuring. A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
+    /// Re-render `docs/benchmarks/results.md` from a stored result file instead of measuring. A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
     render: Option<PathBuf>,
 }
 
@@ -297,7 +297,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     );
 }
 
-/// The doc half of the output: the charts under `docs/benchmarks/`, then `docs/benchmarks.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
+/// The doc half of the output: the charts under `docs/benchmarks/figs/`, then `docs/benchmarks/results.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
 ///
 /// Charts not covered by the record are deleted: an orphan SVG looks current while nothing links it. The doc and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
@@ -312,7 +312,10 @@ fn write_doc(report: &report::Report) -> Result<()> {
     }
     prune_charts(&written)?;
     write_file(
-        &docs_dir().join("benchmarks.md"),
+        &charts_dir()
+            .parent()
+            .expect("figs has a parent")
+            .join("results.md"),
         &report::render_doc(report, &charts),
     )
 }
@@ -593,9 +596,9 @@ fn docs_dir() -> PathBuf {
     repo_root().join("docs")
 }
 
-/// `docs/benchmarks/` — the generated SVG charts `docs/benchmarks.md` embeds.
+/// `docs/benchmarks/figs/` — the generated SVG charts `docs/benchmarks/results.md` embeds.
 fn charts_dir() -> PathBuf {
-    docs_dir().join("benchmarks")
+    docs_dir().join("benchmarks").join("figs")
 }
 
 /// `examples/apps/cache/`, where the app workloads' modules live (ADR-9).

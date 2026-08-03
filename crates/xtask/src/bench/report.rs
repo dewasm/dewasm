@@ -1,4 +1,4 @@
-//! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks.md`.
+//! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks/results.md`.
 //!
 //! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them — unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots (ADR-56). The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
 
@@ -112,9 +112,9 @@ impl Report {
     }
 }
 
-/// Render `docs/benchmarks.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables, inline ADR links — plus the generated-file marker `docs/support.md` carries.
+/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables, inline ADR links — plus the generated-file marker `docs/support.md` carries.
 ///
-/// `charts` are the SVGs the caller has written under `docs/benchmarks/`; each one is embedded above the table for its own workload. Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
+/// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`; each one is embedded above the table for its own workload. Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
     out.push_str("# Benchmarks\n\n");
@@ -122,7 +122,7 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
 
     let _ = writeln!(
         out,
-        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day. How to run and read these measurements is [docs/benchmarking.md](benchmarking.md); the design rationale is [ADR-57](adr/57-benchmark-harness.md)."
+        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day. How to run and read these measurements is [README.md](README.md); the design rationale is [ADR-57](../adr/57-benchmark-harness.md)."
     );
     out.push('\n');
 
@@ -237,17 +237,17 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
     }
 }
 
-/// A chart, above the table it summarizes. `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file: GitHub honours the `prefers-color-scheme` source, and a renderer that does not falls back to the light `<img>`. Paths are relative to `docs/benchmarks.md`, which sits beside the `benchmarks/` directory the SVGs are written into.
+/// A chart, above the table it summarizes. `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file: GitHub honours the `prefers-color-scheme` source, and a renderer that does not falls back to the light `<img>`. Paths are relative to `docs/benchmarks/results.md`, which sits beside the `figs/` directory the SVGs are written into.
 fn render_chart(out: &mut String, chart: &Chart) {
     out.push_str("<picture>\n");
     let _ = writeln!(
         out,
-        "  <source media=\"(prefers-color-scheme: dark)\" srcset=\"benchmarks/{}-dark.svg\">",
+        "  <source media=\"(prefers-color-scheme: dark)\" srcset=\"figs/{}-dark.svg\">",
         chart.stem
     );
     let _ = writeln!(
         out,
-        "  <img alt=\"{}\" src=\"benchmarks/{}.svg\">",
+        "  <img alt=\"{}\" src=\"figs/{}.svg\">",
         html_attr(&chart.alt),
         chart.stem
     );

@@ -1,6 +1,6 @@
 # Running the benchmarks
 
-How to run the cross-runtime benchmark suite and how to read its numbers. The results themselves are in [docs/benchmarks.md](benchmarks.md) (generated, never hand-edited); the design rationale is [ADR-57](adr/57-benchmark-harness.md); the workloads live under [`benchmarks/`](../benchmarks/README.md).
+How to run the cross-runtime benchmark suite and how to read its numbers. The results are in [results.md](results.md) (generated, never hand-edited) with its figures under `figs/`; the design rationale is [ADR-57](../adr/57-benchmark-harness.md); the workloads live under [`benchmarks/`](../../benchmarks/README.md).
 
 ## Running
 
@@ -10,7 +10,7 @@ $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm a
 $ cargo xtask bench                  # the full matrix, roughly an hour
 ```
 
-A full run writes a dated record to `benchmarks/results/` and regenerates `docs/benchmarks.md` with its charts. Useful variants:
+A full run writes a dated record to `benchmarks/results/` and regenerates `docs/benchmarks/results.md` with its charts. Useful variants:
 
 | Command | Effect |
 | --- | --- |

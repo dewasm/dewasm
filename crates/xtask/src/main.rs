@@ -2,7 +2,7 @@
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command (ADR-56): the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM frame, which stays on the embedded `wasmtime` crate because its custom-import interface can't run through `wasmtime run` (ADR-53). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
-//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
+//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
@@ -45,8 +45,8 @@ Commands:
                                native runtimes (wasmer, wasmedge, wazero,
                                wasm3), and on the pywasm/wardite interpreters.
                                Writes a dated result file to benchmarks/results/
-                               and regenerates docs/benchmarks.md plus the SVG
-                               charts it embeds (docs/benchmarks/, one per
+                               and regenerates docs/benchmarks/results.md plus
+                               the SVG charts it embeds (docs/benchmarks/figs/, one per
                                workload). An optional substring `filter` limits
                                it to matching workload/runner labels (wasmtime
                                always runs, as the baseline and the correctness
@@ -65,7 +65,7 @@ Commands:
                                calibrator aims at, default 300),
                                --timeout SECS (per-process ceiling, default
                                900), --render FILE (re-render
-                               docs/benchmarks.md and its charts from a stored
+                               the results doc and its charts from a stored
                                benchmarks/results/*.json without measuring
                                anything, for when only the wording changed).
 ";

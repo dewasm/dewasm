@@ -12,8 +12,8 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 | [docs/apps-audit.md](apps-audit.md) | The real-world app gate record and feature verdicts | Contributors, evaluators | By hand |
 | [docs/testing.md](testing.md) | What `cargo test` needs and why it fails loud | Contributors | By hand |
 | [docs/related-work.md](related-work.md) | Comparison with prior art | Evaluators | By hand |
-| [docs/benchmarking.md](benchmarking.md) | How to run the benchmark suite and read its numbers | Contributors | By hand |
-| [docs/benchmarks.md](benchmarks.md) | Measured performance against wasmtime, pywasm, and wardite | Evaluators | **Generated — never hand-edit** |
+| [docs/benchmarks/](benchmarks/README.md) | How to run the benchmark suite and read its numbers | Contributors | By hand |
+| [docs/benchmarks/results.md](benchmarks/results.md) | Measured performance, with figures under `figs/` | Evaluators | **Generated — never hand-edit** |
 | [docs/adr/](adr/README.md) | Design decisions with rationale and rejected alternatives | Contributors, future maintainers | By hand (via the `adr-author` skill) |
 
 ## Rules

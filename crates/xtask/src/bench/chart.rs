@@ -1,4 +1,4 @@
-//! The static SVG charts that ride above the tables in `docs/benchmarks.md`.
+//! The static SVG charts that ride above the tables in `docs/benchmarks/results.md`.
 //!
 //! SVG files, not Mermaid: the span forces a log10 axis, which Mermaid's `xychart` lacks. Two files per chart, not CSS `prefers-color-scheme`: GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between baked-in modes.
 //!

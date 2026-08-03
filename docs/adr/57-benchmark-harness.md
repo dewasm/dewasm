@@ -1,6 +1,6 @@
 # ADR-57: Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline
 
-**Status:** Accepted (2026-08-02). Landed: `cargo xtask bench`, the workloads under `benchmarks/`, and the generated `docs/benchmarks.md`. Not covered: any CI enforcement — timings are not reproducible byte-for-byte, so nothing here is a compared snapshot.
+**Status:** Accepted (2026-08-02). Landed: `cargo xtask bench`, the workloads under `benchmarks/`, and the generated `docs/benchmarks/results.md`. Not covered: any CI enforcement — timings are not reproducible byte-for-byte, so nothing here is a compared snapshot.
 
 ## Context
 
@@ -46,6 +46,6 @@ Measuring this naively is wrong in five ways, each observed on this host rather 
 - The caps in `MICRO_ITER_CAPS` must be retuned when a microbenchmark body changes; they are set to roughly 3x what wasmtime needs for the default target.
 - The suite has **no f32 coverage at all**, because wardite's f32 is broken. This is a real gap in what the numbers describe.
 - `c/wordcount` generates its input buffer before reading `argv[1]`, so its `t(0)` is startup plus that setup, not startup alone. Its per-iteration figures are unaffected; its cold-start column is not comparable to the others..
-- Every workload is also drawn, as a generated SVG lollipop chart under `docs/benchmarks/` (two files per chart, light and dark, since GitHub's sanitizer cannot be trusted with CSS inside an SVG), with its table folded into a `<details>` underneath. A 23000x span forces a log axis, which rules out both Mermaid's `xychart` and any bar form — a bar's length is measured from a zero the axis does not have. The axis is seconds on every chart and never a ratio — seconds per iteration for a microbenchmark, seconds per run for an app — so two charts can be read against each other; a ratio axis can only be read against its own baseline.
+- Every workload is also drawn, as a generated SVG lollipop chart under `docs/benchmarks/figs/` (two files per chart, light and dark, since GitHub's sanitizer cannot be trusted with CSS inside an SVG), with its table folded into a `<details>` underneath. A 23000x span forces a log axis, which rules out both Mermaid's `xychart` and any bar form — a bar's length is measured from a zero the axis does not have. The axis is seconds on every chart and never a ratio — seconds per iteration for a microbenchmark, seconds per run for an app — so two charts can be read against each other; a ratio axis can only be read against its own baseline.
 - Runtimes other than wasmtime that consume the `.wasm` directly (wasmer, wasmedge, wazero, wasm3) are measured as ordinary runners and cross-checked like everything else. They widen the range the numbers sit in without changing the decision above: wasmtime alone remains the baseline and the oracle.
-- Published numbers are host-specific and dated. `docs/benchmarks.md` is generated and states the host, every runtime version, and the date; it is not hand-edited.
+- Published numbers are host-specific and dated. `docs/benchmarks/results.md` is generated and states the host, every runtime version, and the date; it is not hand-edited.

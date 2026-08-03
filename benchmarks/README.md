@@ -1,3 +1,9 @@
 # benchmarks
 
-The workloads for the cross-runtime benchmark suite, and the driver scripts for the two pure-source wasm interpreters it compares against ([wardite](https://github.com/udzura/wardite) and [pywasm](https://github.com/mohanson/pywasm)). `wat/` holds hand-written microbenchmarks that each isolate one instruction axis, `c/` ones compiled from C with `zig cc` for workloads with realistic shape; `benchmarks/setup.sh` builds both into the gitignored `cache/` and pins the interpreters there. The harness that runs everything is `cargo xtask bench` in `crates/xtask`, its results land in `results/` and `docs/benchmarks.md`, and the measurement design — including why every workload is confined to the feature intersection all runners support — is [ADR-57](../docs/adr/57-benchmark-harness.md).
+The workloads for the cross-runtime benchmark suite, and the driver scripts for the two pure-source wasm interpreters it compares against ([wardite](https://github.com/udzura/wardite) and [pywasm](https://github.com/mohanson/pywasm)).
+
+- `wat/` holds hand-written microbenchmarks that each isolate one instruction axis,
+- `c/` ones compiled from C with `zig cc` for workloads with realistic shape;
+- `benchmarks/setup.sh` builds both into the gitignored `cache/` and pins the interpreters there.
+
+The harness that runs everything is `cargo xtask bench` in `crates/xtask`, its results land in `results/` and `docs/benchmarks/results.md`, and the measurement design — including why every workload is confined to the feature intersection all runners support — is [ADR-57](../docs/adr/57-benchmark-harness.md).
