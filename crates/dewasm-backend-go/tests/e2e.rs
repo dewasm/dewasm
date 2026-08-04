@@ -303,6 +303,20 @@ const GO_CPYTHON_GLUE: &str = r#"func main() {
 }
 "#;
 
+const GO_CRUBY_GLUE: &str = r#"func main() {
+	inst := NewCruby(nil, []string{"ruby", "-e", "puts \"hello from cruby #{6*7}\""}, nil, map[string]string{"/usr": "{cache}/ruby-lib/usr"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
 // --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `func main` carries no `import` (the library file already imports `fmt`). No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
@@ -792,7 +806,9 @@ dewasm_test_helper::qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min), and the 49 MB wasi-vfs-packed variant (ADR-61) is the same interpreter plus embedded stdlib, strictly larger; see docs/apps-audit.md.
+// Ultra-slow category (ADR-48): the ~35 MB CRuby wasm's ~242 MB Go source takes `go build` well past the ~5-minute ADR-24 practicality bar and CI's own budget (convert + build + run measured ~14m54s locally) — wall time is the cost, not feasibility. The 49 MB wasi-vfs-packed variant (ADR-61) is the same interpreter plus embedded stdlib (~14m13s), so it inherits the category.
+dewasm_test_helper::cruby_hello_e2e!(Go, GO_CRUBY_GLUE, ultra);
+dewasm_test_helper::cruby_packed_hello_e2e!(Go, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Go);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
