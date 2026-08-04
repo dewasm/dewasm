@@ -62,6 +62,11 @@ end
 # it diffs against the previous frame's cell contents and the terminal's own
 # cursor position, and only emits an SGR code when a cell's color actually
 # changed.
+# Fixed status-line colors (white on black), independent of the game's own
+# palette -- without an explicit color the status line inherits whatever
+# fg/bg the last-drawn pixel cell left active, flickering with the game.
+STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
+
 class Renderer
   attr_reader :cell_cols, :cell_rows
 
@@ -129,9 +134,15 @@ class Renderer
       end
     end
     if status_text != @last_status
-      buf << "\e[#{@cell_rows + 1};1H\e[K#{status_text}"
+      # Reset SGR first: otherwise the status line inherits whichever
+      # fg/bg the last-drawn pixel cell left active, making its background
+      # flicker with the game's own colors instead of staying the terminal
+      # default.
+      buf << "\e[#{@cell_rows + 1};1H\e[0m#{STATUS_SGR}\e[K#{status_text}"
       @last_status = status_text
       @cursor_row = -1 # force the next painted cell to reposition: the cursor is now on the status line
+      @last_fg = nil # the reset above invalidated the SGR cache; force the next cell to re-emit its color
+      @last_bg = nil
     end
     buf
   end
@@ -341,7 +352,9 @@ def run_smoke(rom_path)
 end
 
 ENTER_ALT_SCREEN = "\e[?1049h\e[?25l\e[2J\e[H"
-EXIT_ALT_SCREEN = "\e[?25h\e[?1049l"
+# SGR reset first: the fixed status-line colors otherwise persist past
+# leaving the alternate screen and tint the shell prompt underneath.
+EXIT_ALT_SCREEN = "\e[0m\e[?25h\e[?1049l"
 
 # The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no
 # separate calibration is needed (unlike DOOM's internal 35Hz pacing, which

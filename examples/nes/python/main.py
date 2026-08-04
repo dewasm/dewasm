@@ -84,6 +84,11 @@ def load_rom(path):
 
 UPPER_HALF_BLOCK = "▀"
 
+# Fixed status-line colors (white on black), independent of the game's own
+# palette -- without an explicit color the status line inherits whatever
+# fg/bg the last-drawn pixel cell left active, flickering with the game.
+STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
+
 
 def _pixel(mv, off, buf_w, x, y):
     # Memory byte order is B, G, R, A (see nes_demo.c's tickGame).
@@ -173,7 +178,7 @@ class Renderer:
         out = "\x1b[2J" if resized else ""
         out += diff_escapes(cells, prev, rows, width)
         # Status line always redrawn: it's one line, and its own text changes tick to tick.
-        out += f"\x1b[{rows + 1};1H\x1b[0m\x1b[K{status_line}"
+        out += f"\x1b[{rows + 1};1H\x1b[0m{STATUS_SGR}\x1b[K{status_line}"
         os.write(1, out.encode())
 
         self.prev, self.width, self.rows = cells, width, rows
@@ -237,7 +242,10 @@ def run_interactive(rom_path):
 
     def restore():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        os.write(1, b"\x1b[?25h\x1b[?1049l")
+        # SGR reset first: the fixed status-line colors otherwise persist
+        # past leaving the alternate screen and tint the shell prompt
+        # underneath.
+        os.write(1, b"\x1b[0m\x1b[?25h\x1b[?1049l")
 
     renderer = Renderer()
     held = {}  # controller bit -> release deadline (time.monotonic() seconds)

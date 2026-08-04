@@ -36,6 +36,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 readonly ESC=$'\e'
 readonly DEFAULT_ROM=../../apps/cache/alter_ego.nes
 
+# Fixed status-line colors (white on black), independent of the game's own
+# palette -- without an explicit color the status line inherits whatever
+# fg/bg the last-drawn pixel cell left active, flickering with the game.
+readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
+
 # NES controller button bits, matching src/nes_demo.c's setInput().
 readonly BTN_A=1 BTN_B=2 BTN_SELECT=4 BTN_START=8
 readonly BTN_UP=16 BTN_DOWN=32 BTN_LEFT=64 BTN_RIGHT=128
@@ -376,7 +381,9 @@ run_interactive() {
   ORIG_STTY=$(stty -g)
   restore_terminal() {
     stty "$ORIG_STTY" 2>/dev/null || true
-    printf '%s' "${ESC}[?25h${ESC}[?1049l"
+    # SGR reset first: the fixed status-line colors otherwise persist past
+    # leaving the alternate screen and tint the shell prompt underneath.
+    printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
   # Ctrl-C is handled as a byte in drain_input (raw mode disables the
   # terminal's own SIGINT); the INT/TERM traps are a backstop for `kill` or a
@@ -417,7 +424,7 @@ run_interactive() {
     render_frame
     local status_text
     status_text="dewasm NES (bash) | frame $frame | $(fmt_secs "$dt_ms")s/frame | q quit  arrows d-pad  x A  z B  enter Start  space Select"
-    printf '%s' "$RENDER_OUT${ESC}[$(( GRID_ROWS + 1 ));1H${ESC}[K${status_text}"
+    printf '%s' "$RENDER_OUT${ESC}[$(( GRID_ROWS + 1 ));1H${ESC}[0m${STATUS_SGR}${ESC}[K${status_text}"
   done
 }
 
