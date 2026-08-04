@@ -8,7 +8,7 @@
 // interface): it exposes memory plus allocRom/initGame/setInput/tickGame and
 // the frame accessors directly, and never calls back into the host. So unlike
 // DoomEngine, NesEngine wires no imports map at all — it just drives the
-// exports and pulls the framebuffer out of linear memory itself after every
+// exports and composes the frame out of linear memory itself after every
 // tick, at a fixed 60 Hz pace the host is responsible for (tickGame renders
 // exactly one NES video frame per call, with no internal timing of its own).
 
@@ -25,8 +25,6 @@ import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -320,18 +318,18 @@ public class Main {
     // Owns the Nes instance and the current framebuffer. nes.wasm has no
     // imports, so construction just needs the ROM bytes: allocate a guest
     // buffer with allocRom, copy the ROM in, and initGame it. Every tick()
-    // sets the input mask, advances one video frame, and copies the guest
-    // framebuffer into the BufferedImage's backing int[] — nes_demo.c writes
-    // B,G,R,A bytes per pixel (alpha padding fixed at 0xff), and a
-    // little-endian u32 load of that byte order is exactly the ARGB int
-    // TYPE_INT_ARGB expects, so the copy is a straight bulk get(), no
-    // per-pixel shuffling.
+    // sets the input mask, advances one video frame, and composes the guest's
+    // frame into the BufferedImage's backing int[] — the guest hands over one
+    // palette *index* per pixel plus a fixed 64-entry palette (ADR-59), so the
+    // palette is decoded once into the ARGB ints TYPE_INT_ARGB expects and
+    // every pixel is one masked table lookup.
     private static final class NesEngine {
         final Nes nes;
         final Memory memory;
         final Rt.Fn setInputFn;
         final Rt.Fn tickGameFn;
-        final Rt.Fn frameOffsetFn;
+        final int screenOff;
+        final int[] palette = new int[64];
 
         final int width;
         final int height;
@@ -348,7 +346,8 @@ public class Main {
             Rt.Fn initGameFn = (Rt.Fn) nes.Exports.get("initGame");
             this.setInputFn = (Rt.Fn) nes.Exports.get("setInput");
             this.tickGameFn = (Rt.Fn) nes.Exports.get("tickGame");
-            this.frameOffsetFn = (Rt.Fn) nes.Exports.get("frameOffset");
+            Rt.Fn screenOffsetFn = (Rt.Fn) nes.Exports.get("screenOffset");
+            Rt.Fn paletteOffsetFn = (Rt.Fn) nes.Exports.get("paletteOffset");
             Rt.Fn frameWidthFn = (Rt.Fn) nes.Exports.get("frameWidth");
             Rt.Fn frameHeightFn = (Rt.Fn) nes.Exports.get("frameHeight");
 
@@ -363,18 +362,30 @@ public class Main {
             this.width = (Integer) frameWidthFn.invoke(new Object[0]);
             this.height = (Integer) frameHeightFn.invoke(new Object[0]);
             this.frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+            // Both offsets are stable for the emulator's lifetime; the palette
+            // is fixed data (R,G,B,A, alpha padding), so it is decoded once.
+            this.screenOff = (Integer) screenOffsetFn.invoke(new Object[0]);
+            int poff = (Integer) paletteOffsetFn.invoke(new Object[0]);
+            for (int i = 0; i < palette.length; i++) {
+                palette[i] = 0xff000000
+                    | ((memory.d[poff + i * 4] & 0xff) << 16)
+                    | ((memory.d[poff + i * 4 + 1] & 0xff) << 8)
+                    | (memory.d[poff + i * 4 + 2] & 0xff);
+            }
         }
 
         void tick(int buttons) {
             setInputFn.invoke(new Object[] { buttons });
             tickGameFn.invoke(new Object[0]);
 
-            int off = (Integer) frameOffsetFn.invoke(new Object[0]);
             int[] pixels = ((DataBufferInt) frame.getRaster().getDataBuffer()).getData();
-            ByteBuffer.wrap(memory.d, off, width * height * 4)
-                .order(ByteOrder.LITTLE_ENDIAN)
-                .asIntBuffer()
-                .get(pixels);
+            byte[] d = memory.d;
+            for (int i = 0; i < pixels.length; i++) {
+                // One byte per pixel, a palette index; the & 0x3f mask is
+                // load-bearing (see examples/apps/src/nes_demo.c).
+                pixels[i] = palette[d[screenOff + i] & 0x3f];
+            }
         }
     }
 }

@@ -190,8 +190,11 @@ done
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
 /// `allocRom`'s buffer via `mem_init` (the same runtime helper active data
-/// segments use), tick `{frames}` times with no input, dump the framebuffer
-/// through the same chunked `printf` `\xNN` pipeline as DOOM. `ROM_BYTES` is
+/// segments use), tick `{frames}` times with no input, compose the frame from
+/// agnes's palette-index screen buffer and its palette (issue #117 — one
+/// `nes_mem` read per pixel instead of three, against a 64-entry `\xNN\xNN\xNN`
+/// lookup table built once; the `& 0x3f` mask is load-bearing), and dump it
+/// through the same chunked `printf` pipeline as DOOM. `ROM_BYTES` is
 /// built with `od`/`mapfile` rather than a bash loop — the ROM is 41 KB, and
 /// `mem_init`'s own copy loop already walks it once. `{rom}` (the cached
 /// ROM's host path) and `{frames}` filled by the runner. The trailing `exit
@@ -217,18 +220,22 @@ nes_invoke frameWidth || { echo "frameWidth failed: ${TRAP_MSG-}" >&2; exit 1; }
 w=$R0
 nes_invoke frameHeight || { echo "frameHeight failed: ${TRAP_MSG-}" >&2; exit 1; }
 h=$R0
-nes_invoke frameOffset || { echo "frameOffset failed: ${TRAP_MSG-}" >&2; exit 1; }
-off=$R0
-n=$(( w * h * 4 ))
+nes_invoke screenOffset || { echo "screenOffset failed: ${TRAP_MSG-}" >&2; exit 1; }
+soff=$R0
+nes_invoke paletteOffset || { echo "paletteOffset failed: ${TRAP_MSG-}" >&2; exit 1; }
+poff=$R0
+declare -a PAL
+for (( e = 0; e < 64; e++ )); do
+  c=$(( poff + e * 4 ))
+  printf -v "PAL[$e]" '\\x%02x\\x%02x\\x%02x' \
+    "${nes_mem[$c]-0}" "${nes_mem[$(( c + 1 ))]-0}" "${nes_mem[$(( c + 2 ))]-0}"
+done
+n=$(( w * h ))
 printf 'P6\n%d %d\n255\n' "$w" "$h"
 fmt=''
 cnt=0
-for (( i = 0; i < n; i += 4 )); do
-  r=${nes_mem[$(( off + i + 2 ))]-0}
-  g=${nes_mem[$(( off + i + 1 ))]-0}
-  b=${nes_mem[$(( off + i ))]-0}
-  printf -v px '\\x%02x\\x%02x\\x%02x' "$r" "$g" "$b"
-  fmt+=$px
+for (( i = 0; i < n; i++ )); do
+  fmt+=${PAL[$(( ${nes_mem[$(( soff + i ))]-0} & 0x3f ))]}
   if (( ++cnt >= 4096 )); then printf "$fmt"; fmt=''; cnt=0; fi
 done
 [[ -n $fmt ]] && printf "$fmt"
@@ -264,7 +271,7 @@ qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
 
 doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
-// Ultra tier (ADR-48): measured ~25s/tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~17 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above.
+// Ultra tier (ADR-48): tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)
 nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
 shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);

@@ -8,8 +8,13 @@
 //! wasmtime oracle produce byte-identical pixels — no synthetic clock is needed,
 //! unlike DOOM.
 //!
-//! The framebuffer is `B,G,R,A` (alpha padding dropped) so the DOOM snapshot's
-//! [`frame_to_ppm`](crate::frame_to_ppm) and the glue shapes are reused.
+//! "Dump the framebuffer" means agnes's own representation, not a rendered
+//! image (issue #117): `screenOffset()` points at `frameWidth * frameHeight`
+//! palette *indices* (row-major, one byte per pixel) and `paletteOffset()` at
+//! the fixed [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette, so a host composes
+//! a pixel as `palette[screen[i] & 0x3f]` — see [`nes_frame_to_ppm`], which is
+//! both the oracle's encoder and the shape every backend's glue reproduces. The
+//! `& 0x3f` mask is load-bearing: indices above 63 occur.
 
 use std::path::PathBuf;
 
@@ -23,6 +28,10 @@ use crate::glue::fill;
 /// dimensions and `frameWidth`/`frameHeight` report them at run time.
 pub const NES_FRAME_W: u32 = 256;
 pub const NES_FRAME_H: u32 = 240;
+
+/// The palette `paletteOffset` points at: 64 entries of 4 bytes (`R,G,B,A`),
+/// i.e. 256 bytes. Fixed data, so a host reads it once.
+pub const NES_PALETTE_ENTRIES: usize = 64;
 
 /// Number of `tickGame` calls (one emulated video frame each) before the frame
 /// is captured, with no controller input. Chosen empirically as the smallest
@@ -51,6 +60,32 @@ pub fn alter_ego_rom_path() -> PathBuf {
 /// (in the shared snapshots dir, so its stem carries the `nes_` prefix).
 pub fn nes_frame_snapshot_path() -> PathBuf {
     crate::fixtures::apps_snapshot_dir().join("nes_frame.ppm")
+}
+
+/// Encode agnes's own frame representation — `w * h` palette indices plus the
+/// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette — as a binary P6 PPM. The
+/// exact byte layout the per-backend glue must reproduce on stdout for the
+/// snapshot comparison, mask included: `palette[index & 0x3f]` (indices above
+/// 63 occur, and agnes's own accessor masks them).
+pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8> {
+    assert_eq!(
+        screen.len(),
+        (w * h) as usize,
+        "screen buffer size mismatch"
+    );
+    assert_eq!(
+        palette.len(),
+        NES_PALETTE_ENTRIES * 4,
+        "palette size mismatch"
+    );
+    let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
+    out.reserve((w * h * 3) as usize);
+    for &ix in screen {
+        let c = &palette[(ix as usize & 0x3f) * 4..];
+        // palette order is R,G,B,A → PPM wants R,G,B; A is padding, dropped.
+        out.extend_from_slice(&[c[0], c[1], c[2]]);
+    }
+    out
 }
 
 /// Convert `nes.wasm` to library mode with `lang`, append `glue` that loads the

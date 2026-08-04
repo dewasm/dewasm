@@ -7,18 +7,20 @@
 //! inspection; only the PPM is the compared oracle.
 //!
 //! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain
-//! reactor library, so the oracle only calls `_initialize` plus the seven demo
+//! reactor library, so the oracle only calls `_initialize` plus the demo
 //! exports. The ROM is copied into guest memory through `allocRom`.
 
 use anyhow::{ensure, Context, Result};
 use dewasm_test_helper::{
-    alter_ego_rom_path, frame_to_ppm, nes_wasm_path, NES_FRAMES, NES_FRAME_H, NES_FRAME_W,
+    alter_ego_rom_path, nes_frame_to_ppm, nes_wasm_path, NES_FRAMES, NES_FRAME_H, NES_FRAME_W,
+    NES_PALETTE_ENTRIES,
 };
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
 /// Instantiate and drive `nes.wasm` under the deterministic contract, returning
-/// the captured framebuffer bytes (`B,G,R,A`) and its dimensions.
-fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
+/// agnes's own frame representation — the palette-index screen buffer, the
+/// palette, and the frame dimensions.
+fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>, u32, u32)> {
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
     let mut store = Store::new(&engine, ());
@@ -56,25 +58,30 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u3
     read_frame(&mut store, &instance, memory)
 }
 
-/// Read `frameWidth`/`frameHeight`/`frameOffset` and slice the framebuffer out
-/// of guest memory. Split out so `memory` is not borrowed across the export
-/// calls above.
+/// Read `frameWidth`/`frameHeight`/`screenOffset`/`paletteOffset` and slice the
+/// index buffer and the palette out of guest memory. Split out so `memory` is
+/// not borrowed across the export calls above.
 fn read_frame(
     store: &mut Store<()>,
     instance: &Instance,
     memory: wasmtime::Memory,
-) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
+) -> wasmtime::Result<(Vec<u8>, Vec<u8>, u32, u32)> {
     let w = instance
         .get_typed_func::<(), i32>(&mut *store, "frameWidth")?
         .call(&mut *store, ())? as u32;
     let h = instance
         .get_typed_func::<(), i32>(&mut *store, "frameHeight")?
         .call(&mut *store, ())? as u32;
-    let off = instance
-        .get_typed_func::<(), i32>(&mut *store, "frameOffset")?
+    let screen_off = instance
+        .get_typed_func::<(), i32>(&mut *store, "screenOffset")?
         .call(&mut *store, ())? as usize;
-    let frame = memory.data(&*store)[off..off + (w * h * 4) as usize].to_vec();
-    Ok((frame, w, h))
+    let palette_off = instance
+        .get_typed_func::<(), i32>(&mut *store, "paletteOffset")?
+        .call(&mut *store, ())? as usize;
+    let data = memory.data(&*store);
+    let screen = data[screen_off..screen_off + (w * h) as usize].to_vec();
+    let palette = data[palette_off..palette_off + NES_PALETTE_ENTRIES * 4].to_vec();
+    Ok((screen, palette, w, h))
 }
 
 /// Recapture the NES framebuffer from a live (embedded) wasmtime and return both
@@ -97,7 +104,7 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         )
     })?;
 
-    let (frame, w, h) = capture_frame(&bytes, &rom).map_err(anyhow::Error::msg)?;
+    let (screen, palette, w, h) = capture_frame(&bytes, &rom).map_err(anyhow::Error::msg)?;
     ensure!(
         w == NES_FRAME_W && h == NES_FRAME_H,
         "frame is {w}x{h}, expected {NES_FRAME_W}x{NES_FRAME_H} (pin bump?)"
@@ -107,9 +114,12 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     // tiny, so the DOOM oracle's >50 threshold is wrong here — the Alter Ego
     // credits screen this pins measures 7 distinct colors, while the near-black
     // boot frame is a single color. A >4 threshold cleanly separates the two.
-    let distinct = frame
-        .chunks_exact(4)
-        .map(|px| [px[0], px[1], px[2]])
+    // Counted over colors, not raw indices: distinct indices can alias onto one
+    // palette entry (the mask, plus repeated black entries).
+    let ppm = nes_frame_to_ppm(&screen, &palette, w, h);
+    let distinct = screen
+        .iter()
+        .map(|&ix| &palette[(ix as usize & 0x3f) * 4..(ix as usize & 0x3f) * 4 + 3])
         .collect::<std::collections::HashSet<_>>()
         .len();
     ensure!(
@@ -117,17 +127,19 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         "captured frame looks degenerate ({distinct} distinct colors) — check NES_FRAMES"
     );
 
-    Ok((frame_to_ppm(&frame, w, h), frame_to_png(&frame, w, h)?))
+    Ok((ppm, frame_to_png(&screen, &palette, w, h)?))
 }
 
-/// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit
-/// RGB PNG. Settings are the crate defaults, kept fixed so regeneration is
-/// byte-stable. This PNG is a human-facing sidecar only — no test compares it.
-fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
+/// Encode the palette-index screen buffer as an 8-bit RGB PNG, composing pixels
+/// the same way [`nes_frame_to_ppm`] does. Settings are the crate defaults, kept
+/// fixed so regeneration is byte-stable. This PNG is a human-facing sidecar only
+/// — no test compares it.
+fn frame_to_png(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
-    for px in frame.chunks_exact(4) {
-        // memory order is B,G,R,A → PNG wants R,G,B; A is padding, dropped.
-        rgb.extend_from_slice(&[px[2], px[1], px[0]]);
+    for &ix in screen {
+        let c = &palette[(ix as usize & 0x3f) * 4..];
+        // palette order is R,G,B,A → PNG wants R,G,B; A is padding, dropped.
+        rgb.extend_from_slice(&[c[0], c[1], c[2]]);
     }
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);

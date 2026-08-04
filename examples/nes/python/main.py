@@ -2,12 +2,18 @@
 """Interactive frontend for the dewasm-generated NES emulator (nes_gen.py,
 produced from examples/apps/src/nes_demo.c's agnes wrapper by build.sh,
 ADR-59). Unlike DOOM, nes.wasm has zero wasm imports -- no console/save-
-game/clock host surface to wire up, just `_initialize` plus the seven demo
-exports (allocRom/initGame/setInput/tickGame/frameOffset/frameWidth/
+game/clock host surface to wire up, just `_initialize` plus the demo exports
+(allocRom/initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
 frameHeight) -- so this script's whole job is to load a ROM into the
 module's linear memory and drive the game loop itself: pacing, input
 polling, and rendering are entirely the host's job (the module has no clock
 import of its own, unlike DOOM's internal 35Hz timer).
+
+The guest hands over agnes's own frame representation -- one palette *index*
+per pixel plus the fixed 64-entry palette -- rather than a rendered image, so
+composing pixels is the host's job too. That suits a terminal frontend: a
+cell samples one pixel out of several, so only the sampled indices are ever
+looked up (and the SGR escape per index is precomputed once).
 
 Rendering reuses the DOOM Python frontend's half-block truecolor trick
 (../../doom/python/) and its key-hold heuristic for terminals that only
@@ -57,7 +63,12 @@ FRAME_W = 256
 FRAME_H = 240
 
 nes = None
-frame_off = 0
+screen_off = 0
+# The module's fixed palette, read once after initGame: 64 (r, g, b) entries,
+# plus the truecolor SGR escape each one renders as.
+palette = []
+fg_sgr = []
+bg_sgr = []
 
 
 def read_rom(path):
@@ -71,6 +82,17 @@ def load_rom(path):
     nes.memory.data[ptr : ptr + len(data)] = data
     ok = nes.invoke("initGame")
     assert ok == 1, f"initGame failed (ROM: {path})"
+
+
+def load_palette():
+    """Caches paletteOffset's 64 R,G,B,A entries (alpha is padding) and the
+    per-index SGR escapes. Fixed data -- reading it once is enough."""
+    global palette, fg_sgr, bg_sgr
+    off = nes.invoke("paletteOffset")
+    mv = memoryview(nes.memory.data)
+    palette = [tuple(mv[off + i * 4 : off + i * 4 + 3]) for i in range(64)]
+    fg_sgr = [f"\x1b[38;2;{r};{g};{b}m" for r, g, b in palette]
+    bg_sgr = [f"\x1b[48;2;{r};{g};{b}m" for r, g, b in palette]
 
 
 # --- Terminal rendering ------------------------------------------------
@@ -90,10 +112,10 @@ UPPER_HALF_BLOCK = "▀"
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
-def _pixel(mv, off, buf_w, x, y):
-    # Memory byte order is B, G, R, A (see nes_demo.c's tickGame).
-    o = off + (y * buf_w + x) * 4
-    return mv[o + 2], mv[o + 1], mv[o]
+def _index(mv, off, buf_w, x, y):
+    # One byte per pixel, a palette index; the & 0x3F mask is load-bearing
+    # (see nes_demo.c).
+    return mv[off + y * buf_w + x] & 0x3F
 
 
 def _fit(logical_w, logical_h, term_cols, term_rows):
@@ -122,8 +144,8 @@ def build_cells(mv, off, buf_w, buf_h, width, rows):
         for col in range(width):
             lx = col * buf_w // width
             cur[col] = (
-                _pixel(mv, off, buf_w, lx, ly_top),
-                _pixel(mv, off, buf_w, lx, ly_bot),
+                _index(mv, off, buf_w, lx, ly_top),
+                _index(mv, off, buf_w, lx, ly_bot),
             )
     return cells
 
@@ -147,10 +169,10 @@ def diff_escapes(cells, prev, rows, width):
             while col < width and (prev_row is None or cur_row[col] != prev_row[col]):
                 fg, bg = cur_row[col]
                 if fg != last_fg:
-                    out.append(f"\x1b[38;2;{fg[0]};{fg[1]};{fg[2]}m")
+                    out.append(fg_sgr[fg])
                     last_fg = fg
                 if bg != last_bg:
-                    out.append(f"\x1b[48;2;{bg[0]};{bg[1]};{bg[2]}m")
+                    out.append(bg_sgr[bg])
                     last_bg = bg
                 out.append(UPPER_HALF_BLOCK)
                 col += 1
@@ -171,7 +193,7 @@ class Renderer:
         mv = memoryview(nes.memory.data)
         term_cols, term_rows = os.get_terminal_size()
         width, rows = _fit(FRAME_W, FRAME_H, term_cols, term_rows)
-        cells = build_cells(mv, frame_off, FRAME_W, FRAME_H, width, rows)
+        cells = build_cells(mv, screen_off, FRAME_W, FRAME_H, width, rows)
 
         resized = width != self.width or rows != self.rows
         prev = None if resized else self.prev
@@ -231,11 +253,14 @@ FRAME_SECONDS = 1.0 / TARGET_FPS
 
 
 def run_interactive(rom_path):
-    global nes, frame_off
+    global nes, screen_off
     nes = nes_gen.Nes({})
     nes.invoke("_initialize")
     load_rom(rom_path)
-    frame_off = nes.invoke("frameOffset")
+    load_palette()
+    # Both offsets are stable for the emulator's lifetime, so they are read
+    # once rather than per frame.
+    screen_off = nes.invoke("screenOffset")
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -288,7 +313,6 @@ def run_interactive(rom_path):
                 mask |= bit
             nes.invoke("setInput", mask)
             nes.invoke("tickGame")
-            frame_off = nes.invoke("frameOffset")
 
             status_ticks += 1
             elapsed = now - status_window_start
@@ -313,16 +337,16 @@ def run_interactive(rom_path):
 
 
 def write_ppm_and_count_colors(path, mv, off, w, h):
-    """Writes the framebuffer as a binary P6 PPM (stdlib-only, unlike PNG)
-    and counts distinct RGB colors in the same pass."""
+    """Writes the frame as a binary P6 PPM (stdlib-only, unlike PNG), composing
+    each pixel from its palette index, and counts distinct RGB colors in the
+    same pass."""
     distinct = set()
     buf = bytearray(w * h * 3)
     for i in range(w * h):
-        o = off + i * 4
-        b, g, r = mv[o], mv[o + 1], mv[o + 2]
+        c = palette[mv[off + i] & 0x3F]
         j = i * 3
-        buf[j], buf[j + 1], buf[j + 2] = r, g, b
-        distinct.add((r, g, b))
+        buf[j], buf[j + 1], buf[j + 2] = c
+        distinct.add(c)
     with open(path, "wb") as f:
         f.write(f"P6\n{w} {h}\n255\n".encode("ascii"))
         f.write(buf)
@@ -340,17 +364,18 @@ SMOKE_FRAMES = 40
 
 
 def run_smoke(rom_path, frames=SMOKE_FRAMES):
-    global nes, frame_off
+    global nes, screen_off
     nes = nes_gen.Nes({})
     nes.invoke("_initialize")
     load_rom(rom_path)
+    load_palette()
 
     start = time.monotonic()
     for _ in range(frames):
         nes.invoke("setInput", 0)
         nes.invoke("tickGame")
     elapsed = time.monotonic() - start
-    frame_off = nes.invoke("frameOffset")
+    screen_off = nes.invoke("screenOffset")
     rate = frames / elapsed if elapsed > 0 else float("inf")
     print(f"smoke: ran {frames} frames in {elapsed:.3f}s ({rate:.2f} frames/sec)")
 
@@ -362,12 +387,12 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
     render_start = time.monotonic()
     cols, rows = 80, 24
     width, rows = _fit(FRAME_W, FRAME_H, cols, rows)
-    cells = build_cells(mv, frame_off, FRAME_W, FRAME_H, width, rows)
+    cells = build_cells(mv, screen_off, FRAME_W, FRAME_H, width, rows)
     diff_escapes(cells, None, rows, width)
     render_elapsed = time.monotonic() - render_start
     print(f"smoke: terminal-render (to a string) took {render_elapsed * 1000:.2f}ms for a {width}x{rows}-cell frame")
 
-    distinct = write_ppm_and_count_colors("screenshot.ppm", mv, frame_off, FRAME_W, FRAME_H)
+    distinct = write_ppm_and_count_colors("screenshot.ppm", mv, screen_off, FRAME_W, FRAME_H)
     print(f"smoke: final frame is {FRAME_W}x{FRAME_H}, wrote screenshot.ppm ({len(distinct)} distinct colors)")
 
     # The NES PPU palette tops out at 64 colors, and agnes's frame is a

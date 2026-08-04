@@ -50,8 +50,8 @@ pub use library::{
 };
 pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
 pub use nes::{
-    alter_ego_rom_path, nes_frame_snapshot_path, nes_wasm_path, run_nes_frame_case, NES_FRAMES,
-    NES_FRAME_H, NES_FRAME_W,
+    alter_ego_rom_path, nes_frame_snapshot_path, nes_frame_to_ppm, nes_wasm_path,
+    run_nes_frame_case, NES_FRAMES, NES_FRAME_H, NES_FRAME_W, NES_PALETTE_ENTRIES,
 };
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{

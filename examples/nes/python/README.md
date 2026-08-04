@@ -18,6 +18,8 @@ Pacing targets 60Hz (the NTSC NES's real rate is ~60.0988Hz -- close enough that
 
 ## Rendering
 
+The module hands over agnes's own frame representation -- one palette *index* per pixel at `screenOffset()`, plus the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`) -- rather than a rendered image, so composing pixels is this frontend's job and only the pixels a cell actually samples are ever looked up.
+
 Each character cell shows two vertically-stacked pixels via the upper-half-block character `▀`: the foreground color is the top pixel, the background color is the bottom pixel, both set with 24-bit truecolor escapes. Unlike DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200), agnes's 256x240 framebuffer is already the NES's native resolution, so pixels are read 1:1 and nearest-neighbor-fit to however many columns/rows the terminal actually has (capped at 256 columns, one row reserved for the status line). Only cells that changed since the previous frame are redrawn, and repeated colors within a redrawn run don't re-emit their escape code.
 
 ## Controls

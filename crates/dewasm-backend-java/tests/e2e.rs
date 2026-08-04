@@ -480,9 +480,11 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
-/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
-/// cached ROM's host path) and `{frames}` filled by the runner.
+/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame
+/// from agnes's palette-index screen buffer and its palette (issue #117; the
+/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime
+/// snapshot. `{rom}` (the cached ROM's host path) and `{frames}` filled by the
+/// runner.
 const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         byte[] rom = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("{rom}"));
@@ -497,14 +499,16 @@ const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
 
         int w = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameWidth")).invoke(new Object[]{});
         int h = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameHeight")).invoke(new Object[]{});
-        int off = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameOffset")).invoke(new Object[]{});
+        int soff = (int)(Integer) ((Rt.Fn) nes.Exports.get("screenOffset")).invoke(new Object[]{});
+        int poff = (int)(Integer) ((Rt.Fn) nes.Exports.get("paletteOffset")).invoke(new Object[]{});
         byte[] d = nes.memory.d;
         byte[] out = new byte[w * h * 3];
         int j = 0;
-        for (int i = 0; i < w * h * 4; i += 4) {
-            out[j++] = d[off + i + 2];
-            out[j++] = d[off + i + 1];
-            out[j++] = d[off + i];
+        for (int i = 0; i < w * h; i++) {
+            int c = poff + (d[soff + i] & 0x3f) * 4;
+            out[j++] = d[c];
+            out[j++] = d[c + 1];
+            out[j++] = d[c + 2];
         }
         System.out.write(("P6\n" + w + " " + h + "\n255\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
         System.out.write(out);

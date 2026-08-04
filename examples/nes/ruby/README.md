@@ -12,7 +12,9 @@ builds and takes over the terminal (alternate screen, hidden cursor, raw input) 
 
 ## Rendering
 
-The NES's native 256x240 framebuffer is downsampled to fit the terminal and drawn two source pixels per character cell with the half-block trick (the same one `../doom/ruby` uses): `▀` colored via 24-bit truecolor SGR, `\e[38;2;R;G;Bm` for the foreground (top pixel) and `\e[48;2;R;G;Bm` for the background (bottom pixel). Target width is `min(terminal columns, 256)`; height in cells follows from that at the NES's aspect ratio, minus one row for the status line. At a typical 160-column terminal that's 160x150 logical pixels, i.e. 160x75 character cells.
+The module hands over agnes's own frame representation — one palette *index* per pixel at `screenOffset()`, plus the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`) — rather than a rendered image, so composing pixels is this frontend's job: the SGR escape for each palette entry is precomputed once, and only the pixels a cell actually samples are ever looked up.
+
+The NES's native 256x240 frame is downsampled to fit the terminal and drawn two source pixels per character cell with the half-block trick (the same one `../doom/ruby` uses): `▀` colored via 24-bit truecolor SGR, `\e[38;2;R;G;Bm` for the foreground (top pixel) and `\e[48;2;R;G;Bm` for the background (bottom pixel). Target width is `min(terminal columns, 256)`; height in cells follows from that at the NES's aspect ratio, minus one row for the status line. At a typical 160-column terminal that's 160x150 logical pixels, i.e. 160x75 character cells.
 
 Only changed cells are redrawn — an SGR code is skipped whenever a cell's color matches the previous cell's, and the whole frame is built as one string and written with a single `write` call. This diffing/escape-sequence bookkeeping is the actual performance-sensitive part of this frontend; the wasm execution is not.
 
