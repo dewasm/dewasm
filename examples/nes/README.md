@@ -7,7 +7,7 @@ One NES, six languages: [agnes](https://github.com/kgabis/agnes) (a dependency-f
 - [`ruby/`](ruby/) — Ruby, rendering *into the terminal* as 24-bit-color ANSI half-blocks (stdlib only, run with `--yjit`)
 - [`python/`](python/) — Python, the same terminal renderer (stdlib only, ~1.2 frames/sec)
 - [`perl/`](perl/) — Perl, the same terminal renderer (core modules only, ~0.9 frames/sec)
-- [`bash/`](bash/) — pure Bash, same terminal renderer; ~25–50 seconds per frame, an existence proof in the bash-DOOM tradition (with a `dist.sh` that builds a single-file `nes.bash` — everything here is MIT/public-domain, so unlike DOOM's GPL build it needs no out-of-repo home)
+- [`bash/`](bash/) — pure Bash, same terminal renderer; ~25–50 seconds per frame, an existence proof in the bash-DOOM tradition
 
 Where DOOM demonstrates library mode's *import* surface (ten host functions), the NES module needs nothing from the host at all: a NES frame is a fixed unit of console time, so pacing, input polling, and presentation are wholly host-side. Each frontend reads a `.nes` ROM file, feeds it in through the exported `allocRom`, then drives `initGame`/`setInput`/`tickGame` and reads the framebuffer (256×240, B,G,R,A) straight out of exported memory. The wasm module is the portable artifact and — unlike DOOM, whose WAD is baked in — the program it runs is your choice: pass any ROM within agnes's mapper coverage (NROM/UxROM/MMC1/MMC3) as an argument ([ADR-59](../../docs/adr/59-nes-example-agnes.md)).
 

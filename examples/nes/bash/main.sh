@@ -42,26 +42,11 @@ readonly BTN_UP=16 BTN_DOWN=32 BTN_LEFT=64 BTN_RIGHT=128
 
 MODE=interactive
 ROM_PATH=$DEFAULT_ROM
-ROM_FROM_ARG=0
 if [[ ${1-} == --smoke ]]; then
   MODE=smoke
-  [[ -n ${2-} ]] && { ROM_PATH=$2; ROM_FROM_ARG=1; }
+  [[ -n ${2-} ]] && ROM_PATH=$2
 else
-  [[ -n ${1-} ]] && { ROM_PATH=$1; ROM_FROM_ARG=1; }
-fi
-
-# The single-file distributable (dist.sh) sets EMBEDDED_ROM_B64 to a base64
-# of Alter Ego, so nes.bash carries the ROM with it and needs no dewasm
-# checkout. When present and the user didn't pass their own ROM path, decode
-# it to a temp file and use that as the default ROM. ROM_TEMP is removed by
-# every exit path (both the smoke and interactive teardowns call it).
-EMBEDDED_ROM_B64=${EMBEDDED_ROM_B64-}
-ROM_TEMP=
-cleanup_rom_temp() { [[ -n $ROM_TEMP ]] && rm -f "$ROM_TEMP"; return 0; }
-if [[ -n $EMBEDDED_ROM_B64 && $ROM_FROM_ARG == 0 ]]; then
-  ROM_TEMP=$(mktemp -t nes_rom.XXXXXX) || { echo "nes (bash): mktemp failed" >&2; exit 1; }
-  ROM_PATH=$ROM_TEMP
-  printf '%s' "$EMBEDDED_ROM_B64" | base64 -d > "$ROM_PATH" || { echo "nes (bash): failed to decode embedded ROM" >&2; cleanup_rom_temp; exit 1; }
+  [[ -n ${1-} ]] && ROM_PATH=$1
 fi
 
 FRAME_W=0
@@ -370,7 +355,6 @@ run_smoke() {
   fi
 
   echo "smoke: PASS"
-  cleanup_rom_temp
 }
 
 run_interactive() {
@@ -393,7 +377,6 @@ run_interactive() {
   restore_terminal() {
     stty "$ORIG_STTY" 2>/dev/null || true
     printf '%s' "${ESC}[?25h${ESC}[?1049l"
-    cleanup_rom_temp
   }
   # Ctrl-C is handled as a byte in drain_input (raw mode disables the
   # terminal's own SIGINT); the INT/TERM traps are a backstop for `kill` or a
@@ -438,8 +421,7 @@ run_interactive() {
   done
 }
 
-# The generated NES library. dist.sh replaces this `source` line with the
-# library's contents inline to build the single-file nes.bash.
+# The generated NES library.
 # shellcheck source=/dev/null
 source ./nes_gen.sh
 

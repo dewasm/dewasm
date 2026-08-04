@@ -30,10 +30,6 @@ Alter Ego opens on a near-black boot frame and only fades in its final, stable c
 
 builds and takes over the terminal (alternate screen, hidden cursor, raw input); expect roughly one rendered frame every 25-50 seconds. `./run.sh --smoke` instead runs a headless self-check: it loads the ROM, ticks 40 frames with no input (the same count as the framebuffer snapshot, so the result is Alter Ego's recognizable credits screen rather than the black boot frame), renders that frame, sanity-checks it (asserting the ~7-color credits screen actually drew), writes it to `screenshot.ppm` (ASCII PPM, P3 — plain text, so a stray NUL can't corrupt it, and Bash has no clean binary-safe way to write P6 anyway), and exits non-zero on failure. The full self-check measured about 25 minutes end to end (mean ~38s/frame); it prints a progress line before every tick specifically so a stretch of silence never looks like a hang. Set `SMOKE_FRAMES=N ./main.sh --smoke` for a quicker pipeline check (fewer than ~37 frames will legitimately render near-black and so fail the color assertion — the pipeline still exercises).
 
-## Single-file distribution
-
-`./dist.sh` builds `nes.bash`: the frontend with the generated library inlined in place of its `source` line and the demo ROM base64-embedded, behind a provenance header — one script that runs anywhere with bash >= 5, no dewasm checkout needed. Unlike the DOOM equivalent there is no licensing reason to keep it out of the repository (agnes is MIT, `nes_demo.c` is our own MIT source, the ROM is public domain); it is built rather than committed only because it embeds a fresh copy of the generated library and the ROM.
-
 ## Rendering
 
 Same half-block trick as the DOOM frontends: each terminal cell shows two vertically-stacked source pixels as `▀`, colored with 24-bit truecolor SGR (`\e[38;2;R;G;Bm` for the top pixel, `\e[48;2;R;G;Bm` for the bottom). The 256×240 framebuffer lives in `nes_mem`, the module's linear memory — a plain Bash associative array, one byte per address (`B,G,R,A` per pixel, matching `doom.wasm`'s layout), read directly rather than copied out through a runtime call.
