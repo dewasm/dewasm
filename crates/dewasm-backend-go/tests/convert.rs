@@ -4,6 +4,5 @@
 //! lives in `dewasm-test-helper`.
 
 use dewasm_backend_go::GoBackend;
-use dewasm_test_helper::apps_convert_suite;
 
-apps_convert_suite!(GoBackend);
+dewasm_test_helper::apps_convert_suite!(GoBackend);

@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
-use dewasm_test_helper::{doom_frame_snapshot_path, nes_frame_snapshot_path, wasmtime_snapshots};
 
 use crate::doom_snapshot::capture_doom_frame;
 use crate::nes_snapshot::capture_nes_frame;
@@ -113,7 +112,7 @@ struct SnapshotTarget {
 
 /// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM frame, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency (ADR-53). The DOOM target emits two files — the compared `doom_frame.ppm` and a `doom_frame.png` rendering of the same frame for human inspection (never compared by a test).
 fn snapshot_targets() -> Vec<SnapshotTarget> {
-    let mut targets: Vec<SnapshotTarget> = wasmtime_snapshots()
+    let mut targets: Vec<SnapshotTarget> = dewasm_test_helper::wasmtime_snapshots()
         .into_iter()
         .map(|snap| SnapshotTarget {
             label: snap.label,
@@ -125,7 +124,7 @@ fn snapshot_targets() -> Vec<SnapshotTarget> {
     targets.push(SnapshotTarget {
         label: "examples/apps/snapshots/doom_frame.ppm".to_string(),
         capture: Box::new(|| {
-            let ppm_path = doom_frame_snapshot_path();
+            let ppm_path = dewasm_test_helper::doom_frame_snapshot_path();
             let png_path = ppm_path.with_extension("png");
             let (ppm, png) = capture_doom_frame()?;
             Ok(vec![(ppm_path, ppm), (png_path, png)])
@@ -134,7 +133,7 @@ fn snapshot_targets() -> Vec<SnapshotTarget> {
     targets.push(SnapshotTarget {
         label: "examples/apps/snapshots/nes_frame.ppm".to_string(),
         capture: Box::new(|| {
-            let ppm_path = nes_frame_snapshot_path();
+            let ppm_path = dewasm_test_helper::nes_frame_snapshot_path();
             let png_path = ppm_path.with_extension("png");
             let (ppm, png) = capture_nes_frame()?;
             Ok(vec![(ppm_path, ppm), (png_path, png)])

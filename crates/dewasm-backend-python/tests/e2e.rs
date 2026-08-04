@@ -4,16 +4,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_python::{find_python, PythonBackend};
-use dewasm_test_helper::{
-    convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    cruby_packed_hello_e2e, custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e,
-    examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, nes_frame_e2e,
-    partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
-    treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 pub struct Python;
 
@@ -36,7 +27,8 @@ impl BackendUnderTest for Python {
             let mut units = std::collections::BTreeSet::new();
             let mut classes = Vec::new();
             for (wat, name) in modules {
-                let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+                let bytes = wat::parse_file(dewasm_test_helper::examples_dir().join(wat))
+                    .expect("parse wat");
                 let module = dewasm_core::build_module(&bytes).expect("build IR");
                 let (src, u) = dewasm_backend_python::generate_class_with_units(
                     &module,
@@ -57,9 +49,9 @@ impl BackendUnderTest for Python {
             modules
                 .iter()
                 .map(|(wat, name)| {
-                    convert(
+                    dewasm_test_helper::convert(
                         &PythonBackend,
-                        &examples_dir().join(wat),
+                        &dewasm_test_helper::examples_dir().join(wat),
                         Mode::Library,
                         name,
                     )
@@ -528,43 +520,43 @@ out.flush()
 
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-library_add_e2e!(Python, PYTHON_ADD_GLUE);
-wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
-custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
-partial_override_e2e!(Python, PYTHON_PARTIAL_OVERRIDE_GLUE);
-stdio_capture_e2e!(Python, PYTHON_STDIO_CAPTURE_GLUE);
+dewasm_test_helper::library_add_e2e!(Python, PYTHON_ADD_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
+dewasm_test_helper::custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
+dewasm_test_helper::partial_override_e2e!(Python, PYTHON_PARTIAL_OVERRIDE_GLUE);
+dewasm_test_helper::stdio_capture_e2e!(Python, PYTHON_STDIO_CAPTURE_GLUE);
 
-wasi_suite!(Python, Stdio);
-wasi_suite!(Python, ArgsEnv);
-wasi_suite!(Python, Poll);
-wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
-wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Python);
+dewasm_test_helper::wasi_suite!(Python, Stdio);
+dewasm_test_helper::wasi_suite!(Python, ArgsEnv);
+dewasm_test_helper::wasi_suite!(Python, Poll);
+dewasm_test_helper::wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
+dewasm_test_helper::wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
+dewasm_test_helper::standalone_dir_e2e!(Python);
 // The standalone entrypoint's ADR-28 recursion mitigation (issue #31).
-deep_recursion_e2e!(Python);
+dewasm_test_helper::deep_recursion_e2e!(Python);
 
-cowsay_args_e2e!(Python);
-cowsay_stdin_e2e!(Python);
-qjs_eval_e2e!(Python);
-sqlite3_shell_e2e!(Python);
-gzip_e2e!(Python);
+dewasm_test_helper::cowsay_args_e2e!(Python);
+dewasm_test_helper::cowsay_stdin_e2e!(Python);
+dewasm_test_helper::qjs_eval_e2e!(Python);
+dewasm_test_helper::sqlite3_shell_e2e!(Python);
+dewasm_test_helper::gzip_e2e!(Python);
 
-qjs_file_io_e2e!(Python, PYTHON_QJS_FILE_IO_GLUE);
-sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
-cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
-cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-cruby_packed_hello_e2e!(Python);
-qjs_repl_pty_e2e!(Python);
+dewasm_test_helper::qjs_file_io_e2e!(Python, PYTHON_QJS_FILE_IO_GLUE);
+dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE);
+dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
+dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
+dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
+dewasm_test_helper::cruby_packed_hello_e2e!(Python);
+dewasm_test_helper::qjs_repl_pty_e2e!(Python);
 
-libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
-pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
-treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
+dewasm_test_helper::libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
+dewasm_test_helper::sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
+dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
+dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 
-doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
-nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
+dewasm_test_helper::doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
+dewasm_test_helper::nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
 
-shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
+dewasm_test_helper::shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).

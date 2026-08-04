@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use dewasm_backend::Backend;
 use dewasm_backend_bash::BashBackend;
 use dewasm_core::ir;
-use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
+use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
@@ -133,7 +133,7 @@ impl BackendUnderTest for BashSpec {
     }
 }
 
-impl SpecBackend for BashSpec {
+impl dewasm_test_helper::SpecBackend for BashSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
@@ -146,12 +146,16 @@ impl SpecBackend for BashSpec {
         &[]
     }
 
-    fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted> {
+    fn generate(
+        &self,
+        module: &ir::Module,
+        counter: u32,
+    ) -> anyhow::Result<dewasm_test_helper::Converted> {
         let prefix = format!("m{counter}_");
         let (source, units) = dewasm_backend_bash::generate_module_with_units(
             module, &prefix, false, // spec modules import spectest, never WASI
         )?;
-        Ok(Converted {
+        Ok(dewasm_test_helper::Converted {
             source,
             handle: prefix,
             units,
@@ -166,7 +170,7 @@ impl SpecBackend for BashSpec {
         &self,
         script: &mut String,
         _decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         _var_id: u32,
         registered: &[(String, String)],
     ) -> String {
@@ -186,7 +190,7 @@ impl SpecBackend for BashSpec {
         &self,
         script: &mut String,
         _decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
@@ -447,4 +451,4 @@ const POSTAMBLE: &str = r#"
 echo "RESULT pass=$PASS fail=$FAIL"
 "#;
 
-spec_suite!(BashSpec);
+dewasm_test_helper::spec_suite!(BashSpec);

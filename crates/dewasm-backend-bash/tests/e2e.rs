@@ -5,12 +5,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
-use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    nes_frame_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, shared_table_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, wasi_import_override_e2e,
-    wasi_root_containment_e2e, wasi_suite, BackendUnderTest,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 pub struct Bash;
 
@@ -38,7 +33,8 @@ impl BackendUnderTest for Bash {
         let mut units = BTreeSet::new();
         let mut decls = Vec::new();
         for (wat, name) in modules {
-            let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+            let bytes =
+                wat::parse_file(dewasm_test_helper::examples_dir().join(wat)).expect("parse wat");
             let module = dewasm_core::build_module(&bytes).expect("build IR");
             let prefix = dewasm_backend_bash::func_prefix(name);
             let (src, u) = dewasm_backend_bash::generate_module_with_units(&module, &prefix, false)
@@ -244,35 +240,35 @@ exit 0
 
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-library_add_e2e!(Bash, BASH_ADD_GLUE);
-wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
+dewasm_test_helper::library_add_e2e!(Bash, BASH_ADD_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 // custom_wasi_provider_e2e! / partial_override_e2e! / stdio_capture_e2e!: not invoked — Bash has no host-language object model to replace WASI wholesale, probe its lazy construction, or redirect stdio into an in-memory object (ADR-12).
 
-wasi_suite!(Bash, Stdio);
-wasi_suite!(Bash, ArgsEnv);
-wasi_suite!(Bash, Poll);
-wasi_suite!(Bash, Fs, BASH_FS_GLUE);
-wasi_root_containment_e2e!(Bash, BASH_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Bash);
+dewasm_test_helper::wasi_suite!(Bash, Stdio);
+dewasm_test_helper::wasi_suite!(Bash, ArgsEnv);
+dewasm_test_helper::wasi_suite!(Bash, Poll);
+dewasm_test_helper::wasi_suite!(Bash, Fs, BASH_FS_GLUE);
+dewasm_test_helper::wasi_root_containment_e2e!(Bash, BASH_CONTAINMENT_GLUE);
+dewasm_test_helper::standalone_dir_e2e!(Bash);
 
-cowsay_args_e2e!(Bash);
-cowsay_stdin_e2e!(Bash);
+dewasm_test_helper::cowsay_args_e2e!(Bash);
+dewasm_test_helper::cowsay_stdin_e2e!(Bash);
 // qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but slow — Bash's softfloat makes QuickJS/SQLite take tens of seconds, so the generated tests are `#[ignore]`d by default; `--features slow_test` or `-- --include-ignored` runs them anyway (same as every other backend, ADR-27 revision).
-qjs_eval_e2e!(Bash);
-sqlite3_shell_e2e!(Bash);
+dewasm_test_helper::qjs_eval_e2e!(Bash);
+dewasm_test_helper::sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default, unlike the slow floating-point apps (QuickJS/SQLite).
-gzip_e2e!(Bash);
+dewasm_test_helper::gzip_e2e!(Bash);
 
 // Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens, path_open, and positioned I/O, so the three small-fixture fs apps are wired (all slow, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
-qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
-sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
+dewasm_test_helper::qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
+dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here alongside them: it shares their standalone-mode QuickJS conversion. It is markedly slower than every other case — every keystroke of the scripted session re-enters QuickJS's interactive line editor (redraw/completion), and each successive evaluation measured slower than the last (first prompt ~135s, then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and timed out on CI (#22). It is therefore pinned to the `ultra` tier (ADR-48): kept out of CI's `slow_test` sweep and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification. Left wired rather than unwired per ADR-15 (fail loud, not silently skip): a timeout is still an honest signal.
-qjs_repl_pty_e2e!(Bash, ultra);
+dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
 // rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
 
-doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
+dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 // Ultra tier (ADR-48): tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)
-nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
+dewasm_test_helper::nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
-shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
+dewasm_test_helper::shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
 // libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e! / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no host-language C API to plumb a pointer-returning binding through (ADR-12), and the multi-MB reactor artifacts are far past what Bash's parser can load in practice. embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).

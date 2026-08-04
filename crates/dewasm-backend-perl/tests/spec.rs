@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use dewasm_backend::{Backend, RuntimeLinkage};
 use dewasm_backend_perl::PerlBackend;
 use dewasm_core::ir;
-use dewasm_test_helper::{spec_suite, BackendUnderTest, Converted, SpecBackend};
+use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
@@ -123,7 +123,7 @@ impl BackendUnderTest for PerlSpec {
     }
 }
 
-impl SpecBackend for PerlSpec {
+impl dewasm_test_helper::SpecBackend for PerlSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
@@ -149,7 +149,11 @@ impl SpecBackend for PerlSpec {
         ]
     }
 
-    fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted> {
+    fn generate(
+        &self,
+        module: &ir::Module,
+        counter: u32,
+    ) -> anyhow::Result<dewasm_test_helper::Converted> {
         let package_name = format!("WastMod{counter}");
         let (source, units) = dewasm_backend_perl::generate_package_with_units(
             module,
@@ -157,7 +161,7 @@ impl SpecBackend for PerlSpec {
             &RuntimeLinkage::Alias("Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        Ok(Converted {
+        Ok(dewasm_test_helper::Converted {
             source,
             handle: package_name,
             units,
@@ -172,7 +176,7 @@ impl SpecBackend for PerlSpec {
         &self,
         script: &mut String,
         _decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         var_id: u32,
         registered: &[(String, String)],
     ) -> String {
@@ -191,7 +195,7 @@ impl SpecBackend for PerlSpec {
         &self,
         script: &mut String,
         _decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
@@ -504,4 +508,4 @@ my $spectest = {
 };
 "#;
 
-spec_suite!(PerlSpec);
+dewasm_test_helper::spec_suite!(PerlSpec);

@@ -6,14 +6,7 @@ use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, JavaBackend};
-use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, doom_frame_e2e, examples_dir, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, nes_frame_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, run_command_bytes, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    BackendUnderTest, PtyCommand,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 mod common;
 
@@ -37,7 +30,7 @@ impl BackendUnderTest for Java {
         match build_java(source) {
             // A compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
             Err(build) => build,
-            Ok(classdir) => run_command_bytes(
+            Ok(classdir) => dewasm_test_helper::run_command_bytes(
                 Command::new(&java)
                     .arg("-cp")
                     .arg(&classdir)
@@ -49,7 +42,7 @@ impl BackendUnderTest for Java {
     }
 
     /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty. A compile failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
-    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+    fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
         let classdir = build_java(source).unwrap_or_else(|build| {
@@ -64,7 +57,7 @@ impl BackendUnderTest for Java {
             "Main".to_string(),
         ];
         argv.extend(args.iter().map(|a| a.to_string()));
-        PtyCommand {
+        dewasm_test_helper::PtyCommand {
             program: java,
             args: argv,
             cwd: None,
@@ -80,7 +73,8 @@ impl BackendUnderTest for Java {
         let mut units = std::collections::BTreeSet::new();
         let mut classes = Vec::new();
         for (wat, name) in modules {
-            let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+            let bytes =
+                wat::parse_file(dewasm_test_helper::examples_dir().join(wat)).expect("parse wat");
             let module = dewasm_core::build_module(&bytes).expect("build IR");
             let (src, u) =
                 dewasm_backend_java::generate_program_with_units(&module, name).expect("generate");
@@ -519,36 +513,36 @@ const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
 
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-library_add_e2e!(Java, JAVA_ADD_GLUE);
-wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
-stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
+dewasm_test_helper::library_add_e2e!(Java, JAVA_ADD_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
+dewasm_test_helper::stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
 // custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-30), so the lazy-construction observable cannot hold.
 
-wasi_suite!(Java, Stdio);
-wasi_suite!(Java, ArgsEnv);
-wasi_suite!(Java, Poll);
-wasi_suite!(Java, Fs, JAVA_FS_GLUE);
-wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Java);
+dewasm_test_helper::wasi_suite!(Java, Stdio);
+dewasm_test_helper::wasi_suite!(Java, ArgsEnv);
+dewasm_test_helper::wasi_suite!(Java, Poll);
+dewasm_test_helper::wasi_suite!(Java, Fs, JAVA_FS_GLUE);
+dewasm_test_helper::wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
+dewasm_test_helper::standalone_dir_e2e!(Java);
 
-cowsay_args_e2e!(Java);
-cowsay_stdin_e2e!(Java);
-qjs_eval_e2e!(Java);
-sqlite3_shell_e2e!(Java);
-gzip_e2e!(Java);
+dewasm_test_helper::cowsay_args_e2e!(Java);
+dewasm_test_helper::cowsay_stdin_e2e!(Java);
+dewasm_test_helper::qjs_eval_e2e!(Java);
+dewasm_test_helper::sqlite3_shell_e2e!(Java);
+dewasm_test_helper::gzip_e2e!(Java);
 
-qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
-sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
+dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
+dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
+dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
 // cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit shared by the wasi-vfs-packed variant (ADR-61), whose element segments are the same interpreter's (docs/apps-audit.md).
-qjs_repl_pty_e2e!(Java);
+dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 
-libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
+dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
+dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
+dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
 
-doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
-nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
+dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
+dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
 
-shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
+dewasm_test_helper::shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.

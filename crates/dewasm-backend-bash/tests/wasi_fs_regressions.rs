@@ -8,7 +8,6 @@ use std::process::Command;
 
 use dewasm_backend::Mode;
 use dewasm_backend_bash::{find_bash5, BashBackend};
-use dewasm_test_helper::convert_bytes;
 
 /// A fresh, empty scratch directory keyed by `name`, so cases running in parallel never share host state (the `wasi.rs` helper's shape).
 fn scratch_dir(name: &str) -> PathBuf {
@@ -22,7 +21,7 @@ fn scratch_dir(name: &str) -> PathBuf {
 fn run_module(name: &str, wat_src: &str, glue: &str) -> String {
     let bash = find_bash5().expect("bash >= 5 not found — see docs/testing.md");
     let bytes = wat::parse_str(wat_src).expect("parse wat");
-    let src = convert_bytes(&BashBackend, &bytes, Mode::Library, "prog");
+    let src = dewasm_test_helper::convert_bytes(&BashBackend, &bytes, Mode::Library, "prog");
     let script_path = std::env::temp_dir().join(format!(
         "dewasm-bash-wasi-reg-{name}-{}.sh",
         std::process::id()

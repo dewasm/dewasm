@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_bash::BashBackend;
-use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBackend};
+use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)` — out-of-scope syscalls (timestamps, sockets), the D3 file-symlink-follow limit (pure bash has no `readlink` for path resolution, ADR-34), stat-precision gaps with no `stat` license (dev/ino), the D1 whole-file-buffer divergence, and environ entries bash itself exports (PWD/SHLVL/_), which count-exact `environ_*` assertions cannot absorb (ADR-40).
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
@@ -74,10 +74,10 @@ impl BackendUnderTest for BashWasi {
     }
 }
 
-impl WasiTestsuiteBackend for BashWasi {
+impl dewasm_test_helper::WasiTestsuiteBackend for BashWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
 }
 
-wasi_testsuite_suite!(BashWasi);
+dewasm_test_helper::wasi_testsuite_suite!(BashWasi);
