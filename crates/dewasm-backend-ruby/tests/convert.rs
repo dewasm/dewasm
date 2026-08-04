@@ -4,6 +4,5 @@
 //! `dewasm-test-helper`.
 
 use dewasm_backend_ruby::RubyBackend;
-use dewasm_test_helper::apps_convert_suite;
 
-apps_convert_suite!(RubyBackend);
+dewasm_test_helper::apps_convert_suite!(RubyBackend);
