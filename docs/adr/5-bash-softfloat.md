@@ -6,7 +6,7 @@ Status: **Accepted, 2026-07-23.** Backfilled; the policy was fixed during initia
 
 ## Context
 
-Bash arithmetic (`$(( ))`) is signed 64-bit integers only; there is no float type. The Bash backend is the project's flagship demonstration (ADR-0): C/Rust tools running with no architecture-specific binary and no runtime dependency. f32/f64 support therefore needs an emulation strategy, and the choice decides whether that promise actually holds.
+Bash arithmetic (`$(( ))`) is signed 64-bit integers only; there is no float type. The Bash backend is the project's defining demonstration (ADR-0): C/Rust tools running with no architecture-specific binary and no runtime dependency. f32/f64 support therefore needs an emulation strategy, and the choice decides whether that promise actually holds.
 
 ## Decision
 
@@ -17,7 +17,7 @@ Sequencing: the Bash backend ships integer/memory/control-flow/WASI support firs
 ## Rejected alternatives
 
 - **Delegating to `awk` / `bc`** — adds external-command dependencies (portability loss, huge per-call fork cost) and neither implements IEEE 754 semantics bit-exactly (NaN payloads, −0.0, round-to-nearest- even at the format boundary); the spec testsuite would not pass.
-- **Integer-only forever** — leaves the flagship demo unable to run most real Rust/C programs (`std` formatting paths alone pull in floats).
+- **Integer-only forever** — leaves the defining demo unable to run most real Rust/C programs (`std` formatting paths alone pull in floats).
 
 ## Consequences
 

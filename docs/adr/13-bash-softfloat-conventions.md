@@ -25,6 +25,6 @@ ADR-5 decided *that* floats would be a pure-Bash IEEE-754 softfloat; this ADR re
 
 ## Consequences
 
-- Positive: the Bash backend reaches full parity with Ruby on the spec testsuite; real binaries (cowsay byte-identical to wasmtime in ~2 s, QuickJS `console.log` in ~23 s) run under plain bash — the ADR-0 flagship demo exists. The feared data-segment scaling wall did not materialize at cowsay/QuickJS size.
+- Positive: the Bash backend reaches full parity with Ruby on the spec testsuite; real binaries (cowsay byte-identical to wasmtime in ~2 s, QuickJS `console.log` in ~23 s) run under plain bash — the ADR-0 defining demo exists. The feared data-segment scaling wall did not materialize at cowsay/QuickJS size.
 - Negative: softfloat ops cost 40–300 µs each; float-heavy hot loops are orders of magnitude slower than Ruby's host floats. The curated spec suite grew from ~1 s to ~5 s and the full run from ~39 s to ~58 s.
-- The `floats` skip tag is dead: `Feature::Floats` Supported means any float-related skip is now a hard harness failure (ADR-8's ratchet).
+- The `floats` skip tag is dead: `Feature::Floats` Supported means any float-related skip is now a hard harness failure (ADR-8's one-way discipline).

@@ -12,7 +12,7 @@ Programs compiled to WebAssembly (from C, C++, Rust, ...) normally need a wasm r
 - **Implementation language: Rust**, using the Bytecode Alliance crates (`wasmparser` for decoding/validation, `wast`/`wat` for the test pipeline). Rust also keeps the self-hosting demo possible: dewasmify itself compiled to wasm, then translated by itself.
 - **First-release input scope: Wasm core 1.0 plus the extensions C/Rust toolchains enable by default** (mutable globals, sign-extension, saturating float-to-int, multi-value, bulk memory), and **WASI preview 1**. Reference types, SIMD, threads, GC, multiple memories/tables, and cross-module linking are out of scope and must be rejected with a clear error.
 - **Two output modes**: *library* (a class/module instantiated with an imports object, exports exposed to the host language) and *standalone* (WASI wired up, `_start` invoked, exit code mapped).
-- **Target language priority: Ruby → Bash → Java → Go → Python → PHP.** Bash is the flagship demonstration (running C/Rust tools with no hardware-specific binary at all); Ruby went first to validate the pipeline (implemented). JavaScript is deliberately absent.
+- **Target language priority: Ruby → Bash → Java → Go → Python → PHP.** Bash is the defining demonstration (running C/Rust tools with no hardware-specific binary at all); Ruby went first to validate the pipeline (implemented). JavaScript is deliberately absent.
 - **Name: `dewasmify`** — the tool strips ("de-") the wasm out of a program. Crate, CLI, and repository share the name. *Amended by [ADR-26](26-rename-dewasm.md) (2026-07-25): renamed to `dewasm`.*
 
 ## Rejected alternatives

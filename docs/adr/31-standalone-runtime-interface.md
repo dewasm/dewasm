@@ -13,7 +13,7 @@ A converted `--mode standalone` program is a real CLI: a WASI guest wrapped in a
 - **env** passed through in Ruby/Python/Go/Bash, but Java handed the guest an empty environment.
 - The **trap** exit code (134) and the `proc_exit`/`_start`-return mapping were already uniform.
 
-wasmtime — the ground-truth engine the app goldens are captured from (ADR-9/15) — takes `wasmtime run [--dir HOST::GUEST]... <wasm> [args...]` and gives the guest `argv[0] = basename(wasm)`. Aligning to it makes the generated programs behave like the binary they were converted from.
+wasmtime — the ground-truth engine the app snapshots are captured from (ADR-9/15) — takes `wasmtime run [--dir HOST::GUEST]... <wasm> [args...]` and gives the guest `argv[0] = basename(wasm)`. Aligning to it makes the generated programs behave like the binary they were converted from.
 
 ## Decision
 

@@ -4,7 +4,7 @@ Status: **Accepted, 2026-08-03.** Implemented in [`crates/dewasm-backend-ruby/sr
 
 ## Context
 
-ADR-42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per tier. That is linear in nesting depth. On the converted `sqlite3-shell` it produced 33,219 `__br` references and roughly half of all CPU, concentrated in the VDBE interpreter loop where the towers are deepest.
+ADR-42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per level. That is linear in nesting depth. On the converted `sqlite3-shell` it produced 33,219 `__br` references and roughly half of all CPU, concentrated in the VDBE interpreter loop where the towers are deepest.
 
 Two existing wasm-to-C compilers avoid the problem structurally. w2c2 emits `goto label_N`; WasmKit emits `pc += offset`. Both name the target as a *value*, so a branch costs the same from any depth. Ruby's equivalent primitive is `opt_case_dispatch`: a `case` over integer literals compiles to a single hash probe with no compares.
 

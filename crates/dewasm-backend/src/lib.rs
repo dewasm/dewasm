@@ -59,7 +59,7 @@ pub trait Backend {
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
 
-    /// Declared support tier per feature (ADR-8). The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
+    /// Declared support level per feature (ADR-8). The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
@@ -320,7 +320,7 @@ impl RuntimeBundler {
         Ok(closure)
     }
 
-    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent tier of the bundle's root-scope members (the caller wraps the result in the runtime module/namespace itself).
+    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent level of the bundle's root-scope members (the caller wraps the result in the runtime module/namespace itself).
     pub fn bundle(&self, seeds: &BTreeSet<String>, base_indent: usize) -> Result<String> {
         let closure = self.closure(seeds)?;
         let mut out = String::new();

@@ -21,7 +21,7 @@ Nothing else is required for `cargo test` to pass in full, **except** for the `a
 
 ## The `apps` end-to-end cases
 
-The `apps` case table (`crates/dewasm-test-helper/src/apps.rs`, run per backend as `cargo test -p dewasm-backend-<lang> --test e2e apps`) converts real-world wasm binaries (cowsay, quickjs-ng, SQLite) and checks the output against a snapshot reference (older ADRs call these files "snapshot"). Two things distinguish it from the rest of the suite:
+The `apps` case table (`crates/dewasm-test-helper/src/apps.rs`, run per backend as `cargo test -p dewasm-backend-<lang> --test e2e apps`) converts real-world wasm binaries (cowsay, quickjs-ng, SQLite) and checks the output against a snapshot reference. Two things distinguish it from the rest of the suite:
 
 - **The binaries themselves are fetched, not committed** ([ADR-9](adr/9-example-apps-from-registry.md)): run `examples/apps/setup.sh` once (needs network access) to populate the gitignored `examples/apps/cache/`. Per ADR-15 this is a hard prerequisite, not an optional extra — the `apps` tests fail with a message naming the missing file until you run it. Several apps are built locally from pinned source, so `setup.sh` needs a few extra tools on PATH (only for `setup.sh` — `cargo test` itself never needs them once the cache exists):
     - the three sqlite3 shapes and `minigzip` (zlib) need **`zig`** and **`unzip`** ([ADR-22](adr/22-sqlite3-built-from-source.md); `minigzip` is `zig cc`'d from the pinned zlib 1.3.1 source, the byte-exact-stdio compression CLI that runs under both backends);
@@ -119,4 +119,4 @@ Alongside the spec harness, each backend has a second libtest-mimic suite (`crat
 $ cargo test -p dewasm-backend-ruby --test wasi_testsuite   # or bash/python/go/java
 ```
 
-The c + rust + assemblyscript `wasm32-wasip1` suites run (the Rust `wasm32-wasip3` tree is excluded — preview 3 is component-model territory, ADR-24). Each backend carries its own `WASI_TESTSUITE_EXPECTED_FAILURES` list (ADR-8): every known failure is attributed to a declared ENOSYS gap (docs/support.md), a semantics-precision gap on a supported syscall, or the ADR-31 whole-environment passthrough. As in the spec harness the list is checked both ways — a ledgered trial that unexpectedly *passes* is a hard failure, so filling a gap forces the entry to be removed.
+The c + rust + assemblyscript `wasm32-wasip1` suites run (the Rust `wasm32-wasip3` tree is excluded — preview 3 is component-model territory, ADR-24). Each backend carries its own `WASI_TESTSUITE_EXPECTED_FAILURES` list (ADR-8): every known failure is attributed to a declared ENOSYS gap (docs/support.md), a semantics-precision gap on a supported syscall, or the ADR-31 whole-environment passthrough. As in the spec harness the list is checked both ways — a listed trial that unexpectedly *passes* is a hard failure, so filling a gap forces the entry to be removed.

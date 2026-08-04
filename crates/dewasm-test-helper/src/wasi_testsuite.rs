@@ -1,4 +1,4 @@
-//! Official WASI preview-1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the ADR-31 standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` list checked *both ways* (an unexpectedly-passing ledgered test is a hard failure, exactly like the spec harness).
+//! Official WASI preview-1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the ADR-31 standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` list checked *both ways* (an unexpectedly-passing listed test is a hard failure, exactly like the spec harness).
 //!
 //! Each `<name>.wasm` may carry a co-located `<name>.json` manifest (the upstream v0 schema: `args`, `env`, `root`, `exit_code`, `stdout`, `stderr`). The runner converts the module in [`Mode::Standalone`], mounts the manifest's `root` fixture at guest `/` (via a fresh temp copy so trials stay hermetic), sets `env`/`args`, then asserts the process exit code and — when the manifest pins it — stdout/stderr. The `root`→`/` mapping mirrors upstream's own wasmtime adapter (`--dir {root}::/`).
 //!
@@ -20,7 +20,7 @@ use crate::backend::BackendUnderTest;
 
 /// A backend wired into the WASI-testsuite harness: the base [`BackendUnderTest`] plus its known-failure list.
 pub trait WasiTestsuiteBackend: BackendUnderTest {
-    /// Known trial failures: `(trial name, attribution tag)`. The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`); the tag names the WASI function or interface behaviour that causes the failure (a declared ENOSYS gap, or an ADR-31 interface choice). A ledgered trial that *passes* is a hard failure — remove it (same both-ways discipline as `spec.rs`).
+    /// Known trial failures: `(trial name, attribution tag)`. The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`); the tag names the WASI function or interface behaviour that causes the failure (a declared ENOSYS gap, or an ADR-31 interface choice). A listed trial that *passes* is a hard failure — remove it (same both-ways discipline as `spec.rs`).
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)];
 
     /// Host-scoped list entries that only fail on a **macOS** host (host libc or interpreter behaviour, e.g. CoreFoundation injecting `__CF_USER_TEXT_ENCODING`). Merged into [`expected_failures`] only when the harness runs on macOS; ignored on other hosts, so the both-ways discipline still flags a genuine unexpected pass there.
@@ -42,7 +42,7 @@ fn testsuite_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/wasi-testsuite")
 }
 
-/// A parsed test manifest (the upstream v0 legacy schema). Every field is optional (`#[serde(default)]`); an absent `.json` means "all defaults" (a still-valid test). Unknown keys (the v1 `operations`/`proposals` schema, the suite-tier `manifest.json`) are ignored rather than rejected — serde's default without `deny_unknown_fields`.
+/// A parsed test manifest (the upstream v0 legacy schema). Every field is optional (`#[serde(default)]`); an absent `.json` means "all defaults" (a still-valid test). Unknown keys (the v1 `operations`/`proposals` schema, the suite-level `manifest.json`) are ignored rather than rejected — serde's default without `deny_unknown_fields`.
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct Manifest {
@@ -68,7 +68,7 @@ struct Case {
     manifest: Manifest,
 }
 
-/// Enumerate every `.wasm` under each suite's `wasm32-wasip1` directory (the suite-tier `manifest.json` has no `.wasm`, so it is never a case), pairing it with its optional `<stem>.json`.
+/// Enumerate every `.wasm` under each suite's `wasm32-wasip1` directory (the suite-level `manifest.json` has no `.wasm`, so it is never a case), pairing it with its optional `<stem>.json`.
 fn enumerate() -> anyhow::Result<Vec<Case>> {
     let root = testsuite_dir();
     assert!(
@@ -154,11 +154,11 @@ fn run_trial(
     case: &Case,
 ) -> Result<(), Failed> {
     let outcome = evaluate(lang, case);
-    let ledgered = list.iter().find(|(n, _)| *n == name).map(|(_, tag)| *tag);
-    match (outcome, ledgered) {
+    let expected = list.iter().find(|(n, _)| *n == name).map(|(_, tag)| *tag);
+    match (outcome, expected) {
         (Outcome::Pass, None) => Ok(()),
         (Outcome::Pass, Some(tag)) => Err(Failed::from(format!(
-            "{name}: ledgered as an expected failure ({tag}) but PASSED — \
+            "{name}: listed as an expected failure ({tag}) but PASSED — \
              remove it from WASI_TESTSUITE_EXPECTED_FAILURES"
         ))),
         (Outcome::Fail(detail), None) => Err(Failed::from(format!(

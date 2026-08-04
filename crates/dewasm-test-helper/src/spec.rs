@@ -16,13 +16,13 @@ use crate::backend::BackendUnderTest;
 
 /// The script-phrasing layer of a backend under test (ADR-27): how to convert a module, how to phrase each assertion in that language, and how to bundle the runtime. `name`/`backend`/`interpreter`/`run` come from the base [`BackendUnderTest`] trait. `emit_*` methods append to the script body; returning `Err(tag)` skips the directive under that attribution tag.
 pub trait SpecBackend: BackendUnderTest {
-    /// Known assertion-tier failures: (file, count, attribution tag).
+    /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
     /// The non-ignored set: files run by a plain `cargo test`. Every other `.wast` file still becomes a trial, but marked `#[ignore]`d, so `cargo test -- --ignored` / `--include-ignored` runs the whole testsuite. `None` marks nothing ignored — the whole testsuite runs by default (used by the fast interpreters).
     fn curated_files(&self) -> Option<&'static [&'static str]>;
     /// Units the harness helpers themselves use.
     fn seed_units(&self) -> &'static [&'static str];
-    /// Lower an IR module to source. Backend-tier refusals (e.g. floats on an integer-only backend) carry `UnsupportedError` in the chain.
+    /// Lower an IR module to source. Backend-level refusals (e.g. floats on an integer-only backend) carry `UnsupportedError` in the chain.
     fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted>;
     /// Whether `register`-directive linking is wired up for this language: a `(register "Name" $id)`'d instance becomes resolvable as an import source for later modules (`registered` below), and `assert_unlinkable` is checked for real instead of always skipped.
     fn supports_registered_imports(&self) -> bool {
@@ -91,8 +91,8 @@ fn spec_dir() -> std::path::PathBuf {
 
 /// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). File selection is now cargo's own: the trial name is the file stem, so `cargo test --test spec i32` runs the `i32`-named file(s) via the built-in name filter. Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set and `--include-ignored` (or `--ignored`) runs the whole testsuite. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
 ///
-/// `slow_tier` is the backend crate's `slow_test` feature (CI's main run tier, ADR-48): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
-pub fn spec_trials(lang: &'static dyn SpecBackend, slow_tier: bool) -> Vec<Trial> {
+/// `slow_test` mirrors the backend crate's feature of the same name (CI's main run, ADR-48): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
+pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial> {
     let dir = spec_dir();
     assert!(
         dir.exists(),
@@ -112,8 +112,8 @@ pub fn spec_trials(lang: &'static dyn SpecBackend, slow_tier: bool) -> Vec<Trial
         .collect();
     names.sort();
 
-    // The slow tier runs the whole testsuite (nothing curated => nothing ignored below), matching the old `--include-ignored` main run.
-    let curated: Option<BTreeSet<&'static str>> = if slow_tier {
+    // With `slow_test` on, the whole testsuite runs (nothing curated => nothing ignored below), matching the old `--include-ignored` main run.
+    let curated: Option<BTreeSet<&'static str>> = if slow_test {
         None
     } else {
         lang.curated_files().map(|c| c.iter().copied().collect())
@@ -134,12 +134,12 @@ pub fn spec_trials(lang: &'static dyn SpecBackend, slow_tier: bool) -> Vec<Trial
 }
 
 /// harness=false entry point: parse cargo's test arguments (name filter, `--ignored`/`--include-ignored`, thread count, ...) and run the trials.
-pub fn spec_main(lang: &'static dyn SpecBackend, slow_tier: bool) {
+pub fn spec_main(lang: &'static dyn SpecBackend, slow_test: bool) {
     let args = libtest_mimic::Arguments::from_args();
-    libtest_mimic::run(&args, spec_trials(lang, slow_tier)).exit();
+    libtest_mimic::run(&args, spec_trials(lang, slow_test)).exit();
 }
 
-/// Run one `.wast` file and apply the per-file tests that the old aggregate suite applied globally: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression. Checks (a)/(c) are per-file here, equivalent to the old global check because the global sets are the union of the per-file sets. A passing trial stays quiet; failures carry the per-file summary and detail.
+/// Run one `.wast` file and apply the per-file checks that the old aggregate suite applied globally: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression. Checks (a)/(c) are per-file here, equivalent to the old global check because the global sets are the union of the per-file sets. A passing trial stays quiet; failures carry the per-file summary and detail.
 fn run_trial(lang: &dyn SpecBackend, name: &str, path: &Path) -> Result<(), Failed> {
     let stats = run_file(lang, name, path).map_err(|err| format!("{name}: {err:#}"))?;
 
@@ -193,7 +193,7 @@ fn run_trial(lang: &dyn SpecBackend, name: &str, path: &Path) -> Result<(), Fail
 struct Stats {
     pass: u32,
     fail: u32,
-    /// Skipped directives, attributed to declared-unsupported feature ids (plus harness-tier tags like "linking" and "unknown-proposal").
+    /// Skipped directives, attributed to declared-unsupported feature ids (plus harness-level tags like "linking" and "unknown-proposal").
     unsupported: BTreeMap<String, u32>,
     /// Unattributed conversion errors: dewasm bugs, fail the suite.
     hard_errors: Vec<String>,

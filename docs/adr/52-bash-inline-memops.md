@@ -24,4 +24,4 @@ Memory naming needs no new machinery: generated code references `<p>mem`/`<p>pag
 
 - Positive: DOOM tick 2.5x, initGame 1.9x; every converted module's hot loops shed two function calls plus an R0 copy per memory access. Remaining bash cost is arithmetic/control-flow, not call overhead.
 - Negative: generated files grow (DOOM: 16.7MB → 19.1MB, +14%; source time +7.6%); load/store semantics now exist in two places (units and emitter helpers) — the spec suite is the guard against drift.
-- Carry-over: word-packed cells (ADR-51's rejected alternative) remain the next representation-tier lever if ever needed; the function-return `R0` hop for value-returning bodies is untouched (it is the return mechanism, not load overhead).
+- Carry-over: word-packed cells (ADR-51's rejected alternative) remain the next representation-level lever if ever needed; the function-return `R0` hop for value-returning bodies is untouched (it is the return mechanism, not load overhead).

@@ -75,7 +75,7 @@ jobs:
       matrix:
         backend: [ruby, bash, python, go, java, perl]
     runs-on: ubuntu-latest
-    # The slow-tier run (full spec suites + slow apps, ADR-48) has
+    # The slow_test run (full spec suites + slow apps, ADR-48) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -120,18 +120,18 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
-      # Tiers (ADR-48): the `slow_test` feature runs the full spec run plus the
+      # Speed categories (ADR-48): the `slow_test` feature runs the full spec suite plus the
       # slow per-case app cases (CI's main run). It deliberately excludes the
       # `ultra_slow_test` cases — the ~1 min+ pty / giant-`go build` cases that
       # timed out (#22) or exhausted runner memory (#23) — which run only locally.
-      - name: Test (slow tier)
+      - name: Test (slow)
         if: github.event_name != 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast --features dewasm-backend-${{ matrix.backend }}/slow_test
 
   core:
     needs: apps-cache
     runs-on: ubuntu-latest
-    # The slow-tier run (full spec suites + slow apps, ADR-48) has
+    # The slow_test run (full spec suites + slow apps, ADR-48) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -166,7 +166,7 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # Tiers (ADR-48): the slow tier feature-tests what `--include-ignored`
+      # Speed categories (ADR-48): the `slow_test` feature covers what `--include-ignored`
       # used to un-ignore. `dewasm-test-helper/wasmtime_test` runs the
       # apps_wasmtime snapshot-freshness suite (execs `wasmtime run`, installed
       # below, ADR-15); `dewasm-cli/slow_test` runs the slow cross-backend
@@ -178,6 +178,6 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast
-      - name: Test (slow tier)
+      - name: Test (slow)
         if: github.event_name != 'pull_request'
         run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast --features dewasm-cli/slow_test,dewasm-test-helper/wasmtime_test

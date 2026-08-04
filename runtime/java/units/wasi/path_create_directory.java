@@ -3,7 +3,7 @@ int wasi_path_create_directory(int dirfd, int pathPtr, int pathLen) {
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    // Strip a trailing slash before the resolver's directory gate: mkdir
+    // Strip a trailing slash before the resolver's directory check: mkdir
     // names a directory anyway, and EEXIST is wasmtime's answer for
     // mkdir("file/") where the hosts split (ADR-49).
     String trimmed = rel;

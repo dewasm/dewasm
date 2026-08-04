@@ -1,4 +1,4 @@
-<!-- Maintainer notes. Block-tier HTML comments are stripped before this file enters an agent's context:
+<!-- Maintainer notes. Block-level HTML comments are stripped before this file enters an agent's context:
 
 - Claude Code reads CLAUDE.md, not AGENTS.md; CLAUDE.md pulls this file in with `@AGENTS.md`.
 - Everything here loads into every session. Keep it short and keep it INSTRUCTIONS; explain a rule's why only when the why changes what you do.

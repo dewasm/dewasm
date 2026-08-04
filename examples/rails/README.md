@@ -49,7 +49,7 @@ the adapter source:
   FLOAT→Float, TEXT→UTF-8 String, BLOB→binary String, NULL→nil), `columns`,
   `types` (declared types feed AR's type map), `reset!`, `column_count`.
 - `Pragmas` as a real module with real setter methods (Rails introspects
-  `method_defined?`), the full exception ladder keyed by result code
+  `method_defined?`), the full exception hierarchy keyed by result code
   (sqlite's own error strings pass through, which is what Rails'
   constraint-violation regexes match), `Constants::Open`, `ForkSafety`.
 

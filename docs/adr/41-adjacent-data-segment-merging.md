@@ -34,7 +34,7 @@ Add a crate-private pass, `merge_adjacent_data_segments`, over `module.datas`. I
   | cpython.wasm | 2 | 1 |
   | qjs.wasm | 2 | 1 |
 
-The flagship `ruby.wasm` collapses 7871 → 352 (a 22× reduction); the code-dominated `cpython`/`qjs` have only two segments and merge to one.
+The largest app, `ruby.wasm`, collapses 7871 → 352 (a 22× reduction); the code-dominated `cpython`/`qjs` have only two segments and merge to one.
 - Correctness is bound by the spec harness (ADR-3): the pass is always on, so the full testsuite passing for every backend *is* the execution-equivalence proof. Targeted IR-shape unit tests in `crates/dewasm-core/tests/data_merge.rs` pin the merge, the zero-fill, the gap threshold, the barrier, and each bail.
 - Modules that use bulk data ops (`rg.wasm`, `libpcap.wasm`, treesitter) hit guard 1 and are passed through untouched — the pass never regresses them.
 - Composes with ADR-37: `--data-file` externalizes the *merged* blobs, so the sidecar carries fewer, larger segments and the source fewer prefix-sum constants.

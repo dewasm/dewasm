@@ -6,7 +6,7 @@ Originally accepted 2026-07-24. Implemented for the Ruby backend: `crates/dewasm
 
 ## Context
 
-WASI preview 2 binaries are components (layer-1 wrappers): N core modules, an instantiation graph, and `canon lift`/`canon lower` adapters translating between WIT values and core values via linear memory. dewasmify targets many languages (ADR-0), so the load-bearing question was where the canonical ABI lives: implemented once per backend (jco-style host glue), or once centrally. A D0 probe of a real Rust `wasm32-wasip2` binary fixed the required shape: 17 versioned `wasi:*` instance imports, a shim module whose funcref `$imports` table is fixed up post-instantiation, 26 lowers/1 lift, and — decisively — a trivial *nested component* wrapping the lifted `run` into an instance export, plus core-tier import names whose versions (`@0.2.0`) differ from the component-tier ones (`@0.2.9`).
+WASI preview 2 binaries are components (layer-1 wrappers): N core modules, an instantiation graph, and `canon lift`/`canon lower` adapters translating between WIT values and core values via linear memory. dewasmify targets many languages (ADR-0), so the load-bearing question was where the canonical ABI lives: implemented once per backend (jco-style host glue), or once centrally. A D0 probe of a real Rust `wasm32-wasip2` binary fixed the required shape: 17 versioned `wasi:*` instance imports, a shim module whose funcref `$imports` table is fixed up post-instantiation, 26 lowers/1 lift, and — decisively — a trivial *nested component* wrapping the lifted `run` into an instance export, plus core-level import names whose versions (`@0.2.0`) differ from the component-level ones (`@0.2.9`).
 
 ## Decision
 
@@ -25,8 +25,8 @@ WASI preview 2 binaries are components (layer-1 wrappers): N core modules, an in
 
 ## Consequences
 
-- Positive: a real Rust `wasm32-wasip2` binary (103 KB, 3 core modules, 26 lowers) converts to ~1 MB of Ruby and runs byte-identically to wasmtime (stdout, stdin, env, preopened file I/O, exit semantics) with zero canonical-ABI knowledge in the Ruby backend. The committed `.wat` component fixtures give interpreter-tier e2e without binary artifacts.
+- Positive: a real Rust `wasm32-wasip2` binary (103 KB, 3 core modules, 26 lowers) converts to ~1 MB of Ruby and runs byte-identically to wasmtime (stdout, stdin, env, preopened file I/O, exit semantics) with zero canonical-ABI knowledge in the Ruby backend. The committed `.wat` component fixtures give interpreter-level e2e without binary artifacts.
 - Positive: a future backend (ADR-10's C#/Java) gets components by implementing the Host vocabulary (bounded, enumerable) + host units + a wrapper emitter; `ValType::Host` maps to `Object`, and no vocabulary op mixes host and core types in one slot, so static typing stays clean.
-- Negative / carry-over: Bash rejection of Host constructs relies on components only being routed to Ruby (CLI-tier check), not on `check_module_support` — acceptable while the component path is single-backend, to revisit when a second backend lands. Flat variants with payloads, non-utf8 encodings, `wasi:sockets/http`, and WASI 0.3 async remain out of scope. The `run` result is `result<(),()>`: nonzero guest exit codes collapse to 1 (a WASI 0.2 limitation, not ours).
+- Negative / carry-over: Bash rejection of Host constructs relies on components only being routed to Ruby (CLI-level check), not on `check_module_support` — acceptable while the component path is single-backend, to revisit when a second backend lands. Flat variants with payloads, non-utf8 encodings, `wasi:sockets/http`, and WASI 0.3 async remain out of scope. The `run` result is `result<(),()>`: nonzero guest exit codes collapse to 1 (a WASI 0.2 limitation, not ours).
 
 See also: [ADR-7](7-import-providers.md) (the provider protocol the wiring reuses), [ADR-16](16-ruby-wasm1-completion.md) (imported memories/tables the adapters lean on), [ADR-21](21-ruby-wasi-preview2.md) (the host side).

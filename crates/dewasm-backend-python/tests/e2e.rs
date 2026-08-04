@@ -1,4 +1,4 @@
-//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Python backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem (ADR-28), so it wires every WASI kind, the slow-tier `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
+//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Python backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem (ADR-28), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
 
 use std::path::PathBuf;
 
@@ -21,7 +21,7 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-tier `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
+    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -546,7 +546,7 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-// Ultra tier (ADR-48, issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
+// Ultra-slow category (ADR-48, issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
 // e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
 // concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
 // where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI run; it
@@ -564,4 +564,4 @@ dewasm_test_helper::doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
 
 dewasm_test_helper::shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-tier `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).
+// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).

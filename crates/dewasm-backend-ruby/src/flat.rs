@@ -34,7 +34,7 @@
 //! branches, not loops.
 //!
 //! **Only *deep* branches pay for a dispatch.** The cascade the dispatch
-//! replaces is linear in the number of frames a branch crosses, and each tier
+//! replaces is linear in the number of frames a branch crosses, and each level
 //! is cheap; the dispatch is a constant that is not. So a function is flattened
 //! only where some branch is deep enough for the relay to lose — see
 //! [`DEEP_CROSSING`] — and everything else keeps ADR-42's cascade, in the same
@@ -66,7 +66,7 @@ impl Plan {
 }
 
 /// Crossing depth from which a branch is worth a dispatch. A relay costs one
-/// compare per crossed frame — measured at 0.82 ns/tier under `--yjit`, flat
+/// compare per crossed frame — measured at 0.82 ns/level under `--yjit`, flat
 /// from depth 2 to 32 — while a dispatch is a `case`-over-integers chain whose
 /// cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot
 /// states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere

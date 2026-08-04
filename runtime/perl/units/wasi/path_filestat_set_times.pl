@@ -14,7 +14,7 @@ sub wasi_path_filestat_set_times {
     # Core perl exposes no lutimes/utimensat(AT_SYMLINK_NOFOLLOW), so a
     # final-component symlink cannot carry its own times: the utime below
     # follows it (the one NOFOLLOW gap in this backend's WASI surface; the
-    # wasi-testsuite ledger carries the attribution).
+    # wasi-testsuite expected-failures list carries the attribution).
     Time::HiRes::utime($a, $m, $host) or return $self->fs_errno(0 + $!);
     return ERRNO_SUCCESS;
 }

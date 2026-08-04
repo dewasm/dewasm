@@ -5,7 +5,7 @@
 //! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`. Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
 //! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting (ADR-28).
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by the module-tier name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top tier, not nested in the generated class as it is for Ruby).
+//! The runtime is composed from per-method units (ADR-6) and referenced by the module-level name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby).
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -69,7 +69,7 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-tier shared runtime (`class Rt: ...`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("Rt")`.
+/// Emit a top-level shared runtime (`class Rt: ...`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
@@ -445,7 +445,7 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-tier `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
@@ -465,7 +465,7 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// Reference a module-tier runtime helper, recording its unit.
+    /// Reference a module-level runtime helper, recording its unit.
     fn rt(&self, name: &str) -> String {
         self.use_unit(&format!("rt/{name}"));
         format!("Rt.{name}")

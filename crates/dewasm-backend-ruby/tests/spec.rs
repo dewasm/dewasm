@@ -11,7 +11,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-tier failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type — a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count reverted 59 → 28 when exception handling was removed (ADR-24): its "test" fixture module exports tags, so it no longer converts — the tag export is now rejected at conversion time — and the downstream type-mismatch checks it exposed are no longer reached.
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
@@ -325,7 +325,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),
-        // A specific function's identity: not expressible without an export map; no top-tier testsuite file uses it.
+        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

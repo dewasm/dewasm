@@ -46,7 +46,7 @@ pub const DOOM_CLOCK_STEP_MS: i64 = 1000;
 /// Number of `tickGame` calls before the frame is captured. Kept minimal — two
 /// ticks already clear DOOM's startup to a non-degenerate frame (the oracle
 /// asserts the colour count) — because each tick is ~tens of seconds under Bash,
-/// so every extra tick is real wall time on Bash's ultra tier; pinned by the
+/// so every extra tick is real wall time in Bash's ultra-slow category; pinned by the
 /// snapshot.
 pub const DOOM_TICKS: u32 = 2;
 
@@ -83,7 +83,7 @@ pub fn frame_to_ppm(frame: &[u8], w: u32, h: u32) -> Vec<u8> {
 /// the deterministic contract and writes the frame as a P6 PPM to stdout, and
 /// require it byte-identical to the snapshot. The `{ticks}`/`{clock_step}`
 /// placeholders in `glue` are filled from [`DOOM_TICKS`]/[`DOOM_CLOCK_STEP_MS`]
-/// so the driving constants live in one place. Ultra-tier: heavy (ADR-53).
+/// so the driving constants live in one place. Ultra-slow: heavy (ADR-53).
 pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     let bytes = read_doom_wasm();
     let class = lang.convert_app(&bytes, Mode::Library, "doom");

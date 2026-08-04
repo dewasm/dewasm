@@ -8,7 +8,7 @@
 # rest of the tree are not needed at run time and are left out (the extract
 # helpers unpack only the two named members). The e2e case preopens
 # cache/ruby-lib/usr at guest /usr. Ruby-only, heavy — execution behind the
-# `heavy_test` cargo feature. The "Ruby on Ruby" north-star demo
+# `heavy_test` cargo feature. The "Ruby on Ruby" goal demo
 # (docs/apps-audit.md).
 #
 # A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended

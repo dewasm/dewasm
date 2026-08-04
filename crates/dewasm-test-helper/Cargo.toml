@@ -13,7 +13,7 @@ publish = false
 workspace = true
 
 [features]
-# Opt-in: tests the wasmtime snapshot-freshness suite (tests/apps_wasmtime.rs),
+# Opt-in: enables the wasmtime snapshot-freshness suite (tests/apps_wasmtime.rs),
 # which needs a real `wasmtime` install (ADR-15 keeps the default suite free of
 # that dependency). See docs/testing.md.
 wasmtime_test = []

@@ -17,7 +17,7 @@ dewasmify's whole value is semantic fidelity across six target languages. That c
 ## Rejected alternatives
 
 - **A reference interpreter inside dewasmify** — duplicates wasmtime/the spec interpreter, and tests the wrong thing (our interpreter, not our generated code).
-- **Differential testing only** (run wasm under wasmtime vs. converted output) — good for WASI-tier end-to-end checks and kept as a complement, but it cannot pinpoint per-instruction semantics the way ~20k targeted assertions do.
+- **Differential testing only** (run wasm under wasmtime vs. converted output) — good for WASI-level end-to-end checks and kept as a complement, but it cannot pinpoint per-instruction semantics the way ~20k targeted assertions do.
 
 ## Consequences
 

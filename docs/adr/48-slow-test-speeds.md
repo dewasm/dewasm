@@ -1,6 +1,6 @@
 # ADR-48 — Two-Speed Slow-Test Classification (slow_test / ultra_slow_test)
 
-Status: **Accepted, 2026-07-29.** Implemented across the backend crates' cargo features, the `dewasm-test-helper` case macros (`slow_test!`), the spec harness's run conditioning, and the CI workflow's main-branch legs.
+Status: **Accepted, 2026-07-29.** Implemented across the backend crates' cargo features, the `dewasm-test-helper` case macros (`test_speed!`), the spec harness's run conditioning, and the CI workflow's main-branch legs.
 
 ## Context
 
@@ -13,7 +13,7 @@ Two explicit speed categories, named for what they test:
 - `slow_test` (renamed from `heavy_test`): cases CI verifies on every push to main. The feature also un-ignores the spec harness's non-curated run, so the CI switch from `--include-ignored` to `--features slow_test` drops nothing unintended.
 - `ultra_slow_test = ["slow_test"]`: cases CI deliberately does not run. **Criterion: roughly one minute per test on a CI runner** (observed, not estimated — a case is promoted on evidence from a real run). The speed category is chosen per callsite in each backend's `tests/e2e.rs`, so the same case can be ultra for go (compiling a CPython-sized program) and slow for java.
 
-Local speeds: `cargo test` (fast test) → `--features slow_test` (what CI's main run runs) → `--features ultra_slow_test` (everything); `-- --include-ignored` remains the feature-independent sledgehammer. The ultra-slow category is thereby *locally* verified — run it before declaring support or tagging a release — never silently skipped: the cases stay compiled (clippy runs `--all-features`) and visibly `ignored` in default output.
+Local speeds: `cargo test` (fast test) → `--features slow_test` (what CI's main run runs) → `--features ultra_slow_test` (everything); `-- --include-ignored` remains the feature-independent way to run everything. The ultra-slow category is thereby *locally* verified — run it before declaring support or tagging a release — never silently skipped: the cases stay compiled (clippy runs `--all-features`) and visibly `ignored` in default output.
 
 ## Rejected alternatives
 

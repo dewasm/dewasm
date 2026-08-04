@@ -1,6 +1,6 @@
 # ADR-39 — wasm-opt Preprocessing of Locally-Built App Modules
 
-Status: **Accepted, 2026-07-28.** Implemented in `examples/apps/scripts/*.sh` (via the `wasm_opt_inplace` helper in `common.sh`): `wasm-opt -O2` (baseline features only) runs over every module the script builds from source — the three sqlite3 shapes, minigzip, libpcap, tree-sitter, and ripgrep — with `wasm-opt --version` folded into each module's rebuild stamp. (The pass initially covered only libpcap/tree-sitter/ripgrep; it was later extended to sqlite3 and minigzip, which the "build it ⇒ eligible" rule below always implied, once their goldens were re-verified against the optimized output.)
+Status: **Accepted, 2026-07-28.** Implemented in `examples/apps/scripts/*.sh` (via the `wasm_opt_inplace` helper in `common.sh`): `wasm-opt -O2` (baseline features only) runs over every module the script builds from source — the three sqlite3 shapes, minigzip, libpcap, tree-sitter, and ripgrep — with `wasm-opt --version` folded into each module's rebuild stamp. (The pass initially covered only libpcap/tree-sitter/ripgrep; it was later extended to sqlite3 and minigzip, which the "build it ⇒ eligible" rule below always implied, once their snapshots were re-verified against the optimized output.)
 
 ## Context
 

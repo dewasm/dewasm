@@ -24,7 +24,7 @@ The justification is impossibility, not convenience: pure Bash cannot express th
 
 ### D3 — Sandboxing: physical resolution plus per-dirfd containment
 
-Preopen roots are resolved to a physical path once, via `$(cd -P -- "$host" && pwd -P)`. Every guest path resolution re-derives the parent's physical path the same way and checks prefix-containment against *that dirfd's own* stored root — nesting cannot launder an escape one tier cheaper, exactly the model [ADR-14](14-ruby-wasi-filesystem.md) uses. The containment test is `[[ $real == "$root" || $real == "${root%/}/"* ]]`; the `${root%/}/` form makes a root of `/` contain everything.
+Preopen roots are resolved to a physical path once, via `$(cd -P -- "$host" && pwd -P)`. Every guest path resolution re-derives the parent's physical path the same way and checks prefix-containment against *that dirfd's own* stored root — nesting cannot launder an escape one level cheaper, exactly the model [ADR-14](14-ruby-wasi-filesystem.md) uses. The containment test is `[[ $real == "$root" || $real == "${root%/}/"* ]]`; the `${root%/}/` form makes a root of `/` contain everything.
 
 Two deviations from Ruby, both from missing builtins and both documented: Bash has no `readlink`, so a **file** symlink as the final path component cannot be followed and resolves to `ELOOP` (stricter than Ruby, which follows it); a **directory** symlink is still followed, because `cd -P` resolves it. The check-then-open TOCTOU caveat from ADR-14 carries over unchanged: this is a single-process research/demo runtime, not a multi-tenant sandbox host.
 
@@ -42,9 +42,9 @@ Filetype comes from the test builtins (`-d`/`-f`/`-h`/`-t`); `size` is the live 
 
 ## Rejected alternatives
 
-- **Leave the four namespace-mutation syscalls ENOSYS.** Honest to ADR-5 but leaves the surface permanently unable to do what SQLite's journal/WAL lifecycle (ADR-14's north star) needs — create and delete files and directories. The impossibility argument (D2) is what tips it: this is the one capability pure Bash *cannot* provide, so it is the one place the criterion earns a narrow exception.
+- **Leave the four namespace-mutation syscalls ENOSYS.** Honest to ADR-5 but leaves the surface permanently unable to do what SQLite's journal/WAL lifecycle (ADR-14's stated goal) needs — create and delete files and directories. The impossibility argument (D2) is what tips it: this is the one capability pure Bash *cannot* provide, so it is the one place the criterion earns a narrow exception.
 - **Loadable builtins (`enable -f mkdir.so`).** A platform-specific `.so` is a heavier and less portable dependency than a POSIX command already guaranteed on every system with a Bash; it defeats the "runs anywhere Bash runs" property more than one `command mkdir` does.
-- **A virtual filesystem overlay in Bash arrays.** State would diverge from the host (the whole point of `--dir` is to touch real host files) and the standalone `--dir` goldens, captured under wasmtime (ADR-9), would not match.
+- **A virtual filesystem overlay in Bash arrays.** State would diverge from the host (the whole point of `--dir` is to touch real host files) and the standalone `--dir` snapshots, captured under wasmtime (ADR-9), would not match.
 - **General external-command use for the rest of the surface** (`od`/`dd` for bytes, `stat` for metadata). Rejected as ADR-5 always rejected them: those capabilities *are* expressible in pure Bash (byte-wise `read`/ `printf`, test builtins), so there is no impossibility to license the exception. D2 is scoped to exactly the operations that have no pure-Bash form.
 
 ## Consequences

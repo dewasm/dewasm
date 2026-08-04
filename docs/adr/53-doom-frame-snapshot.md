@@ -8,7 +8,7 @@ Implemented: the oracle (`cargo xtask update-doom-snapshot`), the shared contrac
 and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed snapshot
 (`examples/doom/snapshot/frame.ppm`), and the frame case on Ruby/Python/Go/Java
 plus the frame case on all five backends (byte-identical) — Bash at the
-ultra_slow tier, the others at slow.
+ultra_slow_test category, the others at slow.
 
 ## Context
 
@@ -88,10 +88,10 @@ clock — pin the clock, fix the inputs, and diff the rendered artifact.* The
 oracle is an independent embedder (wasmtime), not backend consensus, because the
 value of the test is catching a bug the backends could share.
 
-**Tiering.** The frame-snapshot test runs on every backend, tiered to match each
+**Speed assignment.** The frame-snapshot test runs on every backend, classified to match each
 backend's convention for a comparably heavy execution case. Ruby/Python/Go/Java
-use the **slow_test** tier — CI's main run, like the qjs/sqlite e2e — so DOOM
-is actually exercised in CI. Bash uses the **ultra_slow_test** tier (ADR-48),
+use **slow_test** — CI's main run, like the qjs/sqlite e2e — so DOOM
+is actually exercised in CI. Bash uses **ultra_slow_test** (ADR-48),
 like its qjs-REPL pty case: its run is minutes (initGame ~2 min + ticks +
 serializing a 1 MB framebuffer out of the associative-array memory), so it stays
 out of CI and runs only in local pre-release. There is no separate conversion
@@ -99,7 +99,7 @@ smoke — the frame test already exercises the full convert-and-run path, and a
 convert-only assertion
 would be an idiom no other suite uses. *(Amended by
 [ADR-54](54-apps-convert-suite.md): the convert-only assertion is now the idiom
-of a whole-cache per-backend convert suite, which includes a fast-tier `doom`
+of a whole-cache per-backend convert suite, which includes a fast `doom`
 convert trial on every backend — the frame-snapshot run above stays the
 convert-and-run test; the two are complementary.)*
 
@@ -113,7 +113,7 @@ convert-and-run test; the two are complementary.)*
   assert "enough distinct colors / has glyphs" (`examples/doom/bash/main.sh:400-417`),
   which is cheap but catches only gross breakage and is non-deterministic (wall
   clock). It stays as the demo's self-check; it is not the test.
-- **Oracle via the `wasmtime` CLI, like the apps goldens.** `wasmtime run`
+- **Oracle via the `wasmtime` CLI, like the apps snapshots.** `wasmtime run`
   cannot provide DOOM's custom imports (`crates/dewasm-test-helper/src/wasmtime_backend.rs`);
   unusable here.
 - **Extend the frontends with a snapshot-dump mode instead of dedicated test

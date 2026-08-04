@@ -47,7 +47,7 @@ impl BackendUnderTest for Go {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-tier declarations against one flat top-tier runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and everything is assembled into a single `package main` file — an import block covering the runtime's needs plus `fmt` (the appended driver prints with it), the bundle, then the module decls. The driver (`func main`) is appended afterwards by the runner, so no main is emitted. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits one flat top-tier runtime shared by all modules (ADR-29).
+    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and everything is assembled into a single `package main` file — an import block covering the runtime's needs plus `fmt` (the appended driver prints with it), the bundle, then the module decls. The driver (`func main`) is appended afterwards by the runner, so no main is emitted. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits one flat top-level runtime shared by all modules (ADR-29).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         assert!(
             shared_runtime,
@@ -611,7 +611,7 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 /// Unlike every other backend's glue, this is a function rather than a static
 /// `&str` const. Library-mode Go's generated file imports only `fmt` (plus
 /// whatever the wasm module's own decompiled code happens to reference) —
-/// Go requires every `import` to appear before all other top-tier
+/// Go requires every `import` to appear before all other top-level
 /// declarations, so glue text *appended* after the generated class cannot
 /// add its own `import "os"` to open `{rom}`'s host path (`go build` rejects
 /// a trailing import with "imports must appear before other declarations").
@@ -681,7 +681,7 @@ dewasm_test_helper::standalone_dir_e2e!(Go);
 
 dewasm_test_helper::cowsay_args_e2e!(Go);
 dewasm_test_helper::cowsay_stdin_e2e!(Go);
-// The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` run, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
+// The `ultra` cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` run, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at `slow`.
 dewasm_test_helper::qjs_eval_e2e!(Go, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Go, ultra);
 dewasm_test_helper::gzip_e2e!(Go);
@@ -703,4 +703,4 @@ dewasm_test_helper::doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Go, &go_nes_frame_glue());
 
 dewasm_test_helper::shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-tier runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.
+// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.

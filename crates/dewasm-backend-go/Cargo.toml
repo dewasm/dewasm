@@ -11,10 +11,10 @@ repository.workspace = true
 workspace = true
 
 [features]
-# Opt-in test tiers (see docs/testing.md). `slow_test` expands the slow
+# Opt-in test speed categories (see docs/testing.md). `slow_test` expands the slow
 # per-case macros (dewasm-test-helper, ADR-27 revision) as active `#[test]`s
-# instead of `#[ignore]`d ones and runs the full spec testsuite run — CI's
-# main run tier. `ultra_slow_test` additionally un-ignores the cases measured
+# instead of `#[ignore]`d ones and runs the full spec testsuite — CI's
+# main run. `ultra_slow_test` additionally un-ignores the cases measured
 # at ~1 min+ on a CI runner (the giant-generated-program `go build` cases),
 # which are kept out of CI and run only in local pre-release verification.
 slow_test = []

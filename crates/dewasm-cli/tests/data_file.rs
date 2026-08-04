@@ -1,6 +1,6 @@
 //! End-to-end coverage for `--data-file` data-segment externalization (ADR-37). For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's tier convention (ADR-48) for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention (ADR-48) for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};

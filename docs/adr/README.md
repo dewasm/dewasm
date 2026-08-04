@@ -55,13 +55,13 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
 | ADR-40 | [WASI p1 Completion: Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment](40-wasi-p1-completion.md) | Accepted |
 | ADR-41 | [Merge Adjacent Active Data Segments at Build Time](41-adjacent-data-segment-merging.md) | Accepted |
-| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Tier `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
+| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
 | ADR-43 | [Ruby Backend: i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | ADR-44 | [Ruby Backend: Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
 | ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
 | ADR-46 | [Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness](46-host-scoped-wasi-expected-failures.md) | Accepted |
 | ADR-47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
-| ADR-48 | [Two-Tier Slow-Test Conditioning (slow_test / ultra_slow_test)](48-slow-test-speeds.md) | Accepted |
+| ADR-48 | [Two-Speed Slow-Test Classification (slow_test / ultra_slow_test)](48-slow-test-speeds.md) | Accepted |
 | ADR-49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
 | ADR-50 | [DOOM Demo: One Wasm Binary, Per-Language Native Frontends](50-doom-example-shape.md) | Accepted |
 | ADR-51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |

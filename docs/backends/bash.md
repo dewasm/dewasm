@@ -1,6 +1,6 @@
 # Bash backend
 
-`--target bash`. The flagship "runs where the only dependency is a shell" target: C/Rust tools converted to a script with no external commands.
+`--target bash`. The defining target — "runs where the only dependency is a shell": C/Rust tools converted to a script with no external commands.
 
 ## Output shape
 
@@ -32,6 +32,6 @@ The import table is the `IMPORTS` associative array keyed `module.name`; there i
 
 ## Caveats
 
-- **Speed.** Bash arithmetic is signed-64 only, and every float operation is softfloat integer arithmetic, so float-heavy programs are slow — the slow apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only under the `slow_test` cargo feature (or `cargo test -- --include-ignored`); the interactive qjs REPL pty case is slower still and sits at the `ultra_slow_test` tier ([ADR-48](../adr/48-slow-test-speeds.md), kept out of CI). Integer-only programs (cowsay, minigzip) run fine.
+- **Speed.** Bash arithmetic is signed-64 only, and every float operation is softfloat integer arithmetic, so float-heavy programs are slow — the slow apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only under the `slow_test` cargo feature (or `cargo test -- --include-ignored`); the interactive qjs REPL pty case is slower still and is in the `ultra_slow_test` category ([ADR-48](../adr/48-slow-test-speeds.md), kept out of CI). Integer-only programs (cowsay, minigzip) run fine.
 - Every generated function ends with an explicit `return 0`; a trailing arithmetic statement would otherwise leak status 1 (the units lint enforces this — [ADR-11](../adr/11-bash-backend-lowering.md)).
 - Floats are their bit patterns (u32 / signed-64), not shell floats; reads of the output should expect softfloat, not native, arithmetic.

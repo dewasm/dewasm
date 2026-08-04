@@ -62,7 +62,7 @@ never run the generated program.
 - **Fail loud, never skip** (ADR-15). A missing cache file fails the trial with
   the standard `run examples/apps/setup.sh` message; it does not skip.
 
-- **Two-tier conditioning by measurement** (ADR-48). Heavy trials are `#[ignore]`d
+- **Two-speed classification by measurement** (ADR-48). Heavy trials are `#[ignore]`d
   unless the backend crate's `slow_test` feature is on. "Heavy" is *measured*,
   not inferred from artifact size: every (backend × app) conversion was timed at
   the dev profile — the build the fast test pays. Only the two giant interpreter
@@ -75,18 +75,17 @@ never run the generated program.
 **Discriminating criterion:** *conversion is worth asserting on its own wherever
 running is infeasible or merely unwired — it is cheap, deterministic, and needs
 no oracle, so the whole cache is covered for every backend regardless of which
-pairs an execution suite reaches.* What tests a convert trial behind a tier is
+pairs an execution suite reaches.* What puts a convert trial behind `slow_test` is
 its measured dev-profile time against the fast test, nothing else.
 
 ## Rejected alternatives
 
-- **Per-case convert-only smokes derived from the e2e macro callsites, conditional one
-  tier below the parent case.** This was issue #60's shape: for each existing
-  execution macro invocation, emit a sibling convert-only `#[test]` one tier
+- **Per-case convert-only smokes derived from the e2e macro callsites, conditional one speed category below the parent case.** This was issue #60's shape: for each existing
+  execution macro invocation, emit a sibling convert-only `#[test]` one category
   down. It couples convert coverage to the execution wiring — a pair with no
   execution callsite (every un-run pair, which is exactly the gap) gets no
   convert smoke either, so the blind spot survives. It also scatters ~N×5
-  generated tests across the backend crates and re-derives the tier per callsite.
+  generated tests across the backend crates and re-derives the category per callsite.
   A single whole-cache suite covers every pair uniformly and keeps the manifest
   in one place; #60 is closed as superseded by #65.
 

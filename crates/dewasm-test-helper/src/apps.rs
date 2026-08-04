@@ -1,6 +1,6 @@
-//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (ADR-15) — running these does not itself need `wasmtime` installed. (Older ADRs call these snapshot files "snapshot".)
+//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (ADR-15) — running these does not itself need `wasmtime` installed.
 //!
-//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature tier.
+//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -34,7 +34,7 @@ pub const COWSAY_STDIN: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// QuickJS `-e` one-liner eval (slow tier: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
+/// QuickJS `-e` one-liner eval (slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
 pub const QJS_EVAL: AppCase = AppCase {
     name: "qjs",
     args: &[
@@ -46,7 +46,7 @@ pub const QJS_EVAL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// sqlite3 shell against an in-memory database (slow tier: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
+/// sqlite3 shell against an in-memory database (slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
 pub const SQLITE3_SHELL: AppCase = AppCase {
     name: "sqlite3-shell",
     args: &[],
@@ -58,7 +58,7 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// The wasi-vfs-packed CRuby (ADR-61): `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape. Needs no preopens — a `require` from the stdlib proves the embedded VFS serves it — so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`. Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine). Slow tier, same as the unpacked case.
+/// The wasi-vfs-packed CRuby (ADR-61): `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape. Needs no preopens — a `require` from the stdlib proves the embedded VFS serves it — so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`. Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine). Slow, same as the unpacked case.
 pub const CRUBY_PACKED_HELLO: AppCase = AppCase {
     name: "ruby-packed",
     args: &[
@@ -153,7 +153,7 @@ pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
     compressed.stdout
 }
 
-/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature tier (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs to test itself.
+/// Run a slow [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature level (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs its own opt-out.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }

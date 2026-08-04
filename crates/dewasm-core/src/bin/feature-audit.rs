@@ -245,7 +245,7 @@ fn main() -> ExitCode {
             }
         }
     }
-    // Nonzero when any binary needs out-of-scope features, so scripts can test on the verdict; the human decision (defer vs. rethink) is recorded in docs/apps-audit.md.
+    // Nonzero when any binary needs out-of-scope features, so scripts can branch on the verdict; the human decision (defer vs. rethink) is recorded in docs/apps-audit.md.
     if all_clean {
         ExitCode::SUCCESS
     } else {

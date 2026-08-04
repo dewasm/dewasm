@@ -18,7 +18,7 @@
 //! app's shape and the execution suites already use. A missing cache file fails
 //! the trial (ADR-15), it never skips.
 //!
-//! `slow_tier` is the backend crate's `slow_test` feature (ADR-48): heavy
+//! `slow_test` mirrors the backend crate's feature of the same name (ADR-48): heavy
 //! trials — the ones whose dev-profile conversion measurably hurts the fast
 //! test — are `#[ignore]`d unless it is on. Which trials are heavy comes from
 //! measurement (ADR-54), not the artifact size alone.
@@ -29,7 +29,7 @@ use libtest_mimic::{Failed, Trial};
 use crate::fixtures::apps_cache_dir;
 
 /// One cached app: the cache-file stem (also the trial name), the conversion
-/// [`Mode`], and whether the trial is heavy enough to test behind `slow_test`.
+/// [`Mode`], and whether the trial is heavy enough to require `slow_test`.
 struct AppConvert {
     /// Cache-file stem: `<stem>.wasm` under `examples/apps/cache/`, and the
     /// trial name cargo's `--test convert <stem>` filter matches.
@@ -134,14 +134,14 @@ const MANIFEST: &[AppConvert] = &[
 ];
 
 /// Build one [`Trial`] per manifest entry for `backend` (the `apps_convert_suite!`
-/// entry point). Heavy trials are marked `#[ignore]`d unless `slow_tier` (the
-/// backend crate's `slow_test` feature) is on — the same two-tier test the spec
-/// harness applies to its non-curated files (ADR-48).
-pub fn apps_convert_trials(backend: &'static (dyn Backend + Sync), slow_tier: bool) -> Vec<Trial> {
+/// entry point). Heavy trials are marked `#[ignore]`d unless `slow_test` (mirroring
+/// the backend crate's feature of the same name) is on — the same slow/fast split
+/// the spec harness applies to its non-curated files (ADR-48).
+pub fn apps_convert_trials(backend: &'static (dyn Backend + Sync), slow_test: bool) -> Vec<Trial> {
     MANIFEST
         .iter()
         .map(|entry| {
-            let ignored = entry.heavy && !slow_tier;
+            let ignored = entry.heavy && !slow_test;
             Trial::test(entry.stem, move || run_convert(backend, entry)).with_ignored_flag(ignored)
         })
         .collect()
@@ -149,9 +149,9 @@ pub fn apps_convert_trials(backend: &'static (dyn Backend + Sync), slow_tier: bo
 
 /// harness=false entry point: parse cargo's test arguments (name filter,
 /// `--ignored`/`--include-ignored`, thread count) and run the trials.
-pub fn apps_convert_main(backend: &'static (dyn Backend + Sync), slow_tier: bool) {
+pub fn apps_convert_main(backend: &'static (dyn Backend + Sync), slow_test: bool) {
     let args = libtest_mimic::Arguments::from_args();
-    libtest_mimic::run(&args, apps_convert_trials(backend, slow_tier)).exit();
+    libtest_mimic::run(&args, apps_convert_trials(backend, slow_test)).exit();
 }
 
 /// Convert one cached app and require non-empty source. A missing cache file

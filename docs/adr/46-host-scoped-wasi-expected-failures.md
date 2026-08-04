@@ -1,10 +1,10 @@
-# ADR-46 — Host-OS-Scoped Expected-Failure Ledgers for the WASI Testsuite Harness
+# ADR-46 — Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness
 
 Status: **Accepted, 2026-07-29.** Implemented in `crates/dewasm-test-helper/src/wasi_testsuite.rs` (the `expected_failures_macos`/`expected_failures_linux` trait methods) together with the first scoped entries (Java, Ruby); the Java `path_link` entry was fixed outright instead of scoped.
 
 ## Context
 
-The wasi-testsuite ledgers ([ADR-8](8-latest-testsuite-support-matrix.md) discipline, [ADR-36](36-wasi-testsuite-conformance.md) harness) are checked both ways: a ledgered trial that *passes* is a hard failure. Every entry was written against a macOS development host. The first Linux CI run (issue #7) broke that assumption in both directions:
+The wasi-testsuite expected-failures lists ([ADR-8](8-latest-testsuite-support-matrix.md) discipline, [ADR-36](36-wasi-testsuite-conformance.md) harness) are checked both ways: a listed trial that *passes* is a hard failure. Every entry was written against a macOS development host. The first Linux CI run (issue #7) broke that assumption in both directions:
 
 - Entries whose cause is macOS host behaviour — CoreFoundation injecting `__CF_USER_TEXT_ENCODING` into the JVM/ruby environ — *pass* on Linux and trip the unexpectedly-passing check.
 - A trial can fail on Linux only: the Linux JDK sets NOFOLLOW symlink times through microsecond `lutimes`, truncating the ns `mtim` the suite round-trips (`rust/symlink_filestat`), while macOS preserves ns.

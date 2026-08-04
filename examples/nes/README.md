@@ -28,4 +28,4 @@ Measured on an Apple Silicon laptop, headless: Go ~228 ticks/sec, Java ~126 — 
 
 Controls (all frontends): arrows = D-pad, `x` = A, `z` = B, Enter = Start, Space = Select, `q`/Esc = quit.
 
-No sound: agnes has no APU. The frontends are built by their own scripts and are not part of `cargo test`; the frame snapshot above is, at the DOOM case's tiers (slow, Bash at ultra).
+No sound: agnes has no APU. The frontends are built by their own scripts and are not part of `cargo test`; the frame snapshot above is, with the DOOM case's speed assignment (slow, Bash at ultra).

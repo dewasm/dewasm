@@ -40,7 +40,7 @@ pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
     run_under_pty(cmd, QJS_REPL_SESSION, Some(QJS_PROMPT), PTY_TIMEOUT)
 }
 
-/// The per-backend runner: convert qjs to a standalone program for `lang`, drive its REPL under a pty, and require the transcript to be byte-identical to the wasmtime snapshot. The perf opt-out lives at the macro/feature tier (`qjs_repl_pty_e2e!` expands its `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner runs unconditionally.
+/// The per-backend runner: convert qjs to a standalone program for `lang`, drive its REPL under a pty, and require the transcript to be byte-identical to the wasmtime snapshot. The perf opt-out lives at the macro/feature level (`qjs_repl_pty_e2e!` expands its `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner runs unconditionally.
 pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
     let snapshot = std::fs::read(qjs_repl_snapshot_path()).unwrap_or_else(|e| {
         panic!(

@@ -1,4 +1,4 @@
-# The interpreter gate (ADR-15): the generated numerics assume 64-bit IVs
+# The interpreter version check (ADR-15): the generated numerics assume 64-bit IVs
 # and IEEE-double NVs; die loudly on any other perl build rather than
 # silently mis-compute.
 use Config ();

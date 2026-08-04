@@ -141,7 +141,7 @@ pub const EXIFTOOL_EXTRACT: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature tier, see the module docs). Stages `case.stage` into a fresh scratch dir and fills `{scratch}`/`{cache}` in `glue` (the file-backed and exiftool cases' preopens; unused by the in-memory cases).
+/// Run one [`CApiCase`] for `lang` with its per-language `glue` unconditionally (the perf opt-out lives at the macro/feature level, see the module docs). Stages `case.stage` into a fresh scratch dir and fills `{scratch}`/`{cache}` in `glue` (the file-backed and exiftool cases' preopens; unused by the in-memory cases).
 pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let cache = apps_cache_dir();
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));

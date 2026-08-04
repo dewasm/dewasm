@@ -6,7 +6,7 @@
 //! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln` — `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby (ADR-42) and Python (ADR-28) need do not exist here.
 //! - Call-stack exhaustion is enforced by an explicit depth counter (`local $Rt::DEPTH`), because runaway perl recursion only stops at the OOM killer.
 //!
-//! The runtime is composed from per-method units (ADR-6) in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`). Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-tier `Rt` (the spec harness).
+//! The runtime is composed from per-method units (ADR-6) in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`). Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -1380,7 +1380,7 @@ fn store_method(op: StoreOp) -> &'static str {
     }
 }
 
-/// Codegen-shape test for the label lowering (ADR-55): multi-tier branches must come out as direct `last`/`next` on perl labels, with no flag-variable cascade (Ruby's `__br`, ADR-42) sneaking back in.
+/// Codegen-shape test for the label lowering (ADR-55): multi-level branches must come out as direct `last`/`next` on perl labels, with no flag-variable cascade (Ruby's `__br`, ADR-42) sneaking back in.
 #[cfg(test)]
 mod branch_shape {
     use super::*;
@@ -1419,7 +1419,7 @@ mod branch_shape {
         // Branches are direct label exits/continues: the back-edge is a `next`, the block exits are `last`s at two different depths.
         assert!(source.contains("next L"), "loop back-edge:\n{source}");
         let lasts = source.matches("last L").count();
-        assert!(lasts >= 3, "multi-tier exits (got {lasts}):\n{source}");
+        assert!(lasts >= 3, "multi-level exits (got {lasts}):\n{source}");
         // No flag-variable cascade (ADR-42/ADR-28 schemes must not reappear).
         assert!(!source.contains("__br"), "flag cascade leaked:\n{source}");
         assert!(!source.contains("$_br"), "flag register leaked:\n{source}");

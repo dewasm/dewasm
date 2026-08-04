@@ -13,7 +13,7 @@ def wasi_fd_read(fd, iovs_ptr, iovs_len, nread_ptr)
     # IO#read(len) blocks until the full len arrives or EOF, deadlocking a
     # line-buffered terminal that never sends EOF. readpartial returns as soon
     # as any bytes are available — the WASI short-read semantics wasmtime uses —
-    # while poll_oneoff's IO.select already gated the wait. Files keep #read.
+    # while poll_oneoff's IO.select already did the waiting. Files keep #read.
     if stdin
       begin
         chunk = io.readpartial(len)

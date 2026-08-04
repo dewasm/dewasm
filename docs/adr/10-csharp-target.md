@@ -8,7 +8,7 @@ C# was simply missing from the original target list (user call-out). It fits the
 
 ## Decision
 
-Add C#, scheduled together with Java: the two backends share almost all design decisions (class-shaped module, byte-array linear memory, exceptions for traps), so the marginal cost of the second one is small. Where they differ, C# is the easier half: native unsigned integers (`uint`/`ulong`, so ADR-2's masked-unsigned strategy is bypassed entirely), `goto` for multi-tier `br`, `Span<byte>`/`BinaryPrimitives` for little-endian memory access, and no hard method-size limit like the JVM's 64 KB (Java keeps its function-splitting task). A shared lowering-conventions ADR for the pair is expected when that milestone starts.
+Add C#, scheduled together with Java: the two backends share almost all design decisions (class-shaped module, byte-array linear memory, exceptions for traps), so the marginal cost of the second one is small. Where they differ, C# is the easier half: native unsigned integers (`uint`/`ulong`, so ADR-2's masked-unsigned strategy is bypassed entirely), `goto` for multi-level `br`, `Span<byte>`/`BinaryPrimitives` for little-endian memory access, and no hard method-size limit like the JVM's 64 KB (Java keeps its function-splitting task). A shared lowering-conventions ADR for the pair is expected when that milestone starts.
 
 ## Rejected alternatives
 

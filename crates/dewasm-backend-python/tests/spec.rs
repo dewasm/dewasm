@@ -15,7 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-tier failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list (ADR-16): the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list (ADR-16): the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -161,7 +161,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             &RuntimeLinkage::Alias("Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-tier `Rt` global (ADR-28). The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name — drop it and rely on the module global.
+        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global (ADR-28). The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name — drop it and rely on the module global.
         let source = source
             .strip_prefix("Rt = Rt\n\n\n")
             .unwrap_or(&source)
@@ -422,7 +422,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "(isinstance({value}, list) and isinstance({value}[0], str))"
         )),
-        // A specific function's identity: not expressible without an export map; no top-tier testsuite file uses it.
+        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

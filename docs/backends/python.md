@@ -4,7 +4,7 @@
 
 ## Output shape
 
-A single `.py` module: the generated module as a class named after the input stem (override with `--module-name`), with the runtime at **module top tier** under the name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
+A single `.py` module: the generated module as a class named after the input stem (override with `--module-name`), with the runtime at **module top level** under the name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
 
 ## Requirements
 
