@@ -58,6 +58,18 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
+/// The wasi-vfs-packed CRuby (ADR-61): `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape. Needs no preopens — a `require` from the stdlib proves the embedded VFS serves it — so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`. Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine). Slow tier, same as the unpacked case.
+pub const CRUBY_PACKED_HELLO: AppCase = AppCase {
+    name: "ruby-packed",
+    args: &[
+        "-e",
+        r#"require "json"; puts JSON.generate({app: "ruby-packed", answer: 6*7})"#,
+    ],
+    stdin: "",
+    expect_stdout: "{\"app\":\"ruby-packed\",\"answer\":42}\n",
+    expect_code: 0,
+};
+
 /// Convert the cached app `case` names with `lang`'s backend, run it, and diff against the case's snapshot output.
 fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));

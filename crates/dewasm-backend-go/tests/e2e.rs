@@ -697,7 +697,7 @@ qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
 sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// cruby_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min); see docs/apps-audit.md.
+// cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min), and the 49 MB wasi-vfs-packed variant (ADR-61) is the same interpreter plus embedded stdlib, strictly larger; see docs/apps-audit.md.
 qjs_repl_pty_e2e!(Go);
 
 libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);

@@ -45,12 +45,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends binaryen bison flex
       - name: Add wasm32-wasip1 target (setup.sh builds ripgrep with it)
         run: rustup target add wasm32-wasip1
+      - name: Install wasi-vfs CLI (setup.sh packs ruby-packed with it, ADR-61)
+        run: |
+          curl -fsSL --retry 5 -o /tmp/wasi-vfs-cli.zip \
+            https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip
+          echo "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485  /tmp/wasi-vfs-cli.zip" | shasum -a 256 -c -
+          sudo unzip -o /tmp/wasi-vfs-cli.zip -d /usr/local/bin
+          sudo chmod +x /usr/local/bin/wasi-vfs
       # The libpcap/tree-sitter/ripgrep stamps in setup.sh fold in
       # `wasm-opt --version`, so the apps-cache key must too: a binaryen bump
-      # must yield a new key so the rebuilt artifacts get re-saved.
+      # must yield a new key so the rebuilt artifacts get re-saved. Same for the
+      # ruby-packed stamp and `wasi-vfs --version`.
       - name: Compute apps cache key
         id: appskey
-        run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-${{ hashFiles('examples/apps/setup.sh', 'examples/apps/scripts/**', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
+        run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-wasivfs$(wasi-vfs --version | awk '{print $2}')-${{ hashFiles('examples/apps/setup.sh', 'examples/apps/scripts/**', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         with:
           path: examples/apps/cache

@@ -6,13 +6,14 @@ use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_perl::{find_perl, PerlBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e, embedded_coexist_e2e,
-    examples_dir, exiftool_extract_e2e, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e,
-    nes_frame_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
-    qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
-    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
-    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
-    wasi_suite, zeroperl_eval_e2e, BackendUnderTest,
+    cruby_packed_hello_e2e, custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e,
+    embedded_coexist_e2e, examples_dir, exiftool_extract_e2e, gzip_e2e, library_add_e2e,
+    libsqlite3_c_api_e2e, nes_frame_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e,
+    qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
+    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
+    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, zeroperl_eval_e2e,
+    BackendUnderTest,
 };
 
 pub struct Perl;
@@ -571,8 +572,9 @@ qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
 sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
 cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
-// Ultra tier (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under.
+// Ultra tier (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib (ADR-61), so it inherits the tier.
 cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
+cruby_packed_hello_e2e!(Perl, ultra);
 qjs_repl_pty_e2e!(Perl);
 
 libsqlite3_c_api_e2e!(Perl, PERL_LIBSQLITE3_MEM);

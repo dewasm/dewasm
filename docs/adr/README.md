@@ -74,6 +74,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-58 | [Ruby Backend: Address a Branch by Value, Not by Lexical Scope](58-ruby-branch-by-value.md) | Accepted |
 | ADR-59 | [NES Demo: A Self-Built Guest with a File-Based ROM and an Export-Only Interface](59-nes-example-agnes.md) | Accepted |
 | ADR-60 | [Ruby Backend: Flatten Only Deep Crossings](60-ruby-flatten-only-deep-crossings.md) | Accepted |
+| ADR-61 | [Cover ruby.wasm's wasi-vfs-Packed Shape by Packing In-Cache](61-wasi-vfs-packed-cruby.md) | Accepted |
 
 ## Adding a new ADR
 

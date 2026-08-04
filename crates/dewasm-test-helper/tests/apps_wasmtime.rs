@@ -11,8 +11,8 @@
 use dewasm_test_helper::{
     assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_snapshot_path, run_app_case,
     run_fs_app_case, run_gzip_cases, run_slow_app_case, run_standalone_dir, Wasmtime, COWSAY_ARGS,
-    COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, QJS_EVAL, QJS_FILE_IO, RG_SEARCH, SQLITE3_SHELL,
-    SQLITE3_SHELL_DBFILE,
+    COWSAY_STDIN, CPYTHON_HELLO, CRUBY_HELLO, CRUBY_PACKED_HELLO, QJS_EVAL, QJS_FILE_IO, RG_SEARCH,
+    SQLITE3_SHELL, SQLITE3_SHELL_DBFILE,
 };
 
 // The wasmtime-backed `BackendUnderTest` (`Wasmtime`, plus the `NeverBackend` stand-in it uses to satisfy `BackendUnderTest::backend()`) lives in `dewasm_test_helper::wasmtime_backend` so `cargo xtask update-snapshots` can drive it too; see that module for the implementation.
@@ -41,6 +41,13 @@ fn qjs_eval() {
 #[test]
 fn sqlite3_shell() {
     run_slow_app_case(&Wasmtime, &SQLITE3_SHELL);
+}
+
+// The wasi-vfs-packed CRuby (ADR-61): its `AppCase` expectation is an inline string (deterministic one-liner, same convention as the interpreter fs hellos), so this run is what validates it against a live engine — with zero preopens, which is the point of the packed shape.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn cruby_packed_hello() {
+    run_slow_app_case(&Wasmtime, &CRUBY_PACKED_HELLO);
 }
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
