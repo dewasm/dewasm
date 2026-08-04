@@ -36,6 +36,9 @@ const ELEM_SPLIT: usize = 1024;
 /// Funcref entries per `elem{i}_pK` part method (each ~20 bytes of bytecode per entry stays well under the 64KB method limit).
 const ELEM_PART: usize = 512;
 
+/// Funcref entries per `ElemF{c}` filler class. Every entry costs its class's constant pool a lambda (invokedynamic + method handle + synthetic method, ~7 entries) plus the `P{k}.f{idx}` method reference it calls (~3), so a single filler class saturates the 65535-entry pool at well under ten thousand entries: CRuby's 8737-entry table overflowed it (issue #142). Kept low enough that a filler class stays around a fifth of the pool.
+const ELEM_PER_CLASS: usize = 2048;
+
 /// Defined-function count above which the module's functions are split across nested `P{k}` helper classes, each with its own 65535-entry constant pool (ADR-30 third milestone). A single class holding thousands of functions (their numeric literals, method refs, and names) overflows the pool: qjs (~1500) and sqlite (~1970) fit, but zeroperl (~2450) and rg (~7300) do not — zeroperl's Perl core is constant-dense enough that it overflowed while under the former 3000 bound (`javac`: *too many constants*). Kept just above sqlite's proven single-class size, so a module only partitions once it exceeds the largest size measured to fit.
 const FN_PARTITION_THRESHOLD: usize = 2000;
 
@@ -704,15 +707,20 @@ impl<'a> Gen<'a> {
     }
 
     fn push_part(&self, name: &str, body: String) {
+        self.push_part_with(name, "", body);
+    }
+
+    /// `push_part` with extra parameters appended to the head (used by the outlined `br_table` case ranges, which take the table index).
+    fn push_part_with(&self, name: &str, extra_params: &str, body: String) {
         let frame = self.cur_frame_ty.borrow().clone();
         // A partitioned module's parts are static and take the module instance alongside the frame, so instance references resolve through `inst`.
         let head = if self.partitioned.get() {
             format!(
-                "static void {name}({} inst, {frame} f) {{\n",
+                "static void {name}({} inst, {frame} f{extra_params}) {{\n",
                 self.type_name
             )
         } else {
-            format!("private void {name}({frame} f) {{\n")
+            format!("private void {name}({frame} f{extra_params}) {{\n")
         };
         let mut out = head;
         out.push_str(&reindent(&body, 1));
@@ -895,46 +903,82 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit the nested `Elem` helper class for the oversized element segments in `split_elems`. Each segment `i` gets an `elem{i}(inst)` factory that allocates the array and calls chunked `elem{i}_pK(inst, a)` fillers.
+    /// Emit the nested `Elem` helper class for the oversized element segments in `split_elems`. Each segment `i` gets an `elem{i}(inst)` factory that allocates the array and calls chunked `elem{i}_pK(inst, a)` fillers; the fillers themselves live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` entries each, so no single pool holds more funcref lambdas than it can address.
     fn emit_elem_class(&self, w: &mut CodeWriter, split_elems: &[usize]) {
         self.elem_capture.set(true);
+        let ty = &self.type_name;
+        // Assign each `elem{i}_p{p}` filler to a filler class, packing them in order.
+        let mut filler_class: HashMap<(usize, usize), usize> = HashMap::new();
+        let mut cls = 0usize;
+        let mut in_cls = 0usize;
+        for &i in split_elems {
+            let len = self.module.elems[i].items.len();
+            for p in 0..len.div_ceil(ELEM_PART) {
+                if in_cls > 0 && in_cls + ELEM_PART > ELEM_PER_CLASS {
+                    cls += 1;
+                    in_cls = 0;
+                }
+                filler_class.insert((i, p), cls);
+                in_cls += ELEM_PART;
+            }
+        }
+
         w.line("");
         w.line("static final class Elem {");
         w.indent();
-        let ty = &self.type_name;
         for (n, &i) in split_elems.iter().enumerate() {
             if n > 0 {
                 w.line("");
             }
-            let elem = &self.module.elems[i];
-            let len = elem.items.len();
-            let parts = len.div_ceil(ELEM_PART);
+            let len = self.module.elems[i].items.len();
             w.line(format!("static Rt.Funcref[] elem{i}({ty} inst) {{"));
             w.indent();
             w.line(format!("Rt.Funcref[] a = new Rt.Funcref[{len}];"));
-            for p in 0..parts {
-                w.line(format!("elem{i}_p{p}(inst, a);"));
+            for p in 0..len.div_ceil(ELEM_PART) {
+                w.line(format!(
+                    "ElemF{}.elem{i}_p{p}(inst, a);",
+                    filler_class[&(i, p)]
+                ));
             }
             w.line("return a;");
             w.dedent();
             w.line("}");
-            for p in 0..parts {
-                w.line("");
-                w.line(format!(
-                    "static void elem{i}_p{p}({ty} inst, Rt.Funcref[] a) {{"
-                ));
-                w.indent();
-                let start = p * ELEM_PART;
-                let end = (start + ELEM_PART).min(len);
-                for (k, item) in elem.items[start..end].iter().enumerate() {
-                    w.line(format!("a[{}] = {};", start + k, self.elem_item(item)));
-                }
-                w.dedent();
-                w.line("}");
-            }
         }
         w.dedent();
         w.line("}");
+
+        for c in 0..=cls {
+            w.line("");
+            w.line(format!("static final class ElemF{c} {{"));
+            w.indent();
+            let mut first = true;
+            for &i in split_elems {
+                let elem = &self.module.elems[i];
+                let len = elem.items.len();
+                for p in 0..len.div_ceil(ELEM_PART) {
+                    if filler_class[&(i, p)] != c {
+                        continue;
+                    }
+                    if !first {
+                        w.line("");
+                    }
+                    first = false;
+                    w.line(format!(
+                        "static void elem{i}_p{p}({ty} inst, Rt.Funcref[] a) {{"
+                    ));
+                    w.indent();
+                    let start = p * ELEM_PART;
+                    let end = (start + ELEM_PART).min(len);
+                    for (k, item) in elem.items[start..end].iter().enumerate() {
+                        w.line(format!("a[{}] = {};", start + k, self.elem_item(item)));
+                    }
+                    w.dedent();
+                    w.line("}");
+                }
+            }
+            w.dedent();
+            w.line("}");
+        }
         self.elem_capture.set(false);
     }
 
@@ -1380,6 +1424,81 @@ impl<'a> Gen<'a> {
         names
     }
 
+    /// Split a `br_table`'s targets into consecutive case ranges, each of at most `SPLIT_THRESHOLD` estimated cost. Returns every range's exclusive end index, so a one-element result means the whole table fits in a single method.
+    fn br_table_groups(&self, targets: &[BrTarget]) -> Vec<usize> {
+        let mut ends = Vec::new();
+        let mut cost = 0usize;
+        for (n, t) in targets.iter().enumerate() {
+            let c = 1 + target_cost(t);
+            if cost > 0 && cost + c > SPLIT_THRESHOLD {
+                ends.push(n);
+                cost = 0;
+            }
+            cost += c;
+        }
+        ends.push(targets.len());
+        ends
+    }
+
+    /// Emit a `br_table` too large for one method: each case range of `ends` becomes a part method taking the table index, and the call site dispatches to it by range. A statement sequence splits at its statement boundaries, but a table with thousands of targets is a single statement — so the split recurses into the case list, which is the only place it can (issue #142). CPython's largest function holds a 3202-target table, and 44 tables in one sequence.
+    fn emit_br_table_parts(
+        &self,
+        w: &mut CodeWriter,
+        index: &Expr,
+        targets: &[BrTarget],
+        default: &BrTarget,
+        ends: &[usize],
+    ) {
+        let mut names = Vec::with_capacity(ends.len());
+        for (g, &end) in ends.iter().enumerate() {
+            let start = if g == 0 { 0 } else { ends[g - 1] };
+            let mut pw = CodeWriter::new("    ");
+            pw.line("switch (_sw) {");
+            for (k, target) in targets[start..end].iter().enumerate() {
+                pw.line(format!("case {}: {{", start + k));
+                pw.indent();
+                self.branch(&mut pw, target);
+                pw.line("break;");
+                pw.dedent();
+                pw.line("}");
+            }
+            pw.line("}");
+            let name = self.new_part();
+            self.push_part_with(&name, ", int _sw", pw.finish());
+            names.push(name);
+        }
+
+        let part_args = if self.partitioned.get() {
+            "inst, f"
+        } else {
+            "f"
+        };
+        // The index is read once into a scoped local; an out-of-range index (unsigned, so a negative `int` is out of range too) takes the default target, and the rest is a plain range cascade over the parts.
+        w.line("{");
+        w.indent();
+        w.line(format!("int _sw = {};", self.expr(index)));
+        w.line(format!(
+            "if (Integer.compareUnsigned(_sw, {}) >= 0) {{",
+            targets.len()
+        ));
+        w.indent();
+        self.branch(w, default);
+        w.dedent();
+        for (g, name) in names.iter().enumerate() {
+            if g + 1 == names.len() {
+                w.line("} else {");
+            } else {
+                w.line(format!("}} else if (_sw < {}) {{", ends[g]));
+            }
+            w.indent();
+            w.line(format!("{name}({part_args}, _sw);"));
+            w.dedent();
+        }
+        w.line("}");
+        w.dedent();
+        w.line("}");
+    }
+
     /// Emit one statement, adding its free branch targets to `free` (see `emit_body`).
     fn emit_stmt(
         &self,
@@ -1542,6 +1661,11 @@ impl<'a> Gen<'a> {
             } => {
                 if targets.is_empty() {
                     self.branch(w, default);
+                    return;
+                }
+                let groups = self.br_table_groups(targets);
+                if groups.len() > 1 && self.split.get() {
+                    self.emit_br_table_parts(w, index, targets, default, &groups);
                     return;
                 }
                 w.line(format!("switch ({}) {{", self.expr(index)));
@@ -2187,9 +2311,10 @@ impl CostMemo {
                 targets,
                 default,
             } => {
+                // Every target expands to a `case n: { ...; break; }` arm, so a table costs at least one node per target even when no target carries assignments. Counting only the assignments made a thousands-of-targets table look free, and the function holding it was left unsplit (issue #142).
                 expr_cost(index)
                     + target_cost(default)
-                    + targets.iter().map(target_cost).sum::<usize>()
+                    + targets.iter().map(|t| 1 + target_cost(t)).sum::<usize>()
             }
             Stmt::Return { values } => values.iter().map(expr_cost).sum(),
             Stmt::Call { args, .. } => args.iter().map(expr_cost).sum(),

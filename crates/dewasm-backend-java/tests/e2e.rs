@@ -207,7 +207,30 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3, libpcap, tree-sitter): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+/// The interpreter stdlib trees mount straight from the app cache ({cache}), never copied.
+const JAVA_CPYTHON_HELLO_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Cpython inst = new Cpython(null, new String[]{"python", "-c", "print('hello from cpython', 6 * 7)"}, new String[]{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, java.util.Map.of("/lib", "{cache}/cpython-lib/lib"));
+        try {
+            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Rt.Exit e) {
+        }
+    }
+}
+"#;
+
+const JAVA_CRUBY_HELLO_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Cruby inst = new Cruby(null, new String[]{"ruby", "-e", "puts \"hello from cruby #{6*7}\""}, null, java.util.Map.of("/usr", "{cache}/ruby-lib/usr"));
+        try {
+            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Rt.Exit e) {
+        }
+    }
+}
+"#;
+
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
@@ -710,7 +733,10 @@ dewasm_test_helper::gzip_e2e!(Java);
 dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit shared by the wasi-vfs-packed variant (ADR-61), whose element segments are the same interpreter's (docs/apps-audit.md).
+// The three interpreter giants (issue #142). Each was excluded until the ADR-30 splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, which is one statement and so had no boundary to split at: `javac`: *code too large*) and to spread the funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool: *too many constants*). Ultra-slow (ADR-48): the 30-49 MB modules become 76-229 MB of Java, and each case `javac`s its own `Main` from cold — measured 42 s (CPython), 132 s (CRuby) and 137 s (packed CRuby) end to end on an M-series laptop, past the ~1-min CI-runner bar, at up to ~8 GB of `javac` heap.
+dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
+dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
+dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
