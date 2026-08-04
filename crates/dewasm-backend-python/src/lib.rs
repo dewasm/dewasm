@@ -998,7 +998,13 @@ impl<'a> Gen<'a> {
     }
 
     /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
-    fn emit_if(&self, w: &mut CodeWriter, cond: &Expr, then: &[Stmt], els: &[Stmt]) -> BTreeSet<u32> {
+    fn emit_if(
+        &self,
+        w: &mut CodeWriter,
+        cond: &Expr,
+        then: &[Stmt],
+        els: &[Stmt],
+    ) -> BTreeSet<u32> {
         // A pending `_br` never reaches here: `emit_seq`'s region guard already established `_br == 0` for every statement it emits.
         w.line(format!("if {}:", self.cond(cond)));
         w.indent();
