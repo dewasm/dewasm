@@ -107,7 +107,7 @@ pub fn find_javac() -> Option<std::path::PathBuf> {
 
 /// The one way dewasm's suites invoke `javac`: the located compiler, tuned for a one-shot compile. A missing `javac` is the loud failure ADR-15 asks for, with the setup instruction in the message.
 ///
-/// C2 cannot repay its own compilation cost inside a single ~1 s `javac` run, and N of these JVMs running concurrently — each with two C2 compiler threads and a G1 thread pool sized for the whole machine — is what destroys parallel scaling on a small CI runner. So: cap the JIT at C1, take the serial collector, and stop each JVM from sizing its pools for every core. The heap is deliberately left at the default; the slow tier's qjs/DOOM sources need the headroom.
+/// C2 cannot repay its own compilation cost inside a single ~1 s `javac` run, and N of these JVMs running concurrently — each with two C2 compiler threads and a G1 thread pool sized for the whole machine — is what destroys parallel scaling on a small CI runner. So: cap the JIT at C1, take the serial collector, and stop each JVM from sizing its pools for every core. The heap is deliberately left at the default; the slow category's qjs/DOOM sources need the headroom.
 ///
 /// The `.class` output is byte-identical with and without these flags (verified on the 4.2 MB cowsay and 15 MB qjs standalone sources) — they change only how the JVM runs the compiler.
 pub fn javac_command() -> std::process::Command {

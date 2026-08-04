@@ -21,7 +21,7 @@ Add a crate-private pass, `merge_adjacent_data_segments`, over `module.datas`. I
 ## Rejected alternatives
 
 - **Sort segments by offset, then merge.** Would merge more, but reordering active segments changes which write wins on overlap and moves them relative to `global.get` barriers whose targets are unknown. Declaration order is the only order whose memory image is guaranteed; sorting trades a proven-correct pass for an unprovable one.
-- **A backend-side merge during lowering.** Each backend already iterates `module.datas`; merging there would multiply the delicate ordering/soundness reasoning by the backend count and invite divergence. Doing it once on the shared IR keeps a single audited implementation under one spec-harness gate.
+- **A backend-side merge during lowering.** Each backend already iterates `module.datas`; merging there would multiply the delicate ordering/soundness reasoning by the backend count and invite divergence. Doing it once on the shared IR keeps a single audited implementation under one spec-harness test.
 - **Merge regardless of gap size (bridge any hole).** A single pair of segments straddling a multi-kilobyte hole would materialize kilobytes of zero bytes inline in every backend, which is strictly worse than two initializers. The threshold caps that blow-up.
 
 ## Consequences
@@ -34,7 +34,7 @@ Add a crate-private pass, `merge_adjacent_data_segments`, over `module.datas`. I
   | cpython.wasm | 2 | 1 |
   | qjs.wasm | 2 | 1 |
 
-The flagship `ruby.wasm` collapses 7871 → 352 (a 22× reduction); the code-dominated `cpython`/`qjs` have only two segments and merge to one.
+The largest app, `ruby.wasm`, collapses 7871 → 352 (a 22× reduction); the code-dominated `cpython`/`qjs` have only two segments and merge to one.
 - Correctness is bound by the spec harness (ADR-3): the pass is always on, so the full testsuite passing for every backend *is* the execution-equivalence proof. Targeted IR-shape unit tests in `crates/dewasm-core/tests/data_merge.rs` pin the merge, the zero-fill, the gap threshold, the barrier, and each bail.
 - Modules that use bulk data ops (`rg.wasm`, `libpcap.wasm`, treesitter) hit guard 1 and are passed through untouched — the pass never regresses them.
 - Composes with ADR-37: `--data-file` externalizes the *merged* blobs, so the sidecar carries fewer, larger segments and the source fewer prefix-sum constants.

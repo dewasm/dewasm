@@ -2,7 +2,7 @@
 //!
 //! The bare no-args invocation is the interactive REPL: a standalone backend runs `_start` with the host process's real argv, so spawning the converted program under the pty with no extra arguments is exactly `qjs` with an empty argument list — the same shape `wasmtime run qjs.wasm` (no trailing args) takes. The scripted session is fed with CR line endings because that is what a terminal sends on Enter; the pty driver's ICRNL then delivers NL to the guest, whose stdin reads a character device (matching wasmtime).
 //!
-//! The snapshot lives at `examples/apps/snapshots/qjs_repl_interactive.transcript` (raw bytes, ANSI escapes included) and is re-validated against a live wasmtime by the `wasmtime_test`-gated freshness test in `crates/dewasm-test-helper/tests/apps_wasmtime.rs`.
+//! The snapshot lives at `examples/apps/snapshots/qjs_repl_interactive.transcript` (raw bytes, ANSI escapes included) and is re-validated against a live wasmtime by the `wasmtime_test`-conditional freshness test in `crates/dewasm-test-helper/tests/apps_wasmtime.rs`.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -27,7 +27,7 @@ pub fn qjs_repl_snapshot_path() -> PathBuf {
     apps_snapshot_dir().join("qjs_repl_interactive.transcript")
 }
 
-/// Convert the cached `qjs.wasm` to a standalone program for `lang` and drive its interactive REPL under a pty with [`QJS_REPL_SESSION`], returning the raw transcript. Shared by the gated per-backend runner and the wasmtime snapshot capture/freshness path.
+/// Convert the cached `qjs.wasm` to a standalone program for `lang` and drive its interactive REPL under a pty with [`QJS_REPL_SESSION`], returning the raw transcript. Shared by the conditional per-backend runner and the wasmtime snapshot capture/freshness path.
 pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
     let wasm = apps_cache_dir().join("qjs.wasm");
     assert!(

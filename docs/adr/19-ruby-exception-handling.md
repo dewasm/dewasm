@@ -20,13 +20,13 @@ Wasm 3.0 exception handling (`try_table`/`throw`/`throw_ref`, tags, `exnref`) is
 
 - **Tag = symbol/index keyed by module** — breaks imported-tag identity across instances (`catch-imported` in `try_table.wast`); an interned structural key (the `type_symbol` trick) is wrong by design here because tag equality is *not* structural.
 - **`exnref` as a separate wrapper around (tag, values)** — the exception object already *is* that tuple; a second object would need converting at every catch_ref/throw_ref boundary.
-- **Routing traps and exceptions through one class hierarchy** — a `rescue` of a common superclass would make it too easy for generated code to catch traps; two unrelated classes make the "traps are uncatchable" property structural rather than disciplined.
+- **Routing traps and exceptions through one class ladder** — a `rescue` of a common superclass would make it too easy for generated code to catch traps; two unrelated classes make the "traps are uncatchable" property structural rather than disciplined.
 - **`Partial("try_table only")`** — unnecessary: the pinned suite has no legacy-EH constructs (verified by grep before implementation); legacy binaries fail validation (the `LEGACY_EXCEPTIONS` validator feature stays off) and surface as clean `unknown-proposal` refusals.
 
 ## Consequences
 
-- Positive: `try_table` (44), `throw` (9), `throw_ref` (12), `tag` (1 + skips attributed to gc-era constructs) all pass; full Ruby sweep pass 29,598 → 29,679. `assert_exception` is now a real check (`SpecLang::emit_check_exception`; the default keeps it an attributed skip for Bash).
-- **Ledger change (ADR-8): `imports.wast` expected failures 28 → 59**, same `import-limits` tag. Its "test" fixture module exports tags, so it never converted before this ADR; now that it does, the downstream `assert_unlinkable` cases checking function signatures, global types, and tag parameter types run — all instances of the ADR-16 kind-not-type gap, no new mechanism. Every other ledger entry (imports2 2, linking 4, linking0 1, load1 5) is byte-identical, and Bash's sweep is unchanged.
+- Positive: `try_table` (44), `throw` (9), `throw_ref` (12), `tag` (1 + skips attributed to gc-era constructs) all pass; full Ruby run pass 29,598 → 29,679. `assert_exception` is now a real check (`SpecLang::emit_check_exception`; the default keeps it an attributed skip for Bash).
+- **List change (ADR-8): `imports.wast` expected failures 28 → 59**, same `import-limits` tag. Its "test" fixture module exports tags, so it never converted before this ADR; now that it does, the downstream `assert_unlinkable` cases checking function signatures, global types, and tag parameter types run — all instances of the ADR-16 kind-not-type gap, no new mechanism. Every other list entry (imports2 2, linking 4, linking0 1, load1 5) is byte-identical, and Bash's run is unchanged.
 - Negative / carry-over: tag parameter types join the `import-limits` debt. An uncaught wasm exception in `--mode standalone` surfaces as a raw Ruby backtrace (no dedicated exit path like `Rt::Trap`'s 134) — acceptable until a real p2/component consumer defines better.
 
 See also: [ADR-16](16-ruby-wasm1-completion.md) (provider protocol, kind-not-type gap), [ADR-17](17-ruby-reference-types.md) (flat ref `ValType` variants), [ADR-18](18-ruby-tail-calls.md) (the trampoline this corrected).

@@ -4,8 +4,8 @@ Status: **Accepted, 2026-08-01.** Implemented: the shared harness
 (`crates/dewasm-test-helper/src/apps_convert.rs`, `apps_convert_suite!`), a
 `convert` integration test in each of the five backend crates, and a fixed
 13-entry manifest covering every `.wasm` the fetch scripts produce. Every app
-converts under every backend today; `ruby` and `cpython` are gated behind
-`slow_test`, the other eleven run in the fast gate.
+converts under every backend today; `ruby` and `cpython` are conditional behind
+`slow_test`, the other eleven run in the fast test.
 
 ## Context
 
@@ -23,12 +23,12 @@ tables) is exactly where a backend-specific lowering bug hides.
 
 Conversion is also cheap and deterministic where running is not. Running CRuby
 under Bash is infeasible; *converting* it is a couple of CPU-bound seconds with
-no interpreter, toolchain, or golden needed. So the coverage a convert-only
+no interpreter, toolchain, or snapshot needed. So the coverage a convert-only
 assertion buys is available for every pair, including the ones no execution case
 will ever cover.
 
 ADR-53 noted, for DOOM, that "a convert-only assertion would be an idiom no
-other suite uses" and so folded DOOM's convert coverage into its frame-golden
+other suite uses" and so folded DOOM's convert coverage into its frame-snapshot
 run. That reasoning was local to a single module; generalized across the whole
 app cache the idiom pays for itself, and this ADR establishes it (see the note
 added to ADR-53).
@@ -62,31 +62,30 @@ never run the generated program.
 - **Fail loud, never skip** (ADR-15). A missing cache file fails the trial with
   the standard `run examples/apps/setup.sh` message; it does not skip.
 
-- **Two-tier gating by measurement** (ADR-48). Heavy trials are `#[ignore]`d
+- **Two-speed classification by measurement** (ADR-48). Heavy trials are `#[ignore]`d
   unless the backend crate's `slow_test` feature is on. "Heavy" is *measured*,
   not inferred from artifact size: every (backend × app) conversion was timed at
-  the dev profile — the build the fast gate pays. Only the two giant interpreter
+  the dev profile — the build the fast test pays. Only the two giant interpreter
   artifacts cross ~2 s on every backend (`ruby` ~7–13 s, `cpython` ~2.6–5 s);
-  they are gated. The next-slowest, `rg` (~1.1–2.1 s), sits in the same cluster
-  as the sqlite cases and stays in the fast gate. The rule is one shared
+  they are conditional. The next-slowest, `rg` (~1.1–2.1 s), sits in the same cluster
+  as the sqlite cases and stays in the fast test. The rule is one shared
   threshold applied to the measured times, not a hand-curated per-backend list —
   the data showed no backend needs a different set.
 
 **Discriminating criterion:** *conversion is worth asserting on its own wherever
 running is infeasible or merely unwired — it is cheap, deterministic, and needs
 no oracle, so the whole cache is covered for every backend regardless of which
-pairs an execution suite reaches.* What gates a convert trial behind a tier is
-its measured dev-profile time against the fast gate, nothing else.
+pairs an execution suite reaches.* What puts a convert trial behind `slow_test` is
+its measured dev-profile time against the fast test, nothing else.
 
 ## Rejected alternatives
 
-- **Per-case convert-only smokes derived from the e2e macro callsites, gated one
-  tier below the parent case.** This was issue #60's shape: for each existing
-  execution macro invocation, emit a sibling convert-only `#[test]` one tier
+- **Per-case convert-only smokes derived from the e2e macro callsites, conditional one speed category below the parent case.** This was issue #60's shape: for each existing
+  execution macro invocation, emit a sibling convert-only `#[test]` one category
   down. It couples convert coverage to the execution wiring — a pair with no
   execution callsite (every un-run pair, which is exactly the gap) gets no
   convert smoke either, so the blind spot survives. It also scatters ~N×5
-  generated tests across the backend crates and re-derives the tier per callsite.
+  generated tests across the backend crates and re-derives the category per callsite.
   A single whole-cache suite covers every pair uniformly and keeps the manifest
   in one place; #60 is closed as superseded by #65.
 
@@ -97,19 +96,19 @@ its measured dev-profile time against the fast gate, nothing else.
   source of truth for what exists; the manifest tracks them explicitly.
 
 - **Also assert the generated source compiles/runs.** That is the execution
-  suites' job and needs the toolchain, golden, and wall time this suite exists to
+  suites' job and needs the toolchain, snapshot, and wall time this suite exists to
   avoid. The value here is the convert step in isolation; a non-empty-source
   assertion is the whole contract.
 
 ## Consequences
 
-- Positive: every backend now converts every cached app on every fast-gate run
+- Positive: every backend now converts every cached app on every fast-test run
   (eleven of thirteen; the two interpreter giants join under `slow_test`). A
   lowering regression on a pair no execution case covers now fails a fast,
   deterministic test.
 - Positive: the suite doubled as an audit — all 13 apps convert cleanly under all
   five backends today, with no `check_module_support` rejection or codegen error.
-- Cost: the fast gate gains eleven convert trials per backend; measured at well
+- Cost: the fast test gains eleven convert trials per backend; measured at well
   under the `rg`/sqlite ~1–2 s cluster and run in parallel within each `convert`
   binary, so the added wall time is small (a couple of seconds per backend, the
   `rg` pole).

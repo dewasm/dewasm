@@ -1,6 +1,6 @@
 //! Bash side of the shared spec harness (ADR-3, ADR-27): converts modules with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn result globals and the status-134 trap protocol), and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
-//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list (ADR-3 pre-accepts this); the rest are `#[ignore]`d trials, so `cargo test -- --include-ignored` sweeps everything. The generic harness lives in `dewasm-test-helper`.
+//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list (ADR-3 pre-accepts this); the rest are `#[ignore]`d trials, so `cargo test -- --include-ignored` runs everything. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -13,9 +13,9 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures (ADR-35). Cross-module linking of function, global, memory, and now table imports (through PROVIDERS and the per-kind export maps) is fully wired; `assert_unlinkable` is checked for real. Two residual clusters, both pre-existing and out of this backend's scope to fix (matching the Ruby ledger, which has already covered every import kind for a while):
+/// Known assertion-level failures (ADR-35). Cross-module linking of function, global, memory, and now table imports (through PROVIDERS and the per-kind export maps) is fully wired; `assert_unlinkable` is checked for real. Two residual clusters, both pre-existing and out of this backend's scope to fix (matching the Ruby list, which has already covered every import kind for a while):
 ///
-/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4): `rt_resolve_import` validates that a resolved import is the right *kind* (func/global/table/memory) but not the finer-grained wasm type — a function's param/result signature, a global's mutability, a table's min/max limits, or a memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) links instead of failing. Same accepted gap as the Ruby ledger's `import-limits`, and now the same count (28/2/4) since Bash supports every import kind Ruby does.
+/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4): `rt_resolve_import` validates that a resolved import is the right *kind* (func/global/table/memory) but not the finer-grained wasm type — a function's param/result signature, a global's mutability, a table's min/max limits, or a memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) links instead of failing. Same accepted gap as the Ruby list's `import-limits`, and now the same count (28/2/4) since Bash supports every import kind Ruby does.
 /// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)` declaration or import is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24) regardless of backend. Both files exercise this via a module with two memories (one often an import of another module's exported memory); that module fails to convert, so the data/assertions that depended on it running observe stale (zeroed) state in a memory another, unrelated module still owns. Not a linking gap — every import in play resolves fine — and not fixable without the multi-memory proposal, which ADR-24 rejects outright.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),

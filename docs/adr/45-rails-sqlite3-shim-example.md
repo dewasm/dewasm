@@ -4,7 +4,7 @@ Status: **Accepted, 2026-07-28.** `examples/rails` runs an unmodified Rails 8 ap
 
 ## Context
 
-The Ruby backend's north-star demo (`docs/backends/ruby.md`) is real software using converted SQLite. Rails is the strongest form of that claim, but something must bridge ActiveRecord's SQLite3Adapter to the converted module's `invoke`/`Rt::Memory` interface — and the converted library cannot call back into arbitrary host Ruby (a guest function pointer cannot be conjured for a host lambda; only declared imports can, per ADR-7's provider table).
+The Ruby backend's goal demo (`docs/backends/ruby.md`) is real software using converted SQLite. Rails is the strongest form of that claim, but something must bridge ActiveRecord's SQLite3Adapter to the converted module's `invoke`/`Rt::Memory` interface — and the converted library cannot call back into arbitrary host Ruby (a guest function pointer cannot be conjured for a host lambda; only declared imports can, per ADR-7's provider table).
 
 ## Decision
 

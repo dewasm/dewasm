@@ -8,7 +8,7 @@ Status: **Accepted, 2026-07-23.** Implemented in `runtime/ruby/units/wasi/` (`pa
 
 ## Context
 
-`Rt::WASI` (ADR-7) covered stdio, args/env, clock, and random, but every `path_*` call and filesystem-only `fd_*` call resolved to the ENOSYS stub — blocking the project's north star (running Rails on a pure-Ruby SQLite driver, which needs a real main-DB-plus-journal/WAL file lifecycle: create, read/write at arbitrary offsets, sync, delete, rename). Adding real file I/O means answering two questions the stdio-only design never had to: what a directory descriptor *is*, and how a guest-supplied path gets confined to a directory the embedder explicitly authorized (a WASI preopen), since ambient authority to the whole host filesystem is not acceptable even in a demo runtime.
+`Rt::WASI` (ADR-7) covered stdio, args/env, clock, and random, but every `path_*` call and filesystem-only `fd_*` call resolved to the ENOSYS stub — blocking the project's stated goal (running Rails on a pure-Ruby SQLite driver, which needs a real main-DB-plus-journal/WAL file lifecycle: create, read/write at arbitrary offsets, sync, delete, rename). Adding real file I/O means answering two questions the stdio-only design never had to: what a directory descriptor *is*, and how a guest-supplied path gets confined to a directory the embedder explicitly authorized (a WASI preopen), since ambient authority to the whole host filesystem is not acceptable even in a demo runtime.
 
 ## Decision
 

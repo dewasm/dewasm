@@ -22,5 +22,5 @@ Reserving the crates.io name with an early publish is recommended at release tim
 ## Consequences
 
 - Positive: shorter name, free on crates.io, single flag-day commit while there are no external users.
-- Negative: one wide, though purely mechanical, diff; historical ADR prose refers to the old name until the rename commit sweeps it (superseded ADRs keep reading coherently — same project).
+- Negative: one wide, though purely mechanical, diff; historical ADR prose refers to the old name until the rename commit runs it (superseded ADRs keep reading coherently — same project).
 - The rename commit must contain no behavior changes so it reviews as a pure diff of names.

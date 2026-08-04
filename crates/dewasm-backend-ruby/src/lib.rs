@@ -184,7 +184,7 @@ impl Backend for RubyBackend {
         "rb"
     }
 
-    // The flagship backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits ledger (ADR-16).
+    // The Ruby backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits list (ADR-16).
     fn has_wasi_p1(&self, name: &str) -> bool {
         bundler().has_unit(&format!("wasi/{name}"))
     }

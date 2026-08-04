@@ -1,6 +1,6 @@
 # ADR-55 — Perl Backend Lowering Conventions
 
-Status: **Accepted, 2026-08-01.** First milestone (spec-harness green, issue #68) implemented in `crates/dewasm-backend-perl/src/lib.rs` + `runtime/perl/units/` (the full-testsuite sweep passes with the same `import-limits`/`linking` ledger as Python's). Numeric conventions are [ADR-2](2-numeric-semantics.md)'s; this ADR covers where Perl forced (or spared) a different shape from Ruby ([ADR-4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([ADR-28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [ADR-15](15-tests-fail-not-skip.md), and `find_perl` gates at >= 5.26 — the features used floor out at POSIX C99 math, 5.22, plus margin). WASI preview 1 is follow-up work (issue #69).
+Status: **Accepted, 2026-08-01.** First milestone (spec-harness green, issue #68) implemented in `crates/dewasm-backend-perl/src/lib.rs` + `runtime/perl/units/` (the full-testsuite run passes with the same `import-limits`/`linking` list as Python's). Numeric conventions are [ADR-2](2-numeric-semantics.md)'s; this ADR covers where Perl forced (or spared) a different shape from Ruby ([ADR-4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([ADR-28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [ADR-15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26 — the features used floor out at POSIX C99 math, 5.22, plus margin). WASI preview 1 is follow-up work (issue #69).
 
 ## Context
 
@@ -32,6 +32,6 @@ On control flow Perl is *stronger* than Ruby/Python: `last LABEL`/`next LABEL` e
 
 ## Consequences
 
-- Positive: the full spec testsuite sweep is green (257 files; ledger identical in shape to Python's `import-limits`/`linking` entries), with the branch lowering the simplest of any dewasm backend — no pre-pass, no epilogues, no guards. The whole-cache convert suite passes ([ADR-54](54-apps-convert-suite.md)).
+- Positive: the full spec testsuite run is green (257 files; list identical in shape to Python's `import-limits`/`linking` entries), with the branch lowering the simplest of any dewasm backend — no pre-pass, no epilogues, no guards. The whole-cache convert suite passes ([ADR-54](54-apps-convert-suite.md)).
 - Negative: every f64 add/sub/mul is a sub call plus a `pack` round-trip, and every call pays the depth-counter `local`; Perl output will be slower than Ruby's on hot float/call paths. `$Rt::LIMIT` bounds legitimate deep recursion (raisable by the embedder).
 - Carry-over: WASI preview 1 (`runtime/perl/units/wasi/`, the e2e/wasi_testsuite suites) is issue #69; `check_import_kind` shares Python's `import-limits` gap (kind checked, finer wasm type not).

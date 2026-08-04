@@ -114,7 +114,7 @@ impl Feature {
         }
     }
 
-    /// Validator feature bits that this proposal gates, for attributing validation failures. `None` for capabilities that validate fine under the base feature set and are rejected during IR building.
+    /// Validator feature bits that this proposal controls, for attributing validation failures. `None` for capabilities that validate fine under the base feature set and are rejected during IR building.
     pub fn validator_bits(self) -> Option<WasmFeatures> {
         Some(match self {
             Feature::FunctionReferences => WasmFeatures::FUNCTION_REFERENCES,

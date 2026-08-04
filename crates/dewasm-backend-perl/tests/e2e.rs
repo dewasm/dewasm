@@ -1,4 +1,4 @@
-//! Perl end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Perl backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Perl covers full WASI preview 1 incl. the filesystem (ADR-55/issue #69), so it wires every WASI kind, the slow-tier `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
+//! Perl end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Perl backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Perl covers full WASI preview 1 incl. the filesystem (ADR-55/issue #69), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
 
 use std::path::PathBuf;
 
@@ -568,7 +568,7 @@ dewasm_test_helper::qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
-// Ultra tier (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib (ADR-61), so it inherits the tier.
+// Ultra-slow category (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib (ADR-61), so it inherits the category.
 dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Perl);
@@ -579,10 +579,10 @@ dewasm_test_helper::sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
 dewasm_test_helper::zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
-// Ultra tier (ADR-48): measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at the slow tier.
+// Ultra-slow category (ADR-48): measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at `slow`.
 dewasm_test_helper::exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
-// Slow tier like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
+// Slow category like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
 dewasm_test_helper::doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
 

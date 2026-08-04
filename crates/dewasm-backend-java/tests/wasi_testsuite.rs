@@ -31,7 +31,7 @@ const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
     ),
 ];
 
-/// Host-scoped failures on a Linux host: the unit passes ns-precision FileTime to `BasicFileAttributeView.setTimes` with `NOFOLLOW_LINKS`, but the Linux JDK routes the NOFOLLOW case through µs-precision `lutimes`, so the suite's ns `mtim` round-trip is truncated and fails; macOS preserves ns. Symmetric to the Go backend's ledgered lutimes gap (ADR-40).
+/// Host-scoped failures on a Linux host: the unit passes ns-precision FileTime to `BasicFileAttributeView.setTimes` with `NOFOLLOW_LINKS`, but the Linux JDK routes the NOFOLLOW case through µs-precision `lutimes`, so the suite's ns `mtim` round-trip is truncated and fails; macOS preserves ns. Symmetric to the Go backend's listed lutimes gap (ADR-40).
 const WASI_TESTSUITE_EXPECTED_FAILURES_LINUX: &[(&str, &str)] = &[(
     "rust/symlink_filestat",
     "path_filestat_set_times: Linux JDK sets NOFOLLOW symlink times via microsecond lutimes, truncating ns",

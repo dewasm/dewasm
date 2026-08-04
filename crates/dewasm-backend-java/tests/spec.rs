@@ -27,7 +27,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default (the non-ignored trials). Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so the default gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps every file.
+/// Files `cargo test` runs by default (the non-ignored trials). Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so the default test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs every file.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",

@@ -23,7 +23,7 @@ These remove the wasm engine like dewasm does, but emit **bytecode for one VM**,
 | --- | --- | --- |
 | [asmble](https://github.com/cretz/asmble) | JVM bytecode | Archived. |
 | [Chicory build-time compiler](https://chicory.dev/docs/usage/build-time-compiler/) | JVM bytecode | Active; part of the pure-Java Chicory runtime. |
-| [wasm2cil](https://github.com/ericsink/wasm2cil) | .NET CIL assemblies | WASI support; work-in-progress, but notably ran SQLite and a raytracer on the CLR — prior art for "SQLite on a managed runtime via wasm", which dewasm pursues at the source level on Ruby (README north-star). Also why the C# backend ([ADR-10](adr/10-csharp-target.md)) still has an open niche: CIL is not C# source. |
+| [wasm2cil](https://github.com/ericsink/wasm2cil) | .NET CIL assemblies | WASI support; work-in-progress, but notably ran SQLite and a raytracer on the CLR — prior art for "SQLite on a managed runtime via wasm", which dewasm pursues at the source level on Ruby (the README's stated goal). Also why the C# backend ([ADR-10](adr/10-csharp-target.md)) still has an open niche: CIL is not C# source. |
 
 Bytecode output is invisible to the target ecosystem's humans and tooling: it cannot be read, reviewed, patched, stepped through as ordinary code, or vendored into a codebase as a plain file — and it only exists where the VM has a bytecode story at all (there is none for Bash, and none for shipping a plain `.rb`/`.py` file).
 
@@ -35,7 +35,7 @@ wasmtime, wasmer, wazero, wasm3, Chicory's interpreter, and browser engines all 
 
 1. **One IR, many targets** ([ADR-0](adr/0-foundation.md), [ADR-1](adr/1-ir-design.md)). Every translator above is single-target. Here, adding a language is a lowering table plus runtime units plus turning the shared spec harness green ([ADR-3](adr/3-testing-strategy.md)) — the semantics knowledge (numerics, NaN bit-exactness, trap points) is paid for once ([ADR-2](adr/2-numeric-semantics.md)).
 2. **Source output, deliberately.** Readable, reviewable, debuggable, vendorable as a file; no build toolchain or VM contract at the run site.
-3. **Targets that cannot run wasm any other way.** The flagship is Bash ([ADR-5](adr/5-bash-softfloat.md)): C/Rust tools running where the only dependency is a shell.
+3. **Targets that cannot run wasm any other way.** The defining example is Bash ([ADR-5](adr/5-bash-softfloat.md)): C/Rust tools running where the only dependency is a shell.
 4. **Deployment-grade output, not demo output.** Minimal runtime bundling per module and collision-free coexistence of generated artifacts ([ADR-6](adr/6-runtime-units.md)); a library mode with import providers and a default WASI fallback ([ADR-7](adr/7-import-providers.md)).
 5. **Declared, enforced fidelity.** The official testsuite runs on the real target interpreters, and every skipped test must be attributable to a feature declared unsupported in the generated [support matrix](support.md) ([ADR-8](adr/8-latest-testsuite-support-matrix.md)).
 

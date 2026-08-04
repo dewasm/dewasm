@@ -45,7 +45,7 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     }
     java.nio.file.Path base = dir.hostPath;
     java.nio.file.Path joined = java.nio.file.Paths.get(base.toString() + "/" + rel).normalize();
-    // Lexical containment gate: enough ".." components can normalize to a path
+    // Lexical containment check: enough ".." components can normalize to a path
     // above base even though every prefix exists, so reject it here (NOTCAPABLE)
     // before the filesystem is consulted — otherwise a nonexistent escaped
     // target would surface as NOENT rather than the capability error the guest

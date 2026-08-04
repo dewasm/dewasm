@@ -208,7 +208,7 @@ private static boolean isStdio(Object entry) {
 
 // True when fd carries a rights meta that does not grant `need`. An fd with no
 // meta (the inherited stdio streams) is treated as fully capable, so this only
-// gates the path_open'd/preopen fds the rights model actually tracks (ADR-40).
+// restricts only the path_open'd/preopen fds the rights model actually tracks (ADR-40).
 boolean lacksRight(int fd, long need) {
     FdMeta m = meta.get(fd);
     return m != null && (m.base & need) == 0;

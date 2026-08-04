@@ -101,13 +101,13 @@ macro_rules! wasi_testsuite_suite {
     };
 }
 
-/// Internal: attach a two-tier `#[ignore]` gate to a generated `#[test]` item (ADR-48). The per-case app macros below delegate here so a callsite can pick the tier without duplicating the gate. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::slow_tier_test!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
+/// Internal: wrap a generated `#[test]` item in the ADR-48 speed-category `#[ignore]` attribute. The per-case app macros below delegate here so a callsite can pick the category without duplicating the cfg_attr. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::test_speed!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
 ///
-/// * `slow` — gated on the backend crate's `slow_test` feature (CI's main sweep tier). This is the default for every slow-case macro.
-/// * `ultra` — gated on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
+/// * `slow` — conditional on the backend crate's `slow_test` feature (CI's main run category). This is the default for every slow-case macro.
+/// * `ultra` — conditional on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! slow_tier_test {
+macro_rules! test_speed {
     (slow, $item:item) => {
         #[cfg_attr(
             not(feature = "slow_test"),
@@ -249,7 +249,7 @@ macro_rules! wasi_root_containment_e2e {
     };
 }
 
-/// Per-case app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test` or `cargo test -- --include-ignored`). A callsite may pass a trailing tier token (`slow`, the default, or `ultra`); see [`slow_tier_test!`] (ADR-48).
+/// Per-case app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test` or `cargo test -- --include-ignored`). A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`] (ADR-48).
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -273,14 +273,14 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra tier ([`slow_tier_test!`], ADR-48).
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (ADR-27 revision) — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra-slow category ([`test_speed!`], ADR-48).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
         $crate::qjs_eval_e2e!($lang, slow);
     };
-    ($lang:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn qjs_eval() {
                 $crate::run_slow_app_case(&$lang, &$crate::QJS_EVAL);
@@ -289,14 +289,14 @@ macro_rules! qjs_eval_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
         $crate::sqlite3_shell_e2e!($lang, slow);
     };
-    ($lang:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn sqlite3_shell() {
                 $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
@@ -305,14 +305,14 @@ macro_rules! sqlite3_shell_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case — the wasi-vfs-packed CRuby (ADR-61), a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case — the wasi-vfs-packed CRuby (ADR-61), a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
 #[macro_export]
 macro_rules! cruby_packed_hello_e2e {
     ($lang:expr) => {
         $crate::cruby_packed_hello_e2e!($lang, slow);
     };
-    ($lang:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn cruby_packed_hello() {
                 $crate::run_slow_app_case(&$lang, &$crate::CRUBY_PACKED_HELLO);
@@ -332,14 +332,14 @@ macro_rules! gzip_e2e {
     };
 }
 
-/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime snapshot (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+/// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime snapshot (Fix 4). Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
         $crate::qjs_repl_pty_e2e!($lang, slow);
     };
-    ($lang:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn qjs_repl_pty() {
                 $crate::run_qjs_repl_pty(&$lang);
@@ -348,7 +348,7 @@ macro_rules! qjs_repl_pty_e2e {
     };
 }
 
-/// Per-case filesystem-app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing tier token after `$glue` promotes a case to the ultra tier ([`slow_tier_test!`]).
+/// Per-case filesystem-app macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills). A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing speed token after `$glue` promotes a case to the ultra-slow category ([`test_speed!`]).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
@@ -356,8 +356,8 @@ macro_rules! qjs_file_io_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::qjs_file_io_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn qjs_file_io() {
                 $crate::run_fs_app_case(&$lang, &$crate::QJS_FILE_IO, $glue);
@@ -372,8 +372,8 @@ macro_rules! sqlite3_shell_dbfile_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::sqlite3_shell_dbfile_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn sqlite3_shell_dbfile() {
                 $crate::run_fs_app_case(&$lang, &$crate::SQLITE3_SHELL_DBFILE, $glue);
@@ -388,8 +388,8 @@ macro_rules! rg_search_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::rg_search_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn rg_search() {
                 $crate::run_fs_app_case(&$lang, &$crate::RG_SEARCH, $glue);
@@ -404,8 +404,8 @@ macro_rules! cpython_hello_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::cpython_hello_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn cpython_hello() {
                 $crate::run_fs_app_case(&$lang, &$crate::CPYTHON_HELLO, $glue);
@@ -420,8 +420,8 @@ macro_rules! cruby_hello_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::cruby_hello_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn cruby_hello() {
                 $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
@@ -438,8 +438,8 @@ macro_rules! libsqlite3_c_api_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::libsqlite3_c_api_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn libsqlite3_c_api() {
                 $crate::run_capi_case(&$lang, &$crate::LIBSQLITE3_C_API, $glue);
@@ -454,8 +454,8 @@ macro_rules! sqlite3_file_c_api_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::sqlite3_file_c_api_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn sqlite3_file_c_api() {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_FILE_C_API, $glue);
@@ -464,14 +464,14 @@ macro_rules! sqlite3_file_c_api_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the libpcap BPF-compile case [`PCAP_COMPILE`](crate::PCAP_COMPILE): drives `compile_filter` on "tcp port 80" and prints the serialized BPF program. Slow (a ~2 MB reactor artifact reconverted per run), so gated like the sqlite C-API cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the libpcap BPF-compile case [`PCAP_COMPILE`](crate::PCAP_COMPILE): drives `compile_filter` on "tcp port 80" and prints the serialized BPF program. Slow (a ~2 MB reactor artifact reconverted per run), so conditional like the sqlite C-API cases.
 #[macro_export]
 macro_rules! pcap_compile_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::pcap_compile_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn pcap_compile() {
                 $crate::run_capi_case(&$lang, &$crate::PCAP_COMPILE, $glue);
@@ -480,14 +480,14 @@ macro_rules! pcap_compile_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a fixed JSON snippet and prints the parse tree's S-expression. Slow (a ~1.5 MB reactor artifact reconverted per run), so gated like the sqlite C-API cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the tree-sitter JSON-parse case [`TREESITTER_PARSE`](crate::TREESITTER_PARSE): drives `parse_source` on a fixed JSON snippet and prints the parse tree's S-expression. Slow (a ~1.5 MB reactor artifact reconverted per run), so conditional like the sqlite C-API cases.
 #[macro_export]
 macro_rules! treesitter_parse_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::treesitter_parse_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn treesitter_parse() {
                 $crate::run_capi_case(&$lang, &$crate::TREESITTER_PARSE, $glue);
@@ -496,14 +496,14 @@ macro_rules! treesitter_parse_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the zeroperl Perl-5.42 eval case [`ZEROPERL_EVAL`](crate::ZEROPERL_EVAL): drives the embedding C API to evaluate a Perl program and pins its stdout. Slow (a 25 MB reactor artifact reconverted to a ~120 MB / ~1M-line program per run), so gated like the other C-API cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the zeroperl Perl-5.42 eval case [`ZEROPERL_EVAL`](crate::ZEROPERL_EVAL): drives the embedding C API to evaluate a Perl program and pins its stdout. Slow (a 25 MB reactor artifact reconverted to a ~120 MB / ~1M-line program per run), so conditional like the other C-API cases.
 #[macro_export]
 macro_rules! zeroperl_eval_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::zeroperl_eval_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn zeroperl_eval() {
                 $crate::run_capi_case(&$lang, &$crate::ZEROPERL_EVAL, $glue);
@@ -512,14 +512,14 @@ macro_rules! zeroperl_eval_e2e {
     };
 }
 
-/// See [`libsqlite3_c_api_e2e!`]. Runs the ExifTool-on-zeroperl case [`EXIFTOOL_EXTRACT`](crate::EXIFTOOL_EXTRACT): drives the flattened `exiftool` CLI driver on `cache/zeroperl.wasm` through the embedding C API and pins the extracted EXIF tags. Slow (the same 25 MB reactor reconverted per run), so gated like the other C-API cases.
+/// See [`libsqlite3_c_api_e2e!`]. Runs the ExifTool-on-zeroperl case [`EXIFTOOL_EXTRACT`](crate::EXIFTOOL_EXTRACT): drives the flattened `exiftool` CLI driver on `cache/zeroperl.wasm` through the embedding C API and pins the extracted EXIF tags. Slow (the same 25 MB reactor reconverted per run), so conditional like the other C-API cases.
 #[macro_export]
 macro_rules! exiftool_extract_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::exiftool_extract_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn exiftool_extract() {
                 $crate::run_capi_case(&$lang, &$crate::EXIFTOOL_EXTRACT, $glue);
@@ -534,8 +534,8 @@ macro_rules! sqlite3_callback_binding_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::sqlite3_callback_binding_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn sqlite3_callback_binding() {
                 $crate::run_capi_case(&$lang, &$crate::SQLITE3_CALLBACK_BINDING, $glue);
@@ -544,14 +544,14 @@ macro_rules! sqlite3_callback_binding_e2e {
     };
 }
 
-/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/apps/snapshots/doom_frame.ppm`. The tier follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`slow_tier_test!`].
+/// The DOOM framebuffer-snapshot case (ADR-53): expands to `#[test] fn doom_frame()` driving the converted `doom.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate providing the ten imports, the self-advancing synthetic clock, and the P6-PPM framebuffer dump), then diffing stdout against `examples/apps/snapshots/doom_frame.ppm`. The speed follows the backend's convention for a comparably heavy execution case: `slow` by default (Ruby/Python/Go/Java, like the qjs/sqlite e2e), passed `ultra` for Bash (its run is minutes, like the bash qjs-REPL pty case, ADR-48). See [`test_speed!`].
 #[macro_export]
 macro_rules! doom_frame_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::doom_frame_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn doom_frame() {
                 $crate::run_doom_frame_case(&$lang, $glue);
@@ -560,14 +560,14 @@ macro_rules! doom_frame_e2e {
     };
 }
 
-/// The NES framebuffer-snapshot case (issue #114, mirroring [`doom_frame_e2e!`]/ADR-53): expands to `#[test] fn nes_frame()` driving the converted `nes.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate — or, where the host language cannot open a host file from *library-mode* glue without an import the generated module doesn't itself pull in (Go, ADR-29), a function computing an equivalent `String` at test time) that loads the pinned ROM, ticks the deterministic no-input contract, and dumps the frame as a P6 PPM, then diffing stdout against `examples/apps/snapshots/nes_frame.ppm`. Tiering mirrors [`doom_frame_e2e!`]: `slow` by default, passed `ultra` for Bash.
+/// The NES framebuffer-snapshot case (issue #114, mirroring [`doom_frame_e2e!`]/ADR-53): expands to `#[test] fn nes_frame()` driving the converted `nes.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate — or, where the host language cannot open a host file from *library-mode* glue without an import the generated module doesn't itself pull in (Go, ADR-29), a function computing an equivalent `String` at test time) that loads the pinned ROM, ticks the deterministic no-input contract, and dumps the frame as a P6 PPM, then diffing stdout against `examples/apps/snapshots/nes_frame.ppm`. Speed assignment mirrors [`doom_frame_e2e!`]: `slow` by default, passed `ultra` for Bash.
 #[macro_export]
 macro_rules! nes_frame_e2e {
     ($lang:expr, $glue:expr) => {
         $crate::nes_frame_e2e!($lang, $glue, slow);
     };
-    ($lang:expr, $glue:expr, $tier:tt) => {
-        $crate::slow_tier_test! { $tier,
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
             #[test]
             fn nes_frame() {
                 $crate::run_nes_frame_case(&$lang, $glue);

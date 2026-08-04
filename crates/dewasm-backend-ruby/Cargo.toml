@@ -13,7 +13,7 @@ workspace = true
 [features]
 # Opt-in: expands the slow per-case macros (dewasm-test-helper, ADR-27
 # revision) as active `#[test]`s instead of `#[ignore]`d ones, and runs the
-# full spec testsuite sweep — CI's main sweep tier. See docs/testing.md.
+# full spec testsuite — CI's main run. See docs/testing.md.
 slow_test = []
 
 [dependencies]

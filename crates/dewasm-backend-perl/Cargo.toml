@@ -13,9 +13,9 @@ workspace = true
 [features]
 # Opt-in: expands the slow per-case macros (dewasm-test-helper, ADR-27
 # revision) as active `#[test]`s instead of `#[ignore]`d ones, and runs the
-# full spec testsuite sweep — CI's main sweep tier. See docs/testing.md.
+# full spec testsuite — CI's main run. See docs/testing.md.
 slow_test = []
-# The ultra tier (ADR-48): cases measured at ~1 minute or more on a CI
+# The ultra-slow category (ADR-48): cases measured at ~1 minute or more on a CI
 # runner (the CRuby-hello run, ~57s locally), kept out of CI and run only
 # in local pre-release verification.
 ultra_slow_test = ["slow_test"]

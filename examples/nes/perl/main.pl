@@ -40,7 +40,7 @@ use constant DEFAULT_ROM => "$FindBin::Bin/../../apps/cache/alter_ego.nes";
 # this long after the last matching press/autorepeat before it's dropped
 # from the bitmask passed to setInput. See ../../doom/perl/main.pl for the
 # same heuristic under DOOM's edge-triggered import surface; here it just
-# gates membership in the level-triggered bitmask instead of synthesizing a
+# controls membership in the level-triggered bitmask instead of synthesizing a
 # release call.
 use constant KEY_HOLD_SECONDS => 0.4;
 

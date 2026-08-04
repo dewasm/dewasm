@@ -1,6 +1,6 @@
 //! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate, plus its WASI preview 1 import surface.
 //!
-//! This is the ADR-24 app audit gate: before an app is pinned as a conversion target, run this tool on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `docs/apps-audit.md`.
+//! This is the ADR-24 app audit test: before an app is pinned as a conversion target, run this tool on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `docs/apps-audit.md`.
 //!
 //! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than the crate's `Feature` enum, so it keeps naming proposals the converter itself no longer models.
 //!
@@ -245,7 +245,7 @@ fn main() -> ExitCode {
             }
         }
     }
-    // Nonzero when any binary needs out-of-scope features, so scripts can gate on the verdict; the human decision (defer vs. rethink) is recorded in docs/apps-audit.md.
+    // Nonzero when any binary needs out-of-scope features, so scripts can branch on the verdict; the human decision (defer vs. rethink) is recorded in docs/apps-audit.md.
     if all_clean {
         ExitCode::SUCCESS
     } else {

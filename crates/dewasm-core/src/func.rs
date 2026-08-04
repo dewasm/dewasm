@@ -1151,7 +1151,7 @@ fn un_traps(op: UnOp) -> bool {
     )
 }
 
-/// Attribute an untranslated operator to a feature. Operators gated by validator features never reach this point; what does reach it are the families our base validation accepts — an unclassified operator here is a dewasm bug and the spec harness treats it as such.
+/// Attribute an untranslated operator to a feature. Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts — an unclassified operator here is a dewasm bug and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[

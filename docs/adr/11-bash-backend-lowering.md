@@ -1,6 +1,6 @@
 # ADR-11 — Bash Backend Lowering Conventions (Integer Subset)
 
-Status: **Accepted, 2026-07-23.** Implemented in `crates/dewasm-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers the integer subset; WASI and standalone mode landed the same day under [ADR-12](12-bash-wasi.md), and the ADR-5 softfloat (conventions in [ADR-13](13-bash-softfloat-conventions.md)) later removed the float conversion-time gate this ADR originally imposed. Cross-module linking conventions (imported globals, the PROVIDERS provider protocol, status-135 link errors) are extended by [ADR-35](35-bash-cross-module-linking.md). Requires bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2 and is out of scope.
+Status: **Accepted, 2026-07-23.** Implemented in `crates/dewasm-backend-bash/src/lib.rs` + `runtime/bash/units/`. Covers the integer subset; WASI and standalone mode landed the same day under [ADR-12](12-bash-wasi.md), and the ADR-5 softfloat (conventions in [ADR-13](13-bash-softfloat-conventions.md)) later removed the float conversion-time rejection this ADR originally imposed. Cross-module linking conventions (imported globals, the PROVIDERS provider protocol, status-135 link errors) are extended by [ADR-35](35-bash-cross-module-linking.md). Requires bash >= 5 (namerefs, associative arrays); macOS system bash is 3.2 and is out of scope.
 
 ## Context
 
@@ -15,7 +15,7 @@ Bash arithmetic (`$(( ))`) is signed 64-bit only, `(( x = 0 ))` returns exit sta
 - **Linear memory is a sparse indexed array, one byte per element**, read as `__m[a]` inside arithmetic (unset elements are 0, so zero-init and `memory.grow` are free). Loads/stores are nameref units (`runtime/bash/units/mem/`); bounds checks compare against `pages * 65536`. Tables, globals, and data segments are plain per-prefix variables emitted inline; `call_indirect` checks the canonicalized type index (ADR-4's structural canonicalization, ported).
 - **One instance per generation-time prefix** (`m1_f0`, `m1_g0`, `m1_init`, `m1_invoke`, `m1_EXPORTS`); the spec harness passes a fresh prefix per module directive, which is how one script hosts many modules. Imports resolve from the caller's `IMPORTS` associative array (`[module.name]=function`); `RuntimeLinkage::Embedded` prepends the unit bundle, `Alias` emits nothing because bash names are global.
 
-Measured on the spec harness (ADR-3): the curated CI subset passes 1,455 assertions in ~1 s; the full-testsuite sweep passes 9,923 with only the Ruby ledger's five linking-attributed failure groups, in ~39 s (Ruby: ~13 s). The feared fork cost never materialized because the cascade design forks only for exhaustion checks.
+Measured on the spec harness (ADR-3): the curated CI subset passes 1,455 assertions in ~1 s; the full-testsuite run passes 9,923 with only the Ruby list's five linking-attributed failure groups, in ~39 s (Ruby: ~13 s). The feared fork cost never materialized because the cascade design forks only for exhaustion checks.
 
 ## Rejected alternatives
 

@@ -1,7 +1,7 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 func (w *WASI) wasi_path_create_directory(dirfd, pathPtr, pathLen uint32) uint32 {
     rel := string(w.memory.read_string(uint64(pathPtr), uint64(pathLen)))
-    // Strip a trailing slash before the resolver's directory gate: mkdir
+    // Strip a trailing slash before the resolver's directory check: mkdir
     // names a directory anyway, and EEXIST is wasmtime's answer for
     // mkdir("file/") where the hosts split (ADR-49).
     if trimmed := strings.TrimRight(rel, "/"); trimmed != "" {

@@ -293,7 +293,7 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: true,
         },
     },
-    // Per-fd rights enforcement (ADR-40). A fd narrowed by fd_fdstat_set_rights must refuse fd_pread/fd_pwrite (NOTCAPABLE, like fd_read/fd_write); a dirfd stripped of PATH_FILESTAT_SET_SIZE must refuse an O_TRUNC open without touching the file; and one stripped of PATH_OPEN must refuse any open. The fixture prints "<tag><errno>" per probe (76 = NOTCAPABLE), so the expected stdout pins every gate.
+    // Per-fd rights enforcement (ADR-40). A fd narrowed by fd_fdstat_set_rights must refuse fd_pread/fd_pwrite (NOTCAPABLE, like fd_read/fd_write); a dirfd stripped of PATH_FILESTAT_SET_SIZE must refuse an O_TRUNC open without touching the file; and one stripped of PATH_OPEN must refuse any open. The fixture prints "<tag><errno>" per probe (76 = NOTCAPABLE), so the expected stdout pins every probe.
     WasiCase {
         name: "fs_rights_notcapable",
         wat: "wasi_rights_notcapable.wat",

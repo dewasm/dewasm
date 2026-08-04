@@ -166,7 +166,7 @@ pub const CPYTHON_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
-/// CRuby 3.4 executing a one-liner (Phase 5b) — the "Ruby on Ruby" north-star demo — reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \ -e 'puts "hello from cruby #{6*7}"'
+/// CRuby 3.4 executing a one-liner (Phase 5b) — the "Ruby on Ruby" goal demo — reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \ -e 'puts "hello from cruby #{6*7}"'
 pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     name: "cruby_hello",
     wasm: "ruby",
@@ -303,7 +303,7 @@ fn drive_fs_app_case(
     (scratch, outputs)
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs its own opt-out.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
     for (run, output) in case.runs.iter().zip(&outputs) {

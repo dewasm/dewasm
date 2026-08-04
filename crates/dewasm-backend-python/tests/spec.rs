@@ -15,7 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby ledger (ADR-16): the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list (ADR-16): the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -24,7 +24,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default. Python executes wasm several times slower than Ruby — the full 257-file sweep takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file — so, like Bash (ADR-3 pre-accepts this), the gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps everything.
+/// Files `cargo test` runs by default. Python executes wasm several times slower than Ruby — the full 257-file run takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file — so, like Bash (ADR-3 pre-accepts this), the test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs everything.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
@@ -551,8 +551,8 @@ const POSTAMBLE: &str = r#"
 
 # The limit is a ceiling for the checks that legitimately recurse, not a budget:
 # with check_exhaust capping itself at _EXHAUST_RECURSION_LIMIT, the deepest
-# descent the whole 257-file sweep performs is that cap, and no other check comes
-# near it (the sweep still passes with this global limit lowered to the cap). The
+# descent the whole 257-file run performs is that cap, and no other check comes
+# near it (the run still passes with this global limit lowered to the cap). The
 # thread stack is sized for that descent: CPython <= 3.10 keeps a C frame per
 # Python frame and needs ~1 KiB each (20000 frames measured to fault below 24 MiB
 # and survive above it), 3.11+ moves them off the C stack entirely, so 64 MiB is

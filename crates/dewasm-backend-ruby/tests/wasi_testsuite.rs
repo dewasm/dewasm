@@ -8,7 +8,7 @@ use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)`. Two kinds remain, both attributed honestly: * declared out-of-scope syscalls (`sock_shutdown`; docs/support.md) — filling the gap later flips the entry to a hard failure, exactly ADR-8's contract; * environment variables the host interpreter itself injects (macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest legitimately observes, so count-exact `environ_*` assertions cannot hold even though the harness runs trials with a cleared environment (ADR-40).
 ///
-/// The former filesystem ledger (per-fd rights/fdflags, symlink/link/readlink, renumber, advise/allocate, set_times, path-resolution errno precision) is now implemented — see the `wasi/` runtime units and ADR-40.
+/// The former filesystem list (per-fd rights/fdflags, symlink/link/readlink, renumber, advise/allocate, set_times, path-resolution errno precision) is now implemented — see the `wasi/` runtime units and ADR-40.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),

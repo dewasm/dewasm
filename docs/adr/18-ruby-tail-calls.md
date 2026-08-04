@@ -25,8 +25,8 @@ A trampoline, shaped so that no per-hop stack frame survives:
 
 ## Consequences
 
-- Positive: `return_call.wast` (33) + `return_call_indirect.wast` (82 total with the former) pass in ~2 s including the 10⁶-deep chains; full Ruby sweep pass 29,516 → 29,598, fail stays 40; Bash unchanged (gated by `check_module_support`, `tail-call` skips re-appear in its histogram unchanged).
-- Positive: `stmts_use_tail_calls` lives in `dewasm-backend` because gating needs it anyway — a future backend implementing tail calls (C#'s real `tail.` prefix, Java trampolines) reuses the same tail-caller analysis.
+- Positive: `return_call.wast` (33) + `return_call_indirect.wast` (82 total with the former) pass in ~2 s including the 10⁶-deep chains; full Ruby run pass 29,516 → 29,598, fail stays 40; Bash unchanged (controlled by `check_module_support`, `tail-call` skips re-appear in its histogram unchanged).
+- Positive: `stmts_use_tail_calls` lives in `dewasm-backend` because conditioning needs it anyway — a future backend implementing tail calls (C#'s real `tail.` prefix, Java trampolines) reuses the same tail-caller analysis.
 - Negative / carry-over: tail-calling functions allocate one `Rt::TailCall` per hop, and every tail-caller pays the extra wrapper frame even when called normally. A host externref that is itself an `Rt::TailCall` instance would confuse a trampoline only if a wasm function could *return* it from a body — it cannot (bodies only produce thunks at `return_call` sites), so this is theoretical. `return_call_ref` stays rejected under `function-references`.
 
 See also: [ADR-17](17-ruby-reference-types.md) (the table slot format the third element extends), [ADR-4](4-ruby-backend-lowering.md) (lowering conventions), [ADR-16](16-ruby-wasm1-completion.md) (`check_module_support`).

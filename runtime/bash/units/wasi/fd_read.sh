@@ -71,7 +71,7 @@ wasi_fd_read() {
         __b=${__push%% *}
         if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
       elif (( __tty )); then
-        # Short-read gating as below: only the first byte of the call blocks.
+        # Short-read handling as below: only the first byte of the call blocks.
         # Once the buffered line is drained, return what was delivered rather
         # than blocking on the next line.
         if (( __total > 0 )); then
@@ -98,7 +98,7 @@ wasi_fd_read() {
         __b=${__push%% *}
         if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
       else
-        # Short-read gating: only the first byte of the call blocks; each
+        # Short-read handling: only the first byte of the call blocks; each
         # further byte is taken only while input is already available. `read
         # -t 0` reports readiness without consuming (success iff a byte is
         # ready), giving the readpartial short-read semantics wasmtime/Ruby
