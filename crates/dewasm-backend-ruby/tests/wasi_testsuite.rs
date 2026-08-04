@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_ruby::RubyBackend;
-use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBackend};
+use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)`. Two kinds remain, both attributed honestly: * declared out-of-scope syscalls (`sock_shutdown`; docs/support.md) — filling the gap later flips the entry to a hard failure, exactly ADR-8's contract; * environment variables the host interpreter itself injects (macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest legitimately observes, so count-exact `environ_*` assertions cannot hold even though the harness runs trials with a cleared environment (ADR-40).
 ///
@@ -47,7 +47,7 @@ impl BackendUnderTest for RubyWasi {
     }
 }
 
-impl WasiTestsuiteBackend for RubyWasi {
+impl dewasm_test_helper::WasiTestsuiteBackend for RubyWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
@@ -57,4 +57,4 @@ impl WasiTestsuiteBackend for RubyWasi {
     }
 }
 
-wasi_testsuite_suite!(RubyWasi);
+dewasm_test_helper::wasi_testsuite_suite!(RubyWasi);
