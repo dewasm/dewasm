@@ -943,7 +943,7 @@ impl<'a> Gen<'a> {
         match nstates {
             None => {
                 let mut guarded = false;
-                self.emit_seq(w, &func.body, &mut guarded);
+                self.emit_seq(w, &func.body, &mut guarded, true);
             }
             Some(n) => {
                 // Each state is rendered into its own writer, then stitched under its arm of the dispatch. Every state body ends in a transition, a `return` or a trap (see `flat_seq`), so no arm falls through to the next round with the same state.
@@ -990,7 +990,7 @@ impl<'a> Gen<'a> {
             };
             if run < i {
                 let mut guarded = false;
-                self.emit_seq(&mut st[cur], &stmts[run..i], &mut guarded);
+                self.emit_seq(&mut st[cur], &stmts[run..i], &mut guarded, false);
             }
             run = i + 1;
             match stmt {
@@ -1042,7 +1042,7 @@ impl<'a> Gen<'a> {
         }
         if run < stmts.len() {
             let mut guarded = false;
-            self.emit_seq(&mut st[cur], &stmts[run..], &mut guarded);
+            self.emit_seq(&mut st[cur], &stmts[run..], &mut guarded, false);
         }
         cur
     }
@@ -1051,17 +1051,31 @@ impl<'a> Gen<'a> {
     ///
     /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement — nested constructs included — is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
     ///
+    /// `tail` says nothing runs after this sequence before the function falls off: no following statement in any enclosing sequence, and no enclosing loop back-edge (the flat dispatch passes `false` throughout). In that position a landing marker (`if _br == N: _br = 0`) writes a register nothing will read again, so it is skipped; a stale nonzero `_br` at fall-off is unobservable.
+    ///
     /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
-    fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded: &mut bool) -> BTreeSet<u32> {
+    fn emit_seq(
+        &self,
+        w: &mut CodeWriter,
+        stmts: &[Stmt],
+        guarded: &mut bool,
+        tail: bool,
+    ) -> BTreeSet<u32> {
         let mut free = BTreeSet::new();
         // Whether an `if _br == 0:` region suite is currently open.
         let mut open = false;
-        for stmt in stmts {
+        // The last element that emits code: the one whose marker `tail` can elide.
+        let last_emit = stmts.iter().rposition(stmt_emits);
+        let mut i = 0;
+        while i < stmts.len() {
+            let stmt = &stmts[i];
             // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe — an open suite already holds a real statement, and nothing here can touch `_br` (ADR-38).
             if !stmt_emits(stmt) {
                 self.simple_stmt_or_skip(w, stmt);
+                i += 1;
                 continue;
             }
+            let stmt_tail = tail && last_emit == Some(i);
             if *guarded && !open {
                 w.line("if _br == 0:");
                 w.indent();
@@ -1071,8 +1085,8 @@ impl<'a> Gen<'a> {
             let may_set = match stmt {
                 Stmt::Block { label, body } => {
                     let mut inner_guarded = false;
-                    let mut inner = self.emit_seq(w, body, &mut inner_guarded);
-                    if label.referenced {
+                    let mut inner = self.emit_seq(w, body, &mut inner_guarded, stmt_tail);
+                    if label.referenced && !stmt_tail {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
@@ -1088,7 +1102,8 @@ impl<'a> Gen<'a> {
                         w.line("while True:");
                         w.indent();
                         let mut inner_guarded = false;
-                        let mut inner = self.emit_seq(w, body, &mut inner_guarded);
+                        // Never tail: the back-edge rereads `_br` next iteration.
+                        let mut inner = self.emit_seq(w, body, &mut inner_guarded, false);
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
@@ -1103,7 +1118,7 @@ impl<'a> Gen<'a> {
                     } else {
                         // No br targets this loop, so it never repeats: the body is spliced inline. It opens its own regions, so it starts unguarded like any construct body.
                         let mut inner_guarded = false;
-                        let mut inner = self.emit_seq(w, body, &mut inner_guarded);
+                        let mut inner = self.emit_seq(w, body, &mut inner_guarded, stmt_tail);
                         inner.remove(&label.id);
                         let escapes = !inner.is_empty();
                         free.extend(inner);
@@ -1116,8 +1131,8 @@ impl<'a> Gen<'a> {
                     then,
                     els,
                 } => {
-                    let mut inner = self.emit_if(w, cond, then, els);
-                    if label.referenced {
+                    let mut inner = self.emit_if(w, cond, then, els, stmt_tail);
+                    if label.referenced && !stmt_tail {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
                         w.line("_br = 0");
@@ -1130,7 +1145,12 @@ impl<'a> Gen<'a> {
                 }
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
                 _ => {
-                    self.simple_stmt(w, stmt);
+                    if let Some(line) = self.fused_call_line(stmt, stmts.get(i + 1)) {
+                        w.line(line);
+                        i += 1; // The consumer is emitted with its producer.
+                    } else {
+                        self.simple_stmt(w, stmt);
+                    }
                     self.collect_leaf_free_targets(stmt, &mut free)
                 }
             };
@@ -1141,11 +1161,64 @@ impl<'a> Gen<'a> {
                     open = false;
                 }
             }
+            i += 1;
         }
         if open {
             w.dedent();
         }
         free
+    }
+
+    /// Fuse a call-family producer with the adjacent statement that consumes its whole result: `s0 = self._f1(...)` + `l2 = s0` becomes `l2 = self._f1(...)`. Sound because temps are stack slots: a write at depth `d` immediately followed by a statement whose entire right-hand side is that slot is that value's one and only pop — a value with more readers (a block result, a branch operand) is never consumed adjacently in full. Only call-shaped producers are fused; pure-expression producers are already folded into their consumers by the IR builder.
+    fn fused_call_line(&self, producer: &Stmt, consumer: Option<&Stmt>) -> Option<String> {
+        let (produced, call) = match producer {
+            Stmt::Call {
+                func,
+                args,
+                results,
+            } => {
+                let &[t] = &results[..] else { return None };
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                (t, self.call_string(*func, &args))
+            }
+            Stmt::CallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+                results,
+            } => {
+                let &[t] = &results[..] else { return None };
+                self.use_unit("table/call");
+                let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
+                call_args.extend(args.iter().map(|a| self.expr(a)));
+                (
+                    t,
+                    format!("self.t{table_index}.call({})", call_args.join(", ")),
+                )
+            }
+            Stmt::MemoryGrow { dst, delta } => {
+                self.use_unit("memory/grow");
+                (*dst, format!("self.memory.grow({})", self.expr(delta)))
+            }
+            _ => return None,
+        };
+        let target = match consumer? {
+            Stmt::Assign {
+                dst,
+                expr: Expr::Temp(t),
+            } if t.depth == produced.depth => temp(*dst),
+            Stmt::LocalSet {
+                idx,
+                expr: Expr::Temp(t),
+            } if t.depth == produced.depth => format!("l{idx}"),
+            Stmt::GlobalSet {
+                idx,
+                expr: Expr::Temp(t),
+            } if t.depth == produced.depth => format!("self.g{idx}.value"),
+            _ => return None,
+        };
+        Some(format!("{target} = {call}"))
     }
 
     /// Emit the statements `stmt_emits` deems code-free: a comment renders, an empty construct vanishes (its all-comment body still renders, at the current level).
@@ -1161,13 +1234,14 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
+    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller). `tail` propagates into both arms: when the `if` is the function's last code and its own marker is elided, an arm's trailing marker is equally unread.
     fn emit_if(
         &self,
         w: &mut CodeWriter,
         cond: &Expr,
         then: &[Stmt],
         els: &[Stmt],
+        tail: bool,
     ) -> BTreeSet<u32> {
         // A pending `_br` never reaches here: `emit_seq`'s region guard already established `_br == 0` for every statement it emits.
         w.line(format!("if {}:", self.cond(cond)));
@@ -1177,14 +1251,14 @@ impl<'a> Gen<'a> {
             w.line("pass");
         } else {
             let mut it = false;
-            free = self.emit_seq(w, then, &mut it);
+            free = self.emit_seq(w, then, &mut it, tail);
         }
         w.dedent();
         if !els.is_empty() {
             w.line("else:");
             w.indent();
             let mut ie = false;
-            free.extend(self.emit_seq(w, els, &mut ie));
+            free.extend(self.emit_seq(w, els, &mut ie, tail));
             w.dedent();
         }
         free
