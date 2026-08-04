@@ -207,7 +207,30 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3, libpcap, tree-sitter): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+/// The interpreter stdlib trees mount straight from the app cache ({cache}), never copied.
+const JAVA_CPYTHON_HELLO_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Cpython inst = new Cpython(null, new String[]{"python", "-c", "print('hello from cpython', 6 * 7)"}, new String[]{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, java.util.Map.of("/lib", "{cache}/cpython-lib/lib"));
+        try {
+            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Rt.Exit e) {
+        }
+    }
+}
+"#;
+
+const JAVA_CRUBY_HELLO_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Cruby inst = new Cruby(null, new String[]{"ruby", "-e", "puts \"hello from cruby #{6*7}\""}, null, java.util.Map.of("/usr", "{cache}/ruby-lib/usr"));
+        try {
+            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Rt.Exit e) {
+        }
+    }
+}
+"#;
+
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
@@ -411,92 +434,6 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
 }
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`. The allocator here is plain `malloc`/`free` (libpcap is not sqlite), and `free` returns void, so it goes through `Rt.Fn.invoke` directly rather than the int-returning `call` helper.
-const JAVA_PCAP_COMPILE: &str = r#"public class Main {
-    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
-    static Libpcap inst;
-
-    static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
-    }
-
-    static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
-    }
-
-    static int cstr(String s) {
-        byte[] u = s.getBytes(UTF_8);
-        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
-        int p = malloc(c.length);
-        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
-        return p;
-    }
-
-    public static void main(String[] a) throws Exception {
-        inst = new Libpcap(null, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
-
-        int prog = call("compile_filter", cstr("tcp port 80"), 1, 65535);
-        if (prog == 0) throw new RuntimeException("compile failed");
-        byte[] d = inst.memory.d;
-        int n = inst.memory.i32_load(Integer.toUnsignedLong(prog));
-        for (int i = 0; i < n; i++) {
-            int base = prog + 4 + i * 8;
-            int code = (d[base] & 0xff) | ((d[base + 1] & 0xff) << 8);
-            int jt = d[base + 2] & 0xff;
-            int jf = d[base + 3] & 0xff;
-            int k = inst.memory.i32_load(Integer.toUnsignedLong(base + 4));
-            System.out.println(code + " " + jt + " " + jf + " " + k);
-        }
-        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{prog});
-        System.out.println("BPF-OK");
-    }
-}
-"#;
-
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
-const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
-    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
-    static Treesitter inst;
-
-    static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
-    }
-
-    static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
-    }
-
-    static int cstr(String s) {
-        byte[] u = s.getBytes(UTF_8);
-        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
-        int p = malloc(c.length);
-        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
-        return p;
-    }
-
-    static String readCstr(int ptr) {
-        if (ptr == 0) return null;
-        byte[] d = inst.memory.d;
-        int end = ptr;
-        while (d[end] != 0) end++;
-        return new String(inst.memory.read_string(Integer.toUnsignedLong(ptr), end - ptr), UTF_8);
-    }
-
-    public static void main(String[] a) throws Exception {
-        inst = new Treesitter(null, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
-
-        String src = "{\"key\": [1, true, null]}";
-        int r = call("parse_source", cstr(src), src.getBytes(UTF_8).length);
-        if (r == 0) throw new RuntimeException("parse failed");
-        System.out.println(readCstr(r));
-        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{r});
-        System.out.println("TS-OK");
-    }
-}
-"#;
-
 /// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
 /// zero-returning `env.call_host_function` import stub (only invoked when the
 /// guest registers host callbacks — this program registers none) and a
@@ -581,6 +518,92 @@ const JAVA_EXIFTOOL: &str = r#"public class Main {
         inst.memory.init(Integer.toUnsignedLong(ptr), c, 0, c.length);
         call("zeroperl_eval", ptr, 0, 0, 0);
         call("zeroperl_flush");
+    }
+}
+"#;
+
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`. The allocator here is plain `malloc`/`free` (libpcap is not sqlite), and `free` returns void, so it goes through `Rt.Fn.invoke` directly rather than the int-returning `call` helper.
+const JAVA_PCAP_COMPILE: &str = r#"public class Main {
+    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+    static Libpcap inst;
+
+    static int malloc(int n) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+    }
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    static int cstr(String s) {
+        byte[] u = s.getBytes(UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int p = malloc(c.length);
+        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
+        return p;
+    }
+
+    public static void main(String[] a) throws Exception {
+        inst = new Libpcap(null, null, null, null);
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+
+        int prog = call("compile_filter", cstr("tcp port 80"), 1, 65535);
+        if (prog == 0) throw new RuntimeException("compile failed");
+        byte[] d = inst.memory.d;
+        int n = inst.memory.i32_load(Integer.toUnsignedLong(prog));
+        for (int i = 0; i < n; i++) {
+            int base = prog + 4 + i * 8;
+            int code = (d[base] & 0xff) | ((d[base + 1] & 0xff) << 8);
+            int jt = d[base + 2] & 0xff;
+            int jf = d[base + 3] & 0xff;
+            int k = inst.memory.i32_load(Integer.toUnsignedLong(base + 4));
+            System.out.println(code + " " + jt + " " + jf + " " + k);
+        }
+        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{prog});
+        System.out.println("BPF-OK");
+    }
+}
+"#;
+
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
+    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+    static Treesitter inst;
+
+    static int malloc(int n) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+    }
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    static int cstr(String s) {
+        byte[] u = s.getBytes(UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int p = malloc(c.length);
+        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
+        return p;
+    }
+
+    static String readCstr(int ptr) {
+        if (ptr == 0) return null;
+        byte[] d = inst.memory.d;
+        int end = ptr;
+        while (d[end] != 0) end++;
+        return new String(inst.memory.read_string(Integer.toUnsignedLong(ptr), end - ptr), UTF_8);
+    }
+
+    public static void main(String[] a) throws Exception {
+        inst = new Treesitter(null, null, null, null);
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+
+        String src = "{\"key\": [1, true, null]}";
+        int r = call("parse_source", cstr(src), src.getBytes(UTF_8).length);
+        if (r == 0) throw new RuntimeException("parse failed");
+        System.out.println(readCstr(r));
+        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{r});
+        System.out.println("TS-OK");
     }
 }
 "#;
@@ -710,17 +733,20 @@ dewasm_test_helper::gzip_e2e!(Java);
 dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit shared by the wasi-vfs-packed variant (ADR-61), whose element segments are the same interpreter's (docs/apps-audit.md).
+// The three interpreter giants (issue #142). Each was excluded until the ADR-30 splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, which is one statement and so had no boundary to split at: `javac`: *code too large*) and to spread the funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool: *too many constants*). Ultra-slow (ADR-48): the 30-49 MB modules become 76-229 MB of Java, and each case `javac`s its own `Main` from cold — measured 42 s (CPython), 132 s (CRuby) and 137 s (packed CRuby) end to end on an M-series laptop, past the ~1-min CI-runner bar, at up to ~8 GB of `javac` heap.
+dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
+dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
+dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);
-dewasm_test_helper::treesitter_parse_e2e!(Java, JAVA_TREESITTER_PARSE);
 // The zeroperl reactor cases (issue #139) are Java's first `ultra` ones (ADR-48), hence the crate's new `ultra_slow_test` feature. The 25 MB reactor becomes ~99 MB of Java, and each case `javac`s its own `Main` from cold: measured 43 s (zeroperl_eval) and 51 s (exiftool_extract) on an M-series laptop, so both sit at or past the ~1-min CI-runner bar, and they would compile concurrently in this one test binary. They also drove the ADR-30 function-partition threshold down to 2000 (`FN_PARTITION_THRESHOLD`): zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool (`javac`: *too many constants*).
 dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);
+dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Java, JAVA_TREESITTER_PARSE);
 
 dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
