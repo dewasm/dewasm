@@ -610,8 +610,10 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick [`NES_FRAMES`] times with no input, dump the
-/// framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// `allocRom`'s buffer, tick [`NES_FRAMES`] times with no input, compose the
+/// frame from agnes's palette-index screen buffer and its palette (issue #117;
+/// the `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the
+/// wasmtime snapshot.
 ///
 /// Unlike every other backend's glue, this is a function rather than a static
 /// `&str` const. Library-mode Go's generated file imports only `fmt` (plus
@@ -653,13 +655,15 @@ fn go_nes_frame_glue() -> String {
 	}}
 	w := inst.Exports["frameWidth"].(func() uint32)()
 	h := inst.Exports["frameHeight"].(func() uint32)()
-	off := inst.Exports["frameOffset"].(func() uint32)()
+	screenOff := inst.Exports["screenOffset"].(func() uint32)()
+	paletteOff := inst.Exports["paletteOffset"].(func() uint32)()
 	data := inst.memory.data
 	header := fmt.Sprintf("P6\n%d %d\n255\n", w, h)
 	out := make([]byte, 0, len(header)+int(w*h*3))
 	out = append(out, header...)
-	for i := uint32(0); i < w*h*4; i += 4 {{
-		out = append(out, data[off+i+2], data[off+i+1], data[off+i])
+	for i := uint32(0); i < w*h; i++ {{
+		c := paletteOff + uint32(data[screenOff+i]&0x3f)*4
+		out = append(out, data[c], data[c+1], data[c+2])
 	}}
 	fmt.Print(string(out))
 }}

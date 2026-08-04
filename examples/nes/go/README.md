@@ -1,6 +1,6 @@
 # NES (Go, ebiten)
 
-An interactive frontend for a converted NES emulator. `build.sh` builds `cache/nes.wasm` (agnes, wrapped with a small `allocRom`/`initGame`/`setInput`/`tickGame` export surface — see `examples/apps/scripts/nes.sh`) and converts it to Go with dewasm (`nes_gen.go`, gitignored, regenerated on every build). Unlike the DOOM frontend, `nes.wasm` has zero host imports, so `main.go` only loads a ROM into the module's memory and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten) — no host-import wiring needed.
+An interactive frontend for a converted NES emulator. `build.sh` builds `cache/nes.wasm` (agnes, wrapped with a small `allocRom`/`initGame`/`setInput`/`tickGame` export surface plus `screenOffset`/`paletteOffset` for the frame — see `examples/apps/scripts/nes.sh`) and converts it to Go with dewasm (`nes_gen.go`, gitignored, regenerated on every build). Unlike the DOOM frontend, `nes.wasm` has zero host imports, so `main.go` only loads a ROM into the module's memory and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten) — no host-import wiring needed.
 
 ## Run
 

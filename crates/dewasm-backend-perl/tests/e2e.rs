@@ -496,9 +496,11 @@ print $rgb;
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
-/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
-/// cached ROM's host path) and `{frames}` filled by the runner.
+/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame
+/// from agnes's palette-index screen buffer and its palette (issue #117; the
+/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime
+/// snapshot. `{rom}` (the cached ROM's host path) and `{frames}` filled by the
+/// runner.
 const PERL_NES_FRAME_GLUE: &str = r#"my $rom = do {
     local $/;
     open my $fh, '<:raw', "{rom}" or die $!;
@@ -514,9 +516,10 @@ die "initGame failed: $ok" unless $ok == 1;
 $nes->invoke('tickGame') for 1 .. {frames};
 my $w = $nes->invoke('frameWidth');
 my $h = $nes->invoke('frameHeight');
-my $off = $nes->invoke('frameOffset');
-my $rgb = substr($mem->{data}, $off, $w * $h * 4);
-$rgb =~ s/(.)(.)(.)./$3$2$1/gs;    # memory is B,G,R,A; PPM wants R,G,B (alpha dropped)
+my $screen = substr($mem->{data}, $nes->invoke('screenOffset'), $w * $h);
+my $palette = substr($mem->{data}, $nes->invoke('paletteOffset'), 64 * 4);
+my @entries = map { substr($palette, $_ * 4, 3) } 0 .. 63;    # R,G,B; A dropped
+my $rgb = join('', map { $entries[$_ & 0x3f] } unpack('C*', $screen));
 binmode(STDOUT);
 print "P6\n$w $h\n255\n";
 print $rgb;

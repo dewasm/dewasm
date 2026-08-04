@@ -9,8 +9,12 @@
 #
 # Unlike DOOM's doom.wasm, nes.wasm has *zero* wasm imports (verified by
 # examples/apps/scripts/nes.sh): there is no console/save-game/clock host
-# surface to wire up, just `_initialize` plus the seven demo exports
-# (allocRom/initGame/setInput/tickGame/frameOffset/frameWidth/frameHeight).
+# surface to wire up, just `_initialize` plus the demo exports (allocRom/
+# initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
+# frameHeight). The guest hands over agnes's own frame representation -- one
+# palette *index* per pixel plus the fixed 64-entry palette -- rather than a
+# rendered image, which suits this renderer: a terminal cell samples one pixel
+# out of several, so only the sampled indices are ever looked up.
 # The controller is also level-triggered (one `setInput(bitmask)` call per
 # tick, not DOOM's edge-triggered reportKeyDown/reportKeyUp pair), so the
 # key-hold heuristic below just tracks which buttons are currently "down"
@@ -86,16 +90,17 @@ sub init_nes {
 
 # ---------------------------------------------------------------- Renderer
 #
-# Renders the framebuffer into ANSI half-block terminal cells: each
-# character cell shows two vertically-stacked source pixels via "▀"
-# (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
-# SGR). Same diff strategy as the DOOM frontend: track the previous frame's
-# cell contents and the cursor/SGR state, and only emit escape codes for
-# cells that actually changed.
+# Renders the frame into ANSI half-block terminal cells: each character cell
+# shows two vertically-stacked source pixels via "▀" (foreground = top pixel,
+# background = bottom pixel, both 24-bit truecolor SGR). Same diff strategy as
+# the DOOM frontend: track the previous frame's cell contents and the
+# cursor/SGR state, and only emit escape codes for cells that actually
+# changed. Since a color is a function of its palette index, the whole SGR
+# string per index is precomputed here and the diff compares indices.
 package Renderer;
 
 sub new {
-    my ($class, $term_cols, $term_rows, $frame_w, $frame_h) = @_;
+    my ($class, $term_cols, $term_rows, $frame_w, $frame_h, $palette) = @_;
     my $status_rows = 1;
     my $avail_rows = $term_rows - $status_rows;
     $avail_rows = 1 if $avail_rows < 1;
@@ -117,6 +122,8 @@ sub new {
         pixel_rows  => $pixel_rows,
         cell_cols   => $pixel_cols,
         cell_rows   => $cell_rows,
+        fg_sgr      => [map { sprintf("\e[38;2;%d;%d;%dm", @{$_}) } @{$palette}],
+        bg_sgr      => [map { sprintf("\e[48;2;%d;%d;%dm", @{$_}) } @{$palette}],
         prev        => [map { [(undef) x $pixel_cols] } 1 .. $cell_rows],
         cursor_row  => undef,
         cursor_col  => undef,
@@ -133,7 +140,7 @@ sub cell_rows { return $_[0]->{cell_rows}; }
 # string; the caller is responsible for writing it (or, for --smoke, just
 # timing how long this took and discarding it).
 sub render {
-    my ($self, $pixels, $frame_w, $frame_h, $status_text) = @_;
+    my ($self, $screen, $frame_w, $frame_h, $status_text) = @_;
     my $buf = '';
     for my $cy (0 .. $self->{cell_rows} - 1) {
         my $top_row_base = int($cy * 2 * $frame_h / $self->{pixel_rows}) * $frame_w;
@@ -141,16 +148,11 @@ sub render {
         my $prev_row = $self->{prev}[$cy];
         for my $cx (0 .. $self->{cell_cols} - 1) {
             my $src_x = int($cx * $frame_w / $self->{pixel_cols});
-            my $to = ($top_row_base + $src_x) * 4;
-            my $bo = ($bot_row_base + $src_x) * 4;
-            # Memory byte order is B,G,R,A (see nes_demo.c's tickGame).
-            my $top_r = ord(substr($pixels, $to + 2, 1));
-            my $top_g = ord(substr($pixels, $to + 1, 1));
-            my $top_b = ord(substr($pixels, $to, 1));
-            my $bot_r = ord(substr($pixels, $bo + 2, 1));
-            my $bot_g = ord(substr($pixels, $bo + 1, 1));
-            my $bot_b = ord(substr($pixels, $bo, 1));
-            my $key = ($top_r << 40) | ($top_g << 32) | ($top_b << 24) | ($bot_r << 16) | ($bot_g << 8) | $bot_b;
+            # One byte per pixel, a palette index; the & 0x3f mask is
+            # load-bearing (see nes_demo.c).
+            my $top = ord(substr($screen, $top_row_base + $src_x, 1)) & 0x3f;
+            my $bot = ord(substr($screen, $bot_row_base + $src_x, 1)) & 0x3f;
+            my $key = ($top << 6) | $bot;
             next if defined($prev_row->[$cx]) && $prev_row->[$cx] == $key;
 
             $prev_row->[$cx] = $key;
@@ -158,15 +160,13 @@ sub render {
                 && defined($self->{cursor_col}) && $self->{cursor_col} == $cx) {
                 $buf .= sprintf("\e[%d;%dH", $cy + 1, $cx + 1);
             }
-            my $fg = $key >> 24;
-            if (!defined($self->{last_fg}) || $self->{last_fg} != $fg) {
-                $self->{last_fg} = $fg;
-                $buf .= "\e[38;2;$top_r;$top_g;${top_b}m";
+            if (!defined($self->{last_fg}) || $self->{last_fg} != $top) {
+                $self->{last_fg} = $top;
+                $buf .= $self->{fg_sgr}[$top];
             }
-            my $bg = $key & 0xffffff;
-            if (!defined($self->{last_bg}) || $self->{last_bg} != $bg) {
-                $self->{last_bg} = $bg;
-                $buf .= "\e[48;2;$bot_r;$bot_g;${bot_b}m";
+            if (!defined($self->{last_bg}) || $self->{last_bg} != $bot) {
+                $self->{last_bg} = $bot;
+                $buf .= $self->{bg_sgr}[$bot];
             }
             $buf .= $HALF_BLOCK;
             $self->{cursor_row} = $cy;
@@ -334,19 +334,26 @@ sub expire_held_keys {
 package main;
 
 sub write_ppm {
-    my ($path, $w, $h, $pixels) = @_;
-    # Memory byte order is B,G,R,A; PPM wants R,G,B (alpha is padding).
-    (my $rgb = $pixels) =~ s/(.)(.)(.)./$3$2$1/gs;
+    my ($path, $w, $h, $screen, $palette) = @_;
+    my @entries = map { pack('C3', @{$_}) } @{$palette};
+    my $rgb = join('', map { $entries[$_ & 0x3f] } unpack('C*', $screen));
     open(my $fh, '>:raw', $path) or die "nes: cannot write $path: $!";
     print {$fh} "P6\n$w $h\n255\n", $rgb;
     close($fh);
     return Cwd::abs_path($path);
 }
 
-sub read_frame {
-    my ($nes, $w, $h) = @_;
-    my $off = $nes->invoke('frameOffset');
-    return substr($nes->{memory}{data}, $off, $w * $h * 4);
+# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding),
+# read once -- unlike the index buffer, it never changes.
+sub read_palette {
+    my ($nes) = @_;
+    my $bytes = substr($nes->{memory}{data}, $nes->invoke('paletteOffset'), 64 * 4);
+    return [map { [unpack('C3', substr($bytes, $_ * 4, 3))] } 0 .. 63];
+}
+
+sub read_screen {
+    my ($nes, $off, $w, $h) = @_;
+    return substr($nes->{memory}{data}, $off, $w * $h);
 }
 
 sub run_smoke {
@@ -354,9 +361,11 @@ sub run_smoke {
     my $nes = init_nes($rom_path);
     my $w = $nes->invoke('frameWidth');
     my $h = $nes->invoke('frameHeight');
+    my $screen_off = $nes->invoke('screenOffset');
+    my $palette = read_palette($nes);
 
     # A synthetic terminal size, so this runs in CI/anywhere with no real tty.
-    my $renderer = Renderer->new(160, 51, $w, $h);
+    my $renderer = Renderer->new(160, 51, $w, $h, $palette);
 
     my $ticks = 40;
     my $render_seconds = 0.0;
@@ -365,7 +374,7 @@ sub run_smoke {
         $nes->invoke('setInput', 0);
         $nes->invoke('tickGame');
         my $r0 = monotonic();
-        $renderer->render(read_frame($nes, $w, $h), $w, $h, 'smoke');
+        $renderer->render(read_screen($nes, $screen_off, $w, $h), $w, $h, 'smoke');
         $render_seconds += monotonic() - $r0;
     }
     my $elapsed = monotonic() - $start;
@@ -374,11 +383,9 @@ sub run_smoke {
         $ticks, $elapsed, $ticks / ($elapsed - $render_seconds), $ticks / $elapsed, $render_seconds / $ticks * 1000
     );
 
-    my $pixels = read_frame($nes, $w, $h);
+    my $screen = read_screen($nes, $screen_off, $w, $h);
     my %distinct;
-    for (my $o = 0; $o < length($pixels); $o += 4) {
-        $distinct{ substr($pixels, $o, 3) } = 1;
-    }
+    $distinct{ join(',', @{ $palette->[$_ & 0x3f] }) } = 1 for unpack('C*', $screen);
     my $colors = scalar(keys %distinct);
     print "smoke: final frame is ${w}x${h} with $colors distinct colors\n";
     # agnes's NES palette is tiny (the Alter Ego credits screen this settles
@@ -389,7 +396,7 @@ sub run_smoke {
         exit 1;
     }
 
-    my $path = write_ppm('screenshot.ppm', $w, $h, $pixels);
+    my $path = write_ppm('screenshot.ppm', $w, $h, $screen, $palette);
     print "smoke: wrote $path\n";
     return;
 }
@@ -409,11 +416,14 @@ sub run_interactive {
     my $nes = init_nes($rom_path);
     my $w = $nes->invoke('frameWidth');
     my $h = $nes->invoke('frameHeight');
+    # Both are stable for the emulator's lifetime, so they are read once.
+    my $screen_off = $nes->invoke('screenOffset');
+    my $palette = read_palette($nes);
 
     my ($rows, $cols) = split(' ', `stty size 2>/dev/null` || '');
     $rows ||= 24;
     $cols ||= 80;
-    my $renderer = Renderer->new($cols, $rows, $w, $h);
+    my $renderer = Renderer->new($cols, $rows, $w, $h, $palette);
     my $input = InputHandler->new();
 
     my $orig_stty = `stty -g`;
@@ -458,7 +468,7 @@ sub run_interactive {
                     $status_window_start = $now;
                 }
 
-                print $renderer->render(read_frame($nes, $w, $h), $w, $h, $status_text);
+                print $renderer->render(read_screen($nes, $screen_off, $w, $h), $w, $h, $status_text);
             }
         };
         $@;

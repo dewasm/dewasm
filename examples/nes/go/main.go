@@ -31,9 +31,14 @@ var nesInst *Nes
 
 // frameW/frameH are fixed by the module (256x240) but read from its exports
 // rather than hardcoded, matching frameBuf's DOOM-frontend counterpart.
+// palette holds the module's fixed 64 colors as ready-to-copy opaque RGBA
+// quads, decoded once from paletteOffset: the guest hands over one palette
+// *index* per pixel, not a rendered image (ADR-59), so composing frameBuf is
+// this frontend's job.
 var (
 	frameW, frameH int
 	frameBuf       []byte
+	palette        [64][4]byte
 )
 
 // defaultRomPath resolves the demo ROM relative to the built binary's own
@@ -101,20 +106,16 @@ func buttonMask() uint32 {
 // drawFrame re-fetches nesInst.memory.data on every call rather than caching
 // it: a preceding tick can grow the module's memory, which replaces the
 // backing slice (same caveat as DOOM's hostDrawFrame).
-func drawFrame(setInput func(uint32), tickGame func(), frameOffset func() uint32) {
+func drawFrame(setInput func(uint32), tickGame func(), screenOffset func() uint32) {
 	setInput(buttonMask())
 	tickGame()
 	data := nesInst.memory.data
-	off := int(frameOffset())
+	off := int(screenOffset())
 	n := frameW * frameH
 	for i := 0; i < n; i++ {
-		o := off + i*4
-		b, g, r := data[o], data[o+1], data[o+2]
-		j := i * 4
-		frameBuf[j+0] = r
-		frameBuf[j+1] = g
-		frameBuf[j+2] = b
-		frameBuf[j+3] = 0xff // force opaque; the source alpha byte is not meaningful here
+		// One byte per pixel, a palette index; the & 0x3f mask is
+		// load-bearing (see examples/apps/src/nes_demo.c).
+		copy(frameBuf[i*4:], palette[data[off+i]&0x3f][:])
 	}
 }
 
@@ -130,9 +131,9 @@ const titleUpdateEvery = 60 // roughly once a second at the NES's ~60Hz frame ra
 // Game implements ebiten.Game. The three exported funcs are type-asserted
 // once in main rather than on every call.
 type Game struct {
-	setInput    func(uint32)
-	tickGame    func()
-	frameOffset func() uint32
+	setInput     func(uint32)
+	tickGame     func()
+	screenOffset func() uint32
 
 	ticks int
 }
@@ -141,7 +142,7 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return ebiten.Termination
 	}
-	drawFrame(g.setInput, g.tickGame, g.frameOffset)
+	drawFrame(g.setInput, g.tickGame, g.screenOffset)
 
 	g.ticks++
 	if g.ticks%titleUpdateEvery == 0 {
@@ -189,7 +190,8 @@ func loadRom(romPath string) *Game {
 	initGame := nesInst.Exports["initGame"].(func() uint32)
 	setInput := nesInst.Exports["setInput"].(func(uint32))
 	tickGame := nesInst.Exports["tickGame"].(func())
-	frameOffset := nesInst.Exports["frameOffset"].(func() uint32)
+	screenOffset := nesInst.Exports["screenOffset"].(func() uint32)
+	paletteOffset := nesInst.Exports["paletteOffset"].(func() uint32)
 	frameWidth := nesInst.Exports["frameWidth"].(func() uint32)
 	frameHeight := nesInst.Exports["frameHeight"].(func() uint32)
 
@@ -204,7 +206,15 @@ func loadRom(romPath string) *Game {
 	frameW, frameH = int(frameWidth()), int(frameHeight())
 	frameBuf = make([]byte, frameW*frameH*4)
 
-	return &Game{setInput: setInput, tickGame: tickGame, frameOffset: frameOffset}
+	// The palette is fixed data (R,G,B,A, alpha padding), so decode it once
+	// into opaque RGBA quads; only the index buffer changes per frame.
+	poff := int(paletteOffset())
+	for i := range palette {
+		c := nesInst.memory.data[poff+i*4:]
+		palette[i] = [4]byte{c[0], c[1], c[2], 0xff}
+	}
+
+	return &Game{setInput: setInput, tickGame: tickGame, screenOffset: screenOffset}
 }
 
 // runSmoke drives the game headlessly: no window, no ebiten loop. It exists
@@ -214,7 +224,7 @@ func runSmoke(g *Game) {
 	const ticks = 300
 	start := time.Now()
 	for i := 0; i < ticks; i++ {
-		drawFrame(g.setInput, g.tickGame, g.frameOffset)
+		drawFrame(g.setInput, g.tickGame, g.screenOffset)
 	}
 	elapsed := time.Since(start)
 	rate := float64(ticks) / elapsed.Seconds()

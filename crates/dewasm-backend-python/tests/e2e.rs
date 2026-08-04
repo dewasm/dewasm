@@ -487,9 +487,11 @@ out.flush()
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
-/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
-/// cached ROM's host path) and `{frames}` filled by the runner.
+/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame
+/// from agnes's palette-index screen buffer and its palette (issue #117; the
+/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime
+/// snapshot. `{rom}` (the cached ROM's host path) and `{frames}` filled by the
+/// runner.
 const PYTHON_NES_FRAME_GLUE: &str = r#"import sys
 
 nes = Nes()
@@ -505,16 +507,19 @@ for _t in range(1, {frames} + 1):
 
 w = nes.invoke("frameWidth")
 h = nes.invoke("frameHeight")
-off = nes.invoke("frameOffset")
-frame = bytes(mem.data[off:off + w * h * 4])
+soff = nes.invoke("screenOffset")
+poff = nes.invoke("paletteOffset")
+screen = bytes(mem.data[soff:soff + w * h])
+palette = bytes(mem.data[poff:poff + 64 * 4])
 out = sys.stdout.buffer
 out.write(b"P6\n%d %d\n255\n" % (w, h))
 rgb = bytearray(w * h * 3)
 j = 0
-for i in range(0, len(frame), 4):
-    rgb[j] = frame[i + 2]
-    rgb[j + 1] = frame[i + 1]
-    rgb[j + 2] = frame[i]
+for ix in screen:
+    c = (ix & 0x3F) * 4
+    rgb[j] = palette[c]
+    rgb[j + 1] = palette[c + 1]
+    rgb[j + 2] = palette[c + 2]
     j += 3
 out.write(rgb)
 out.flush()

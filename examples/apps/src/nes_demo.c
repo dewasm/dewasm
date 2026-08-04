@@ -6,9 +6,22 @@
  * examples/apps/scripts/nes.sh) that exposes a minimal, import-free driving
  * surface for the NES framebuffer-snapshot example (issue #114), mirroring the
  * DOOM demo's shape (ADR-50/53): a host allocates the ROM, loads it, ticks
- * frames with an input bitmask, then reads a B,G,R,A framebuffer straight out of
- * guest memory. The framebuffer byte order matches doom.wasm's, so the
- * test-helper's frame_to_ppm and the per-backend glue are reused unchanged.
+ * frames with an input bitmask, then reads the frame straight out of guest
+ * memory.
+ *
+ * The frame is handed over exactly as agnes keeps it — a 256x240 buffer of one
+ * palette *index* per pixel plus the fixed 64-entry palette — instead of a
+ * BGRA image rendered in-guest per pixel, which cost 12-15% of frame time on
+ * every backend for no added information (issue #117). A host composes a pixel
+ * as `palette[screen[y * width + x] & 0x3f]` → R,G,B (the 4th palette byte is
+ * alpha padding, ignorable). **The `& 0x3f` mask is load-bearing**: indices
+ * above 63 do occur in the buffer, and agnes's own accessor masks them; a host
+ * that skips the mask reads past the palette.
+ *
+ * agnes.c is a single-file amalgamation whose type and object definitions live
+ * at file scope, so #including it here (rather than compiling it as a separate
+ * translation unit) makes ppu.screen_buffer and g_colors reachable with no
+ * patch to third-party source.
  *
  * Import-free is a goal: we avoid stdio/assert so wasi-libc pulls nothing in,
  * leaving the module's import section empty (verified with wasm-dis in
@@ -17,16 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "agnes.h"
+#include "agnes.c"
 
 /* The loaded ROM buffer, remembered between allocRom and initGame. */
 static void *g_rom = NULL;
 static int g_rom_size = 0;
 static agnes_t *g_agnes = NULL;
-
-/* The rendered frame, B,G,R,A per pixel (alpha padding), matching doom.wasm's
- * layout so the shared PPM encoder and glue apply as-is. */
-static unsigned char g_frame[AGNES_SCREEN_WIDTH * AGNES_SCREEN_HEIGHT * 4];
 
 /* Allocate a size-byte buffer for the iNES ROM, remember it, and return its
  * guest pointer so the host can copy the ROM bytes in before initGame. */
@@ -62,24 +71,18 @@ void setInput(int buttons) {
   agnes_set_input(g_agnes, &in, NULL);
 }
 
-/* Emulate one full video frame, then snapshot every pixel into g_frame in
- * B,G,R,A order (agnes reports R,G,B,A; A is padding, kept as 0xff). */
-void tickGame(void) {
-  agnes_next_frame(g_agnes);
-  int i = 0;
-  for (int y = 0; y < AGNES_SCREEN_HEIGHT; y++) {
-    for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) {
-      agnes_color_t c = agnes_get_screen_pixel(g_agnes, x, y);
-      g_frame[i++] = c.b;
-      g_frame[i++] = c.g;
-      g_frame[i++] = c.r;
-      g_frame[i++] = 0xff;
-    }
-  }
-}
+/* Emulate one full video frame, leaving it in agnes's own screen buffer. */
+void tickGame(void) { agnes_next_frame(g_agnes); }
 
-/* Guest pointer to the rendered framebuffer. */
-int frameOffset(void) { return (int)(unsigned long)g_frame; }
+/* Guest pointer to the palette-index screen buffer: frameWidth *
+ * frameHeight bytes, row-major, one index per pixel. Valid only after a
+ * successful initGame (it points inside the emulator allocated there), and
+ * stable for that emulator's lifetime. */
+int screenOffset(void) { return (int)(unsigned long)g_agnes->ppu.screen_buffer; }
+
+/* Guest pointer to the palette: 64 entries of 4 bytes each, R,G,B,A (alpha is
+ * padding). Fixed data — reading it once is enough. */
+int paletteOffset(void) { return (int)(unsigned long)g_colors; }
 
 /* Framebuffer dimensions (AGNES_SCREEN_WIDTH/AGNES_SCREEN_HEIGHT). */
 int frameWidth(void) { return AGNES_SCREEN_WIDTH; }

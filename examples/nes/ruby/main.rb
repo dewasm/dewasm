@@ -51,17 +51,22 @@ def load_rom(nes, path)
   raise "nes: initGame failed for #{path} (ROM rejected or unsupported mapper)" unless ok == 1
 end
 
-# Renders the framebuffer into ANSI half-block terminal cells: each
-# character cell shows two vertically-stacked source pixels via "▀"
-# (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
-# SGR) — the same trick as ../doom/ruby's Renderer, ported here with one
-# difference: the NES's 256x240 framebuffer is already native resolution
-# (no implicit 2x upscale like DOOM's 640x400), so the pixel cap is the
-# frame's own width, not half of it. This diffing/escape-sequence bookkeeping
-# is the performance-sensitive part of this frontend, not the wasm execution:
-# it diffs against the previous frame's cell contents and the terminal's own
-# cursor position, and only emits an SGR code when a cell's color actually
-# changed.
+# Renders the frame into ANSI half-block terminal cells: each character cell
+# shows two vertically-stacked source pixels via "▀" (foreground = top pixel,
+# background = bottom pixel, both 24-bit truecolor SGR) — the same trick as
+# ../doom/ruby's Renderer, ported here with one difference: the NES's 256x240
+# framebuffer is already native resolution (no implicit 2x upscale like DOOM's
+# 640x400), so the pixel cap is the frame's own width, not half of it. This
+# diffing/escape-sequence bookkeeping is the performance-sensitive part of this
+# frontend, not the wasm execution: it diffs against the previous frame's cell
+# contents and the terminal's own cursor position, and only emits an SGR code
+# when a cell's color actually changed.
+#
+# The guest hands over palette *indices*, not colors (ADR-59), which suits this
+# renderer exactly: a terminal cell samples one pixel out of several, so the
+# only palette lookups performed are the sampled ones — and since a color is a
+# function of its index, the whole SGR string per index is precomputed once and
+# the frame diff compares indices directly.
 # Fixed status-line colors (white on black), independent of the game's own
 # palette -- without an explicit color the status line inherits whatever
 # fg/bg the last-drawn pixel cell left active, flickering with the game.
@@ -70,7 +75,7 @@ STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
 class Renderer
   attr_reader :cell_cols, :cell_rows
 
-  def initialize(term_cols, term_rows, frame_w, frame_h)
+  def initialize(term_cols, term_rows, frame_w, frame_h, palette)
     status_rows = 1
     avail_rows = [term_rows - status_rows, 1].max
     pixel_cols = [term_cols, frame_w].min
@@ -85,6 +90,8 @@ class Renderer
     @pixel_rows = pixel_rows
     @cell_cols = pixel_cols
     @cell_rows = cell_rows
+    @fg_sgr = palette.map { |r, g, b| "\e[38;2;#{r};#{g};#{b}m" }
+    @bg_sgr = palette.map { |r, g, b| "\e[48;2;#{r};#{g};#{b}m" }
     @prev = Array.new(cell_rows) { Array.new(@cell_cols) }
     @cursor_row = nil
     @cursor_col = nil
@@ -96,7 +103,7 @@ class Renderer
   # Builds one frame's worth of escape sequences/characters as a single
   # string; the caller is responsible for writing it (or, for --smoke,
   # just timing how long this took and discarding it).
-  def render(pixels, frame_w, frame_h, status_text)
+  def render(screen, frame_w, frame_h, status_text)
     buf = String.new(capacity: @cell_cols * @cell_rows * 4)
     @cell_rows.times do |cy|
       top_row_base = ((cy * 2) * frame_h / @pixel_rows) * frame_w
@@ -104,29 +111,22 @@ class Renderer
       prev_row = @prev[cy]
       @cell_cols.times do |cx|
         src_x = cx * frame_w / @pixel_cols
-        to = (top_row_base + src_x) * 4
-        bo = (bot_row_base + src_x) * 4
-        # Memory byte order is B,G,R,A (examples/apps/src/nes_demo.c).
-        top_r = pixels.getbyte(to + 2)
-        top_g = pixels.getbyte(to + 1)
-        top_b = pixels.getbyte(to)
-        bot_r = pixels.getbyte(bo + 2)
-        bot_g = pixels.getbyte(bo + 1)
-        bot_b = pixels.getbyte(bo)
-        key = (top_r << 40) | (top_g << 32) | (top_b << 24) | (bot_r << 16) | (bot_g << 8) | bot_b
+        # One byte per pixel, a palette index; the & 0x3f mask is load-bearing
+        # (examples/apps/src/nes_demo.c).
+        top = screen.getbyte(top_row_base + src_x) & 0x3f
+        bot = screen.getbyte(bot_row_base + src_x) & 0x3f
+        key = (top << 6) | bot
         next if prev_row[cx] == key
 
         prev_row[cx] = key
         buf << "\e[#{cy + 1};#{cx + 1}H" unless @cursor_row == cy && @cursor_col == cx
-        fg = key >> 24
-        if @last_fg != fg
-          @last_fg = fg
-          buf << "\e[38;2;#{top_r};#{top_g};#{top_b}m"
+        if @last_fg != top
+          @last_fg = top
+          buf << @fg_sgr[top]
         end
-        bg = key & 0xffffff
-        if @last_bg != bg
-          @last_bg = bg
-          buf << "\e[48;2;#{bot_r};#{bot_g};#{bot_b}m"
+        if @last_bg != bot
+          @last_bg = bot
+          buf << @bg_sgr[bot]
         end
         buf << "▀"
         @cursor_row = cy
@@ -276,21 +276,21 @@ def check_yjit!
        "- the Ruby backend is already dewasm's slowest, and needs YJIT to stay playable."
 end
 
-def write_ppm(path, w, h, pixels)
-  rgb = Array.new(w * h * 3)
-  (w * h).times do |i|
-    o = i * 4
-    j = i * 3
-    # Memory byte order is B,G,R,A; PPM wants R,G,B.
-    rgb[j] = pixels.getbyte(o + 2)
-    rgb[j + 1] = pixels.getbyte(o + 1)
-    rgb[j + 2] = pixels.getbyte(o)
-  end
+def write_ppm(path, w, h, screen, palette)
+  rgb = []
+  screen.each_byte { |ix| rgb.concat(palette[ix & 0x3f]) }
   File.open(path, "wb") do |f|
     f.write("P6\n#{w} #{h}\n255\n")
     f.write(rgb.pack("C*"))
   end
   File.expand_path(path)
+end
+
+# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding),
+# read once — it never changes, unlike the per-frame index buffer.
+def read_palette(nes)
+  bytes = nes.memory.buffer.get_string(nes.invoke("paletteOffset"), 64 * 4).bytes
+  Array.new(64) { |i| bytes[i * 4, 3] }
 end
 
 def new_nes
@@ -307,10 +307,11 @@ def run_smoke(rom_path)
 
   frame_w = nes.invoke("frameWidth")
   frame_h = nes.invoke("frameHeight")
-  frame_off = nes.invoke("frameOffset")
+  screen_off = nes.invoke("screenOffset")
+  palette = read_palette(nes)
 
   # A synthetic terminal size, so this runs in CI/anywhere with no real tty.
-  renderer = Renderer.new(160, 51, frame_w, frame_h)
+  renderer = Renderer.new(160, 51, frame_w, frame_h, palette)
 
   ticks = 300
   render_seconds = 0.0
@@ -319,8 +320,8 @@ def run_smoke(rom_path)
     nes.invoke("setInput", 0)
     nes.invoke("tickGame")
     r0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    pixels = nes.memory.buffer.get_string(frame_off, frame_w * frame_h * 4)
-    renderer.render(pixels, frame_w, frame_h, "smoke")
+    screen = nes.memory.buffer.get_string(screen_off, frame_w * frame_h)
+    renderer.render(screen, frame_w, frame_h, "smoke")
     render_seconds += Process.clock_gettime(Process::CLOCK_MONOTONIC) - r0
   end
   elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
@@ -332,12 +333,9 @@ def run_smoke(rom_path)
     ticks, elapsed, bare_rate, full_rate, render_ms
   )
 
-  pixels = nes.memory.buffer.get_string(frame_off, frame_w * frame_h * 4)
+  screen = nes.memory.buffer.get_string(screen_off, frame_w * frame_h)
   distinct = {}
-  (frame_w * frame_h).times do |i|
-    o = i * 4
-    distinct[pixels.getbyte(o) | (pixels.getbyte(o + 1) << 8) | (pixels.getbyte(o + 2) << 16)] = true
-  end
+  screen.each_byte { |ix| distinct[palette[ix & 0x3f]] = true }
   puts "smoke: final frame is #{frame_w}x#{frame_h} with #{distinct.size} distinct colors"
   # The NES PPU palette tops out at 64 colors total, so a healthy frame lands
   # in the dozens; a degenerate (blank/solid) frame lands in the single digits
@@ -347,7 +345,7 @@ def run_smoke(rom_path)
     exit 1
   end
 
-  path = write_ppm("screenshot.ppm", frame_w, frame_h, pixels)
+  path = write_ppm("screenshot.ppm", frame_w, frame_h, screen, palette)
   puts "smoke: wrote #{path}"
 end
 
@@ -371,10 +369,11 @@ def run_interactive(rom_path)
   load_rom(nes, rom_path)
   frame_w = nes.invoke("frameWidth")
   frame_h = nes.invoke("frameHeight")
-  frame_off = nes.invoke("frameOffset")
+  screen_off = nes.invoke("screenOffset")
+  palette = read_palette(nes)
 
   rows, cols = IO.console.winsize
-  renderer = Renderer.new(cols, rows, frame_w, frame_h)
+  renderer = Renderer.new(cols, rows, frame_w, frame_h, palette)
   input = InputHandler.new
 
   restored = false
@@ -423,8 +422,8 @@ def run_interactive(rom_path)
           status_window_start = now
         end
 
-        pixels = nes.memory.buffer.get_string(frame_off, frame_w * frame_h * 4)
-        $stdout.write(renderer.render(pixels, frame_w, frame_h, status_text))
+        screen = nes.memory.buffer.get_string(screen_off, frame_w * frame_h)
+        $stdout.write(renderer.render(screen, frame_w, frame_h, status_text))
 
         next_frame_at += FRAME_SECONDS
         now2 = Process.clock_gettime(Process::CLOCK_MONOTONIC)

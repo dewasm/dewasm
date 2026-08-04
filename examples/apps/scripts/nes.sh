@@ -9,13 +9,16 @@
 #
 # One reactor library, cache/nes.wasm, wraps agnes (kgabis/agnes) with our own
 # src/nes_demo.c (allocRom/initGame/setInput/tickGame + the frame accessors),
-# driven from the host to render a B,G,R,A framebuffer that matches doom.wasm's
-# layout. The ROM (Shiru's public-domain Alter Ego) lands separately at
-# cache/alter_ego.nes; the host copies it into the module via allocRom.
+# driven from the host, which composes pixels from the palette-index screen
+# buffer and the palette agnes keeps internally. The ROM (Shiru's public-domain
+# Alter Ego) lands separately at cache/alter_ego.nes; the host copies it into
+# the module via allocRom.
 #
 # agnes has no upstream wasm32-wasi build, so it is compiled here. Its two files
 # are pinned as individually checksummed raw blobs (stabler than an on-the-fly
-# codeload tarball).
+# codeload tarball). agnes.c is not a separate translation unit: nes_demo.c
+# #includes it, which is what lets the frame accessors address agnes's
+# internals (issue #117).
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -36,7 +39,8 @@ ROM_MEMBER="alter_ego/Alter_Ego.nes"
 # The reactor export surface (src/nes_demo.c). Zero wasm imports is the goal, so
 # agnes/wasi-libc must pull nothing in — verified below with wasm-objdump.
 NES_EXPORTS=(
-  allocRom initGame setInput tickGame frameOffset frameWidth frameHeight
+  allocRom initGame setInput tickGame screenOffset paletteOffset
+  frameWidth frameHeight
 )
 
 # The stamp covers both source pins, the ROM pin, the export list, and the
@@ -65,10 +69,11 @@ fetch_verified "$AGNES_C_URL" "$AGNES_C_SHA256" "$tmp/agnes.c"
 echo "nes: building nes.wasm (zig cc, reactor)"
 mapfile -t exports < <(wl_exports "${NES_EXPORTS[@]}")
 # --strip-debug drops the DWARF wasm-opt cannot parse (ADR-39); -I $tmp lets
-# nes_demo.c find the fetched agnes.h.
+# nes_demo.c find the fetched agnes.c/agnes.h, which it #includes rather than
+# linking as a separate TU.
 zig_cc_wasi -O2 -mexec-model=reactor -Wl,--strip-debug \
   -I "$tmp" \
-  "$tmp/agnes.c" src/nes_demo.c \
+  src/nes_demo.c \
   "${exports[@]}" \
   -o cache/nes.wasm
 

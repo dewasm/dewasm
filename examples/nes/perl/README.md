@@ -11,13 +11,16 @@ modules only: no CPAN installs -- raw mode goes through `stty` because
 
 Unlike the DOOM Perl frontend (`../../doom/perl`), `nes.wasm` has **zero**
 wasm imports: no console/save-game/clock host surface to wire up, just
-`_initialize` plus seven exports (`allocRom`, `initGame`, `setInput`,
-`tickGame`, `frameOffset`, `frameWidth`, `frameHeight`). The controller is
-also level-triggered -- one `setInput(bitmask)` call per tick, not DOOM's
-edge-triggered `reportKeyDown`/`reportKeyUp` pair -- so there's no save-game
-directory and no per-frame host callback to receive the pixels; the host
-instead pulls them straight out of guest memory at `frameOffset()` after each
-tick.
+`_initialize` plus eight exports (`allocRom`, `initGame`, `setInput`,
+`tickGame`, `screenOffset`, `paletteOffset`, `frameWidth`, `frameHeight`). The
+controller is also level-triggered -- one `setInput(bitmask)` call per tick,
+not DOOM's edge-triggered `reportKeyDown`/`reportKeyUp` pair -- so there's no
+save-game directory and no per-frame host callback to receive the pixels; the
+host instead pulls the frame straight out of guest memory after each tick, in
+the emulator's own representation: one palette *index* per pixel at
+`screenOffset()`, resolved against the fixed 64-entry palette at
+`paletteOffset()` (masked with `0x3f`). At terminal resolution that means only
+the sampled pixels are ever looked up.
 
 The bundled ROM is *Alter Ego* by Shiru, released into the public domain.
 

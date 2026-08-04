@@ -530,9 +530,11 @@ $stdout.write(rgb.pack("C*"))
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
-/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
-/// cached ROM's host path) and `{frames}` filled by the runner.
+/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame
+/// from agnes's palette-index screen buffer and its palette (issue #117; the
+/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime
+/// snapshot. `{rom}` (the cached ROM's host path) and `{frames}` filled by the
+/// runner.
 const RUBY_NES_FRAME_GLUE: &str = r#"nes = Nes.new
 nes.invoke("_initialize")
 mem = nes.memory
@@ -544,10 +546,10 @@ raise "initGame failed: #{ok}" unless ok == 1
 {frames}.times { nes.invoke("tickGame") }
 w = nes.invoke("frameWidth")
 h = nes.invoke("frameHeight")
-off = nes.invoke("frameOffset")
-pixels = mem.buffer.get_string(off, w * h * 4).bytes
+screen = mem.buffer.get_string(nes.invoke("screenOffset"), w * h).bytes
+palette = mem.buffer.get_string(nes.invoke("paletteOffset"), 64 * 4).bytes
 rgb = []
-pixels.each_slice(4) { |b, g, r, _a| rgb.push(r, g, b) }
+screen.each { |ix| rgb.concat(palette[(ix & 0x3f) * 4, 3]) }
 $stdout.binmode
 $stdout.write("P6\n#{w} #{h}\n255\n")
 $stdout.write(rgb.pack("C*"))

@@ -56,7 +56,13 @@ fi
 
 FRAME_W=0
 FRAME_H=0
-FRAME_BUF_OFF=0
+# Guest pointer to the palette-index screen buffer (one byte per pixel), plus
+# the module's fixed 64-entry palette decoded into ready-made SGR escapes and
+# R/G/B components. All of it is read once in load_rom: the offsets are stable
+# for the emulator's lifetime and the palette never changes, so per-frame work
+# is one nes_mem read and one array lookup per sampled pixel.
+SCREEN_OFF=0
+declare -a FG_SGR BG_SGR PAL_R PAL_G PAL_B
 
 # Overridden by run_interactive once the terminal is in raw/alternate-screen
 # mode; a global no-op otherwise so the die paths can call it unconditionally.
@@ -146,7 +152,18 @@ load_rom() {
 
   invoke_or_die frameWidth;  FRAME_W=$R0
   invoke_or_die frameHeight; FRAME_H=$R0
-  invoke_or_die frameOffset; FRAME_BUF_OFF=$R0
+  invoke_or_die screenOffset; SCREEN_OFF=$R0
+  invoke_or_die paletteOffset
+  local poff=$R0 e c
+  for (( e = 0; e < 64; e++ )); do
+    # Palette entries are R,G,B,A (alpha is padding, ignored).
+    c=$(( poff + e * 4 ))
+    PAL_R[e]=${nes_mem[$c]-0}
+    PAL_G[e]=${nes_mem[$(( c + 1 ))]-0}
+    PAL_B[e]=${nes_mem[$(( c + 2 ))]-0}
+    FG_SGR[e]="${ESC}[38;2;${PAL_R[e]};${PAL_G[e]};${PAL_B[e]}m"
+    BG_SGR[e]="${ESC}[48;2;${PAL_R[e]};${PAL_G[e]};${PAL_B[e]}m"
+  done
 }
 
 # --- Rendering -------------------------------------------------------
@@ -185,33 +202,29 @@ compute_grid() {
 # cheap and shrinks the string a lot on the NES's large flat-color areas (its
 # PPU has a fixed 64-entry palette, <=25 colors on screen at once).
 render_frame() {
-  local buf="" cy cx top_base bot_base src_x to bo
-  local tb tg tr bb bgc br fg_key bg_key
+  local buf="" cy cx top_base bot_base src_x ti bi
   local last_fg=-1 last_bg=-1
-  local w=$FRAME_W h=$FRAME_H off=$FRAME_BUF_OFF
+  local w=$FRAME_W h=$FRAME_H off=$SCREEN_OFF
   for (( cy = 0; cy < GRID_ROWS; cy++ )); do
     buf+="${ESC}[$(( cy + 1 ));1H"
     top_base=$(( ((cy * 2) * h / PIXEL_ROWS) * w ))
     bot_base=$(( ((cy * 2 + 1) * h / PIXEL_ROWS) * w ))
     for (( cx = 0; cx < GRID_COLS; cx++ )); do
       src_x=$(( cx * w / GRID_COLS ))
-      to=$(( off + (top_base + src_x) * 4 ))
-      bo=$(( off + (bot_base + src_x) * 4 ))
-      # Memory byte order per pixel is B,G,R,A. Associative-array subscripts
-      # are literal strings, not arithmetic expressions (unlike inside
-      # `$(( ))`), so every subscript needs an explicit `$`/`$(( ))` -- a
-      # bare `nes_mem[to]` would look up the key "to", not the address.
-      tb=${nes_mem[$to]-0}; tg=${nes_mem[$((to + 1))]-0}; tr=${nes_mem[$((to + 2))]-0}
-      bb=${nes_mem[$bo]-0}; bgc=${nes_mem[$((bo + 1))]-0}; br=${nes_mem[$((bo + 2))]-0}
-      fg_key=$(( (tr << 16) | (tg << 8) | tb ))
-      bg_key=$(( (br << 16) | (bgc << 8) | bb ))
-      if (( fg_key != last_fg )); then
-        buf+="${ESC}[38;2;${tr};${tg};${tb}m"
-        last_fg=$fg_key
+      # One byte per pixel, a palette index; the & 0x3f mask is load-bearing.
+      # Associative-array subscripts are literal strings, not arithmetic
+      # expressions (unlike inside `$(( ))`), so every subscript needs an
+      # explicit `$`/`$(( ))` -- a bare `nes_mem[o]` would look up the key
+      # "o", not the address.
+      ti=$(( ${nes_mem[$(( off + top_base + src_x ))]-0} & 0x3f ))
+      bi=$(( ${nes_mem[$(( off + bot_base + src_x ))]-0} & 0x3f ))
+      if (( ti != last_fg )); then
+        buf+=${FG_SGR[ti]}
+        last_fg=$ti
       fi
-      if (( bg_key != last_bg )); then
-        buf+="${ESC}[48;2;${br};${bgc};${bb}m"
-        last_bg=$bg_key
+      if (( bi != last_bg )); then
+        buf+=${BG_SGR[bi]}
+        last_bg=$bi
       fi
       buf+="▀"
     done
@@ -223,16 +236,16 @@ render_frame() {
 # so there's no risk of a stray NUL confusing anything downstream.
 write_ppm() {
   local path=$1
-  local w=$FRAME_W h=$FRAME_H off=$FRAME_BUF_OFF
-  local py px row_base src_x o r g b
+  local w=$FRAME_W h=$FRAME_H off=$SCREEN_OFF
+  local py px row_base src_x ix r g b
   local buf; buf=$'P3\n'"${GRID_COLS} ${PIXEL_ROWS}"$'\n255\n'
   declare -A distinct=()
   for (( py = 0; py < PIXEL_ROWS; py++ )); do
     row_base=$(( (py * h / PIXEL_ROWS) * w ))
     for (( px = 0; px < GRID_COLS; px++ )); do
       src_x=$(( px * w / GRID_COLS ))
-      o=$(( off + (row_base + src_x) * 4 ))
-      b=${nes_mem[$o]-0}; g=${nes_mem[$((o + 1))]-0}; r=${nes_mem[$((o + 2))]-0}
+      ix=$(( ${nes_mem[$(( off + row_base + src_x ))]-0} & 0x3f ))
+      r=${PAL_R[ix]}; g=${PAL_G[ix]}; b=${PAL_B[ix]}
       buf+="$r $g $b"$'\n'
       distinct["$r,$g,$b"]=1
     done
@@ -316,8 +329,9 @@ run_smoke() {
   # ADR-53): Alter Ego opens on a near-black boot frame (1 color at ~15
   # ticks) and only fades in its final, stable credits screen (7 distinct
   # colors) by frame ~37, so a shorter run would only ever screenshot black.
-  # At ~25s/frame this is ~17 minutes -- a progress line per tick keeps the
-  # silence from ever looking like a hang. Set SMOKE_FRAMES=N for a shorter
+  # At tens of seconds per frame this is ~20 minutes -- a progress line per
+  # tick keeps the silence from ever looking like a hang. Set SMOKE_FRAMES=N
+  # for a shorter
   # pipeline check (fewer than ~37 frames will legitimately be near-black).
   local frames=${SMOKE_FRAMES:-40}
   local total_ms=0 i
