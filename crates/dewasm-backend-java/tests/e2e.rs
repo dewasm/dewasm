@@ -540,7 +540,7 @@ gzip_e2e!(Java);
 qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit (docs/apps-audit.md).
+// cpython_hello_e2e!: not invoked — a CPython interpreter method overflows the JVM 64 KB per-method bytecode limit (`code too large`); the ADR-30 class-splitter does not subdivide individual methods (a hard limit; see docs/apps-audit.md). cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the CRuby element-segment `Elem` class overflows the JVM 64 K constant-pool limit (`too many constants`), a hard limit shared by the wasi-vfs-packed variant (ADR-61), whose element segments are the same interpreter's (docs/apps-audit.md).
 qjs_repl_pty_e2e!(Java);
 
 libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);

@@ -91,6 +91,11 @@ const MANIFEST: &[AppConvert] = &[
         heavy: true,
     },
     AppConvert {
+        stem: "ruby-packed",
+        mode: Mode::Standalone,
+        heavy: true,
+    },
+    AppConvert {
         stem: "sqlite3-shell",
         mode: Mode::Standalone,
         heavy: false,

@@ -20,8 +20,8 @@ mod wasi_testsuite;
 mod wasmtime_backend;
 
 pub use apps::{
-    run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN, QJS_EVAL,
-    SQLITE3_SHELL,
+    run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN,
+    CRUBY_PACKED_HELLO, QJS_EVAL, SQLITE3_SHELL,
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, EXIFTOOL_EXTRACT, LIBSQLITE3_C_API, PCAP_COMPILE,
@@ -300,6 +300,22 @@ macro_rules! sqlite3_shell_e2e {
             #[test]
             fn sqlite3_shell() {
                 $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
+            }
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`]. Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case — the wasi-vfs-packed CRuby (ADR-61), a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature gate and the trailing tier token.
+#[macro_export]
+macro_rules! cruby_packed_hello_e2e {
+    ($lang:expr) => {
+        $crate::cruby_packed_hello_e2e!($lang, slow);
+    };
+    ($lang:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn cruby_packed_hello() {
+                $crate::run_slow_app_case(&$lang, &$crate::CRUBY_PACKED_HELLO);
             }
         }
     };
