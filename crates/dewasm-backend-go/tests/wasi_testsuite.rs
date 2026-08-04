@@ -7,9 +7,7 @@ use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
-use dewasm_test_helper::{
-    wasi_testsuite_suite, BackendUnderTest, PtyCommand, WasiTestsuiteBackend,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-40): `(trial, tag)` — out-of-scope syscalls and the one std-portability gap the full WASI p1 filesystem support (ADR-40) cannot close on Go.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
@@ -37,14 +35,14 @@ impl BackendUnderTest for GoWasi {
     }
 
     /// Build `source` to the content-addressed cache binary and return the run recipe. A missing `go` toolchain fails loud (ADR-15); a build failure panics (generated code that does not compile is a bug, not a WASI gap).
-    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+    fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let bin = build_go(source).unwrap_or_else(|build| {
             panic!(
                 "go build failed:\n{}",
                 String::from_utf8_lossy(&build.stderr)
             )
         });
-        PtyCommand {
+        dewasm_test_helper::PtyCommand {
             program: bin,
             args: args.iter().map(|a| a.to_string()).collect(),
             cwd: None,
@@ -89,10 +87,10 @@ fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-impl WasiTestsuiteBackend for GoWasi {
+impl dewasm_test_helper::WasiTestsuiteBackend for GoWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
 }
 
-wasi_testsuite_suite!(GoWasi);
+dewasm_test_helper::wasi_testsuite_suite!(GoWasi);

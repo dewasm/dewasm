@@ -14,7 +14,7 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_core::ir;
-use dewasm_test_helper::{run_command_bytes, spec_suite, BackendUnderTest, Converted, SpecBackend};
+use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
@@ -160,13 +160,13 @@ impl BackendUnderTest for GoSpec {
             let _ = std::fs::rename(&tmp_bin, &bin);
         }
 
-        run_command_bytes(Command::new(&bin).args(args), stdin)
+        dewasm_test_helper::run_command_bytes(Command::new(&bin).args(args), stdin)
     }
 }
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-impl SpecBackend for GoSpec {
+impl dewasm_test_helper::SpecBackend for GoSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
@@ -190,10 +190,14 @@ impl SpecBackend for GoSpec {
         ]
     }
 
-    fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted> {
+    fn generate(
+        &self,
+        module: &ir::Module,
+        counter: u32,
+    ) -> anyhow::Result<dewasm_test_helper::Converted> {
         let type_name = format!("WastMod{counter}");
         let (source, units) = dewasm_backend_go::generate_program_with_units(module, &type_name)?;
-        Ok(Converted {
+        Ok(dewasm_test_helper::Converted {
             source,
             handle: type_name,
             units,
@@ -208,7 +212,7 @@ impl SpecBackend for GoSpec {
         &self,
         script: &mut String,
         decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         var_id: u32,
         registered: &[(String, String)],
     ) -> String {
@@ -229,7 +233,7 @@ impl SpecBackend for GoSpec {
         &self,
         script: &mut String,
         decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         registered: &[(String, String)],
     ) -> String {
         let _ = script;
@@ -587,4 +591,4 @@ var _spectest = map[string]any{
 }
 "#;
 
-spec_suite!(GoSpec);
+dewasm_test_helper::spec_suite!(GoSpec);

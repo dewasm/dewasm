@@ -10,15 +10,7 @@ use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
-use dewasm_test_helper::{
-    alter_ego_rom_path, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, doom_frame_e2e,
-    examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, nes_frame_e2e, pcap_compile_e2e,
-    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes,
-    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
-    NES_FRAMES,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 pub struct Go;
 
@@ -36,19 +28,19 @@ impl BackendUnderTest for Go {
         match build_go(source) {
             // A build failure is surfaced as the build `Output` so the caller's `status.success()` assertion reports the compile error.
             Err(build) => build,
-            Ok(bin) => run_command_bytes(Command::new(&bin).args(args), stdin),
+            Ok(bin) => dewasm_test_helper::run_command_bytes(Command::new(&bin).args(args), stdin),
         }
     }
 
     /// Build `source` to the cache binary and run it under a pty. A build failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the compiler output.
-    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+    fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let bin = build_go(source).unwrap_or_else(|build| {
             panic!(
                 "go build failed for the pty run:\n{}",
                 String::from_utf8_lossy(&build.stderr)
             )
         });
-        PtyCommand {
+        dewasm_test_helper::PtyCommand {
             program: bin,
             args: args.iter().map(|a| a.to_string()).collect(),
             cwd: None,
@@ -64,7 +56,8 @@ impl BackendUnderTest for Go {
         let mut units = BTreeSet::new();
         let mut decls = Vec::new();
         for (wat, name) in modules {
-            let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+            let bytes =
+                wat::parse_file(dewasm_test_helper::examples_dir().join(wat)).expect("parse wat");
             let module = dewasm_core::build_module(&bytes).expect("build IR");
             let (src, u) =
                 dewasm_backend_go::generate_program_with_units(&module, name).expect("generate");
@@ -630,7 +623,7 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 /// data segments (`Rt.unhex`, `f0`'s `p.memory.init` call in a converted
 /// `nes.wasm`).
 fn go_nes_frame_glue() -> String {
-    let rom = std::fs::read(alter_ego_rom_path())
+    let rom = std::fs::read(dewasm_test_helper::alter_ego_rom_path())
         .expect("read alter_ego_rom_path — see examples/apps/scripts/nes.sh");
     let mut literal = String::with_capacity(rom.len() * 4 + 2);
     literal.push('"');
@@ -669,45 +662,45 @@ fn go_nes_frame_glue() -> String {
 }}
 "#,
         literal = literal,
-        frames = NES_FRAMES,
+        frames = dewasm_test_helper::NES_FRAMES,
     )
 }
 
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-library_add_e2e!(Go, GO_ADD_GLUE);
-wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
+dewasm_test_helper::library_add_e2e!(Go, GO_ADD_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
 // custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold. stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no io.Writer indirection to inject an in-memory buffer (ADR-29).
 
-wasi_suite!(Go, Stdio);
-wasi_suite!(Go, ArgsEnv);
-wasi_suite!(Go, Poll);
-wasi_suite!(Go, Fs, GO_FS_GLUE);
-wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Go);
+dewasm_test_helper::wasi_suite!(Go, Stdio);
+dewasm_test_helper::wasi_suite!(Go, ArgsEnv);
+dewasm_test_helper::wasi_suite!(Go, Poll);
+dewasm_test_helper::wasi_suite!(Go, Fs, GO_FS_GLUE);
+dewasm_test_helper::wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
+dewasm_test_helper::standalone_dir_e2e!(Go);
 
-cowsay_args_e2e!(Go);
-cowsay_stdin_e2e!(Go);
+dewasm_test_helper::cowsay_args_e2e!(Go);
+dewasm_test_helper::cowsay_stdin_e2e!(Go);
 // The `ultra`-tier cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` sweep, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at the `slow` tier.
-qjs_eval_e2e!(Go, ultra);
-sqlite3_shell_e2e!(Go, ultra);
-gzip_e2e!(Go);
+dewasm_test_helper::qjs_eval_e2e!(Go, ultra);
+dewasm_test_helper::sqlite3_shell_e2e!(Go, ultra);
+dewasm_test_helper::gzip_e2e!(Go);
 
-qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
-sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
-cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
+dewasm_test_helper::qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
+dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
+dewasm_test_helper::rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
+dewasm_test_helper::cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
 // cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — the ~35 MB CRuby wasm's ~242 MB Go source exceeds the ADR-24 ~5-minute practicality bar under `go build` (measured >6 min), and the 49 MB wasi-vfs-packed variant (ADR-61) is the same interpreter plus embedded stdlib, strictly larger; see docs/apps-audit.md.
-qjs_repl_pty_e2e!(Go);
+dewasm_test_helper::qjs_repl_pty_e2e!(Go);
 
-libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
-sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
-sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
-pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
-treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
+dewasm_test_helper::libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);
+dewasm_test_helper::sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
+dewasm_test_helper::sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
+dewasm_test_helper::pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 
-doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
-nes_frame_e2e!(Go, &go_nes_frame_glue());
+dewasm_test_helper::doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
+dewasm_test_helper::nes_frame_e2e!(Go, &go_nes_frame_glue());
 
-shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
+dewasm_test_helper::shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.
