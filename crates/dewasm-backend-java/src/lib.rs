@@ -736,7 +736,7 @@ impl<'a> Gen<'a> {
         self.struct_fields(w);
         w.line("");
         w.line(format!(
-            "{name}(java.util.Map<String, java.util.Map<String, Object>> imports, String[] args, String[] env, java.util.Map<String, String> preopens) {{"
+            "{name}(java.util.Map<String, ?> imports, String[] args, String[] env, java.util.Map<String, String> preopens) {{"
         ));
         w.indent();
 
@@ -776,10 +776,10 @@ impl<'a> Gen<'a> {
         let wasi = wasi_bundled(m, self.default_wasi);
         if wasi {
             self.use_unit("wasi/_class");
-            w.line("this.wasi = new WASI(args, env, preopens);");
-            if m.memory.is_some() || m.imported_memory.is_some() {
-                w.line("this.wasi.memory = this.memory;");
-            }
+            // Kept for `wasiInstance()`, which builds the bundled WASI the first time an import falls back to it (ADR-7): an embedder covering every WASI import never pays for one.
+            w.line("this.wasiArgs = args;");
+            w.line("this.wasiEnv = env;");
+            w.line("this.wasiPreopens = preopens;");
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
@@ -865,12 +865,38 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        // Let import providers bind to the fully-constructed instance (ADR-7's `attach`).
+        let has_imports = !m.imported_funcs.is_empty()
+            || !m.imported_globals.is_empty()
+            || !m.imported_tables.is_empty()
+            || m.imported_memory.is_some();
+        if has_imports {
+            w.line("if (imports != null) {");
+            w.indent();
+            w.line("for (Object __p : imports.values()) {");
+            w.indent();
+            w.line("if (__p instanceof Rt.ImportProvider) {");
+            w.indent();
+            w.line("((Rt.ImportProvider) __p).attach(this);");
+            w.dedent();
+            w.line("}");
+            w.dedent();
+            w.line("}");
+            w.dedent();
+            w.line("}");
+        }
+
         if let Some(start) = m.start {
             w.line(format!("{};", self.call_string(start, &[])));
         }
 
         w.dedent();
         w.line("}");
+
+        if wasi {
+            w.line("");
+            self.wasi_accessor(w);
+        }
 
         // Per-segment data initializers, called in order from the constructor (see above). Each is a self-contained method so an oversized segment never bloats `<init>` past the 64KB method limit (ADR-30).
         for (i, data) in m.datas.iter().enumerate() {
@@ -901,6 +927,24 @@ impl<'a> Gen<'a> {
         if !split_elems.is_empty() {
             self.emit_elem_class(w, &split_elems);
         }
+    }
+
+    /// The bundled WASI, built on first use (ADR-7). Nothing constructs it in the constructor: an embedder whose provider covers every WASI import gets no WASI at all — which is exactly what `wasi == null` says — while the first import that falls back builds it, with the memory already bound (the constructor resolves memory before any import).
+    fn wasi_accessor(&self, w: &mut CodeWriter) {
+        let m = self.module;
+        w.line("WASI wasiInstance() {");
+        w.indent();
+        w.line("if (this.wasi == null) {");
+        w.indent();
+        w.line("this.wasi = new WASI(this.wasiArgs, this.wasiEnv, this.wasiPreopens);");
+        if m.memory.is_some() || m.imported_memory.is_some() {
+            w.line("this.wasi.memory = this.memory;");
+        }
+        w.dedent();
+        w.line("}");
+        w.line("return this.wasi;");
+        w.dedent();
+        w.line("}");
     }
 
     /// Emit the nested `Elem` helper class for the oversized element segments in `split_elems`. Each segment `i` gets an `elem{i}(inst)` factory that allocates the array and calls chunked `elem{i}_pK(inst, a)` fillers; the fillers themselves live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` entries each, so no single pool holds more funcref lambdas than it can address.
@@ -1022,7 +1066,11 @@ impl<'a> Gen<'a> {
             w.line(format!("Rt.Fn if{i};"));
         }
         if wasi_bundled(m, self.default_wasi) {
+            // The bundled WASI is built on first fallback, not in the ctor (ADR-7's lazy construction), so the ctor arguments are kept for `wasiInstance()` to use.
             w.line("WASI wasi;");
+            w.line("String[] wasiArgs;");
+            w.line("String[] wasiEnv;");
+            w.line("java.util.Map<String, String> wasiPreopens;");
         }
         // Element segments retained for table.init (active ones are emptied after instantiation).
         for i in 0..m.elems.len() {
@@ -1075,6 +1123,8 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let ty = &m.types[import.type_idx as usize];
 
+        // Whether the fallback below needs the bundled WASI built first (its `__w` local).
+        let mut needs_wasi = false;
         let fallback = if is_wasi_module(&import.module) && self.default_wasi {
             let unit = format!("wasi/{}", import.name);
             if bundler().has_unit(&unit) {
@@ -1086,10 +1136,9 @@ impl<'a> Gen<'a> {
                     .map(|(k, t)| unbox(*t, &format!("__a[{k}]")))
                     .collect::<Vec<_>>()
                     .join(", ");
-                Some(format!(
-                    "__a -> this.wasi.wasi_{}({call_args})",
-                    import.name
-                ))
+                // The adapter closes over the WASI the fallback just built, so the bundled WASI exists exactly when some import fell back to it (ADR-7, mirroring Ruby's `@wasi ||=`) rather than on the first *call*.
+                needs_wasi = true;
+                Some(format!("__a -> __w.wasi_{}({call_args})", import.name))
             } else {
                 // ENOSYS: unimplemented WASI call.
                 Some(enosys_stub(ty))
@@ -1120,7 +1169,12 @@ impl<'a> Gen<'a> {
         w.line("} else {");
         w.indent();
         match fallback {
-            Some(f) => w.line(format!("this.if{i} = {f};")),
+            Some(f) => {
+                if needs_wasi {
+                    w.line("WASI __w = this.wasiInstance();");
+                }
+                w.line(format!("this.if{i} = {f};"));
+            }
             None => w.line(format!(
                 "{}({});",
                 self.rt("link_error"),

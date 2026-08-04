@@ -133,22 +133,22 @@ func hostOnGameInit(width, height uint32) {
 
 func buildImports() Imports {
 	return Imports{
-		"console": {
+		"console": map[string]any{
 			"onErrorMessage": hostOnErrorMessage,
 			"onInfoMessage":  hostOnInfoMessage,
 		},
-		"gameSaving": {
+		"gameSaving": map[string]any{
 			"sizeOfSaveGame": hostSizeOfSaveGame,
 			"readSaveGame":   hostReadSaveGame,
 			"writeSaveGame":  hostWriteSaveGame,
 		},
-		"runtimeControl": {
+		"runtimeControl": map[string]any{
 			"timeInMilliseconds": hostTimeInMilliseconds,
 		},
-		"ui": {
+		"ui": map[string]any{
 			"drawFrame": hostDrawFrame,
 		},
-		"loading": {
+		"loading": map[string]any{
 			"onGameInit": hostOnGameInit,
 			"wadSizes":   hostWadSizes,
 			"readWads":   hostReadWads,

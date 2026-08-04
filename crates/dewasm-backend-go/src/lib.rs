@@ -693,7 +693,11 @@ impl<'a> Gen<'a> {
             w.line(format!("if{i} {}", go_func_type(&ty.params, &ty.results)));
         }
         if wasi_bundled(m, self.default_wasi) {
+            // The bundled WASI is built on first fallback, not in the ctor (ADR-7's lazy construction), so the ctor arguments are kept for `wasiInstance` to use.
             w.line("wasi *WASI");
+            w.line("wasiArgs []string");
+            w.line("wasiEnv []string");
+            w.line("wasiPreopens map[string]string");
         }
         for i in 0..m.elems.len() {
             w.line(format!("elem{i} []*funcref"));
@@ -754,10 +758,10 @@ impl<'a> Gen<'a> {
             || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
-            w.line("p.wasi = newWASI(args, env, preopens)");
-            if m.memory.is_some() || m.imported_memory.is_some() {
-                w.line("p.wasi.memory = p.memory");
-            }
+            // Kept for `wasiInstance`, which builds the bundled WASI the first time an import falls back to it (ADR-7): an embedder covering every WASI import never pays for one.
+            w.line("p.wasiArgs = args");
+            w.line("p.wasiEnv = env");
+            w.line("p.wasiPreopens = preopens");
         } else {
             // args/env/preopens unused when no WASI is bundled.
             w.line("_ = args");
@@ -857,11 +861,50 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        // Let import providers bind to the fully-constructed instance (ADR-7's `attach`, here the optional `Attach` half of the provider protocol).
+        if has_imports {
+            w.line("for _, s := range imports {");
+            w.indent();
+            w.line("if a, ok := s.(ImportAttacher); ok {");
+            w.indent();
+            w.line("a.Attach(p)");
+            w.dedent();
+            w.line("}");
+            w.dedent();
+            w.line("}");
+        }
+
         if let Some(start) = m.start {
             w.line(self.call_string(start, &[]));
         }
 
         w.line("return p");
+        w.dedent();
+        w.line("}");
+
+        if wasi {
+            w.line("");
+            self.wasi_accessor(w);
+        }
+    }
+
+    /// The bundled WASI, built on first use (ADR-7). Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all — which is exactly what `p.wasi == nil` says — while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
+    fn wasi_accessor(&self, w: &mut CodeWriter) {
+        let m = self.module;
+        w.line(format!(
+            "func (p *{}) wasiInstance() *WASI {{",
+            self.type_name
+        ));
+        w.indent();
+        w.line("if p.wasi == nil {");
+        w.indent();
+        w.line("p.wasi = newWASI(p.wasiArgs, p.wasiEnv, p.wasiPreopens)");
+        if m.memory.is_some() || m.imported_memory.is_some() {
+            w.line("p.wasi.memory = p.memory");
+        }
+        w.dedent();
+        w.line("}");
+        w.line("return p.wasi");
         w.dedent();
         w.line("}");
     }
@@ -876,7 +919,8 @@ impl<'a> Gen<'a> {
             let unit = format!("wasi/{}", import.name);
             if bundler().has_unit(&unit) {
                 self.use_unit(&unit);
-                Some(format!("p.wasi.wasi_{}", import.name))
+                // A method value on the lazily built WASI: taking it here is what constructs the bundled WASI, so it exists exactly when some import fell back to it (ADR-7, mirroring Ruby's `@wasi ||=`).
+                Some(format!("p.wasiInstance().wasi_{}", import.name))
             } else {
                 // ENOSYS: unimplemented WASI call.
                 Some(self.enosys_stub(ty))

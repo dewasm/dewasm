@@ -131,7 +131,77 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `wasi_stdio_capture` glue: Java's bundled WASI is built eagerly in the module ctor and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction — the Java mirror of Ruby's `$stdout` redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `wasmImport(name)` resolves every function and `attach(instance)` binds the memory (the Java shape of Ruby's `import`/`attach`), so no import falls back and `p.wasi` stays null.
+const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
+    static class MyWasi implements Rt.ImportProvider {
+        Prog inst;
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+
+        public Object wasmImport(String name) {
+            if (name.equals("fd_write")) {
+                return (Rt.Fn) this::fdWrite;
+            }
+            if (name.equals("random_get")) {
+                return (Rt.Fn) args -> 0;
+            }
+            return null;
+        }
+
+        public void attach(Object instance) {
+            this.inst = (Prog) instance;
+        }
+
+        Object fdWrite(Object[] args) {
+            int iovs = (int)(Integer) args[1];
+            int ptr = inst.memory.i32_load(Integer.toUnsignedLong(iovs));
+            int len = inst.memory.i32_load(Integer.toUnsignedLong(iovs) + 4);
+            byte[] b = inst.memory.read_string(Integer.toUnsignedLong(ptr), Integer.toUnsignedLong(len));
+            out.write(b, 0, b.length);
+            inst.memory.i32_store(Integer.toUnsignedLong((int)(Integer) args[3]), len);
+            return 0;
+        }
+    }
+
+    public static void main(String[] a) throws Exception {
+        MyWasi wasi = new MyWasi();
+        Prog p = new Prog(java.util.Map.of("wasi_snapshot_preview1", wasi), null, null, null);
+        ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
+        System.out.write(wasi.out.toByteArray());
+        System.out.flush();
+        System.out.println("bundled wasi constructed: " + (p.wasi != null));
+    }
+}
+"#;
+
+/// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback — `wasiInstance()` constructs it as the constructor takes the adapter.
+const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        Prog[] holder = new Prog[1];
+        Rt.Fn fdWrite = args -> {
+            int iovs = (int)(Integer) args[1];
+            int ptr = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs));
+            int len = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs) + 4);
+            byte[] b = holder[0].memory.read_string(Integer.toUnsignedLong(ptr), Integer.toUnsignedLong(len));
+            captured.write(b, 0, b.length);
+            holder[0].memory.i32_store(Integer.toUnsignedLong((int)(Integer) args[3]), len);
+            return 0;
+        };
+        java.util.Map<String, Object> wasi = new java.util.HashMap<>();
+        wasi.put("fd_write", fdWrite);
+        java.util.Map<String, Object> imports = new java.util.HashMap<>();
+        imports.put("wasi_snapshot_preview1", wasi);
+        Prog p = new Prog(imports, null, null, null);
+        holder[0] = p;
+        ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{}); // random_get falls back to bundled WASI
+        System.out.write(captured.toByteArray());
+        System.out.flush();
+        System.out.println("bundled wasi constructed: " + (p.wasi != null));
+    }
+}
+"#;
+
+/// The `wasi_stdio_capture` glue: Java's bundled WASI is built by the module ctor's `fd_write` fallback and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction — the Java mirror of Ruby's `$stdout` redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
 const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, null);
@@ -713,7 +783,8 @@ const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
 dewasm_test_helper::library_add_e2e!(Java, JAVA_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Java's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-30), so the lazy-construction observable cannot hold.
+dewasm_test_helper::custom_wasi_provider_e2e!(Java, JAVA_CUSTOM_PROVIDER_GLUE);
+dewasm_test_helper::partial_override_e2e!(Java, JAVA_PARTIAL_OVERRIDE_GLUE);
 
 dewasm_test_helper::wasi_suite!(Java, Stdio);
 dewasm_test_helper::wasi_suite!(Java, ArgsEnv);
