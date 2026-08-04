@@ -1000,7 +1000,7 @@ impl<'a> Gen<'a> {
                 } => {
                     // The arms stay inline — `if` is not a Ruby loop, so a `next`
                     // inside one already reaches the dispatch loop.
-                    st[cur].line(format!("if {} != 0", self.expr(cond)));
+                    st[cur].line(format!("if {}", self.cond(cond)));
                     st[cur].indent();
                     let a = self.flat_seq(st, cur, then);
                     if !terminates(then) {
@@ -1101,7 +1101,7 @@ impl<'a> Gen<'a> {
                 els,
             } => {
                 let emit_if = |w: &mut CodeWriter, gen: &Self| {
-                    w.line(format!("if {} != 0", gen.expr(cond)));
+                    w.line(format!("if {}", gen.cond(cond)));
                     w.indent();
                     if then.is_empty() {
                         w.line("nil");
@@ -1131,7 +1131,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
-                w.block(format!("if {} != 0", self.expr(cond)), "end", |w| {
+                w.block(format!("if {}", self.cond(cond)), "end", |w| {
                     self.branch(w, target);
                 });
             }
@@ -1384,6 +1384,20 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// An expression in boolean context (an `if`/`br_if` test).
+    ///
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a ternary only to undo it one operation later. Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`. Anything else keeps the `!= 0` test.
+    fn cond(&self, e: &Expr) -> String {
+        match e {
+            Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => format!("{} == 0", self.expr(a)),
+            Expr::Bin(op, a, b) => match rel_op(*op) {
+                Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
+                None => format!("{} != 0", self.expr(e)),
+            },
+            _ => format!("{} != 0", self.expr(e)),
+        }
+    }
+
     fn un(&self, op: UnOp, a: &str) -> String {
         use UnOp::*;
         match op {
@@ -1438,6 +1452,10 @@ impl<'a> Gen<'a> {
 
     fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
         use BinOp::*;
+        // A comparison is a Ruby boolean; outside condition position it needs the ternary back to the i32 0 or 1 wasm expects (see `cond`).
+        if let Some(rel) = rel_op(op) {
+            return format!("({} ? 1 : 0)", self.rel(rel, a, b));
+        }
         match op {
             I32Add => format!("(({a} + {b}) & 0xffffffff)"),
             I32Sub => format!("(({a} - {b}) & 0xffffffff)"),
@@ -1470,20 +1488,6 @@ impl<'a> Gen<'a> {
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
             I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            I32Eq | I64Eq => format!("({a} == {b} ? 1 : 0)"),
-            I32Ne | I64Ne => format!("({a} != {b} ? 1 : 0)"),
-            I32LtU | I64LtU => format!("({a} < {b} ? 1 : 0)"),
-            I32GtU | I64GtU => format!("({a} > {b} ? 1 : 0)"),
-            I32LeU | I64LeU => format!("({a} <= {b} ? 1 : 0)"),
-            I32GeU | I64GeU => format!("({a} >= {b} ? 1 : 0)"),
-            I32LtS => format!("({0}({a}) < {0}({b}) ? 1 : 0)", self.rt("s32")),
-            I32GtS => format!("({0}({a}) > {0}({b}) ? 1 : 0)", self.rt("s32")),
-            I32LeS => format!("({0}({a}) <= {0}({b}) ? 1 : 0)", self.rt("s32")),
-            I32GeS => format!("({0}({a}) >= {0}({b}) ? 1 : 0)", self.rt("s32")),
-            I64LtS => format!("({0}({a}) < {0}({b}) ? 1 : 0)", self.rt("s64")),
-            I64GtS => format!("({0}({a}) > {0}({b}) ? 1 : 0)", self.rt("s64")),
-            I64LeS => format!("({0}({a}) <= {0}({b}) ? 1 : 0)", self.rt("s64")),
-            I64GeS => format!("({0}({a}) >= {0}({b}) ? 1 : 0)", self.rt("s64")),
             F32Add => format!("{}({a} + {b})", self.rt("f32")),
             F32Sub => format!("{}({a} - {b})", self.rt("f32")),
             F32Mul => format!("{}({a} * {b})", self.rt("f32")),
@@ -1497,14 +1501,42 @@ impl<'a> Gen<'a> {
             F32Max | F64Max => format!("{}({a}, {b})", self.rt("fmax")),
             F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
             F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
-            F32Eq | F64Eq => format!("({a} == {b} ? 1 : 0)"),
-            F32Ne | F64Ne => format!("({a} != {b} ? 1 : 0)"),
-            F32Lt | F64Lt => format!("({a} < {b} ? 1 : 0)"),
-            F32Gt | F64Gt => format!("({a} > {b} ? 1 : 0)"),
-            F32Le | F64Le => format!("({a} <= {b} ? 1 : 0)"),
-            F32Ge | F64Ge => format!("({a} >= {b} ? 1 : 0)"),
+            _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
+
+    /// A comparison as a Ruby boolean, from a `rel_op` mapping and the already rendered operands.
+    fn rel(&self, (r, sign): (&str, Option<&str>), a: &str, b: &str) -> String {
+        match sign {
+            None => format!("{a} {r} {b}"),
+            Some(sign) => {
+                let f = self.rt(sign);
+                format!("{f}({a}) {r} {f}({b})")
+            }
+        }
+    }
+}
+
+/// The Ruby rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Ruby `Float` comparison matches wasm, NaN included; ADR-2). The single home of that mapping: `bin` wraps the result back into an i32, `cond` takes it as it stands.
+fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
+    use BinOp::*;
+    Some(match op {
+        I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
+        I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
+        I32LtU | I64LtU | F32Lt | F64Lt => ("<", None),
+        I32GtU | I64GtU | F32Gt | F64Gt => (">", None),
+        I32LeU | I64LeU | F32Le | F64Le => ("<=", None),
+        I32GeU | I64GeU | F32Ge | F64Ge => (">=", None),
+        I32LtS => ("<", Some("s32")),
+        I32GtS => (">", Some("s32")),
+        I32LeS => ("<=", Some("s32")),
+        I32GeS => (">=", Some("s32")),
+        I64LtS => ("<", Some("s64")),
+        I64GtS => (">", Some("s64")),
+        I64LeS => ("<=", Some("s64")),
+        I64GeS => (">=", Some("s64")),
+        _ => return None,
+    })
 }
 
 /// Whether `stmts` unconditionally leaves the current dispatch state, so a
