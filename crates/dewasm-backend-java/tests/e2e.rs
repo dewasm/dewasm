@@ -207,7 +207,7 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3, libpcap, tree-sitter): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
@@ -411,6 +411,92 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
 }
 "#;
 
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`. The allocator here is plain `malloc`/`free` (libpcap is not sqlite), and `free` returns void, so it goes through `Rt.Fn.invoke` directly rather than the int-returning `call` helper.
+const JAVA_PCAP_COMPILE: &str = r#"public class Main {
+    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+    static Libpcap inst;
+
+    static int malloc(int n) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+    }
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    static int cstr(String s) {
+        byte[] u = s.getBytes(UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int p = malloc(c.length);
+        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
+        return p;
+    }
+
+    public static void main(String[] a) throws Exception {
+        inst = new Libpcap(null, null, null, null);
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+
+        int prog = call("compile_filter", cstr("tcp port 80"), 1, 65535);
+        if (prog == 0) throw new RuntimeException("compile failed");
+        byte[] d = inst.memory.d;
+        int n = inst.memory.i32_load(Integer.toUnsignedLong(prog));
+        for (int i = 0; i < n; i++) {
+            int base = prog + 4 + i * 8;
+            int code = (d[base] & 0xff) | ((d[base + 1] & 0xff) << 8);
+            int jt = d[base + 2] & 0xff;
+            int jf = d[base + 3] & 0xff;
+            int k = inst.memory.i32_load(Integer.toUnsignedLong(base + 4));
+            System.out.println(code + " " + jt + " " + jf + " " + k);
+        }
+        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{prog});
+        System.out.println("BPF-OK");
+    }
+}
+"#;
+
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
+    static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
+    static Treesitter inst;
+
+    static int malloc(int n) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+    }
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    static int cstr(String s) {
+        byte[] u = s.getBytes(UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int p = malloc(c.length);
+        inst.memory.init(Integer.toUnsignedLong(p), c, 0, c.length);
+        return p;
+    }
+
+    static String readCstr(int ptr) {
+        if (ptr == 0) return null;
+        byte[] d = inst.memory.d;
+        int end = ptr;
+        while (d[end] != 0) end++;
+        return new String(inst.memory.read_string(Integer.toUnsignedLong(ptr), end - ptr), UTF_8);
+    }
+
+    public static void main(String[] a) throws Exception {
+        inst = new Treesitter(null, null, null, null);
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+
+        String src = "{\"key\": [1, true, null]}";
+        int r = call("parse_source", cstr(src), src.getBytes(UTF_8).length);
+        if (r == 0) throw new RuntimeException("parse failed");
+        System.out.println(readCstr(r));
+        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{r});
+        System.out.println("TS-OK");
+    }
+}
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Instantiate the table exporter, then the importer with the exporter's `Exports` map as its `"a"` import provider (the exporter's `"tab"` table), and print the `call0` result (call_indirect through the shared table → 42).
@@ -542,6 +628,8 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
+dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Java, JAVA_TREESITTER_PARSE);
 
 dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
