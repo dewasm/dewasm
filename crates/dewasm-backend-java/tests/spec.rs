@@ -11,7 +11,7 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, JavaBackend};
 use dewasm_core::ir;
-use dewasm_test_helper::{run_command_bytes, spec_suite, BackendUnderTest, Converted, SpecBackend};
+use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
@@ -133,7 +133,7 @@ impl BackendUnderTest for JavaSpec {
             Ok(classdir) => classdir,
         };
 
-        run_command_bytes(
+        dewasm_test_helper::run_command_bytes(
             // A generous per-thread stack keeps genuinely deep but terminating recursions (fac, deep br chains) under the limit while a runaway still overflows into a catchable StackOverflowError (ADR-30).
             Command::new(&java)
                 .arg("-Xss16m")
@@ -146,7 +146,7 @@ impl BackendUnderTest for JavaSpec {
     }
 }
 
-impl SpecBackend for JavaSpec {
+impl dewasm_test_helper::SpecBackend for JavaSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
@@ -167,10 +167,14 @@ impl SpecBackend for JavaSpec {
         ]
     }
 
-    fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted> {
+    fn generate(
+        &self,
+        module: &ir::Module,
+        counter: u32,
+    ) -> anyhow::Result<dewasm_test_helper::Converted> {
         let type_name = format!("WastMod{counter}");
         let (source, units) = dewasm_backend_java::generate_program_with_units(module, &type_name)?;
-        Ok(Converted {
+        Ok(dewasm_test_helper::Converted {
             source,
             handle: type_name,
             units,
@@ -185,7 +189,7 @@ impl SpecBackend for JavaSpec {
         &self,
         script: &mut String,
         decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         var_id: u32,
         registered: &[(String, String)],
     ) -> String {
@@ -204,7 +208,7 @@ impl SpecBackend for JavaSpec {
         &self,
         script: &mut String,
         decls: &mut String,
-        conv: &Converted,
+        conv: &dewasm_test_helper::Converted,
         registered: &[(String, String)],
     ) -> String {
         let _ = script;
@@ -532,4 +536,4 @@ const POSTAMBLE: &str = r#"        System.out.println("RESULT pass=" + _pass + "
 }
 "#;
 
-spec_suite!(JavaSpec);
+dewasm_test_helper::spec_suite!(JavaSpec);
