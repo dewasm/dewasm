@@ -6,7 +6,6 @@ use std::process::{Command, Output};
 
 use dewasm_backend::Mode;
 use dewasm_backend_java::{find_java, JavaBackend};
-use dewasm_test_helper::convert_bytes;
 
 mod common;
 
@@ -17,7 +16,7 @@ fn convert_and_run(wat: &str, glue: &str) -> Output {
     let bytes = wat::parse_str(wat).expect("parse wat");
     let source = format!(
         "{}\n{glue}",
-        convert_bytes(&JavaBackend, &bytes, Mode::Library, "prog")
+        dewasm_test_helper::convert_bytes(&JavaBackend, &bytes, Mode::Library, "prog")
     );
 
     let classdir = common::build_java(&source).unwrap_or_else(|build| {

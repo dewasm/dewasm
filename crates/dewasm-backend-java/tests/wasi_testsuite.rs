@@ -2,9 +2,7 @@
 
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, JavaBackend};
-use dewasm_test_helper::{
-    wasi_testsuite_suite, BackendUnderTest, PtyCommand, WasiTestsuiteBackend,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 mod common;
 
@@ -51,7 +49,7 @@ impl BackendUnderTest for JavaWasi {
     }
 
     /// Compile `source` (one `Main.java`) to the content-addressed class-dir cache and return the run recipe. A missing `javac`/`java` fails loud (ADR-15); a compile failure panics (generated code that does not compile is a bug, not a WASI gap).
-    fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
+    fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
         let classdir = build_java(source).unwrap_or_else(|build| {
@@ -64,7 +62,7 @@ impl BackendUnderTest for JavaWasi {
             "Main".to_string(),
         ];
         argv.extend(args.iter().map(|a| a.to_string()));
-        PtyCommand {
+        dewasm_test_helper::PtyCommand {
             program: java,
             args: argv,
             cwd: None,
@@ -72,7 +70,7 @@ impl BackendUnderTest for JavaWasi {
     }
 }
 
-impl WasiTestsuiteBackend for JavaWasi {
+impl dewasm_test_helper::WasiTestsuiteBackend for JavaWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
@@ -86,4 +84,4 @@ impl WasiTestsuiteBackend for JavaWasi {
     }
 }
 
-wasi_testsuite_suite!(JavaWasi);
+dewasm_test_helper::wasi_testsuite_suite!(JavaWasi);

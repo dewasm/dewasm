@@ -4,6 +4,5 @@
 //! lives in `dewasm-test-helper`.
 
 use dewasm_backend_java::JavaBackend;
-use dewasm_test_helper::apps_convert_suite;
 
-apps_convert_suite!(JavaBackend);
+dewasm_test_helper::apps_convert_suite!(JavaBackend);
