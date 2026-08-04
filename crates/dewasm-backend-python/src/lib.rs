@@ -4,8 +4,11 @@
 //! - i32/i64 are unsigned (masked) Python ints; signed views via `Rt.s32/s64` only where an instruction needs them.
 //! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`. Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
 //! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting (ADR-28).
+//! - A branch crossing many frames pays one test per crossed frame under that register, so a function holding a deep enough crossing has those frames dissolved into a state machine instead (see [`flat`]); shallower branches keep the register, in the same function.
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by the module-level name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby).
+
+mod flat;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -143,6 +146,7 @@ fn generate_class_inner(
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
+        flat: RefCell::new(None),
         data_file: data_file.map(str::to_string),
         data_offsets,
     };
@@ -432,6 +436,60 @@ fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
+/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body — a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest (ADR-60).
+///
+/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch — `pos` is the top, the branch leaves its own innermost frame and crosses nothing — or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in. A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name. A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
+fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
+    let mut paths = Vec::new();
+    let mut stack: Vec<u32> = Vec::new();
+    walk_frame_paths(body, &mut stack, &mut paths);
+    paths
+}
+
+fn walk_frame_paths(stmts: &[Stmt], stack: &mut Vec<u32>, paths: &mut Vec<Vec<u32>>) {
+    for stmt in stmts {
+        match stmt {
+            Stmt::Block { label, body } | Stmt::Loop { label, body } => {
+                stack.push(label.id);
+                walk_frame_paths(body, stack, paths);
+                stack.pop();
+            }
+            Stmt::If {
+                label, then, els, ..
+            } => {
+                if label.referenced {
+                    stack.push(label.id);
+                }
+                walk_frame_paths(then, stack, paths);
+                walk_frame_paths(els, stack, paths);
+                if label.referenced {
+                    stack.pop();
+                }
+            }
+            Stmt::Br(target) | Stmt::BrIf { target, .. } => record_path(target, stack, paths),
+            Stmt::BrTable {
+                targets, default, ..
+            } => {
+                for target in targets {
+                    record_path(target, stack, paths);
+                }
+                record_path(default, stack, paths);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn record_path(target: &BrTarget, stack: &[u32], paths: &mut Vec<Vec<u32>>) {
+    if let BrTarget::Label { label, .. } = target {
+        if let Some(pos) = stack.iter().position(|id| id == label) {
+            if pos + 1 < stack.len() {
+                paths.push(stack[pos..].to_vec());
+            }
+        }
+    }
+}
+
 fn default_value(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 | ValType::I64 => "0",
@@ -445,6 +503,8 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
+    /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]). `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
+    flat: RefCell<Option<flat::Plan>>,
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
@@ -874,13 +934,117 @@ impl<'a> Gen<'a> {
                 .join(" = ");
             w.line(format!("{decl} = 0"));
         }
-        let needs_br = seq_has_label_branch(&func.body);
-        if needs_br {
+        *self.flat.borrow_mut() = flat::plan(&func.body, &compute_frame_paths(&func.body));
+        // The branch register is declared only when the cascade can actually use it: a branch to a frame that survives the plan still relays through `_br`, one addressed by state never does, and a function with no label branch at all never reads it either.
+        if self.seq_has_relay_branch(&func.body) {
             w.line("_br = 0");
         }
-        let mut guarded = false;
-        self.emit_seq(w, &func.body, &mut guarded);
+        let nstates = self.flat.borrow().as_ref().map(|p| p.nstates as usize);
+        match nstates {
+            None => {
+                let mut guarded = false;
+                self.emit_seq(w, &func.body, &mut guarded);
+            }
+            Some(n) => {
+                // Each state is rendered into its own writer, then stitched under its arm of the dispatch. Every state body ends in a transition, a `return` or a trap (see `flat_seq`), so no arm falls through to the next round with the same state.
+                let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("    ")).collect();
+                let last = self.flat_seq(&mut st, 0, &func.body);
+                // Falling off the body ends the function; leave the dispatch loop through its `else`. A body that cannot fall off needs no such exit.
+                if !terminates(&func.body) {
+                    st[last].line(format!("_state = {n}; continue"));
+                }
+                let texts: Vec<String> = st.into_iter().map(|c| c.finish()).collect();
+                w.line("_state = 0");
+                w.line("while True:");
+                w.indent();
+                emit_dispatch_tree(w, &texts, 0, n);
+                w.dedent();
+            }
+        }
+        *self.flat.borrow_mut() = None;
         w.dedent();
+    }
+
+    /// Emit `stmts` into the state machine, splitting at each dissolved frame. Statements between the splits go through the ordinary [`Self::emit_seq`], so surviving frames keep their `_br` regions and landing markers. Returns the state control is in afterwards.
+    ///
+    /// A run starts unguarded: every frame enclosing a sequence `flat_seq` walks is dissolved (dissolution is transitive up the spine), so every branch escaping the run is addressed by state and leaves `_br` alone.
+    fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
+        let mut run = 0; // start of the pending run of non-dissolved statements
+        for (i, stmt) in stmts.iter().enumerate() {
+            let plan_hit = {
+                let p = self.flat.borrow();
+                let p = p.as_ref().unwrap();
+                match stmt {
+                    Stmt::Block { label, .. }
+                    | Stmt::Loop { label, .. }
+                    | Stmt::If { label, .. }
+                        if p.dissolved.contains(&label.id) =>
+                    {
+                        Some((p.state_of[&label.id], p.after[&label.id]))
+                    }
+                    _ => None,
+                }
+            };
+            let Some((target, after)) = plan_hit else {
+                continue;
+            };
+            if run < i {
+                let mut guarded = false;
+                self.emit_seq(&mut st[cur], &stmts[run..i], &mut guarded);
+            }
+            run = i + 1;
+            match stmt {
+                Stmt::Block { body, .. } => {
+                    cur = self.flat_seq(st, cur, body);
+                    if !terminates(body) {
+                        st[cur].line(format!("_state = {after}; continue"));
+                    }
+                    cur = after as usize;
+                }
+                Stmt::Loop { body, .. } => {
+                    // `target` is the head: entering the loop and taking its back-edge are the same transition.
+                    st[cur].line(format!("_state = {target}; continue"));
+                    cur = target as usize;
+                    cur = self.flat_seq(st, cur, body);
+                    if !terminates(body) {
+                        st[cur].line(format!("_state = {after}; continue"));
+                    }
+                    cur = after as usize;
+                }
+                Stmt::If {
+                    cond, then, els, ..
+                } => {
+                    // The arms stay inline — `if` is not a Python loop, so a `continue` inside one already reaches the dispatch loop. An arm that changes state carries on in the new state's writer, at its top level, which is reachable only through the transition emitted under this `if`.
+                    st[cur].line(format!("if {}:", self.cond(cond)));
+                    st[cur].indent();
+                    let a = self.flat_seq(st, cur, then);
+                    if !terminates(then) {
+                        st[a].line(format!("_state = {after}; continue"));
+                    }
+                    st[cur].dedent();
+                    if !els.is_empty() {
+                        st[cur].line("else:");
+                        st[cur].indent();
+                        let b = self.flat_seq(st, cur, els);
+                        if !terminates(els) {
+                            st[b].line(format!("_state = {after}; continue"));
+                        }
+                        st[cur].dedent();
+                    }
+                    // Reachable only through the condition-false fallthrough. With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
+                    if els.is_empty() {
+                        st[cur].line(format!("_state = {after}; continue"));
+                    }
+                    cur = after as usize;
+                }
+                _ => unreachable!("only frames are dissolved"),
+            }
+        }
+        if run < stmts.len() {
+            let mut guarded = false;
+            self.emit_seq(&mut st[cur], &stmts[run..], &mut guarded);
+        }
+        cur
     }
 
     /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while` (ADR-28).
@@ -967,7 +1131,7 @@ impl<'a> Gen<'a> {
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
                 _ => {
                     self.simple_stmt(w, stmt);
-                    collect_leaf_free_targets(stmt, &mut free)
+                    self.collect_leaf_free_targets(stmt, &mut free)
                 }
             };
             if may_set {
@@ -1210,8 +1374,73 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
+                // Addressed by value: one assignment and one jump, the same cost from any depth. The `continue` reaches the dispatch loop because every frame this branch escapes was dissolved with it (the path closure in [`flat::plan`]), so no surviving `while True:` sits in between.
+                if let Some(st) = self.state_of(*label) {
+                    w.line(format!("_state = {st}; continue"));
+                    return;
+                }
                 // is_loop is irrelevant here: the loop trailer turns `_br == <loop id>` into a `continue`; a block/if exit is handled by the guards skipping to the label's reset marker (ADR-28).
                 w.line(format!("_br = {label}"));
+            }
+        }
+    }
+
+    /// The dispatch state a branch to `label` lands in, when the current function's plan addresses that label by value.
+    fn state_of(&self, label: u32) -> Option<u32> {
+        self.flat
+            .borrow()
+            .as_ref()
+            .and_then(|p| p.state_of.get(&label).copied())
+    }
+
+    /// Whether `stmts` holds a branch that still travels through `_br`, i.e. whether the function needs the branch register at all. A label branch the plan addresses by state never touches it, and neither does a `return`.
+    fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
+        stmts.iter().any(|s| self.stmt_has_relay_branch(s))
+    }
+
+    fn stmt_has_relay_branch(&self, stmt: &Stmt) -> bool {
+        let relays = |t: &BrTarget| match t {
+            BrTarget::Return { .. } => false,
+            BrTarget::Label { label, .. } => self.state_of(*label).is_none(),
+        };
+        match stmt {
+            Stmt::Br(t) | Stmt::BrIf { target: t, .. } => relays(t),
+            Stmt::BrTable {
+                targets, default, ..
+            } => relays(default) || targets.iter().any(relays),
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => self.seq_has_relay_branch(body),
+            Stmt::If { then, els, .. } => {
+                self.seq_has_relay_branch(then) || self.seq_has_relay_branch(els)
+            }
+            _ => false,
+        }
+    }
+
+    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28). Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
+    fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
+        match stmt {
+            Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
+            Stmt::BrTable {
+                targets, default, ..
+            } => {
+                let mut any = self.collect_target_free(default, free);
+                for t in targets {
+                    any |= self.collect_target_free(t, free);
+                }
+                any
+            }
+            _ => false,
+        }
+    }
+
+    fn collect_target_free(&self, t: &BrTarget, free: &mut BTreeSet<u32>) -> bool {
+        match t {
+            BrTarget::Return { .. } => false,
+            // A state-addressed branch jumps to the dispatch loop without touching `_br`: it neither escapes this sequence as a pending branch nor leaves anything for a following statement to guard against.
+            BrTarget::Label { label, .. } if self.state_of(*label).is_some() => false,
+            BrTarget::Label { label, .. } => {
+                free.insert(*label);
+                true
             }
         }
     }
@@ -1446,6 +1675,31 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
+/// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits, leaves holding the state bodies — O(log n) compares per transition. Ruby's `case/when` dispatch is a single hash probe, but CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares: on the packed-CRuby conversion the linear chain (largest machine 1,463 states) measured 1.22x *slower* than the relay cascade it replaced, and the tree is what makes the flat lowering pay for itself. `lo..=hi` is the id range this subtree serves; id `texts.len()` is the exit state, reachable only as a transition target, whose leaf is `break`. A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
+fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize) {
+    if lo == hi {
+        if lo == texts.len() {
+            w.line("break");
+        } else if texts[lo].is_empty() {
+            w.line("pass");
+        } else {
+            for line in texts[lo].lines() {
+                w.line(line);
+            }
+        }
+        return;
+    }
+    let mid = lo + (hi - lo).div_ceil(2);
+    w.line(format!("if _state < {mid}:"));
+    w.indent();
+    emit_dispatch_tree(w, texts, lo, mid - 1);
+    w.dedent();
+    w.line("else:");
+    w.indent();
+    emit_dispatch_tree(w, texts, mid, hi);
+    w.dedent();
+}
+
 /// Whether `stmt` emits at least one real Python statement. A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them — the suite could end up holding no statement, which Python rejects.
 fn stmt_emits(stmt: &Stmt) -> bool {
     match stmt {
@@ -1459,50 +1713,20 @@ fn stmt_emits(stmt: &Stmt) -> bool {
     }
 }
 
-/// Whether `stmts` contains any branch to a label (as opposed to a return), i.e. whether the function needs the `_br` branch register at all.
-fn seq_has_label_branch(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(stmt_has_label_branch)
-}
-
-fn stmt_has_label_branch(stmt: &Stmt) -> bool {
-    match stmt {
-        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => matches!(t, BrTarget::Label { .. }),
-        Stmt::BrTable {
-            targets, default, ..
-        } => {
-            matches!(default, BrTarget::Label { .. })
-                || targets.iter().any(|t| matches!(t, BrTarget::Label { .. }))
-        }
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_has_label_branch(body),
-        Stmt::If { then, els, .. } => seq_has_label_branch(then) || seq_has_label_branch(els),
+/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. `flat_seq` appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative — answering `false` only re-emits the transition that used to be there unconditionally.
+fn terminates(stmts: &[Stmt]) -> bool {
+    let Some(last) = stmts
+        .iter()
+        .rev()
+        .find(|s| !matches!(s, Stmt::SourceLine(_)))
+    else {
+        return false;
+    };
+    match last {
+        Stmt::Br(_) | Stmt::Return { .. } | Stmt::Unreachable => true,
+        // Neither arm falling through means the `if` itself does not.
+        Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
         _ => false,
-    }
-}
-
-/// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28). Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
-fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
-    match stmt {
-        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => collect_target_free(t, free),
-        Stmt::BrTable {
-            targets, default, ..
-        } => {
-            let mut any = collect_target_free(default, free);
-            for t in targets {
-                any |= collect_target_free(t, free);
-            }
-            any
-        }
-        _ => false,
-    }
-}
-
-fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) -> bool {
-    match t {
-        BrTarget::Return { .. } => false,
-        BrTarget::Label { label, .. } => {
-            free.insert(*label);
-            true
-        }
     }
 }
 
@@ -1538,6 +1762,86 @@ fn store_method(op: StoreOp) -> &'static str {
         I64Store8 => "i64_store8",
         I64Store16 => "i64_store16",
         I64Store32 => "i64_store32",
+    }
+}
+
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus a `continue` into the dispatch loop; a shallow one must keep the ADR-28 branch register, which the Ruby measurements behind ADR-60 found cheaper than a dispatch at that depth.
+#[cfg(test)]
+mod cascade {
+    use super::*;
+
+    fn convert(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length — the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings (ADR-60).
+    fn tower(depth: usize) -> String {
+        let opens = (0..depth)
+            .map(|i| format!("(block $l{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let targets = (0..depth)
+            .rev()
+            .map(|i| format!("$l{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             {opens} (br_table {targets} (local.get 0)) {closes} \
+             (local.set 1 (i32.const 7)) (local.get 1)))",
+            closes = ")".repeat(depth)
+        )
+    }
+
+    #[test]
+    fn deep_multi_level_br_is_addressed_by_value() {
+        let src = convert(&tower(flat::DEEP_CROSSING + 2));
+        // The dispatch loop, and a branch that names its target as a number.
+        assert!(src.contains("_state = 0"), "no dispatch entry in:\n{src}");
+        assert!(src.contains("if _state < "), "no dispatch tree in:\n{src}");
+        assert!(src.contains("; continue"), "no transition in:\n{src}");
+        // The register lowering it replaces: no relay, and no register at all in a function whose every crossing is addressed by state.
+        assert!(!src.contains("_br"), "branch register survived in:\n{src}");
+    }
+
+    #[test]
+    fn shallow_multi_level_br_keeps_the_relay() {
+        // The same tower, one level below the threshold: a relay of that depth is cheaper than a dispatch, so nothing dissolves (ADR-60).
+        let src = convert(&tower(flat::DEEP_CROSSING - 1));
+        assert!(
+            src.contains("_br = "),
+            "no relay for a shallow branch in:\n{src}"
+        );
+        assert!(
+            src.contains("if _br == 1:"),
+            "no landing marker for a shallow branch in:\n{src}"
+        );
+        assert!(!src.contains("_state"), "state machine leaked in:\n{src}");
+    }
+
+    #[test]
+    fn mixed_depths_stay_structured() {
+        // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single `br_table` whose targets span all three nesting depths. Every crossing is shallow, so the whole function keeps the register lowering and its structured loop.
+        let src = convert(
+            r#"
+              (module
+                (func (export "f") (param i32) (result i32)
+                  (local i32)
+                  (block $A
+                    (loop $B
+                      (block $C
+                        (br_table $C $B $A (local.get 0)))
+                      (local.set 1 (i32.const 7))))
+                  (local.get 1)))
+            "#,
+        );
+        assert!(src.contains("while True:"), "no structured loop in:\n{src}");
+        assert!(src.contains("_br = "), "no relay in:\n{src}");
+        assert!(!src.contains("_state"), "dispatch appeared in:\n{src}");
     }
 }
 
