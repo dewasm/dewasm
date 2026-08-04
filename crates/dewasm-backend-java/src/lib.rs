@@ -347,7 +347,7 @@ fn reindent(src: &str, levels: usize) -> String {
     out
 }
 
-/// The standalone entry point: parse the runtime interface (ADR-31) — `--dir HOST::GUEST` preopens, then the guest argv with argv[0] the program name — instantiate, run `_start`, and map `proc_exit`/trap to a process exit code (a trap prints to stderr and exits 134, mirroring Ruby/Python/Go).
+/// The standalone entry point: parse the runtime interface (ADR-31) — `--dir HOST::GUEST` preopens, then the guest argv with argv[0] the program name — instantiate, run `_start` on a dedicated large-stack thread, and map `proc_exit`/trap to a process exit code (a trap prints to stderr and exits 134, mirroring Ruby/Python/Go). The dedicated thread mirrors Python's ADR-28 mitigation: deep-but-valid guest recursion (issue #137) can exceed the JVM's default main-thread stack on some hosts, so `_start` runs on a 64 MiB thread instead. Exceptions thrown on that thread do not cross `Thread.join()`, so the runnable catches everything and hands the result back through `failure`.
 fn main_class(type_name: &str, wasi: bool) -> String {
     let args = if wasi { "wasiArgs" } else { "null" };
     let env = if wasi { "wasiEnv" } else { "new String[0]" };
@@ -405,14 +405,31 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     out.push_str(&format!(
         "        {type_name} p = new {type_name}(null, {args}, {env}, {preopens});\n"
     ));
+    out.push_str("        Throwable[] failure = new Throwable[1];\n");
+    out.push_str("        Runnable guestRun = () -> {\n");
+    out.push_str("            try {\n");
+    out.push_str("                ((Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{});\n");
+    out.push_str("            } catch (Throwable e) {\n");
+    out.push_str("                failure[0] = e;\n");
+    out.push_str("            }\n");
+    out.push_str("        };\n");
+    out.push_str("        Thread guest = new Thread(null, guestRun, \"guest\", 64L << 20);\n");
+    out.push_str("        guest.start();\n");
     out.push_str("        try {\n");
-    out.push_str("            ((Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{});\n");
-    out.push_str("        } catch (Rt.Exit e) {\n");
-    out.push_str("            System.exit(e.code);\n");
-    out.push_str("        } catch (Rt.Trap e) {\n");
-    out.push_str("            System.err.print(\"trap: \" + e.getMessage() + \"\\n\");\n");
+    out.push_str("            guest.join();\n");
+    out.push_str("        } catch (InterruptedException e) {\n");
+    out.push_str("            Thread.currentThread().interrupt();\n");
+    out.push_str("        }\n");
+    out.push_str("        if (failure[0] instanceof Rt.Exit) {\n");
+    out.push_str("            System.exit(((Rt.Exit) failure[0]).code);\n");
+    out.push_str("        } else if (failure[0] instanceof Rt.Trap) {\n");
+    out.push_str("            System.err.print(\"trap: \" + failure[0].getMessage() + \"\\n\");\n");
     out.push_str("            System.err.flush();\n");
     out.push_str("            System.exit(134);\n");
+    out.push_str("        } else if (failure[0] instanceof RuntimeException) {\n");
+    out.push_str("            throw (RuntimeException) failure[0];\n");
+    out.push_str("        } else if (failure[0] instanceof Error) {\n");
+    out.push_str("            throw (Error) failure[0];\n");
     out.push_str("        }\n");
     out.push_str("        System.exit(0);\n");
     out.push_str("    }\n");

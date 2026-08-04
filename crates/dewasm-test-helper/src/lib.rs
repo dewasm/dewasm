@@ -227,7 +227,7 @@ macro_rules! standalone_dir_e2e {
     };
 }
 
-/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame recursion) standalone, run it, and require the guest's `proc_exit(42)` as the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No glue — this exercises the emitted entrypoint itself. Wired by Python, whose entrypoint applies ADR-28's mitigation (issue #31); each other backend's host recursion depth is its own concern — it invokes this once its entrypoint needs (and has) such a mitigation.
+/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame recursion) standalone, run it, and require the guest's `proc_exit(42)` as the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No glue — this exercises the emitted entrypoint itself. Wired by all six backends; each callsite notes whether its entrypoint needed a mitigation for this depth (Python's ADR-28 big-stack thread, issue #31; Java's equivalent, issue #137) or survives unmitigated (Ruby's host stack, Go's growable goroutine stacks, Bash's `ulimit -s` line, Perl's heap-allocated recursion, ADR-55).
 #[macro_export]
 macro_rules! deep_recursion_e2e {
     ($lang:expr) => {
