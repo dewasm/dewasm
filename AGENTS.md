@@ -17,7 +17,7 @@ Rust toolchain is pinned by `rust-toolchain.toml` (stable); plain `cargo` comman
 
 | Command | What it does |
 | --- | --- |
-| `cargo test` | **The gate**: unit + e2e + curated spec harness. The spec harness is a libtest-mimic test (one trial per `.wast` file); each backend crate owns its own conformance suites (ADR-27), only cross-backend tests live in `dewasm-cli`. |
+| `cargo test` | **The baseline check for every change**: unit + e2e + curated spec harness. The spec harness is a libtest-mimic test (one trial per `.wast` file); each backend crate owns its own conformance suites (ADR-27), only cross-backend tests live in `dewasm-cli`. |
 | `cargo fmt --check` | Verify Rust code formatting. |
 | `cargo clippy --all-targets -- -D warnings` | Run linter on all targets, failing on any warnings. |
 | `cargo test -p dewasm-backend-ruby --test spec i32` | Spec harness on `.wast` files whose name matches (cargo's built-in test-name filter — substring, add `--exact` for one file). Swap the crate (`-p dewasm-backend-bash`) to switch language. |
