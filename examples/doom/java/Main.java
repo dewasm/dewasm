@@ -100,6 +100,13 @@ public class Main {
         System.out.println("smoke: OK");
     }
 
+    // Shown as an on-screen overlay (mirrors mapKey) since there's no other
+    // discoverability path for a window app.
+    private static final String CONTROLS_TEXT =
+        "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu";
+
+    private static final String WINDOW_TITLE = "DOOM (dewasm)";
+
     // Interactive window: a JFrame whose panel blits the engine's current
     // BufferedImage scaled to the panel size, plus a KeyListener that queues
     // key events for the game thread to drain. DOOM ticks on its own thread
@@ -107,8 +114,9 @@ public class Main {
     // must all be called from one thread) while Swing delivers input on the
     // EDT; the ConcurrentLinkedQueue is the handoff between the two.
     private static void runGui() throws IOException {
-        JFrame window = new JFrame("DOOM (dewasm)");
+        JFrame window = new JFrame(WINDOW_TITLE);
         DoomPanel panel = new DoomPanel();
+        panel.controlsText = CONTROLS_TEXT;
         window.setContentPane(panel);
         window.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -149,8 +157,23 @@ public class Main {
 
         Thread gameThread = new Thread(() -> {
             engine.init();
+            // FPS is measured over ~1s windows (tick counting), not one tick
+            // at a time: DOOM's own 35Hz pacing plus JIT warmup jitter would
+            // otherwise make a per-tick instantaneous rate too noisy to read.
+            long fpsWindowStart = System.nanoTime();
+            int fpsWindowTicks = 0;
             while (!Thread.currentThread().isInterrupted()) {
                 engine.tick();
+                fpsWindowTicks++;
+                long now = System.nanoTime();
+                double elapsedSec = (now - fpsWindowStart) / 1e9;
+                if (elapsedSec >= 1.0) {
+                    double fps = fpsWindowTicks / elapsedSec;
+                    panel.fps = fps;
+                    SwingUtilities.invokeLater(() -> window.setTitle(String.format("%s - %.1f FPS", WINDOW_TITLE, fps)));
+                    fpsWindowStart = now;
+                    fpsWindowTicks = 0;
+                }
                 try {
                     Thread.sleep(1);
                 } catch (InterruptedException e) {
@@ -219,6 +242,8 @@ public class Main {
     // aspect ratio and letterboxing with black bars on the short axis.
     private static final class DoomPanel extends JPanel {
         volatile DoomEngine engine;
+        volatile double fps;
+        volatile String controlsText = "";
 
         DoomPanel() {
             setBackground(Color.BLACK);
@@ -243,6 +268,21 @@ public class Main {
             Graphics2D g2 = (Graphics2D) g;
             g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             g2.drawImage(frame, dx, dy, dw, dh, null);
+            drawHud(g2, dx, dy + dh);
+        }
+
+        // Overlays the FPS and control scheme on a fixed-color dark bar
+        // along the bottom edge of the rendered frame, so both stay legible
+        // against the game's own (highly variable) palette rather than the
+        // panel's plain black background bleeding through.
+        private void drawHud(Graphics2D g2, int frameLeft, int frameBottom) {
+            String text = String.format("%.0f FPS  |  %s", fps, controlsText);
+            int barHeight = 18;
+            int barTop = frameBottom - barHeight;
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRect(frameLeft, barTop, getWidth() - 2 * frameLeft, barHeight);
+            g2.setColor(Color.WHITE);
+            g2.drawString(text, frameLeft + 4, frameBottom - 5);
         }
     }
 

@@ -37,6 +37,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 readonly ESC=$'\e'
 
+# Fixed status-line colors (white on black), independent of the game's own
+# palette -- without an explicit color the status line inherits whatever
+# fg/bg the last-drawn pixel cell left active, flickering with the game.
+readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
+
 MODE=interactive
 [[ ${1-} == --smoke ]] && MODE=smoke
 # Info messages would corrupt the alternate-screen frame if printed there,
@@ -441,7 +446,9 @@ run_interactive() {
   ORIG_STTY=$(stty -g)
   restore_terminal() {
     stty "$ORIG_STTY" 2>/dev/null || true
-    printf '%s' "${ESC}[?25h${ESC}[?1049l"
+    # SGR reset first: the fixed status-line colors otherwise persist past
+    # leaving the alternate screen and tint the shell prompt underneath.
+    printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
   # Ctrl-C is handled explicitly as a byte in drain_input (once raw mode
   # is active) because raw mode disables the terminal's own SIGINT
@@ -512,7 +519,7 @@ run_interactive() {
     render_frame
     local status_text
     status_text="dewasm DOOM (bash) | tick $tick | $(fmt_secs "$dt_ms")s/tick | q quit  f fire  space use  arrows move  ,/. strafe  tab automap  enter confirm"
-    printf '%s' "$RENDER_OUT${ESC}[$(( GRID_ROWS + 1 ));1H${ESC}[K${status_text}"
+    printf '%s' "$RENDER_OUT${ESC}[$(( GRID_ROWS + 1 ));1H${ESC}[0m${STATUS_SGR}${ESC}[K${status_text}"
   done
 }
 

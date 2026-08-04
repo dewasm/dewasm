@@ -13,13 +13,16 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
 // doomInst is package-level because the host import closures below need to
@@ -205,6 +208,15 @@ func mapKey(k ebiten.Key) (uint32, bool) {
 	return 0, false
 }
 
+// controlsText mirrors the key mapping in mapKey; shown as an on-screen
+// overlay since there's no other discoverability path for a window app.
+const controlsText = "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu"
+
+// titleUpdateEvery throttles ebiten.SetWindowTitle calls: the title only
+// needs to be legible, not frame-accurate, and OS window-title updates are
+// not free every tick.
+const titleUpdateEvery = 35 // roughly once a second at DOOM's 35 TPS
+
 // Game implements ebiten.Game. tickGame/reportKeyDown/reportKeyUp are the
 // module's exported funcs, type-asserted once in main rather than on every
 // call.
@@ -212,6 +224,8 @@ type Game struct {
 	tickGame      func()
 	reportKeyDown func(uint32)
 	reportKeyUp   func(uint32)
+
+	ticks int
 }
 
 func (g *Game) Update() error {
@@ -226,6 +240,11 @@ func (g *Game) Update() error {
 		}
 	}
 	g.tickGame() // drives ui.drawFrame internally, refreshing frameBuf
+
+	g.ticks++
+	if g.ticks%titleUpdateEvery == 0 {
+		ebiten.SetWindowTitle(fmt.Sprintf("DOOM (dewasm) - %.1f FPS", ebiten.ActualFPS()))
+	}
 	return nil
 }
 
@@ -233,6 +252,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if frameBuf != nil {
 		screen.WritePixels(frameBuf)
 	}
+	drawHUD(screen, ebiten.ActualFPS())
+}
+
+// drawHUD overlays the FPS and control scheme on a dark bar along the
+// bottom edge of the frame, so both stay legible against DOOM's own
+// (highly variable) palette.
+func drawHUD(screen *ebiten.Image, fps float64) {
+	bounds := screen.Bounds()
+	const barHeight = 16
+	barY := float32(bounds.Dy() - barHeight)
+	vector.FillRect(screen, 0, barY, float32(bounds.Dx()), barHeight, color.NRGBA{0, 0, 0, 180}, false)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.0f FPS  |  %s", fps, controlsText), 4, bounds.Dy()-barHeight+2)
 }
 
 // Layout reports the module's native resolution as ebiten's logical screen

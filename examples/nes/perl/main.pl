@@ -54,6 +54,11 @@ use constant {
 
 my $HALF_BLOCK = "\xE2\x96\x80";    # U+2580 upper half block, as raw UTF-8
 
+# Fixed status-line colors (white on black), independent of the game's own
+# palette -- without an explicit color the status line inherits whatever
+# fg/bg the last-drawn pixel cell left active, flickering with the game.
+my $STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m";
+
 sub monotonic { return clock_gettime(CLOCK_MONOTONIC); }
 
 sub load_rom {
@@ -169,11 +174,19 @@ sub render {
         }
     }
     if (!defined($self->{last_status}) || $status_text ne $self->{last_status}) {
-        $buf .= sprintf("\e[%d;1H\e[K%s", $self->{cell_rows} + 1, $status_text);
+        # Reset SGR first: otherwise the status line inherits whichever
+        # fg/bg the last-drawn pixel cell left active, making its background
+        # flicker with the game's own colors instead of staying the
+        # terminal default.
+        $buf .= sprintf("\e[%d;1H\e[0m%s\e[K%s", $self->{cell_rows} + 1, $STATUS_SGR, $status_text);
         $self->{last_status} = $status_text;
         # Force the next painted cell to reposition: the cursor is now on
         # the status line.
         $self->{cursor_row} = -1;
+        # The reset above invalidated the SGR cache; force the next cell to
+        # re-emit its color.
+        $self->{last_fg} = undef;
+        $self->{last_bg} = undef;
     }
     return $buf;
 }
@@ -382,7 +395,9 @@ sub run_smoke {
 }
 
 use constant ENTER_ALT_SCREEN => "\e[?1049h\e[?25l\e[2J\e[H";
-use constant EXIT_ALT_SCREEN  => "\e[?25h\e[?1049l";
+# SGR reset first: the fixed status-line colors otherwise persist past
+# leaving the alternate screen and tint the shell prompt underneath.
+use constant EXIT_ALT_SCREEN  => "\e[0m\e[?25h\e[?1049l";
 
 sub run_interactive {
     my $rom_path = shift(@_) || DEFAULT_ROM;
