@@ -183,6 +183,38 @@ const GO_OVERRIDE_GLUE: &str = r#"func main() {
 }
 "#;
 
+/// The `wasi_stdio_capture` glue: Go's bundled WASI holds `*os.File` at fd 1 (`fd_write` type-asserts exactly that), so the embedder's sink is an `os.Pipe` write end swapped into `inst.wasi.fds` after construction — a real fd rather than an in-memory buffer, the same shape Perl's glue uses. Run `_start` (swallowing its clean `proc_exit`), close the writer so the reader sees EOF, and copy the captured bytes to the real stdout. The read loop is hand-rolled: library-mode Go imports `fmt` plus whatever the runtime bundle needs (`os`, here), and appended glue cannot add an `io` import of its own.
+const GO_STDIO_CAPTURE_GLUE: &str = r#"func main() {
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	inst := NewProg(nil, nil, nil, nil)
+	inst.wasi.fds[1] = w
+	func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				if _, ok := rec.(*rtExit); !ok {
+					panic(rec)
+				}
+			}
+		}()
+		inst.Exports["_start"].(func())()
+	}()
+	w.Close()
+	buf := make([]byte, 4096)
+	for {
+		n, e := r.Read(buf)
+		if n > 0 {
+			os.Stdout.Write(buf[:n])
+		}
+		if e != nil {
+			break
+		}
+	}
+}
+"#;
+
 // --------------------------------------------------------------------- WASI filesystem glue.
 
 /// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (via rtExit) as a trailing decimal line. rt/exit is always seeded for library-mode WASI output, so `*rtExit` is defined even for fixtures that never import proc_exit.
@@ -670,7 +702,8 @@ fn go_nes_frame_glue() -> String {
 
 dewasm_test_helper::library_add_e2e!(Go, GO_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold. stdio_capture_e2e!: not invoked — Go's WASI fds hold *os.File only; no io.Writer indirection to inject an in-memory buffer (ADR-29).
+dewasm_test_helper::stdio_capture_e2e!(Go, GO_STDIO_CAPTURE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold.
 
 dewasm_test_helper::wasi_suite!(Go, Stdio);
 dewasm_test_helper::wasi_suite!(Go, ArgsEnv);

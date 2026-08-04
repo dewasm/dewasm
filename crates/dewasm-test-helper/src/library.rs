@@ -47,7 +47,7 @@ pub const PARTIAL_OVERRIDE: LibraryCase = LibraryCase {
     expect: "ok\nbundled wasi constructed: true\n",
 };
 
-/// Library-mode stdio redirected to an in-memory object: the embedder wires the module's stdout to a language-native in-memory sink (Ruby StringIO, Python BytesIO, Java ByteArrayOutputStream) and reads the guest output back. Ruby, Python, and Java invoke `stdio_capture_e2e!`; Go and Bash lack the injection point (see their non-invocation REASON comments).
+/// Library-mode stdio captured by the embedder: the host wires the module's stdout to a sink of its own and reads the guest output back. Every backend invokes `stdio_capture_e2e!`, each with the sink its runtime's fd 1 accepts — an in-memory object where one fits (Ruby StringIO, Python BytesIO, Java ByteArrayOutputStream), an fd-level redirect where the fd must stay a real one (Perl's unlinked temp file, Go's `os.Pipe`, Bash's command substitution).
 pub const STDIO_CAPTURE: LibraryCase = LibraryCase {
     name: "wasi_stdio_capture",
     wat: "hello.wat",

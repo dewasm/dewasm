@@ -430,7 +430,7 @@ macro_rules! cruby_hello_e2e {
     };
 }
 
-/// Per-case C-API macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate; the file-backed case's `{scratch}` placeholder is filled by the runner). Which backends invoke these is the capability declaration (ADR-27): Ruby/Python/Go/Java, not Bash (ADR-12). Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]).
+/// Per-case C-API macros (ADR-27 revision): each expands to one `#[test] fn <case>()` running the named [`CApiCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate; the file-backed case's `{scratch}` placeholder is filled by the runner). Which backends invoke these is the capability declaration (ADR-27); every backend does (issue #138). Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]).
 ///
 /// [`CApiCase`]: crate::CApiCase
 #[macro_export]

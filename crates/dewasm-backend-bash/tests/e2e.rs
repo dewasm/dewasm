@@ -1,4 +1,4 @@
-//! Bash end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Bash backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Bash has no host-language object model (ADR-12), so it invokes only the two always-available library cases (glue is Bash function calls over the R0.. result globals, ADR-11), the whole-program WASI kinds it covers, and the flat-namespace multi-module case (ADR-35).
+//! Bash end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Bash backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Glue is Bash function calls over the R0.. result globals (ADR-11) and the `${prefix}mem` byte array — enough to drive the C-API cases as well; what Bash drops is only what needs a host-language *object* model (a WASI provider object and its lazy construction) and the flat-namespace multi-module limit (ADR-35).
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -87,6 +87,14 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
+/// The `wasi_stdio_capture` glue: bash's embedder-controlled sink is a command substitution — run init and `_start` inside `$( … )` and the guest's fd 1 writes land in a shell variable instead of the script's stdout, the same fd-level redirect Perl's glue uses rather than an in-memory object. `$()` strips the trailing newlines, so the captured text is printed back with `%s\n` to restore the one the guest wrote. The subshell's `_start` ends in `proc_exit`, i.e. the status-133 cascade (ADR-12), which is simply not propagated: this case asserts stdout only.
+const BASH_STDIO_CAPTURE_GLUE: &str = r#"captured=$(
+  prog_init || { echo "init failed" >&2; exit 1; }
+  prog_invoke '_start'
+)
+printf '%s\n' "$captured"
+"#;
+
 /// `SHARED_TABLE`'s driver: `shared_table_a.wat`'s module has no wasm-level name, so `compose_modules` prefixes it from the case's "TableExp" label (`func_prefix`); `shared_table_b.wat` imports it under the *wasm* module name `"a"` (unrelated to "TableExp"), so PROVIDERS maps that literal key to the exporter's generation prefix (ADR-35).
 const BASH_SHARED_TABLE_GLUE: &str = r#"tableexp_init || { echo "init failed" >&2; exit 1; }
 declare -A PROVIDERS=([a]=tableexp_)
@@ -134,6 +142,267 @@ sqlite3shell_init || { echo "init failed" >&2; exit 1; }
 sqlite3shell_invoke '_start'
 exit 0
 "#;
+
+const BASH_RG_SEARCH_GLUE: &str = r#"WASI_ARGS=(rg --sort path needle /work)
+WASI_ENV=()
+WASI_DIRS=('{scratch}::/work')
+rg_init || { echo "init failed" >&2; exit 1; }
+rg_invoke '_start'
+exit 0
+"#;
+
+// --------------------------------------------------------------------- C-API drive glue: the same pointer plumbing the other backends write as host-language closures, in Bash's vocabulary — results in the `R0` global (ADR-11), guest memory as the `${P}mem` associative array (one decimal byte per index), and the generated module's own runtime units (`mem_init`, `mem_i32_load`) for the transfers. No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+
+/// The front matter every C-API glue below shares, parameterized by the module's generation prefix and its allocator export (`sqlite3_malloc` for the sqlite artifacts, plain `malloc` for the reactor libraries). A macro rather than a plain const so the pieces can be `concat!`ed into a `&'static str` glue const, keeping each case's drive readable as one literal.
+macro_rules! bash_capi_prelude {
+    ($prefix:literal, $malloc:literal) => {
+        concat!(
+            "P=",
+            $prefix,
+            "\nMALLOC=",
+            $malloc,
+            "\n",
+            r#"
+# Call an export, failing loud on a trap (the drive is a straight line: any
+# trap means the case is broken, not that the guest reported an error).
+capi_call() {
+  "${P}invoke" "$@" || { echo "$1 failed (status $?): ${TRAP_MSG-}" >&2; exit 1; }
+}
+
+# Copy a string into freshly allocated guest memory with a NUL terminator and
+# return the pointer in R0. Character codes come from printf's leading-quote
+# form (`printf '%d' "'c"`), the byte array then goes in through `mem_init` —
+# the same runtime helper an active data segment uses.
+capi_cstr() {
+  local s=$1 i c
+  CSTR_BYTES=()
+  for (( i = 0; i < ${#s}; i++ )); do
+    printf -v c '%d' "'${s:i:1}"
+    CSTR_BYTES+=("$c")
+  done
+  CSTR_BYTES+=(0)
+  capi_call "$MALLOC" "${#CSTR_BYTES[@]}"
+  local p=$R0
+  mem_init "$P" CSTR_BYTES "$p" 0 "${#CSTR_BYTES[@]}" || exit 1
+  R0=$p
+}
+
+# Read the NUL-terminated C string at a guest pointer back into CSTR. An unset
+# memory index reads as 0 in arithmetic, i.e. as the terminator. The bytes are
+# turned back into text through a `\xNN` printf format, the same reconstruction
+# the bundled fd_write unit uses.
+capi_read_cstr() {
+  local -n __m=${P}mem
+  local p=$1 b bytes=() fmt
+  CSTR=''
+  while (( b = __m[$p] )); do
+    bytes+=("$b")
+    (( p++ ))
+  done
+  (( ${#bytes[@]} )) || return 0
+  printf -v fmt '\\x%02x' "${bytes[@]}"
+  printf -v CSTR "$fmt"
+}
+"#
+        )
+    };
+}
+
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + pointer plumbing, open/exec/prepare/step/column/finalize/close. `sqlite3_prepare_v2`'s -1 length is written as its masked-unsigned i32 (ADR-2).
+const BASH_LIBSQLITE3_MEM: &str = concat!(
+    bash_capi_prelude!("libsqlite3_", "sqlite3_malloc"),
+    r#"
+libsqlite3_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+
+capi_call sqlite3_libversion
+capi_read_cstr "$R0"
+printf 'version: %s\n' "$CSTR"
+
+capi_call "$MALLOC" 4
+ppdb=$R0
+capi_cstr ':memory:'
+capi_call sqlite3_open "$R0" "$ppdb"
+(( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
+mem_i32_load "$P" "$ppdb" || exit 1
+db=$R0
+
+capi_cstr "create table t(a,b); insert into t values (1,'x'),(2,'y');"
+capi_call sqlite3_exec "$db" "$R0" 0 0 0
+(( R0 == 0 )) || { echo "exec rc=$R0" >&2; exit 1; }
+
+capi_call "$MALLOC" 4
+ppstmt=$R0
+capi_cstr 'select a*10, b from t order by a desc'
+capi_call sqlite3_prepare_v2 "$db" "$R0" 4294967295 "$ppstmt" 0
+(( R0 == 0 )) || { echo "prepare rc=$R0" >&2; exit 1; }
+mem_i32_load "$P" "$ppstmt" || exit 1
+stmt=$R0
+
+while capi_call sqlite3_step "$stmt"; [[ $R0 == 100 ]]; do  # SQLITE_ROW
+  capi_call sqlite3_column_count "$stmt"
+  ncol=$R0
+  row=''
+  for (( i = 0; i < ncol; i++ )); do
+    capi_call sqlite3_column_text "$stmt" "$i"
+    capi_read_cstr "$R0"
+    (( i )) && row+='|'
+    row+=$CSTR
+  done
+  printf '%s\n' "$row"
+done
+capi_call sqlite3_finalize "$stmt"
+capi_call sqlite3_close "$db"
+echo 'C-API-OK'
+"#
+);
+
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-34 fs stack as the shell), leaving a nonzero DB file on the host.
+const BASH_LIBSQLITE3_FILE: &str = concat!(
+    r#"WASI_ARGS=(libsqlite3)
+WASI_ENV=()
+WASI_DIRS=('{scratch}::/db')
+"#,
+    bash_capi_prelude!("libsqlite3_", "sqlite3_malloc"),
+    r#"
+open_db() {
+  capi_call "$MALLOC" 4
+  local pp=$R0
+  capi_cstr "$1"
+  capi_call sqlite3_open "$R0" "$pp"
+  (( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
+  mem_i32_load "$P" "$pp" || exit 1
+}
+
+libsqlite3_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+
+# create + insert, then close so the file is fully flushed
+open_db /db/data.db
+db=$R0
+capi_cstr "create table t(a,b); insert into t values (1,'x'),(2,'y');"
+capi_call sqlite3_exec "$db" "$R0" 0 0 0
+(( R0 == 0 )) || { echo "exec rc=$R0" >&2; exit 1; }
+capi_call sqlite3_close "$db"
+
+# reopen the same file and read it back
+open_db /db/data.db
+db=$R0
+capi_call "$MALLOC" 4
+ppstmt=$R0
+capi_cstr 'select a*10, b from t order by a'
+capi_call sqlite3_prepare_v2 "$db" "$R0" 4294967295 "$ppstmt" 0
+(( R0 == 0 )) || { echo "prepare rc=$R0" >&2; exit 1; }
+mem_i32_load "$P" "$ppstmt" || exit 1
+stmt=$R0
+while capi_call sqlite3_step "$stmt"; [[ $R0 == 100 ]]; do  # SQLITE_ROW
+  capi_call sqlite3_column_count "$stmt"
+  ncol=$R0
+  row=''
+  for (( i = 0; i < ncol; i++ )); do
+    capi_call sqlite3_column_text "$stmt" "$i"
+    capi_read_cstr "$R0"
+    (( i )) && row+='|'
+    row+=$CSTR
+  done
+  printf '%s\n' "$row"
+done
+capi_call sqlite3_finalize "$stmt"
+capi_call sqlite3_close "$db"
+echo 'FILE-OK'
+"#
+);
+
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` through the ADR-7 `IMPORTS` array — a void import, so it leaves `R0` empty — and collects the rows.
+const BASH_SQLITE3_CALLBACK: &str = concat!(
+    bash_capi_prelude!("sqlite3_binding_", "sqlite3_malloc"),
+    r#"
+ROWS=()
+host_row() {
+  local argc=$1 argv=$2 row='' i
+  for (( i = 0; i < argc; i++ )); do
+    mem_i32_load "$P" $(( argv + i * 4 )) || return $?
+    capi_read_cstr "$R0"
+    (( i )) && row+='|'
+    row+=$CSTR
+  done
+  ROWS+=("$row")
+  R0=
+  return 0
+}
+declare -A IMPORTS=(['env.host_row']=host_row)
+
+sqlite3_binding_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+
+capi_call "$MALLOC" 4
+ppdb=$R0
+capi_cstr ':memory:'
+capi_call sqlite3_open "$R0" "$ppdb"
+(( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
+mem_i32_load "$P" "$ppdb" || exit 1
+db=$R0
+
+capi_cstr "create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"
+capi_call sqlite3_exec "$db" "$R0" 0 0 0
+(( R0 == 0 )) || { echo "exec rc=$R0" >&2; exit 1; }
+
+# guest -> host: run_query calls back into env.host_row once per row
+capi_cstr 'select a, b from t where a >= 2 order by a'
+capi_call run_query "$db" "$R0"
+(( R0 == 0 )) || { echo "run_query rc=$R0" >&2; exit 1; }
+capi_call sqlite3_close "$db"
+
+for row in "${ROWS[@]}"; do printf 'row: %s\n' "$row"; done
+echo 'CALLBACK-OK'
+"#
+);
+
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`. The u16/u8 fields are composed from single memory bytes (little-endian), the u32s go through `mem_i32_load`.
+const BASH_PCAP_COMPILE: &str = concat!(
+    bash_capi_prelude!("libpcap_", "malloc"),
+    r#"
+libpcap_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+
+capi_cstr 'tcp port 80'
+capi_call compile_filter "$R0" 1 65535
+prog=$R0
+(( prog )) || { echo "compile failed" >&2; exit 1; }
+mem_i32_load "$P" "$prog" || exit 1
+n=$R0
+declare -n mem=${P}mem
+for (( i = 0; i < n; i++ )); do
+  base=$(( prog + 4 + i * 8 ))
+  code=$(( mem[$base] | mem[$(( base + 1 ))] << 8 ))
+  jt=$(( mem[$(( base + 2 ))] ))
+  jf=$(( mem[$(( base + 3 ))] ))
+  mem_i32_load "$P" $(( base + 4 )) || exit 1
+  printf '%d %d %d %d\n' "$code" "$jt" "$jf" "$R0"
+done
+capi_call free "$prog"
+echo 'BPF-OK'
+"#
+);
+
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+const BASH_TREESITTER_PARSE: &str = concat!(
+    bash_capi_prelude!("treesitter_", "malloc"),
+    r#"
+src='{"key": [1, true, null]}'
+treesitter_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+
+capi_cstr "$src"
+capi_call parse_source "$R0" "${#src}"
+tree=$R0
+(( tree )) || { echo "parse failed" >&2; exit 1; }
+capi_read_cstr "$tree"
+printf '%s\n' "$CSTR"
+capi_call free "$tree"
+echo 'TS-OK'
+"#
+);
 
 /// DOOM (ADR-53): the frame snapshot, modelled on the Bash frontend (examples/doom/bash/main.sh) — imp_* handlers set `R0`, `IMPORTS[mod.name]` wires them, `doom_init`/`doom_invoke` drive, and `doom_mem` holds the pixels. The P6 frame goes out through a chunked `printf` `\xNN` format string (which carries the NUL bytes a Bash variable cannot). `{ticks}`/`{clock_step}` filled by the runner.
 const BASH_DOOM_FRAME_GLUE: &str = r#"DOOM_MS=0
@@ -242,7 +511,8 @@ exit 0
 
 dewasm_test_helper::library_add_e2e!(Bash, BASH_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e! / stdio_capture_e2e!: not invoked — Bash has no host-language object model to replace WASI wholesale, probe its lazy construction, or redirect stdio into an in-memory object (ADR-12).
+dewasm_test_helper::stdio_capture_e2e!(Bash, BASH_STDIO_CAPTURE_GLUE);
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Bash has no host-language object model to replace WASI wholesale or probe its lazy construction (ADR-12).
 
 dewasm_test_helper::wasi_suite!(Bash, Stdio);
 dewasm_test_helper::wasi_suite!(Bash, ArgsEnv);
@@ -259,16 +529,24 @@ dewasm_test_helper::sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default, unlike the slow floating-point apps (QuickJS/SQLite).
 dewasm_test_helper::gzip_e2e!(Bash);
 
-// Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens, path_open, and positioned I/O, so the three small-fixture fs apps are wired (all slow, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
+// Filesystem app cases (ADR-34): Bash's WASI filesystem now covers preopens, path_open, and positioned I/O, so the small-fixture fs apps are wired (all slow, softfloat-bound QuickJS/SQLite — see qjs_eval_e2e! above).
 dewasm_test_helper::qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
+// ripgrep: an 18 MB wasm becomes a 70 MB script, which bash parses in 1.7 s and then walks the fixture tree in the rest of a 22 s run — the slowest of the Bash `slow` cases but the same cluster as qjs_eval (13.6 s) and sqlite3_shell_dbfile (10.0 s), not the ~1-minute `ultra` line.
+dewasm_test_helper::rg_search_e2e!(Bash, BASH_RG_SEARCH_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here alongside them: it shares their standalone-mode QuickJS conversion. It is markedly slower than every other case — every keystroke of the scripted session re-enters QuickJS's interactive line editor (redraw/completion), and each successive evaluation measured slower than the last (first prompt ~135s, then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and timed out on CI (#22). It is therefore pinned to the `ultra` category (ADR-48): kept out of CI's `slow_test` run and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification. Left wired rather than unwired per ADR-15 (fail loud, not silently skip): a timeout is still an honest signal.
 dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
-// rg_search_e2e! / cpython_hello_e2e! / cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — these wasm binaries are tens of MB; the Bash backend's per-instruction lowering (ADR-11) would generate a hundreds-of-MB script, well beyond what bash's own parser can load in practice (ADR-13's softfloat perf figures already put a single arithmetic op at bash-interpreter speed, and these apps are orders of magnitude larger than QuickJS/SQLite) — parse feasibility, not just runtime speed, is the blocker.
+// cpython_hello_e2e! / cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — wall time, not parse feasibility, is what stops these. The generated scripts do load: the 18 MB rg.wasm's 70 MB script parses in 1.7 s and finishes the fixture search in 21 s (wired above), and CPython's 30 MB wasm yields a 226 MB script that bash parses in 4.6 s. What is unmeasured is how long an interpreter boot then takes under ADR-13's softfloat, where a single arithmetic op costs a bash function call; CRuby is the same shape, one interpreter larger, and its wasi-vfs-packed variant (ADR-61) larger still.
 
 dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 // Ultra-slow category (ADR-48): tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)
 dewasm_test_helper::nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
 dewasm_test_helper::shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
-// libsqlite3_c_api_e2e! / sqlite3_file_c_api_e2e! / sqlite3_callback_binding_e2e! / pcap_compile_e2e! / treesitter_parse_e2e!: not invoked — Bash has no host-language C API to plumb a pointer-returning binding through (ADR-12), and the multi-MB reactor artifacts are far past what Bash's parser can load in practice. embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).
+// The C-API cases run under Bash too: a pointer is a decimal in `R0` and guest memory is the `${P}mem` array, which is all the plumbing these drives need — the NES glue above already does the same in the other direction. The artifacts are within reach as well (41.6 MB libsqlite3, 18.1 MB libpcap, 3.0 MB tree-sitter scripts, all at or below the 45 MB sqlite3-shell script Bash already runs), and all five stay in the `slow` category: 0.7 s tree-sitter, 1.4 s libpcap, 4.0/4.2 s the in-memory sqlite drives, 7.7 s the file-backed one.
+dewasm_test_helper::libsqlite3_c_api_e2e!(Bash, BASH_LIBSQLITE3_MEM);
+dewasm_test_helper::sqlite3_file_c_api_e2e!(Bash, BASH_LIBSQLITE3_FILE);
+dewasm_test_helper::sqlite3_callback_binding_e2e!(Bash, BASH_SQLITE3_CALLBACK);
+dewasm_test_helper::pcap_compile_e2e!(Bash, BASH_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Bash, BASH_TREESITTER_PARSE);
+// embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).
