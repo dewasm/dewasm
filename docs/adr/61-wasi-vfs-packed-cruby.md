@@ -22,6 +22,6 @@ Because the packed module needs no preopens, the case (`CRUBY_PACKED_HELLO`, `cr
 
 ## Consequences
 
-- The intended ruby.wasm deployment shape is covered end-to-end: pack (setup.sh) → convert (a `heavy` row in the whole-cache convert manifest, ADR-54) → run (`cruby_packed_hello_e2e!` on Ruby/Python at the slow tier, Perl at ultra; Go/Java/Bash excluded for the unpacked CRuby's own reasons — the packed module is the same interpreter, strictly larger).
+- The intended ruby.wasm deployment shape is covered end-to-end: pack (setup.sh) → convert (a `heavy` row in the whole-cache convert manifest, ADR-54) → run (`cruby_packed_hello_e2e!` on Ruby at the slow tier, Python/Perl at ultra — Python demoted by issue #126, a CI-runner memory limit; Go/Java/Bash excluded for the unpacked CRuby's own reasons — the packed module is the same interpreter, strictly larger).
 - `setup.sh` gains a required tool: `wasi-vfs` (prebuilt CLI or `cargo install wasi-vfs-cli`; docs/testing.md). Its version participates in the stamp and the CI cache key, so a CLI bump re-packs.
 - The cache grows by the ~49 MB packed module; the convert suites pay one more heavy trial per backend.

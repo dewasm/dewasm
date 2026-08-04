@@ -546,7 +546,12 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-dewasm_test_helper::cruby_packed_hello_e2e!(Python);
+// Ultra tier (ADR-48, issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
+// e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
+// concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
+// where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI sweep; it
+// still runs on Ruby and under wasmtime in CI, and still converts here.
+dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Python);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
