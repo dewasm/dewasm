@@ -10,6 +10,7 @@ mod fixtures;
 mod glue;
 mod library;
 mod multimodule;
+mod nes;
 mod pty;
 mod qjs_repl;
 mod snapshots;
@@ -48,6 +49,10 @@ pub use library::{
     STDIO_CAPTURE, WASI_IMPORT_OVERRIDE,
 };
 pub use multimodule::{run_multi_module_case, MultiModuleCase, EMBEDDED_COEXIST, SHARED_TABLE};
+pub use nes::{
+    alter_ego_rom_path, nes_frame_snapshot_path, nes_wasm_path, run_nes_frame_case, NES_FRAMES,
+    NES_FRAME_H, NES_FRAME_W,
+};
 pub use pty::{run_under_pty, PtyCommand};
 pub use qjs_repl::{
     assert_transcript_eq, capture_qjs_repl_transcript, qjs_repl_snapshot_path, run_qjs_repl_pty,
@@ -534,6 +539,22 @@ macro_rules! doom_frame_e2e {
             #[test]
             fn doom_frame() {
                 $crate::run_doom_frame_case(&$lang, $glue);
+            }
+        }
+    };
+}
+
+/// The NES framebuffer-snapshot case (issue #114, mirroring [`doom_frame_e2e!`]/ADR-53): expands to `#[test] fn nes_frame()` driving the converted `nes.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate — or, where the host language cannot open a host file from *library-mode* glue without an import the generated module doesn't itself pull in (Go, ADR-29), a function computing an equivalent `String` at test time) that loads the pinned ROM, ticks the deterministic no-input contract, and dumps the frame as a P6 PPM, then diffing stdout against `examples/apps/snapshots/nes_frame.ppm`. Tiering mirrors [`doom_frame_e2e!`]: `slow` by default, passed `ultra` for Bash.
+#[macro_export]
+macro_rules! nes_frame_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::nes_frame_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $tier:tt) => {
+        $crate::slow_tier_test! { $tier,
+            #[test]
+            fn nes_frame() {
+                $crate::run_nes_frame_case(&$lang, $glue);
             }
         }
     };

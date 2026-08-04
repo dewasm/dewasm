@@ -11,12 +11,13 @@ use std::process::{Command, Output};
 use dewasm_backend::Backend;
 use dewasm_backend_go::{find_go, GoBackend};
 use dewasm_test_helper::{
-    cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, doom_frame_e2e, examples_dir, gzip_e2e,
-    library_add_e2e, libsqlite3_c_api_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
-    qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes, shared_table_e2e,
-    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e, wasi_import_override_e2e,
-    wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
+    alter_ego_rom_path, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, doom_frame_e2e,
+    examples_dir, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, nes_frame_e2e, pcap_compile_e2e,
+    qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, run_command_bytes,
+    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, treesitter_parse_e2e,
+    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, BackendUnderTest, PtyCommand,
+    NES_FRAMES,
 };
 
 pub struct Go;
@@ -608,6 +609,66 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 }
 "#;
 
+/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
+/// `allocRom`'s buffer, tick [`NES_FRAMES`] times with no input, dump the
+/// framebuffer as a P6 PPM matching the wasmtime snapshot.
+///
+/// Unlike every other backend's glue, this is a function rather than a static
+/// `&str` const. Library-mode Go's generated file imports only `fmt` (plus
+/// whatever the wasm module's own decompiled code happens to reference) —
+/// Go requires every `import` to appear before all other top-level
+/// declarations, so glue text *appended* after the generated class cannot
+/// add its own `import "os"` to open `{rom}`'s host path (`go build` rejects
+/// a trailing import with "imports must appear before other declarations").
+/// With no WASI imports either (`nes.wasm` imports nothing at all) there is
+/// no other route to `os` for a free host-file read. So the ROM's bytes are
+/// read here, at test time, and embedded as a `\xHH`-escaped Go string
+/// literal — a `[]byte(...)` conversion of an escaped string literal needs no
+/// import, the same trick the Go backend's own codegen uses for a module's
+/// data segments (`Rt.unhex`, `f0`'s `p.memory.init` call in a converted
+/// `nes.wasm`).
+fn go_nes_frame_glue() -> String {
+    let rom = std::fs::read(alter_ego_rom_path())
+        .expect("read alter_ego_rom_path — see examples/apps/scripts/nes.sh");
+    let mut literal = String::with_capacity(rom.len() * 4 + 2);
+    literal.push('"');
+    for b in &rom {
+        literal.push_str(&format!("\\x{b:02x}"));
+    }
+    literal.push('"');
+    format!(
+        r#"func main() {{
+	rom := []byte({literal})
+	inst := NewNes(nil, nil, nil, nil)
+	inst.Exports["_initialize"].(func())()
+	ptr := inst.Exports["allocRom"].(func(uint32) uint32)(uint32(len(rom)))
+	inst.memory.init(uint64(ptr), rom, 0, uint64(len(rom)))
+	ok := inst.Exports["initGame"].(func() uint32)()
+	if ok != 1 {{
+		panic(fmt.Sprintf("initGame failed: %d", ok))
+	}}
+	tick := inst.Exports["tickGame"].(func())
+	for i := 0; i < {frames}; i++ {{
+		tick()
+	}}
+	w := inst.Exports["frameWidth"].(func() uint32)()
+	h := inst.Exports["frameHeight"].(func() uint32)()
+	off := inst.Exports["frameOffset"].(func() uint32)()
+	data := inst.memory.data
+	header := fmt.Sprintf("P6\n%d %d\n255\n", w, h)
+	out := make([]byte, 0, len(header)+int(w*h*3))
+	out = append(out, header...)
+	for i := uint32(0); i < w*h*4; i += 4 {{
+		out = append(out, data[off+i+2], data[off+i+1], data[off+i])
+	}}
+	fmt.Print(string(out))
+}}
+"#,
+        literal = literal,
+        frames = NES_FRAMES,
+    )
+}
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Go, GO_ADD_GLUE);
@@ -642,6 +703,7 @@ pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
 
 doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
+nes_frame_e2e!(Go, &go_nes_frame_glue());
 
 shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
 // embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.

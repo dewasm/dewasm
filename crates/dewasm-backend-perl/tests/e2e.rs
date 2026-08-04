@@ -8,11 +8,11 @@ use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
     custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e, embedded_coexist_e2e,
     examples_dir, exiftool_extract_e2e, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e,
-    partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
-    rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
-    sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
-    treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
-    zeroperl_eval_e2e, BackendUnderTest,
+    nes_frame_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e,
+    qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e,
+    sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e,
+    stdio_capture_e2e, treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e,
+    wasi_suite, zeroperl_eval_e2e, BackendUnderTest,
 };
 
 pub struct Perl;
@@ -495,6 +495,33 @@ print "P6\n$w $h\n255\n";
 print $rgb;
 "#;
 
+/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
+/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
+/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
+/// cached ROM's host path) and `{frames}` filled by the runner.
+const PERL_NES_FRAME_GLUE: &str = r#"my $rom = do {
+    local $/;
+    open my $fh, '<:raw', "{rom}" or die $!;
+    <$fh>;
+};
+my $nes = Nes->new({});
+$nes->invoke('_initialize');
+my $mem = $nes->{memory};
+my $ptr = $nes->invoke('allocRom', length($rom));
+$mem->init($ptr, $rom, 0, length($rom));
+my $ok = $nes->invoke('initGame');
+die "initGame failed: $ok" unless $ok == 1;
+$nes->invoke('tickGame') for 1 .. {frames};
+my $w = $nes->invoke('frameWidth');
+my $h = $nes->invoke('frameHeight');
+my $off = $nes->invoke('frameOffset');
+my $rgb = substr($mem->{data}, $off, $w * $h * 4);
+$rgb =~ s/(.)(.)(.)./$3$2$1/gs;    # memory is B,G,R,A; PPM wants R,G,B (alpha dropped)
+binmode(STDOUT);
+print "P6\n$w $h\n255\n";
+print $rgb;
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
@@ -556,6 +583,7 @@ exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
 // Slow tier like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
 doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
+nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
 
 shared_table_e2e!(Perl, PERL_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Perl, PERL_EMBEDDED_COEXIST_GLUE);

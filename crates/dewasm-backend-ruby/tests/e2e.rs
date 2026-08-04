@@ -7,9 +7,9 @@ use dewasm_backend_ruby::{find_ruby, RubyBackend};
 use dewasm_test_helper::{
     convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
     custom_wasi_provider_e2e, doom_frame_e2e, embedded_coexist_e2e, examples_dir,
-    exiftool_extract_e2e, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, partial_override_e2e,
-    pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e,
-    shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
+    exiftool_extract_e2e, gzip_e2e, library_add_e2e, libsqlite3_c_api_e2e, nes_frame_e2e,
+    partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e, qjs_file_io_e2e, qjs_repl_pty_e2e,
+    rg_search_e2e, shared_table_e2e, sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e,
     sqlite3_shell_dbfile_e2e, sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e,
     treesitter_parse_e2e, wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite,
     zeroperl_eval_e2e, BackendUnderTest,
@@ -529,6 +529,30 @@ $stdout.write("P6\n#{w} #{h}\n255\n")
 $stdout.write(rgb.pack("C*"))
 "#;
 
+/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
+/// `allocRom`'s buffer, tick `{frames}` times with no input, dump the
+/// framebuffer as a P6 PPM matching the wasmtime snapshot. `{rom}` (the
+/// cached ROM's host path) and `{frames}` filled by the runner.
+const RUBY_NES_FRAME_GLUE: &str = r#"nes = Nes.new
+nes.invoke("_initialize")
+mem = nes.memory
+rom = File.binread("{rom}")
+ptr = nes.invoke("allocRom", rom.bytesize)
+mem.init(ptr, rom, 0, rom.bytesize)
+ok = nes.invoke("initGame")
+raise "initGame failed: #{ok}" unless ok == 1
+{frames}.times { nes.invoke("tickGame") }
+w = nes.invoke("frameWidth")
+h = nes.invoke("frameHeight")
+off = nes.invoke("frameOffset")
+pixels = mem.buffer.get_string(off, w * h * 4).bytes
+rgb = []
+pixels.each_slice(4) { |b, g, r, _a| rgb.push(r, g, b) }
+$stdout.binmode
+$stdout.write("P6\n#{w} #{h}\n255\n")
+$stdout.write(rgb.pack("C*"))
+"#;
+
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 library_add_e2e!(Ruby, RUBY_ADD_GLUE);
@@ -566,6 +590,7 @@ zeroperl_eval_e2e!(Ruby, RUBY_ZEROPERL_EVAL);
 exiftool_extract_e2e!(Ruby, RUBY_EXIFTOOL);
 
 doom_frame_e2e!(Ruby, RUBY_DOOM_FRAME_GLUE);
+nes_frame_e2e!(Ruby, RUBY_NES_FRAME_GLUE);
 
 shared_table_e2e!(Ruby, RUBY_SHARED_TABLE_GLUE);
 embedded_coexist_e2e!(Ruby, RUBY_EMBEDDED_COEXIST_GLUE);

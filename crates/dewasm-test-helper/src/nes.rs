@@ -1,0 +1,104 @@
+//! Shared constants and helpers for the NES framebuffer-snapshot test (issue
+//! #114), mirroring the DOOM one (ADR-53). The oracle (`cargo xtask
+//! update-snapshots`, whose NES target embeds the wasmtime crate — kept out of
+//! this crate's dependency tree) and the per-backend drivers (the language glue)
+//! must agree on one driving contract: load the pinned ROM, tick [`NES_FRAMES`]
+//! frames with **no input**, then dump the framebuffer. agnes's emulation is
+//! deterministic (fixed-point integer, no wall clock), so every backend and the
+//! wasmtime oracle produce byte-identical pixels — no synthetic clock is needed,
+//! unlike DOOM.
+//!
+//! The framebuffer is `B,G,R,A` (alpha padding dropped) so the DOOM snapshot's
+//! [`frame_to_ppm`](crate::frame_to_ppm) and the glue shapes are reused.
+
+use std::path::PathBuf;
+
+use dewasm_backend::Mode;
+
+use crate::backend::BackendUnderTest;
+use crate::glue::fill;
+
+/// The framebuffer this NES emulator renders (agnes's fixed native resolution,
+/// `AGNES_SCREEN_WIDTH`×`AGNES_SCREEN_HEIGHT`); the snapshot is captured at these
+/// dimensions and `frameWidth`/`frameHeight` report them at run time.
+pub const NES_FRAME_W: u32 = 256;
+pub const NES_FRAME_H: u32 = 240;
+
+/// Number of `tickGame` calls (one emulated video frame each) before the frame
+/// is captured, with no controller input. Chosen empirically as the smallest
+/// count that clears the ROM's boot to a clearly recognizable, non-degenerate
+/// screen: Alter Ego opens on a near-black boot frame (1 color at ~15 ticks),
+/// then fades in a credits screen that reaches its final, stable image by frame
+/// 37 (7 distinct colors, identical through 180+). 40 sits just inside that
+/// stable region with a small margin. Every frame is real wall time on the Bash
+/// backend later, so smaller is better — but a boring near-black frame is worse
+/// than a handful of extra ticks, so this trades ~3 ticks of margin for a solidly
+/// drawn screen. Pinned by the snapshot.
+pub const NES_FRAMES: u32 = 40;
+
+/// The cached `nes.wasm` reactor library (populated by
+/// `examples/apps/scripts/nes.sh`).
+pub fn nes_wasm_path() -> PathBuf {
+    crate::fixtures::apps_cache_dir().join("nes.wasm")
+}
+
+/// The cached demo ROM (`cache/alter_ego.nes`, populated by the same script).
+pub fn alter_ego_rom_path() -> PathBuf {
+    crate::fixtures::apps_cache_dir().join("alter_ego.nes")
+}
+
+/// `examples/apps/snapshots/nes_frame.ppm`, the checked-in framebuffer snapshot
+/// (in the shared snapshots dir, so its stem carries the `nes_` prefix).
+pub fn nes_frame_snapshot_path() -> PathBuf {
+    crate::fixtures::apps_snapshot_dir().join("nes_frame.ppm")
+}
+
+/// Convert `nes.wasm` to library mode with `lang`, append `glue` that loads the
+/// ROM, ticks the deterministic contract, and writes the frame as a P6 PPM to
+/// stdout, and require it byte-identical to the snapshot. The `{frames}`/`{rom}`
+/// placeholders in `glue` are filled from [`NES_FRAMES`] and the cached ROM path
+/// so the driving constants live in one place.
+pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
+    let bytes = read_nes_wasm();
+    let class = lang.convert_app(&bytes, Mode::Library, "nes");
+    let glue = fill(
+        glue,
+        &[
+            ("frames", &NES_FRAMES.to_string()),
+            ("rom", &alter_ego_rom_path().to_string_lossy()),
+        ],
+    );
+    let output = lang.run(&format!("{class}\n{glue}"), &[], "");
+    assert!(
+        output.status.success(),
+        "nes frame under {}: nonzero exit {}\n{}",
+        lang.name(),
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot = std::fs::read(nes_frame_snapshot_path())
+        .expect("read nes frame snapshot — regenerate with `cargo xtask update-snapshots`");
+    assert!(
+        output.stdout == snapshot,
+        "nes frame under {}: rendered frame differs from the snapshot ({} vs {} snapshot bytes)\nstderr: {}",
+        lang.name(),
+        output.stdout.len(),
+        snapshot.len(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    println!(
+        "nes frame under {}: matches snapshot ({} bytes)",
+        lang.name(),
+        snapshot.len()
+    );
+}
+
+/// Read the cached `nes.wasm`, failing loud (ADR-15) when it is absent.
+fn read_nes_wasm() -> Vec<u8> {
+    let wasm = nes_wasm_path();
+    assert!(
+        wasm.exists(),
+        "nes not cached — run examples/apps/scripts/nes.sh (see docs/testing.md)"
+    );
+    std::fs::read(&wasm).expect("read nes.wasm")
+}

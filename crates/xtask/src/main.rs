@@ -8,14 +8,16 @@
 
 mod bench;
 mod doom_snapshot;
+mod nes_snapshot;
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use dewasm_cli::support_docs::render_support_docs;
-use dewasm_test_helper::{doom_frame_snapshot_path, wasmtime_snapshots};
+use dewasm_test_helper::{doom_frame_snapshot_path, nes_frame_snapshot_path, wasmtime_snapshots};
 
 use crate::doom_snapshot::capture_doom_frame;
+use crate::nes_snapshot::capture_nes_frame;
 
 const USAGE: &str = "\
 Usage: cargo xtask <command> [args]
@@ -126,6 +128,15 @@ fn snapshot_targets() -> Vec<SnapshotTarget> {
             let ppm_path = doom_frame_snapshot_path();
             let png_path = ppm_path.with_extension("png");
             let (ppm, png) = capture_doom_frame()?;
+            Ok(vec![(ppm_path, ppm), (png_path, png)])
+        }),
+    });
+    targets.push(SnapshotTarget {
+        label: "examples/apps/snapshots/nes_frame.ppm".to_string(),
+        capture: Box::new(|| {
+            let ppm_path = nes_frame_snapshot_path();
+            let png_path = ppm_path.with_extension("png");
+            let (ppm, png) = capture_nes_frame()?;
             Ok(vec![(ppm_path, ppm), (png_path, png)])
         }),
     });
