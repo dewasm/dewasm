@@ -4,6 +4,5 @@
 //! `dewasm-test-helper`.
 
 use dewasm_backend_bash::BashBackend;
-use dewasm_test_helper::apps_convert_suite;
 
-apps_convert_suite!(BashBackend);
+dewasm_test_helper::apps_convert_suite!(BashBackend);
