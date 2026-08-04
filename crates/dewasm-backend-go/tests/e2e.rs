@@ -581,6 +581,73 @@ const GO_TREESITTER_PARSE: &str = r#"func main() {
 }
 "#;
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
+/// zero-returning `env.call_host_function` import stub (only invoked when the
+/// guest registers host callbacks — this program registers none) and a
+/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
+/// capture and a `printf`, so its stdout is deterministic. The Perl source is a Go raw
+/// string literal: its backslash escapes belong to Perl, not to Go.
+const GO_ZEROPERL_EVAL: &str = r#"func main() {
+	inst := NewZeroperl(
+		Imports{"env": {"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
+		nil, nil, map[string]string{"/dev/null": "/dev/null"})
+	inst.Exports["_initialize"].(func())()
+	if rc := inst.Exports["zeroperl_init"].(func() uint32)(); rc != 0 {
+		panic(fmt.Sprintf("zeroperl_init rc=%d", rc))
+	}
+	mem := inst.memory
+
+	prog := append([]byte(`my $s = "hello world 42";
+if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
+  printf("m=%s|%s|%d sum=%d\n", $1, $2, $3, $3 + 8);
+}
+`), 0)
+	ptr := inst.Exports["malloc"].(func(uint32) uint32)(uint32(len(prog)))
+	mem.init(uint64(ptr), prog, 0, uint64(len(prog)))
+	inst.Exports["zeroperl_eval"].(func(uint32, uint32, uint32, uint32) uint32)(ptr, 0, 0, 0)
+	inst.Exports["zeroperl_flush"].(func() uint32)()
+}
+"#;
+
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
+/// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
+/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
+/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// preopen. Instantiated like [`GO_ZEROPERL_EVAL`] (the `call_host_function`
+/// stub + a `/dev/null` preopen), plus the staged image at `/img`. The Perl
+/// driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides
+/// `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back
+/// into `eval_pv` instead of tripping `proc_exit` — then `zeroperl_flush`
+/// pushes ExifTool's buffered stdout out through fd 1. Only deterministic tags
+/// are requested (`-S -Make -Model -DateTimeOriginal`).
+const GO_EXIFTOOL: &str = r#"func main() {
+	inst := NewZeroperl(
+		Imports{"env": {"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
+		nil, nil, map[string]string{
+			"/dev/null": "/dev/null",
+			"/work":     "{cache}/exiftool-lib",
+			"/img":      "{scratch}",
+		})
+	inst.Exports["_initialize"].(func())()
+	if rc := inst.Exports["zeroperl_init"].(func() uint32)(); rc != 0 {
+		panic(fmt.Sprintf("zeroperl_init rc=%d", rc))
+	}
+	mem := inst.memory
+
+	driver := append([]byte(`BEGIN { *CORE::GLOBAL::exit = sub (;$) { die "zeroperl_exit\n" }; }
+@ARGV = ('-S', '-Make', '-Model', '-DateTimeOriginal', '/img/exif_fixture.jpg');
+$0 = '/work/exiftool';
+do '/work/exiftool';
+`), 0)
+	ptr := inst.Exports["malloc"].(func(uint32) uint32)(uint32(len(driver)))
+	mem.init(uint64(ptr), driver, 0, uint64(len(driver)))
+	inst.Exports["zeroperl_eval"].(func(uint32, uint32, uint32, uint32) uint32)(ptr, 0, 0, 0)
+	inst.Exports["zeroperl_flush"].(func() uint32)()
+}
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`).
@@ -733,6 +800,9 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
+// The zeroperl reactor cases (issue #139) join the `ultra` giants above: the 25 MB reactor becomes a ~90 MB Go program whose `go build` dominates the run — measured 71 s (zeroperl_eval) and 92 s (exiftool_extract), well past the ~1-min bar.
+dewasm_test_helper::zeroperl_eval_e2e!(Go, GO_ZEROPERL_EVAL, ultra);
+dewasm_test_helper::exiftool_extract_e2e!(Go, GO_EXIFTOOL, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Go, &go_nes_frame_glue());

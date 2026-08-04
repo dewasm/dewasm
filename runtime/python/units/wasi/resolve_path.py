@@ -49,6 +49,14 @@ def resolve_path(self, dirfd, rel, follow_last=True):
             return (None, self.ERRNO_NOENT)
         host = os.path.join(real_parent, last)
         return (host + os.sep if trailing else host, None)
+    # A final "." resolves to its parent, but os.path.join left "<parent>/." —
+    # which os.path.lexists reports missing (and os.open rejects with ENOTDIR)
+    # once that parent is a non-directory preopen: wasi-libc rewrites a path
+    # that *is* a preopen, e.g. the zeroperl reactor's "/dev/null", to ".".
+    # Ruby's File.realpath collapses it and Go's filepath.Join cleans it; do the
+    # same, after `last` has had its say above so the symlink rules are unchanged.
+    if last == ".":
+        joined = os.path.dirname(joined)
     if os.path.lexists(joined):
         real = os.path.realpath(joined)
         if not self.within(base, real):

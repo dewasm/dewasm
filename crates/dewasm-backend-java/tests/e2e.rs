@@ -497,6 +497,94 @@ const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
 }
 "#;
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
+/// zero-returning `env.call_host_function` import stub (only invoked when the
+/// guest registers host callbacks — this program registers none) and a
+/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
+/// capture and a `printf`, so its stdout is deterministic. Java has no raw string literal
+/// at the JDK 11 baseline, so the Perl source is concatenated with its
+/// backslashes doubled — every `\` below belongs to Perl.
+const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
+    static Zeroperl inst;
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    public static void main(String[] a) throws Exception {
+        java.util.Map<String, Object> env = new java.util.HashMap<>();
+        env.put("call_host_function", (Rt.Fn) args -> 0);
+        java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
+        imports.put("env", env);
+        inst = new Zeroperl(imports, null, null, java.util.Map.of("/dev/null", "/dev/null"));
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        int rc = call("zeroperl_init");
+        if (rc != 0) throw new RuntimeException("zeroperl_init rc=" + rc);
+
+        String prog =
+            "my $s = \"hello world 42\";\n"
+            + "if ($s =~ /(\\w+)\\s+(\\w+)\\s+(\\d+)/) {\n"
+            + "  printf(\"m=%s|%s|%d sum=%d\\n\", $1, $2, $3, $3 + 8);\n"
+            + "}\n";
+        byte[] u = prog.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int ptr = call("malloc", c.length);
+        inst.memory.init(Integer.toUnsignedLong(ptr), c, 0, c.length);
+        call("zeroperl_eval", ptr, 0, 0, 0);
+        call("zeroperl_flush");
+    }
+}
+"#;
+
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
+/// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
+/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
+/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// preopen. Instantiated like [`JAVA_ZEROPERL_EVAL`] (the `call_host_function`
+/// stub + a `/dev/null` preopen), plus the staged image at `/img`. The Perl
+/// driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides
+/// `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back
+/// into `eval_pv` instead of tripping `proc_exit` — then `zeroperl_flush`
+/// pushes ExifTool's buffered stdout out through fd 1. Only deterministic tags
+/// are requested (`-S -Make -Model -DateTimeOriginal`).
+const JAVA_EXIFTOOL: &str = r#"public class Main {
+    static Zeroperl inst;
+
+    static int call(String name, Object... args) {
+        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+    }
+
+    public static void main(String[] a) throws Exception {
+        java.util.Map<String, Object> env = new java.util.HashMap<>();
+        env.put("call_host_function", (Rt.Fn) args -> 0);
+        java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
+        imports.put("env", env);
+        java.util.Map<String, String> preopens = new java.util.HashMap<>();
+        preopens.put("/dev/null", "/dev/null");
+        preopens.put("/work", "{cache}/exiftool-lib");
+        preopens.put("/img", "{scratch}");
+        inst = new Zeroperl(imports, null, null, preopens);
+        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        int rc = call("zeroperl_init");
+        if (rc != 0) throw new RuntimeException("zeroperl_init rc=" + rc);
+
+        String driver =
+            "BEGIN { *CORE::GLOBAL::exit = sub (;$) { die \"zeroperl_exit\\n\" }; }\n"
+            + "@ARGV = ('-S', '-Make', '-Model', '-DateTimeOriginal', '/img/exif_fixture.jpg');\n"
+            + "$0 = '/work/exiftool';\n"
+            + "do '/work/exiftool';\n";
+        byte[] u = driver.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] c = java.util.Arrays.copyOf(u, u.length + 1); // trailing NUL
+        int ptr = call("malloc", c.length);
+        inst.memory.init(Integer.toUnsignedLong(ptr), c, 0, c.length);
+        call("zeroperl_eval", ptr, 0, 0, 0);
+        call("zeroperl_flush");
+    }
+}
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Instantiate the table exporter, then the importer with the exporter's `Exports` map as its `"a"` import provider (the exporter's `"tab"` table), and print the `call0` result (call_indirect through the shared table → 42).
@@ -630,6 +718,9 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Java, JAVA_TREESITTER_PARSE);
+// The zeroperl reactor cases (issue #139) are Java's first `ultra` ones (ADR-48), hence the crate's new `ultra_slow_test` feature. The 25 MB reactor becomes ~99 MB of Java, and each case `javac`s its own `Main` from cold: measured 43 s (zeroperl_eval) and 51 s (exiftool_extract) on an M-series laptop, so both sit at or past the ~1-min CI-runner bar, and they would compile concurrently in this one test binary. They also drove the ADR-30 function-partition threshold down to 2000 (`FN_PARTITION_THRESHOLD`): zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool (`javac`: *too many constants*).
+dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
+dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
