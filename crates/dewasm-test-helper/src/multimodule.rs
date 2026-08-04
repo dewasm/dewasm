@@ -26,7 +26,7 @@ pub const SHARED_TABLE: MultiModuleCase = MultiModuleCase {
     expect: "42\n",
 };
 
-/// Two self-contained artifacts must coexist in one process, each carrying its own runtime, so runtime classes (and the trap type) never collide. Inherently a *nested*-runtime capability, and only Ruby nests: its Embedded output puts `module Rt` inside each class, so `Alpha::Rt` and `Beta::Rt` are distinct types. Only Ruby invokes `embedded_coexist_e2e!` (see the other backends' non-invocation REASON comments). The driver normalizes output to `distinct-rt`/`trapped`.
+/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide. ADR-62 makes this a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Perl and Python rename the runtime per artifact. A backend that has not implemented its mechanism yet carries a non-invocation REASON comment. The driver normalizes output to `distinct-rt`/`trapped`.
 pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
     name: "embedded_runtimes_coexist",
     modules: &[("div_trap.wat", "Alpha"), ("div_trap.wat", "Beta")],

@@ -4,7 +4,7 @@
 
 ## Output shape
 
-A single `.py` module: the generated module as a class named after the input stem (override with `--module-name`), with the runtime at **module top level** under the name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
+A single `.py` module: the generated module as a class named after the input stem (override with `--module-name`), with the runtime at **module top level** under the name `<Class>Rt` — `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace, [ADR-62](../adr/62-embedded-runtime-isolation.md)). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
 
 ## Requirements
 
@@ -28,7 +28,7 @@ print(inst.invoke("add", 2, 3))   # 5
 inst.memory                       # linear memory
 ```
 
-`proc_exit` raises `Rt.Exit` (with `.code`); catch it around `invoke("_start")` in library mode.
+`proc_exit` raises `<Class>Rt.Exit` (with `.code`) — `AddRt.Exit` here; catch it around `invoke("_start")` in library mode.
 
 ## Capabilities
 
@@ -60,5 +60,5 @@ Preopen host directories for filesystem access via the constructor's `preopens` 
 ## Caveats
 
 - **Recursion / thread-stack depth.** Deeply recursive wasm (or deep call chains) can hit Python's recursion limit; raising it (`sys.setrecursionlimit`) and the thread stack size may be necessary for heavy programs.
-- Float division goes through `Rt.fdiv` because Python raises on `x / 0.0` ([ADR-28](../adr/28-python-backend-lowering.md)).
+- Float division goes through the runtime's `fdiv` because Python raises on `x / 0.0` ([ADR-28](../adr/28-python-backend-lowering.md)).
 - Numeric conventions are the shared masked-unsigned model ([ADR-2](../adr/2-numeric-semantics.md)).
