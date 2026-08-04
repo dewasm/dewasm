@@ -32,6 +32,13 @@
 //! a state transition costs more than the plain `next` it replaces and loses to
 //! the cascade outright once the loop runs ~100 trips per entry. Flatten
 //! branches, not loops.
+//!
+//! **Only *deep* branches pay for a dispatch.** The cascade the dispatch
+//! replaces is linear in the number of frames a branch crosses, and each level
+//! is cheap; the dispatch is a constant that is not. So a function is flattened
+//! only where some branch is deep enough for the relay to lose — see
+//! [`DEEP_CROSSING`] — and everything else keeps ADR-42's cascade, in the same
+//! function, side by side (ADR-60).
 
 use std::collections::{HashMap, HashSet};
 
@@ -58,24 +65,55 @@ impl Plan {
     }
 }
 
-/// Decide which frames to dissolve. `crossed` is [`crate::FrameSets::crossed`] —
-/// exactly the frames some branch escapes, which is exactly the set that must
-/// stop being Ruby loops.
+/// Crossing depth from which a branch is worth a dispatch. A relay costs one
+/// compare per crossed frame — measured at 0.82 ns/level under `--yjit`, flat
+/// from depth 2 to 32 — while a dispatch is a `case`-over-integers chain whose
+/// cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot
+/// states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere
+/// between 5 and 30 crossed frames depending on how large the state machine
+/// ends up, and any threshold inside that band is a judgement call rather than
+/// a derived constant. 16 is the value picked: it puts the two measured
+/// workloads on the side each was measured to prefer — `nes.wasm` crosses at
+/// most 12 frames anywhere in the module and is 1.18x faster fully cascaded,
+/// `sqlite3-shell` reaches 278 and is 2.08x faster flattened (ADR-58/ADR-60).
+pub const DEEP_CROSSING: usize = 16;
+
+/// Decide which frames to dissolve. `paths` is [`crate::FrameSets::paths`] —
+/// one entry per outward branch, the inclusive frame path from its target down
+/// to its own innermost frame, which is exactly the set of frames that must
+/// stop being Ruby loops if that branch is to become a state transition.
 ///
-/// Returns `None` when nothing is crossed, so the function keeps today's
-/// lowering untouched and pays nothing for the machinery.
-pub fn plan(body: &[Stmt], crossed: &HashSet<u32>) -> Option<Plan> {
-    if crossed.is_empty() {
+/// Returns `None` when no branch is deep enough, so the function keeps ADR-42's
+/// cascade untouched and pays nothing for the machinery.
+pub fn plan(body: &[Stmt], paths: &[Vec<u32>]) -> Option<Plan> {
+    let mut dissolved: HashSet<u32> = paths
+        .iter()
+        .filter(|p| p.len() >= DEEP_CROSSING)
+        .flatten()
+        .copied()
+        .collect();
+    if dissolved.is_empty() {
         return None;
     }
-    // Dissolution is transitive up the spine. A frame that still exists as a
-    // Ruby loop would capture a `next` aimed at the dispatch loop, so anything
-    // *containing* a dissolved frame has to go too. What survives is the leaves:
-    // loops and blocks with no escaping branch anywhere inside them — which is
-    // precisely where keeping the structured form was measured to matter.
-    let mut dissolved = crossed.clone();
+    // Two closures, to a joint fixpoint.
+    //
+    // *Paths.* A `state = N; next` must not be captured on its way to the
+    // dispatch loop, so once any frame a branch crosses is dissolved, every
+    // frame it crosses has to go — the branch can no longer be a relay.
+    //
+    // *Ancestors.* Dissolution is transitive up the spine for the same reason:
+    // a frame that still exists as a Ruby loop would capture a `next` aimed at
+    // the dispatch loop, so anything *containing* a dissolved frame has to go
+    // too. What survives is the leaves: loops and blocks with no escaping
+    // branch anywhere inside them — which is precisely where keeping the
+    // structured form was measured to matter.
     loop {
         let before = dissolved.len();
+        for path in paths {
+            if path.iter().any(|f| dissolved.contains(f)) {
+                dissolved.extend(path.iter().copied());
+            }
+        }
         mark_ancestors(body, &mut dissolved);
         if dissolved.len() == before {
             break;

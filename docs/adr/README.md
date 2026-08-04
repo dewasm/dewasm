@@ -73,6 +73,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-57 | [Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline](57-benchmark-harness.md) | Accepted |
 | ADR-58 | [Ruby Backend: Address a Branch by Value, Not by Lexical Scope](58-ruby-branch-by-value.md) | Accepted |
 | ADR-59 | [NES Demo: A Self-Built Guest with a File-Based ROM and an Export-Only Interface](59-nes-example-agnes.md) | Accepted |
+| ADR-60 | [Ruby Backend: Flatten Only Deep Crossings](60-ruby-flatten-only-deep-crossings.md) | Accepted |
 
 ## Adding a new ADR
 
