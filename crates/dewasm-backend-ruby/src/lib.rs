@@ -382,6 +382,8 @@ struct FrameSets {
     wrapped: HashSet<u32>,
     /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve — the `while` compiles to a `while`.
     break_ok: HashSet<u32>,
+    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing — dissolving any frame it crosses forces the rest (ADR-60).
+    paths: Vec<Vec<u32>>,
 }
 
 /// Compute the [`FrameSets`] for a function body.
@@ -474,7 +476,9 @@ fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets)
                 if pos + 2 == stack.len() && sets.break_ok.contains(&stack[pos + 1].0) {
                     return;
                 }
-                sets.crossed.extend(stack[pos..].iter().map(|(id, _)| *id));
+                let path: Vec<u32> = stack[pos..].iter().map(|(id, _)| *id).collect();
+                sets.crossed.extend(path.iter().copied());
+                sets.paths.push(path);
                 // A loop targeted from a nested frame needs its body-scope wrapper so the relayed `break` re-enters via `next`.
                 if stack[pos].1 {
                     sets.wrapped.insert(*label);
@@ -901,12 +905,16 @@ impl<'a> Gen<'a> {
                 let name = format!("l{}", ty.params.len() + i);
                 w.line(format!("{name} = {}", default_value(*local_ty)));
             }
-            let plan = flat::plan(&func.body, &self.frames.borrow().crossed);
-            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it — a flattened function addresses every crossed frame by state, so nothing ever reads `__br`, and with no crossed frame at all nothing references it either.
+            let plan = flat::plan(&func.body, &self.frames.borrow().paths);
+            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
             let mut decl = String::new();
-            if plan.is_none() && !self.frames.borrow().crossed.is_empty() {
+            let relays = self.frames.borrow().crossed.iter().any(|id| {
+                plan.as_ref()
+                    .is_none_or(|p: &flat::Plan| !p.dissolved.contains(id))
+            });
+            if relays {
                 decl.push_str("__br = ");
             }
             for d in &depths {
@@ -1686,7 +1694,7 @@ mod units {
     }
 }
 
-/// Codegen-shape checks for control flow: a multi-level `br` must be addressed by *value* — a state assignment plus `next` into the dispatch loop — never by walking scopes (the ADR-42 `__br` cascade) and never by `catch`/`throw` (ADR-4).
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw` (ADR-4); a shallow one must keep the ADR-42 relay, which ADR-60 measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1741,9 +1749,31 @@ mod cascade {
         assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
     }
 
+    /// A `br_table` tower `depth` blocks deep whose table names every level, so
+    /// the outermost target is crossed by a branch of exactly that path length —
+    /// the wasm compilation of a C `switch`, and the shape whose size decides
+    /// between the two lowerings (ADR-60).
+    fn tower(depth: usize) -> String {
+        let opens = (0..depth)
+            .map(|i| format!("(block $l{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let targets = (0..depth)
+            .rev()
+            .map(|i| format!("$l{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        format!(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             {opens} (br_table {targets} (local.get 0)) {closes} \
+             (local.set 1 (i32.const 7)) (local.get 1)))",
+            closes = ")".repeat(depth)
+        )
+    }
+
     #[test]
-    fn multi_level_br_is_addressed_by_value() {
-        let src = convert(MIXED_DEPTHS);
+    fn deep_multi_level_br_is_addressed_by_value() {
+        let src = convert(&tower(flat::DEEP_CROSSING + 2));
         // The dispatch loop, and a branch that names its target as a number.
         assert!(src.contains("state = 0"), "no dispatch entry in:\n{src}");
         assert!(src.contains("case state"), "no dispatch in:\n{src}");
@@ -1756,5 +1786,35 @@ mod cascade {
         );
         assert!(!src.contains("catch("), "catch survived in:\n{src}");
         assert!(!src.contains("throw "), "throw survived in:\n{src}");
+    }
+
+    #[test]
+    fn shallow_multi_level_br_keeps_the_relay() {
+        // The same tower, one level below the threshold: a relay of that depth
+        // is cheaper than a dispatch, so nothing dissolves (ADR-60).
+        let src = convert(&tower(flat::DEEP_CROSSING - 1));
+        assert!(
+            src.contains("elsif __br"),
+            "no relay arm for a shallow branch in:\n{src}"
+        );
+        assert!(
+            !src.contains("case state"),
+            "a shallow branch was flattened in:\n{src}"
+        );
+        assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
+    }
+
+    #[test]
+    fn mixed_depths_stay_structured() {
+        // The three-deep mixed-target shape: every crossing is shallow, so the
+        // whole function keeps ADR-42's frames and its wrapped-loop back-edge.
+        let src = convert(MIXED_DEPTHS);
+        assert!(src.contains("while true"), "no structured loop in:\n{src}");
+        assert!(
+            src.contains("end while false"),
+            "no cascade frame in:\n{src}"
+        );
+        assert!(!src.contains("case state"), "dispatch appeared in:\n{src}");
+        assert!(!src.contains("catch("), "catch survived in:\n{src}");
     }
 }

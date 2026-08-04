@@ -1,6 +1,6 @@
 # ADR-58 — Ruby Backend: Address a Branch by Value, Not by Lexical Scope
 
-Status: **Accepted, 2026-08-03.** Implemented in [`crates/dewasm-backend-ruby/src/flat.rs`](../../crates/dewasm-backend-ruby/src/flat.rs) and `lib.rs`. Supersedes [ADR-42](42-ruby-label-variable-cascade.md)'s cross-frame relay protocol, which no longer runs on any path; ADR-42's lean frame shapes and depth-1 fast path stand and remain the lowering for every function with no crossed frame — 45% of `sqlite3-shell`'s. State merging is deliberately not included; see Consequences.
+Status: **Accepted, 2026-08-03.** Implemented in [`crates/dewasm-backend-ruby/src/flat.rs`](../../crates/dewasm-backend-ruby/src/flat.rs) and `lib.rs`. Supersedes [ADR-42](42-ruby-label-variable-cascade.md)'s cross-frame relay protocol, which no longer runs on any path; ADR-42's lean frame shapes and depth-1 fast path stand and remain the lowering for every function with no crossed frame — 45% of `sqlite3-shell`'s. State merging is deliberately not included; see Consequences. **Refined by [ADR-60](60-ruby-flatten-only-deep-crossings.md) (2026-08-04):** the relay runs again for branches crossing fewer than 16 frames — only deep crossings are addressed by state, after the dispatch probe showed up as 11.8% of the NES workload's wall time.
 
 ## Context
 
