@@ -4,17 +4,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_perl::{find_perl, PerlBackend};
-use dewasm_test_helper::{
-    convert, cowsay_args_e2e, cowsay_stdin_e2e, cpython_hello_e2e, cruby_hello_e2e,
-    cruby_packed_hello_e2e, custom_wasi_provider_e2e, deep_recursion_e2e, doom_frame_e2e,
-    embedded_coexist_e2e, examples_dir, exiftool_extract_e2e, gzip_e2e, library_add_e2e,
-    libsqlite3_c_api_e2e, nes_frame_e2e, partial_override_e2e, pcap_compile_e2e, qjs_eval_e2e,
-    qjs_file_io_e2e, qjs_repl_pty_e2e, rg_search_e2e, shared_table_e2e,
-    sqlite3_callback_binding_e2e, sqlite3_file_c_api_e2e, sqlite3_shell_dbfile_e2e,
-    sqlite3_shell_e2e, standalone_dir_e2e, stdio_capture_e2e, treesitter_parse_e2e,
-    wasi_import_override_e2e, wasi_root_containment_e2e, wasi_suite, zeroperl_eval_e2e,
-    BackendUnderTest,
-};
+use dewasm_test_helper::BackendUnderTest;
 
 pub struct Perl;
 
@@ -38,7 +28,8 @@ impl BackendUnderTest for Perl {
             let mut units = std::collections::BTreeSet::new();
             let mut pkgs = Vec::new();
             for (wat, name) in modules {
-                let bytes = wat::parse_file(examples_dir().join(wat)).expect("parse wat");
+                let bytes = wat::parse_file(dewasm_test_helper::examples_dir().join(wat))
+                    .expect("parse wat");
                 let module = dewasm_core::build_module(&bytes).expect("build IR");
                 let (src, u) = dewasm_backend_perl::generate_package_with_units(
                     &module,
@@ -59,7 +50,12 @@ impl BackendUnderTest for Perl {
             modules
                 .iter()
                 .map(|(wat, name)| {
-                    convert(&PerlBackend, &examples_dir().join(wat), Mode::Library, name)
+                    dewasm_test_helper::convert(
+                        &PerlBackend,
+                        &dewasm_test_helper::examples_dir().join(wat),
+                        Mode::Library,
+                        name,
+                    )
                 })
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -547,48 +543,48 @@ print "trapped\n" if ref($e) && $e->isa('Alpha::Rt::Trap');
 
 // --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
-library_add_e2e!(Perl, PERL_ADD_GLUE);
-wasi_import_override_e2e!(Perl, PERL_OVERRIDE_GLUE);
-custom_wasi_provider_e2e!(Perl, PERL_CUSTOM_PROVIDER_GLUE);
-partial_override_e2e!(Perl, PERL_PARTIAL_OVERRIDE_GLUE);
-stdio_capture_e2e!(Perl, PERL_STDIO_CAPTURE_GLUE);
+dewasm_test_helper::library_add_e2e!(Perl, PERL_ADD_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Perl, PERL_OVERRIDE_GLUE);
+dewasm_test_helper::custom_wasi_provider_e2e!(Perl, PERL_CUSTOM_PROVIDER_GLUE);
+dewasm_test_helper::partial_override_e2e!(Perl, PERL_PARTIAL_OVERRIDE_GLUE);
+dewasm_test_helper::stdio_capture_e2e!(Perl, PERL_STDIO_CAPTURE_GLUE);
 
-wasi_suite!(Perl, Stdio);
-wasi_suite!(Perl, ArgsEnv);
-wasi_suite!(Perl, Poll);
-wasi_suite!(Perl, Fs, PERL_FS_GLUE);
-wasi_root_containment_e2e!(Perl, PERL_CONTAINMENT_GLUE);
-standalone_dir_e2e!(Perl);
+dewasm_test_helper::wasi_suite!(Perl, Stdio);
+dewasm_test_helper::wasi_suite!(Perl, ArgsEnv);
+dewasm_test_helper::wasi_suite!(Perl, Poll);
+dewasm_test_helper::wasi_suite!(Perl, Fs, PERL_FS_GLUE);
+dewasm_test_helper::wasi_root_containment_e2e!(Perl, PERL_CONTAINMENT_GLUE);
+dewasm_test_helper::standalone_dir_e2e!(Perl);
 // Perl recursion is heap-allocated (no host stack to overflow, ADR-55); the case pins that the entrypoint still surfaces proc_exit(42) through deep guest recursion.
-deep_recursion_e2e!(Perl);
+dewasm_test_helper::deep_recursion_e2e!(Perl);
 
-cowsay_args_e2e!(Perl);
-cowsay_stdin_e2e!(Perl);
-qjs_eval_e2e!(Perl);
-sqlite3_shell_e2e!(Perl);
-gzip_e2e!(Perl);
+dewasm_test_helper::cowsay_args_e2e!(Perl);
+dewasm_test_helper::cowsay_stdin_e2e!(Perl);
+dewasm_test_helper::qjs_eval_e2e!(Perl);
+dewasm_test_helper::sqlite3_shell_e2e!(Perl);
+dewasm_test_helper::gzip_e2e!(Perl);
 
-qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
-sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
-rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
-cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
+dewasm_test_helper::qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
+dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
+dewasm_test_helper::rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
+dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
 // Ultra tier (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib (ADR-61), so it inherits the tier.
-cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
-cruby_packed_hello_e2e!(Perl, ultra);
-qjs_repl_pty_e2e!(Perl);
+dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
+dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
+dewasm_test_helper::qjs_repl_pty_e2e!(Perl);
 
-libsqlite3_c_api_e2e!(Perl, PERL_LIBSQLITE3_MEM);
-sqlite3_file_c_api_e2e!(Perl, PERL_LIBSQLITE3_FILE);
-sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
-pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
-treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
-zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
+dewasm_test_helper::libsqlite3_c_api_e2e!(Perl, PERL_LIBSQLITE3_MEM);
+dewasm_test_helper::sqlite3_file_c_api_e2e!(Perl, PERL_LIBSQLITE3_FILE);
+dewasm_test_helper::sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
+dewasm_test_helper::pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
+dewasm_test_helper::treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
+dewasm_test_helper::zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
 // Ultra tier (ADR-48): measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at the slow tier.
-exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
+dewasm_test_helper::exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
 // Slow tier like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
-doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
-nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
+dewasm_test_helper::doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
+dewasm_test_helper::nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
 
-shared_table_e2e!(Perl, PERL_SHARED_TABLE_GLUE);
-embedded_coexist_e2e!(Perl, PERL_EMBEDDED_COEXIST_GLUE);
+dewasm_test_helper::shared_table_e2e!(Perl, PERL_SHARED_TABLE_GLUE);
+dewasm_test_helper::embedded_coexist_e2e!(Perl, PERL_EMBEDDED_COEXIST_GLUE);
