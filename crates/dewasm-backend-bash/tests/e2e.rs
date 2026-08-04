@@ -151,6 +151,28 @@ rg_invoke '_start'
 exit 0
 "#;
 
+/// CPython reading its stdlib from the cache-preopened tree at `/lib`; `WASI_ENV` carries `PYTHONHOME`/`PYTHONPATH` as the `NAME=value` strings the standalone main also builds.
+///
+/// The leading `ulimit` is the one thing these two interpreters need that the smaller filesystem apps do not. Each wasm call nests one native bash call (ADR-11), and CPython's boot recurses far enough to exhaust the 8 MB default process stack — a real SIGSEGV, not a trappable wasm stack overflow (measured: without this line the trial dies of signal 11 partway through the boot, ~90 s in). The generated *standalone* entrypoint raises the soft rlimit for exactly this reason; a library-mode embedder has to do it itself, and the glue is that embedder — so it repeats the line, with the same `unlimited`-then-hard-limit fallback and the same silent degradation if a sandbox refuses both.
+const BASH_CPYTHON_GLUE: &str = r#"ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -Hs)" 2>/dev/null || true
+WASI_ARGS=(python -c "print('hello from cpython', 6 * 7)")
+WASI_ENV=(PYTHONHOME=/ PYTHONPATH=/lib/python3.14)
+WASI_DIRS=('{cache}/cpython-lib/lib::/lib')
+cpython_init || { echo "init failed" >&2; exit 1; }
+cpython_invoke '_start'
+exit 0
+"#;
+
+/// CRuby reading its stdlib from the cache-preopened tree at `/usr` — Ruby on Bash. Raises the stack rlimit for the same reason [`BASH_CPYTHON_GLUE`] does.
+const BASH_CRUBY_GLUE: &str = r#"ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -Hs)" 2>/dev/null || true
+WASI_ARGS=(ruby -e 'puts "hello from cruby #{6*7}"')
+WASI_ENV=()
+WASI_DIRS=('{cache}/ruby-lib/usr::/usr')
+cruby_init || { echo "init failed" >&2; exit 1; }
+cruby_invoke '_start'
+exit 0
+"#;
+
 // --------------------------------------------------------------------- C-API drive glue: the same pointer plumbing the other backends write as host-language closures, in Bash's vocabulary — results in the `R0` global (ADR-11), guest memory as the `${P}mem` associative array (one decimal byte per index), and the generated module's own runtime units (`mem_init`, `mem_i32_load`) for the transfers. No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The front matter every C-API glue below shares, parameterized by the module's generation prefix and its allocator export (`sqlite3_malloc` for the sqlite artifacts, plain `malloc` for the reactor libraries). A macro rather than a plain const so the pieces can be `concat!`ed into a `&'static str` glue const, keeping each case's drive readable as one literal.
@@ -404,6 +426,62 @@ echo 'TS-OK'
 "#
 );
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a zero-returning `env.call_host_function` import stub (only invoked when the guest registers host callbacks — this program registers none) and a `/dev/null` preopen (`zeroperl_init` returns 1 without it; the Bash runtime accepts a single-file preopen since issue #143), then `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`. The guest program is a quoted heredoc, so its bytes are identical to the other backends'.
+const BASH_ZEROPERL_EVAL: &str = concat!(
+    r#"WASI_ARGS=(zeroperl)
+WASI_ENV=()
+WASI_DIRS=('/dev/null::/dev/null')
+imp_call_host_function() { R0=0; return 0; }
+declare -A IMPORTS=(['env.call_host_function']=imp_call_host_function)
+"#,
+    bash_capi_prelude!("zeroperl_", "malloc"),
+    r#"
+zeroperl_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+capi_call zeroperl_init
+(( R0 == 0 )) || { echo "zeroperl_init rc=$R0" >&2; exit 1; }
+
+PERL_PROG=$(cat <<'GUEST_PROGRAM'
+my $s = "hello world 42";
+if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
+  printf("m=%s|%s|%d sum=%d\n", $1, $2, $3, $3 + 8);
+}
+GUEST_PROGRAM
+)
+capi_cstr "$PERL_PROG"
+capi_call zeroperl_eval "$R0" 0 0 0
+capi_call zeroperl_flush
+"#
+);
+
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver (`{cache}/exiftool-lib`, preopened at `/work`) run on the same `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool` module tree. Instantiated like [`BASH_ZEROPERL_EVAL`] plus the staged image at `/img`. The guest driver snippet (identical bytes to the other backends') overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`, sets `@ARGV`/`$0`, and `do`es the script; `zeroperl_flush` then pushes ExifTool's buffered stdout out through fd 1.
+const BASH_EXIFTOOL: &str = concat!(
+    r#"WASI_ARGS=(zeroperl)
+WASI_ENV=()
+WASI_DIRS=('/dev/null::/dev/null' '{cache}/exiftool-lib::/work' '{scratch}::/img')
+imp_call_host_function() { R0=0; return 0; }
+declare -A IMPORTS=(['env.call_host_function']=imp_call_host_function)
+"#,
+    bash_capi_prelude!("zeroperl_", "malloc"),
+    r#"
+zeroperl_init || { echo "init failed" >&2; exit 1; }
+capi_call '_initialize'
+capi_call zeroperl_init
+(( R0 == 0 )) || { echo "zeroperl_init rc=$R0" >&2; exit 1; }
+
+PERL_DRIVER=$(cat <<'GUEST_PROGRAM'
+BEGIN { *CORE::GLOBAL::exit = sub (;$) { die "zeroperl_exit\n" }; }
+@ARGV = ('-S', '-Make', '-Model', '-DateTimeOriginal', '/img/exif_fixture.jpg');
+$0 = '/work/exiftool';
+do '/work/exiftool';
+GUEST_PROGRAM
+)
+capi_cstr "$PERL_DRIVER"
+capi_call zeroperl_eval "$R0" 0 0 0
+capi_call zeroperl_flush
+"#
+);
+
 /// DOOM (ADR-53): the frame snapshot, modelled on the Bash frontend (examples/doom/bash/main.sh) — imp_* handlers set `R0`, `IMPORTS[mod.name]` wires them, `doom_init`/`doom_invoke` drive, and `doom_mem` holds the pixels. The P6 frame goes out through a chunked `printf` `\xNN` format string (which carries the NUL bytes a Bash variable cannot). `{ticks}`/`{clock_step}` filled by the runner.
 const BASH_DOOM_FRAME_GLUE: &str = r#"DOOM_MS=0
 FRAME_BUF_OFF=0
@@ -538,7 +616,10 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GL
 dewasm_test_helper::rg_search_e2e!(Bash, BASH_RG_SEARCH_GLUE);
 // qjs_repl_pty is not a filesystem case (no preopens) but is wired here alongside them: it shares their standalone-mode QuickJS conversion. It is markedly slower than every other case — every keystroke of the scripted session re-enters QuickJS's interactive line editor (redraw/completion), and each successive evaluation measured slower than the last (first prompt ~135s, then +~65s, then +~330s for `[3,1,2].sort()`), so it exceeds the shared 180s per-prompt `PTY_TIMEOUT` (`crates/dewasm-test-helper/src/qjs_repl.rs`) and timed out on CI (#22). It is therefore pinned to the `ultra` category (ADR-48): kept out of CI's `slow_test` run and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification. Left wired rather than unwired per ADR-15 (fail loud, not silently skip): a timeout is still an honest signal.
 dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
-// cpython_hello_e2e! / cruby_hello_e2e! / cruby_packed_hello_e2e!: not invoked — wall time, not parse feasibility, is what stops these. The generated scripts do load: the 18 MB rg.wasm's 70 MB script parses in 1.7 s and finishes the fixture search in 21 s (wired above), and CPython's 30 MB wasm yields a 226 MB script that bash parses in 4.6 s. What is unmeasured is how long an interpreter boot then takes under ADR-13's softfloat, where a single arithmetic op costs a bash function call; CRuby is the same shape, one interpreter larger, and its wasi-vfs-packed variant (ADR-61) larger still.
+// The two language-runtime giants and the packed CRuby run under Bash too (issue #143), all three in the `ultra` category (ADR-48): the wall times run from minutes to over an hour, far past the ~1-minute CI-runner line. CPython's 30 MB wasm yields a 226 MB script that bash parses in 4.6 s and then boots the interpreter for the one-liner in ~9.5 min — measured by running exactly this case's artifact and glue by hand, the evidence these callsites rest on, since re-running the harness for a wording change costs hours. CRuby is one interpreter larger under ADR-13's softfloat, where a single arithmetic op costs a bash function call: its one-liner measured 71 min, in the standalone shape (the same interpreter through the same runtime as the library-mode drive below, but the only one run to completion). The wasi-vfs-packed CRuby (ADR-61) needs no preopens at all — that same interpreter with the stdlib served from guest memory, measured *faster* than the unpacked case on every other backend, and wired here on that evidence rather than on a local completion. All three run at `slow` on Ruby (and Python/Perl), so the apps stay CI-covered; what is not covered is Bash.
+dewasm_test_helper::cpython_hello_e2e!(Bash, BASH_CPYTHON_GLUE, ultra);
+dewasm_test_helper::cruby_hello_e2e!(Bash, BASH_CRUBY_GLUE, ultra);
+dewasm_test_helper::cruby_packed_hello_e2e!(Bash, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 // Ultra-slow category (ADR-48): tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run — well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)
@@ -551,4 +632,7 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Bash, BASH_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Bash, BASH_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Bash, BASH_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Bash, BASH_TREESITTER_PARSE);
+// The two zeroperl reactor cases (issue #143) sit in the `ultra` category instead. The 25 MB reactor converts to a 229 MB script whose module init alone — the SFS blob carrying the whole Perl core into the `zeroperl_mem` array — runs 1 m 39 s before any Perl is evaluated, with ~6 GB of host RSS held for the duration. The eval case measured 1 m 55 s end to end (init, then 5.7 s of `zeroperl_init` and 3.1 s of `zeroperl_eval`). ExifTool is the one case here with no completion evidence: a hand-run of exactly this artifact and glue was still burning CPU inside `zeroperl_eval` at 69 minutes when the run was cut, so its wall time is unknown, not merely long — it is wired anyway per ADR-15 (a case that runs forever is a louder, more honest signal than one silently unwired), and it is covered in CI on Ruby, where it runs at `slow` (Perl runs it at `ultra`).
+dewasm_test_helper::zeroperl_eval_e2e!(Bash, BASH_ZEROPERL_EVAL, ultra);
+dewasm_test_helper::exiftool_extract_e2e!(Bash, BASH_EXIFTOOL, ultra);
 // embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).
