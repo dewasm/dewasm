@@ -885,14 +885,29 @@ impl<'a> Gen<'a> {
 
     /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while` (ADR-28).
     ///
+    /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement — nested constructs included — is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
+    ///
     /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
     fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded: &mut bool) -> BTreeSet<u32> {
         let mut free = BTreeSet::new();
+        // Whether an `if _br == 0:` region suite is currently open.
+        let mut open = false;
         for stmt in stmts {
-            match stmt {
+            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe — an open suite already holds a real statement, and nothing here can touch `_br` (ADR-38).
+            if !stmt_emits(stmt) {
+                self.simple_stmt_or_skip(w, stmt);
+                continue;
+            }
+            if *guarded && !open {
+                w.line("if _br == 0:");
+                w.indent();
+                open = true;
+            }
+            // Inside a region (or unguarded) `_br == 0` holds here, so the statement and any construct body emit unguarded.
+            let may_set = match stmt {
                 Stmt::Block { label, body } => {
-                    let before = *guarded;
-                    let mut inner = self.emit_seq(w, body, guarded);
+                    let mut inner_guarded = false;
+                    let mut inner = self.emit_seq(w, body, &mut inner_guarded);
                     if label.referenced {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
@@ -900,15 +915,15 @@ impl<'a> Gen<'a> {
                         w.dedent();
                     }
                     inner.remove(&label.id);
-                    *guarded = before || !inner.is_empty();
+                    let escapes = !inner.is_empty();
                     free.extend(inner);
+                    escapes
                 }
                 Stmt::Loop { label, body } => {
                     if label.referenced {
-                        let before = *guarded;
                         w.line("while True:");
                         w.indent();
-                        let mut inner_guarded = before;
+                        let mut inner_guarded = false;
                         let mut inner = self.emit_seq(w, body, &mut inner_guarded);
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
@@ -918,13 +933,17 @@ impl<'a> Gen<'a> {
                         w.line("break");
                         w.dedent();
                         inner.remove(&label.id);
-                        *guarded = before || !inner.is_empty();
+                        let escapes = !inner.is_empty();
                         free.extend(inner);
+                        escapes
                     } else {
-                        // No br targets this loop, so it never repeats.
-                        let mut inner = self.emit_seq(w, body, guarded);
+                        // No br targets this loop, so it never repeats: the body is spliced inline. It opens its own regions, so it starts unguarded like any construct body.
+                        let mut inner_guarded = false;
+                        let mut inner = self.emit_seq(w, body, &mut inner_guarded);
                         inner.remove(&label.id);
+                        let escapes = !inner.is_empty();
                         free.extend(inner);
+                        escapes
                     }
                 }
                 Stmt::If {
@@ -933,8 +952,7 @@ impl<'a> Gen<'a> {
                     then,
                     els,
                 } => {
-                    let before = *guarded;
-                    let mut inner = self.emit_if(w, before, cond, then, els);
+                    let mut inner = self.emit_if(w, cond, then, els);
                     if label.referenced {
                         w.line(format!("if _br == {}:", label.id));
                         w.indent();
@@ -942,47 +960,53 @@ impl<'a> Gen<'a> {
                         w.dedent();
                     }
                     inner.remove(&label.id);
-                    *guarded = before || !inner.is_empty();
+                    let escapes = !inner.is_empty();
                     free.extend(inner);
+                    escapes
                 }
-                Stmt::SourceLine(_) => {
-                    // A comment carries no runtime effect, so render it outside the `_br == 0` guard: a lone comment under an indented guard block would be an empty suite Python rejects, and the guard state must stay exactly as the surrounding statements left it (ADR-38).
-                    self.simple_stmt(w, stmt);
-                }
+                Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
                 _ => {
-                    if *guarded {
-                        w.line("if _br == 0:");
-                        w.indent();
-                        self.simple_stmt(w, stmt);
-                        w.dedent();
-                    } else {
-                        self.simple_stmt(w, stmt);
-                    }
-                    if collect_leaf_free_targets(stmt, &mut free) {
-                        *guarded = true;
-                    }
+                    self.simple_stmt(w, stmt);
+                    collect_leaf_free_targets(stmt, &mut free)
+                }
+            };
+            if may_set {
+                *guarded = true;
+                if open {
+                    w.dedent();
+                    open = false;
                 }
             }
         }
+        if open {
+            w.dedent();
+        }
         free
+    }
+
+    /// Emit the statements `stmt_emits` deems code-free: a comment renders, an empty construct vanishes (its all-comment body still renders, at the current level).
+    fn simple_stmt_or_skip(&self, w: &mut CodeWriter, stmt: &Stmt) {
+        match stmt {
+            Stmt::SourceLine(_) => self.simple_stmt(w, stmt),
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => {
+                for s in body {
+                    self.simple_stmt_or_skip(w, s);
+                }
+            }
+            _ => unreachable!("stmt_emits admits only comments and empty constructs"),
+        }
     }
 
     /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
     fn emit_if(
         &self,
         w: &mut CodeWriter,
-        guarded: bool,
         cond: &Expr,
         then: &[Stmt],
         els: &[Stmt],
     ) -> BTreeSet<u32> {
-        let cond_s = self.expr(cond);
-        // When guarded, `_br == 0 and ...` short-circuits so `cond` (which may trap on a load) is not evaluated while a branch is pending.
-        if guarded {
-            w.line(format!("if _br == 0 and ({cond_s}) != 0:"));
-        } else {
-            w.line(format!("if ({cond_s}) != 0:"));
-        }
+        // A pending `_br` never reaches here: `emit_seq`'s region guard already established `_br == 0` for every statement it emits.
+        w.line(format!("if {}:", self.cond(cond)));
         w.indent();
         let mut free = BTreeSet::new();
         if then.is_empty() {
@@ -993,11 +1017,7 @@ impl<'a> Gen<'a> {
         }
         w.dedent();
         if !els.is_empty() {
-            if guarded {
-                w.line("elif _br == 0:");
-            } else {
-                w.line("else:");
-            }
+            w.line("else:");
             w.indent();
             let mut ie = false;
             free.extend(self.emit_seq(w, els, &mut ie));
@@ -1032,7 +1052,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
-                w.line(format!("if ({}) != 0:", self.expr(cond)));
+                w.line(format!("if {}:", self.cond(cond)));
                 w.indent();
                 self.branch(w, target);
                 w.dedent();
@@ -1257,6 +1277,31 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// An expression in boolean context (an `if`/`br_if` test).
+    ///
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Python boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
+    fn cond(&self, e: &Expr) -> String {
+        match e {
+            Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => format!("{} == 0", self.expr(a)),
+            Expr::Bin(op, a, b) => match rel_op(*op) {
+                Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
+                None => format!("({}) != 0", self.expr(e)),
+            },
+            _ => format!("({}) != 0", self.expr(e)),
+        }
+    }
+
+    /// A comparison as a Python boolean, from a `rel_op` mapping and the already rendered operands.
+    fn rel(&self, (r, sign): (&str, Option<&str>), a: &str, b: &str) -> String {
+        match sign {
+            None => format!("{a} {r} {b}"),
+            Some(sign) => {
+                let f = self.rt(sign);
+                format!("{f}({a}) {r} {f}({b})")
+            }
+        }
+    }
+
     fn un(&self, op: UnOp, a: &str) -> String {
         use UnOp::*;
         match op {
@@ -1311,6 +1356,10 @@ impl<'a> Gen<'a> {
 
     fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
         use BinOp::*;
+        // A comparison is a Python boolean; outside condition position it needs the conditional back to the i32 0 or 1 wasm expects (see `cond`).
+        if let Some(rel) = rel_op(op) {
+            return format!("(1 if {} else 0)", self.rel(rel, a, b));
+        }
         match op {
             I32Add => format!("(({a} + {b}) & 0xFFFFFFFF)"),
             I32Sub => format!("(({a} - {b}) & 0xFFFFFFFF)"),
@@ -1342,20 +1391,6 @@ impl<'a> Gen<'a> {
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
             I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            I32Eq | I64Eq => format!("(1 if {a} == {b} else 0)"),
-            I32Ne | I64Ne => format!("(1 if {a} != {b} else 0)"),
-            I32LtU | I64LtU => format!("(1 if {a} < {b} else 0)"),
-            I32GtU | I64GtU => format!("(1 if {a} > {b} else 0)"),
-            I32LeU | I64LeU => format!("(1 if {a} <= {b} else 0)"),
-            I32GeU | I64GeU => format!("(1 if {a} >= {b} else 0)"),
-            I32LtS => format!("(1 if {0}({a}) < {0}({b}) else 0)", self.rt("s32")),
-            I32GtS => format!("(1 if {0}({a}) > {0}({b}) else 0)", self.rt("s32")),
-            I32LeS => format!("(1 if {0}({a}) <= {0}({b}) else 0)", self.rt("s32")),
-            I32GeS => format!("(1 if {0}({a}) >= {0}({b}) else 0)", self.rt("s32")),
-            I64LtS => format!("(1 if {0}({a}) < {0}({b}) else 0)", self.rt("s64")),
-            I64GtS => format!("(1 if {0}({a}) > {0}({b}) else 0)", self.rt("s64")),
-            I64LeS => format!("(1 if {0}({a}) <= {0}({b}) else 0)", self.rt("s64")),
-            I64GeS => format!("(1 if {0}({a}) >= {0}({b}) else 0)", self.rt("s64")),
             F32Add => format!("{}({a} + {b})", self.rt("f32")),
             F32Sub => format!("{}({a} - {b})", self.rt("f32")),
             F32Mul => format!("{}({a} * {b})", self.rt("f32")),
@@ -1368,14 +1403,31 @@ impl<'a> Gen<'a> {
             F32Max | F64Max => format!("{}({a}, {b})", self.rt("fmax")),
             F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
             F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
-            F32Eq | F64Eq => format!("(1 if {a} == {b} else 0)"),
-            F32Ne | F64Ne => format!("(1 if {a} != {b} else 0)"),
-            F32Lt | F64Lt => format!("(1 if {a} < {b} else 0)"),
-            F32Gt | F64Gt => format!("(1 if {a} > {b} else 0)"),
-            F32Le | F64Le => format!("(1 if {a} <= {b} else 0)"),
-            F32Ge | F64Ge => format!("(1 if {a} >= {b} else 0)"),
+            _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
+}
+
+/// The Python rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Python `float` comparison matches wasm, NaN included; ADR-2). The single home of that mapping: `bin` wraps the result back into an i32, `cond` takes it as it stands. (Ported from the Ruby backend, #122.)
+fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
+    use BinOp::*;
+    Some(match op {
+        I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
+        I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
+        I32LtU | I64LtU | F32Lt | F64Lt => ("<", None),
+        I32GtU | I64GtU | F32Gt | F64Gt => (">", None),
+        I32LeU | I64LeU | F32Le | F64Le => ("<=", None),
+        I32GeU | I64GeU | F32Ge | F64Ge => (">=", None),
+        I32LtS => ("<", Some("s32")),
+        I32GtS => (">", Some("s32")),
+        I32LeS => ("<=", Some("s32")),
+        I32GeS => (">=", Some("s32")),
+        I64LtS => ("<", Some("s64")),
+        I64GtS => (">", Some("s64")),
+        I64LeS => ("<=", Some("s64")),
+        I64GeS => (">=", Some("s64")),
+        _ => return None,
+    })
 }
 
 /// A Python float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which Python's `float()` parses back exactly; only the spelling of infinities/`e` notation differs, and non-finite values never reach here.
@@ -1391,6 +1443,19 @@ fn assign_results(results: &[Temp], call: String) -> String {
             let names = rs.iter().map(|r| temp(*r)).collect::<Vec<_>>().join(", ");
             format!("{names} = {call}")
         }
+    }
+}
+
+/// Whether `stmt` emits at least one real Python statement. A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them — the suite could end up holding no statement, which Python rejects.
+fn stmt_emits(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::SourceLine(_) => false,
+        // A referenced label emits its landing marker (block) or the `while True:` shape (loop) regardless of the body.
+        Stmt::Block { label, body } | Stmt::Loop { label, body } => {
+            label.referenced || body.iter().any(stmt_emits)
+        }
+        // An `if` always emits its header (an empty `then` arm becomes `pass`).
+        _ => true,
     }
 }
 
