@@ -4,6 +4,5 @@
 //! lives in `dewasm-test-helper`.
 
 use dewasm_backend_python::PythonBackend;
-use dewasm_test_helper::apps_convert_suite;
 
-apps_convert_suite!(PythonBackend);
+dewasm_test_helper::apps_convert_suite!(PythonBackend);

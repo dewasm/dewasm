@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use dewasm_backend::Backend;
 use dewasm_backend_python::PythonBackend;
-use dewasm_test_helper::{wasi_testsuite_suite, BackendUnderTest, WasiTestsuiteBackend};
+use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)` — the out-of-scope `sock_shutdown` syscall and the environ entries the CPython host injects itself, which count-exact `environ_*` assertions cannot absorb (ADR-40). The filesystem-rights, symlink, times, renumber, advise/allocate and path-semantics syscalls are now implemented (runtime/python/units/wasi/), so their former rows are gone.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
@@ -43,10 +43,10 @@ impl BackendUnderTest for PythonWasi {
     }
 }
 
-impl WasiTestsuiteBackend for PythonWasi {
+impl dewasm_test_helper::WasiTestsuiteBackend for PythonWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
 }
 
-wasi_testsuite_suite!(PythonWasi);
+dewasm_test_helper::wasi_testsuite_suite!(PythonWasi);
