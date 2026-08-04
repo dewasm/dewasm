@@ -171,12 +171,16 @@ WASI(String[] args, String[] env, java.util.Map<String, String> preopens) {
             try {
                 real = real.toRealPath();
             } catch (java.io.IOException e) {
-                // Leave `real` as the absolute path; the isDirectory check below
-                // still rejects a non-directory or missing preopen.
+                // Leave `real` as the absolute path; the existence check below
+                // still rejects a missing preopen.
             }
-            if (!java.nio.file.Files.isDirectory(real)) {
+            // The host path must resolve, but need not be a directory: like the
+            // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for
+            // the zeroperl reactor's init probe) is accepted — the guest
+            // resolves it as the preopen root itself.
+            if (!java.nio.file.Files.exists(real)) {
                 throw new RuntimeException(
-                    "preopen " + guest + " => " + preopens.get(guest) + ": not a directory");
+                    "preopen " + guest + " => " + preopens.get(guest) + ": does not exist");
             }
             this.fds.put(next, new Dir(real, guest.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             // A preopen holds every directory right and hands down every file

@@ -94,9 +94,13 @@ def __init__(self, args=None, env=None, preopens=None):
     self.memory = None
     next_fd = 3
     for guest, host in (preopens or {}).items():
+        # The host path must resolve, but need not be a directory: like the
+        # Ruby/Perl runtimes, a single-file preopen (e.g. '/dev/null' for the
+        # zeroperl reactor's init probe) is accepted — the guest resolves it
+        # as the preopen root itself.
         real = os.path.realpath(host)
-        if not os.path.isdir(real):
-            raise ValueError("preopen %r => %r: not a directory" % (guest, host))
+        if not os.path.exists(real):
+            raise ValueError("preopen %r => %r: does not exist" % (guest, host))
         name = guest if isinstance(guest, bytes) else str(guest).encode("utf-8")
         self.fds[next_fd] = self.WasiDir(real, name, None)
         self.fd_meta[next_fd] = [self.DIR_RIGHTS_BASE, self.DIR_RIGHTS_INHERITING, 0]

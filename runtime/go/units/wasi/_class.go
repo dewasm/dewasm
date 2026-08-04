@@ -143,9 +143,12 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
         if resolved, err := filepath.EvalSymlinks(real); err == nil {
             real = resolved
         }
-        info, err := os.Stat(real)
-        if err != nil || !info.IsDir() {
-            panic("preopen " + guest + " => " + preopens[guest] + ": not a directory")
+        // The host path must resolve, but need not be a directory: like the
+        // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the
+        // zeroperl reactor's init probe) is accepted — the guest resolves it
+        // as the preopen root itself.
+        if _, err := os.Stat(real); err != nil {
+            panic("preopen " + guest + " => " + preopens[guest] + ": does not exist")
         }
         w.fds[nextFd] = &wasiDir{hostPath: real, preopenName: []byte(guest)}
         w.meta[nextFd] = &wasiFdMeta{base: dirRightsBase, inheriting: dirRightsInheriting}

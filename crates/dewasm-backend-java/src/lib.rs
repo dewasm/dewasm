@@ -36,8 +36,8 @@ const ELEM_SPLIT: usize = 1024;
 /// Funcref entries per `elem{i}_pK` part method (each ~20 bytes of bytecode per entry stays well under the 64KB method limit).
 const ELEM_PART: usize = 512;
 
-/// Defined-function count above which the module's functions are split across nested `P{k}` helper classes, each with its own 65535-entry constant pool (ADR-30 third milestone). A single class holding thousands of functions (their numeric literals, method refs, and names) overflows the pool: qjs (~1500) and sqlite (~1970) fit, but rg (~7300) does not. Kept above sqlite's proven single-class size so only rg-scale modules partition.
-const FN_PARTITION_THRESHOLD: usize = 3000;
+/// Defined-function count above which the module's functions are split across nested `P{k}` helper classes, each with its own 65535-entry constant pool (ADR-30 third milestone). A single class holding thousands of functions (their numeric literals, method refs, and names) overflows the pool: qjs (~1500) and sqlite (~1970) fit, but zeroperl (~2450) and rg (~7300) do not — zeroperl's Perl core is constant-dense enough that it overflowed while under the former 3000 bound (`javac`: *too many constants*). Kept just above sqlite's proven single-class size, so a module only partitions once it exceeds the largest size measured to fit.
+const FN_PARTITION_THRESHOLD: usize = 2000;
 
 /// Defined functions per partition class. Kept under sqlite's proven single-class function count so no partition's pool overflows.
 const FN_PER_PARTITION: usize = 1500;

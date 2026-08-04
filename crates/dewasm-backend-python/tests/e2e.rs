@@ -422,6 +422,71 @@ inst.invoke("free", r)
 print("TS-OK")
 "#;
 
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
+/// zero-returning `env.call_host_function` import stub (only invoked when the
+/// guest registers host callbacks — this program registers none) and a
+/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
+/// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
+/// capture and a `printf`, so its stdout is deterministic. The Perl source is a raw byte
+/// literal: its backslash escapes belong to Perl, not to Python.
+const PYTHON_ZEROPERL_EVAL: &str = r#"
+inst = Zeroperl(
+    {"env": {"call_host_function": lambda a, b, c: 0}},
+    preopens={"/dev/null": "/dev/null"},
+)
+inst.invoke("_initialize")
+rc = inst.invoke("zeroperl_init")
+assert rc == 0, "zeroperl_init rc=%d" % rc
+mem = inst.memory
+
+prog = rb"""my $s = "hello world 42";
+if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
+  printf("m=%s|%s|%d sum=%d\n", $1, $2, $3, $3 + 8);
+}
+""" + b"\x00"
+ptr = inst.invoke("malloc", len(prog))
+mem.init(ptr, prog, 0, len(prog))
+inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
+inst.invoke("zeroperl_flush")
+"#;
+
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
+/// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
+/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
+/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// preopen. Instantiated like [`PYTHON_ZEROPERL_EVAL`] (the
+/// `call_host_function` stub + a `/dev/null` preopen), plus the staged image at
+/// `/img`. The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it
+/// first overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal
+/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit` — then
+/// `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1. Only
+/// deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
+const PYTHON_EXIFTOOL: &str = r#"
+inst = Zeroperl(
+    {"env": {"call_host_function": lambda a, b, c: 0}},
+    preopens={
+        "/dev/null": "/dev/null",
+        "/work": "{cache}/exiftool-lib",
+        "/img": "{scratch}",
+    },
+)
+inst.invoke("_initialize")
+rc = inst.invoke("zeroperl_init")
+assert rc == 0, "zeroperl_init rc=%d" % rc
+mem = inst.memory
+
+driver = rb"""BEGIN { *CORE::GLOBAL::exit = sub (;$) { die "zeroperl_exit\n" }; }
+@ARGV = ('-S', '-Make', '-Model', '-DateTimeOriginal', '/img/exif_fixture.jpg');
+$0 = '/work/exiftool';
+do '/work/exiftool';
+""" + b"\x00"
+ptr = inst.invoke("malloc", len(driver))
+mem.init(ptr, driver, 0, len(driver))
+inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
+inst.invoke("zeroperl_flush")
+"#;
+
 // --------------------------------------------------------------------- Multi-module drive glue.
 
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
@@ -559,6 +624,13 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
+// Ultra-slow category (ADR-48, issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
+// Python module, and host CPython peaks at ~4.9 GB RSS compiling it — the memory criterion that put
+// the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
+// Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is
+// what puts the eval case here; the two share the one oversized module.
+dewasm_test_helper::zeroperl_eval_e2e!(Python, PYTHON_ZEROPERL_EVAL, ultra);
+dewasm_test_helper::exiftool_extract_e2e!(Python, PYTHON_EXIFTOOL, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
