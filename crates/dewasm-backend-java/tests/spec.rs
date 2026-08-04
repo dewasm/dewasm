@@ -15,7 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-tier failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof` — not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. Java's counts match Ruby's (ADR-16), not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here (ADR-30).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
@@ -27,7 +27,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default (the non-ignored trials). Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so the default gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps every file.
+/// Files `cargo test` runs by default (the non-ignored trials). Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so the default test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs every file.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",

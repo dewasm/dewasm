@@ -21,7 +21,7 @@ Add a crate-private pass, `merge_adjacent_data_segments`, over `module.datas`. I
 ## Rejected alternatives
 
 - **Sort segments by offset, then merge.** Would merge more, but reordering active segments changes which write wins on overlap and moves them relative to `global.get` barriers whose targets are unknown. Declaration order is the only order whose memory image is guaranteed; sorting trades a proven-correct pass for an unprovable one.
-- **A backend-side merge during lowering.** Each backend already iterates `module.datas`; merging there would multiply the delicate ordering/soundness reasoning by the backend count and invite divergence. Doing it once on the shared IR keeps a single audited implementation under one spec-harness gate.
+- **A backend-side merge during lowering.** Each backend already iterates `module.datas`; merging there would multiply the delicate ordering/soundness reasoning by the backend count and invite divergence. Doing it once on the shared IR keeps a single audited implementation under one spec-harness test.
 - **Merge regardless of gap size (bridge any hole).** A single pair of segments straddling a multi-kilobyte hole would materialize kilobytes of zero bytes inline in every backend, which is strictly worse than two initializers. The threshold caps that blow-up.
 
 ## Consequences

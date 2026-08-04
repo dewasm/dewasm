@@ -21,7 +21,7 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
+    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-tier `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -549,7 +549,7 @@ dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
 // Ultra tier (ADR-48, issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
 // e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
 // concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
-// where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI sweep; it
+// where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI run; it
 // still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Python);
@@ -564,4 +564,4 @@ dewasm_test_helper::doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
 
 dewasm_test_helper::shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).
+// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-tier `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).

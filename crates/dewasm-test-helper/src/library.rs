@@ -1,6 +1,6 @@
 //! Library-mode scenarios over hand-written `.wat` fixtures (`examples/wat/`). These need per-language glue (Ruby method calls vs. Bash function calls against globals) — that can't be shared, so glue is *not* in the case data (ADR-27 revision); each backend crate passes a named glue constant to the per-case macro. Each glue is engineered to observe the same thing the same way (e.g. both intercept fd_write and print the literal bytes written), so one `expect` per scenario is pinned instead of one per language that could quietly drift apart.
 //!
-//! Each case is a `pub const` [`LibraryCase`] a per-case macro (`library_add_e2e!`, `wasi_import_override_e2e!`, ...) drives; a backend declares participation by invoking the macro, and drops it (with a REASON comment) for a capability it lacks — the ADR-27 replacement for the old per-case `exclude` ledger.
+//! Each case is a `pub const` [`LibraryCase`] a per-case macro (`library_add_e2e!`, `wasi_import_override_e2e!`, ...) drives; a backend declares participation by invoking the macro, and drops it (with a REASON comment) for a capability it lacks — the ADR-27 replacement for the old per-case `exclude` list.
 
 use dewasm_backend::Mode;
 

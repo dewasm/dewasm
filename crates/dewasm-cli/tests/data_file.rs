@@ -164,7 +164,7 @@ fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-// -------------------------------------------------------------------------- Inline-fixture parity (default gate).
+// -------------------------------------------------------------------------- Inline-fixture parity (default test).
 
 #[test]
 fn ruby_data_file_matches_embedded() {
@@ -488,7 +488,7 @@ fn java_data_file_matches_embedded() {
     assert_eq!(code_e, code_x);
 }
 
-// -------------------------------------------------------------------------- Loud rejections (default gate).
+// -------------------------------------------------------------------------- Loud rejections (default test).
 
 #[test]
 fn rejects_unsupported_targets_and_stdout() {

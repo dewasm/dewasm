@@ -1,6 +1,6 @@
 //! wasmtime as a [`BackendUnderTest`] (ADR-27): the snapshot-vs-wasmtime freshness checks run through the *same* shared app/gzip runners every real backend uses, rather than a hand-written per-case loop. wasmtime does not generate source — it runs the cached `.wasm` binary directly — so its `convert_app` returns the path to the exact cache binary the snapshots were captured from, and its `run`/`run_bytes` exec `wasmtime run <path>`.
 //!
-//! Public (not gated behind the `wasmtime_test` feature, which only gates the *tests* in `tests/apps_wasmtime.rs`) so that both that test file and `cargo xtask update-snapshots` can drive the same wasmtime-backed [`BackendUnderTest`] to (re)capture the execution snapshots.
+//! Public (not conditional behind the `wasmtime_test` feature, which only tests the *tests* in `tests/apps_wasmtime.rs`) so that both that test file and `cargo xtask update-snapshots` can drive the same wasmtime-backed [`BackendUnderTest`] to (re)capture the execution snapshots.
 
 use std::path::Path;
 use std::process::{Command, Output};

@@ -4,7 +4,7 @@ Status: **Accepted, 2026-08-03.** Implemented in [`crates/dewasm-backend-ruby/sr
 
 ## Context
 
-ADR-42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per level. That is linear in nesting depth. On the converted `sqlite3-shell` it produced 33,219 `__br` references and roughly half of all CPU, concentrated in the VDBE interpreter loop where the towers are deepest.
+ADR-42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per tier. That is linear in nesting depth. On the converted `sqlite3-shell` it produced 33,219 `__br` references and roughly half of all CPU, concentrated in the VDBE interpreter loop where the towers are deepest.
 
 Two existing wasm-to-C compilers avoid the problem structurally. w2c2 emits `goto label_N`; WasmKit emits `pc += offset`. Both name the target as a *value*, so a branch costs the same from any depth. Ruby's equivalent primitive is `opt_case_dispatch`: a `case` over integer literals compiles to a single hash probe with no compares.
 
@@ -22,9 +22,9 @@ The obvious alternative — put each state in its own method — is closed off h
 
 - **Keep the ADR-42 cascade.** Linear in depth by construction; 33,219 `__br` references and ~half of CPU on the workload that motivated this.
 - **Flatten loops too, for uniformity.** Loses to the cascade outright past ~100 trips per entry — the back-edge is the one place the structured form is cheaper. This is the criterion above, stated as its own rejection.
-- **State the `break` exemption as "the loop is the last statement".** Incorrect, and not merely conservative: it fires on 374 sites in `sqlite3-shell` where the block holds something else, and the generated program's output diverges. Caught by the byte-comparison gate, not by the microbenchmarks, all of which have the sole-statement shape.
+- **State the `break` exemption as "the loop is the last statement".** Incorrect, and not merely conservative: it fires on 374 sites in `sqlite3-shell` where the block holds something else, and the generated program's output diverges. Caught by the byte-comparison test, not by the microbenchmarks, all of which have the sole-statement shape.
 - **Clean the emitted state bodies with a text pass.** Recovers a control-flow graph the IR already has, by `strip_prefix("state = ")` over generated Ruby. Its dead-code half measures 0% — unreachable code does not run — and its state-merging half measured 1.5–4%, inside this host's drift. Structure it in the IR or not at all.
-- **Per-state outlining, or block outlining into methods.** 1.15–1.18x *slower* at every gate; hot states are 5–10 lines, too small to carry a call. See the no-OSR measurement in Context.
+- **Per-state outlining, or block outlining into methods.** 1.15–1.18x *slower* at every test; hot states are 5–10 lines, too small to carry a call. See the no-OSR measurement in Context.
 
 ## Consequences
 

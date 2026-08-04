@@ -45,7 +45,7 @@ const FN_PER_PARTITION: usize = 1500;
 /// A branch-register sentinel for "return from the function", distinct from any real label id (which are small). Emitted as `-1`.
 const RETURN_SENTINEL: u32 = u32::MAX;
 
-/// The runtime unit bundler for Java (see runtime/java/units/). Each scope is a top-level package-private class wrapping its unit bodies (methods / nested types); generated code refers to them as `Rt.*` / `Memory` / `Table` / `WASI` (ADR-30).
+/// The runtime unit bundler for Java (see runtime/java/units/). Each scope is a top-tier package-private class wrapping its unit bodies (methods / nested types); generated code refers to them as `Rt.*` / `Memory` / `Table` / `WASI` (ADR-30).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -331,9 +331,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// Re-indent a block of source by `levels` (four spaces each), leaving blank lines empty.
-fn reindent(src: &str, levels: usize) -> String {
-    let pad = "    ".repeat(levels);
+/// Re-indent a block of source by `tiers` (four spaces each), leaving blank lines empty.
+fn reindent(src: &str, tiers: usize) -> String {
+    let pad = "    ".repeat(tiers);
     let mut out = String::new();
     for line in src.lines() {
         if line.trim().is_empty() {
@@ -2119,11 +2119,11 @@ fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) {
 
 /// Statement-cost queries for the function being emitted, memoized by node identity.
 ///
-/// The split decision needs a body's cost *before* that body is emitted, so unlike the free-branch-target set (which `emit_body` now derives bottom-up while emitting) the cost cannot ride along with emission. Asked naively it is re-derived top-down at every enclosing level and again per sibling in `emit_parts`, which is the same O(nodes x nesting depth) shape that made the target query quadratic — see issue #62.
+/// The split decision needs a body's cost *before* that body is emitted, so unlike the free-branch-target set (which `emit_body` now derives bottom-up while emitting) the cost cannot ride along with emission. Asked naively it is re-derived top-down at every enclosing tier and again per sibling in `emit_parts`, which is the same O(nodes x nesting depth) shape that made the target query quadratic — see issue #62.
 ///
 /// Entries are keyed by the *address* of the `Stmt` node. That is sound because `Gen` borrows its `Module` immutably for the whole of `generate_source`, nothing mutates the IR while emitting, and there is no threading: every statement reachable from a function body sits at a fixed, unique address for at least as long as this table. `Gen::function` clears it per function anyway, to bound it.
 ///
-/// Only `Block`/`Loop`/`If` are memoized. That alone makes the whole query linear — a leaf's cost is recomputed a bounded number of times, while a structured statement's would be recomputed once per enclosing level — and it keeps hashing off the hot leaf path.
+/// Only `Block`/`Loop`/`If` are memoized. That alone makes the whole query linear — a leaf's cost is recomputed a bounded number of times, while a structured statement's would be recomputed once per enclosing tier — and it keeps hashing off the hot leaf path.
 #[derive(Default)]
 struct CostMemo(RefCell<HashMap<usize, usize>>);
 

@@ -24,7 +24,7 @@ The justification is impossibility, not convenience: pure Bash cannot express th
 
 ### D3 — Sandboxing: physical resolution plus per-dirfd containment
 
-Preopen roots are resolved to a physical path once, via `$(cd -P -- "$host" && pwd -P)`. Every guest path resolution re-derives the parent's physical path the same way and checks prefix-containment against *that dirfd's own* stored root — nesting cannot launder an escape one level cheaper, exactly the model [ADR-14](14-ruby-wasi-filesystem.md) uses. The containment test is `[[ $real == "$root" || $real == "${root%/}/"* ]]`; the `${root%/}/` form makes a root of `/` contain everything.
+Preopen roots are resolved to a physical path once, via `$(cd -P -- "$host" && pwd -P)`. Every guest path resolution re-derives the parent's physical path the same way and checks prefix-containment against *that dirfd's own* stored root — nesting cannot launder an escape one tier cheaper, exactly the model [ADR-14](14-ruby-wasi-filesystem.md) uses. The containment test is `[[ $real == "$root" || $real == "${root%/}/"* ]]`; the `${root%/}/` form makes a root of `/` contain everything.
 
 Two deviations from Ruby, both from missing builtins and both documented: Bash has no `readlink`, so a **file** symlink as the final path component cannot be followed and resolves to `ELOOP` (stricter than Ruby, which follows it); a **directory** symlink is still followed, because `cd -P` resolves it. The check-then-open TOCTOU caveat from ADR-14 carries over unchanged: this is a single-process research/demo runtime, not a multi-tenant sandbox host.
 

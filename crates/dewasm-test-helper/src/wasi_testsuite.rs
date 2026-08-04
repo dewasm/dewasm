@@ -1,12 +1,12 @@
-//! Official WASI preview-1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the ADR-31 standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` ledger checked *both ways* (an unexpectedly-passing ledgered test is a hard failure, exactly like the spec harness).
+//! Official WASI preview-1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the ADR-31 standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` list checked *both ways* (an unexpectedly-passing ledgered test is a hard failure, exactly like the spec harness).
 //!
 //! Each `<name>.wasm` may carry a co-located `<name>.json` manifest (the upstream v0 schema: `args`, `env`, `root`, `exit_code`, `stdout`, `stderr`). The runner converts the module in [`Mode::Standalone`], mounts the manifest's `root` fixture at guest `/` (via a fresh temp copy so trials stay hermetic), sets `env`/`args`, then asserts the process exit code and — when the manifest pins it — stdout/stderr. The `root`→`/` mapping mirrors upstream's own wasmtime adapter (`--dir {root}::/`).
 //!
-//! A conversion refusal attributed to a declared-unsupported feature, a wrong exit code, or a stdout mismatch is a *failure*; the ledger (ADR-8) then decides whether it is expected. Every ledger entry names the WASI function or interface behaviour responsible.
+//! A conversion refusal attributed to a declared-unsupported feature, a wrong exit code, or a stdout mismatch is a *failure*; the list (ADR-8) then decides whether it is expected. Every list entry names the WASI function or interface behaviour responsible.
 //!
 //! The Rust suite runs with the host-matched strict errno mode injected (ADR-49); see [`evaluate`].
 //!
-//! A ledger entry may be *host-scoped*: some failures depend on the host libc or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`, or a Linux JDK truncating symlink times to microseconds). A backend declares those via `expected_failures_macos()`/`expected_failures_linux()`; the runner merges the host-matching list into the base ledger, so an entry that only trips on one host is not flagged as an unexpected pass on the other.
+//! A list entry may be *host-scoped*: some failures depend on the host libc or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`, or a Linux JDK truncating symlink times to microseconds). A backend declares those via `expected_failures_macos()`/`expected_failures_linux()`; the runner merges the host-matching list into the base list, so an entry that only trips on one host is not flagged as an unexpected pass on the other.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -18,17 +18,17 @@ use serde::Deserialize;
 
 use crate::backend::BackendUnderTest;
 
-/// A backend wired into the WASI-testsuite harness: the base [`BackendUnderTest`] plus its known-failure ledger.
+/// A backend wired into the WASI-testsuite harness: the base [`BackendUnderTest`] plus its known-failure list.
 pub trait WasiTestsuiteBackend: BackendUnderTest {
     /// Known trial failures: `(trial name, attribution tag)`. The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`); the tag names the WASI function or interface behaviour that causes the failure (a declared ENOSYS gap, or an ADR-31 interface choice). A ledgered trial that *passes* is a hard failure — remove it (same both-ways discipline as `spec.rs`).
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)];
 
-    /// Host-scoped ledger entries that only fail on a **macOS** host (host libc or interpreter behaviour, e.g. CoreFoundation injecting `__CF_USER_TEXT_ENCODING`). Merged into [`expected_failures`] only when the harness runs on macOS; ignored on other hosts, so the both-ways discipline still flags a genuine unexpected pass there.
+    /// Host-scoped list entries that only fail on a **macOS** host (host libc or interpreter behaviour, e.g. CoreFoundation injecting `__CF_USER_TEXT_ENCODING`). Merged into [`expected_failures`] only when the harness runs on macOS; ignored on other hosts, so the both-ways discipline still flags a genuine unexpected pass there.
     fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
 
-    /// Host-scoped ledger entries that only fail on a **Linux** host (host libc or interpreter behaviour, e.g. a JDK routing NOFOLLOW symlink times through microsecond `lutimes`). Merged into [`expected_failures`] only when the harness runs on Linux.
+    /// Host-scoped list entries that only fail on a **Linux** host (host libc or interpreter behaviour, e.g. a JDK routing NOFOLLOW symlink times through microsecond `lutimes`). Merged into [`expected_failures`] only when the harness runs on Linux.
     fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
@@ -42,7 +42,7 @@ fn testsuite_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/wasi-testsuite")
 }
 
-/// A parsed test manifest (the upstream v0 legacy schema). Every field is optional (`#[serde(default)]`); an absent `.json` means "all defaults" (a still-valid test). Unknown keys (the v1 `operations`/`proposals` schema, the suite-level `manifest.json`) are ignored rather than rejected — serde's default without `deny_unknown_fields`.
+/// A parsed test manifest (the upstream v0 legacy schema). Every field is optional (`#[serde(default)]`); an absent `.json` means "all defaults" (a still-valid test). Unknown keys (the v1 `operations`/`proposals` schema, the suite-tier `manifest.json`) are ignored rather than rejected — serde's default without `deny_unknown_fields`.
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct Manifest {
@@ -68,7 +68,7 @@ struct Case {
     manifest: Manifest,
 }
 
-/// Enumerate every `.wasm` under each suite's `wasm32-wasip1` directory (the suite-level `manifest.json` has no `.wasm`, so it is never a case), pairing it with its optional `<stem>.json`.
+/// Enumerate every `.wasm` under each suite's `wasm32-wasip1` directory (the suite-tier `manifest.json` has no `.wasm`, so it is never a case), pairing it with its optional `<stem>.json`.
 fn enumerate() -> anyhow::Result<Vec<Case>> {
     let root = testsuite_dir();
     assert!(
@@ -117,20 +117,20 @@ fn enumerate() -> anyhow::Result<Vec<Case>> {
 /// Build one libtest-mimic [`Trial`] per prebuilt module (the `wasi_testsuite_suite!` macro's entry point). The trial name is `"<suite>/<stem>"`, so `cargo test --test wasi_testsuite rust` filters by suite and `-- --exact rust/path_link` selects one module.
 pub fn wasi_testsuite_trials(lang: &'static dyn WasiTestsuiteBackend) -> Vec<Trial> {
     let cases = enumerate().expect("enumerate wasi-testsuite");
-    // Merge the base ledger with the host-matching scoped entries, so a failure that only trips on this host is expected while its counterpart on the other host is still flagged as a genuine unexpected pass. Leaked to `'static` because trials outlive this function.
-    let mut ledger: Vec<(&'static str, &'static str)> = lang.expected_failures().to_vec();
+    // Merge the base list with the host-matching scoped entries, so a failure that only trips on this host is expected while its counterpart on the other host is still flagged as a genuine unexpected pass. Leaked to `'static` because trials outlive this function.
+    let mut list: Vec<(&'static str, &'static str)> = lang.expected_failures().to_vec();
     if cfg!(target_os = "macos") {
-        ledger.extend_from_slice(lang.expected_failures_macos());
+        list.extend_from_slice(lang.expected_failures_macos());
     }
     if cfg!(target_os = "linux") {
-        ledger.extend_from_slice(lang.expected_failures_linux());
+        list.extend_from_slice(lang.expected_failures_linux());
     }
-    let ledger: &'static [(&'static str, &'static str)] = Vec::leak(ledger);
+    let list: &'static [(&'static str, &'static str)] = Vec::leak(list);
     cases
         .into_iter()
         .map(|case| {
             let name = case.trial_name.clone();
-            Trial::test(name.clone(), move || run_trial(lang, ledger, &name, &case))
+            Trial::test(name.clone(), move || run_trial(lang, list, &name, &case))
         })
         .collect()
 }
@@ -141,7 +141,7 @@ pub fn wasi_testsuite_main(lang: &'static dyn WasiTestsuiteBackend) {
     libtest_mimic::run(&args, wasi_testsuite_trials(lang)).exit();
 }
 
-/// Outcome of actually running a case, before the ledger is consulted.
+/// Outcome of actually running a case, before the list is consulted.
 enum Outcome {
     Pass,
     Fail(String),
@@ -149,12 +149,12 @@ enum Outcome {
 
 fn run_trial(
     lang: &dyn WasiTestsuiteBackend,
-    ledger: &[(&str, &str)],
+    list: &[(&str, &str)],
     name: &str,
     case: &Case,
 ) -> Result<(), Failed> {
     let outcome = evaluate(lang, case);
-    let ledgered = ledger.iter().find(|(n, _)| *n == name).map(|(_, tag)| *tag);
+    let ledgered = list.iter().find(|(n, _)| *n == name).map(|(_, tag)| *tag);
     match (outcome, ledgered) {
         (Outcome::Pass, None) => Ok(()),
         (Outcome::Pass, Some(tag)) => Err(Failed::from(format!(
@@ -169,7 +169,7 @@ fn run_trial(
     }
 }
 
-/// Convert, run, and check one case against its manifest. Any deviation (conversion refusal, wrong exit code, wrong stdout/stderr) is a [`Outcome::Fail`]; the ledger in [`run_trial`] decides if it is expected.
+/// Convert, run, and check one case against its manifest. Any deviation (conversion refusal, wrong exit code, wrong stdout/stderr) is a [`Outcome::Fail`]; the list in [`run_trial`] decides if it is expected.
 fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
     let bytes = match std::fs::read(&case.wasm) {
         Ok(b) => b,

@@ -3,7 +3,7 @@
 //! Lowering conventions (ADR-4; numeric conventions ADR-2):
 //! - i32/i64 are unsigned (masked) Ruby Integers; signed views via `Rt.s32/s64` only where an instruction needs them.
 //! - f32/f64 are Ruby Floats; f32 results are re-rounded with `Rt.f32`.
-//! - `br` lowers to a method-local `__br` label-variable cascade: blocks and referenced ifs are `begin...end while false`, loops are `while true`, and a multi-level branch sets `__br` to the target label id and `break`s, each crossed frame's epilogue relaying it until the target lands.
+//! - `br` lowers to a method-local `__br` label-variable cascade: blocks and referenced ifs are `begin...end while false`, loops are `while true`, and a multi-tier branch sets `__br` to the target label id and `break`s, each crossed frame's epilogue relaying it until the target lands.
 //!
 //! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
 
@@ -71,7 +71,7 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime (`module Rt ... end`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
+/// Emit a top-tier shared runtime (`module Rt ... end`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
@@ -184,7 +184,7 @@ impl Backend for RubyBackend {
         "rb"
     }
 
-    // The flagship backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits ledger (ADR-16).
+    // The flagship backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits list (ADR-16).
     fn has_wasi_p1(&self, name: &str) -> bool {
         bundler().has_unit(&format!("wasi/{name}"))
     }
@@ -559,7 +559,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Reference a module-level runtime helper, recording its unit.
+    /// Reference a module-tier runtime helper, recording its unit.
     fn rt(&self, name: &str) -> String {
         self.use_unit(&format!("rt/{name}"));
         format!("Rt.{name}")
@@ -592,7 +592,7 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// Class body members, written at indent level 1.
+    /// Class body members, written at indent tier 1.
     fn body(&self, w: &mut CodeWriter) {
         self.initialize(w);
         w.line("");
@@ -1726,7 +1726,7 @@ mod units {
     }
 }
 
-/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw` (ADR-4); a shallow one must keep the ADR-42 relay, which ADR-60 measured cheaper than a dispatch at that depth.
+/// Codegen-shape checks for control flow: a *deep* multi-tier `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw` (ADR-4); a shallow one must keep the ADR-42 relay, which ADR-60 measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1781,7 +1781,7 @@ mod cascade {
         assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
     }
 
-    /// A `br_table` tower `depth` blocks deep whose table names every level, so
+    /// A `br_table` tower `depth` blocks deep whose table names every tier, so
     /// the outermost target is crossed by a branch of exactly that path length —
     /// the wasm compilation of a C `switch`, and the shape whose size decides
     /// between the two lowerings (ADR-60).
@@ -1822,7 +1822,7 @@ mod cascade {
 
     #[test]
     fn shallow_multi_level_br_keeps_the_relay() {
-        // The same tower, one level below the threshold: a relay of that depth
+        // The same tower, one tier below the threshold: a relay of that depth
         // is cheaper than a dispatch, so nothing dissolves (ADR-60).
         let src = convert(&tower(flat::DEEP_CROSSING - 1));
         assert!(

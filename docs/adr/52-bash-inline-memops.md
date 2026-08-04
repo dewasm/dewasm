@@ -1,10 +1,10 @@
 # ADR-52 — Bash Emitter Inlines Linear-Memory Loads and Stores
 
-Status: **Accepted, 2026-07-30.** The Bash emitter generates per-instruction loads/stores as inline arithmetic on the module's memory array instead of `mem_*` unit calls; the units remain for WASI and bulk/rare ops. DOOM's tick dropped 87s → 34s (2.5x) and initGame 198s → 103s on top of ADR-51's representation change, with identical framebuffer checksums and the full gate green (spec 257/257).
+Status: **Accepted, 2026-07-30.** The Bash emitter generates per-instruction loads/stores as inline arithmetic on the module's memory array instead of `mem_*` unit calls; the units remain for WASI and bulk/rare ops. DOOM's tick dropped 87s → 34s (2.5x) and initGame 198s → 103s on top of ADR-51's representation change, with identical framebuffer checksums and the full test green (spec 257/257).
 
 ## Context
 
-After ADR-51 made random access O(1), the next cost class is bash function-call overhead: a call-based i32 load measured ~41k ops/sec while the same composition inlined measured ~85k. Every generated load also paid a second call (`mem_check`) and an R0-hop into its destination. ADR-1's ordering applies: this changes emitted shape, not semantics, and the spec harness gates it.
+After ADR-51 made random access O(1), the next cost class is bash function-call overhead: a call-based i32 load measured ~41k ops/sec while the same composition inlined measured ~85k. Every generated load also paid a second call (`mem_check`) and an R0-hop into its destination. ADR-1's ordering applies: this changes emitted shape, not semantics, and the spec harness tests it.
 
 ## Decision
 
@@ -24,4 +24,4 @@ Memory naming needs no new machinery: generated code references `<p>mem`/`<p>pag
 
 - Positive: DOOM tick 2.5x, initGame 1.9x; every converted module's hot loops shed two function calls plus an R0 copy per memory access. Remaining bash cost is arithmetic/control-flow, not call overhead.
 - Negative: generated files grow (DOOM: 16.7MB → 19.1MB, +14%; source time +7.6%); load/store semantics now exist in two places (units and emitter helpers) — the spec suite is the guard against drift.
-- Carry-over: word-packed cells (ADR-51's rejected alternative) remain the next representation-level lever if ever needed; the function-return `R0` hop for value-returning bodies is untouched (it is the return mechanism, not load overhead).
+- Carry-over: word-packed cells (ADR-51's rejected alternative) remain the next representation-tier lever if ever needed; the function-return `R0` hop for value-returning bodies is untouched (it is the return mechanism, not load overhead).

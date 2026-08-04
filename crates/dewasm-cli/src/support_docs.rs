@@ -50,7 +50,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("## Features\n\n");
     out.push_str(
-        "The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-tiers.md)); every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).\n\n",
+        "The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-levels.md)); every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).\n\n",
     );
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");

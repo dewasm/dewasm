@@ -23,7 +23,7 @@ These remove the wasm engine like dewasm does, but emit **bytecode for one VM**,
 | --- | --- | --- |
 | [asmble](https://github.com/cretz/asmble) | JVM bytecode | Archived. |
 | [Chicory build-time compiler](https://chicory.dev/docs/usage/build-time-compiler/) | JVM bytecode | Active; part of the pure-Java Chicory runtime. |
-| [wasm2cil](https://github.com/ericsink/wasm2cil) | .NET CIL assemblies | WASI support; work-in-progress, but notably ran SQLite and a raytracer on the CLR — prior art for "SQLite on a managed runtime via wasm", which dewasm pursues at the source level on Ruby (README north-star). Also why the C# backend ([ADR-10](adr/10-csharp-target.md)) still has an open niche: CIL is not C# source. |
+| [wasm2cil](https://github.com/ericsink/wasm2cil) | .NET CIL assemblies | WASI support; work-in-progress, but notably ran SQLite and a raytracer on the CLR — prior art for "SQLite on a managed runtime via wasm", which dewasm pursues at the source tier on Ruby (README north-star). Also why the C# backend ([ADR-10](adr/10-csharp-target.md)) still has an open niche: CIL is not C# source. |
 
 Bytecode output is invisible to the target ecosystem's humans and tooling: it cannot be read, reviewed, patched, stepped through as ordinary code, or vendored into a codebase as a plain file — and it only exists where the VM has a bytecode story at all (there is none for Bash, and none for shipping a plain `.rb`/`.py` file).
 
@@ -39,4 +39,4 @@ wasmtime, wasmer, wazero, wasm3, Chicory's interpreter, and browser engines all 
 4. **Deployment-grade output, not demo output.** Minimal runtime bundling per module and collision-free coexistence of generated artifacts ([ADR-6](adr/6-runtime-units.md)); a library mode with import providers and a default WASI fallback ([ADR-7](adr/7-import-providers.md)).
 5. **Declared, enforced fidelity.** The official testsuite runs on the real target interpreters, and every skipped test must be attributable to a feature declared unsupported in the generated [support matrix](support.md) ([ADR-8](adr/8-latest-testsuite-support-matrix.md)).
 
-dewasm stands on this prior work: wasm2c's translation scheme, w2c2's proof that spec-level fidelity is reachable, and the import-binding designs of Node's WASI, wasm2c, and the major runtimes are all cited in the ADRs above.
+dewasm stands on this prior work: wasm2c's translation scheme, w2c2's proof that spec-tier fidelity is reachable, and the import-binding designs of Node's WASI, wasm2c, and the major runtimes are all cited in the ADRs above.

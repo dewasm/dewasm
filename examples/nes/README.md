@@ -13,7 +13,7 @@ Where DOOM demonstrates library mode's *import* surface (ten host functions), th
 
 ![The deterministic NES frame snapshot](../apps/snapshots/nes_frame.png)
 
-*The frame the framebuffer-snapshot test pins: 40 input-free frames into [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) (the bundled demo ROM — a puzzle platformer by Shiru, public domain), every backend and the wasmtime oracle render these exact pixels, so it doubles as a cross-backend conformance snapshot in the DOOM snapshot's harness ([ADR-53](../../docs/adr/53-doom-frame-golden.md)). The compared oracle is `nes_frame.ppm`; this PNG is the same frame for human eyes.*
+*The frame the framebuffer-snapshot test pins: 40 input-free frames into [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) (the bundled demo ROM — a puzzle platformer by Shiru, public domain), every backend and the wasmtime oracle render these exact pixels, so it doubles as a cross-backend conformance snapshot in the DOOM snapshot's harness ([ADR-53](../../docs/adr/53-doom-frame-snapshot.md)). The compared oracle is `nes_frame.ppm`; this PNG is the same frame for human eyes.*
 
 ## Run
 

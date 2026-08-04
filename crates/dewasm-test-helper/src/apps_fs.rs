@@ -2,7 +2,7 @@
 //!
 //! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro (`qjs_file_io_e2e!`, `sqlite3_shell_dbfile_e2e!`, ...). The per-language instantiation glue is a named const passed to that macro: it writes out the class name, argv, env, and preopen *guest* paths literally and takes only the runtime host paths through the `{scratch}`/`{cache}` placeholders the runner fills. wasmtime does not use the glue: it overrides [`BackendUnderTest::run_app_fs`] to exec the cached binary with `--dir` preopens directly, so the same case consts feed both the backend macros and the wasmtime suite (via [`run_fs_app_case`], called directly).
 //!
-//! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB binary), so the perf opt-out lives at the macro/feature level: each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
+//! These cases are slow (they reconvert qjs/sqlite and stage ripgrep's 22 MB binary), so the perf opt-out lives at the macro/feature tier: each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled. [`run_fs_app_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -303,7 +303,7 @@ fn drive_fs_app_case(
     (scratch, outputs)
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to gate itself.
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature tier (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs to test itself.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
     for (run, output) in case.runs.iter().zip(&outputs) {

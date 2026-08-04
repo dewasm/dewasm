@@ -14,7 +14,7 @@ Lower `f64.sub` to an inline self-compare guard:
 ((r = a - b) == r ? r : Rt.quiet_nan(r))
 ```
 
-`r == r` is false only for NaN, so the common path adds one C-level compare — no method call, no allocation — matching the Ruby perf posture (ADR-32/33/42–44); the NaN path routes through the existing `rt/quiet_nan` (sign and payload preserved, hence still an arithmetic NaN).
+`r == r` is false only for NaN, so the common path adds one C-tier compare — no method call, no allocation — matching the Ruby perf posture (ADR-32/33/42–44); the NaN path routes through the existing `rt/quiet_nan` (sign and payload preserved, hence still an arithmetic NaN).
 
 The criterion for guarding an op: **an op gets a quiet guard only when a real host was observed returning a signaling NaN from it.** Today that is `f64.sub` alone — `f32.sub` is already safe because the `Rt.f32` re-round's `pack("e")` narrowing quietens on every probed host, and add/mul/div quietened everywhere. The same criterion applies to other backends if they exhibit the class.
 

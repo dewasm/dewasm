@@ -21,7 +21,7 @@ impl BackendUnderTest for Ruby {
         find_ruby().expect("ruby not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) plus one bundled runtime, so an imported table crosses modules (as the spec harness's `register` path does); otherwise it emits independent Embedded classes, each with its own nested `Rt`.
+    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` emits each module against a single top-tier `::Rt` (Alias linkage) plus one bundled runtime, so an imported table crosses modules (as the spec harness's `register` path does); otherwise it emits independent Embedded classes, each with its own nested `Rt`.
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();

@@ -92,7 +92,7 @@ wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
 
 # zig_cc_wasi <args...>: `zig cc` for the wasm32-wasi target — the one flag
 # every locally-compiled module shares. Per-app choices (the reactor exec
-# model, -O level, includes, --strip-debug) stay at the call site.
+# model, -O tier, includes, --strip-debug) stay at the call site.
 zig_cc_wasi() {
   zig cc -target wasm32-wasi "$@"
 }

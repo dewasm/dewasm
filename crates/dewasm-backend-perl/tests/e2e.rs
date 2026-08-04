@@ -22,7 +22,7 @@ impl BackendUnderTest for Perl {
             .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `Rt` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (each carrying its own `<Package>::Rt`).
+    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-tier `Rt` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (each carrying its own `<Package>::Rt`).
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();

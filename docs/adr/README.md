@@ -36,9 +36,9 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-20 | [Component Model: Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary](20-component-model-core-ir-adapters.md) | Superseded (ADR-24) |
 | ADR-21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (ADR-24) |
 | ADR-22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
-| ADR-23 | [Backend Support Tiers, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-tiers.md) | Superseded (ADR-25) |
+| ADR-23 | [Backend Support Maturity Levels, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-levels.md) | Superseded (ADR-25) |
 | ADR-24 | [0.1 Scope Reset: Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals](24-01-scope-reset.md) | Accepted |
-| ADR-25 | [Retire the Support-Tier Ladder for Plain Capability Declarations](25-retire-support-tiers.md) | Accepted |
+| ADR-25 | [Retire the Support Maturity Levels for Plain Capability Declarations](25-retire-support-levels.md) | Accepted |
 | ADR-26 | [Rename the Project: dewasmify → dewasm](26-rename-dewasm.md) | Accepted |
 | ADR-27 | [Shared Test-Helper Crate with Per-Feature Test Macros](27-test-helper-crate.md) | Accepted |
 | ADR-28 | [Python Backend Lowering Conventions](28-python-backend-lowering.md) | Accepted |
@@ -55,18 +55,18 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
 | ADR-40 | [WASI p1 Completion: Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment](40-wasi-p1-completion.md) | Accepted |
 | ADR-41 | [Merge Adjacent Active Data Segments at Build Time](41-adjacent-data-segment-merging.md) | Accepted |
-| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
+| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Tier `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
 | ADR-43 | [Ruby Backend: i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | ADR-44 | [Ruby Backend: Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
 | ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
-| ADR-46 | [Host-OS-Scoped Expected-Failure Ledgers for the WASI Testsuite Harness](46-host-scoped-wasi-ledgers.md) | Accepted |
+| ADR-46 | [Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness](46-host-scoped-wasi-expected-failures.md) | Accepted |
 | ADR-47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
-| ADR-48 | [Two-Tier Slow-Test Gating (slow_test / ultra_slow_test)](48-slow-test-tiers.md) | Accepted |
+| ADR-48 | [Two-Tier Slow-Test Conditioning (slow_test / ultra_slow_test)](48-slow-test-speeds.md) | Accepted |
 | ADR-49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
 | ADR-50 | [DOOM Demo: One Wasm Binary, Per-Language Native Frontends](50-doom-example-shape.md) | Accepted |
 | ADR-51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |
 | ADR-52 | [Bash Emitter Inlines Linear-Memory Loads and Stores](52-bash-inline-memops.md) | Accepted |
-| ADR-53 | [Test DOOM by a Deterministic Framebuffer Golden](53-doom-frame-golden.md) | Accepted |
+| ADR-53 | [Test DOOM by a Deterministic Framebuffer Snapshot](53-doom-frame-snapshot.md) | Accepted |
 | ADR-54 | [Whole-Cache Per-Backend Conversion Suite](54-apps-convert-suite.md) | Accepted |
 | ADR-55 | [Perl Backend Lowering Conventions](55-perl-backend-lowering.md) | Accepted |
 | ADR-56 | [One Command Regenerates Every Execution Snapshot](56-unified-snapshot-regeneration.md) | Accepted |

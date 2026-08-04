@@ -13,7 +13,7 @@ Each frontend implements the same ten imports (framebuffer hand-off, monotonic c
 
 ![The deterministic DOOM frame snapshot](../apps/snapshots/doom_frame.png)
 
-*The frame the framebuffer-snapshot test pins: driving the converted module under a fixed synthetic clock renders these exact pixels on every backend and the wasmtime oracle, so it doubles as a cross-backend conformance snapshot ([ADR-53](../../docs/adr/53-doom-frame-golden.md)). The compared oracle is `doom_frame.ppm`; this PNG is the same frame for human eyes.*
+*The frame the framebuffer-snapshot test pins: driving the converted module under a fixed synthetic clock renders these exact pixels on every backend and the wasmtime oracle, so it doubles as a cross-backend conformance snapshot ([ADR-53](../../docs/adr/53-doom-frame-snapshot.md)). The compared oracle is `doom_frame.ppm`; this PNG is the same frame for human eyes.*
 
 ## Run
 

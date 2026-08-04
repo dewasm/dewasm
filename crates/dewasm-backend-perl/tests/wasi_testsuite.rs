@@ -20,7 +20,7 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/path_filestat",
         "filestat times: perl NV-seconds utime caps precision below ns",
     ),
-    // Core perl has no lutimes/utimensat(AT_SYMLINK_NOFOLLOW): a final-component symlink cannot carry its own times, so the suite's set-then-lstat on the link itself cannot hold (the Linux JDK ledger has the microsecond analog of this gap).
+    // Core perl has no lutimes/utimensat(AT_SYMLINK_NOFOLLOW): a final-component symlink cannot carry its own times, so the suite's set-then-lstat on the link itself cannot hold (the Linux JDK list has the microsecond analog of this gap).
     (
         "rust/symlink_filestat",
         "path_filestat_set_times NOFOLLOW: core perl lacks lutimes/utimensat",

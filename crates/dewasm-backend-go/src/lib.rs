@@ -5,7 +5,7 @@
 //! - NaN bit paths go through `math.Float32bits`/`Float64bits`, which are bit-preserving on native floats; only demote/promote reconstruct NaN payloads explicitly.
 //! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`. Unreferenced structures are spliced inline. Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
 //!
-//! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
+//! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-tier constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -24,7 +24,7 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Go (see runtime/go/units/). Every scope has empty wrappers: Go methods and types are package-level regardless of the struct they belong to, so the bundle is a flat list of declarations (unlike Python's nested classes).
+/// The runtime unit bundler for Go (see runtime/go/units/). Every scope has empty wrappers: Go methods and types are package-tier regardless of the struct they belong to, so the bundle is a flat list of declarations (unlike Python's nested classes).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -157,7 +157,7 @@ impl Backend for GoBackend {
     }
 }
 
-/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness (ADR-3): the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`. Returns the declarations and the runtime units they reference.
+/// Emit just the package-tier declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness (ADR-3): the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`. Returns the declarations and the runtime units they reference.
 pub fn generate_program_with_units(
     module: &Module,
     type_name: &str,

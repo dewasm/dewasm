@@ -21,7 +21,7 @@ Handing the frame over as agnes's own palette indices instead of a BGRA image re
 
 NES's 256×240 framebuffer is about 4.5x fewer pixels than DOOM's 640×400, and indeed a frame ticks well under DOOM's ~34s here — but the two aren't directly comparable (different guest workload entirely; DOOM also pays a much heavier `initGame`). The point is the same: genuinely running, not fast.
 
-Alter Ego opens on a near-black boot frame and only fades in its final, stable credits screen (7 distinct colors) by frame ~37, so the first ~15 frames of any run are essentially black while the ROM warms up the PPU — that is the ROM's own behavior, not a stall. The cross-backend framebuffer snapshot ([ADR-53](../../../docs/adr/53-doom-frame-golden.md)) pins frame 40 for exactly this reason.
+Alter Ego opens on a near-black boot frame and only fades in its final, stable credits screen (7 distinct colors) by frame ~37, so the first ~15 frames of any run are essentially black while the ROM warms up the PPU — that is the ROM's own behavior, not a stall. The cross-backend framebuffer snapshot ([ADR-53](../../../docs/adr/53-doom-frame-snapshot.md)) pins frame 40 for exactly this reason.
 
 ## Run
 

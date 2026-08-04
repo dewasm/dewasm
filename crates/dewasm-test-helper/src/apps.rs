@@ -1,6 +1,6 @@
-//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (ADR-15) — running these does not itself need `wasmtime` installed. (Older ADRs call these snapshot files "golden".)
+//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (ADR-15) — running these does not itself need `wasmtime` installed. (Older ADRs call these snapshot files "snapshot".)
 //!
-//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the gating lives at the macro/feature level.
+//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature tier.
 
 use dewasm_backend::Mode;
 
@@ -153,7 +153,7 @@ pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
     compressed.stdout
 }
 
-/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature level (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs to gate itself.
+/// Run a slow-tier [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature tier (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs to test itself.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }

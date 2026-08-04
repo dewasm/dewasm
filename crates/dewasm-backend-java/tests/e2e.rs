@@ -64,7 +64,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. Java only composes against one shared runtime (mirroring the spec harness's `register` path): generate each module's class with `generate_program_with_units`, union the referenced runtime units, bundle them once, and concatenate the runtime classes followed by both module classes into ONE default-package compilation unit. The driver `public class Main` is appended by the runner. `shared_runtime=false` is never requested for Java — `embedded_coexist_e2e!` is not invoked because Java emits one flat top-level runtime shared by all modules (ADR-30) — so it is unimplemented.
+    /// Compose several `.wat` modules for the multi-module cases. Java only composes against one shared runtime (mirroring the spec harness's `register` path): generate each module's class with `generate_program_with_units`, union the referenced runtime units, bundle them once, and concatenate the runtime classes followed by both module classes into ONE default-package compilation unit. The driver `public class Main` is appended by the runner. `shared_runtime=false` is never requested for Java — `embedded_coexist_e2e!` is not invoked because Java emits one flat top-tier runtime shared by all modules (ADR-30) — so it is unimplemented.
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         assert!(
             shared_runtime,
@@ -545,4 +545,4 @@ dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
 
 dewasm_test_helper::shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.
+// embedded_coexist_e2e!: not invoked — a single flat top-tier runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.

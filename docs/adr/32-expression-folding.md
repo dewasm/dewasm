@@ -37,7 +37,7 @@ Two backend adjustments were needed because folded expressions now reach code th
 
 - **Status quo (one temp per instruction).** Simplest and obviously correct, but leaves the measured 335 MB / 6.5 M-line output and its parse/compile/runtime cost on the table for every backend.
 - **A post-build optimization pass over the IR.** Fold as a separate pass that rewrites `Assign`-heavy IR into nested expressions. It would need to re-derive the effect/aliasing information the builder already has as it walks the operand stack, re-doing the trap- and effect-ordering analysis on a form that has already lost the stack structure. Building the folded form directly is less code and less duplicated reasoning; readability passes (ADR-1) can still layer on top.
-- **Per-backend folding.** Each backend folds during its own lowering. That multiplies the delicate trap/effect-ordering logic by the number of backends and invites divergence; doing it once in the shared builder keeps a single audited implementation and one spec-harness gate.
+- **Per-backend folding.** Each backend folds during its own lowering. That multiplies the delicate trap/effect-ordering logic by the number of backends and invites divergence; doing it once in the shared builder keeps a single audited implementation and one spec-harness test.
 
 ## Consequences
 

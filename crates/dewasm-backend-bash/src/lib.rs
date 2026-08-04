@@ -3,7 +3,7 @@
 //! Lowering conventions (ADR-11; numeric conventions ADR-2):
 //! - i32 is a masked-unsigned value in [0, 2^32); i64 is stored as its signed-64 two's-complement bit pattern (bash arithmetic is signed 64-bit only). Signed/unsigned views are derived inline.
 //! - f32/f64 are their bit patterns (u32 / signed-64), computed by the pure-Bash softfloat units (ADR-5/ADR-13); reinterprets and float loads/stores are the identity over the integer paths.
-//! - Structured control flow maps to `while :; do ...; break; done` wrappers; `br` becomes `break N`/`continue N` (bash counts only loops, `if` adds no level). Unreferenced labels emit no wrapper.
+//! - Structured control flow maps to `while :; do ...; break; done` wrappers; `br` becomes `break N`/`continue N` (bash counts only loops, `if` adds no tier). Unreferenced labels emit no wrapper.
 //! - Functions return values through the globals `R0, R1, ...`; traps set `TRAP_MSG` and propagate status 134 through `|| return $?` chains. Every generated function ends with an explicit `return 0` because a trailing arithmetic statement would leak status 1.
 //! - One module instance per generation-time prefix: functions `<p>f<i>`, state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space table), entry points `<p>init`, `<p>invoke`, `<p>global_get`. Imported functions resolve from the caller's `IMPORTS` array; other import kinds resolve through `PROVIDERS` + per-kind export maps, with imported globals and imported memory aliased in via `declare -gn` namerefs (ADR-35).
 //!
@@ -65,7 +65,7 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime for the closure of `seeds`. Bash has no namespaces, so the "runtime" is just the flat function definitions.
+/// Emit a top-tier shared runtime for the closure of `seeds`. Bash has no namespaces, so the "runtime" is just the flat function definitions.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     bundler().bundle(seeds, 0)
 }
@@ -1234,7 +1234,7 @@ impl<'a> Gen<'a> {
 }
 
 struct Frames {
-    /// Label ids that occupy a bash loop level, outermost first.
+    /// Label ids that occupy a bash loop tier, outermost first.
     stack: Vec<u32>,
 }
 

@@ -13,7 +13,7 @@ Unlike the DOOM Perl frontend (`../../doom/perl`), `nes.wasm` has **zero**
 wasm imports: no console/save-game/clock host surface to wire up, just
 `_initialize` plus eight exports (`allocRom`, `initGame`, `setInput`,
 `tickGame`, `screenOffset`, `paletteOffset`, `frameWidth`, `frameHeight`). The
-controller is also level-triggered -- one `setInput(bitmask)` call per tick,
+controller is also tier-triggered -- one `setInput(bitmask)` call per tick,
 not DOOM's edge-triggered `reportKeyDown`/`reportKeyUp` pair -- so there's no
 save-game directory and no per-frame host callback to receive the pixels; the
 host instead pulls the frame straight out of guest memory after each tick, in

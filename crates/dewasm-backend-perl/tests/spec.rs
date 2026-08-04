@@ -15,7 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby/Python ledgers (ADR-16): the only open gap is `import-limits` — `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-tier failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby/Python ledgers (ADR-16): the only open gap is `import-limits` — `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -24,7 +24,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default. Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so — like Python and Bash (ADR-3 pre-accepts this) — the gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps everything.
+/// Files `cargo test` runs by default. Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so — like Python and Bash (ADR-3 pre-accepts this) — the test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs everything.
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
@@ -405,7 +405,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
         // `(ref.func)`: any non-null funcref — in ADR-17's representation, a `[type_string, coderef]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!("ref({value}) eq 'ARRAY'")),
-        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
+        // A specific function's identity: not expressible without an export map; no top-tier testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

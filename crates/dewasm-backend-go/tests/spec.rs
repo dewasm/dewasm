@@ -1,4 +1,4 @@
-//! Go side of the shared spec harness (ADR-3, ADR-27, ADR-29): converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
+//! Go side of the shared spec harness (ADR-3, ADR-27, ADR-29): converts each module with the Go backend to package-tier declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
 //! Three Go facts shape the phrasing (ADR-29):
 //! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module — hence every export's signature — is known); the harness asserts the boxed `any` results to the expected type.
@@ -18,7 +18,7 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-tier failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too — but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's (ADR-16): the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
@@ -32,7 +32,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// Files `cargo test` runs by default (the non-ignored trials). Go compiles each `.wast` file to one program, so the default gate runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole ledger; `cargo test -- --include-ignored` sweeps every file (one `go build` per file — a few seconds each, dominated by compile latency).
+/// Files `cargo test` runs by default (the non-ignored trials). Go compiles each `.wast` file to one program, so the default test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs every file (one `go build` per file — a few seconds each, dominated by compile latency).
 const CURATED_FILES: &[&str] = &[
     "address",
     "align",
