@@ -11,10 +11,6 @@
 //! exports. The ROM is copied into guest memory through `allocRom`.
 
 use anyhow::{ensure, Context, Result};
-use dewasm_test_helper::{
-    alter_ego_rom_path, nes_frame_to_ppm, nes_wasm_path, NES_FRAMES, NES_FRAME_H, NES_FRAME_W,
-    NES_PALETTE_ENTRIES,
-};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
 /// Instantiate and drive `nes.wasm` under the deterministic contract, returning
@@ -51,7 +47,7 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
     }
 
     // N frames, no input.
-    for _ in 0..NES_FRAMES {
+    for _ in 0..dewasm_test_helper::NES_FRAMES {
         tick.call(&mut store, ())?;
     }
 
@@ -80,7 +76,8 @@ fn read_frame(
         .call(&mut *store, ())? as usize;
     let data = memory.data(&*store);
     let screen = data[screen_off..screen_off + (w * h) as usize].to_vec();
-    let palette = data[palette_off..palette_off + NES_PALETTE_ENTRIES * 4].to_vec();
+    let palette =
+        data[palette_off..palette_off + dewasm_test_helper::NES_PALETTE_ENTRIES * 4].to_vec();
     Ok((screen, palette, w, h))
 }
 
@@ -89,14 +86,14 @@ fn read_frame(
 /// compared oracle) and a PNG of the same frame for `nes_frame.png` (human
 /// inspection — never compared by a test).
 pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
-    let wasm_path = nes_wasm_path();
+    let wasm_path = dewasm_test_helper::nes_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
         format!(
             "read {} — run examples/apps/scripts/nes.sh first",
             wasm_path.display()
         )
     })?;
-    let rom_path = alter_ego_rom_path();
+    let rom_path = dewasm_test_helper::alter_ego_rom_path();
     let rom = std::fs::read(&rom_path).with_context(|| {
         format!(
             "read {} — run examples/apps/scripts/nes.sh first",
@@ -106,8 +103,10 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 
     let (screen, palette, w, h) = capture_frame(&bytes, &rom).map_err(anyhow::Error::msg)?;
     ensure!(
-        w == NES_FRAME_W && h == NES_FRAME_H,
-        "frame is {w}x{h}, expected {NES_FRAME_W}x{NES_FRAME_H} (pin bump?)"
+        w == dewasm_test_helper::NES_FRAME_W && h == dewasm_test_helper::NES_FRAME_H,
+        "frame is {w}x{h}, expected {}x{} (pin bump?)",
+        dewasm_test_helper::NES_FRAME_W,
+        dewasm_test_helper::NES_FRAME_H
     );
 
     // Guard against a degenerate (blank/near-blank) capture. NES palettes are
@@ -116,7 +115,7 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     // boot frame is a single color. A >4 threshold cleanly separates the two.
     // Counted over colors, not raw indices: distinct indices can alias onto one
     // palette entry (the mask, plus repeated black entries).
-    let ppm = nes_frame_to_ppm(&screen, &palette, w, h);
+    let ppm = dewasm_test_helper::nes_frame_to_ppm(&screen, &palette, w, h);
     let distinct = screen
         .iter()
         .map(|&ix| &palette[(ix as usize & 0x3f) * 4..(ix as usize & 0x3f) * 4 + 3])
