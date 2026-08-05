@@ -1,6 +1,6 @@
 # ADR-51 — Bash Linear Memory as an Associative Array
 
-Status: **Accepted, 2026-07-30.** Linear memory in generated Bash is `declare -gA` (one byte per key) instead of an indexed array; all 23 `mem/` units and the 10 memory-touching WASI units use pre-expanded decimal keys. The full bash test is green and DOOM's `initGame` — which never completed in 3+ CPU-hours on the indexed representation — finishes in ~3.3 minutes.
+Status: **Accepted, 2026-07-30.** Linear memory in generated Bash is `declare -gA` (one byte per key) instead of an indexed array; all 23 `mem/` units and the 10 memory-touching WASI units use pre-expanded decimal keys. The full bash test passes and DOOM's `initGame` — which never completed in 3+ CPU-hours on the indexed representation — finishes in ~3.3 minutes.
 
 ## Context
 

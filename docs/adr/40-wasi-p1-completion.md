@@ -23,7 +23,7 @@ ADR-36's conformance harness attributed every known failure to a declared gap. T
 ## Consequences
 
 - Positive: the five wasi-testsuite lists drop to their honest floor — `sock_shutdown` ×2 everywhere (out of scope, ADR-24); `environ` ×3 on the four interpreted backends (host injection; Go's compiled binaries pass); Java `path_link` (hard-linking a dangling symlink needs `linkat(2)` nofollow, inexpressible in NIO — Ruby reaches it via Fiddle, Go by recreating the link); Go `rust/symlink_filestat` (no portable build-tag-free `lutimes` in Go std); Bash's declared set (timestamps ×2 under D4, d_ino/dev-ino ×3 under D6, cross-fd read-back under D1, and three file-symlink-follow ELOOP re-tags under D3).
-- Positive: real-app suites (SQLite, QuickJS, CPython, CRuby, ripgrep) stay green under enforcement because preopens seed the canonical directory rights with full inheriting sets.
+- Positive: real-app suites (SQLite, QuickJS, CPython, CRuby, ripgrep) keep passing under enforcement because preopens seed the canonical directory rights with full inheriting sets.
 - Negative: the rights meta table adds a lookup to the hot `fd_read`/ `fd_write` paths on every backend; the Bash symlink units spawn licensed external commands.
 - Carry-over: closing the TOCTOU gap for real (cap-std-style `openat`- beneath) remains out of scope, as in ADR-14.
 

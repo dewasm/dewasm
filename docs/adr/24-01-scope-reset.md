@@ -16,7 +16,7 @@ The discriminating criterion: **a feature stays only if a pinned target app need
 
 Goals are stated app-first; the spec testsuite remains the correctness test (ADR-3), not the goal. 0.1 targets: cowsay (backend bring-up), quickjs-ng (one-shot, script with file I/O, REPL), sqlite3 (shell and C-API library, DB files on disk, callback binding), ripgrep, a CPython or CRuby runtime binary, and a compression CLI. A **feature audit** (conversion-time feature report over each pinned binary) runs before the excision; an app that needs a dropped feature is deferred with a written note in `docs/apps-audit.md` — it does not block the excision. pandoc.wasm is the expected first deferral (GHC's wasm backend is believed to emit tail calls; to be confirmed by the audit).
 
-0.1 backends: Ruby and Bash (existing) plus **Python, Go, Java**. Each new backend's first milestone is "cowsay runs"; its 0.1 bar is spec-green plus full WASI p1 including the filesystem. If the schedule demands, the release may relax to "Python at the full bar; Go/Java at the cowsay milestone" — that call is made at release time, not now.
+0.1 backends: Ruby and Bash (existing) plus **Python, Go, Java**. Each new backend's first milestone is "cowsay runs"; its 0.1 bar is a passing spec harness plus full WASI p1 including the filesystem. If the schedule demands, the release may relax to "Python at the full bar; Go/Java at the cowsay milestone" — that call is made at release time, not now.
 
 Future work recorded, deliberately out of 0.1 scope: restoring wasm 2.0+ support, wasix and partial emscripten-runtime import surfaces as possible additional input dialects, and Haskell/OCaml (and C#, per the ADR-10 revision) as later target languages.
 
@@ -29,6 +29,6 @@ Future work recorded, deliberately out of 0.1 scope: restoring wasm 2.0+ support
 ## Consequences
 
 - Positive: one input dialect shared by all five 0.1 backends; the IR a new backend must lower shrinks; goals become demos a user can run.
-- Negative: working, spec-green Ruby code for ADRs 17–21 is deleted (~4k LOC + 37 runtime units); pandoc is likely deferred; users with 2.0+ binaries are turned away at conversion time.
+- Negative: working, spec-passing Ruby code for ADRs 17–21 is deleted (~4k LOC + 37 runtime units); pandoc is likely deferred; users with 2.0+ binaries are turned away at conversion time.
 - Carry-over: ADRs 17–21 stay in the tree as Superseded design records for a future restoration; the excision commit flips their statuses.
 - The support maturity levels lose their reason to exist once every backend targets the same bar — retired separately in [ADR-25](25-retire-support-levels.md).

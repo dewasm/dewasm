@@ -26,7 +26,7 @@ Add one subcommand, **`cargo xtask update-snapshots [filter]`**, that regenerate
 
 - **A per-snapshot command each (the status quo, extended).** Keep `update-repl-snapshot` / `update-doom-snapshot` and add seven more. It scales the surface with the snapshot count, re-derives the invocation per command, and leaves no single "regenerate everything" entry — the very fragmentation that left eight snapshots on manual redirection. One command with a filter gives the same targeting without N commands.
 
-- **An env-var update mode on the compare-only tests** (`DEWASM_UPDATE_SNAPSHOTS=1 cargo test …`). Tempting because the test already computes the fresh bytes. Rejected on standing policy (ADR-27 revision, docs/testing.md): a compare test that can rewrite its own reference can launder a broken capture into a green run, defeating the check. Capture stays a separate path that never runs inside the assertion.
+- **An env-var update mode on the compare-only tests** (`DEWASM_UPDATE_SNAPSHOTS=1 cargo test …`). Tempting because the test already computes the fresh bytes. Rejected on standing policy (ADR-27 revision, docs/testing.md): a compare test that can rewrite its own reference can launder a broken capture into a passing run, defeating the check. Capture stays a separate path that never runs inside the assertion.
 
 - **Leave the manual `wasmtime run >` redirection documented but uncodified.** The prose can't encode the filesystem cases' preopens or the two-run sqlite sequence without becoming a second, drift-prone copy of the runner logic. Codifying the mapping once in `wasmtime_snapshots()` removes the retyping and the drift.
 

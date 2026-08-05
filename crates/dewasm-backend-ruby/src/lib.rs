@@ -1752,7 +1752,7 @@ mod cascade {
           (local.get 1)))
     "#;
 
-    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so ADR-58's exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial green and only costs tight-loop speed.
+    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so ADR-58's exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
     const SOLE_LOOP_EXIT: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)

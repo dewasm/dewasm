@@ -33,4 +33,4 @@ In-range values (the common case) return unboxed via two non-allocating comparis
 
 - Positive: on the `sqlite3-shell` benchmark, allocated objects dropped 2.40M → 0.62M (−74%) for byte-identical output; wall time stayed flat (~6.2s, within noise). The generated `sqlite3-shell` shrank ~42 KB (21,316,625 → 21,274,277 bytes) because `Rt.m64(...)` is shorter than the inline mask.
 - Negative: rotates and other sites whose value is usually out of range pay two extra comparisons before the same `& M64`; these are rare, and the code-size and consistency win holds. One more runtime unit (`rt/m64`) enters the bundle whenever any masked i64 op is emitted.
-- The spec harness (ADR-3) binds correctness and is green for the Ruby backend under this lowering (257 trials); the numeric conventions of ADR-2 are unchanged.
+- The spec harness (ADR-3) binds correctness and passes for the Ruby backend under this lowering (257 trials); the numeric conventions of ADR-2 are unchanged.

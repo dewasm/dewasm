@@ -27,6 +27,6 @@ Measured on the spec harness (ADR-3): the curated CI subset passes 1,455 asserti
 ## Consequences
 
 - Positive: the shared `Backend`/`RuntimeBundler`/spec-harness machinery (ADR-6, ADR-3) carried over unchanged except for per-language harness emitters — the multi-language design is validated. Runtime speed is a non-issue at spec scale.
-- Negative (resolved): float-using modules were refused (attributed `floats`, ADR-8) until the ADR-5 softfloat landed under ADR-13; the classic control-flow files and the pure-float suite are green since.
+- Negative (resolved): float-using modules were refused (attributed `floats`, ADR-8) until the ADR-5 softfloat landed under ADR-13; the classic control-flow files and the pure-float suite have passed since.
 - Deep recursion without `FUNCNEST` segfaults bash around 10–20k frames; exhaustion checks must stay inside `( FUNCNEST=...; ... )` subshells.
 - Bulk memory ops loop per byte; large `memory.copy`/`fill` will need batching before real apps run under bash.

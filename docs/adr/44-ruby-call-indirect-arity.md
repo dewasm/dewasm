@@ -34,4 +34,4 @@ Semantics are unchanged: the same interned structural type symbols (`:"i32,i64->
 
 - Positive: no `T_ARRAY` is built for any `call_indirect` at arity ≤ 8. On the `sqlite3-shell` benchmark workload total object allocations fell 2,570,922 → 2,117,639 (−453,283, ~17.6%), byte-identical output. The wall-clock gain is modest (~1% on this bench, which is dominated by other work); the win is allocation/GC pressure, which the profile attributed to the splat.
 - Negative: nine near-identical small units instead of one. They share the trap contract by copy, so a change to that contract touches all nine (and the fallback `call`); the units lint (ADR-6) keeps their `# requires:` headers honest but does not dedupe the bodies.
-- The spec harness (ADR-3) binds correctness: it is green for the Ruby backend under this lowering, `call_indirect.wast` included, and the `qjs`/`sqlite3-shell` heavy e2e cases pass.
+- The spec harness (ADR-3) binds correctness: it passes for the Ruby backend under this lowering, `call_indirect.wast` included, and the `qjs`/`sqlite3-shell` heavy e2e cases pass.

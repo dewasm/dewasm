@@ -27,4 +27,4 @@ ADR-4 explicitly rejected flag variables as obscuring the code and needing a sta
 
 - Positive: `catch`/`throw` is gone from generated Ruby. `sqlite3-shell` on the benchmark workload dropped 24.0s → 6.95s (3.45x), byte-identical output; GC fell from 16.5% to 11%, and a CPU profile's top frames are now the work function and memory loads/stores, with no `Kernel#catch` or `Kernel#throw`.
 - Negative: a *wrapped* loop's back-edge takes a `__br` assignment and a compare instead of a plain `next`; the common loop+block idiom stays unwrapped and keeps `next`. A multi-level `br` emits one small epilogue per crossed frame — an output-size cost (epilogues sit at deep indents, so they are emitted as single lines; measured on `sqlite3-shell`, the multi-line first cut grew the output by 37%, mostly leading whitespace).
-- The spec harness (ADR-3) binds correctness: it is green for the Ruby backend under this lowering, including `br_table`, `unwind`, and `labels`.
+- The spec harness (ADR-3) binds correctness: it passes for the Ruby backend under this lowering, including `br_table`, `unwind`, and `labels`.

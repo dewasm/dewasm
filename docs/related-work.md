@@ -33,7 +33,7 @@ wasmtime, wasmer, wazero, wasm3, Chicory's interpreter, and browser engines all 
 
 ## What dewasm adds
 
-1. **One IR, many targets** ([ADR-0](adr/0-foundation.md), [ADR-1](adr/1-ir-design.md)). Every translator above is single-target. Here, adding a language is a lowering table plus runtime units plus turning the shared spec harness green ([ADR-3](adr/3-testing-strategy.md)) — the semantics knowledge (numerics, NaN bit-exactness, trap points) is paid for once ([ADR-2](adr/2-numeric-semantics.md)).
+1. **One IR, many targets** ([ADR-0](adr/0-foundation.md), [ADR-1](adr/1-ir-design.md)). Every translator above is single-target. Here, adding a language is a lowering table plus runtime units plus making the shared spec harness pass ([ADR-3](adr/3-testing-strategy.md)) — the semantics knowledge (numerics, NaN bit-exactness, trap points) is paid for once ([ADR-2](adr/2-numeric-semantics.md)).
 2. **Source output, deliberately.** Readable, reviewable, debuggable, vendorable as a file; no build toolchain or VM contract at the run site.
 3. **Targets that cannot run wasm any other way.** The defining example is Bash ([ADR-5](adr/5-bash-softfloat.md)): C/Rust tools running where the only dependency is a shell.
 4. **Deployment-grade output, not demo output.** Minimal runtime bundling per module and collision-free coexistence of generated artifacts ([ADR-6](adr/6-runtime-units.md)); a library mode with import providers and a default WASI fallback ([ADR-7](adr/7-import-providers.md)).
