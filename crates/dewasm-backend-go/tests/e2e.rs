@@ -2,9 +2,10 @@
 //!
 //! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute instead of interpreting: `go build` the generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem (ADR-29).
 //!
-//! Library-mode output is `package <module name>`, not `package main`, so a library case is not a runnable file on its own: [`common::build_go`] wraps it in a throwaway Go module whose `main` imports the package and calls the glue's `RunTest`. That is why every library glue below defines `func RunTest()` where it used to define `func main()`; the multi-module glue keeps `func main` because `compose_modules` assembles its own `package main`.
+//! Library-mode output is `package <module name>`, not `package main`, so a library case is not a runnable file on its own: [`common::build_go`] wraps it in a throwaway Go module whose `main` imports the package and calls the glue's `RunTest`. That is why every library glue below defines `func RunTest()` where it used to define `func main()`; the multi-module glue keeps `func main` because its driver *is* the `package main` file of a module `compose_modules` lays out on disk.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 use std::process::{Command, Output};
 
 use dewasm_backend::{Backend, Mode};
@@ -13,7 +14,7 @@ use dewasm_test_helper::BackendUnderTest;
 
 mod common;
 
-use common::{build_go, go_module_name};
+use common::{build_go, build_go_dir, go_module_name, package_clause};
 
 pub struct Go;
 
@@ -55,38 +56,66 @@ impl BackendUnderTest for Go {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and everything is assembled into a single `package main` file — an import block covering the runtime's needs plus `fmt` (the appended driver prints with it), the bundle, then the module decls. The driver (`func main`) is appended afterwards by the runner, so no main is emitted. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Go: `embedded_coexist_e2e!` is not invoked because Go emits one flat top-level runtime shared by all modules (ADR-29).
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
-        assert!(
-            shared_runtime,
-            "go multi-module: shared_runtime=false is excluded (one flat runtime, ADR-29)"
-        );
-        let mut units = BTreeSet::new();
-        let mut decls = Vec::new();
-        for (wat, name) in modules {
-            let bytes =
-                wat::parse_file(dewasm_test_helper::examples_dir().join(wat)).expect("parse wat");
-            let module = dewasm_core::build_module(&bytes).expect("build IR");
-            let (src, u) =
-                dewasm_backend_go::generate_program_with_units(&module, name).expect("generate");
-            units.extend(u);
-            decls.push(src);
+    /// Lay out a multi-module case as a throwaway Go module in `dir` and return the driver file's `package main` clause — everything else the driver needs, its imports included, comes from the case glue, because Go rejects an unused import and only the glue knows what it uses.
+    ///
+    /// `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and all of it goes into a single `modules.go` of the *same* `package main` as the driver. A shared runtime cannot be split into a package per module: the runtime types would then be distinct types per package, and a table value crossing modules would no longer typecheck. `shared_runtime=false` is the opposite layout and needs no trick at all — each module is a library conversion, which since #155 declares `package <module name>`, so writing them into `alpha/` and `beta/` beside the driver gives two artifacts with their own runtime, their own trap type, and no shared identifier whatsoever (ADR-62).
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        std::fs::write(dir.join("go.mod"), "module dewasmtest\n\ngo 1.21\n").unwrap();
+        if shared_runtime {
+            let mut units = BTreeSet::new();
+            let mut decls = Vec::new();
+            for (wat, name) in modules {
+                let bytes = wat::parse_file(dewasm_test_helper::examples_dir().join(wat))
+                    .expect("parse wat");
+                let module = dewasm_core::build_module(&bytes).expect("build IR");
+                let (src, u) = dewasm_backend_go::generate_program_with_units(&module, name)
+                    .expect("generate");
+                units.extend(u);
+                decls.push(src);
+            }
+            let bundle = dewasm_backend_go::bundler()
+                .bundle(&units, 0)
+                .expect("bundle runtime");
+            let decls = decls.join("\n");
+            let imports = scan_imports(&format!("{bundle}\n{decls}"));
+            // `generate_program_with_units` emits spec-mode declarations whose recursion guard references a shared `rtStack` counter, declared in the spec harness's PREAMBLE; the multi-module composition must declare it too (ADR-29).
+            std::fs::write(
+                dir.join("modules.go"),
+                format!(
+                    "package main\n\n{}\nvar rtStack int\n\n{bundle}\n\n{decls}\n",
+                    import_block(&imports)
+                ),
+            )
+            .unwrap();
+        } else {
+            for (wat, name) in modules {
+                let src = dewasm_test_helper::convert(
+                    &GoBackend,
+                    &dewasm_test_helper::examples_dir().join(wat),
+                    Mode::Library,
+                    name,
+                );
+                let package = package_clause(&src).to_string();
+                let pkg_dir = dir.join(&package);
+                std::fs::create_dir_all(&pkg_dir).unwrap();
+                std::fs::write(pkg_dir.join(format!("{package}.go")), &src).unwrap();
+            }
         }
-        let bundle = dewasm_backend_go::bundler()
-            .bundle(&units, 0)
-            .expect("bundle runtime");
-        let decls = decls.join("\n");
-        // Cover whatever the runtime bundle and module decls reference, then force `fmt` in — the appended driver prints with it and Go forbids a later `import` after other declarations.
-        let mut imports = scan_imports(&format!("{bundle}\n{decls}"));
-        if !imports.iter().any(|i| i == "fmt") {
-            imports.push("fmt".to_string());
-            imports.sort();
+        "package main".to_string()
+    }
+
+    /// Write the multi-module `driver` as the module's `main.go`, build the module rooted at `dir`, and run the binary. A build failure is surfaced as the `go build` `Output`, like [`Self::run_bytes`], so the caller's `status.success()` assertion reports the compile error.
+    fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
+        std::fs::write(dir.join("main.go"), driver).unwrap();
+        match build_go_dir(dir) {
+            Err(build) => build,
+            Ok(bin) => dewasm_test_helper::run_command(&mut Command::new(&bin), ""),
         }
-        // `generate_program_with_units` emits spec-mode declarations whose recursion guard references a shared `rtStack` counter, declared in the spec harness's PREAMBLE; the multi-module composition must declare it too (ADR-29).
-        format!(
-            "package main\n\n{}\nvar rtStack int\n\n{bundle}\n\n{decls}\n",
-            import_block(&imports)
-        )
     }
 }
 
@@ -684,11 +713,53 @@ do '/work/exiftool';
 
 // --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`).
-const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
+/// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`). Both modules share the driver's `package main`, so they are named unqualified; the driver file carries its own imports (`compose_modules` writes only the package clause, since Go rejects an unused import).
+const GO_SHARED_TABLE_GLUE: &str = r#"
+import "fmt"
+
+func main() {
 	a := NewTableExp(nil, nil, nil, nil)
 	b := NewTableImp(Imports{"a": a.Exports}, nil, nil, nil)
 	fmt.Println(b.Exports["call0"].(func() uint32)())
+}
+"#;
+
+/// Driver for the Embedded-coexistence case: two library conversions of the same module as the packages `alpha` and `beta` (#155), imported side by side. Each package has its own runtime, so its trap type is its own unexported `rtTrap` — invisible to an importer by name, but the panic value's *dynamic type* is observable through `%T`, which prints it package-qualified (`*alpha.rtTrap` vs `*beta.rtTrap`). That is the whole coexistence claim: the two differ, and the one Alpha raises is Alpha's.
+const GO_EMBEDDED_COEXIST_GLUE: &str = r#"
+import (
+	"fmt"
+	"strings"
+
+	"dewasmtest/alpha"
+	"dewasmtest/beta"
+)
+
+// trapType runs f and returns the dynamic type of whatever it panicked with, "" if it returned normally.
+func trapType(f func()) (ty string) {
+	defer func() {
+		if r := recover(); r != nil {
+			ty = fmt.Sprintf("%T", r)
+		}
+	}()
+	f()
+	return
+}
+
+func main() {
+	a := alpha.NewAlpha(nil, nil, nil, nil)
+	b := beta.NewBeta(nil, nil, nil, nil)
+	fmt.Println(a.Exports["div"].(func(uint32, uint32) uint32)(7, 2))
+	fmt.Println(b.Exports["div"].(func(uint32, uint32) uint32)(0xfffffff9, 2))
+	at := trapType(func() { a.Exports["div"].(func(uint32, uint32) uint32)(1, 0) })
+	bt := trapType(func() { b.Exports["div"].(func(uint32, uint32) uint32)(1, 0) })
+	if at != bt {
+		fmt.Println("distinct-rt")
+	} else {
+		fmt.Println("same-rt")
+	}
+	if strings.HasPrefix(at, "*alpha.") {
+		fmt.Println("trapped")
+	}
 }
 "#;
 
@@ -845,4 +916,4 @@ dewasm_test_helper::doom_frame_e2e!(Go, GO_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Go, &go_nes_frame_glue());
 
 dewasm_test_helper::shared_table_e2e!(Go, GO_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-29); two independent runtimes cannot coexist.
+dewasm_test_helper::embedded_coexist_e2e!(Go, GO_EMBEDDED_COEXIST_GLUE);

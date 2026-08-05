@@ -1,6 +1,6 @@
 # ADR-62 — `Embedded` Output Isolates Its Runtime per Artifact
 
-Status: **Accepted, 2026-08-05.** Ruby (lexical nesting) and Perl ([ADR-55](55-perl-backend-lowering.md), textual package prefix) already conformed; Python conforms as of this decision — `RuntimeLinkage::Embedded` names its runtime class `<Class>Rt` (`crates/dewasm-backend-python/src/lib.rs`, `runtime_name`). Java, Bash and Go still emit one flat shared runtime and are follow-up work (issue #141). `embedded_coexist_e2e!` is the check.
+Status: **Accepted, 2026-08-05.** Ruby (lexical nesting) and Perl ([ADR-55](55-perl-backend-lowering.md), textual package prefix) already conformed; Python conforms as of this decision — `RuntimeLinkage::Embedded` names its runtime class `<Class>Rt` (`crates/dewasm-backend-python/src/lib.rs`, `runtime_name`). Java and Go conform as of issue #141: Java nests its runtime classes in the module class, Go gets isolation from the per-package library output ([#155](https://github.com/dewasm/dewasm/pull/155)). Bash is the one backend left (issue #141). `embedded_coexist_e2e!` is the check.
 
 ## Context
 
@@ -23,9 +23,9 @@ The mechanism is per-backend — whatever isolation that language makes cheapest
 | Ruby | `module Rt` nested in the generated class; lexical constant lookup resolves it with no rewriting. |
 | Perl | `Rt::` → `<Package>::Rt::` textual prefix at bundle time (ADR-55). |
 | Python | the runtime class is `<Class>Rt`, and the bundle's `Rt.` references are rewritten once at bundle time. |
-| Java | static nested classes under the generated class. |
+| Java | `static` nested classes under the generated class (landed). Java resolves simple names through enclosing class scopes, so nothing inside the artifact is rewritten; only outside references gain the `<Class>.` qualifier ([ADR-30](30-java-backend-lowering.md) revision). |
 | Bash | `rt_`/`mem_`/`tab_`/`wasi_` function-name prefixing, keeping `TRAP_MSG`/`EXIT_CODE`/`R0` shared as the cross-module calling protocol ([ADR-35](35-bash-cross-module-linking.md)). |
-| Go | package-level identifier prefixing plus a header-less compose entry point; this also requires `GenOptions.runtime`, which the Go backend currently ignores, to be honored. |
+| Go | one package per artifact — library output declares `package <module name>` ([ADR-63](63-module-name-policy.md), #155), and a Go package *is* a namespace, so two artifacts share no identifier at all (landed). |
 
 A backend is done when it invokes `embedded_coexist_e2e!`. Until then its REASON comment is a to-do, not a capability declaration.
 
@@ -35,11 +35,12 @@ A backend is done when it invokes `embedded_coexist_e2e!`. Until then its REASON
 
 - **Nest the runtime for real on Python** (`class Rt` inside the generated class, Ruby's shape). Python method scopes cannot see the enclosing class scope, so every helper reference would have to spell the class (`Prog.Rt.trap`) — a global lookup plus two attribute lookups instead of one plus one, on every masked-integer op, every load and every store, in the slowest backend's hottest path. The rename costs nothing at run time: the generated code still resolves one module-level global by one name.
 - **Accept flat runtimes as a permanent limitation** and keep the REASON comments. The failure is silent and is not only about trap identity — a smaller sibling bundle removes helpers the other artifact calls. ADR-6 rejected this shape before any of these backends existed; the deviation was drift, not a decision.
-- **Emit each artifact as its own file and lean on the target's module system** (Python `import`). Fixes Python only, contradicts the single-file self-contained output contract ([ADR-0](0-foundation.md)), and does nothing for Bash, Go or Java, where the namespace really is flat.
+- **Split one artifact across files and lean on the target's module system** (Python `import`). Fixes Python only, contradicts the single-file self-contained output contract ([ADR-0](0-foundation.md)), and does nothing for Bash, Go or Java, where the namespace really is flat. Go's landed mechanism is not this: its `package` clause is a line *inside* the one generated file, so the artifact stays a single file and the isolation costs nothing.
 - **Detect the collision at run time** (a guard that raises when a second runtime redefines the first). Converts a silent bug into a loud one but still refuses a program that has every right to run.
 
 ## Consequences
 
 - Positive: ADR-6's coexistence promise holds where it is claimed. An embedder can hold two converted libraries — two versions of the same one included — in one namespace and catch each one's traps by name. Python's latent smaller-bundle-wins helper loss disappears.
 - Negative: the runtime name is no longer the fixed literal `Rt` for `Embedded` output, so glue, docs and embedder code must derive it (Python: `<Class>Rt`). Backends whose mechanism is a textual rewrite (Perl, Python) require that no runtime unit mentions the runtime prefix inside a string literal; on Python a units-lint test enforces that.
-- Carry-over: Java, Bash and Go (issue #141). Go is the largest, since honoring `GenOptions.runtime` is a prerequisite.
+- Carry-over: Bash (issue #141), whose mechanism is the function-name prefixing in the table above.
+- The Go mechanism planned here — package-level identifier prefixing plus a header-less compose entry point, with `GenOptions.runtime` honored — was never built, and should not be: while it waited, ADR-63/#155 made library output declare `package <module name>` for unrelated reasons, and a package is a real namespace. Two artifacts now isolate with no renaming, no new entry point and no linkage plumbing; what was going to be the largest of the three took none of the work estimated for it. The observable in `embedded_coexist_e2e!` shifts accordingly: an importer cannot name the unexported `rtTrap`, so the driver recovers each panic and compares the values' dynamic types (`%T` prints them `*alpha.rtTrap` / `*beta.rtTrap`).

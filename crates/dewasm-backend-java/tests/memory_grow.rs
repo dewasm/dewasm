@@ -40,9 +40,9 @@ fn grow_beyond_byte_array_cap_returns_minus_one() {
     let glue = r#"public class Main {
     public static void main(String[] a) {
         Prog p = new Prog(null, null, null, null);
-        System.out.println((int)(Integer)((Rt.Fn) p.Exports.get("grow")).invoke(new Object[]{32768}));
-        System.out.println((int)(Integer)((Rt.Fn) p.Exports.get("grow")).invoke(new Object[]{1}));
-        System.out.println((int)(Integer)((Rt.Fn) p.Exports.get("size")).invoke(new Object[]{}));
+        System.out.println((int)(Integer)((Prog.Rt.Fn) p.Exports.get("grow")).invoke(new Object[]{32768}));
+        System.out.println((int)(Integer)((Prog.Rt.Fn) p.Exports.get("grow")).invoke(new Object[]{1}));
+        System.out.println((int)(Integer)((Prog.Rt.Fn) p.Exports.get("size")).invoke(new Object[]{}));
     }
 }
 "#;
@@ -65,7 +65,7 @@ fn initial_memory_beyond_byte_array_cap_traps_clearly() {
         try {
             new Prog(null, null, null, null);
             System.out.println("instantiated");
-        } catch (Rt.Trap e) {
+        } catch (Prog.Rt.Trap e) {
             System.out.println("trap: " + e.getMessage());
         }
     }

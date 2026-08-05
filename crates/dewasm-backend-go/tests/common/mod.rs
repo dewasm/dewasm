@@ -78,6 +78,18 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
+/// Build the Go module the caller has already laid out in `dir` — a `go.mod` at its root, `package main` files beside it, and whatever library packages it wrote into subdirectories — and return the resulting binary's path. The multi-module cases use this instead of [`build_go`]: their artifacts are several files by design (that is what the case is about), so there is no single source to key a cache on, and each case gets a fresh directory anyway.
+pub fn build_go_dir(dir: &std::path::Path) -> Result<PathBuf, Output> {
+    let go =
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+    let bin = dir.join("prog");
+    let build = run_build(&go, &bin, std::path::Path::new("."), Some(dir));
+    if !build.status.success() {
+        return Err(build);
+    }
+    Ok(bin)
+}
+
 /// `go build -o out target`, optionally from `cwd` (the temp module root for the package layout).
 fn run_build(
     go: &std::path::Path,
@@ -121,7 +133,7 @@ pub fn go_module_name(name: &str) -> String {
 }
 
 /// The package `source` declares. The first line starting with `package ` is the clause itself: everything before it in generated output is `//` comments.
-fn package_clause(source: &str) -> &str {
+pub fn package_clause(source: &str) -> &str {
     source
         .lines()
         .find_map(|line| line.strip_prefix("package "))

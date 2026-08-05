@@ -103,10 +103,25 @@ pub trait BackendUnderTest: Sync {
         }
     }
 
-    /// Compose several wat modules that share the backend's linkage model into one runnable source (no driver appended). `modules` is `(wat filename in examples/wat, class/type name)` pairs. `shared_runtime` selects the linkage: `true` emits every module against ONE shared runtime (so an imported table can cross modules — the `shared_table` case); `false` emits independent self-contained (Embedded) runtimes that coexist (the `embedded_coexist` case). Only backends wired into `multi_module_e2e!` implement this, each using its own crate's multi-module API (the test-helper crate cannot depend on a concrete backend). See [`crate::run_multi_module_case`].
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
-        let _ = (modules, shared_runtime);
+    /// Write each of `modules` into `dir` as its own file, the way a user of this backend would ship several converted artifacts, and return the *driver preamble*: the source that loads those files in the host language. The runner appends the case glue to that preamble and runs the result from `dir` through [`Self::run_in_dir`]. `modules` is `(wat filename in examples/wat, class/type name)` pairs. `shared_runtime` selects the linkage: `true` emits every module against ONE shared runtime, written out as its own file too (so an imported table can cross modules — the `shared_table` case); `false` converts each module independently in library mode, each carrying its own runtime (the `embedded_coexist` case). Only backends wired into the multi-module macros implement this, each using its own crate's API (the test-helper crate cannot depend on a concrete backend). See [`crate::run_multi_module_case`].
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        let _ = (dir, modules, shared_runtime);
         unimplemented!("a multi-module backend must implement compose_modules()")
+    }
+
+    /// Run the multi-module `driver` (the preamble from [`Self::compose_modules`] plus the case glue) against the module files sitting in `dir`. The default — every interpreted backend — writes the driver as `dir/driver.<ext>` and execs the interpreter on it with `dir` as the working directory, so the language's own relative loading (`require_relative`, `sys.path[0]`, `source`) finds the files beside it. The compiled backends override this to build the directory instead.
+    fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
+        let path = dir.join(format!("driver.{}", self.backend().file_extension()));
+        std::fs::write(&path, driver).unwrap();
+        run_command(
+            Command::new(self.interpreter()).arg(&path).current_dir(dir),
+            "",
+        )
     }
 
     /// Run library-mode `program` (from [`Self::convert_app`]) as a filesystem app: append the already-filled instantiation `glue` (a named backend const with its `{scratch}`/`{cache}` placeholders resolved by the runner, ADR-27 revision), feed `stdin`, and return the process `Output`. The default runs `program` + `glue` through `run_bytes`, so the static `args`/`env`/`preopens` are written literally inside `glue` and ignored here; an engine-under-test that runs the wasm binary directly (wasmtime) overrides this to exec the binary (`program` is the wasm path) with those host `args`/`env`/`preopens` and ignores `glue`.

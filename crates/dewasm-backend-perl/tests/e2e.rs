@@ -1,6 +1,6 @@
 //! Perl end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Perl backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Perl covers full WASI preview 1 incl. the filesystem (ADR-55/issue #69), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_perl::{find_perl, PerlBackend};
@@ -22,8 +22,19 @@ impl BackendUnderTest for Perl {
             .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `Rt` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (each carrying its own `<Package>::Rt`).
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file and return the `require` preamble that loads them. The paths are absolute: `require` searches `@INC` for anything else, and `.` has not been on `@INC` since perl 5.26. Each file ends with `1;` so `require` sees the true value it demands. `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) written to `rt.pl`, required by every module file, so an imported table crosses modules; otherwise each file is a self-contained Embedded conversion carrying its own `<Package>::Rt` (ADR-55).
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        let write = |stem: &str, src: String| -> String {
+            let path = dir.join(format!("{stem}.pl"));
+            std::fs::write(&path, src).unwrap();
+            format!("require '{}';", path.display())
+        };
+        let mut requires = Vec::new();
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
             let mut pkgs = Vec::new();
@@ -39,27 +50,33 @@ impl BackendUnderTest for Perl {
                 )
                 .expect("generate");
                 units.extend(u);
-                pkgs.push(src);
+                pkgs.push((name.to_lowercase(), src));
             }
-            format!(
-                "{}\n{}",
-                dewasm_backend_perl::shared_runtime(&units).expect("bundle runtime"),
-                pkgs.join("\n")
-            )
+            let rt = write(
+                "rt",
+                format!(
+                    "{}\n1;\n",
+                    dewasm_backend_perl::shared_runtime(&units).expect("bundle runtime")
+                ),
+            );
+            requires.push(rt.clone());
+            for (stem, src) in pkgs {
+                requires.push(write(&stem, format!("{rt}\n{src}\n1;\n")));
+            }
         } else {
-            modules
-                .iter()
-                .map(|(wat, name)| {
+            for (wat, name) in modules {
+                requires.push(write(
+                    &name.to_lowercase(),
                     dewasm_test_helper::convert(
                         &PerlBackend,
                         &dewasm_test_helper::examples_dir().join(wat),
                         Mode::Library,
                         name,
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+                    ),
+                ));
+            }
         }
+        requires.join("\n")
     }
 }
 

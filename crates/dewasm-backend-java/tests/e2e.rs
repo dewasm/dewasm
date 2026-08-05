@@ -2,10 +2,11 @@
 //!
 //! Java is a compiled backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main` (ADR-30). Java covers full WASI preview 1 incl. the filesystem.
 
+use std::path::Path;
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, JavaBackend};
+use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 use dewasm_test_helper::BackendUnderTest;
 
 mod common;
@@ -64,30 +65,71 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. Java only composes against one shared runtime (mirroring the spec harness's `register` path): generate each module's class with `generate_program_with_units`, union the referenced runtime units, bundle them once, and concatenate the runtime classes followed by both module classes into ONE default-package compilation unit. The driver `public class Main` is appended by the runner. `shared_runtime=false` is never requested for Java — `embedded_coexist_e2e!` is not invoked because Java emits one flat top-level runtime shared by all modules (ADR-30) — so it is unimplemented.
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
-        assert!(
-            shared_runtime,
-            "java only composes shared-runtime modules; embedded coexistence is excluded"
-        );
-        let mut units = std::collections::BTreeSet::new();
-        let mut classes = Vec::new();
-        for (wat, name) in modules {
-            let bytes =
-                wat::parse_file(dewasm_test_helper::examples_dir().join(wat)).expect("parse wat");
-            let module = dewasm_core::build_module(&bytes).expect("build IR");
-            let (src, u) =
-                dewasm_backend_java::generate_program_with_units(&module, name).expect("generate");
-            units.extend(u);
-            classes.push(src);
+    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file. Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project. `shared_runtime` mirrors the spec harness's `register` path — each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has. Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class (ADR-62), so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        if shared_runtime {
+            let mut units = std::collections::BTreeSet::new();
+            for (wat, name) in modules {
+                let bytes = wat::parse_file(dewasm_test_helper::examples_dir().join(wat))
+                    .expect("parse wat");
+                let module = dewasm_core::build_module(&bytes).expect("build IR");
+                let (src, u) = dewasm_backend_java::generate_program_with_units(&module, name)
+                    .expect("generate");
+                units.extend(u);
+                std::fs::write(dir.join(format!("{name}.java")), src).unwrap();
+            }
+            // One file holding the whole runtime: `javac` only ties a file name to a *public* class, and these are all package-private.
+            std::fs::write(
+                dir.join("Rt.java"),
+                dewasm_backend_java::bundler()
+                    .bundle(&units, 0)
+                    .expect("bundle runtime"),
+            )
+            .unwrap();
+        } else {
+            for (wat, name) in modules {
+                std::fs::write(
+                    dir.join(format!("{name}.java")),
+                    dewasm_test_helper::convert(
+                        &JavaBackend,
+                        &dewasm_test_helper::examples_dir().join(wat),
+                        dewasm_backend::Mode::Library,
+                        name,
+                    ),
+                )
+                .unwrap();
+            }
         }
-        format!(
-            "{}\n{}",
-            dewasm_backend_java::bundler()
-                .bundle(&units, 0)
-                .expect("bundle runtime"),
-            classes.join("\n")
-        )
+        String::new()
+    }
+
+    /// Compile every `.java` file in `dir` — the module files `compose_modules` wrote plus the driver, written here as `Main.java` — in one `javac` invocation, then run `Main` from that directory. No content-addressed cache: each case gets a fresh directory, and there are only a handful of small files.
+    fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
+        let java =
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+        std::fs::write(dir.join("Main.java"), driver).unwrap();
+        let mut sources: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "java"))
+            .collect();
+        sources.sort();
+        let build = javac_command()
+            .arg("-d")
+            .arg(dir)
+            .args(&sources)
+            .output()
+            .expect("spawn javac");
+        // A compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
+        if !build.status.success() {
+            return build;
+        }
+        dewasm_test_helper::run_command(Command::new(&java).arg("-cp").arg(dir).arg("Main"), "")
     }
 }
 
@@ -97,9 +139,9 @@ impl BackendUnderTest for Java {
 const JAVA_ADD_GLUE: &str = r#"public class Main {
     public static void main(String[] a) {
         Add inst = new Add(null, null, null, null);
-        System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{2, 3}));
-        System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{0xffffffff, 1}));
-        System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get("fib")).invoke(new Object[]{10}));
+        System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{2, 3}));
+        System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{0xffffffff, 1}));
+        System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get("fib")).invoke(new Object[]{10}));
     }
 }
 "#;
@@ -109,7 +151,7 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         Prog[] holder = new Prog[1];
-        Rt.Fn fdWrite = args -> {
+        Prog.Rt.Fn fdWrite = args -> {
             int iovs = (int)(Integer) args[1];
             int ptr = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs));
             int len = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs) + 4);
@@ -124,7 +166,7 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
         imports.put("wasi_snapshot_preview1", wasi);
         Prog p = new Prog(imports, null, null, null);
         holder[0] = p;
-        ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{}); // random_get falls back to bundled WASI
+        ((Prog.Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{}); // random_get falls back to bundled WASI
         System.out.write(captured.toByteArray());
         System.out.flush();
     }
@@ -133,16 +175,16 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
 
 /// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `wasmImport(name)` resolves every function and `attach(instance)` binds the memory (the Java shape of Ruby's `import`/`attach`), so no import falls back and `p.wasi` stays null.
 const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
-    static class MyWasi implements Rt.ImportProvider {
+    static class MyWasi implements Prog.Rt.ImportProvider {
         Prog inst;
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
 
         public Object wasmImport(String name) {
             if (name.equals("fd_write")) {
-                return (Rt.Fn) this::fdWrite;
+                return (Prog.Rt.Fn) this::fdWrite;
             }
             if (name.equals("random_get")) {
-                return (Rt.Fn) args -> 0;
+                return (Prog.Rt.Fn) args -> 0;
             }
             return null;
         }
@@ -165,7 +207,7 @@ const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         MyWasi wasi = new MyWasi();
         Prog p = new Prog(java.util.Map.of("wasi_snapshot_preview1", wasi), null, null, null);
-        ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
+        ((Prog.Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
         System.out.write(wasi.out.toByteArray());
         System.out.flush();
         System.out.println("bundled wasi constructed: " + (p.wasi != null));
@@ -178,7 +220,7 @@ const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         Prog[] holder = new Prog[1];
-        Rt.Fn fdWrite = args -> {
+        Prog.Rt.Fn fdWrite = args -> {
             int iovs = (int)(Integer) args[1];
             int ptr = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs));
             int len = holder[0].memory.i32_load(Integer.toUnsignedLong(iovs) + 4);
@@ -193,7 +235,7 @@ const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
         imports.put("wasi_snapshot_preview1", wasi);
         Prog p = new Prog(imports, null, null, null);
         holder[0] = p;
-        ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{}); // random_get falls back to bundled WASI
+        ((Prog.Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{}); // random_get falls back to bundled WASI
         System.out.write(captured.toByteArray());
         System.out.flush();
         System.out.println("bundled wasi constructed: " + (p.wasi != null));
@@ -208,8 +250,8 @@ const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         p.wasi.fds.put(1, captured);
         try {
-            ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Prog.Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Prog.Rt.Exit e) {
         }
         System.out.write(captured.toByteArray());
         System.out.flush();
@@ -224,8 +266,8 @@ const JAVA_FS_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, java.util.Map.of("{guest}", "{host}"));
         try {
-            ((Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Prog.Rt.Fn) p.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Prog.Rt.Exit e) {
             System.out.println(e.code);
         }
     }
@@ -235,8 +277,8 @@ const JAVA_FS_GLUE: &str = r#"public class Main {
 /// The root-preopen containment probe: probe the WASI sandbox resolver directly (no guest run): with `/` preopened at host `/`, resolving a relative path off the preopen fd (3) must stay contained (errno WASI_OK == 0).
 const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
-        WASI w = new WASI(null, null, java.util.Map.of("/", "/"));
-        WASI.Resolved r = w.resolve_path(3, "etc", true);
+        Prog.WASI w = new Prog.WASI(null, null, java.util.Map.of("/", "/"));
+        Prog.WASI.Resolved r = w.resolve_path(3, "etc", true);
         System.out.println(r.errno == 0 ? "contained" : "rejected");
     }
 }
@@ -248,8 +290,8 @@ const JAVA_QJS_FILE_IO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Qjs inst = new Qjs(null, new String[]{"qjs", "/work/qjs_file_io.js"}, null, java.util.Map.of("/work", "{scratch}"));
         try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Qjs.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Qjs.Rt.Exit e) {
         }
     }
 }
@@ -259,8 +301,8 @@ const JAVA_SQLITE3_SHELL_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Sqlite3Shell inst = new Sqlite3Shell(null, new String[]{"sqlite3"}, null, java.util.Map.of("/db", "{scratch}"));
         try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Sqlite3Shell.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Sqlite3Shell.Rt.Exit e) {
         }
     }
 }
@@ -270,8 +312,8 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Rg inst = new Rg(null, new String[]{"rg", "--sort", "path", "needle", "/work"}, null, java.util.Map.of("/work", "{scratch}"));
         try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Rg.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Rg.Rt.Exit e) {
         }
     }
 }
@@ -282,8 +324,8 @@ const JAVA_CPYTHON_HELLO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Cpython inst = new Cpython(null, new String[]{"python", "-c", "print('hello from cpython', 6 * 7)"}, new String[]{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, java.util.Map.of("/lib", "{cache}/cpython-lib/lib"));
         try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Cpython.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Cpython.Rt.Exit e) {
         }
     }
 }
@@ -293,8 +335,8 @@ const JAVA_CRUBY_HELLO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Cruby inst = new Cruby(null, new String[]{"ruby", "-e", "puts \"hello from cruby #{6*7}\""}, null, java.util.Map.of("/usr", "{cache}/ruby-lib/usr"));
         try {
-            ((Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-        } catch (Rt.Exit e) {
+            ((Cruby.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Cruby.Rt.Exit e) {
         }
     }
 }
@@ -308,11 +350,11 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
     static Libsqlite3 inst;
 
     static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
+        return (int)(Integer)((Libsqlite3.Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
     }
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Libsqlite3.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     static int cstr(String s) {
@@ -333,7 +375,7 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
 
     public static void main(String[] a) throws Exception {
         inst = new Libsqlite3(null, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Libsqlite3.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
 
         System.out.println("version: " + readCstr(call("sqlite3_libversion")));
 
@@ -373,11 +415,11 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
     static Libsqlite3 inst;
 
     static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
+        return (int)(Integer)((Libsqlite3.Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
     }
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Libsqlite3.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     static int cstr(String s) {
@@ -405,7 +447,7 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
 
     public static void main(String[] a) throws Exception {
         inst = new Libsqlite3(null, null, null, java.util.Map.of("/db", "{scratch}"));
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Libsqlite3.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
 
         // create + insert, then close so the file is fully flushed
         int db = openDb("/db/data.db");
@@ -442,11 +484,11 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     static final java.util.List<String> rows = new java.util.ArrayList<>();
 
     static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
+        return (int)(Integer)((Sqlite3Binding.Rt.Fn) inst.Exports.get("sqlite3_malloc")).invoke(new Object[]{n});
     }
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Sqlite3Binding.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     static int cstr(String s) {
@@ -466,7 +508,7 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     }
 
     public static void main(String[] a) throws Exception {
-        Rt.Fn hostRow = args -> {
+        Sqlite3Binding.Rt.Fn hostRow = args -> {
             int argc = (int)(Integer) args[0];
             int argvPtr = (int)(Integer) args[1];
             StringBuilder row = new StringBuilder();
@@ -483,7 +525,7 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
         java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
         imports.put("env", env);
         inst = new Sqlite3Binding(imports, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Sqlite3Binding.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
 
         int ppDb = malloc(4);
         int rc = call("sqlite3_open", cstr(":memory:"), ppDb);
@@ -517,16 +559,16 @@ const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
     static Zeroperl inst;
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Zeroperl.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     public static void main(String[] a) throws Exception {
         java.util.Map<String, Object> env = new java.util.HashMap<>();
-        env.put("call_host_function", (Rt.Fn) args -> 0);
+        env.put("call_host_function", (Zeroperl.Rt.Fn) args -> 0);
         java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
         imports.put("env", env);
         inst = new Zeroperl(imports, null, null, java.util.Map.of("/dev/null", "/dev/null"));
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Zeroperl.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
         int rc = call("zeroperl_init");
         if (rc != 0) throw new RuntimeException("zeroperl_init rc=" + rc);
 
@@ -560,12 +602,12 @@ const JAVA_EXIFTOOL: &str = r#"public class Main {
     static Zeroperl inst;
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Zeroperl.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     public static void main(String[] a) throws Exception {
         java.util.Map<String, Object> env = new java.util.HashMap<>();
-        env.put("call_host_function", (Rt.Fn) args -> 0);
+        env.put("call_host_function", (Zeroperl.Rt.Fn) args -> 0);
         java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
         imports.put("env", env);
         java.util.Map<String, String> preopens = new java.util.HashMap<>();
@@ -573,7 +615,7 @@ const JAVA_EXIFTOOL: &str = r#"public class Main {
         preopens.put("/work", "{cache}/exiftool-lib");
         preopens.put("/img", "{scratch}");
         inst = new Zeroperl(imports, null, null, preopens);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Zeroperl.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
         int rc = call("zeroperl_init");
         if (rc != 0) throw new RuntimeException("zeroperl_init rc=" + rc);
 
@@ -598,11 +640,11 @@ const JAVA_PCAP_COMPILE: &str = r#"public class Main {
     static Libpcap inst;
 
     static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+        return (int)(Integer)((Libpcap.Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
     }
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Libpcap.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     static int cstr(String s) {
@@ -615,7 +657,7 @@ const JAVA_PCAP_COMPILE: &str = r#"public class Main {
 
     public static void main(String[] a) throws Exception {
         inst = new Libpcap(null, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Libpcap.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
 
         int prog = call("compile_filter", cstr("tcp port 80"), 1, 65535);
         if (prog == 0) throw new RuntimeException("compile failed");
@@ -629,7 +671,7 @@ const JAVA_PCAP_COMPILE: &str = r#"public class Main {
             int k = inst.memory.i32_load(Integer.toUnsignedLong(base + 4));
             System.out.println(code + " " + jt + " " + jf + " " + k);
         }
-        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{prog});
+        ((Libpcap.Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{prog});
         System.out.println("BPF-OK");
     }
 }
@@ -641,11 +683,11 @@ const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
     static Treesitter inst;
 
     static int malloc(int n) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
+        return (int)(Integer)((Treesitter.Rt.Fn) inst.Exports.get("malloc")).invoke(new Object[]{n});
     }
 
     static int call(String name, Object... args) {
-        return (int)(Integer)((Rt.Fn) inst.Exports.get(name)).invoke(args);
+        return (int)(Integer)((Treesitter.Rt.Fn) inst.Exports.get(name)).invoke(args);
     }
 
     static int cstr(String s) {
@@ -666,13 +708,13 @@ const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
 
     public static void main(String[] a) throws Exception {
         inst = new Treesitter(null, null, null, null);
-        ((Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
+        ((Treesitter.Rt.Fn) inst.Exports.get("_initialize")).invoke(new Object[]{});
 
         String src = "{\"key\": [1, true, null]}";
         int r = call("parse_source", cstr(src), src.getBytes(UTF_8).length);
         if (r == 0) throw new RuntimeException("parse failed");
         System.out.println(readCstr(r));
-        ((Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{r});
+        ((Treesitter.Rt.Fn) inst.Exports.get("free")).invoke(new Object[]{r});
         System.out.println("TS-OK");
     }
 }
@@ -692,6 +734,23 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 }
 "#;
 
+/// Driver for the Embedded-coexistence case: two independently converted classes in one default package, each carrying its runtime as `static` nested classes (ADR-62), so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types and Alpha's trap is catchable by name. `Class` objects of two unrelated types are incomparable with `!=` in Java (the compiler rejects `Class<Alpha.Rt.Trap> != Class<Beta.Rt.Trap>`), so the distinctness check goes through `equals`.
+const JAVA_EMBEDDED_COEXIST_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Alpha alpha = new Alpha(null, null, null, null);
+        Beta beta = new Beta(null, null, null, null);
+        System.out.println((int)(Integer)((Alpha.Rt.Fn) alpha.Exports.get("div")).invoke(new Object[]{7, 2}));
+        System.out.println(Integer.toUnsignedString((int)(Integer)((Beta.Rt.Fn) beta.Exports.get("div")).invoke(new Object[]{0xfffffff9, 2})));
+        System.out.println(Alpha.Rt.Trap.class.equals(Beta.Rt.Trap.class) ? "same-rt" : "distinct-rt");
+        try {
+            ((Alpha.Rt.Fn) alpha.Exports.get("div")).invoke(new Object[]{1, 0});
+        } catch (Alpha.Rt.Trap e) {
+            System.out.println("trapped");
+        }
+    }
+}
+"#;
+
 /// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
 const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -699,29 +758,29 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
         final int[] fw = {0}, fh = {0}, foff = {0};
         java.util.Map<String, java.util.Map<String, Object>> imports = new java.util.HashMap<>();
         java.util.Map<String, Object> console = new java.util.HashMap<>();
-        console.put("onErrorMessage", (Rt.Fn)(args -> null));
-        console.put("onInfoMessage", (Rt.Fn)(args -> null));
+        console.put("onErrorMessage", (Doom.Rt.Fn)(args -> null));
+        console.put("onInfoMessage", (Doom.Rt.Fn)(args -> null));
         imports.put("console", console);
         java.util.Map<String, Object> gameSaving = new java.util.HashMap<>();
-        gameSaving.put("sizeOfSaveGame", (Rt.Fn)(args -> 0));
-        gameSaving.put("readSaveGame", (Rt.Fn)(args -> 0));
-        gameSaving.put("writeSaveGame", (Rt.Fn)(args -> args[2]));
+        gameSaving.put("sizeOfSaveGame", (Doom.Rt.Fn)(args -> 0));
+        gameSaving.put("readSaveGame", (Doom.Rt.Fn)(args -> 0));
+        gameSaving.put("writeSaveGame", (Doom.Rt.Fn)(args -> args[2]));
         imports.put("gameSaving", gameSaving);
         java.util.Map<String, Object> runtimeControl = new java.util.HashMap<>();
-        runtimeControl.put("timeInMilliseconds", (Rt.Fn)(args -> { ms[0] += {clock_step}; return ms[0]; }));
+        runtimeControl.put("timeInMilliseconds", (Doom.Rt.Fn)(args -> { ms[0] += {clock_step}; return ms[0]; }));
         imports.put("runtimeControl", runtimeControl);
         java.util.Map<String, Object> ui = new java.util.HashMap<>();
-        ui.put("drawFrame", (Rt.Fn)(args -> { foff[0] = (int)(Integer) args[0]; return null; }));
+        ui.put("drawFrame", (Doom.Rt.Fn)(args -> { foff[0] = (int)(Integer) args[0]; return null; }));
         imports.put("ui", ui);
         java.util.Map<String, Object> loading = new java.util.HashMap<>();
-        loading.put("onGameInit", (Rt.Fn)(args -> { fw[0] = (int)(Integer) args[0]; fh[0] = (int)(Integer) args[1]; return null; }));
-        loading.put("wadSizes", (Rt.Fn)(args -> null));
-        loading.put("readWads", (Rt.Fn)(args -> null));
+        loading.put("onGameInit", (Doom.Rt.Fn)(args -> { fw[0] = (int)(Integer) args[0]; fh[0] = (int)(Integer) args[1]; return null; }));
+        loading.put("wadSizes", (Doom.Rt.Fn)(args -> null));
+        loading.put("readWads", (Doom.Rt.Fn)(args -> null));
         imports.put("loading", loading);
 
         Doom doom = new Doom(imports, null, null, null);
-        ((Rt.Fn) doom.Exports.get("initGame")).invoke(new Object[]{});
-        Rt.Fn tick = (Rt.Fn) doom.Exports.get("tickGame");
+        ((Doom.Rt.Fn) doom.Exports.get("initGame")).invoke(new Object[]{});
+        Doom.Rt.Fn tick = (Doom.Rt.Fn) doom.Exports.get("tickGame");
         for (int i = 0; i < {ticks}; i++) tick.invoke(new Object[]{});
 
         int w = fw[0], h = fh[0], off = foff[0];
@@ -750,18 +809,18 @@ const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         byte[] rom = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("{rom}"));
         Nes nes = new Nes(null, null, null, null);
-        ((Rt.Fn) nes.Exports.get("_initialize")).invoke(new Object[]{});
-        int ptr = (int)(Integer) ((Rt.Fn) nes.Exports.get("allocRom")).invoke(new Object[]{rom.length});
+        ((Nes.Rt.Fn) nes.Exports.get("_initialize")).invoke(new Object[]{});
+        int ptr = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("allocRom")).invoke(new Object[]{rom.length});
         nes.memory.init(Integer.toUnsignedLong(ptr), rom, 0, rom.length);
-        int ok = (int)(Integer) ((Rt.Fn) nes.Exports.get("initGame")).invoke(new Object[]{});
+        int ok = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("initGame")).invoke(new Object[]{});
         if (ok != 1) throw new RuntimeException("initGame failed: " + ok);
-        Rt.Fn tick = (Rt.Fn) nes.Exports.get("tickGame");
+        Nes.Rt.Fn tick = (Nes.Rt.Fn) nes.Exports.get("tickGame");
         for (int i = 0; i < {frames}; i++) tick.invoke(new Object[]{});
 
-        int w = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameWidth")).invoke(new Object[]{});
-        int h = (int)(Integer) ((Rt.Fn) nes.Exports.get("frameHeight")).invoke(new Object[]{});
-        int soff = (int)(Integer) ((Rt.Fn) nes.Exports.get("screenOffset")).invoke(new Object[]{});
-        int poff = (int)(Integer) ((Rt.Fn) nes.Exports.get("paletteOffset")).invoke(new Object[]{});
+        int w = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("frameWidth")).invoke(new Object[]{});
+        int h = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("frameHeight")).invoke(new Object[]{});
+        int soff = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("screenOffset")).invoke(new Object[]{});
+        int poff = (int)(Integer) ((Nes.Rt.Fn) nes.Exports.get("paletteOffset")).invoke(new Object[]{});
         byte[] d = nes.memory.d;
         byte[] out = new byte[w * h * 3];
         int j = 0;
@@ -823,4 +882,4 @@ dewasm_test_helper::doom_frame_e2e!(Java, JAVA_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Java, JAVA_NES_FRAME_GLUE);
 
 dewasm_test_helper::shared_table_e2e!(Java, JAVA_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — a single flat top-level runtime is shared by all modules (ADR-30); two independent runtimes cannot coexist.
+dewasm_test_helper::embedded_coexist_e2e!(Java, JAVA_EMBEDDED_COEXIST_GLUE);
