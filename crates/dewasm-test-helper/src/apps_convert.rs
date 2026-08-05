@@ -26,6 +26,7 @@
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use libtest_mimic::{Failed, Trial};
 
+use crate::backend::{derive_module_name, module_name_style};
 use crate::fixtures::apps_cache_dir;
 
 /// One cached app: the cache-file stem (also the trial name), the conversion
@@ -166,7 +167,9 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
         )));
     }
     let bytes = std::fs::read(&wasm).map_err(|e| format!("read {}: {e}", wasm.display()))?;
-    let source = convert_source(backend, &bytes, entry.mode, entry.stem)
+    // Cache stems are kebab-case (`sqlite3-shell`); the backends take a module name in their own grammar and refuse to guess (ADR-63), so convert it here. Standalone entries do not use the name internally, but deriving uniformly keeps one rule.
+    let module_name = derive_module_name(module_name_style(backend.name()), entry.stem);
+    let source = convert_source(backend, &bytes, entry.mode, &module_name)
         .map_err(|e| format!("{} convert failed: {e:#}", entry.stem))?;
     if source.is_empty() {
         return Err(Failed::from(format!(

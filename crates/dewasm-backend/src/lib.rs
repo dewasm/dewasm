@@ -33,7 +33,7 @@ pub enum RuntimeLinkage {
 #[derive(Clone, Debug)]
 pub struct GenOptions {
     pub mode: Mode,
-    /// Class/package/module name for the generated code.
+    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim — no sanitization (ADR-63). In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
     /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide. Disable to keep generated libraries free of ambient authority.
@@ -115,6 +115,24 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         "passive/declared element segment, ref.null element item, or table.init/copy/elem.drop",
     )?;
     Ok(())
+}
+
+/// Reject a library-mode module name that does not fit `language`'s grammar (ADR-63). `grammar` is the prose form of the rule, quoted verbatim in the message: an invalid name is a conversion-time error, never a silent transformation, so the message must be enough to fix the invocation without reading the source.
+pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "invalid {language} module name {name:?}: it must be {grammar}. \
+         Pass a valid one with --module-name (the default is the input file stem), \
+         or drop --module-name for --mode standalone, whose internal name is fixed (ADR-63)."
+    )
+}
+
+/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest` — the shape every backend's module-name grammar is built out of (ADR-63).
+pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> bool {
+    let mut chars = seg.chars();
+    match chars.next() {
+        Some(c) if first(c) => chars.all(rest),
+        _ => false,
+    }
 }
 
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {

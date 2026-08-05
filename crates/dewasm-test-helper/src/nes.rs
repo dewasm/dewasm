@@ -95,7 +95,7 @@ pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8
 /// so the driving constants live in one place.
 pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     let bytes = read_nes_wasm();
-    let class = lang.convert_app(&bytes, Mode::Library, "nes");
+    let class = lang.convert_app(&bytes, Mode::Library, &lang.module_name("nes"));
     let glue = fill(
         glue,
         &[

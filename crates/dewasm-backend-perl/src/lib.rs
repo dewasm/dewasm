@@ -14,8 +14,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
+    OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -212,7 +212,13 @@ impl Backend for PerlBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        let package_name = package_name(&opts.module_name);
+        // Standalone output is a self-contained program: its package name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        let package_name = if opts.mode == Mode::Standalone {
+            STANDALONE_PACKAGE.to_string()
+        } else {
+            check_module_name(&opts.module_name)?;
+            opts.module_name.clone()
+        };
 
         // The Exit/Trap handlers in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
@@ -335,25 +341,27 @@ impl Backend for PerlBackend {
     }
 }
 
-fn package_name(module_name: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for c in module_name.chars() {
-        if c.is_ascii_alphanumeric() {
-            if upper {
-                out.extend(c.to_uppercase());
-                upper = false;
-            } else {
-                out.push(c);
-            }
-        } else {
-            upper = true;
-        }
+/// The package a `--mode standalone` program defines (ADR-63): fixed, since nothing outside a self-contained program observes it.
+pub const STANDALONE_PACKAGE: &str = "Program";
+
+/// The library-mode module name must be a Perl package name — `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*` — and is used verbatim (ADR-63). Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas), so the grammar does not forbid them; the caller picks the case it wants and gets exactly that.
+fn check_module_name(name: &str) -> Result<()> {
+    let ok = name.split("::").all(|seg| {
+        is_ident(
+            seg,
+            |c| c.is_ascii_alphabetic() || c == '_',
+            |c| c.is_ascii_alphanumeric() || c == '_',
+        )
+    });
+    if ok {
+        Ok(())
+    } else {
+        Err(module_name_error(
+            "perl",
+            name,
+            "a package name: `::`-separated segments each matching [A-Za-z_][A-Za-z0-9_]* (e.g. Add, Dewasm::Sqlite3)",
+        ))
     }
-    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
-        out.insert_str(0, "Wasm");
-    }
-    out
 }
 
 /// Perl single-quoted string literal (no interpolation, so `$`/`@` in wasm names are inert; raw control bytes are legal inside single quotes).

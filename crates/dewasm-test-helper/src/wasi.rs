@@ -379,7 +379,7 @@ pub fn run_wasi_fs(lang: &dyn BackendUnderTest, template: &str) {
             lang.backend(),
             &examples_dir().join(case.wat),
             Mode::Library,
-            "prog",
+            &lang.module_name("prog"),
         );
         let glue = fill(
             template,
@@ -463,7 +463,7 @@ pub fn run_wasi_containment(lang: &dyn BackendUnderTest, glue: &str) {
         lang.backend(),
         &examples_dir().join("wasi_path_open_roundtrip.wat"),
         Mode::Library,
-        "prog",
+        &lang.module_name("prog"),
     );
     let output = lang.run(&format!("{src}\n{glue}"), &[], "");
     assert!(

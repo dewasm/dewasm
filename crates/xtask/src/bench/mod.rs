@@ -423,7 +423,7 @@ fn measure_cell(
     workshop: &mut Workshop,
     references: &mut HashMap<u64, Vec<u8>>,
 ) -> Result<Outcome> {
-    let launch = workshop.launch(runner, &workload.wasm, &workload.module_name)?;
+    let launch = workshop.launch(runner, &workload.wasm)?;
     let mut runs_per_sample = None;
     let (iterations, zero, total, last) = match &workload.kind {
         workload::Kind::Micro { iter_cap } => {

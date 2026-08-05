@@ -15,8 +15,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
+    OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -155,7 +155,8 @@ fn generate_class_inner(
     let body = wb.finish();
     let uses = gen.uses.into_inner();
 
-    let mut out = format!("class {class_name}\n");
+    let mut out = ancestor_guards(class_name);
+    out.push_str(&format!("class {class_name}\n"));
     match linkage {
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
@@ -203,7 +204,13 @@ impl Backend for RubyBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        let class_name = class_name(&opts.module_name);
+        // Standalone output is a self-contained program: its class name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        let class_name = if opts.mode == Mode::Standalone {
+            STANDALONE_CLASS.to_string()
+        } else {
+            check_module_name(&opts.module_name)?;
+            opts.module_name.clone()
+        };
 
         // The Exit/Trap rescue clauses in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
@@ -306,23 +313,38 @@ impl Backend for RubyBackend {
     }
 }
 
-fn class_name(module_name: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for c in module_name.chars() {
-        if c.is_ascii_alphanumeric() {
-            if upper {
-                out.extend(c.to_uppercase());
-                upper = false;
-            } else {
-                out.push(c);
-            }
-        } else {
-            upper = true;
-        }
+/// The class a `--mode standalone` program defines (ADR-63). A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
+pub const STANDALONE_CLASS: &str = "Program";
+
+/// The library-mode module name must be a Ruby constant path — `::`-separated segments, each `[A-Z][A-Za-z0-9_]*` — and is used verbatim (ADR-63). Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
+fn check_module_name(name: &str) -> Result<()> {
+    let ok = name.split("::").all(|seg| {
+        is_ident(
+            seg,
+            |c| c.is_ascii_uppercase(),
+            |c| c.is_ascii_alphanumeric() || c == '_',
+        )
+    });
+    if ok {
+        Ok(())
+    } else {
+        Err(module_name_error(
+            "ruby",
+            name,
+            "a constant path: `::`-separated segments each matching [A-Z][A-Za-z0-9_]* (e.g. Add, Dewasm::Sqlite3)",
+        ))
     }
-    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
-        out.insert_str(0, "Wasm");
+}
+
+/// Ruby's `class A::B::C` needs `A` and `A::B` to already exist, and a generated file must be loadable both on its own and next to something that already defined them. Each ancestor therefore gets a guarded definition: define it only when the constant is not already there, in outermost-first order (ADR-63). An ancestor that exists as a *class* is left alone (the guard skips it); an ancestor bound to a non-module constant fails loudly at load, which is the correct outcome.
+fn ancestor_guards(class_name: &str) -> String {
+    let segs: Vec<&str> = class_name.split("::").collect();
+    let mut out = String::new();
+    for i in 1..segs.len() {
+        let path = segs[..i].join("::");
+        out.push_str(&format!(
+            "unless defined?({path})\n  module {path}; end\nend\n"
+        ));
     }
     out
 }

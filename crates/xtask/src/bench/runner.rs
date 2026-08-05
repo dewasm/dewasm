@@ -378,7 +378,7 @@ enum Artifact {
 
 impl Workshop {
     /// The launch recipe for `runner` on `wasm`. For a dewasm runner this converts (and, for Go/Java, compiles) on first use.
-    pub fn launch(&mut self, runner: &Runner, wasm: &Path, module_name: &str) -> Result<Launch> {
+    pub fn launch(&mut self, runner: &Runner, wasm: &Path) -> Result<Launch> {
         match &runner.kind {
             Kind::Wasmtime => Ok(Launch {
                 program: wasmtime_bin().context("wasmtime not found on PATH")?,
@@ -386,12 +386,12 @@ impl Workshop {
                 env: Vec::new(),
             }),
             Kind::Native(native) => native.launch(wasm),
-            Kind::Dewasm(target) => self.dewasm_launch(*target, wasm, module_name),
+            Kind::Dewasm(target) => self.dewasm_launch(*target, wasm),
             Kind::Driver(driver) => driver_launch(*driver, wasm),
         }
     }
 
-    fn dewasm_launch(&mut self, target: Target, wasm: &Path, module_name: &str) -> Result<Launch> {
+    fn dewasm_launch(&mut self, target: Target, wasm: &Path) -> Result<Launch> {
         let bytes =
             std::fs::read(wasm).with_context(|| format!("failed to read {}", wasm.display()))?;
         let backend = target.backend();
@@ -399,7 +399,7 @@ impl Workshop {
         let artifact = match self.artifacts.get(&key) {
             Some(cached) => cached.clone(),
             None => {
-                let built = build_artifact(target, &bytes, module_name)?;
+                let built = build_artifact(target, &bytes)?;
                 self.artifacts.insert(key, built.clone());
                 built
             }
@@ -447,11 +447,11 @@ impl Workshop {
 }
 
 /// Convert `bytes` with `target`'s backend and get it into runnable shape, reusing the content-addressed `/tmp` cache when a previous run already produced it.
-fn build_artifact(target: Target, bytes: &[u8], module_name: &str) -> Result<Artifact> {
+fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
     let backend = target.backend();
     let cache = bench_tmp_dir()?;
     // Convert unconditionally and key the disk cache by what came out: the artifact must reflect *this* build's codegen, and only the compile step after it is expensive enough to be worth remembering.
-    let source = convert(backend, bytes, module_name)?;
+    let source = convert(backend, bytes)?;
     let stem = format!("{}-{:016x}", backend.name(), hash_bytes(source.as_bytes()));
 
     match target {
@@ -511,7 +511,7 @@ fn build_artifact(target: Target, bytes: &[u8], module_name: &str) -> Result<Art
 /// Convert `bytes` to standalone source with `backend`, on a 64 MiB stack.
 ///
 /// Codegen recurses with the IR's control-flow nesting, and a SQLite-class module's deepest functions overflow the default stack — the same reason `dewasm_test_helper::convert_on_big_stack` exists. That helper panics on a codegen error, which here would take down the whole suite instead of marking one cell failed, so this mirrors it over `Result`.
-fn convert(backend: &(dyn Backend + Sync), bytes: &[u8], module_name: &str) -> Result<String> {
+fn convert(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<String> {
     let source = std::thread::scope(|scope| {
         std::thread::Builder::new()
             .stack_size(64 << 20)
@@ -522,7 +522,8 @@ fn convert(backend: &(dyn Backend + Sync), bytes: &[u8], module_name: &str) -> R
                         &module,
                         &GenOptions {
                             mode: Mode::Standalone,
-                            module_name: module_name.to_string(),
+                            // Only the output file's stem, which this suite never writes: a standalone artifact's internal names are fixed (ADR-63).
+                            module_name: "prog".to_string(),
                             runtime: RuntimeLinkage::Embedded,
                             default_wasi: true,
                             data_file: None,

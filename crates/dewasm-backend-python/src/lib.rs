@@ -16,8 +16,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
+    OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -209,7 +209,13 @@ impl Backend for PythonBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        let class_name = class_name(&opts.module_name);
+        // Standalone output is a self-contained program: its class name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        let class_name = if opts.mode == Mode::Standalone {
+            STANDALONE_CLASS.to_string()
+        } else {
+            check_module_name(&opts.module_name)?;
+            opts.module_name.clone()
+        };
         let rt_name = runtime_name(&class_name, &opts.runtime);
 
         // The Exit/Trap handlers in the standalone main need these even when the module itself never references them.
@@ -381,25 +387,24 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     }
 }
 
-fn class_name(module_name: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for c in module_name.chars() {
-        if c.is_ascii_alphanumeric() {
-            if upper {
-                out.extend(c.to_uppercase());
-                upper = false;
-            } else {
-                out.push(c);
-            }
-        } else {
-            upper = true;
-        }
+/// The class a `--mode standalone` program defines (ADR-63): fixed, since nothing outside a self-contained program observes it.
+pub const STANDALONE_CLASS: &str = "Program";
+
+/// The library-mode module name must be a single Python identifier and is used verbatim (ADR-63). Everything the backend emits lives in one module (no package split is ever produced, so a dotted name would have nothing to mean), hence no separator.
+fn check_module_name(name: &str) -> Result<()> {
+    if is_ident(
+        name,
+        |c| c.is_ascii_alphabetic() || c == '_',
+        |c| c.is_ascii_alphanumeric() || c == '_',
+    ) {
+        Ok(())
+    } else {
+        Err(module_name_error(
+            "python",
+            name,
+            "a single identifier matching [A-Za-z_][A-Za-z0-9_]* (e.g. Add, sqlite3)",
+        ))
     }
-    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
-        out.insert_str(0, "Wasm");
-    }
-    out
 }
 
 /// Python double-quoted string literal.

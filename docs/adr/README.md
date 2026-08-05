@@ -76,6 +76,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-60 | [Ruby Backend: Flatten Only Deep Crossings](60-ruby-flatten-only-deep-crossings.md) | Accepted |
 | ADR-61 | [Cover ruby.wasm's wasi-vfs-Packed Shape by Packing In-Cache](61-wasi-vfs-packed-cruby.md) | Accepted |
 | ADR-62 | [`Embedded` Output Isolates Its Runtime per Artifact](62-embedded-runtime-isolation.md) | Accepted (Java/Bash/Go pending) |
+| ADR-63 | [`--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode](63-module-name-policy.md) | Accepted (Go pending) |
 
 ## Adding a new ADR
 

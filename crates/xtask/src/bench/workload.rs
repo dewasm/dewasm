@@ -54,8 +54,6 @@ pub enum Kind {
 pub struct Workload {
     /// The filter/report label, e.g. `wat/i32_alu`, `c/sha256` or `app/sqlite3_query`. The part before the slash is the family, which is also the source directory for a microbenchmark.
     pub label: String,
-    /// The name handed to the backend as the generated module/class name.
-    pub module_name: String,
     /// Path to the `.wasm`; may not exist yet (see [`Workload::missing_reason`]).
     pub wasm: PathBuf,
     pub kind: Kind,
@@ -115,12 +113,9 @@ pub fn workloads() -> Vec<Workload> {
                 .iter()
                 .find(|(known, _)| *known == id)
                 .map_or(DEFAULT_ITER_CAP, |(_, cap)| *cap);
-            // `<family>/<stem>` throughout: the label is the path under `benchmarks/cache/`, and the generated module is named after the stem alone (a slash is not a legal identifier in any backend).
-            let stem = id.rsplit('/').next().unwrap_or(&id).to_string();
             Workload {
                 wasm: cache.join(format!("{id}.wasm")),
                 label: id,
-                module_name: stem,
                 kind: Kind::Micro { iter_cap },
                 exclude: &[],
             }
@@ -157,7 +152,6 @@ fn app_workloads() -> Vec<Workload> {
     vec![
         Workload {
             label: "app/cowsay".to_string(),
-            module_name: "cowsay".to_string(),
             wasm: cache.join("cowsay.wasm"),
             kind: Kind::App {
                 // The message goes in on stdin (cowsay reads stdin when given no argv).
@@ -168,7 +162,6 @@ fn app_workloads() -> Vec<Workload> {
         },
         Workload {
             label: "app/sqlite3_query".to_string(),
-            module_name: "sqlite3_shell".to_string(),
             wasm: cache.join("sqlite3-shell.wasm"),
             kind: Kind::App {
                 // `-batch` pins the shell to non-interactive mode. Otherwise it decides from `isatty`, and a runtime that misreports the standard fds runs a different program — pywasm calls every fd a character device (`wasi.py:429`) and got a banner and box-drawing output.

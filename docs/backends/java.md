@@ -4,7 +4,11 @@
 
 ## Output shape
 
-A single `.java` file: a set of package-private runtime classes (`Rt`/`Memory`/`Table`/`WASI`) plus the generated module class named after the input stem. In **standalone** mode the entry point is always a `public class Main` with `public static void main`, so name the output `Main.java`. In **library** mode the module class is package-private, so put your own `public class Main` (or other public entry) in the *same* file. Integers are native `int`/`long` as bit patterns; unsigned ops use `Integer.*`/`Long.*`. Control flow uses a per-function branch register `_br`. See [ADR-30](../adr/30-java-backend-lowering.md).
+A single `.java` file: a set of package-private runtime classes (`Rt`/`Memory`/`Table`/`WASI`) plus the generated module class. In **standalone** mode the entry point is always a `public class Main` with `public static void main`, so name the output `Main.java`; the module class is always `Program` and `--module-name` is rejected. In **library** mode the module class is package-private, so put your own `public class Main` (or other public entry) in the *same* file.
+
+The library-mode name is `--module-name` (required in library mode) taken verbatim, dot-separated: the last segment is the class name, anything before it becomes the file's `package` declaration — `--module-name com.github.dewasm.Sqlite3` gives `package com.github.dewasm;` and `class Sqlite3` (your appended `Main` then shares that package). Every segment must match `[A-Za-z_$][A-Za-z0-9_$]*`; anything else is a conversion-time error, nothing is sanitized (Java keywords pass the character-level grammar and fail in `javac` with the compiler's own message — [ADR-63](../adr/63-module-name-policy.md)).
+
+Integers are native `int`/`long` as bit patterns; unsigned ops use `Integer.*`/`Long.*`. Control flow uses a per-function branch register `_br`. See [ADR-30](../adr/30-java-backend-lowering.md).
 
 ## Requirements
 
@@ -19,7 +23,7 @@ $ dewasm prog.wasm --target java --mode standalone -o Main.java
 $ javac Main.java && java Main --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs follow the shared runtime interface (argv, `--dir` preopens, env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md). Java is the one deviation on `argv[0]`: the JVM does not pass the launched file name to `main`, so it uses the module class name.
+Standalone programs follow the shared runtime interface (argv, `--dir` preopens, env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md). Java is the one deviation on `argv[0]`: the JVM does not pass the launched file name to `main`, so it uses the module class name — which in standalone mode is the fixed `Program`.
 
 Library (append your `public class Main` to the generated file). Constructor arguments are `(imports, argv, env, preopens)`; exports are `Rt.Fn` values in the `Exports` map:
 

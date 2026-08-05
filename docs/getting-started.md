@@ -90,10 +90,12 @@ hello, wasi fs!
 
 `--mode library` (the default) exposes the module's exports to the host language instead of running `_start`. We will use [`examples/wat/add.wat`](../examples/wat/add.wat), which exports `add` and a recursive `fib`.
 
+`--module-name` names the generated class/package and is required in library mode. It is used exactly as written — a name that does not fit the target language's grammar is a conversion-time error, never a silently reshaped name ([ADR-63](adr/63-module-name-policy.md)).
+
 ### Ruby
 
 ```console
-$ dewasm examples/wat/add.wat --target ruby --mode library -o add.rb
+$ dewasm examples/wat/add.wat --target ruby --mode library --module-name Add -o add.rb
 ```
 
 ```ruby
@@ -107,7 +109,7 @@ puts inst.invoke("fib", 10)     # => 55
 ### Python
 
 ```console
-$ dewasm examples/wat/add.wat --target python --mode library -o add.py
+$ dewasm examples/wat/add.wat --target python --mode library --module-name Add -o add.py
 ```
 
 ```python
@@ -120,19 +122,32 @@ print(inst.invoke("fib", 10))     # 55
 
 ### Go
 
-The generated file is `package main`; add a `func main` in the same package (the file already imports `fmt`). Exports are typed callables in `Exports`:
+Library output is a Go **package** named after `--module-name`, so put it in a directory of that name and import it. Exports are typed callables in `Exports`:
+
+```console
+$ mkdir add
+$ dewasm examples/wat/add.wat --target go --mode library --module-name add -o add/add.go
+```
 
 ```go
+// main.go, next to the add/ directory
+package main
+
+import (
+	"fmt"
+
+	"example.com/myapp/add"
+)
+
 func main() {
-	inst := NewAdd(nil, nil, nil, nil)
+	inst := add.NewAdd(nil, nil, nil, nil)
 	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(2, 3)) // 5
 	fmt.Println(inst.Exports["fib"].(func(uint32) uint32)(10))          // 55
 }
 ```
 
 ```console
-$ dewasm examples/wat/add.wat --target go --mode library -o add.go
-$ go run add.go        # after appending the func main above
+$ go run .
 ```
 
 ### Java

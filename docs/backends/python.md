@@ -4,7 +4,9 @@
 
 ## Output shape
 
-A single `.py` module: the generated module as a class named after the input stem (override with `--module-name`), with the runtime at **module top level** under the name `<Class>Rt` — `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace, [ADR-62](../adr/62-embedded-runtime-isolation.md)). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
+A single `.py` module: the generated module as a class, with the runtime at **module top level** under the name `<Class>Rt` — `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace, [ADR-62](../adr/62-embedded-runtime-isolation.md)). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
+
+In **library** mode the class name is `--module-name` (required in library mode) taken verbatim, one identifier matching `[A-Za-z_][A-Za-z0-9_]*`; anything else is a conversion-time error, nothing is sanitized ([ADR-63](../adr/63-module-name-policy.md)). In **standalone** mode the class is always `Program` and `--module-name` is rejected.
 
 ## Requirements
 
