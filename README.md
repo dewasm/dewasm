@@ -86,7 +86,6 @@ $ dewasm input.<wasm|wat>
   * `--mode library` exposes the module's exports to the target language.
 - `--output` (or `-o`) sets the output file (default: `-`).
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
-
 - `--module-name` names the generated class/package and is required in library mode (standalone output has a fixed internal name and rejects it).
 
 Please see `dewasm --help` for the full list of options.
