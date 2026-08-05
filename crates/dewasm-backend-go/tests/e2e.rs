@@ -1,16 +1,19 @@
 //! Go end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Go backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute instead of interpreting: `go build` the generated file to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem (ADR-29).
+//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute instead of interpreting: `go build` the generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem (ADR-29).
+//!
+//! Library-mode output is `package <module name>`, not `package main`, so a library case is not a runnable file on its own: [`common::build_go`] wraps it in a throwaway Go module whose `main` imports the package and calls the glue's `RunTest`. That is why every library glue below defines `func RunTest()` where it used to define `func main()`; the multi-module glue keeps `func main` because `compose_modules` assembles its own `package main`.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
 use std::process::{Command, Output};
 
-use dewasm_backend::Backend;
-use dewasm_backend_go::{find_go, GoBackend};
+use dewasm_backend::{Backend, Mode};
+use dewasm_backend_go::GoBackend;
 use dewasm_test_helper::BackendUnderTest;
+
+mod common;
+
+use common::{build_go, go_module_name};
 
 pub struct Go;
 
@@ -21,6 +24,11 @@ impl BackendUnderTest for Go {
 
     fn backend(&self) -> &'static (dyn Backend + Sync) {
         &GoBackend
+    }
+
+    /// Convert a cached app, deriving a conforming module name from the cache stem the shared case tables carry (`sqlite3-binding`): a library-mode Go artifact declares `package <name lowercased>`, so a dashed stem is rejected at conversion time now. Standalone conversions are unaffected (the name is unused there), so this normalizes unconditionally.
+    fn convert_app(&self, bytes: &[u8], mode: Mode, name: &str) -> String {
+        dewasm_test_helper::convert_on_big_stack(self.backend(), bytes, mode, &go_module_name(name))
     }
 
     /// Compile `source` to a cache binary (keyed by content hash) and run it with `args`/`stdin`. A missing `go` toolchain is a loud failure (ADR-15); a build failure is surfaced as the build command's `Output` so the caller's `status.success()` assertion reports the compile error.
@@ -113,52 +121,10 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-/// Compile `source` to a content-addressed cache binary (so identical sources build once) and return its path. `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `go` toolchain is a loud failure (ADR-15).
-fn build_go(source: &str) -> Result<PathBuf, Output> {
-    let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
-
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    let cache = std::env::temp_dir().join("dewasm-go-cache");
-    std::fs::create_dir_all(&cache).unwrap();
-    let bin = cache.join(format!("prog-{hash:016x}"));
-
-    if !bin.exists() {
-        // Both the source and the binary get per-attempt unique names: two threads with the same hash (cowsay's args and stdin cases) may build concurrently, and a shared source path would let one truncate the file mid-read of the other's `go build` (issue #19). Only the final rename onto the cache key is shared, and that is atomic.
-        let unique = format!(
-            "{hash:016x}.{}.{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        );
-        let src = cache.join(format!("src-{unique}.go"));
-        std::fs::write(&src, source).unwrap();
-        let tmp_bin = cache.join(format!("prog-{unique}"));
-        let build = Command::new(&go)
-            .arg("build")
-            .arg("-o")
-            .arg(&tmp_bin)
-            .arg(&src)
-            .output()
-            .expect("spawn go build");
-        if !build.status.success() {
-            return Err(build);
-        }
-        let _ = std::fs::rename(&tmp_bin, &bin);
-        let _ = std::fs::remove_file(&src);
-    }
-
-    Ok(bin)
-}
-
-// --------------------------------------------------------------------- Library-case glue. The appended `func main` carries no `import` — the generated file already imports `fmt`.
+// --------------------------------------------------------------------- Library-case glue. Each defines `RunTest`, the entry point the generated `main.go` of the temp module calls (see `common::build_go`), and carries no `import` — the generated file already imports `fmt`, and Go forbids an `import` after other declarations anyway.
 
 /// `add.wat`: call the exported functions and print each result.
-const GO_ADD_GLUE: &str = r#"func main() {
+const GO_ADD_GLUE: &str = r#"func RunTest() {
 	inst := NewAdd(nil, nil, nil, nil)
 	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(2, 3))
 	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(0xffffffff, 1))
@@ -167,7 +133,7 @@ const GO_ADD_GLUE: &str = r#"func main() {
 "#;
 
 /// The ADR-7 override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
-const GO_OVERRIDE_GLUE: &str = r#"func main() {
+const GO_OVERRIDE_GLUE: &str = r#"func RunTest() {
 	var captured []byte
 	var inst *Prog
 	fdWrite := func(fd, iovs, iovsLen, outPtr uint32) uint32 {
@@ -210,7 +176,7 @@ func (w *myWasi) fdWrite(fd, iovs, iovsLen, outPtr uint32) uint32 {
 	return 0
 }
 
-func main() {
+func RunTest() {
 	wasi := &myWasi{}
 	inst := NewProg(Imports{"wasi_snapshot_preview1": wasi}, nil, nil, nil)
 	inst.Exports["_start"].(func())()
@@ -220,7 +186,7 @@ func main() {
 "#;
 
 /// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback — `wasiInstance()` constructs it as the ctor takes the method value.
-const GO_PARTIAL_OVERRIDE_GLUE: &str = r#"func main() {
+const GO_PARTIAL_OVERRIDE_GLUE: &str = r#"func RunTest() {
 	var captured []byte
 	var inst *Prog
 	fdWrite := func(fd, iovs, iovsLen, outPtr uint32) uint32 {
@@ -238,7 +204,7 @@ const GO_PARTIAL_OVERRIDE_GLUE: &str = r#"func main() {
 "#;
 
 /// The `wasi_stdio_capture` glue: Go's bundled WASI holds `*os.File` at fd 1 (`fd_write` type-asserts exactly that), so the embedder's sink is an `os.Pipe` write end swapped into `inst.wasi.fds` after construction — a real fd rather than an in-memory buffer, the same shape Perl's glue uses. Run `_start` (swallowing its clean `proc_exit`), close the writer so the reader sees EOF, and copy the captured bytes to the real stdout. The read loop is hand-rolled: library-mode Go imports `fmt` plus whatever the runtime bundle needs (`os`, here), and appended glue cannot add an `io` import of its own.
-const GO_STDIO_CAPTURE_GLUE: &str = r#"func main() {
+const GO_STDIO_CAPTURE_GLUE: &str = r#"func RunTest() {
 	r, w, err := os.Pipe()
 	if err != nil {
 		panic(err)
@@ -272,7 +238,7 @@ const GO_STDIO_CAPTURE_GLUE: &str = r#"func main() {
 // --------------------------------------------------------------------- WASI filesystem glue.
 
 /// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (via rtExit) as a trailing decimal line. rt/exit is always seeded for library-mode WASI output, so `*rtExit` is defined even for fixtures that never import proc_exit.
-const GO_FS_GLUE: &str = r#"func main() {
+const GO_FS_GLUE: &str = r#"func RunTest() {
 	inst := NewProg(nil, nil, nil, map[string]string{"{guest}": "{host}"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -288,7 +254,7 @@ const GO_FS_GLUE: &str = r#"func main() {
 "#;
 
 /// The root-preopen containment probe: probe the WASI resolver directly (no guest run). A `"/" => "/"` preopen must resolve a relative path rather than reject every one; fd 3 is the sole preopen, errno 0 (wasiOk) means contained.
-const GO_CONTAINMENT_GLUE: &str = r#"func main() {
+const GO_CONTAINMENT_GLUE: &str = r#"func RunTest() {
 	w := newWASI(nil, nil, map[string]string{"/": "/"})
 	_, err := w.resolve_path(3, "etc", true)
 	if err == 0 {
@@ -301,7 +267,7 @@ const GO_CONTAINMENT_GLUE: &str = r#"func main() {
 
 // --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}. One glue serves both stdout-reporting and proc_exit fixtures: the former return from `_start` normally, so nothing extra is printed.
 
-const GO_QJS_FILE_IO_GLUE: &str = r#"func main() {
+const GO_QJS_FILE_IO_GLUE: &str = r#"func RunTest() {
 	inst := NewQjs(nil, []string{"qjs", "/work/qjs_file_io.js"}, nil, map[string]string{"/work": "{scratch}"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -315,7 +281,7 @@ const GO_QJS_FILE_IO_GLUE: &str = r#"func main() {
 }
 "#;
 
-const GO_SQLITE3_SHELL_GLUE: &str = r#"func main() {
+const GO_SQLITE3_SHELL_GLUE: &str = r#"func RunTest() {
 	inst := NewSqlite3Shell(nil, []string{"sqlite3"}, nil, map[string]string{"/db": "{scratch}"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -329,7 +295,7 @@ const GO_SQLITE3_SHELL_GLUE: &str = r#"func main() {
 }
 "#;
 
-const GO_RG_SEARCH_GLUE: &str = r#"func main() {
+const GO_RG_SEARCH_GLUE: &str = r#"func RunTest() {
 	inst := NewRg(nil, []string{"rg", "--sort", "path", "needle", "/work"}, nil, map[string]string{"/work": "{scratch}"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -343,7 +309,7 @@ const GO_RG_SEARCH_GLUE: &str = r#"func main() {
 }
 "#;
 
-const GO_CPYTHON_GLUE: &str = r#"func main() {
+const GO_CPYTHON_GLUE: &str = r#"func RunTest() {
 	inst := NewCpython(nil, []string{"python", "-c", "print('hello from cpython', 6 * 7)"}, []string{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, map[string]string{"/lib": "{cache}/cpython-lib/lib"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -357,7 +323,7 @@ const GO_CPYTHON_GLUE: &str = r#"func main() {
 }
 "#;
 
-const GO_CRUBY_GLUE: &str = r#"func main() {
+const GO_CRUBY_GLUE: &str = r#"func RunTest() {
 	inst := NewCruby(nil, []string{"ruby", "-e", "puts \"hello from cruby #{6*7}\""}, nil, map[string]string{"/usr": "{cache}/ruby-lib/usr"})
 	defer func() {
 		if r := recover(); r != nil {
@@ -371,10 +337,10 @@ const GO_CRUBY_GLUE: &str = r#"func main() {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `func main` carries no `import` (the library file already imports `fmt`). No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc / guest-memory pointer plumbing via the unexported `inst.memory` (`*Memory`). The appended `RunTest` carries no `import` (the library file already imports `fmt`). No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `*Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
-const GO_LIBSQLITE3_MEM: &str = r#"func main() {
+const GO_LIBSQLITE3_MEM: &str = r#"func RunTest() {
 	inst := NewLibsqlite3(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
@@ -442,7 +408,7 @@ const GO_LIBSQLITE3_MEM: &str = r#"func main() {
 "#;
 
 /// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell).
-const GO_LIBSQLITE3_FILE: &str = r#"func main() {
+const GO_LIBSQLITE3_FILE: &str = r#"func RunTest() {
 	inst := NewLibsqlite3(nil, nil, nil, map[string]string{"/db": "{scratch}"})
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
@@ -515,7 +481,7 @@ const GO_LIBSQLITE3_FILE: &str = r#"func main() {
 "#;
 
 /// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import-provider map and collects the rows.
-const GO_SQLITE3_CALLBACK: &str = r#"func main() {
+const GO_SQLITE3_CALLBACK: &str = r#"func RunTest() {
 	var rows []string
 	var mem *Memory
 	// host_row is imported as `void host_row(int argc, char **argv)` — no result.
@@ -589,7 +555,7 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 "#;
 
 /// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
-const GO_PCAP_COMPILE: &str = r#"func main() {
+const GO_PCAP_COMPILE: &str = r#"func RunTest() {
 	inst := NewLibpcap(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
@@ -621,7 +587,7 @@ const GO_PCAP_COMPILE: &str = r#"func main() {
 "#;
 
 /// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
-const GO_TREESITTER_PARSE: &str = r#"func main() {
+const GO_TREESITTER_PARSE: &str = r#"func RunTest() {
 	inst := NewTreesitter(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem := inst.memory
@@ -657,7 +623,7 @@ const GO_TREESITTER_PARSE: &str = r#"func main() {
 /// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
 /// capture and a `printf`, so its stdout is deterministic. The Perl source is a Go raw
 /// string literal: its backslash escapes belong to Perl, not to Go.
-const GO_ZEROPERL_EVAL: &str = r#"func main() {
+const GO_ZEROPERL_EVAL: &str = r#"func RunTest() {
 	inst := NewZeroperl(
 		Imports{"env": map[string]any{"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
 		nil, nil, map[string]string{"/dev/null": "/dev/null"})
@@ -690,7 +656,7 @@ if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
 /// into `eval_pv` instead of tripping `proc_exit` — then `zeroperl_flush`
 /// pushes ExifTool's buffered stdout out through fd 1. Only deterministic tags
 /// are requested (`-S -Make -Model -DateTimeOriginal`).
-const GO_EXIFTOOL: &str = r#"func main() {
+const GO_EXIFTOOL: &str = r#"func RunTest() {
 	inst := NewZeroperl(
 		Imports{"env": map[string]any{"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
 		nil, nil, map[string]string{
@@ -727,7 +693,7 @@ const GO_SHARED_TABLE_GLUE: &str = r#"func main() {
 "#;
 
 /// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
-const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
+const GO_DOOM_FRAME_GLUE: &str = r#"func RunTest() {
 	var ms uint64
 	var frameOff, frameW, frameH uint32
 	imports := Imports{
@@ -799,7 +765,7 @@ fn go_nes_frame_glue() -> String {
     }
     literal.push('"');
     format!(
-        r#"func main() {{
+        r#"func RunTest() {{
 	rom := []byte({literal})
 	inst := NewNes(nil, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
