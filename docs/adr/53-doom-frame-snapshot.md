@@ -29,13 +29,13 @@ Two facts make a snapshot possible where the module first looks untestable:
   integer computation, identical across wasmtime and every backend regardless of
   the softfloat/NaN conventions (ADR-2/13). The only nondeterminism is the game
   clock: `runtimeControl.timeInMilliseconds` paces the tic loop, and all five
-  frontends feed it a *wall* clock (`examples/doom/go/main.go:94`,
+  frontends feed it a *wall* clock (`examples/doom/go/doom/host.go:100-105`,
   `examples/doom/ruby/main.rb:73`). Override that import with a synthetic
   counter that self-advances a fixed step on every read and drive `initGame`
   then N× `tickGame` with no key events, and the rendered frame is reproducible.
 - **`ui.drawFrame(bufOff)` hands the host an offset into linear memory** where
   `FRAME_W*FRAME_H*4` bytes live in `B,G,R,A` order, the alpha byte padding
-  (`examples/doom/go/main.go:101-113`). For this pinned binary FRAME is 640×400,
+  (`examples/doom/go/doom/host.go:107-122`). For this pinned binary FRAME is 640×400,
   so the frame is 1,024,000 bytes; dropping the don't-care alpha yields a
   640×400 RGB image — a P6 PPM, the exact format the frontends' own screenshot
   writers already emit (`examples/doom/ruby/main.rb:339-354`).
@@ -64,7 +64,7 @@ mode, append per-backend glue, compare output — with three specifics:
   of times more work, turning the Bash run into ~an hour. `wadSizes`/`readWads`
   are no-ops
   (the module falls back to its embedded shareware WAD when the out-params stay
-  zero, `examples/doom/go/main.go:116-124`), `gameSaving.*` are `0/0/len` no-ops
+  zero, `examples/doom/go/doom/host.go:124-133`), `gameSaving.*` are `0/0/len` no-ops
   (no filesystem, as bash already proves at `examples/doom/bash/main.sh:89-96`).
   Call `initGame`, then N× `tickGame` with no input, and dump the last `drawFrame`
   buffer as a 640×400 P6 PPM (alpha dropped). N is fixed and pinned by the snapshot

@@ -4,7 +4,11 @@
 
 ## Output shape
 
-A single `.rb` file: the generated module as a Ruby **class** named after the input file stem (override with `--module-name`), with the lightweight runtime bundled inside it under the relative name `Rt`. Nesting the runtime in the class lets several generated files coexist in one process without collision. The default name can still clash with a constant MRI already defines — most notably `ruby.wasm` defaults to `class Ruby`, which collides with Ruby 4.0's built-in `Ruby` module and fails at load time with "Ruby is not a class (TypeError)". That is working as designed (the stem is just a default); pass `--module-name` to pick a free constant. See [ADR-4](../adr/4-ruby-backend-lowering.md) for the lowering conventions and [ADR-6](../adr/6-runtime-units.md) for the runtime-unit model.
+A single `.rb` file: the generated module as a Ruby **class**, with the lightweight runtime bundled inside it under the relative name `Rt`. Nesting the runtime in the class lets several generated files coexist in one process without collision.
+
+In **library** mode the class name is `--module-name` taken verbatim: a Ruby constant path, `::`-separated segments each matching `[A-Z][A-Za-z0-9_]*`. Anything else is a conversion-time error — nothing is sanitized ([ADR-63](../adr/63-module-name-policy.md)). The default is the input file stem, so a lowercase or hyphenated file name (`add.wasm`, `sqlite3-shell.wasm`) is not a usable default here and library conversion needs an explicit `--module-name`; Ruby is the only backend whose grammar demands the leading capital. A nested name (`Dewasm::Sqlite3`) defines its ancestors under an `unless defined?` guard, so the file loads both on its own and beside code that already defined them. A valid name can still clash with a constant MRI defines: `--module-name Ruby` collides with Ruby 4.0's built-in `Ruby` module and fails at load with "Ruby is not a class (TypeError)", so pick a free constant. In **standalone** mode the class is always `Program` and `--module-name` is rejected.
+
+See [ADR-4](../adr/4-ruby-backend-lowering.md) for the lowering conventions and [ADR-6](../adr/6-runtime-units.md) for the runtime-unit model.
 
 ## Requirements
 

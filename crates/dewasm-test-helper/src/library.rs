@@ -10,6 +10,7 @@ use crate::fixtures::{convert, examples_dir};
 pub struct LibraryCase {
     pub name: &'static str,
     pub wat: &'static str,
+    /// The case's kebab-case name, converted per backend by [`BackendUnderTest::module_name`] (ADR-63) — the glue consts spell out what that conversion yields (`prog` -> Ruby `Prog`, Bash `prog_`).
     pub module_name: &'static str,
     /// Both sides are engineered to produce this same string — the glue captures and prints the actual bytes the wasm module wrote, rather than a language-specific diagnostic, so there is exactly one expectation per scenario.
     pub expect: &'static str,
@@ -61,7 +62,7 @@ pub fn run_library_case(lang: &dyn BackendUnderTest, case: &LibraryCase, glue: &
         lang.backend(),
         &examples_dir().join(case.wat),
         Mode::Library,
-        case.module_name,
+        &lang.module_name(case.module_name),
     );
     let output = lang.run(&format!("{code}\n{glue}"), &[], "");
     assert!(

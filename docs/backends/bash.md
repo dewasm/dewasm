@@ -6,6 +6,8 @@
 
 A single sourceable `.sh` script: the runtime is a set of flat `rt_*`/`mem_*` functions and the module's functions are prefixed per generation so multiple modules can coexist in one shell. Imports resolve from the caller's `IMPORTS` associative array (`[module.name]=function`). Control flow maps onto `while :; do ...; break; done` wrappers with `break N` / `continue N`. See [ADR-11](../adr/11-bash-backend-lowering.md) for lowering, [ADR-12](../adr/12-bash-wasi.md) for WASI conventions, and [ADR-13](../adr/13-bash-softfloat-conventions.md) for the softfloat.
 
+In **library** mode the prefix is `--module-name` (required in library mode) **lowercased** plus `_`: `Sqlite3Shell` gives `sqlite3shell_`, `add` gives `add_`. The name must be one identifier matching `[A-Za-z_][A-Za-z0-9_]*`; anything else is a conversion-time error. The lowercasing is the one mapping the policy keeps — bash has no case-carrying namespace, and it is total and stated rather than guessed ([ADR-63](../adr/63-module-name-policy.md)). In **standalone** mode the prefix is always `program_` and `--module-name` is rejected.
+
 ## Requirements
 
 `bash` **5 or newer** (associative arrays and namerefs; macOS's system `/bin/bash` is 3.2 and does **not** qualify — `brew install bash`). No other external commands: floats run on a pure-Bash IEEE-754 softfloat, so there is no dependency on `bc`, `awk`, `python`, etc.

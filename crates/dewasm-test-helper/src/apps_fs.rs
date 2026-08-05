@@ -41,9 +41,9 @@ pub struct FsRun {
 /// A filesystem-exercising app case: convert `wasm` (cache stem) to library class `class`, stage `stage` into a scratch dir, preopen `preopens`, and run each of `runs`. The static `env`/`preopens`/`cache_preopens` are used by the wasmtime override (which execs the binary with those host mounts) and to stage/mount the scratch and cache trees; the backends read the same facts out of the glue const, where they are written literally.
 pub struct FsAppCase {
     pub name: &'static str,
-    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the conversion module name — every backend PascalCases it to `class`.
+    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`). Not the module name: `class` is, since the two diverge here (see it).
     pub wasm: &'static str,
-    /// The library class name the glue instantiates (PascalCase of `wasm`).
+    /// The library class name the glue instantiates, *and* the module name every backend is converted under. Unlike the other suites this is stated rather than derived from `wasm`, because the two deliberately diverge (cache file `ruby.wasm`, but class `Cruby`: a `Ruby` class collides with MRI's predefined constant). It is a valid module name under every backend's grammar (ADR-63); Bash lowercases it into its prefix.
     pub class: &'static str,
     pub env: &'static [(&'static str, &'static str)],
     /// Guest path -> scratch-relative subdir (`""` = scratch root).
@@ -265,7 +265,7 @@ fn drive_fs_app_case(
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
-    // Convert under `class`, not the cache stem: the stem and the class name diverge for CRuby (cache file `ruby.wasm`, but a `Ruby` class collides with MRI's predefined `Ruby` constant, so the class is `Cruby`). The class name is already PascalCase, and every backend's PascalCasing is idempotent, so this yields exactly `class` for every case. wasmtime ignores the name (it runs the bytes directly).
+    // Convert under `class`, not the cache stem: the two diverge for CRuby (see the field). `class` is already a valid module name for every backend (ADR-63), so it is passed verbatim rather than derived. wasmtime ignores the name (it runs the bytes directly).
     let program = lang.convert_app(&bytes, Mode::Library, case.class);
     // Resolve the runtime host paths the glue const left as placeholders. The scratch preopen and the cache root are all any current case needs.
     let filled_glue = fill(

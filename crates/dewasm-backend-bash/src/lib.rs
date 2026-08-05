@@ -15,8 +15,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeScope, SupportStatus,
+    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
+    OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -169,7 +169,13 @@ impl Backend for BashBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        let prefix = func_prefix(&opts.module_name);
+        // Standalone output is a self-contained program: its prefix is fixed, not derived (ADR-63). Library output uses the requested name (lowercased) after validating it.
+        let prefix = if opts.mode == Mode::Standalone {
+            STANDALONE_PREFIX.to_string()
+        } else {
+            check_module_name(&opts.module_name)?;
+            func_prefix(&opts.module_name)
+        };
 
         // The status mappings in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
@@ -245,23 +251,29 @@ impl Backend for BashBackend {
     }
 }
 
-/// Sanitized state/function prefix for a module name: `add.wasm` -> `add_`. Public so multi-module e2e cases (`compose_modules`) can derive each module's prefix the same way `generate` does.
+/// The function/state prefix a `--mode standalone` program uses (ADR-63): fixed, since nothing outside a self-contained program observes it.
+pub const STANDALONE_PREFIX: &str = "program_";
+
+/// The library-mode module name must be a single identifier `[A-Za-z_][A-Za-z0-9_]*` (ADR-63). Bash has no case-carrying namespace — every generated name is a global shell identifier — so the name is *lowercased* to build the prefix; that is the one deliberate mapping left in the product, and it is total and fully specified, unlike the sanitizers ADR-63 removed.
+fn check_module_name(name: &str) -> Result<()> {
+    if is_ident(
+        name,
+        |c| c.is_ascii_alphabetic() || c == '_',
+        |c| c.is_ascii_alphanumeric() || c == '_',
+    ) {
+        Ok(())
+    } else {
+        Err(module_name_error(
+            "bash",
+            name,
+            "a single identifier matching [A-Za-z_][A-Za-z0-9_]* (e.g. add, Sqlite3Shell)",
+        ))
+    }
+}
+
+/// The state/function prefix of a *validated* module name: `Sqlite3Shell` -> `sqlite3shell_`, `add` -> `add_`. Public so multi-module e2e cases (`compose_modules`) can derive each module's prefix the same way `generate` does.
 pub fn func_prefix(module_name: &str) -> String {
-    let mut out = String::new();
-    for c in module_name.chars() {
-        if c.is_ascii_alphanumeric() {
-            out.extend(c.to_lowercase());
-        } else if !out.is_empty() && !out.ends_with('_') {
-            out.push('_');
-        }
-    }
-    if out.is_empty() || out.starts_with(|c: char| c.is_ascii_digit()) {
-        out.insert_str(0, "wasm_");
-    }
-    if !out.ends_with('_') {
-        out.push('_');
-    }
-    out
+    format!("{}_", module_name.to_ascii_lowercase())
 }
 
 /// `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything implemented here except fd_seek's whence encoding, and fd_seek is ESPIPE-only on this backend anyway.

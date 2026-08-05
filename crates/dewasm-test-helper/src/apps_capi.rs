@@ -14,9 +14,9 @@ use crate::glue::fill;
 /// A C-API-driving case: convert `wasm` (cache stem) to library class `class`, append the backend's glue, run it, and require exactly `expect_stdout`.
 pub struct CApiCase {
     pub name: &'static str,
-    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the conversion module name (every backend PascalCases it to `class`).
+    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the kebab-case name [`BackendUnderTest::module_name`] converts into the conversion module name (ADR-63).
     pub wasm: &'static str,
-    /// The library class name the glue instantiates (PascalCase of `wasm`).
+    /// The library class name the glue instantiates — what the Pascal derivation of `wasm` yields (the Bash glue instead spells the snake derivation's `<name>_` prefix).
     pub class: &'static str,
     /// The fixed stdout the drive must produce (no wasmtime snapshot possible).
     pub expect_stdout: &'static str,
@@ -151,7 +151,7 @@ pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
-    let class = lang.convert_app(&bytes, Mode::Library, case.wasm);
+    let class = lang.convert_app(&bytes, Mode::Library, &lang.module_name(case.wasm));
 
     let scratch: PathBuf = fresh_scratch_dir(&format!("{}-{}", lang.name(), case.name));
     stage_into(&apps_fixtures_dir(), &scratch, case.stage);

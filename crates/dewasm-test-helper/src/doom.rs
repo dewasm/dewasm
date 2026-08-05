@@ -86,7 +86,7 @@ pub fn frame_to_ppm(frame: &[u8], w: u32, h: u32) -> Vec<u8> {
 /// so the driving constants live in one place. Ultra-slow: heavy (ADR-53).
 pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     let bytes = read_doom_wasm();
-    let class = lang.convert_app(&bytes, Mode::Library, "doom");
+    let class = lang.convert_app(&bytes, Mode::Library, &lang.module_name("doom"));
     let glue = fill(
         glue,
         &[

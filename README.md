@@ -31,7 +31,7 @@ A WebAssembly binary can also be used as a library instead of a standalone appli
 Here, a small example [`add.wat`](examples/wat/add.wat) is converted and its `add` export is called directly from Ruby:
 
 ```console
-$ dewasm examples/wat/add.wat --target ruby --mode library -o add.rb
+$ dewasm examples/wat/add.wat --target ruby --mode library --module-name Add -o add.rb
 ```
 
 ```ruby
@@ -87,8 +87,9 @@ $ dewasm input.<wasm|wat>
 - `--output` (or `-o`) sets the output file (default: `-`).
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
 
-Note that `dewasm` has additional command-line options such as `--module-name`.
-Please see `dewasm --help` for the full list.
+- `--module-name` names the generated class/package and is required in library mode (standalone output has a fixed internal name and rejects it).
+
+Please see `dewasm --help` for the full list of options.
 
 ## Copyright
 

@@ -29,7 +29,7 @@ struct Cli {
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Name used for the generated class/module (defaults to the input file stem)
+    /// Library-mode name of the generated class/module/package, used verbatim and rejected if it does not fit the target language's grammar. Required for --mode library; incompatible with --mode standalone, whose internal name is fixed.
     #[arg(long)]
     module_name: Option<String>,
 
@@ -66,6 +66,10 @@ fn main() -> Result<()> {
     };
     if cli.no_default_wasi && mode == Mode::Standalone {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
+    }
+    // A standalone artifact is a self-contained program; its internal class/package/prefix name is not part of any interface, so it is fixed per backend and naming it is a mistake worth reporting rather than ignoring (ADR-63).
+    if cli.module_name.is_some() && mode == Mode::Standalone {
+        bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
     // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
@@ -105,12 +109,14 @@ fn main() -> Result<()> {
         None => None,
     };
 
-    let module_name = cli.module_name.unwrap_or_else(|| {
-        cli.input
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "module".to_string())
-    });
+    // Library mode requires an explicit name (ADR-63): deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed. Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
+    let module_name = match (mode, cli.module_name) {
+        (Mode::Standalone, _) => "program".to_string(),
+        (Mode::Library, Some(name)) => name,
+        (Mode::Library, None) => {
+            bail!("library mode requires --module-name (the class/package name the output defines)")
+        }
+    };
 
     let input = std::fs::read(&cli.input)
         .with_context(|| format!("failed to read {}", cli.input.display()))?;

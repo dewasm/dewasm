@@ -33,8 +33,8 @@ pub use apps_fs::{
     SQLITE3_SHELL_DBFILE,
 };
 pub use backend::{
-    run_command, run_command_bytes, run_script, run_script_bytes, write_temp_script,
-    BackendUnderTest,
+    derive_module_name, module_name_style, run_command, run_command_bytes, run_script,
+    run_script_bytes, write_temp_script, BackendUnderTest, ModuleNameStyle,
 };
 pub use doom::{
     doom_frame_snapshot_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case,

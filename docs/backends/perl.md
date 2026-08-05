@@ -4,7 +4,9 @@
 
 ## Output shape
 
-A single `.pl` file: the generated module as a `package` named after the input stem (override with `--module-name`), instances as blessed hashrefs (`Package->new(\%imports)`), with the runtime bundled in package namespaces under the generated package (`Package::Rt`, `Package::Rt::Memory`, ... — perl package names are absolute, so the embedded runtime is prefixed rather than lexically nested). Control flow lowers to perl's native labeled blocks and loops: every `br` is a direct `last Ln`/`next Ln`, with no flag-variable scheme. See [ADR-55](../adr/55-perl-backend-lowering.md).
+A single `.pl` file: the generated module as a `package`, instances as blessed hashrefs (`Package->new(\%imports)`), with the runtime bundled in package namespaces under the generated package (`Package::Rt`, `Package::Rt::Memory`, ... — perl package names are absolute, so the embedded runtime is prefixed rather than lexically nested). Control flow lowers to perl's native labeled blocks and loops: every `br` is a direct `last Ln`/`next Ln`, with no flag-variable scheme. See [ADR-55](../adr/55-perl-backend-lowering.md).
+
+In **library** mode the package name is `--module-name` (required in library mode) taken verbatim: `::`-separated segments each matching `[A-Za-z_][A-Za-z0-9_]*`, so `Dewasm::Sqlite3` nests as you would expect (and carries the runtime with it, `Dewasm::Sqlite3::Rt`). Anything else is a conversion-time error, nothing is sanitized ([ADR-63](../adr/63-module-name-policy.md)). In **standalone** mode the package is always `Program` and `--module-name` is rejected.
 
 ## Requirements
 

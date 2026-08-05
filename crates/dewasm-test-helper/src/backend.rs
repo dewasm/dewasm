@@ -7,11 +7,60 @@ use dewasm_backend::{Backend, Mode};
 
 use crate::pty::PtyCommand;
 
+/// How a backend spells a module name (ADR-63): the two shapes the product grammars ask for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ModuleNameStyle {
+    /// `sqlite3-shell` -> `Sqlite3Shell`. Ruby needs the leading capital; Python, Perl and Java accept it and read conventionally with it. Go too: it derives *both* names from this one (package `sqlite3shell`, type `Sqlite3Shell`), and only a Pascal input yields a conventional pair.
+    Pascal,
+    /// `sqlite3-shell` -> `sqlite3_shell`. Bash only, whose prefix is the name lowercased: the underscores are what keep the prefix readable (`sqlite3_shell_`), and its glue constants already spell it that way.
+    Snake,
+}
+
+/// Turn a kebab-case test-world name into a module name valid for `style` (ADR-63). Test and tooling names are kebab/stem case (`sqlite3-shell`, `ruby-packed`, `prog`); the product refuses to guess what such a name should become, so the test side converts explicitly. Total on the documented input domain `[a-z0-9]+(-[a-z0-9]+)*`; a name outside it panics rather than producing something the backend would then reject with a confusing message.
+///
+/// This lives in the test helper on purpose: it is test infrastructure, not a product surface. Nothing in `crates/dewasm-backend*` or the CLI performs any name transformation.
+pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
+    assert!(
+        !kebab.is_empty()
+            && kebab.split('-').all(|seg| {
+                !seg.is_empty()
+                    && seg
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            }),
+        "test module names are kebab-case ([a-z0-9]+(-[a-z0-9]+)*), got {kebab:?}"
+    );
+    match style {
+        ModuleNameStyle::Pascal => kebab
+            .split('-')
+            .map(|seg| {
+                let mut chars = seg.chars();
+                let first = chars.next().expect("no segment is empty");
+                first.to_ascii_uppercase().to_string() + chars.as_str()
+            })
+            .collect(),
+        ModuleNameStyle::Snake => kebab.replace('-', "_"),
+    }
+}
+
+/// The style each backend's grammar wants (ADR-63), keyed by [`Backend::name`] so a backend gets the right one without restating it in every `BackendUnderTest` impl. Bash is the lone snake case; everything else — including Go, which builds its package *and* type name out of this one string — reads best from Pascal. Unknown names (the wasmtime stand-in, which never generates) take the majority style.
+pub fn module_name_style(backend: &str) -> ModuleNameStyle {
+    match backend {
+        "bash" => ModuleNameStyle::Snake,
+        _ => ModuleNameStyle::Pascal,
+    }
+}
+
 /// A target backend wired into the shared case tables and the spec harness. The spec layer ([`crate::SpecBackend`]) extends this with the script-phrasing surface; everything a backend needs to run app/e2e suites is here.
 pub trait BackendUnderTest: Sync {
     fn name(&self) -> &'static str;
     /// The backend itself. `+ Sync` so app conversion can run on a scoped worker thread (`convert_on_big_stack`).
     fn backend(&self) -> &'static (dyn Backend + Sync);
+
+    /// The library-mode module name this backend should be handed for the kebab-case test name `kebab` (ADR-63). The default routes [`Backend::name`] through [`module_name_style`]; a backend overrides only if its grammar wants something else.
+    fn module_name(&self, kebab: &str) -> String {
+        derive_module_name(module_name_style(self.backend().name()), kebab)
+    }
 
     /// Interpreter used by `run`'s default implementation. Per ADR-15 a missing interpreter must panic (fail loud), never skip. Compiled backends override `run` directly and need not implement this.
     fn interpreter(&self) -> PathBuf {
@@ -193,4 +242,40 @@ pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
     ));
     std::fs::write(&path, script).unwrap();
     path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{derive_module_name, module_name_style, ModuleNameStyle};
+
+    /// The derivation reproduces exactly the names the deleted per-backend sanitizers produced for these inputs, which is what lets the glue consts stay untouched (ADR-63).
+    #[test]
+    fn kebab_derivation_matches_the_names_the_glue_consts_spell() {
+        for (kebab, pascal, snake) in [
+            ("add", "Add", "add"),
+            ("prog", "Prog", "prog"),
+            ("sqlite3-shell", "Sqlite3Shell", "sqlite3_shell"),
+            ("sqlite3-binding", "Sqlite3Binding", "sqlite3_binding"),
+            ("ruby-packed", "RubyPacked", "ruby_packed"),
+            ("libsqlite3", "Libsqlite3", "libsqlite3"),
+        ] {
+            assert_eq!(derive_module_name(ModuleNameStyle::Pascal, kebab), pascal);
+            assert_eq!(derive_module_name(ModuleNameStyle::Snake, kebab), snake);
+        }
+    }
+
+    #[test]
+    fn styles_are_keyed_by_backend_name() {
+        for backend in ["ruby", "python", "perl", "java", "go"] {
+            assert_eq!(module_name_style(backend), ModuleNameStyle::Pascal);
+        }
+        assert_eq!(module_name_style("bash"), ModuleNameStyle::Snake);
+    }
+
+    /// A name outside the documented kebab domain is a bug in the case table, not something to reshape.
+    #[test]
+    #[should_panic(expected = "kebab-case")]
+    fn a_non_kebab_name_panics() {
+        derive_module_name(ModuleNameStyle::Pascal, "Sqlite3Shell");
+    }
 }
