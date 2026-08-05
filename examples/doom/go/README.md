@@ -1,6 +1,8 @@
 # DOOM (Go, ebiten)
 
-An interactive frontend for the DOOM shareware episode, running as pure Go code. `build.sh` fetches jacobenget/doom.wasm (checksum-pinned into the shared apps cache) and converts it to Go with dewasm (`doom_gen.go`, ~10MB, gitignored, regenerated on every build) and links it against a small host program in `main.go` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery) and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten).
+An interactive frontend for the DOOM shareware episode, running as pure Go code. `build.sh` fetches jacobenget/doom.wasm (checksum-pinned into the shared apps cache) and converts it to Go with dewasm (`doom/doom_gen.go`, ~10MB, gitignored, regenerated on every build) and links it against a small host program in `doom/host.go` that implements the module's ten host imports (console messages, save-game files, the game clock, and frame delivery) and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten).
+
+dewasm converts a module to a Go *package* named after `--module-name`, so the generated file declares `package doom` and lives in `doom/`; the frontend sits in the same directory because it reads the module's linear memory and exported globals directly, which are unexported. The command at the repository top level is two lines: import the package, call `doom.Run()`. An embedder that only calls exports needs none of this — it can import the package from anywhere.
 
 ## Run
 

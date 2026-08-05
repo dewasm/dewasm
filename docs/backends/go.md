@@ -4,11 +4,20 @@
 
 ## Output shape
 
-A single `.go` file: `package main` plus a bundled runtime referenced as `Rt.<name>` (methods on a zero-size receiver). Integers are native `uint32`/`uint64` (wrapping arithmetic makes masking free) and floats are native `float32`/`float64`, so f32 re-rounding and trap-free division need no helper. Control flow maps onto Go's labeled loops. Because unused labels and locals are Go compile errors, the backend emits them only when referenced. See [ADR-29](../adr/29-go-backend-lowering.md).
+A single `.go` file: a package clause plus a bundled runtime referenced as `Rt.<name>` (methods on a zero-size receiver). Integers are native `uint32`/`uint64` (wrapping arithmetic makes masking free) and floats are native `float32`/`float64`, so f32 re-rounding and trap-free division need no helper. Control flow maps onto Go's labeled loops. Because unused labels and locals are Go compile errors, the backend emits them only when referenced. See [ADR-29](../adr/29-go-backend-lowering.md).
+
+The package clause follows the mode:
+
+| Mode | Package | Type | Constructor |
+| --- | --- | --- | --- |
+| standalone | `main` | `Program` | `NewProgram` |
+| library | `--module-name` lowercased | `--module-name` capitalized | `New` + that type |
+
+A standalone artifact is a program, so its internal names are fixed and its bytes never depend on `--module-name`. A library artifact is a Go *package* someone imports, so the name has to be a Go identifier — `/\A[A-Za-z_][A-Za-z0-9_]*\z/`, ASCII. A name outside that grammar is rejected at conversion time, with no sanitization: `--module-name rg` gives `package rg` and type `Rg`, `--module-name my-lib` gives an error, not `Mylib`.
 
 ## Requirements
 
-`go` on `PATH` (or `$DEWASM_GO`), **1.18 or newer** (the runtime uses generics). The output is a normal Go program — `go run` or `go build` it.
+`go` on `PATH` (or `$DEWASM_GO`), **1.18 or newer** (the runtime uses generics). Standalone output is a normal Go program — `go run` or `go build` it; library output is a package to import (see below).
 
 ## Running it
 
@@ -19,16 +28,33 @@ $ go build -o prog prog.go && ./prog --dir ./data::/data arg1 arg2
 
 Standalone programs follow the shared runtime interface (argv, `--dir` preopens, env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md).
 
-Library mode: the generated file is `package main`, so add your own `func main` in the same package (the file already imports `fmt`). Constructor arguments are `(imports, argv, env, preopens)`; exports are typed callables in `Exports`:
+## Embedding a library artifact
+
+The artifact is a package. Put it in a directory named after it and import it like any other:
+
+```console
+$ mkdir add
+$ dewasm add.wasm --target go --mode library --module-name add -o add/add.go
+```
 
 ```go
+package main
+
+import (
+	"fmt"
+
+	"example.com/myapp/add"
+)
+
 func main() {
-	inst := NewAdd(nil, nil, nil, nil)
+	inst := add.NewAdd(nil, nil, nil, nil)
 	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(2, 3)) // 5
 }
 ```
 
-`proc_exit` panics with `*rtExit`; recover it if you drive `_start` yourself.
+Constructor arguments are `(imports, argv, env, preopens)`; exports are typed callables in `Exports`. `proc_exit` panics with `*rtExit`; recover it if you drive `_start` yourself.
+
+Only exported identifiers cross the package boundary — the instance type, its `Exports`, `Imports`, and the constructor. Reaching further (the linear memory behind `inst.memory.data`, an exported global's `*global[uint32]`) means writing host code *inside* the package: add another `.go` file next to the generated one, declaring the same package. `examples/doom/go` is that shape — `doom/doom_gen.go` generated, `doom/host.go` hand-written, and a two-line `main.go` importing the package. Such a file cannot be *appended* to the generated file itself, because Go requires every `import` to precede all other declarations; the generated file imports `fmt` up front so short appended snippets can at least print.
 
 ## Capabilities
 
@@ -36,7 +62,7 @@ Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 includ
 
 ## Providers and library usage
 
-Any unprovided WASI import falls back to a bundled WASI, which is built the first time an import actually falls back to it — cover every WASI import and none is ever constructed. Override imports by passing an `Imports` map (`map[module]source`) to the constructor; preopen directories via the fourth constructor argument. A source is either a `map[string]any` of name → value, or an object implementing `ImportProvider` (`WasmImport(name string) any`) that resolves names itself, optionally also `ImportAttacher` (`Attach(instance any)`), which the constructor calls once the instance is fully built so the provider can reach its memory. The e2e override and custom-provider glues in `crates/dewasm-backend-go/tests/e2e.rs`:
+Any unprovided WASI import falls back to a bundled WASI, which is built the first time an import actually falls back to it — cover every WASI import and none is ever constructed. Override imports by passing an `Imports` map (`map[module]source`) to the constructor; preopen directories via the fourth constructor argument. A source is either a `map[string]any` of name → value, or an object implementing `ImportProvider` (`WasmImport(name string) any`) that resolves names itself, optionally also `ImportAttacher` (`Attach(instance any)`), which the constructor calls once the instance is fully built so the provider can reach its memory. The e2e override and custom-provider glues in `crates/dewasm-backend-go/tests/e2e.rs` — written from inside the artifact's package, so unqualified; from another package, prefix the constructor with the package name:
 
 ```go
 inst = NewProg(Imports{"wasi_snapshot_preview1": map[string]any{"fd_write": fdWrite}}, nil, nil, nil)

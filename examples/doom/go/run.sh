@@ -5,4 +5,4 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ./build.sh
-exec ./doom "$@"
+exec ./bin/doom "$@"
