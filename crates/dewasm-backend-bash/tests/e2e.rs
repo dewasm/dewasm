@@ -87,6 +87,65 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
+/// The `custom_wasi_provider` glue: a provider *prefix* replaces the bundled WASI wholesale — `PROVIDERS[wasi_snapshot_preview1]` points at `my_`, whose `my_EXPORTS` map covers both imports (the bash shape of a provider object, ADR-35), so no import falls back and `<p>init` never builds the bundled WASI's prefix-scoped state. The probe is a real existence test on one of those variables (`declare -p prog_wfds`), the bash counterpart of Ruby's `@wasi.nil?`.
+const BASH_CUSTOM_PROVIDER_GLUE: &str = r#"my_fd_write() {
+  # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
+  mem_i32_load prog_ "$2" || return $?
+  local ptr=$R0
+  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  local len=$R0
+  local -n mem=prog_mem
+  local out='' chunk bytes=() j k
+  for (( j = 0; j < len; j++ )); do
+    k=$(( ptr + j ))
+    bytes+=("$(( mem[$k] ))")
+  done
+  printf -v chunk '\\x%02x' "${bytes[@]}"
+  out+=$chunk
+  printf "$out"
+  mem_i32_store prog_ "$4" "$len" || return $?
+  R0=0
+  return 0
+}
+my_random_get() {
+  R0=0
+  return 0
+}
+declare -A my_EXPORTS=([fd_write]=my_fd_write [random_get]=my_random_get)
+declare -A PROVIDERS=([wasi_snapshot_preview1]=my_)
+prog_init || { echo "init failed" >&2; exit 1; }
+prog_invoke '_start'
+if declare -p prog_wfds &>/dev/null; then built=true; else built=false; fi
+echo "bundled wasi constructed: $built"
+"#;
+
+/// The `partial_override_falls_back_to_bundled_wasi` glue: `BASH_OVERRIDE_GLUE` (fd_write intercepted through IMPORTS, random_get falling back) plus the same probe, which now finds the state — `<p>init` builds it for that one fallback.
+const BASH_PARTIAL_OVERRIDE_GLUE: &str = r#"my_fd_write() {
+  # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
+  mem_i32_load prog_ "$2" || return $?
+  local ptr=$R0
+  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  local len=$R0
+  local -n mem=prog_mem
+  local out='' chunk bytes=() j k
+  for (( j = 0; j < len; j++ )); do
+    k=$(( ptr + j ))
+    bytes+=("$(( mem[$k] ))")
+  done
+  printf -v chunk '\\x%02x' "${bytes[@]}"
+  out+=$chunk
+  printf "$out"
+  mem_i32_store prog_ "$4" "$len" || return $?
+  R0=0
+  return 0
+}
+declare -A IMPORTS=(['wasi_snapshot_preview1.fd_write']=my_fd_write)
+prog_init || { echo "init failed" >&2; exit 1; }
+prog_invoke '_start' # random_get falls back to the bundled WASI
+if declare -p prog_wfds &>/dev/null; then built=true; else built=false; fi
+echo "bundled wasi constructed: $built"
+"#;
+
 /// The `wasi_stdio_capture` glue: bash's embedder-controlled sink is a command substitution — run init and `_start` inside `$( … )` and the guest's fd 1 writes land in a shell variable instead of the script's stdout, the same fd-level redirect Perl's glue uses rather than an in-memory object. `$()` strips the trailing newlines, so the captured text is printed back with `%s\n` to restore the one the guest wrote. The subshell's `_start` ends in `proc_exit`, i.e. the status-133 cascade (ADR-12), which is simply not propagated: this case asserts stdout only.
 const BASH_STDIO_CAPTURE_GLUE: &str = r#"captured=$(
   prog_init || { echo "init failed" >&2; exit 1; }
@@ -590,7 +649,8 @@ exit 0
 dewasm_test_helper::library_add_e2e!(Bash, BASH_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Bash, BASH_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — both cases turn on the observable "was the bundled WASI constructed?", and Bash has no bundled-WASI object to have been constructed. Replacing WASI wholesale is not the blocker: `IMPORTS[wasi_snapshot_preview1.<name>]` overrides each function and `PROVIDERS[wasi_snapshot_preview1]` points a whole module at another prefix's export maps (ADR-35). What is missing is the *lazy* half: the WASI state is a set of prefix-scoped variables (`<p>wargs`/`<p>wfds`/`<p>wtell`/`<p>wnext`/`<p>wpush` plus `wasi_init_preopens`), initialized unconditionally by `<p>init` before any import resolves (ADR-12), so there is nothing whose absence a glue could print.
+dewasm_test_helper::custom_wasi_provider_e2e!(Bash, BASH_CUSTOM_PROVIDER_GLUE);
+dewasm_test_helper::partial_override_e2e!(Bash, BASH_PARTIAL_OVERRIDE_GLUE);
 
 dewasm_test_helper::wasi_suite!(Bash, Stdio);
 dewasm_test_helper::wasi_suite!(Bash, ArgsEnv);

@@ -399,16 +399,10 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}t{idx}ty=()"));
             w.line(format!("{p}t{idx}sz={}", table.min));
         }
-        if wasi_bundled(m, self.default_wasi) {
-            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio fds are preopened and fd_read/fd_write track per-fd offsets. wnext is the next fd; wpush is the stdin pushback buffer (a space-separated byte-ordinal list) shared by fd_read and poll_oneoff; init_preopens registers the --dir mounts and the filesystem fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
-            w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
-            w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
-            w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
-            w.line(format!("{p}wtell=([0]=0 [1]=0 [2]=0)"));
-            w.line(format!("{p}wnext=3"));
-            w.line(format!("{p}wpush=''"));
-            self.use_unit("wasi/init_preopens");
-            w.line(format!("wasi_init_preopens {p} || return 1"));
+        // The bundled WASI's state is only *needed* by an import that actually falls back to it (ADR-7): one the embedder supplied through IMPORTS/PROVIDERS never reads a `<p>w*` variable. So the import loop below records whether any fallback happened, and the state is built iff one did — the shell-variable counterpart of the other backends' lazy `@wasi ||=` construction, and the observable the `custom_wasi_provider`/`partial_override` cases turn on. Still eager within `<p>init`: nothing is deferred to the first syscall, so ADR-34's preopen validation keeps failing instantiation rather than a later call.
+        let wasi_state = wasi_bundled(m, self.default_wasi);
+        if wasi_state {
+            w.line("local __wasi_fb=0");
         }
         for (i, import) in m.imported_funcs.iter().enumerate() {
             self.use_unit("rt/resolve_import");
@@ -422,7 +416,7 @@ impl<'a> Gen<'a> {
                 if bundler().has_unit(&unit) {
                     self.use_unit(&unit);
                     w.line(format!(
-                        "[[ -n ${p}if{i} ]] || {p}if{i}={p}wasi_{}",
+                        "[[ -n ${p}if{i} ]] || {{ {p}if{i}={p}wasi_{}; __wasi_fb=1; }}",
                         import.name
                     ));
                 } else {
@@ -436,6 +430,21 @@ impl<'a> Gen<'a> {
                     "[[ -n ${p}if{i} ]] || {{ rt_link_err {msg}; return $?; }}"
                 ));
             }
+        }
+        if wasi_state {
+            // Callers set the WASI_ARGS/WASI_ENV/WASI_DIRS arrays before init (the bash analogue of Ruby's args:/env:/preopens: keywords); stdio fds are preopened and fd_read/fd_write track per-fd offsets. wnext is the next fd; wpush is the stdin pushback buffer (a space-separated byte-ordinal list) shared by fd_read and poll_oneoff; init_preopens registers the --dir mounts and the filesystem fd-table arrays, failing init loudly on an unresolvable host (ADR-34).
+            w.line("if (( __wasi_fb )); then");
+            w.indent();
+            w.line(format!("{p}wargs=(\"${{WASI_ARGS[@]}}\")"));
+            w.line(format!("{p}wenv=(\"${{WASI_ENV[@]}}\")"));
+            w.line(format!("{p}wfds=([0]=1 [1]=1 [2]=1)"));
+            w.line(format!("{p}wtell=([0]=0 [1]=0 [2]=0)"));
+            w.line(format!("{p}wnext=3"));
+            w.line(format!("{p}wpush=''"));
+            self.use_unit("wasi/init_preopens");
+            w.line(format!("wasi_init_preopens {p} || return 1"));
+            w.dedent();
+            w.line("fi");
         }
         // Imported globals: resolve the provider's cell and alias it in under the unified index with a `declare -gn` nameref, so reads (`(( x = <p>g<i> ))`), mutable writes (`(( <p>g<i> = v ))`), and init-expr `global.get` offsets all reach the shared cell (ADR-35).
         for (i, import) in m.imported_globals.iter().enumerate() {

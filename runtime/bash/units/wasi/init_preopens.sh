@@ -5,8 +5,10 @@
 # physically via `cd -P` (a non-directory host through its parent), and a host
 # path that does not exist is a loud init failure (nonzero return, so <p>init
 # fails). Dir fds start at 3 (past stdio) and <p>wnext is left pointing past
-# the last one. Always called from <p>init when WASI is bundled; an
-# unset/empty WASI_DIRS just initializes the arrays.
+# the last one. Called from <p>init whenever at least one WASI import actually
+# fell back to a bundled unit (an embedder that supplied them all through
+# IMPORTS/PROVIDERS never gets this state); an unset/empty WASI_DIRS just
+# initializes the arrays.
 #
 # Per-fd rights (ADR-40): <p>wrbase / <p>wrinh hold the u64 rights masks a fd
 # exposes through fd_fdstat_get and enforces on fd_read/write/seek/readdir/
