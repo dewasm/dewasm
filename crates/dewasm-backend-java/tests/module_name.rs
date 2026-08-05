@@ -39,7 +39,7 @@ fn dotted_name_emits_a_package_and_runs() {
         "{source}\npublic class Main {{\n    \
          public static void main(String[] a) {{\n        \
          Add inst = new Add(null, null, null, null);\n        \
-         System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get(\"add\")).invoke(new Object[]{{2, 3}}));\n    \
+         System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get(\"add\")).invoke(new Object[]{{2, 3}}));\n    \
          }}\n}}\n"
     );
 

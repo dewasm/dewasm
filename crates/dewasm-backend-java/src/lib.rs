@@ -1,11 +1,11 @@
-//! Java backend: translates dewasm IR into a single self-contained `.java` source file (a set of package-private runtime classes plus the generated module class), compiled with `javac` and run on the JVM.
+//! Java backend: translates dewasm IR into a single self-contained `.java` source file (one package-private module class carrying the runtime as `static` nested classes), compiled with `javac` and run on the JVM.
 //!
 //! Lowering conventions (ADR-30; numeric conventions ADR-2):
 //! - i32/i64 are native signed `int`/`long` treated as bit patterns; unsigned ops use `Integer.*`/`Long.*` (`divideUnsigned`, `compareUnsigned`, ...). f32/f64 are native `float`/`double` (Java is strict IEEE, no FMA contraction, so f32 re-rounding and trap-free division need no helper). NaN bit paths go through `Float.floatToRawIntBits`/`intBitsToFloat` etc.
 //! - Control flow uses the per-function branch register `_br` (ADR-28's Python model, depth-insensitive and — crucially — splittable across methods): block/if exits and the function return set `_br`; following siblings are guarded by `if (_br == 0)`; only real loops become `while (true)`. This avoids Java's "unreachable statement" error entirely (no bare mid-sequence `return`/`break`), and makes the split below mechanical.
 //! - The JVM caps a method at 64KB of bytecode. A function whose estimated size crosses a threshold is emitted with its locals/temps/`br`/`ret` hoisted to a per-call **frame object** and its body split into numbered `part` methods sharing that frame; because control flow is data (`_br`), the parts are just called in order. Data segments that exceed the 64KB string-literal limit are emitted as chunked Base64 (`Rt.data_from_b64`).
 //!
-//! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` / `Memory` / `Table` / `WASI`.
+//! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` / `Memory` / `Table` / `WASI`. In self-contained output those classes are nested in the module class, so two artifacts coexist in one package (ADR-62); the shared-runtime path the spec harness drives keeps them top-level.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap};
@@ -48,49 +48,62 @@ const FN_PER_PARTITION: usize = 1500;
 /// A branch-register sentinel for "return from the function", distinct from any real label id (which are small). Emitted as `-1`.
 const RETURN_SENTINEL: u32 = u32::MAX;
 
-/// The runtime unit bundler for Java (see runtime/java/units/). Each scope is a top-level package-private class wrapping its unit bodies (methods / nested types); generated code refers to them as `Rt.*` / `Memory` / `Table` / `WASI` (ADR-30).
+/// The runtime unit bundler for Java (see runtime/java/units/). Each scope is a *top-level* package-private class wrapping its unit bodies (methods / nested types); generated code refers to them as `Rt.*` / `Memory` / `Table` / `WASI` (ADR-30). This is the shared-runtime shape: the spec harness bundles one runtime for all the modules of a `.wast` file, and the multi-module shared-runtime composition does the same. Self-contained `Embedded` output uses [`nested_bundler`] instead.
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
-    BUNDLER.get_or_init(|| {
-        RuntimeBundler::new(
-            "//",
-            "    ",
-            vec![
-                RuntimeScope {
-                    prefix: "rt",
-                    open: "final class Rt {",
-                    close: "}",
-                    prelude: Some("rt/_prelude"),
-                },
-                RuntimeScope {
-                    prefix: "memory",
-                    open: "final class Memory {",
-                    close: "}",
-                    prelude: Some("memory/_class"),
-                },
-                RuntimeScope {
-                    prefix: "table",
-                    open: "final class Table {",
-                    close: "}",
-                    prelude: Some("table/_class"),
-                },
-                RuntimeScope {
-                    prefix: "global",
-                    open: "final class Global {",
-                    close: "}",
-                    prelude: Some("global/_class"),
-                },
-                RuntimeScope {
-                    prefix: "wasi",
-                    open: "final class WASI {",
-                    close: "}",
-                    prelude: Some("wasi/_class"),
-                },
-            ],
-            UNIT_SOURCES,
-        )
-        .expect("runtime units are well-formed")
+    BUNDLER.get_or_init(|| runtime_bundler(false))
+}
+
+/// The bundler behind `Backend::generate`'s `Embedded` output: the same units under the same simple names, wrapped as `static` **nested** classes so they belong to the generated module class (ADR-62). Java resolves a simple name through enclosing class scopes, so every `Rt.trap(...)` / `new Memory(...)` inside the module class — units included — reads exactly as it did when the classes were top-level; only an *outside* reference has to spell the module class (`Program.Rt.Fn`). Two independently generated artifacts can then sit in one package without their runtimes colliding.
+fn nested_bundler() -> &'static RuntimeBundler {
+    static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
+    BUNDLER.get_or_init(|| runtime_bundler(true))
+}
+
+/// Build the bundler for either placement. The two differ only in each scope's `open` line — `static` is what a nested class needs and what a top-level one may not have — so the scope list is written once.
+fn runtime_bundler(nested: bool) -> RuntimeBundler {
+    // `open` is `&'static str`, so both spellings of each scope's class header are written out rather than formatted.
+    let scopes = [
+        (
+            "rt",
+            "final class Rt {",
+            "static final class Rt {",
+            "rt/_prelude",
+        ),
+        (
+            "memory",
+            "final class Memory {",
+            "static final class Memory {",
+            "memory/_class",
+        ),
+        (
+            "table",
+            "final class Table {",
+            "static final class Table {",
+            "table/_class",
+        ),
+        (
+            "global",
+            "final class Global {",
+            "static final class Global {",
+            "global/_class",
+        ),
+        (
+            "wasi",
+            "final class WASI {",
+            "static final class WASI {",
+            "wasi/_class",
+        ),
+    ]
+    .iter()
+    .map(|(prefix, flat, nested_open, prelude)| RuntimeScope {
+        prefix,
+        open: if nested { nested_open } else { flat },
+        close: "}",
+        prelude: Some(prelude),
     })
+    .collect();
+    RuntimeBundler::new("//", "    ", scopes, UNIT_SOURCES).expect("runtime units are well-formed")
 }
 
 /// Locate a `java` launcher (ADR-15: a missing toolchain is a loud failure at the call site, not here). Honors `$DEWASM_JAVA`, then `java` on `PATH`.
@@ -324,16 +337,17 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     }
 
     let uses = gen.uses.borrow().clone();
-    let bundle = bundler().bundle(&uses, 0)?;
+    // The runtime lives *inside* the module class (ADR-62): two artifacts dropped into one package then own their runtime classes — trap type above all — instead of one silently winning. Nothing inside the class changes, since Java resolves `Rt`/`Memory`/`Table`/`WASI` through the enclosing scope.
+    let bundle = nested_bundler().bundle(&uses, 1)?;
 
     let mut out = String::from("// Generated by dewasm. Do not edit.\n");
-    // The package declaration must precede every type in the compilation unit — including the bundled runtime classes, which share this one file (ADR-30) and therefore this package (ADR-63).
+    // The package declaration must precede every type in the compilation unit (ADR-63).
     if let Some(package) = &package {
         out.push_str(&format!("package {package};\n\n"));
     }
-    out.push_str(&bundle);
-    out.push_str("\n\n");
     out.push_str(&format!("final class {type_name} {{\n"));
+    out.push_str(&bundle);
+    out.push('\n');
     out.push_str(&reindent(&body.finish(), 1));
     out.push_str("}\n");
     if standalone {
@@ -420,7 +434,9 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     out.push_str("        Throwable[] failure = new Throwable[1];\n");
     out.push_str("        Runnable guestRun = () -> {\n");
     out.push_str("            try {\n");
-    out.push_str("                ((Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{});\n");
+    out.push_str(&format!(
+        "                (({type_name}.Rt.Fn) p.Exports.get(\"_start\")).invoke(new Object[]{{}});\n"
+    ));
     out.push_str("            } catch (Throwable e) {\n");
     out.push_str("                failure[0] = e;\n");
     out.push_str("            }\n");
@@ -432,9 +448,15 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     out.push_str("        } catch (InterruptedException e) {\n");
     out.push_str("            Thread.currentThread().interrupt();\n");
     out.push_str("        }\n");
-    out.push_str("        if (failure[0] instanceof Rt.Exit) {\n");
-    out.push_str("            System.exit(((Rt.Exit) failure[0]).code);\n");
-    out.push_str("        } else if (failure[0] instanceof Rt.Trap) {\n");
+    out.push_str(&format!(
+        "        if (failure[0] instanceof {type_name}.Rt.Exit) {{\n"
+    ));
+    out.push_str(&format!(
+        "            System.exit((({type_name}.Rt.Exit) failure[0]).code);\n"
+    ));
+    out.push_str(&format!(
+        "        }} else if (failure[0] instanceof {type_name}.Rt.Trap) {{\n"
+    ));
     out.push_str("            System.err.print(\"trap: \" + failure[0].getMessage() + \"\\n\");\n");
     out.push_str("            System.err.flush();\n");
     out.push_str("            System.exit(134);\n");

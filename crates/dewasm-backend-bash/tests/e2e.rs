@@ -1,7 +1,7 @@
 //! Bash end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Bash backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Glue is Bash function calls over the R0.. result globals (ADR-11) and the `${prefix}mem` byte array — enough to drive the C-API cases as well; what Bash drops is only what needs a host-language *object* model (a WASI provider object and its lazy construction) and the flat-namespace multi-module limit (ADR-35).
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use dewasm_backend::Backend;
 use dewasm_backend_bash::{find_bash5, BashBackend};
@@ -22,14 +22,24 @@ impl BackendUnderTest for Bash {
         find_bash5().expect("bash >= 5 not found — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules for the multi-module cases (ADR-35). Bash has no namespacing at all — every generated module is already a bare, prefix-scoped family of global functions/arrays sharing one flat process, so there is no separate "shared runtime" linkage to build: generate each module (`generate_module_with_units`, prefixed by its name via `func_prefix`), union the runtime units they reference, bundle that union once, and concatenate the bundle with the module bodies. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Bash: there is only ever one flat namespace, so two independent runtimes cannot coexist without their `rt_*`/`mem_*` function names colliding (`embedded_coexist_e2e!` is not invoked).
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.sh` file and return the `source` preamble that loads them (absolute paths, so the driver does not depend on where it is run from). Bash has no namespacing at all — every generated module is already a bare, prefix-scoped family of global functions/arrays sharing one flat process, so there is no separate "shared runtime" linkage to build: generate each module (`generate_module_with_units`, prefixed by its name via `func_prefix`), union the runtime units they reference, and bundle that union once into `rt.sh`. Sourcing only defines functions, so the order that matters is just runtime-before-init, which the preamble's order gives. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Bash: there is only ever one flat namespace, so two independent runtimes cannot coexist without their `rt_*`/`mem_*` function names colliding (`embedded_coexist_e2e!` is not invoked).
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
         assert!(
             shared_runtime,
             "bash multi-module: shared_runtime=false is excluded — bash has one \
              flat global namespace, so two independent runtimes cannot coexist \
              without their rt_*/mem_* names colliding (ADR-11/ADR-35)"
         );
+        let write = |stem: &str, src: String| -> String {
+            let path = dir.join(format!("{stem}.sh"));
+            std::fs::write(&path, src).unwrap();
+            format!("source '{}'", path.display())
+        };
         let mut units = BTreeSet::new();
         let mut decls = Vec::new();
         for (wat, name) in modules {
@@ -40,13 +50,16 @@ impl BackendUnderTest for Bash {
             let (src, u) = dewasm_backend_bash::generate_module_with_units(&module, &prefix, false)
                 .expect("generate");
             units.extend(u);
-            decls.push(src);
+            decls.push((name.to_lowercase(), src));
         }
-        format!(
-            "{}\n{}",
+        let mut sources = vec![write(
+            "rt",
             dewasm_backend_bash::shared_runtime(&units).expect("bundle runtime"),
-            decls.join("\n")
-        )
+        )];
+        for (stem, src) in decls {
+            sources.push(write(&stem, src));
+        }
+        sources.join("\n")
     }
 }
 

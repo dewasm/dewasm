@@ -1,5 +1,5 @@
 // DOOM frontend for the dewasm-generated Doom.java library (default package,
-// same as Doom.java, so the Memory/Global/Rt/Doom classes are reachable
+// same as Doom.java, so Doom and its nested Doom.Rt/Doom.Global classes are reachable
 // without an import). Two entry points share one engine: an interactive
 // Swing window (default) and a headless smoke test (`--smoke`) that never
 // touches java.awt.event/javax.swing so it can run without a display.
@@ -292,10 +292,10 @@ public class Main {
     // path and real callbacks in the GUI path.
     private static final class DoomEngine {
         final Doom doom;
-        final Rt.Fn initGameFn;
-        final Rt.Fn tickGameFn;
-        final Rt.Fn reportKeyDownFn;
-        final Rt.Fn reportKeyUpFn;
+        final Doom.Rt.Fn initGameFn;
+        final Doom.Rt.Fn tickGameFn;
+        final Doom.Rt.Fn reportKeyDownFn;
+        final Doom.Rt.Fn reportKeyUpFn;
         final Map<String, Integer> keyMap = new HashMap<>();
         final ConcurrentLinkedQueue<int[]> keyEvents = new ConcurrentLinkedQueue<>();
         final long startNanos = System.nanoTime();
@@ -312,21 +312,21 @@ public class Main {
             Files.createDirectories(Path.of(".savegame"));
 
             // Doom's constructor resolves imports eagerly but never invokes them, so
-            // this holder lets the Rt.Fn lambdas below close over the instance that
+            // this holder lets the Doom.Rt.Fn lambdas below close over the instance that
             // doesn't exist yet; it's filled in immediately after construction and
             // read only from within tick()/init(), never during the constructor.
             Doom[] holder = new Doom[1];
 
-            Rt.Fn onErrorMessage = a -> {
+            Doom.Rt.Fn onErrorMessage = a -> {
                 logMessage(holder[0], (Integer) a[0], (Integer) a[1], System.err);
                 return null;
             };
-            Rt.Fn onInfoMessage = a -> {
+            Doom.Rt.Fn onInfoMessage = a -> {
                 logMessage(holder[0], (Integer) a[0], (Integer) a[1], System.out);
                 return null;
             };
-            Rt.Fn sizeOfSaveGame = a -> (int) saveFile((Integer) a[0]).length();
-            Rt.Fn readSaveGame = a -> {
+            Doom.Rt.Fn sizeOfSaveGame = a -> (int) saveFile((Integer) a[0]).length();
+            Doom.Rt.Fn readSaveGame = a -> {
                 int id = (Integer) a[0];
                 int dstOff = (Integer) a[1];
                 File f = saveFile(id);
@@ -342,7 +342,7 @@ public class Main {
                 holder[0].memory.init(Integer.toUnsignedLong(dstOff), bytes, 0, bytes.length);
                 return bytes.length;
             };
-            Rt.Fn writeSaveGame = a -> {
+            Doom.Rt.Fn writeSaveGame = a -> {
                 int id = (Integer) a[0];
                 int srcOff = (Integer) a[1];
                 int length = (Integer) a[2];
@@ -355,8 +355,8 @@ public class Main {
                 }
                 return length;
             };
-            Rt.Fn timeInMilliseconds = a -> (System.nanoTime() - startNanos) / 1_000_000L;
-            Rt.Fn drawFrame = a -> {
+            Doom.Rt.Fn timeInMilliseconds = a -> (System.nanoTime() - startNanos) / 1_000_000L;
+            Doom.Rt.Fn drawFrame = a -> {
                 int bufOff = (Integer) a[0];
                 int[] pixels = ((DataBufferInt) frame.getRaster().getDataBuffer()).getData();
                 ByteBuffer.wrap(holder[0].memory.d, bufOff, width * height * 4)
@@ -368,7 +368,7 @@ public class Main {
                 }
                 return null;
             };
-            Rt.Fn onGameInit = a -> {
+            Doom.Rt.Fn onGameInit = a -> {
                 width = (Integer) a[0];
                 height = (Integer) a[1];
                 // TYPE_INT_RGB, not ARGB: the wasm framebuffer's top byte is not
@@ -380,8 +380,8 @@ public class Main {
                 }
                 return null;
             };
-            Rt.Fn wadSizes = a -> null; // leave the pre-zeroed count/size in place: selects the embedded shareware WAD.
-            Rt.Fn readWads = a -> null; // never called when wadSizes leaves the count at 0.
+            Doom.Rt.Fn wadSizes = a -> null; // leave the pre-zeroed count/size in place: selects the embedded shareware WAD.
+            Doom.Rt.Fn readWads = a -> null; // never called when wadSizes leaves the count at 0.
 
             Map<String, Map<String, Object>> imports = new HashMap<>();
             imports.computeIfAbsent("console", k -> new HashMap<>()).put("onErrorMessage", onErrorMessage);
@@ -401,17 +401,17 @@ public class Main {
             this.doom = new Doom(imports, null, null, null);
             holder[0] = doom;
 
-            this.initGameFn = (Rt.Fn) doom.Exports.get("initGame");
-            this.tickGameFn = (Rt.Fn) doom.Exports.get("tickGame");
-            this.reportKeyDownFn = (Rt.Fn) doom.Exports.get("reportKeyDown");
-            this.reportKeyUpFn = (Rt.Fn) doom.Exports.get("reportKeyUp");
+            this.initGameFn = (Doom.Rt.Fn) doom.Exports.get("initGame");
+            this.tickGameFn = (Doom.Rt.Fn) doom.Exports.get("tickGame");
+            this.reportKeyDownFn = (Doom.Rt.Fn) doom.Exports.get("reportKeyDown");
+            this.reportKeyUpFn = (Doom.Rt.Fn) doom.Exports.get("reportKeyUp");
 
             for (String name : new String[] {
                 "KEY_LEFTARROW", "KEY_RIGHTARROW", "KEY_UPARROW", "KEY_DOWNARROW",
                 "KEY_STRAFE_L", "KEY_STRAFE_R", "KEY_FIRE", "KEY_USE", "KEY_SHIFT",
                 "KEY_TAB", "KEY_ESCAPE", "KEY_ENTER", "KEY_BACKSPACE", "KEY_ALT"
             }) {
-                Global g = (Global) doom.Exports.get(name);
+                Doom.Global g = (Doom.Global) doom.Exports.get(name);
                 keyMap.put(name, (Integer) g.value);
             }
         }

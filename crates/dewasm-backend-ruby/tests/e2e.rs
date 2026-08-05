@@ -1,6 +1,6 @@
 //! Ruby end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations — every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration. The formerly Ruby-only scenarios (the ADR-7 provider model, embedded-runtime coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-filesystem internals, and the CPython/CRuby runtime demos) now run wherever a backend's declared capabilities cover them, with a REASON comment at any non-invocation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
@@ -21,8 +21,14 @@ impl BackendUnderTest for Ruby {
         find_ruby().expect("ruby not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules for the multi-module cases. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) plus one bundled runtime, so an imported table crosses modules (as the spec harness's `register` path does); otherwise it emits independent Embedded classes, each with its own nested `Rt`.
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.rb` file and return the `require_relative` preamble that loads them. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) written to `rt.rb`, so an imported table crosses modules (as the spec harness's `register` path does) — each module file requires it first, since its class body resolves `::Rt` at load time. Otherwise each file is a self-contained Embedded conversion carrying its own nested `Rt`.
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        let mut requires = Vec::new();
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
             let mut classes = Vec::new();
@@ -38,27 +44,39 @@ impl BackendUnderTest for Ruby {
                 )
                 .expect("generate");
                 units.extend(u);
-                classes.push(src);
+                classes.push((name.to_lowercase(), src));
             }
-            format!(
-                "{}\n{}",
+            std::fs::write(
+                dir.join("rt.rb"),
                 dewasm_backend_ruby::shared_runtime(&units).expect("bundle runtime"),
-                classes.join("\n")
             )
+            .unwrap();
+            requires.push("require_relative \"rt\"".to_string());
+            for (stem, src) in classes {
+                std::fs::write(
+                    dir.join(format!("{stem}.rb")),
+                    format!("require_relative \"rt\"\n\n{src}"),
+                )
+                .unwrap();
+                requires.push(format!("require_relative \"{stem}\""));
+            }
         } else {
-            modules
-                .iter()
-                .map(|(wat, name)| {
+            for (wat, name) in modules {
+                let stem = name.to_lowercase();
+                std::fs::write(
+                    dir.join(format!("{stem}.rb")),
                     dewasm_test_helper::convert(
                         &RubyBackend,
                         &dewasm_test_helper::examples_dir().join(wat),
                         Mode::Library,
                         name,
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+                    ),
+                )
+                .unwrap();
+                requires.push(format!("require_relative \"{stem}\""));
+            }
         }
+        requires.join("\n")
     }
 }
 

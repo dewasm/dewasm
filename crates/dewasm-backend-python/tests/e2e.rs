@@ -1,6 +1,6 @@
 //! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Python backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem (ADR-28), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use dewasm_backend::{Backend, Mode, RuntimeLinkage};
 use dewasm_backend_python::{find_python, PythonBackend};
@@ -21,8 +21,14 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates full Embedded conversions, each carrying its own `<Class>Rt` (ADR-62). Duplicate top-level `import` lines in the concatenation are harmless in Python.
-    fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
+    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports — its class body binds `Rt` at import time — so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt` (ADR-62); the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
+    fn compose_modules(
+        &self,
+        dir: &Path,
+        modules: &[(&str, &str)],
+        shared_runtime: bool,
+    ) -> String {
+        let mut imports = Vec::new();
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
             let mut classes = Vec::new();
@@ -38,27 +44,39 @@ impl BackendUnderTest for Python {
                 )
                 .expect("generate");
                 units.extend(u);
-                classes.push(src);
+                classes.push((name.to_lowercase(), *name, src));
             }
-            format!(
-                "{}\n{}",
+            std::fs::write(
+                dir.join("rt.py"),
                 dewasm_backend_python::shared_runtime(&units).expect("bundle runtime"),
-                classes.join("\n")
             )
+            .unwrap();
+            imports.push("from rt import Rt".to_string());
+            for (stem, name, src) in classes {
+                std::fs::write(
+                    dir.join(format!("{stem}.py")),
+                    format!("from rt import Rt\n\n{src}"),
+                )
+                .unwrap();
+                imports.push(format!("from {stem} import {name}"));
+            }
         } else {
-            modules
-                .iter()
-                .map(|(wat, name)| {
+            for (wat, name) in modules {
+                let stem = name.to_lowercase();
+                std::fs::write(
+                    dir.join(format!("{stem}.py")),
                     dewasm_test_helper::convert(
                         &PythonBackend,
                         &dewasm_test_helper::examples_dir().join(wat),
                         Mode::Library,
                         name,
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+                    ),
+                )
+                .unwrap();
+                imports.push(format!("from {stem} import {name}, {name}Rt"));
+            }
         }
+        imports.join("\n")
     }
 }
 

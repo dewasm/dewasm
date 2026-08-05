@@ -1,5 +1,5 @@
 // NES frontend for the dewasm-generated Nes.java library (default package,
-// same as Nes.java, so the Memory/Rt/Nes classes are reachable without an
+// same as Nes.java, so Nes and its nested Nes.Rt/Nes.Memory classes are reachable without an
 // import). Two entry points share one engine: an interactive Swing window
 // (default) and a headless smoke test (`--smoke`) that never touches
 // java.awt.event/javax.swing so it can run without a display.
@@ -325,9 +325,9 @@ public class Main {
     // every pixel is one masked table lookup.
     private static final class NesEngine {
         final Nes nes;
-        final Memory memory;
-        final Rt.Fn setInputFn;
-        final Rt.Fn tickGameFn;
+        final Nes.Memory memory;
+        final Nes.Rt.Fn setInputFn;
+        final Nes.Rt.Fn tickGameFn;
         final int screenOff;
         final int[] palette = new int[64];
 
@@ -340,16 +340,16 @@ public class Main {
             // wasm-objdump) and no WASI imports either — null is tolerated
             // for the imports map and for args/env/preopens.
             this.nes = new Nes(null, null, null, null);
-            this.memory = (Memory) nes.Exports.get("memory");
+            this.memory = (Nes.Memory) nes.Exports.get("memory");
 
-            Rt.Fn allocRomFn = (Rt.Fn) nes.Exports.get("allocRom");
-            Rt.Fn initGameFn = (Rt.Fn) nes.Exports.get("initGame");
-            this.setInputFn = (Rt.Fn) nes.Exports.get("setInput");
-            this.tickGameFn = (Rt.Fn) nes.Exports.get("tickGame");
-            Rt.Fn screenOffsetFn = (Rt.Fn) nes.Exports.get("screenOffset");
-            Rt.Fn paletteOffsetFn = (Rt.Fn) nes.Exports.get("paletteOffset");
-            Rt.Fn frameWidthFn = (Rt.Fn) nes.Exports.get("frameWidth");
-            Rt.Fn frameHeightFn = (Rt.Fn) nes.Exports.get("frameHeight");
+            Nes.Rt.Fn allocRomFn = (Nes.Rt.Fn) nes.Exports.get("allocRom");
+            Nes.Rt.Fn initGameFn = (Nes.Rt.Fn) nes.Exports.get("initGame");
+            this.setInputFn = (Nes.Rt.Fn) nes.Exports.get("setInput");
+            this.tickGameFn = (Nes.Rt.Fn) nes.Exports.get("tickGame");
+            Nes.Rt.Fn screenOffsetFn = (Nes.Rt.Fn) nes.Exports.get("screenOffset");
+            Nes.Rt.Fn paletteOffsetFn = (Nes.Rt.Fn) nes.Exports.get("paletteOffset");
+            Nes.Rt.Fn frameWidthFn = (Nes.Rt.Fn) nes.Exports.get("frameWidth");
+            Nes.Rt.Fn frameHeightFn = (Nes.Rt.Fn) nes.Exports.get("frameHeight");
 
             int ptr = (Integer) allocRomFn.invoke(new Object[] { rom.length });
             memory.init(Integer.toUnsignedLong(ptr), rom, 0, rom.length);

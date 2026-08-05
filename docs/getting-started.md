@@ -152,14 +152,14 @@ $ go run .
 
 ### Java
 
-The generated module class is package-private, so put your `public class Main` in the *same* `.java` file (generate with `--module-name Add`, then append):
+The generated module class is package-private and carries the runtime as `static` nested classes (hence `Add.Rt.Fn`), so put your `public class Main` in the *same* `.java` file (generate with `--module-name Add`, then append):
 
 ```java
 public class Main {
     public static void main(String[] args) {
         Add inst = new Add(null, null, null, null);
-        System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{2, 3})); // 5
-        System.out.println((int)(Integer)((Rt.Fn) inst.Exports.get("fib")).invoke(new Object[]{10}));    // 55
+        System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get("add")).invoke(new Object[]{2, 3})); // 5
+        System.out.println((int)(Integer)((Add.Rt.Fn) inst.Exports.get("fib")).invoke(new Object[]{10}));    // 55
     }
 }
 ```

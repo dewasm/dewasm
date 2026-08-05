@@ -15,6 +15,8 @@ The package clause follows the mode:
 
 A standalone artifact is a program, so its internal names are fixed and its bytes never depend on `--module-name`. A library artifact is a Go *package* someone imports, so the name has to be a Go identifier — `/\A[A-Za-z_][A-Za-z0-9_]*\z/`, ASCII. A name outside that grammar is rejected at conversion time, with no sanitization: `--module-name rg` gives `package rg` and type `Rg`, `--module-name my-lib` gives an error, not `Mylib`.
 
+The package is also what isolates one artifact from another ([ADR-62](../adr/62-embedded-runtime-isolation.md)): each carries its own runtime, so two converted libraries import side by side with nothing shared between them — including their trap types, which are per-package and therefore distinguishable.
+
 ## Requirements
 
 `go` on `PATH` (or `$DEWASM_GO`), **1.18 or newer** (the runtime uses generics). Standalone output is a normal Go program — `go run` or `go build` it; library output is a package to import (see below).

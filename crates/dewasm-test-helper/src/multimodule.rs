@@ -1,4 +1,4 @@
-//! Multi-module scenarios (ADR-27): two generated modules living in one process. The *composition* — how a backend emits several modules against one runtime, or as independent self-contained ones — is backend-specific and uses each backend's own crate API, which the test-helper crate cannot depend on; it is therefore supplied via [`BackendUnderTest::compose_modules`]. The *driver* (instantiate, link, assert) is per-language glue passed to the runner as a named const. What stays shared is the case content: which fixtures, the linkage model, and the one fixed expectation each backend's driver is engineered to produce (normalized so it is identical across languages).
+//! Multi-module scenarios (ADR-27): two generated modules living in one process. Each module is written to its own file in a fresh directory and loaded the way that language loads a file — which is how an embedder holds two converted artifacts, and what makes the coexistence case mean anything (a concatenation could never show it). The *composition* — how a backend emits several modules against one runtime, or as independent self-contained ones, and what its driver preamble has to say to load them — is backend-specific and uses each backend's own crate API, which the test-helper crate cannot depend on; it is therefore supplied via [`BackendUnderTest::compose_modules`], with [`BackendUnderTest::run_in_dir`] running the result against that directory. The *driver* (instantiate, link, assert) is per-language glue passed to the runner as a named const. What stays shared is the case content: which fixtures, the linkage model, and the one fixed expectation each backend's driver is engineered to produce (normalized so it is identical across languages).
 //!
 //! Each case is a `pub const` [`MultiModuleCase`] driven by a per-case macro (`shared_table_e2e!`, `embedded_coexist_e2e!`); which backends invoke it is the capability declaration (ADR-27 revision), with a REASON comment at any non-invocation.
 
@@ -26,7 +26,7 @@ pub const SHARED_TABLE: MultiModuleCase = MultiModuleCase {
     expect: "42\n",
 };
 
-/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide. ADR-62 makes this a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Perl and Python rename the runtime per artifact. A backend that has not implemented its mechanism yet carries a non-invocation REASON comment. The driver normalizes output to `distinct-rt`/`trapped`.
+/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide. ADR-62 makes this a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Java nests its runtime classes, Perl and Python rename the runtime per artifact, Go gets it from the per-package library output. Bash, the one backend left, carries a non-invocation REASON comment (issue #141). The driver normalizes output to `distinct-rt`/`trapped`.
 pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
     name: "embedded_runtimes_coexist",
     modules: &[("div_trap.wat", "Alpha"), ("div_trap.wat", "Beta")],
@@ -34,10 +34,11 @@ pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
     expect: "3\n4294967293\ndistinct-rt\ntrapped\n",
 };
 
-/// Compose `case`'s modules with the backend, append its driver `glue`, run, and check stdout against the case's fixed expectation.
+/// Write `case`'s modules into a fresh directory with the backend, append its driver `glue` to the preamble that loads them, run from that directory, and check stdout against the case's fixed expectation.
 pub fn run_multi_module_case(lang: &dyn BackendUnderTest, case: &MultiModuleCase, glue: &str) {
-    let modules = lang.compose_modules(case.modules, case.shared_runtime);
-    let output = lang.run(&format!("{modules}\n{glue}"), &[], "");
+    let dir = crate::fresh_scratch_dir(&format!("multimodule-{}-{}", lang.name(), case.name));
+    let driver = lang.compose_modules(&dir, case.modules, case.shared_runtime);
+    let output = lang.run_in_dir(&dir, &format!("{driver}\n{glue}"));
     assert!(
         output.status.success(),
         "{} under {}: nonzero exit {}\n{}",
