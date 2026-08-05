@@ -22,24 +22,35 @@ impl BackendUnderTest for Bash {
         find_bash5().expect("bash >= 5 not found — see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own `.sh` file and return the `source` preamble that loads them (absolute paths, so the driver does not depend on where it is run from). Bash has no namespacing at all — every generated module is already a bare, prefix-scoped family of global functions/arrays sharing one flat process, so there is no separate "shared runtime" linkage to build: generate each module (`generate_module_with_units`, prefixed by its name via `func_prefix`), union the runtime units they reference, and bundle that union once into `rt.sh`. Sourcing only defines functions, so the order that matters is just runtime-before-init, which the preamble's order gives. `shared_runtime=false` (independent Embedded runtimes) is never exercised for Bash: there is only ever one flat namespace, so two independent runtimes cannot coexist without their `rt_*`/`mem_*` function names colliding (`embedded_coexist_e2e!` is not invoked).
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.sh` file and return the `source` preamble that loads them (absolute paths, so the driver does not depend on where it is run from). Sourcing only defines functions, so the only order that matters is runtime-before-init, which the preamble's order gives. `shared_runtime` builds the Alias shape: generate each module (`generate_module_with_units`, prefixed by its name via `func_prefix`) against the flat unprefixed runtime, union the units they reference, and bundle that union once into `rt.sh` — one runtime, so an imported table crosses modules. Otherwise each file is a self-contained library conversion whose runtime functions carry that artifact's own prefix (`alpha_rt_trap` beside `beta_rt_trap`, ADR-62), which is what lets two of them share the one flat shell namespace.
     fn compose_modules(
         &self,
         dir: &Path,
         modules: &[(&str, &str)],
         shared_runtime: bool,
     ) -> String {
-        assert!(
-            shared_runtime,
-            "bash multi-module: shared_runtime=false is excluded — bash has one \
-             flat global namespace, so two independent runtimes cannot coexist \
-             without their rt_*/mem_* names colliding (ADR-11/ADR-35)"
-        );
         let write = |stem: &str, src: String| -> String {
             let path = dir.join(format!("{stem}.sh"));
             std::fs::write(&path, src).unwrap();
             format!("source '{}'", path.display())
         };
+        if !shared_runtime {
+            return modules
+                .iter()
+                .map(|(wat, name)| {
+                    write(
+                        &name.to_lowercase(),
+                        dewasm_test_helper::convert(
+                            &BashBackend,
+                            &dewasm_test_helper::examples_dir().join(wat),
+                            dewasm_backend::Mode::Library,
+                            name,
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
         let mut units = BTreeSet::new();
         let mut decls = Vec::new();
         for (wat, name) in modules {
@@ -78,9 +89,9 @@ const BASH_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   # bytes the module wrote, the same observable proof of interception
   # `RUBY_OVERRIDE_GLUE` uses, via the same byte-reconstruction the
   # bundled fd_write unit itself uses (runtime/bash/units/wasi/fd_write.sh).
-  mem_i32_load prog_ "$2" || return $?
+  prog_mem_i32_load prog_ "$2" || return $?
   local ptr=$R0
-  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  prog_mem_i32_load prog_ $(( $2 + 4 )) || return $?
   local len=$R0
   local -n mem=prog_mem
   local out='' chunk bytes=() j k
@@ -91,7 +102,7 @@ const BASH_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   printf -v chunk '\\x%02x' "${bytes[@]}"
   out+=$chunk
   printf "$out"
-  mem_i32_store prog_ "$4" "$len" || return $?
+  prog_mem_i32_store prog_ "$4" "$len" || return $?
   R0=0
   return 0
 }
@@ -103,9 +114,9 @@ prog_invoke '_start'
 /// The `custom_wasi_provider` glue: a provider *prefix* replaces the bundled WASI wholesale — `PROVIDERS[wasi_snapshot_preview1]` points at `my_`, whose `my_EXPORTS` map covers both imports (the bash shape of a provider object, ADR-35), so no import falls back and `<p>init` never builds the bundled WASI's prefix-scoped state. The probe is a real existence test on one of those variables (`declare -p prog_wfds`), the bash counterpart of Ruby's `@wasi.nil?`.
 const BASH_CUSTOM_PROVIDER_GLUE: &str = r#"my_fd_write() {
   # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
-  mem_i32_load prog_ "$2" || return $?
+  prog_mem_i32_load prog_ "$2" || return $?
   local ptr=$R0
-  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  prog_mem_i32_load prog_ $(( $2 + 4 )) || return $?
   local len=$R0
   local -n mem=prog_mem
   local out='' chunk bytes=() j k
@@ -116,7 +127,7 @@ const BASH_CUSTOM_PROVIDER_GLUE: &str = r#"my_fd_write() {
   printf -v chunk '\\x%02x' "${bytes[@]}"
   out+=$chunk
   printf "$out"
-  mem_i32_store prog_ "$4" "$len" || return $?
+  prog_mem_i32_store prog_ "$4" "$len" || return $?
   R0=0
   return 0
 }
@@ -135,9 +146,9 @@ echo "bundled wasi constructed: $built"
 /// The `partial_override_falls_back_to_bundled_wasi` glue: `BASH_OVERRIDE_GLUE` (fd_write intercepted through IMPORTS, random_get falling back) plus the same probe, which now finds the state — `<p>init` builds it for that one fallback.
 const BASH_PARTIAL_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
-  mem_i32_load prog_ "$2" || return $?
+  prog_mem_i32_load prog_ "$2" || return $?
   local ptr=$R0
-  mem_i32_load prog_ $(( $2 + 4 )) || return $?
+  prog_mem_i32_load prog_ $(( $2 + 4 )) || return $?
   local len=$R0
   local -n mem=prog_mem
   local out='' chunk bytes=() j k
@@ -148,7 +159,7 @@ const BASH_PARTIAL_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   printf -v chunk '\\x%02x' "${bytes[@]}"
   out+=$chunk
   printf "$out"
-  mem_i32_store prog_ "$4" "$len" || return $?
+  prog_mem_i32_store prog_ "$4" "$len" || return $?
   R0=0
   return 0
 }
@@ -175,6 +186,23 @@ tableimp_invoke call0
 echo $R0
 "#;
 
+/// Two self-contained artifacts sourced into one shell (ADR-62): each carries its own runtime under its own prefix, so `alpha_rt_trap` and `beta_rt_trap` are two functions, not one that the second `source` overwrote. `declare -F` on both names is the structural probe — the bash counterpart of Ruby comparing `Alpha::Rt::Trap` with `Beta::Rt::Trap` — and the trap that follows is raised by Alpha's own copy through the status-134 cascade (ADR-11), with `TRAP_MSG` staying the shared protocol both artifacts write.
+const BASH_EMBEDDED_COEXIST_GLUE: &str = r#"alpha_init || { echo "alpha_init failed" >&2; exit 1; }
+beta_init || { echo "beta_init failed" >&2; exit 1; }
+alpha_invoke div 7 2 || { echo "alpha div failed: ${TRAP_MSG-}" >&2; exit 1; }
+echo $R0
+beta_invoke div 4294967289 2 || { echo "beta div failed: ${TRAP_MSG-}" >&2; exit 1; }
+echo $R0
+if declare -F alpha_rt_trap >/dev/null && declare -F beta_rt_trap >/dev/null; then
+  echo distinct-rt
+else
+  echo same-rt
+fi
+alpha_invoke div 1 0
+if (( $? == 134 )); then echo trapped; fi
+exit 0
+"#;
+
 /// The `wasi_suite!(Bash, Fs, ...)` template (ADR-34): fill `WASI_DIRS` with the one preopen pair, init, invoke `_start`, then surface a `proc_exit` call the same way the standalone main does — `invoke` returns status 133 (ADR-12) with the code in `$EXIT_CODE` — as a trailing decimal line, the same observable the Ruby glue's `rescue Prog::Rt::Exit` produces. A case that never calls `proc_exit` just falls off the end of `_start`, so nothing is appended and the script exits 0.
 const BASH_FS_GLUE: &str = r#"WASI_DIRS=('{host}::{guest}')
 prog_init || { echo "init failed" >&2; exit 1; }
@@ -186,10 +214,10 @@ fi
 exit 0
 "#;
 
-/// The root-preopen containment probe's glue: preopen the filesystem root at guest `/` and call the WASI resolver directly (`wasi_resolve_path <p> <dirfd> <path> <follow>`, ADR-34) instead of running a guest — the bash analogue of Ruby's `wasi.send(:resolve_path, ...)`. `follow=1` matches Ruby's `resolve_path`'s `follow_last: true` default.
+/// The root-preopen containment probe's glue: preopen the filesystem root at guest `/` and call the WASI resolver directly (`<p>wasi_resolve_path <p> <dirfd> <path> <follow>`, ADR-34) instead of running a guest — the bash analogue of Ruby's `wasi.send(:resolve_path, ...)`. `follow=1` matches Ruby's `resolve_path`'s `follow_last: true` default.
 const BASH_CONTAINMENT_GLUE: &str = r#"WASI_DIRS=('/::/')
 prog_init || { echo "init failed" >&2; exit 1; }
-wasi_resolve_path prog_ 3 etc 1
+prog_wasi_resolve_path prog_ 3 etc 1
 if [[ $R0 -eq 0 ]]; then
   echo "contained"
 else
@@ -245,7 +273,7 @@ cruby_invoke '_start'
 exit 0
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue: the same pointer plumbing the other backends write as host-language closures, in Bash's vocabulary — results in the `R0` global (ADR-11), guest memory as the `${P}mem` associative array (one decimal byte per index), and the generated module's own runtime units (`mem_init`, `mem_i32_load`) for the transfers. No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue: the same pointer plumbing the other backends write as host-language closures, in Bash's vocabulary — results in the `R0` global (ADR-11), guest memory as the `${P}mem` associative array (one decimal byte per index), and the generated module's own runtime units for the transfers — spelled `"${P}mem_init"` / `"${P}mem_i32_load"`, since an artifact's runtime carries that artifact's prefix (ADR-62) and `$P` is the very prefix these drives already carry. No wasmtime snapshot exists (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The front matter every C-API glue below shares, parameterized by the module's generation prefix and its allocator export (`sqlite3_malloc` for the sqlite artifacts, plain `malloc` for the reactor libraries). A macro rather than a plain const so the pieces can be `concat!`ed into a `&'static str` glue const, keeping each case's drive readable as one literal.
 macro_rules! bash_capi_prelude {
@@ -277,7 +305,7 @@ capi_cstr() {
   CSTR_BYTES+=(0)
   capi_call "$MALLOC" "${#CSTR_BYTES[@]}"
   local p=$R0
-  mem_init "$P" CSTR_BYTES "$p" 0 "${#CSTR_BYTES[@]}" || exit 1
+  "${P}mem_init" "$P" CSTR_BYTES "$p" 0 "${#CSTR_BYTES[@]}" || exit 1
   R0=$p
 }
 
@@ -318,7 +346,7 @@ ppdb=$R0
 capi_cstr ':memory:'
 capi_call sqlite3_open "$R0" "$ppdb"
 (( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
-mem_i32_load "$P" "$ppdb" || exit 1
+"${P}mem_i32_load" "$P" "$ppdb" || exit 1
 db=$R0
 
 capi_cstr "create table t(a,b); insert into t values (1,'x'),(2,'y');"
@@ -330,7 +358,7 @@ ppstmt=$R0
 capi_cstr 'select a*10, b from t order by a desc'
 capi_call sqlite3_prepare_v2 "$db" "$R0" 4294967295 "$ppstmt" 0
 (( R0 == 0 )) || { echo "prepare rc=$R0" >&2; exit 1; }
-mem_i32_load "$P" "$ppstmt" || exit 1
+"${P}mem_i32_load" "$P" "$ppstmt" || exit 1
 stmt=$R0
 
 while capi_call sqlite3_step "$stmt"; [[ $R0 == 100 ]]; do  # SQLITE_ROW
@@ -365,7 +393,7 @@ open_db() {
   capi_cstr "$1"
   capi_call sqlite3_open "$R0" "$pp"
   (( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
-  mem_i32_load "$P" "$pp" || exit 1
+  "${P}mem_i32_load" "$P" "$pp" || exit 1
 }
 
 libsqlite3_init || { echo "init failed" >&2; exit 1; }
@@ -387,7 +415,7 @@ ppstmt=$R0
 capi_cstr 'select a*10, b from t order by a'
 capi_call sqlite3_prepare_v2 "$db" "$R0" 4294967295 "$ppstmt" 0
 (( R0 == 0 )) || { echo "prepare rc=$R0" >&2; exit 1; }
-mem_i32_load "$P" "$ppstmt" || exit 1
+"${P}mem_i32_load" "$P" "$ppstmt" || exit 1
 stmt=$R0
 while capi_call sqlite3_step "$stmt"; [[ $R0 == 100 ]]; do  # SQLITE_ROW
   capi_call sqlite3_column_count "$stmt"
@@ -415,7 +443,7 @@ ROWS=()
 host_row() {
   local argc=$1 argv=$2 row='' i
   for (( i = 0; i < argc; i++ )); do
-    mem_i32_load "$P" $(( argv + i * 4 )) || return $?
+    "${P}mem_i32_load" "$P" $(( argv + i * 4 )) || return $?
     capi_read_cstr "$R0"
     (( i )) && row+='|'
     row+=$CSTR
@@ -434,7 +462,7 @@ ppdb=$R0
 capi_cstr ':memory:'
 capi_call sqlite3_open "$R0" "$ppdb"
 (( R0 == 0 )) || { echo "open rc=$R0" >&2; exit 1; }
-mem_i32_load "$P" "$ppdb" || exit 1
+"${P}mem_i32_load" "$P" "$ppdb" || exit 1
 db=$R0
 
 capi_cstr "create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"
@@ -463,7 +491,7 @@ capi_cstr 'tcp port 80'
 capi_call compile_filter "$R0" 1 65535
 prog=$R0
 (( prog )) || { echo "compile failed" >&2; exit 1; }
-mem_i32_load "$P" "$prog" || exit 1
+"${P}mem_i32_load" "$P" "$prog" || exit 1
 n=$R0
 declare -n mem=${P}mem
 for (( i = 0; i < n; i++ )); do
@@ -471,7 +499,7 @@ for (( i = 0; i < n; i++ )); do
   code=$(( mem[$base] | mem[$(( base + 1 ))] << 8 ))
   jt=$(( mem[$(( base + 2 ))] ))
   jf=$(( mem[$(( base + 3 ))] ))
-  mem_i32_load "$P" $(( base + 4 )) || exit 1
+  "${P}mem_i32_load" "$P" $(( base + 4 )) || exit 1
   printf '%d %d %d %d\n' "$code" "$jt" "$jf" "$R0"
 done
 capi_call free "$prog"
@@ -604,7 +632,7 @@ done
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer via `mem_init` (the same runtime helper active data
+/// `allocRom`'s buffer via `nes_mem_init` (the same runtime helper active data
 /// segments use), tick `{frames}` times with no input, compose the frame from
 /// agnes's palette-index screen buffer and its palette (issue #117 — one
 /// `nes_mem` read per pixel instead of three, against a 64-entry `\xNN\xNN\xNN`
@@ -624,7 +652,7 @@ nes_init || { echo "nes_init failed" >&2; exit 1; }
 rom_len=${#ROM_BYTES[@]}
 nes_invoke allocRom "$rom_len" || { echo "allocRom failed: ${TRAP_MSG-}" >&2; exit 1; }
 rom_ptr=$R0
-mem_init nes_ ROM_BYTES "$rom_ptr" 0 "$rom_len" || { echo "mem_init failed: ${TRAP_MSG-}" >&2; exit 1; }
+nes_mem_init nes_ ROM_BYTES "$rom_ptr" 0 "$rom_len" || { echo "mem_init failed: ${TRAP_MSG-}" >&2; exit 1; }
 nes_invoke initGame || { echo "initGame failed: ${TRAP_MSG-}" >&2; exit 1; }
 [[ $R0 == 1 ]] || { echo "initGame returned $R0" >&2; exit 1; }
 for (( _t = 0; _t < {frames}; _t++ )); do
@@ -708,4 +736,4 @@ dewasm_test_helper::treesitter_parse_e2e!(Bash, BASH_TREESITTER_PARSE);
 // The two zeroperl reactor cases (issue #143) sit in the `ultra` category instead. The 25 MB reactor converts to a 229 MB script whose module init alone — the SFS blob carrying the whole Perl core into the `zeroperl_mem` array — runs 1 m 39 s before any Perl is evaluated, with ~6 GB of host RSS held for the duration. The eval case measured 1 m 55 s end to end (init, then 5.7 s of `zeroperl_init` and 3.1 s of `zeroperl_eval`). ExifTool is the one case here with no completion evidence: a hand-run of exactly this artifact and glue was still burning CPU inside `zeroperl_eval` at 69 minutes when the run was cut, so its wall time is unknown, not merely long — it is wired anyway per ADR-15 (a case that runs forever is a louder, more honest signal than one silently unwired), and it is covered in CI on Ruby, where it runs at `slow` (Perl runs it at `ultra`).
 dewasm_test_helper::zeroperl_eval_e2e!(Bash, BASH_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Bash, BASH_EXIFTOOL, ultra);
-// embedded_coexist_e2e!: not invoked — Bash has one flat global namespace (no nested runtime/class construct), so two independently-generated runtimes cannot coexist in one process without their rt_*/mem_* function names colliding (ADR-11).
+dewasm_test_helper::embedded_coexist_e2e!(Bash, BASH_EMBEDDED_COEXIST_GLUE);
