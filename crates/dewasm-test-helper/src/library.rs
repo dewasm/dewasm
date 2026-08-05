@@ -31,7 +31,7 @@ pub const WASI_IMPORT_OVERRIDE: LibraryCase = LibraryCase {
     expect: "ok\n",
 };
 
-/// A provider *object* (ADR-7) replaces the bundled WASI wholesale: `import`/`wasm_import`/`WasmImport`/`wasmImport` resolves every function, `attach` binds the memory, and — because every import is covered — the bundled WASI is never lazily constructed. The glue prints the intercepted bytes plus the "not constructed" observable. Every backend with a bundled-WASI *object* to construct invokes `custom_wasi_provider_e2e!` — Ruby, Python, Perl, Go and Java; Bash, whose WASI is prefix-scoped shell variables initialized unconditionally, has no such observable.
+/// A provider *object* (ADR-7) replaces the bundled WASI wholesale: `import`/`wasm_import`/`WasmImport`/`wasmImport` resolves every function, `attach` binds the memory, and — because every import is covered — the bundled WASI is never lazily constructed. The glue prints the intercepted bytes plus the "not constructed" observable. Every backend invokes `custom_wasi_provider_e2e!`; Bash's provider is a prefix whose export map covers both imports, and its bundled WASI is prefix-scoped shell variables built only when an import falls back, so `declare -p <p>wfds` is the same observable.
 pub const CUSTOM_WASI_PROVIDER: LibraryCase = LibraryCase {
     name: "custom_wasi_provider",
     wat: "wasi_imports.wat",

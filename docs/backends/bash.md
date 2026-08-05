@@ -28,7 +28,7 @@ Wasm core 1.0 plus the universal baseline, with f32/f64 on the pure-Bash softflo
 
 ## Providers and library usage
 
-The import table is the `IMPORTS` associative array keyed `module.name`; there is no duck-typed provider *object* as on Ruby/Python. Set an entry to a shell function name to override an import; unset entries fall back to the bundled WASI. The e2e override glue (`crates/dewasm-backend-bash/tests/e2e.rs`) is the worked reference.
+The import table is the `IMPORTS` associative array keyed `module.name`; set an entry to a shell function name to override an import. A whole import module is served by pointing `PROVIDERS[module]` at another prefix `<q>` owning the per-kind export maps `<q>EXPORTS` / `<q>GLOBAL_EXPORTS` / `<q>TABLE_EXPORTS` / `<q>MEMORY_EXPORTS` ([ADR-35](../adr/35-bash-cross-module-linking.md)) — the shell counterpart of Ruby's provider object, and what a wholesale WASI replacement uses. Unset entries fall back to the bundled WASI, and `<p>init` builds the bundled WASI's prefix-scoped state (`<p>wargs`, `<p>wfds`, …) only if at least one import actually fell back, so covering every WASI import leaves none of it behind. The e2e override, custom-provider and partial-override glue (`crates/dewasm-backend-bash/tests/e2e.rs`) are the worked references.
 
 ## Caveats
 
