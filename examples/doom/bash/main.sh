@@ -134,7 +134,7 @@ imp_on_game_init() {
   return 0
 }
 
-# Read by rt_resolve_import in the sourced doom_gen.sh (IMPORTS[mod.name]),
+# Read by doom_rt_resolve_import in the sourced doom_gen.sh (IMPORTS[mod.name]),
 # not anywhere in this script — hence the unused-variable suppression.
 # shellcheck disable=SC2034
 declare -A IMPORTS=(

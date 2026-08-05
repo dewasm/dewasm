@@ -26,7 +26,7 @@ pub const SHARED_TABLE: MultiModuleCase = MultiModuleCase {
     expect: "42\n",
 };
 
-/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide. ADR-62 makes this a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Java nests its runtime classes, Perl and Python rename the runtime per artifact, Go gets it from the per-package library output. Bash, the one backend left, carries a non-invocation REASON comment (issue #141). The driver normalizes output to `distinct-rt`/`trapped`.
+/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide. ADR-62 makes this a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Java nests its runtime classes, Perl and Python rename the runtime per artifact, Bash prefixes its runtime function names, Go gets it from the per-package library output. Every backend invokes it (issue #141). The driver normalizes output to `distinct-rt`/`trapped`.
 pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
     name: "embedded_runtimes_coexist",
     modules: &[("div_trap.wat", "Alpha"), ("div_trap.wat", "Beta")],
