@@ -22,6 +22,6 @@ Ruby has no labeled break/continue, creates a new variable scope inside `do ... 
 
 ## Consequences
 
-- Positive: the whole control-flow story is three emission shapes; the spec harness (ADR-3) is green including `br_table`, `unwind`, and `labels`.
+- Positive: the whole control-flow story is three emission shapes; the spec harness (ADR-3) passes, including `br_table`, `unwind`, and `labels`.
 - Negative: `catch` allocates and `throw` unwinds — hot loops pay for labels they rarely take. Mitigated for the common depth-1 case (see the `break`/`next` decision above); a multi-level `br` (depth > 1) still pays the full `catch`/`throw` cost, unavoidably — Ruby has no labeled `break`.
 - Deep wasm recursion maps to Ruby stack frames; `SystemStackError` is the (accepted) analogue of "call stack exhausted".

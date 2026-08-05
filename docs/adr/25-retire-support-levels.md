@@ -4,7 +4,7 @@ Status: **Accepted, 2026-07-25.** The removal of the level type, its derivation 
 
 ## Context
 
-ADR-23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before ADR-24 cut the input scope to exactly that surface and set the same bar — spec-green + full WASI p1 — for every 0.1 backend. With the 2.0+/CM badges gone and all backends aiming at one bar, the scale degenerates: Levels 1–2 differ only by a list flag and twelve WASI functions, and Level 3 is just "filesystem not done yet".
+ADR-23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before ADR-24 cut the input scope to exactly that surface and set the same bar — a passing spec harness + full WASI p1 — for every 0.1 backend. With the 2.0+/CM badges gone and all backends aiming at one bar, the scale degenerates: Levels 1–2 differ only by a list flag and twelve WASI functions, and Level 3 is just "filesystem not done yet".
 
 ## Decision
 

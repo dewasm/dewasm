@@ -4,7 +4,7 @@ Status: **Accepted, 2026-07-23.** Implemented across `crates/dewasm-cli/tests/{e
 
 ## Context
 
-Every test needing `ruby`, `bash >= 5`, or `wasmtime` self-skipped when the tool was missing — `if find_ruby().is_none() { eprintln!("..."); return; }`, repeated at nearly every call site. `AGENTS.md` already flagged the consequence in its own words: "a green run without it proves less than it looks." That is the problem in one sentence: a contributor (or CI runner) with a broken or incomplete environment sees `cargo test` pass and reasonably concludes the code works, when in fact nothing ran. A missing interpreter is not a legitimate reason for a wasm-to-source transpiler's tests to report success — it is exactly the environment those tests exist to exercise.
+Every test needing `ruby`, `bash >= 5`, or `wasmtime` self-skipped when the tool was missing — `if find_ruby().is_none() { eprintln!("..."); return; }`, repeated at nearly every call site. `AGENTS.md` already flagged the consequence: a passing run without those tools proves less than it looks. That is the problem in one sentence: a contributor (or CI runner) with a broken or incomplete environment sees `cargo test` pass and reasonably concludes the code works, when in fact nothing ran. A missing interpreter is not a legitimate reason for a wasm-to-source transpiler's tests to report success — it is exactly the environment those tests exist to exercise.
 
 ## Decision
 
@@ -18,7 +18,7 @@ Populating `examples/apps/cache/` (via `examples/apps/setup.sh`, ADR-9) remains 
 
 ## Rejected alternatives
 
-- **Keep skipping, but print more loudly** — doesn't fix the actual problem (a green `cargo test` that ran nothing), only makes the log noisier.
+- **Keep skipping, but print more loudly** — doesn't fix the actual problem (a passing `cargo test` that ran nothing), only makes the log noisier.
 - **`#[ignore = "reason"]`** for the *required*-tool tests — Rust's built-in "don't run this by default" mechanism, visible as `ignored` rather than `ok`. Closer to honest than silent-pass-via-skip, but still reports overall success without running the test — wrong for `ruby`/`bash`/the apps cache, which this ADR treats as genuinely required. (It's the *right* tool for the wasmtime snapshot-file check below, precisely because that one is genuinely optional.)
 - **Keep `wasmtime` but add it to the required-tools list** — considered as the straightforward way to make `apps` consistent with the new policy, but it adds a real install requirement for a role (comparison oracle) that a checked-in snapshot file fills just as well, so removing the dependency outright is strictly better than requiring it.
 

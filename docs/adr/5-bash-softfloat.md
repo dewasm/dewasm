@@ -1,6 +1,6 @@
 # ADR-5 — Bash Floats: Pure-Bash Softfloat
 
-Status: **Accepted, 2026-07-23.** Backfilled; the policy was fixed during initial planning. The implementation landed after the integers/memory/WASI milestones, with its conventions recorded in [ADR-13](13-bash-softfloat-conventions.md); the spec float files are green and real binaries run under bash.
+Status: **Accepted, 2026-07-23.** Backfilled; the policy was fixed during initial planning. The implementation landed after the integers/memory/WASI milestones, with its conventions recorded in [ADR-13](13-bash-softfloat-conventions.md); the spec float files pass and real binaries run under bash.
 
 **Revision, 2026-07-27:** the "dependency set is exactly a Bash interpreter" criterion is narrowly amended by [ADR-34](34-bash-wasi-filesystem.md) — the four WASI namespace-mutation syscalls may each call one POSIX command (`mkdir`/`rmdir`/`rm`/`mv`), which pure Bash cannot express.
 

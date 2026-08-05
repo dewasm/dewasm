@@ -20,5 +20,5 @@ App selection is constrained by the declared WASI surface (docs/support.md) — 
 ## Consequences
 
 - Positive: QuickJS — a complete C-built JS engine — converts to a ~25 MB Ruby file and produces wasmtime-identical output in about a second; the demo story ("a JS engine on plain Ruby") costs one script run.
-- Negative: the `apps` cases fail (per ADR-15) rather than passing vacuously in a fresh clone until the explicit `setup.sh` step runs; CI needs that step (or a cached fetch job) before `cargo test` is green. Upstream availability is a fetch-time dependency, mitigated by pinning and checksums.
+- Negative: the `apps` cases fail (per ADR-15) rather than passing vacuously in a fresh clone until the explicit `setup.sh` step runs; CI needs that step (or a cached fetch job) before `cargo test` passes. Upstream availability is a fetch-time dependency, mitigated by pinning and checksums.
 - Adding an app = a script under `examples/apps/scripts/` + a case in `crates/dewasm-test-helper/src/apps.rs` + a row in the README table.

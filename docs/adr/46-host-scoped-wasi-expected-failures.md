@@ -9,7 +9,7 @@ The wasi-testsuite expected-failures lists ([ADR-8](8-latest-testsuite-support-m
 - Entries whose cause is macOS host behaviour — CoreFoundation injecting `__CF_USER_TEXT_ENCODING` into the JVM/ruby environ — *pass* on Linux and trip the unexpectedly-passing check.
 - A trial can fail on Linux only: the Linux JDK sets NOFOLLOW symlink times through microsecond `lutimes`, truncating the ns `mtim` the suite round-trips (`rust/symlink_filestat`), while macOS preserves ns.
 
-So a single flat list cannot be simultaneously green on both hosts, yet the both-ways check is worth keeping — it is what caught the Go `path_link` bug (#5) hiding behind host `link(2)` differences.
+So a single flat list cannot pass on both hosts at once, yet the both-ways check is worth keeping — it is what caught the Go `path_link` bug (#5) hiding behind host `link(2)` differences.
 
 ## Decision
 
@@ -25,6 +25,6 @@ The discriminating criterion: **an entry is host-scoped when its attributed caus
 
 ## Consequences
 
-- CI on ubuntu-latest and local macOS runs are both green against one list declaration, and each host still enforces the both-ways discipline for the entries that apply to it.
+- CI on ubuntu-latest and local macOS runs both pass against one list declaration, and each host still enforces the both-ways discipline for the entries that apply to it.
 - A scoped entry is only ever *verified* on its own host: macOS entries are exercised locally, Linux entries only by CI (and vice versa). A stale scoped entry therefore surfaces one environment later, not never.
 - New backends state host-dependent gaps where they belong instead of papering over them with the flat list; the spec harness list ([ADR-8](8-latest-testsuite-support-matrix.md)) stays flat until it meets the same problem.
