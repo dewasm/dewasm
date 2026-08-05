@@ -31,7 +31,7 @@ pub const WASI_IMPORT_OVERRIDE: LibraryCase = LibraryCase {
     expect: "ok\n",
 };
 
-/// A provider *object* (ADR-7) replaces the bundled WASI wholesale: `import`/`wasm_import` resolves every function, `attach` binds the memory, and — because every import is covered — the bundled WASI is never lazily constructed. The glue prints the intercepted bytes plus the "not constructed" observable. Only Ruby (duck-typed object) and Python (`wasm_import`/`attach` provider + lazy `_wasi`) invoke `custom_wasi_provider_e2e!`.
+/// A provider *object* (ADR-7) replaces the bundled WASI wholesale: `import`/`wasm_import`/`WasmImport`/`wasmImport` resolves every function, `attach` binds the memory, and — because every import is covered — the bundled WASI is never lazily constructed. The glue prints the intercepted bytes plus the "not constructed" observable. Every backend with a bundled-WASI *object* to construct invokes `custom_wasi_provider_e2e!` — Ruby, Python, Perl, Go and Java; Bash, whose WASI is prefix-scoped shell variables initialized unconditionally, has no such observable.
 pub const CUSTOM_WASI_PROVIDER: LibraryCase = LibraryCase {
     name: "custom_wasi_provider",
     wat: "wasi_imports.wat",
@@ -39,7 +39,7 @@ pub const CUSTOM_WASI_PROVIDER: LibraryCase = LibraryCase {
     expect: "ok\nbundled wasi constructed: false\n",
 };
 
-/// The `true` counterpart: a *partial* override (fd_write only) still lets the bundled WASI be lazily constructed for the one import it doesn't cover (random_get) — ADR-7's `@wasi ||= ...`. Same fallback the always-on `WASI_IMPORT_OVERRIDE` case proves, but here the glue additionally probes that the bundled WASI *was* built. Ruby/Python only (`partial_override_e2e!`).
+/// The `true` counterpart: a *partial* override (fd_write only) still lets the bundled WASI be lazily constructed for the one import it doesn't cover (random_get) — ADR-7's `@wasi ||= ...`. Same fallback the always-on `WASI_IMPORT_OVERRIDE` case proves, but here the glue additionally probes that the bundled WASI *was* built. Same participants as `CUSTOM_WASI_PROVIDER` (`partial_override_e2e!`).
 pub const PARTIAL_OVERRIDE: LibraryCase = LibraryCase {
     name: "partial_override_falls_back_to_bundled_wasi",
     wat: "wasi_imports.wat",

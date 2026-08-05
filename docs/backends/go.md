@@ -36,11 +36,14 @@ Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 includ
 
 ## Providers and library usage
 
-Any unprovided WASI import falls back to a bundled WASI. Override imports by passing an `Imports` map to the constructor (`map[module]map[name]func`); preopen directories via the fourth constructor argument. The e2e override glue in `crates/dewasm-backend-go/tests/e2e.rs`:
+Any unprovided WASI import falls back to a bundled WASI, which is built the first time an import actually falls back to it — cover every WASI import and none is ever constructed. Override imports by passing an `Imports` map (`map[module]source`) to the constructor; preopen directories via the fourth constructor argument. A source is either a `map[string]any` of name → value, or an object implementing `ImportProvider` (`WasmImport(name string) any`) that resolves names itself, optionally also `ImportAttacher` (`Attach(instance any)`), which the constructor calls once the instance is fully built so the provider can reach its memory. The e2e override and custom-provider glues in `crates/dewasm-backend-go/tests/e2e.rs`:
 
 ```go
-inst = NewProg(Imports{"wasi_snapshot_preview1": {"fd_write": fdWrite}}, nil, nil, nil)
+inst = NewProg(Imports{"wasi_snapshot_preview1": map[string]any{"fd_write": fdWrite}}, nil, nil, nil)
 inst.Exports["_start"].(func())()   // random_get falls back to the bundled WASI
+
+// or one object standing in for the whole module:
+inst = NewProg(Imports{"wasi_snapshot_preview1": &myWasi{}}, nil, nil, nil)
 ```
 
 ## Caveats

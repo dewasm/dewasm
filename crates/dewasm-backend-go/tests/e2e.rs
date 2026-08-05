@@ -177,9 +177,63 @@ const GO_OVERRIDE_GLUE: &str = r#"func main() {
 		inst.memory.i32_store(uint64(outPtr), length)
 		return 0
 	}
-	inst = NewProg(Imports{"wasi_snapshot_preview1": {"fd_write": fdWrite}}, nil, nil, nil)
+	inst = NewProg(Imports{"wasi_snapshot_preview1": map[string]any{"fd_write": fdWrite}}, nil, nil, nil)
 	inst.Exports["_start"].(func())() // random_get falls back to the bundled WASI
 	fmt.Print(string(captured))
+}
+"#;
+
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `WasmImport(name)` resolves every function and `Attach(instance)` binds the memory (the Go shape of Ruby's `import`/`attach`), so no import falls back and `inst.wasi` stays nil. The provider type is a package-level declaration, which appended glue may carry (only `import` blocks may not).
+const GO_CUSTOM_PROVIDER_GLUE: &str = r#"type myWasi struct {
+	inst *Prog
+	out  []byte
+}
+
+func (w *myWasi) WasmImport(name string) any {
+	switch name {
+	case "fd_write":
+		return w.fdWrite
+	case "random_get":
+		return func(buf, length uint32) uint32 { return 0 }
+	}
+	return nil
+}
+
+func (w *myWasi) Attach(instance any) { w.inst = instance.(*Prog) }
+
+func (w *myWasi) fdWrite(fd, iovs, iovsLen, outPtr uint32) uint32 {
+	mem := w.inst.memory
+	ptr := mem.i32_load(uint64(iovs))
+	length := mem.i32_load(uint64(iovs) + 4)
+	w.out = append(w.out, mem.read_string(uint64(ptr), uint64(length))...)
+	mem.i32_store(uint64(outPtr), length)
+	return 0
+}
+
+func main() {
+	wasi := &myWasi{}
+	inst := NewProg(Imports{"wasi_snapshot_preview1": wasi}, nil, nil, nil)
+	inst.Exports["_start"].(func())()
+	fmt.Print(string(wasi.out))
+	fmt.Printf("bundled wasi constructed: %v\n", inst.wasi != nil)
+}
+"#;
+
+/// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback — `wasiInstance()` constructs it as the ctor takes the method value.
+const GO_PARTIAL_OVERRIDE_GLUE: &str = r#"func main() {
+	var captured []byte
+	var inst *Prog
+	fdWrite := func(fd, iovs, iovsLen, outPtr uint32) uint32 {
+		ptr := inst.memory.i32_load(uint64(iovs))
+		length := inst.memory.i32_load(uint64(iovs) + 4)
+		captured = append(captured, inst.memory.read_string(uint64(ptr), uint64(length))...)
+		inst.memory.i32_store(uint64(outPtr), length)
+		return 0
+	}
+	inst = NewProg(Imports{"wasi_snapshot_preview1": map[string]any{"fd_write": fdWrite}}, nil, nil, nil)
+	inst.Exports["_start"].(func())() // random_get falls back to the bundled WASI
+	fmt.Print(string(captured))
+	fmt.Printf("bundled wasi constructed: %v\n", inst.wasi != nil)
 }
 "#;
 
@@ -483,7 +537,7 @@ const GO_SQLITE3_CALLBACK: &str = r#"func main() {
 		rows = append(rows, row)
 	}
 
-	inst := NewSqlite3Binding(Imports{"env": {"host_row": hostRow}}, nil, nil, nil)
+	inst := NewSqlite3Binding(Imports{"env": map[string]any{"host_row": hostRow}}, nil, nil, nil)
 	inst.Exports["_initialize"].(func())()
 	mem = inst.memory
 	malloc := inst.Exports["sqlite3_malloc"].(func(uint32) uint32)
@@ -605,7 +659,7 @@ const GO_TREESITTER_PARSE: &str = r#"func main() {
 /// string literal: its backslash escapes belong to Perl, not to Go.
 const GO_ZEROPERL_EVAL: &str = r#"func main() {
 	inst := NewZeroperl(
-		Imports{"env": {"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
+		Imports{"env": map[string]any{"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
 		nil, nil, map[string]string{"/dev/null": "/dev/null"})
 	inst.Exports["_initialize"].(func())()
 	if rc := inst.Exports["zeroperl_init"].(func() uint32)(); rc != 0 {
@@ -638,7 +692,7 @@ if ($s =~ /(\w+)\s+(\w+)\s+(\d+)/) {
 /// are requested (`-S -Make -Model -DateTimeOriginal`).
 const GO_EXIFTOOL: &str = r#"func main() {
 	inst := NewZeroperl(
-		Imports{"env": {"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
+		Imports{"env": map[string]any{"call_host_function": func(a, b, c uint32) uint32 { return 0 }}},
 		nil, nil, map[string]string{
 			"/dev/null": "/dev/null",
 			"/work":     "{cache}/exiftool-lib",
@@ -677,22 +731,22 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func main() {
 	var ms uint64
 	var frameOff, frameW, frameH uint32
 	imports := Imports{
-		"console": {
+		"console": map[string]any{
 			"onErrorMessage": func(o, l uint32) {},
 			"onInfoMessage":  func(o, l uint32) {},
 		},
-		"gameSaving": {
+		"gameSaving": map[string]any{
 			"sizeOfSaveGame": func(id uint32) uint32 { return 0 },
 			"readSaveGame":   func(id, dst uint32) uint32 { return 0 },
 			"writeSaveGame":  func(id, src, n uint32) uint32 { return n },
 		},
-		"runtimeControl": {
+		"runtimeControl": map[string]any{
 			"timeInMilliseconds": func() uint64 { ms += {clock_step}; return ms },
 		},
-		"ui": {
+		"ui": map[string]any{
 			"drawFrame": func(off uint32) { frameOff = off },
 		},
-		"loading": {
+		"loading": map[string]any{
 			"onGameInit": func(w, h uint32) { frameW, frameH = w, h },
 			"wadSizes":   func(a, b uint32) {},
 			"readWads":   func(a, b uint32) {},
@@ -784,7 +838,8 @@ fn go_nes_frame_glue() -> String {
 dewasm_test_helper::library_add_e2e!(Go, GO_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Go, GO_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Go's bundled WASI is eagerly constructed in the ctor and there is no provider-object import form (ADR-29), so the lazy-construction observable cannot hold.
+dewasm_test_helper::custom_wasi_provider_e2e!(Go, GO_CUSTOM_PROVIDER_GLUE);
+dewasm_test_helper::partial_override_e2e!(Go, GO_PARTIAL_OVERRIDE_GLUE);
 
 dewasm_test_helper::wasi_suite!(Go, Stdio);
 dewasm_test_helper::wasi_suite!(Go, ArgsEnv);

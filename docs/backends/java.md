@@ -41,7 +41,7 @@ Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 includ
 
 ## Providers and library usage
 
-Any unprovided WASI import falls back to a bundled WASI. Override imports by passing a `Map<String, Map<String, Object>>` to the constructor; preopen directories via the fourth argument (`Map.of(guest, host)`). The e2e override glue in `crates/dewasm-backend-java/tests/e2e.rs` is the worked reference.
+Any unprovided WASI import falls back to a bundled WASI, which is built the first time an import actually falls back to it — cover every WASI import and none is ever constructed. Override imports by passing a `Map<String, ?>` of module → source to the constructor; preopen directories via the fourth argument (`Map.of(guest, host)`). A source is either a `Map<String, Object>` of name → value (so the older `Map<String, Map<String, Object>>` shape still passes), or an object implementing `Rt.ImportProvider` (`Object wasmImport(String name)`) that resolves names itself; its `attach(Object instance)` default method is called once the instance is fully built, so a provider can reach its memory. The e2e override and custom-provider glues in `crates/dewasm-backend-java/tests/e2e.rs` are the worked reference.
 
 ## Caveats
 

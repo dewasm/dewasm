@@ -590,7 +590,7 @@ exit 0
 dewasm_test_helper::library_add_e2e!(Bash, BASH_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Bash, BASH_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Bash, BASH_STDIO_CAPTURE_GLUE);
-// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — Bash has no host-language object model to replace WASI wholesale or probe its lazy construction (ADR-12).
+// custom_wasi_provider_e2e! / partial_override_e2e!: not invoked — both cases turn on the observable "was the bundled WASI constructed?", and Bash has no bundled-WASI object to have been constructed. Replacing WASI wholesale is not the blocker: `IMPORTS[wasi_snapshot_preview1.<name>]` overrides each function and `PROVIDERS[wasi_snapshot_preview1]` points a whole module at another prefix's export maps (ADR-35). What is missing is the *lazy* half: the WASI state is a set of prefix-scoped variables (`<p>wargs`/`<p>wfds`/`<p>wtell`/`<p>wnext`/`<p>wpush` plus `wasi_init_preopens`), initialized unconditionally by `<p>init` before any import resolves (ADR-12), so there is nothing whose absence a glue could print.
 
 dewasm_test_helper::wasi_suite!(Bash, Stdio);
 dewasm_test_helper::wasi_suite!(Bash, ArgsEnv);
