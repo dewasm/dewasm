@@ -6,7 +6,7 @@
 //! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting (ADR-28).
 //! - A branch crossing many frames pays one test per crossed frame under that register, so a function holding a deep enough crossing has those frames dissolved into a state machine instead (see [`flat`]); shallower branches keep the register, in the same function.
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by the module-level name `Rt` (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby).
+//! The runtime is composed from per-method units (ADR-6) and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact — `<Class>Rt` — so two generated artifacts in one namespace keep independent runtimes (ADR-62); `Alias` linkage keeps the shared `Rt`.
 
 mod flat;
 
@@ -142,6 +142,7 @@ fn generate_class_inner(
         data_offsets.push(acc);
         acc += data.data.len();
     }
+    let rt_name = runtime_name(class_name, linkage);
     let gen = Gen {
         module,
         default_wasi,
@@ -149,6 +150,7 @@ fn generate_class_inner(
         flat: RefCell::new(None),
         data_file: data_file.map(str::to_string),
         data_offsets,
+        rt_name: rt_name.clone(),
     };
     let mut wb = CodeWriter::new("    ");
     gen.class(&mut wb, class_name);
@@ -159,8 +161,13 @@ fn generate_class_inner(
     match linkage {
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
-                out.push_str("class Rt:\n");
-                out.push_str(&bundler().bundle(&uses, 1)?);
+                // Namespace the runtime under the generated class (ADR-62): the units reference the runtime only as the module global `Rt.<name>`, never inside a string literal (the units lint enforces that), so one textual replace moves every reference onto the per-artifact name.
+                out.push_str(&format!("class {rt_name}:\n"));
+                out.push_str(
+                    &bundler()
+                        .bundle(&uses, 1)?
+                        .replace("Rt.", &format!("{rt_name}.")),
+                );
                 out.push_str("\n\n");
             }
         }
@@ -203,6 +210,7 @@ impl Backend for PythonBackend {
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         let class_name = class_name(&opts.module_name);
+        let rt_name = runtime_name(&class_name, &opts.runtime);
 
         // The Exit/Trap handlers in the standalone main need these even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
@@ -332,11 +340,11 @@ impl Backend for PythonBackend {
             w.dedent();
             w.line("sys.exit(0)");
             w.dedent();
-            w.line("except Rt.Exit as _e:");
+            w.line(format!("except {rt_name}.Exit as _e:"));
             w.indent();
             w.line("sys.exit(_e.code)");
             w.dedent();
-            w.line("except Rt.Trap as _e:");
+            w.line(format!("except {rt_name}.Trap as _e:"));
             w.indent();
             w.line("sys.stderr.write(\"trap: %s\\n\" % _e)");
             w.line("sys.exit(134)");
@@ -362,6 +370,14 @@ impl Backend for PythonBackend {
             }
         }
         Ok(files)
+    }
+}
+
+/// The module-level name the generated class references its runtime by. `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt` (ADR-62); `Alias` output points at a runtime someone else emitted, which is always the shared `Rt`.
+fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
+    match linkage {
+        RuntimeLinkage::Embedded => format!("{class_name}Rt"),
+        RuntimeLinkage::Alias(_) => "Rt".to_string(),
     }
 }
 
@@ -508,6 +524,8 @@ struct Gen<'a> {
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
+    /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
+    rt_name: String,
 }
 
 impl<'a> Gen<'a> {
@@ -528,14 +546,15 @@ impl<'a> Gen<'a> {
     /// Reference a module-level runtime helper, recording its unit.
     fn rt(&self, name: &str) -> String {
         self.use_unit(&format!("rt/{name}"));
-        format!("Rt.{name}")
+        format!("{}.{name}", self.rt_name)
     }
 
     fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
         self.use_unit("rt/resolve_import");
         self.use_unit("rt/check_import_kind");
+        let rt = &self.rt_name;
         format!(
-            "Rt.check_import_kind(Rt.resolve_import(imports, {}, {}), {}, {}, {})",
+            "{rt}.check_import_kind({rt}.resolve_import(imports, {}, {}), {}, {}, {})",
             py_string(module),
             py_string(name),
             py_string(kind),
@@ -642,8 +661,8 @@ impl<'a> Gen<'a> {
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "None".to_string());
             w.line(format!(
-                "self.memory = Rt.Memory({}, {})",
-                mem.min_pages, max
+                "self.memory = {}.Memory({}, {})",
+                self.rt_name, mem.min_pages, max
             ));
         } else {
             w.line("self.memory = None");
@@ -665,7 +684,10 @@ impl<'a> Gen<'a> {
                 .max
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "None".to_string());
-            w.line(format!("self.t{idx} = Rt.Table({}, {max})", table.min));
+            w.line(format!(
+                "self.t{idx} = {}.Table({}, {max})",
+                self.rt_name, table.min
+            ));
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
@@ -706,7 +728,8 @@ impl<'a> Gen<'a> {
             self.use_unit("global/_class");
             let idx = num_imported_globals + i;
             w.line(format!(
-                "self.g{idx} = Rt.Global({})",
+                "self.g{idx} = {}.Global({})",
+                self.rt_name,
                 self.expr(&global.init)
             ));
         }
@@ -841,7 +864,10 @@ impl<'a> Gen<'a> {
         w.line("");
         w.line("def _missing(self, mod, name):");
         w.indent();
-        w.line("raise Rt.LinkError(\"missing import %s.%s\" % (mod, name))");
+        w.line(format!(
+            "raise {}.LinkError(\"missing import %s.%s\" % (mod, name))",
+            self.rt_name
+        ));
         w.dedent();
         if wasi_bundled(self.module, self.default_wasi) {
             w.line("");
@@ -849,7 +875,7 @@ impl<'a> Gen<'a> {
             w.indent();
             w.line("if self._wasi is None:");
             w.indent();
-            w.line("self._wasi = Rt.WASI(args=self._wasi_args, env=self._wasi_env, preopens=self._wasi_preopens)");
+            w.line(format!("self._wasi = {}.WASI(args=self._wasi_args, env=self._wasi_env, preopens=self._wasi_preopens)", self.rt_name));
             w.dedent();
             w.line("return getattr(self._wasi, \"wasi_\" + name)");
             w.dedent();
@@ -1930,6 +1956,66 @@ mod units {
     #[test]
     fn all_units_bundle() {
         bundler().bundle_all(0).expect("full bundle resolves");
+    }
+
+    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text (ADR-62), which is sound only while every `Rt.` in a unit is code. A `Rt.` inside a string literal would be rewritten too, silently changing program-visible text (a trap message, an errno key); no unit has one today, and this keeps it that way. Triple-quoted strings are rejected outright, since the single-line scanner cannot see across them.
+    #[test]
+    fn no_rt_reference_inside_a_string_literal() {
+        let mut problems = Vec::new();
+        for unit in bundler().units() {
+            assert!(
+                !unit.body.contains("\"\"\"") && !unit.body.contains("'''"),
+                "{}: triple-quoted string — the ADR-62 rename lint cannot scan it",
+                unit.id
+            );
+            for (n, line) in unit.body.lines().enumerate() {
+                for lit in string_literals(line) {
+                    if lit.contains("Rt.") {
+                        problems.push(format!(
+                            "{}:{}: `Rt.` inside the string literal \"{lit}\"",
+                            unit.id,
+                            n + 1
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(
+            problems.is_empty(),
+            "the Embedded runtime rename would rewrite these string literals:\n{}",
+            problems.join("\n")
+        );
+    }
+
+    /// The contents of every single-line string literal on `line`, stopping at an unquoted `#` comment.
+    fn string_literals(line: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut quote: Option<char> = None;
+        let mut buf = String::new();
+        let mut chars = line.chars();
+        while let Some(c) = chars.next() {
+            match quote {
+                Some(q) => {
+                    if c == '\\' {
+                        if let Some(escaped) = chars.next() {
+                            buf.push(c);
+                            buf.push(escaped);
+                        }
+                    } else if c == q {
+                        out.push(std::mem::take(&mut buf));
+                        quote = None;
+                    } else {
+                        buf.push(c);
+                    }
+                }
+                None => match c {
+                    '#' => break,
+                    '"' | '\'' => quote = Some(c),
+                    _ => {}
+                },
+            }
+        }
+        out
     }
 
     #[test]

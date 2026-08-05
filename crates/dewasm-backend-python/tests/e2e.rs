@@ -21,7 +21,7 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates independent Embedded conversions (only used by cases Python invokes).
+    /// Compose several `.wat` modules. `shared_runtime` emits each against one top-level `class Rt:` (Alias linkage) plus a single bundled runtime, so an imported table crosses modules; otherwise it concatenates full Embedded conversions, each carrying its own `<Class>Rt` (ADR-62). Duplicate top-level `import` lines in the concatenation are harmless in Python.
     fn compose_modules(&self, modules: &[(&str, &str)], shared_runtime: bool) -> String {
         if shared_runtime {
             let mut units = std::collections::BTreeSet::new();
@@ -157,7 +157,7 @@ sys.stdout = io.TextIOWrapper(_buf, write_through=True)
 try:
     inst = Prog({})
     inst.invoke("_start")
-except Rt.Exit:
+except ProgRt.Exit:
     pass
 finally:
     sys.stdout.flush()
@@ -175,12 +175,12 @@ sys.stdout.flush()
 const PYTHON_FS_GLUE: &str = r#"inst = Prog({}, preopens={"{guest}": "{host}"})
 try:
     inst.invoke("_start")
-except Rt.Exit as e:
+except ProgRt.Exit as e:
     print(e.code)
 "#;
 
 /// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
-const PYTHON_CONTAINMENT_GLUE: &str = r#"wasi = Rt.WASI(preopens={"/": "/"})
+const PYTHON_CONTAINMENT_GLUE: &str = r#"wasi = ProgRt.WASI(preopens={"/": "/"})
 _path, err = wasi.resolve_path(3, "etc")
 print("contained" if err is None else "rejected")
 "#;
@@ -190,39 +190,39 @@ print("contained" if err is None else "rejected")
 const PYTHON_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_file_io.js"], env={}, preopens={"/work": "{scratch}"})
 try:
     inst.invoke("_start")
-except Rt.Exit:
+except QjsRt.Exit:
     pass
 "#;
 
 const PYTHON_SQLITE3_SHELL_GLUE: &str = r#"inst = Sqlite3Shell({}, args=["sqlite3"], env={}, preopens={"/db": "{scratch}"})
 try:
     inst.invoke("_start")
-except Rt.Exit:
+except Sqlite3ShellRt.Exit:
     pass
 "#;
 
 const PYTHON_RG_SEARCH_GLUE: &str = r#"inst = Rg({}, args=["rg", "--sort", "path", "needle", "/work"], env={}, preopens={"/work": "{scratch}"})
 try:
     inst.invoke("_start")
-except Rt.Exit:
+except RgRt.Exit:
     pass
 "#;
 
 const PYTHON_CPYTHON_GLUE: &str = r#"inst = Cpython({}, args=["python", "-c", "print('hello from cpython', 6 * 7)"], env={"PYTHONHOME": "/", "PYTHONPATH": "/lib/python3.14"}, preopens={"/lib": "{cache}/cpython-lib/lib"})
 try:
     inst.invoke("_start")
-except Rt.Exit:
+except CpythonRt.Exit:
     pass
 "#;
 
 const PYTHON_CRUBY_GLUE: &str = r#"inst = Cruby({}, args=["ruby", "-e", "puts \"hello from cruby #{6*7}\""], env={}, preopens={"/usr": "{cache}/ruby-lib/usr"})
 try:
     inst.invoke("_start")
-except Rt.Exit:
+except CrubyRt.Exit:
     pass
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Rt.Memory. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's runtime Memory. Only the file-backed case uses {scratch}.
 
 const PYTHON_LIBSQLITE3_MEM: &str = r#"
 db_mod = Libsqlite3({})
@@ -495,6 +495,18 @@ b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
+/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module. Each carries its own runtime class (`AlphaRt`/`BetaRt`, ADR-62), so their trap types are distinct objects and Alpha's trap is catchable by name.
+const PYTHON_EMBEDDED_COEXIST_GLUE: &str = r#"a = Alpha()
+b = Beta()
+print(a.invoke("div", 7, 2))
+print(b.invoke("div", 0xfffffff9, 2))
+print("distinct-rt" if AlphaRt.Trap is not BetaRt.Trap else "same-rt")
+try:
+    a.invoke("div", 1, 0)
+except AlphaRt.Trap:
+    print("trapped")
+"#;
+
 /// DOOM (ADR-53): drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
@@ -636,4 +648,4 @@ dewasm_test_helper::doom_frame_e2e!(Python, PYTHON_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Python, PYTHON_NES_FRAME_GLUE);
 
 dewasm_test_helper::shared_table_e2e!(Python, PYTHON_SHARED_TABLE_GLUE);
-// embedded_coexist_e2e!: not invoked — Python's library Embedded output emits one top-level `class Rt:` (a sibling, redefined on concatenation), not a per-class nested runtime, so two independent runtimes cannot coexist (docs/apps-audit.md).
+dewasm_test_helper::embedded_coexist_e2e!(Python, PYTHON_EMBEDDED_COEXIST_GLUE);
