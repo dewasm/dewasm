@@ -88,8 +88,6 @@ $ dewasm input.<wasm|wat>
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
 
 - `--module-name` names the generated class/package and is required in library mode (standalone output has a fixed internal name and rejects it).
-  * It is used verbatim and rejected if it does not fit the target language's grammar — nothing is sanitized ([ADR-63](docs/adr/63-module-name-policy.md)).
-  * Standalone artifacts have a fixed internal name, so `--module-name` is rejected there.
 
 Please see `dewasm --help` for the full list of options.
 
