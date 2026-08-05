@@ -66,8 +66,19 @@ wasi_resolve_path() {
     # A "."/".." tail is never a symlink; resolve the whole path as a dir.
     __real=$(cd -P -- "$__joined" 2>/dev/null && pwd -P)
     if [[ -z $__real ]]; then
-      R0=44 # ENOENT
-      return 0
+      # `cd -P` cannot enter a non-directory, and a preopen root need not be
+      # one: wasi-libc addresses a path that *is* a preopen (the zeroperl
+      # reactor's "/dev/null") as that preopen's fd plus the relative path ".",
+      # which lands here. Collapse that "." onto the root, which is already
+      # stored physically — the same resolution Ruby's `File.realpath` and
+      # Perl's `Cwd::realpath` give a file. Only the root is collapsed: a
+      # "somefile/." deeper in the tree keeps failing.
+      if [[ $__base == "." && ${__joined%/.} == "${__root%/}" && -e $__root ]]; then
+        __real=$__root
+      else
+        R0=44 # ENOENT
+        return 0
+      fi
     fi
   else
     local __dir=${__joined%/*}

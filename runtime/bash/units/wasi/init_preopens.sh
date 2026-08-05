@@ -2,10 +2,11 @@
 # ordered WASI_DIRS array (the bash analogue of Ruby's `preopens:` kwarg, ADR-34)
 # and initialize the parallel fd-table arrays for this prefix. Each WASI_DIRS
 # entry is 'HOST::GUEST' (no `::` means guest==host); the host is resolved
-# physically via `cd -P`, and an unresolvable host is a loud init failure
-# (nonzero return, so <p>init fails). Dir fds start at 3 (past stdio) and
-# <p>wnext is left pointing past the last one. Always called from <p>init when
-# WASI is bundled; an unset/empty WASI_DIRS just initializes the arrays.
+# physically via `cd -P` (a non-directory host through its parent), and a host
+# path that does not exist is a loud init failure (nonzero return, so <p>init
+# fails). Dir fds start at 3 (past stdio) and <p>wnext is left pointing past
+# the last one. Always called from <p>init when WASI is bundled; an
+# unset/empty WASI_DIRS just initializes the arrays.
 #
 # Per-fd rights (ADR-40): <p>wrbase / <p>wrinh hold the u64 rights masks a fd
 # exposes through fd_fdstat_get and enforces on fd_read/write/seek/readdir/
@@ -34,7 +35,7 @@ wasi_init_preopens() {
     __wrinh[$__sfd]=-1
     __wfdflags[$__sfd]=0
   done
-  local __i __spec __host __guest __real __fd=3
+  local __i __spec __host __guest __real __hostdir __fd=3
   for (( __i = 0; __i < ${#WASI_DIRS[@]}; __i++ )); do
     __spec=${WASI_DIRS[__i]}
     if [[ $__spec == *"::"* ]]; then
@@ -44,9 +45,24 @@ wasi_init_preopens() {
       __host=$__spec
       __guest=$__spec
     fi
-    __real=$(cd -P -- "$__host" 2>/dev/null && pwd -P)
+    # The host path must resolve, but need not be a directory: like the
+    # Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the
+    # zeroperl reactor's init probe) is accepted — the guest resolves it as the
+    # preopen root itself. A directory is resolved physically by entering it;
+    # anything else by resolving its parent and re-attaching the basename.
+    if [[ -d $__host ]]; then
+      __real=$(cd -P -- "$__host" 2>/dev/null && pwd -P)
+    elif [[ -e $__host ]]; then
+      __hostdir=${__host%/*}
+      [[ $__hostdir == "$__host" ]] && __hostdir=.
+      [[ -z $__hostdir ]] && __hostdir=/
+      __real=$(cd -P -- "$__hostdir" 2>/dev/null && pwd -P)
+      [[ -n $__real ]] && __real=${__real%/}/${__host##*/}
+    else
+      __real=
+    fi
     if [[ -z $__real ]]; then
-      echo "preopen ${__guest}: cannot resolve host directory ${__host}" >&2
+      echo "preopen ${__guest}: cannot resolve host path ${__host}" >&2
       return 1
     fi
     __fds[$__fd]=3

@@ -1,4 +1,4 @@
-//! Bash-only WASI filesystem regression pins (the issue-29 fixes): drive a converted library-mode module plus its bundled units directly under bash, the same direct-drive shape as `softfloat.rs`. These cases do not join the shared `WASI_CASES` conformance table because the other backends inherit the probed errnos from the host OS — which differs between Linux and macOS on some of them — while the bash units implement each choice deterministically; the exact codes pinned here are bash's own contract (`runtime/bash/units/wasi/path_rename.sh` / `fd_close.sh` / `fd_allocate.sh`).
+//! Bash-only WASI filesystem regression pins (the issue-29 fixes, plus the issue-143 single-file preopen): drive a converted library-mode module plus its bundled units directly under bash, the same direct-drive shape as `softfloat.rs`. These cases do not join the shared `WASI_CASES` conformance table because the other backends inherit the probed errnos from the host OS — which differs between Linux and macOS on some of them — while the bash units implement each choice deterministically; the exact codes pinned here are bash's own contract (`runtime/bash/units/wasi/path_rename.sh` / `fd_close.sh` / `fd_allocate.sh` / `init_preopens.sh`).
 //!
 //! The permission-based cases (a read-only parent to fail `rmdir`, a read-only file to fail the close-time flush) assume a non-root test user: root ignores permission bits and would see the operations succeed.
 #![cfg(unix)]
@@ -277,4 +277,24 @@ exit 0
     );
     let out = run_module("close-flush-failure", wat, &glue);
     assert_eq!(out, "29\n8\n");
+}
+
+/// A preopen whose host path is a *file*, not a directory, is accepted, and the `"."` wasi-libc addresses that preopen with resolves back to the file itself — `path_filestat_get(3, ".")` is 0, not an errno. This is the shape the zeroperl reactor's mandatory `/dev/null` preopen takes (issue #143); before the fix `cd -P` could not enter a non-directory, so init failed outright and the `"."` was ENOENT. Ruby and Perl inherit this from `File.realpath`/`Cwd::realpath`, which resolve `"/dev/null/."` to `/dev/null` already; bash's own `cd -P` resolution is why it needed pinning here.
+#[test]
+fn single_file_preopen_resolves_dot_to_itself() {
+    let dir = scratch_dir("file-preopen");
+    let file = dir.join("only");
+    std::fs::write(&file, "x").unwrap();
+    let wat = r#"(module
+  (import "wasi_snapshot_preview1" "path_filestat_get"
+    (func $path_filestat_get (param i32 i32 i32 i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
+  (memory (export "memory") 1)
+  (data (i32.const 0) ".")
+  (func (export "_start")
+    (call $proc_exit
+      (call $path_filestat_get
+        (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 1) (i32.const 64)))))"#;
+    let out = run_module("file-preopen", wat, &start_glue(&file));
+    assert_eq!(out, "0\n");
 }
