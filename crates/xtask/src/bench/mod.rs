@@ -12,10 +12,11 @@
 //!
 //! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one (ADR-15's fail-loud-not-skip policy).
 
-mod chart;
+// `chart`, `report` and `runner` are also what `cargo xtask size` is built on: the same lollipop drawing, the same host block, the same runtime table (ADR-64).
+pub mod chart;
 mod measure;
-mod report;
-mod runner;
+pub mod report;
+pub mod runner;
 mod workload;
 
 use std::collections::HashMap;
@@ -588,11 +589,12 @@ pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
 
-fn results_dir() -> PathBuf {
+/// `benchmarks/results/` — every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
+pub fn results_dir() -> PathBuf {
     bench_root().join("results")
 }
 
-fn docs_dir() -> PathBuf {
+pub fn docs_dir() -> PathBuf {
     repo_root().join("docs")
 }
 
@@ -606,7 +608,7 @@ pub fn apps_cache_dir() -> PathBuf {
     dewasm_test_helper::apps_cache_dir()
 }
 
-fn write_file(path: &Path, contents: &str) -> Result<()> {
+pub fn write_file(path: &Path, contents: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -619,7 +621,7 @@ fn write_file(path: &Path, contents: &str) -> Result<()> {
 
 // ------------------------------------------------------------------ Host description.
 
-fn host_info() -> report::Host {
+pub fn host_info() -> report::Host {
     report::Host {
         os: os_description(),
         arch: std::env::consts::ARCH.to_string(),
@@ -680,7 +682,7 @@ fn shell_line(program: &str, args: &[&str]) -> Option<String> {
 // ------------------------------------------------------------------ Time.
 
 /// The current UTC time as `YYYY-MM-DDTHH:MM:SSZ`. Hand-rolled rather than pulling `chrono` in for one timestamp in a dev tool.
-fn utc_timestamp() -> String {
+pub fn utc_timestamp() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |since| since.as_secs());

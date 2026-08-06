@@ -5,6 +5,8 @@
 //! The form is a horizontal lollipop, fastest at the top — not bars, because a bar encodes length from a zero that a log axis does not have. Color carries the runner family, never the rank, and every row is direct-labelled.
 //!
 //! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app — the title says which), never a ratio, so charts can be read against each other. The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
+//!
+//! [`lollipop`] and the theme around it are the drawing, with the unit left open; `cargo xtask size` draws its byte figures with the same function so the two records look like one family of charts.
 
 use std::fmt::Write as _;
 
@@ -56,9 +58,10 @@ impl Quantity {
     }
 }
 
-/// Which of the four colors a runner wears. Assigned by family so that a filter or a re-sort never repaints a runner.
+/// Which of the four colors a row wears. Assigned by family so that a filter or a re-sort never repaints a runner.
 #[derive(Clone, Copy, PartialEq)]
-enum Family {
+pub enum Family {
+    /// wasmtime here; the wasm binary itself in the size record.
     Baseline,
     Dewasm,
     /// A wasm runtime executing the module natively — wasmer, wasmedge, wazero, wasm3. Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
@@ -79,7 +82,7 @@ fn family(runner: &str) -> Family {
 }
 
 /// Slots 1-4 of the validated categorical palette, plus the surface and text tokens. Dark is a selected variant — its own steps for the dark surface, not an inversion of the light one.
-struct Theme {
+pub struct Theme {
     surface: &'static str,
     text_primary: &'static str,
     text_secondary: &'static str,
@@ -89,7 +92,7 @@ struct Theme {
     interpreter: &'static str,
 }
 
-const LIGHT: Theme = Theme {
+pub const LIGHT: Theme = Theme {
     surface: "#fcfcfb",
     text_primary: "#0b0b0b",
     text_secondary: "#52514e",
@@ -99,7 +102,7 @@ const LIGHT: Theme = Theme {
     interpreter: "#e87ba4",
 };
 
-const DARK: Theme = Theme {
+pub const DARK: Theme = Theme {
     surface: "#1a1a19",
     text_primary: "#ffffff",
     text_secondary: "#c3c2b7",
@@ -110,7 +113,7 @@ const DARK: Theme = Theme {
 };
 
 impl Theme {
-    fn color(&self, family: Family) -> &'static str {
+    pub fn color(&self, family: Family) -> &'static str {
         match family {
             Family::Baseline => self.baseline,
             Family::Dewasm => self.dewasm,
@@ -120,13 +123,32 @@ impl Theme {
     }
 }
 
-/// One plotted runner.
-struct Row {
-    label: String,
-    /// Seconds, per the chart's [`Quantity`].
-    value: f64,
-    family: Family,
+/// One plotted row.
+pub struct Row {
+    pub label: String,
+    /// In whatever unit the chart's [`Units`] spells; seconds here, bytes in the size record.
+    pub value: f64,
+    pub family: Family,
 }
+
+/// How a chart spells a plotted value and a power-of-ten gridline label. The renderer is unit-agnostic; these two functions are the whole difference between a seconds chart and a bytes chart.
+pub struct Units {
+    pub value: fn(f64) -> String,
+    pub tick: fn(f64) -> String,
+}
+
+const SECONDS: Units = Units {
+    value: fmt_time,
+    tick: fmt_tick,
+};
+
+/// The four families named in every benchmark chart's legend.
+const BENCH_LEGEND: [(Family, &str); 4] = [
+    (Family::Baseline, "wasmtime (baseline)"),
+    (Family::Dewasm, "dewasm backends"),
+    (Family::Native, "native runtimes"),
+    (Family::Interpreter, "wasm interpreters in a host language"),
+];
 
 /// A chart for every workload the record has at least two measurements for, in document order. A workload the run did not cover simply produces none — `--render` has to work on an old or filtered record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
@@ -152,8 +174,8 @@ fn build(report: &Report, workload: &str) -> Option<Chart> {
     Some(Chart {
         workload: workload.to_string(),
         stem: stem(workload),
-        light: svg(&title, &rows, &LIGHT, &alt),
-        dark: svg(&title, &rows, &DARK, &alt),
+        light: lollipop(&title, &rows, &LIGHT, &alt, &SECONDS, &BENCH_LEGEND),
+        dark: lollipop(&title, &rows, &DARK, &alt, &SECONDS, &BENCH_LEGEND),
         alt,
     })
 }
@@ -211,7 +233,15 @@ fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
     )
 }
 
-fn svg(title: &str, rows: &[Row], theme: &Theme, alt: &str) -> String {
+/// The drawing: a horizontal lollipop on a log10 axis, one row each, `rows` given smallest first. `units` names the axis, `legend` names the colors.
+pub fn lollipop(
+    title: &str,
+    rows: &[Row],
+    theme: &Theme,
+    alt: &str,
+    units: &Units,
+    legend: &[(Family, &str)],
+) -> String {
     let plot_bottom = PLOT_TOP + ROW_H * rows.len() as f64;
     let height = plot_bottom + 30.0;
 
@@ -262,7 +292,7 @@ fn svg(title: &str, rows: &[Row], theme: &Theme, alt: &str) -> String {
             r#"<text x="{x:.1}" y="{:.1}" text-anchor="middle" font-size="11" fill="{}">{}</text>"#,
             plot_bottom + 16.0,
             theme.text_secondary,
-            escape(&fmt_tick(value))
+            escape(&(units.tick)(value))
         );
         tick += 1;
     }
@@ -300,7 +330,7 @@ fn svg(title: &str, rows: &[Row], theme: &Theme, alt: &str) -> String {
             r#"<text x="{VALUE_RIGHT:.1}" y="{:.1}" text-anchor="end" font-size="{FONT}" font-weight="600" fill="{}">{}</text>"#,
             cy + 4.0,
             theme.text_primary,
-            escape(&fmt_time(row.value))
+            escape(&(units.value)(row.value))
         );
     }
 
@@ -310,22 +340,17 @@ fn svg(title: &str, rows: &[Row], theme: &Theme, alt: &str) -> String {
         theme.text_primary,
         escape(title)
     );
-    render_legend(&mut out, theme);
+    render_legend(&mut out, theme, legend);
     out.push_str("</svg>\n");
     out
 }
 
-/// The legend is required even though every row is labelled: it is what names the four families, which the row labels only imply.
-fn render_legend(out: &mut String, theme: &Theme) {
-    let entries = [
-        (theme.baseline, "wasmtime (baseline)"),
-        (theme.dewasm, "dewasm backends"),
-        (theme.native, "native runtimes"),
-        (theme.interpreter, "wasm interpreters in a host language"),
-    ];
+/// The legend is required even though every row is labelled: it is what names the families, which the row labels only imply.
+fn render_legend(out: &mut String, theme: &Theme, entries: &[(Family, &str)]) {
     let y = 48.0;
     let mut x = PAD;
-    for (color, label) in entries {
+    for (family, label) in entries.iter().copied() {
+        let color = theme.color(family);
         let _ = writeln!(
             out,
             r#"<circle cx="{:.1}" cy="{y:.1}" r="5.5" fill="{color}" stroke="{}" stroke-width="2"/>"#,
@@ -349,8 +374,8 @@ fn text_width(text: &str, font_size: f64) -> f64 {
     text.chars().count() as f64 * font_size * 0.55
 }
 
-/// A slowdown factor, used only for the span sentence in the alt text. Rounded to three significant figures above 1000x — `23100x`, not `23102x`.
-fn fmt_ratio(ratio: f64) -> String {
+/// A factor between two plotted values, used for the span sentence in the alt text. Rounded to three significant figures above 1000x — `23100x`, not `23102x`.
+pub fn fmt_ratio(ratio: f64) -> String {
     if ratio < 10.0 {
         format!("{ratio:.2}x")
     } else if ratio < 1000.0 {
@@ -391,7 +416,7 @@ fn fmt_tick(seconds: f64) -> String {
 }
 
 /// `value` rounded to three significant figures.
-fn round3(value: f64) -> f64 {
+pub fn round3(value: f64) -> f64 {
     if !value.is_finite() || value <= 0.0 {
         return value;
     }

@@ -14,6 +14,8 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 | [docs/related-work.md](related-work.md) | Comparison with prior art | Evaluators | By hand |
 | [docs/benchmarks/](benchmarks/README.md) | How to run the benchmark suite and read its numbers | Contributors | By hand |
 | [docs/benchmarks/results.md](benchmarks/results.md) | Measured performance, with figures under `figs/` | Evaluators | **Generated — never hand-edit** |
+| [docs/sizes/](sizes/README.md) | How to run the size record and read its numbers | Contributors | By hand |
+| [docs/sizes/results.md](sizes/results.md) | Measured distribution sizes — wasm binary, converted source, runtimes — with figures under `figs/` | Evaluators | **Generated — never hand-edit** |
 | [docs/adr/](adr/README.md) | Design decisions with rationale and rejected alternatives | Contributors, future maintainers | By hand (via the `adr-author` skill) |
 
 ## Rules
@@ -29,3 +31,4 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 - A design decision → a new ADR (see [docs/adr/README.md](adr/README.md)).
 - A new real-world app target → an audited row in `docs/apps-audit.md`.
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask bench`. Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload ([ADR-57](adr/57-benchmark-harness.md)).
+- A size number → the record `cargo xtask size` writes to `benchmarks/results/`, rendered into `docs/sizes/results.md`, for the same reason: a generated artifact's size changes with every codegen change ([ADR-64](adr/64-size-record.md)).

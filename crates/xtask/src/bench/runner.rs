@@ -156,6 +156,15 @@ impl Runner {
         }
     }
 
+    /// The executable this runner launches, for the runners that *are* one executable: wasmtime and the other native runtimes. `None` for a dewasm backend or a driver, whose "runner" is a generated artifact plus a host interpreter. `cargo xtask size` weighs what this returns (ADR-64).
+    pub fn binary(&self) -> Option<PathBuf> {
+        match &self.kind {
+            Kind::Wasmtime => wasmtime_bin(),
+            Kind::Native(native) => native.bin_path(),
+            Kind::Dewasm(_) | Kind::Driver(_) => None,
+        }
+    }
+
     /// A version string captured by *executing* the runtime, so the result file records what actually ran rather than what was pinned.
     pub fn version(&self) -> Option<String> {
         match &self.kind {
