@@ -78,6 +78,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-62 | [`Embedded` Output Isolates Its Runtime per Artifact](62-embedded-runtime-isolation.md) | Accepted |
 | ADR-63 | [`--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode](63-module-name-policy.md) | Accepted (Go pending) |
 | ADR-64 | [Record Distribution Size Beside Speed, in Raw Bytes](64-size-record.md) | Accepted |
+| ADR-65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted (Ruby only) |
 
 ## Adding a new ADR
 

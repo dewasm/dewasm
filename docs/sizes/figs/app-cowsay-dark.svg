@@ -15,9 +15,9 @@
 <circle cx="548.6" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.03 MB</text>
 <text x="152.0" y="138.0" text-anchor="end" font-size="12" fill="#ffffff">ruby</text>
-<line x1="168.0" y1="134.0" x2="556.9" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="556.9" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.16 MB</text>
+<line x1="168.0" y1="134.0" x2="553.6" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="553.6" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.11 MB</text>
 <text x="152.0" y="162.0" text-anchor="end" font-size="12" fill="#ffffff">go</text>
 <line x1="168.0" y1="158.0" x2="571.4" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="571.4" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
