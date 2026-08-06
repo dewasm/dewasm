@@ -14,8 +14,9 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
-    OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
+    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
+    RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -404,15 +405,6 @@ fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
 }
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
-
-/// Whether [`Gen::cond`] renders `e` as a Perl boolean rather than as a `!= 0` test of a materialized value — the case where a consumer can take the boolean directly.
-fn is_boolean(e: &Expr) -> bool {
-    match e {
-        Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, _) => true,
-        Expr::Bin(op, ..) => rel_op(*op).is_some(),
-        _ => false,
-    }
-}
 
 fn temp(t: Temp) -> String {
     format!("$s{}", t.depth)
@@ -878,16 +870,9 @@ impl<'a> Gen<'a> {
             self.rt_name
         ));
         // Locals start at their type's default. A run of consecutive locals sharing one default is declared in a single statement — a list assignment of that many copies, or, where the default is `undef`, the bare declaration a fresh lexical already satisfies.
-        let mut i = 0;
-        while i < func.locals.len() {
-            let default = default_value(func.locals[i]);
-            let mut end = i + 1;
-            while end < func.locals.len() && default_value(func.locals[end]) == default {
-                end += 1;
-            }
-            let names: Vec<String> = (i..end)
-                .map(|k| format!("$l{}", ty.params.len() + k))
-                .collect();
+        for run in local_runs(&func.locals, default_value) {
+            let default = default_value(func.locals[run.start]);
+            let names: Vec<String> = run.map(|k| format!("$l{}", ty.params.len() + k)).collect();
             let decl = match names.as_slice() {
                 [one] => one.clone(),
                 many => format!("({})", many.join(", ")),
@@ -899,7 +884,6 @@ impl<'a> Gen<'a> {
             } else {
                 w.line(format!("my {decl} = ({default}) x {};", names.len()));
             }
-            i = end;
         }
         // Temps default to 0; every temp is assigned before any reachable read (valid wasm), so the value only guards against reading undef.
         let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
@@ -1381,26 +1365,17 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// The Perl rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned IV/UVs, which perl's comparison operators order exactly, and perl's NV comparison matches wasm, NaN included; ADR-2, ADR-55). The single home of that mapping: `bin` wraps the result back into an i32, `cond` takes it as it stands.
+/// The Perl rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned IV/UVs, which perl's comparison operators order exactly, and perl's NV comparison matches wasm, NaN included; ADR-2, ADR-55). `bin` wraps the result back into an i32, `cond` takes it as it stands.
 fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    use BinOp::*;
-    Some(match op {
-        I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
-        I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
-        I32LtU | I64LtU | F32Lt | F64Lt => ("<", None),
-        I32GtU | I64GtU | F32Gt | F64Gt => (">", None),
-        I32LeU | I64LeU | F32Le | F64Le => ("<=", None),
-        I32GeU | I64GeU | F32Ge | F64Ge => (">=", None),
-        I32LtS => ("<", Some("s32")),
-        I32GtS => (">", Some("s32")),
-        I32LeS => ("<=", Some("s32")),
-        I32GeS => (">=", Some("s32")),
-        I64LtS => ("<", Some("s64")),
-        I64GtS => (">", Some("s64")),
-        I64LeS => ("<=", Some("s64")),
-        I64GeS => (">=", Some("s64")),
-        _ => return None,
-    })
+    let (r, operands) = comparison(op)?;
+    Some((
+        r,
+        match operands {
+            CompareOperands::Signed32 => Some("s32"),
+            CompareOperands::Signed64 => Some("s64"),
+            _ => None,
+        },
+    ))
 }
 
 /// A Perl float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which perl's (correctly rounded) string->NV conversion parses back exactly; non-finite values never reach here.

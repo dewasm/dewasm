@@ -15,8 +15,9 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
-    OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
+    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
+    RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -929,19 +930,13 @@ impl<'a> Gen<'a> {
         };
         w.block(header, "end", |w| {
             // Locals start at their type's default. Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
-            let mut i = 0;
-            while i < func.locals.len() {
-                let default = default_value(func.locals[i]);
-                let mut end = i + 1;
-                while end < func.locals.len() && default_value(func.locals[end]) == default {
-                    end += 1;
-                }
-                let names = (i..end)
+            for run in local_runs(&func.locals, default_value) {
+                let default = default_value(func.locals[run.start]);
+                let names = run
                     .map(|k| format!("l{}", ty.params.len() + k))
                     .collect::<Vec<_>>()
                     .join(" = ");
                 w.line(format!("{names} = {default}"));
-                i = end;
             }
             let plan = flat::plan(&func.body, &self.frames.borrow().paths);
             // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
@@ -1574,26 +1569,17 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// The Ruby rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Ruby `Float` comparison matches wasm, NaN included; ADR-2). The single home of that mapping: `bin` wraps the result back into an i32, `cond` takes it as it stands.
+/// The Ruby rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Ruby `Float` comparison matches wasm, NaN included; ADR-2). `bin` wraps the result back into an i32, `cond` takes it as it stands.
 fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    use BinOp::*;
-    Some(match op {
-        I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
-        I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
-        I32LtU | I64LtU | F32Lt | F64Lt => ("<", None),
-        I32GtU | I64GtU | F32Gt | F64Gt => (">", None),
-        I32LeU | I64LeU | F32Le | F64Le => ("<=", None),
-        I32GeU | I64GeU | F32Ge | F64Ge => (">=", None),
-        I32LtS => ("<", Some("s32")),
-        I32GtS => (">", Some("s32")),
-        I32LeS => ("<=", Some("s32")),
-        I32GeS => (">=", Some("s32")),
-        I64LtS => ("<", Some("s64")),
-        I64GtS => (">", Some("s64")),
-        I64LeS => ("<=", Some("s64")),
-        I64GeS => (">=", Some("s64")),
-        _ => return None,
-    })
+    let (r, operands) = comparison(op)?;
+    Some((
+        r,
+        match operands {
+            CompareOperands::Signed32 => Some("s32"),
+            CompareOperands::Signed64 => Some("s64"),
+            _ => None,
+        },
+    ))
 }
 
 /// Whether `stmts` unconditionally leaves the current dispatch state, so a
@@ -1614,15 +1600,6 @@ fn terminates(stmts: &[Stmt]) -> bool {
         Stmt::Br(_) | Stmt::Return { .. } | Stmt::Unreachable => true,
         // Neither arm falling through means the `if` itself does not.
         Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
-        _ => false,
-    }
-}
-
-/// Whether [`Gen::cond`] renders `e` as a Ruby boolean rather than as a `!= 0` test of a materialized value — the case where a consumer can take the boolean directly.
-fn is_boolean(e: &Expr) -> bool {
-    match e {
-        Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, _) => true,
-        Expr::Bin(op, ..) => rel_op(*op).is_some(),
         _ => false,
     }
 }

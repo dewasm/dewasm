@@ -13,8 +13,9 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, is_ident, module_name_error, Backend, CodeWriter, GenOptions, Mode,
-    OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
+    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
+    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope,
+    SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -498,35 +499,17 @@ fn split_module_name(name: &str) -> Result<(Option<String>, String)> {
     Ok((package, (*class).to_string()))
 }
 
-/// Whether [`Gen::cond`] renders `e` as a Java boolean rather than as a `!= 0` test of a materialized value — the case where a consumer can take the boolean directly.
-fn is_boolean(e: &Expr) -> bool {
-    match e {
-        Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, _) => true,
-        Expr::Bin(op, ..) => rel_op(*op).is_some(),
-        _ => false,
-    }
-}
-
-/// The Java rendering of a wasm comparison: the operator, and the unsigned-comparison helper its operands go through — `None` wherever Java's own operator on the stored representation already matches wasm (integers are stored signed, so the signed forms are direct, and Java's float comparison agrees with wasm, NaN included; ADR-2). The single home of that mapping: `bin` wraps the result back into an i32, `cond` takes it as it stands.
+/// The Java rendering of a wasm comparison: the operator, and the unsigned-comparison helper its operands go through — `None` wherever Java's own operator on the stored representation already matches wasm (integers are stored signed, so the signed forms are direct, and Java's float comparison agrees with wasm, NaN included; ADR-2). `bin` wraps the result back into an i32, `cond` takes it as it stands.
 fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    use BinOp::*;
-    Some(match op {
-        I32Eq | I64Eq | F32Eq | F64Eq => ("==", None),
-        I32Ne | I64Ne | F32Ne | F64Ne => ("!=", None),
-        I32LtS | I64LtS | F32Lt | F64Lt => ("<", None),
-        I32GtS | I64GtS | F32Gt | F64Gt => (">", None),
-        I32LeS | I64LeS | F32Le | F64Le => ("<=", None),
-        I32GeS | I64GeS | F32Ge | F64Ge => (">=", None),
-        I32LtU => ("<", Some("Integer.compareUnsigned")),
-        I32GtU => (">", Some("Integer.compareUnsigned")),
-        I32LeU => ("<=", Some("Integer.compareUnsigned")),
-        I32GeU => (">=", Some("Integer.compareUnsigned")),
-        I64LtU => ("<", Some("Long.compareUnsigned")),
-        I64GtU => (">", Some("Long.compareUnsigned")),
-        I64LeU => ("<=", Some("Long.compareUnsigned")),
-        I64GeU => (">=", Some("Long.compareUnsigned")),
-        _ => return None,
-    })
+    let (r, operands) = comparison(op)?;
+    Some((
+        r,
+        match operands {
+            CompareOperands::Unsigned32 => Some("Integer.compareUnsigned"),
+            CompareOperands::Unsigned64 => Some("Long.compareUnsigned"),
+            _ => None,
+        },
+    ))
 }
 
 /// A comparison as a Java boolean, from a `rel_op` mapping and the already rendered operands.
@@ -1408,18 +1391,12 @@ impl<'a> Gen<'a> {
             w.line(self.method_head(&ret_ty, &format!("f{idx}"), &params_str));
             w.indent();
             // Locals start at their type's zero. A run of consecutive locals of one type becomes a single declaration; Java has no chained assignment in a declarator list, so each name keeps its own initializer and only the type name is shared.
-            let mut i = nparams;
-            while i < local_types.len() {
-                let lt = local_types[i];
-                let mut end = i + 1;
-                while end < local_types.len() && local_types[end] == lt {
-                    end += 1;
-                }
-                let names: Vec<String> = (i..end)
-                    .map(|k| format!("l{k} = {}", zero_value(lt)))
+            for run in local_runs(&local_types[nparams..], |t| t) {
+                let lt = local_types[nparams + run.start];
+                let names: Vec<String> = run
+                    .map(|k| format!("l{} = {}", nparams + k, zero_value(lt)))
                     .collect();
                 w.line(format!("{} {};", jtype(lt), names.join(", ")));
-                i = end;
             }
             for t in &func.temps {
                 w.line(format!(
