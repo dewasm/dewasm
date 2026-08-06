@@ -32,7 +32,8 @@ pub fn bundler() -> &'static RuntimeBundler {
     BUNDLER.get_or_init(|| {
         RuntimeBundler::new(
             "#",
-            "  ",
+            "\t",
+            2,
             vec![
                 RuntimeScope {
                     prefix: "rt",
@@ -162,7 +163,7 @@ fn generate_module_inner(
         scratch_max: Cell::new(0),
         needs_ci: Cell::new(false),
     };
-    let mut w = CodeWriter::new("  ");
+    let mut w = CodeWriter::new("\t");
     gen.body(&mut w);
     Ok((w.finish(), gen.uses.into_inner()))
 }
@@ -255,7 +256,7 @@ impl Backend for BashBackend {
         out.push_str(&src);
 
         if opts.mode == Mode::Standalone {
-            let mut w = CodeWriter::new("  ");
+            let mut w = CodeWriter::new("\t");
             w.line("");
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
@@ -265,12 +266,12 @@ impl Backend for BashBackend {
                 // Standalone runtime interface (ADR-31): consume a leading run of `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..]. The Bash backend now honors --dir with real filesystem support (ADR-34), mirroring the Ruby standalone parser.
                 w.line("WASI_DIRS=()");
                 w.line("while (( $# )); do");
-                w.line("  case \"$1\" in");
-                w.line("    --) shift; break ;;");
-                w.line("    --dir) shift; [[ $# -gt 0 ]] || { echo \"--dir requires a HOST::GUEST argument\" >&2; exit 2; }; WASI_DIRS+=(\"$1\"); shift ;;");
-                w.line("    --dir=*) WASI_DIRS+=(\"${1#--dir=}\"); shift ;;");
-                w.line("    *) break ;;");
-                w.line("  esac");
+                w.line("\tcase \"$1\" in");
+                w.line("\t\t--) shift; break ;;");
+                w.line("\t\t--dir) shift; [[ $# -gt 0 ]] || { echo \"--dir requires a HOST::GUEST argument\" >&2; exit 2; }; WASI_DIRS+=(\"$1\"); shift ;;");
+                w.line("\t\t--dir=*) WASI_DIRS+=(\"${1#--dir=}\"); shift ;;");
+                w.line("\t\t*) break ;;");
+                w.line("\tesac");
                 w.line("done");
                 w.line("WASI_ARGS=(\"${0##*/}\" \"$@\")");
                 w.line("WASI_ENV=()");
@@ -391,7 +392,7 @@ impl<'a> Gen<'a> {
                 let p = self.prefix;
                 w.line("");
                 w.line(format!("{p}imp_wasi_{name}() {{"));
-                w.line(format!("  {} {p} \"$@\"", self.rt(&format!("wasi_{name}"))));
+                w.line(format!("\t{} {p} \"$@\"", self.rt(&format!("wasi_{name}"))));
                 w.line("}");
             }
         }
@@ -760,7 +761,7 @@ impl<'a> Gen<'a> {
         self.scratch_max.set(0);
         self.needs_ci.set(false);
 
-        let mut bw = CodeWriter::new("  ");
+        let mut bw = CodeWriter::new("\t");
         bw.indent();
         let mut frames = Frames { stack: Vec::new() };
         self.stmts(&mut bw, &func.body, &mut frames);

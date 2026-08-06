@@ -236,12 +236,15 @@ pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
     units: BTreeMap<String, RuntimeUnit>,
     indent_str: &'static str,
+    unit_indent: usize,
 }
 
 impl RuntimeBundler {
+    /// `indent_str` is one indent level of the emitted bundle; `unit_indent` is the width of one indent level *in the unit sources*, so that their own indentation can be re-emitted in `indent_str` (0 leaves body lines exactly as written).
     pub fn new(
         comment_prefix: &str,
         indent_str: &'static str,
+        unit_indent: usize,
         scopes: Vec<RuntimeScope>,
         sources: &[(&str, &str)],
     ) -> Result<Self> {
@@ -285,6 +288,7 @@ impl RuntimeBundler {
             scopes,
             units,
             indent_str,
+            unit_indent,
         };
         for unit in bundler.units.values() {
             for dep in &unit.requires {
@@ -385,15 +389,27 @@ impl RuntimeBundler {
         self.bundle(&seeds, base_indent)
     }
 
+    /// Emit one line at `indent` levels. A unit source is written space-indented at `unit_indent` per level; each such leading run becomes one `indent_str` here, so the bundle carries the caller's indentation style throughout instead of mixing it with the sources'. Spaces beyond the last whole run (an indentation that is not a multiple of `unit_indent`, e.g. an aligned continuation) are kept as spaces.
     fn push_line(&self, out: &mut String, indent: usize, line: &str) {
         if line.trim().is_empty() {
             out.push('\n');
             return;
         }
-        for _ in 0..indent {
+        let (levels, spaces, rest) = match self.unit_indent {
+            0 => (0, 0, line),
+            width => {
+                let rest = line.trim_start_matches(' ');
+                let leading = line.len() - rest.len();
+                (leading / width, leading % width, rest)
+            }
+        };
+        for _ in 0..indent + levels {
             out.push_str(self.indent_str);
         }
-        out.push_str(line);
+        for _ in 0..spaces {
+            out.push(' ');
+        }
+        out.push_str(rest);
         out.push('\n');
     }
 }
