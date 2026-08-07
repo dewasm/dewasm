@@ -1,6 +1,6 @@
 //! Translate a wasm function body (stack machine) into structured IR with build-time expression folding.
 //!
-//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately. A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus fold directly into their consumer, cutting the statement count for every backend. Evaluation order and trap points are preserved by the spill discipline. Dead code after an unconditional branch is skipped while tracking block nesting only.
+//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately. A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when a temp slot it reads is about to be written (`spill_clobbered`), when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus fold directly into their consumer, cutting the statement count for every backend. Evaluation order and trap points are preserved by the spill discipline. Dead code after an unconditional branch is skipped while tracking block nesting only.
 
 use std::collections::BTreeSet;
 
@@ -30,6 +30,8 @@ struct Effects {
     memory: bool,
     /// May trap (a load, a divide/remainder, or a non-saturating float->int truncation).
     trap: bool,
+    /// Deepest temp slot the expression reads, if it reads any. Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand — so a pending at depth d legitimately keeps reading temps at depths above d. Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
+    max_temp_read: Option<u32>,
 }
 
 impl Effects {
@@ -53,6 +55,7 @@ impl Effects {
         self.globals |= o.globals;
         self.memory |= o.memory;
         self.trap |= o.trap;
+        self.max_temp_read = self.max_temp_read.max(o.max_temp_read);
     }
 
     fn reads_local(&self, idx: u32) -> bool {
@@ -208,10 +211,9 @@ impl<'a> FuncBuilder<'a> {
 
     /// Push a materialized value: allocate a temp for the top slot and record it in `self.temps`. Used for values that are never folded (call results, `memory.grow`) and by `spill`.
     fn push_temp(&mut self, ty: ValType) -> Temp {
-        let temp = Temp {
-            depth: self.stack.len() as u32,
-            ty,
-        };
+        let depth = self.stack.len() as u32;
+        self.spill_clobbered(depth);
+        let temp = Temp { depth, ty };
         self.temps.insert(temp);
         self.stack.push(Slot { ty, pending: None });
         temp
@@ -230,14 +232,17 @@ impl<'a> FuncBuilder<'a> {
         let slot = self.stack.pop().expect("value stack is not empty");
         match slot.pending {
             Some(p) => (p.expr, p.fx, p.size),
-            None => (
-                Expr::Temp(Temp {
-                    depth: self.stack.len() as u32,
-                    ty: slot.ty,
-                }),
-                Effects::default(),
-                1,
-            ),
+            None => {
+                let depth = self.stack.len() as u32;
+                (
+                    Expr::Temp(Temp { depth, ty: slot.ty }),
+                    Effects {
+                        max_temp_read: Some(depth),
+                        ..Effects::default()
+                    },
+                    1,
+                )
+            }
         }
     }
 
@@ -251,17 +256,38 @@ impl<'a> FuncBuilder<'a> {
 
     /// Materialize the pending value at stack index `idx` into its temp, emitting the assignment. A no-op if already materialized.
     fn spill(&mut self, idx: usize) {
+        if self.stack[idx].pending.is_none() {
+            return;
+        }
+        self.spill_clobbered(idx as u32);
         let ty = self.stack[idx].ty;
-        if let Some(p) = self.stack[idx].pending.take() {
-            let temp = Temp {
-                depth: idx as u32,
-                ty,
-            };
-            self.temps.insert(temp);
-            self.emit(Stmt::Assign {
-                dst: temp,
-                expr: p.expr,
-            });
+        let p = self.stack[idx]
+            .pending
+            .take()
+            .expect("the pending is still there");
+        let temp = Temp {
+            depth: idx as u32,
+            ty,
+        };
+        self.temps.insert(temp);
+        self.emit(Stmt::Assign {
+            dst: temp,
+            expr: p.expr,
+        });
+    }
+
+    /// A temp at depth `depth` (or above) is about to be written: spill every pending that still reads a temp that deep, so its operand is read before the write replaces it. Every temp write goes through `push_temp` (results of a call, `memory.grow`) or `spill` (the assignment it emits), so those two call this and nothing else has to.
+    ///
+    /// Only slots below `depth` can be at risk: a pending at depth d is built from slots at depths >= d, so it never reads a temp below its own slot. Spilling one of them writes its own, shallower temp, which is why `spill` re-enters here; the recursion walks strictly downwards and each level emits before its caller, keeping the assignments in ascending-depth (= wasm evaluation) order.
+    fn spill_clobbered(&mut self, depth: u32) {
+        for idx in 0..self.stack.len().min(depth as usize) {
+            let hit = self.stack[idx]
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.fx.max_temp_read.is_some_and(|d| d >= depth));
+            if hit {
+                self.spill(idx);
+            }
         }
     }
 
