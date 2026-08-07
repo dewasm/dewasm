@@ -4,11 +4,14 @@
 //!
 //! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
+//! `size` is its size counterpart (ADR-64): per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime. Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`. Also a measurement rather than a snapshot.
+//!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
 mod bench;
 mod doom_snapshot;
 mod nes_snapshot;
+mod size;
 
 use std::path::{Path, PathBuf};
 
@@ -69,6 +72,26 @@ Commands:
                                the results doc and its charts from a stored
                                benchmarks/results/*.json without measuring
                                anything, for when only the wording changed).
+    size [--render FILE]       Record how big the delivery is: per cached app
+                               (cowsay, sqlite3-shell, qjs, ruby) the wasm
+                               binary and every backend's converted standalone
+                               source, beside the installed size of each native
+                               runtime on the host (wasmtime, wasmer, wasmedge,
+                               wazero, wasm3). Raw bytes, never compressed.
+                               Writes a dated record to
+                               benchmarks/results/<timestamp>Z-size.json, beside
+                               the speed records, and regenerates
+                               docs/sizes/results.md plus the SVG figures it
+                               embeds (docs/sizes/figs/; figures the record no
+                               longer covers are pruned). Needs the apps cache
+                               populated (examples/apps/setup.sh); a missing app
+                               or runtime is reported as skipped-with-reason
+                               rather than dropped. Not a compared snapshot: no
+                               freshness test.
+                               Options: --render FILE (re-render the document
+                               and its figures from a stored
+                               benchmarks/results/*-size.json without measuring
+                               anything).
 ";
 
 fn main() -> Result<()> {
@@ -77,6 +100,7 @@ fn main() -> Result<()> {
         Some("update-support-docs") => update_support_docs(),
         Some("update-snapshots") => update_snapshots(args.next().as_deref()),
         Some("bench") => bench::main(args),
+        Some("size") => size::main(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
