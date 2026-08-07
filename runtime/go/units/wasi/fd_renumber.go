@@ -2,7 +2,7 @@
 // matching the reference table.renumber). The resource currently at `to` is
 // released (a real file handle is closed; a preopen/dir has none, and stdio
 // must never be closed), then `from`'s entry and its rights meta move to `to`
-// and `from` is retired (ADR-40). Used to overwrite stdio and preopen slots.
+// and `from` is retired. Used to overwrite stdio and preopen slots.
 func (w *WASI) wasi_fd_renumber(from, to uint32) uint32 {
     fromEntry, ok := w.fds[from]
     if !ok {

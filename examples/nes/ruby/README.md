@@ -1,6 +1,6 @@
 # NES (Ruby, ANSI terminal)
 
-An interactive NES frontend that renders into the terminal instead of a window (see `../go` for the pixel-window frontend). `build.sh` builds `cache/nes.wasm` (an [agnes](https://github.com/kgabis/agnes)-based emulator wrapped by `examples/apps/src/nes_demo.c`, ADR-59) via `examples/apps/scripts/nes.sh` and converts it to Ruby with dewasm (`nes_gen.rb`, gitignored, regenerated on every build). Unlike `../doom`, `nes.wasm` has **zero host imports** — there is nothing to wire up — so `main.rb` only loads a ROM into the module's linear memory and drives the game loop itself: pacing, input polling, and frame presentation are entirely the host's job (the module has no clock import of its own to pace against, unlike DOOM's internal 35Hz timer).
+An interactive NES frontend that renders into the terminal instead of a window (see `../go` for the pixel-window frontend). `build.sh` builds `cache/nes.wasm` (an [agnes](https://github.com/kgabis/agnes)-based emulator wrapped by `examples/apps/src/nes_demo.c`) via `examples/apps/scripts/nes.sh` and converts it to Ruby with dewasm (`nes_gen.rb`, gitignored, regenerated on every build). Unlike `../../doom`, `nes.wasm` has **zero host imports** — there is nothing to wire up — so `main.rb` only loads a ROM into the module's linear memory and drives the game loop itself: pacing, input polling, and frame presentation are entirely the host's job (the module has no clock import of its own to pace against, unlike DOOM's internal 35Hz timer).
 
 ## Run
 
@@ -12,19 +12,13 @@ builds and takes over the terminal (alternate screen, hidden cursor, raw input) 
 
 ## Rendering
 
-The module hands over agnes's own frame representation — one palette *index* per pixel at `screenOffset()`, plus the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`) — rather than a rendered image, so composing pixels is this frontend's job: the SGR escape for each palette entry is precomputed once, and only the pixels a cell actually samples are ever looked up.
-
-The NES's native 256x240 frame is downsampled to fit the terminal and drawn two source pixels per character cell with the half-block trick (the same one `../doom/ruby` uses): `▀` colored via 24-bit truecolor SGR, `\e[38;2;R;G;Bm` for the foreground (top pixel) and `\e[48;2;R;G;Bm` for the background (bottom pixel). Target width is `min(terminal columns, 256)`; height in cells follows from that at the NES's aspect ratio, minus one row for the status line. At a typical 160-column terminal that's 160x150 logical pixels, i.e. 160x75 character cells.
-
-Only changed cells are redrawn — an SGR code is skipped whenever a cell's color matches the previous cell's, and the whole frame is built as one string and written with a single `write` call. This diffing/escape-sequence bookkeeping is the actual performance-sensitive part of this frontend; the wasm execution is not.
-
-Measured on an Apple Silicon laptop, headless (`--smoke`, 160x50 cells, under `ruby --yjit`): **the Ruby backend runs `tickGame` far faster than DOOM's** (agnes has no APU and a much smaller software surface than DOOM's renderer) — see the numbers `--smoke` prints on your machine; render overhead stays well under 1ms/frame either way. Without YJIT the Ruby backend drops roughly an order of magnitude, same as `../doom/ruby`; `run.sh` always passes `--yjit`, and `main.rb` warns on stderr if it ends up running without it anyway.
+The module hands over agnes's own frame representation instead of a rendered image: one palette *index* per pixel at `screenOffset()`, plus the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`), drawn two source pixels per character cell with the half-block trick (the same one `../../doom/ruby` uses), with unchanged cells skipped. Measured on an Apple Silicon laptop, headless (`--smoke`, 160x50 cells, under `ruby --yjit`): render overhead stays well under 1ms/frame, noise against the tick cost (see the numbers `--smoke` prints on your machine).
 
 Pacing targets 60Hz (the NTSC NES's real rate is ~60.0988Hz — close enough that no calibration is needed): the frontend sleeps when it's running ahead of schedule and never sleeps when it can't keep up, so it plays at the fastest rate the interpreter can sustain instead of stalling behind a fixed budget.
 
 ## Controls
 
-Terminals deliver key *presses* only, never releases, so — like `../doom/ruby` — each press keeps a button held in the `setInput` bitmask for ~180ms after the last matching press/autorepeat, comfortably above a terminal's own autorepeat interval, and unlike DOOM this bitmask (not discrete down/up events) is what the module actually wants every tick.
+Terminals deliver key *presses* only, never releases, so — like `../../doom/ruby` — each press keeps a button held in the `setInput` bitmask for ~180ms after the last matching press/autorepeat, comfortably above a terminal's own autorepeat interval, and unlike DOOM this bitmask (not discrete down/up events) is what the module actually wants every tick.
 
 | Key | Action |
 | --- | --- |

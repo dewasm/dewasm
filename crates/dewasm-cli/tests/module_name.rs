@@ -1,4 +1,4 @@
-//! The CLI half of the module-name policy (ADR-63): `--module-name` is a library-mode flag, required there and rejected for standalone, and an invalid name is rejected by the backend before anything is written.
+//! The CLI half of the module-name policy: `--module-name` is a library-mode flag, required there and rejected for standalone, and an invalid name is rejected by the backend before anything is written.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};

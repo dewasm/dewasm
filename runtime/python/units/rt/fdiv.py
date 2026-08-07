@@ -6,7 +6,7 @@ def fdiv(a, b):
     if b == 0.0:
         # A NaN dividend must yield a quiet NaN (arithmetic-NaN result); the
         # short-circuit skips the hardware division that would quiet it, so
-        # quiet it explicitly (ADR-2), mirroring Ruby's FPU-quieted path.
+        # quiet it explicitly, mirroring Ruby's FPU-quieted path.
         if a != a:
             return Rt.quiet_nan(a)
         if a == 0.0:

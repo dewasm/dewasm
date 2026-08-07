@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Interactive frontend for the dewasm-generated NES emulator (nes_gen.py,
-produced from examples/apps/src/nes_demo.c's agnes wrapper by build.sh,
-ADR-59). Unlike DOOM, nes.wasm has zero wasm imports -- no console/save-
+produced from examples/apps/src/nes_demo.c's agnes wrapper by build.sh).
+Unlike DOOM, nes.wasm has zero wasm imports -- no console/save-
 game/clock host surface to wire up, just `_initialize` plus the demo exports
 (allocRom/initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
 frameHeight) -- so this script's whole job is to load a ROM into the
@@ -353,7 +353,7 @@ def write_ppm_and_count_colors(path, mv, off, w, h):
     return distinct
 
 
-# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs (ADR-59): the
+# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs: the
 # smallest input-free tick count that clears Alter Ego's boot into its
 # stable credits screen, which also lets a smoke run's screenshot.ppm be
 # diffed directly against examples/apps/snapshots/nes_frame.ppm. Perl (the
@@ -397,7 +397,7 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
 
     # The NES PPU palette tops out at 64 colors, and agnes's frame is a
     # small, mostly-flat subset of it (Alter Ego's title screen settles at 7
-    # -- see ADR-59 and NES_FRAMES's comment in
+    # -- see NES_FRAMES's comment in
     # crates/dewasm-test-helper/src/nes.rs), so a healthy frame is nowhere
     # near the thousands of colors a truecolor renderer would produce; a
     # degenerate (blank/solid) frame is the real signal to catch, and lands

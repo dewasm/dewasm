@@ -1,4 +1,4 @@
-# The f64 round-and-pack core (ADR-13): R0 = (-1)^s * m * 2^(e-53),
+# The f64 round-and-pack core: R0 = (-1)^s * m * 2^(e-53),
 # rounded to nearest-even, where sk means "strictly more than m, by less
 # than one unit in m's last place".
 #

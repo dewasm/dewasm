@@ -4,7 +4,7 @@
 // ino/nlink come from the unix syscall.Stat_t; mtim is the portable ModTime,
 // while atim/ctim are read from the Stat_t's platform time field via reflect —
 // the only std, build-tag-free way to reach it, since the field is named Atim
-// on linux and Atimespec on darwin (ADR-40). A distinct atim matters for
+// on linux and Atimespec on darwin. A distinct atim matters for
 // fd_filestat_set_times, which changes mtim while leaving atim untouched.
 func (w *WASI) pack_filestat(fi os.FileInfo) []byte {
     buf := make([]byte, 64)

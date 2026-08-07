@@ -1,4 +1,4 @@
-//! Parse a wasm module's `.debug_line` DWARF program into an address-to-source-position lookup, for the opt-in `--dwarf-line` back-mapping (ADR-38). gimli lives here and here only; backends never see it.
+//! Parse a wasm module's `.debug_line` DWARF program into an address-to-source-position lookup, for the opt-in `--dwarf-line` back-mapping. gimli lives here and here only; backends never see it.
 
 use std::collections::HashMap;
 
@@ -10,8 +10,6 @@ use crate::ir::SourcePos;
 /// The wasm DWARF code-address convention.
 ///
 /// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset. But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets. So to look a resolved operator up in the line table we subtract the code section's content start — that is the address base.
-///
-/// This is calibrated, not assumed: the fixture test (ADR-38) asserts that a known function's directive lands on its real source line, which fails for any wrong base. Keeping it a single named function makes a re-calibration a one-line change should a toolchain ever emit a different convention.
 fn address_base(code_section_start: u64) -> u64 {
     code_section_start
 }

@@ -1,6 +1,6 @@
-//! Java end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Java backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
+//! Java end-to-end suites: the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Java backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Java is a compiled backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main` (ADR-30). Java covers full WASI preview 1 incl. the filesystem.
+//! Java is a compiled backend, so it overrides `BackendUnderTest::run` to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main`. Java covers full WASI preview 1 incl. the filesystem.
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -24,12 +24,11 @@ impl BackendUnderTest for Java {
         &JavaBackend
     }
 
-    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache and run it with `args`/`stdin`. A missing `javac`/`java` is a loud failure (ADR-15); a compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
+    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache and run it with `args`/`stdin`. A missing `javac`/`java` is a loud failure; a compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
         match build_java(source) {
-            // A compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
             Err(build) => build,
             Ok(classdir) => dewasm_test_helper::run_command_bytes(
                 Command::new(&java)
@@ -42,7 +41,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty. A compile failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
+    /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty. A compile failure fails loud: there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
@@ -65,7 +64,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file. Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project. `shared_runtime` mirrors the spec harness's `register` path — each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has. Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class (ADR-62), so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file. Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project. `shared_runtime` mirrors the spec harness's `register` path — each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has. Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -146,7 +145,7 @@ const JAVA_ADD_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
+/// The override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
 const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -409,7 +408,7 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell), leaving a nonzero DB file on the host.
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same fs stack as the shell), leaving a nonzero DB file on the host.
 const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -477,7 +476,7 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)` — the lambda returns null). The glue provides `host_row` via the ADR-7 import provider and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)` — the lambda returns null). The glue provides `host_row` via the import-provider mechanism and collects the rows.
 const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Sqlite3Binding inst;
@@ -734,7 +733,7 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// Driver for the Embedded-coexistence case: two independently converted classes in one default package, each carrying its runtime as `static` nested classes (ADR-62), so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types and Alpha's trap is catchable by name. `Class` objects of two unrelated types are incomparable with `!=` in Java (the compiler rejects `Class<Alpha.Rt.Trap> != Class<Beta.Rt.Trap>`), so the distinctness check goes through `equals`.
+/// Driver for the Embedded-coexistence case: two independently converted classes in one default package, each carrying its runtime as `static` nested classes, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types and Alpha's trap is catchable by name. `Class` objects of two unrelated types are incomparable with `!=` in Java (the compiler rejects `Class<Alpha.Rt.Trap> != Class<Beta.Rt.Trap>`), so the distinctness check goes through `equals`.
 const JAVA_EMBEDDED_COEXIST_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Alpha alpha = new Alpha(null, null, null, null);
@@ -751,7 +750,7 @@ const JAVA_EMBEDDED_COEXIST_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
 const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         final long[] ms = {0};
@@ -837,8 +836,6 @@ const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
 dewasm_test_helper::library_add_e2e!(Java, JAVA_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Java, JAVA_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Java, JAVA_STDIO_CAPTURE_GLUE);
@@ -851,7 +848,7 @@ dewasm_test_helper::wasi_suite!(Java, Poll);
 dewasm_test_helper::wasi_suite!(Java, Fs, JAVA_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Java);
-// The standalone entrypoint runs the guest on a dedicated 64 MiB thread (mirroring Python's ADR-28 mitigation), since Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
+// The standalone entrypoint runs the guest on a dedicated 64 MiB thread (mirroring Python's mitigation), since Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
 dewasm_test_helper::deep_recursion_e2e!(Java);
 
 dewasm_test_helper::cowsay_args_e2e!(Java);
@@ -863,7 +860,7 @@ dewasm_test_helper::gzip_e2e!(Java);
 dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// The three interpreter giants (issue #142). Each was excluded until the ADR-30 splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, which is one statement and so had no boundary to split at: `javac`: *code too large*) and to spread the funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool: *too many constants*). Ultra-slow (ADR-48): the 30-49 MB modules become 76-229 MB of Java, and each case `javac`s its own `Main` from cold — measured 42 s (CPython), 132 s (CRuby) and 137 s (packed CRuby) end to end on an M-series laptop, past the ~1-min CI-runner bar, at up to ~8 GB of `javac` heap.
+// The three interpreter giants (issue #142), excluded until the splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, one statement with no boundary to split at) and to spread funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool). Ultra: measured 42 s (CPython), 132 s (CRuby) and 137 s (packed CRuby), at up to ~8 GB of `javac` heap.
 dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
@@ -872,7 +869,7 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-// The zeroperl reactor cases (issue #139) are Java's first `ultra` ones (ADR-48), hence the crate's new `ultra_slow_test` feature. The 25 MB reactor becomes ~99 MB of Java, and each case `javac`s its own `Main` from cold: measured 43 s (zeroperl_eval) and 51 s (exiftool_extract) on an M-series laptop, so both sit at or past the ~1-min CI-runner bar, and they would compile concurrently in this one test binary. They also drove the ADR-30 function-partition threshold down to 2000 (`FN_PARTITION_THRESHOLD`): zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool (`javac`: *too many constants*).
+// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the 25 MB reactor becomes ~99 MB of Java, measured 43 s (zeroperl_eval) and 51 s (exiftool_extract). They also drove `FN_PARTITION_THRESHOLD` down to 2000 — zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);

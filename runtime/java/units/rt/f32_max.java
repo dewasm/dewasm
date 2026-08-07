@@ -1,5 +1,5 @@
 // f32.max: a NaN operand yields wasm's canonical NaN (see f32_min).
-// max(-0, +0) is +0 (ADR-2).
+// max(-0, +0) is +0.
 static float f32_max(float a, float b) {
     if (Float.isNaN(a) || Float.isNaN(b)) {
         return Float.intBitsToFloat(0x7fc00000);

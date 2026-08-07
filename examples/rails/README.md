@@ -57,10 +57,10 @@ Each `Database` gets its own wasm instance (own linear memory and guest
 heap), so a Rails connection-pool entry is a fully isolated SQLite; a mutex
 serializes calls into each instance. Values cross the host/guest boundary
 through the generated module's `invoke` + `Rt::Memory`, with `sqlite3_malloc`
-for guest-side buffers and ADR-2's masked-unsigned convention for i64.
+for guest-side buffers and the masked-unsigned convention for i64.
 
 The C surface this needs is exported from `libsqlite3.wasm` — the
-`SQLITE_EXPORTS` list in `../apps/setup.sh`.
+`SQLITE_EXPORTS` list in `../apps/scripts/sqlite3.sh`.
 
 ## Deliberate gaps
 

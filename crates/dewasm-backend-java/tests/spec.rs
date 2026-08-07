@@ -1,6 +1,6 @@
-//! Java side of the shared spec harness (ADR-3, ADR-27, ADR-30): converts each module with the Java backend to a package-private module class (carrying a reflective `invoke`/`globalGet` dispatcher), phrases every assertion as compiled Java (`check`/`check_trap`/`check_exhaust`/`check_unlinkable`, bit-exact float comparison via `Float.floatToRawIntBits` / `Double.doubleToRawLongBits`), assembles one self-contained `Main.java` per `.wast` file, and `javac`s + runs it. The generic harness lives in `dewasm-test-helper`.
+//! Java side of the shared spec harness: converts each module with the Java backend to a package-private module class (carrying a reflective `invoke`/`globalGet` dispatcher), phrases every assertion as compiled Java (`check`/`check_trap`/`check_exhaust`/`check_unlinkable`, bit-exact float comparison via `Float.floatToRawIntBits` / `Double.doubleToRawLongBits`), assembles one self-contained `Main.java` per `.wast` file, and `javac`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
-//! Two Java facts shape the phrasing (ADR-30):
+//! Two Java facts shape the phrasing:
 //! - A JVM `StackOverflowError` is *catchable* (unlike Go's fatal goroutine overflow), so exhaustion maps directly: `check_exhaust` catches it, exactly as Ruby catches `SystemStackError`. No spec-build recursion guard is instrumented into the generated functions — each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later, independent check.
 //! - Type/class declarations cannot live inside a method, so per-module classes are accumulated in the harness's file-scoped `decls` buffer (hoisted ahead of `main`'s body by `assemble`) while only instantiation/assertion statements go in `main`.
 
@@ -9,15 +9,15 @@ use std::fmt::Write as _;
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_java::{find_java, JavaBackend};
+use dewasm_backend_java::{find_java, java_string, JavaBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
+use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof` — not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. Java's counts match Ruby's (ADR-16), not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here (ADR-30).
+/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof` — not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. Java's counts match Ruby's, not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here.
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
@@ -25,89 +25,6 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
     ("load1", 5, "linking"),
-];
-
-/// Files `cargo test` runs by default (the non-ignored trials). Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so the default test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs every file.
-const CURATED_FILES: &[&str] = &[
-    "address",
-    "align",
-    "block",
-    "br",
-    "br_if",
-    "br_table",
-    "bulk",
-    "call",
-    "call_indirect",
-    "comments",
-    "const",
-    "conversions",
-    "custom",
-    "data",
-    "elem",
-    "endianness",
-    "f32",
-    "f32_bitwise",
-    "f32_cmp",
-    "f64",
-    "f64_bitwise",
-    "f64_cmp",
-    "fac",
-    "float_exprs",
-    "float_literals",
-    "float_memory",
-    "float_misc",
-    "forward",
-    "func",
-    "func_ptrs",
-    "global",
-    "i32",
-    "i64",
-    "if",
-    "imports",
-    "imports2",
-    "int_exprs",
-    "int_literals",
-    "labels",
-    "left-to-right",
-    "linking",
-    "linking0",
-    "load",
-    "load1",
-    "local_get",
-    "local_set",
-    "local_tee",
-    "loop",
-    "memory",
-    "memory_copy",
-    "memory_fill",
-    "memory_grow",
-    "memory_init",
-    "memory_redundancy",
-    "memory_size",
-    "memory_trap",
-    "names",
-    "nop",
-    "return",
-    "select",
-    "skip-stack-guard-page",
-    "stack",
-    "start",
-    "store",
-    "switch",
-    "table",
-    "table_copy",
-    "table_init",
-    "token",
-    "traps",
-    "type",
-    "unreachable",
-    "unreached-invalid",
-    "unreached-valid",
-    "unwind",
-    "utf8-custom-section-id",
-    "utf8-import-field",
-    "utf8-import-module",
-    "utf8-invalid-encoding",
 ];
 
 mod common;
@@ -123,18 +40,17 @@ impl BackendUnderTest for JavaSpec {
         &JavaBackend
     }
 
-    /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache (identical programs compile once) and run it. A missing `javac`/`java` fails loud (ADR-15); a `javac` failure is surfaced as its `Output` so the harness reports the compile error.
+    /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache (identical programs compile once) and run it. A missing `javac`/`java` fails loud; a `javac` failure is surfaced as its `Output` so the harness reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
         let classdir = match common::build_java(source) {
-            // A compile failure is surfaced as the `javac` `Output` so the harness reports the compile error.
             Err(build) => return build,
             Ok(classdir) => classdir,
         };
 
         dewasm_test_helper::run_command_bytes(
-            // A generous per-thread stack keeps genuinely deep but terminating recursions (fac, deep br chains) under the limit while a runaway still overflows into a catchable StackOverflowError (ADR-30).
+            // A generous per-thread stack keeps genuinely deep but terminating recursions (fac, deep br chains) under the limit while a runaway still overflows into a catchable StackOverflowError.
             Command::new(&java)
                 .arg("-Xss16m")
                 .arg("-cp")
@@ -151,8 +67,9 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         EXPECTED_FAILURES
     }
 
+    /// Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page` for its deep-frame exhaustion cases.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(CURATED_FILES)
+        Some(dewasm_test_helper::curated_with(&["skip-stack-guard-page"]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -227,13 +144,13 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         }
         Ok(format!(
             "{var}.invoke({}, new Object[]{{{}}})",
-            java_str(name),
+            java_string(name),
             parts.join(", ")
         ))
     }
 
     fn global_get(&self, var: &str, global: &str) -> String {
-        format!("{var}.globalGet({})", java_str(global))
+        format!("{var}.globalGet({})", java_string(global))
     }
 
     fn emit_check(
@@ -257,7 +174,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         let _ = writeln!(
             script,
             "check({}, () -> {{ Object[] __r = {call}; return new Object[]{{ ({cmp}), __r }}; }});",
-            java_str(desc)
+            java_string(desc)
         );
         Ok(())
     }
@@ -266,8 +183,8 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         let _ = writeln!(
             script,
             "check_trap({}, {}, () -> {{ {call}; }});",
-            java_str(desc),
-            java_str(message)
+            java_string(desc),
+            java_string(message)
         );
     }
 
@@ -275,7 +192,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         let _ = writeln!(
             script,
             "check_exhaust({}, () -> {{ {call}; }});",
-            java_str(desc)
+            java_string(desc)
         );
     }
 
@@ -283,7 +200,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         let _ = writeln!(
             script,
             "check({}, () -> {{ {call}; return new Object[]{{ true, null }}; }});",
-            java_str(desc)
+            java_string(desc)
         );
     }
 
@@ -291,7 +208,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         let _ = writeln!(
             script,
             "check_unlinkable({}, () -> {{ {call}; }});",
-            java_str(desc)
+            java_string(desc)
         );
     }
 
@@ -323,45 +240,13 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
     }
 }
 
-/// The imports object: `spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an ADR-7 import provider (ADR-16).
+/// The imports object: `spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an import provider.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\", _spectest".to_string()];
     for (name, var) in registered {
-        entries.push(format!("{}, {var}.Exports", java_str(name)));
+        entries.push(format!("{}, {var}.Exports", java_string(name)));
     }
     format!("imps({})", entries.join(", "))
-}
-
-/// Java double-quoted string literal.
-fn java_str(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// Attribution for a ref heap type the harness cannot express as a Java value. Ref-typed args/results only occur in reference-types modules, which fail to convert and are skipped upstream; this is defensive attribution.
-fn heap_type_tag(hty: &HeapType<'_>) -> String {
-    match hty {
-        HeapType::Abstract {
-            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
-            ..
-        } => "exception-handling".to_string(),
-        HeapType::Abstract { .. } => "gc".to_string(),
-        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
-    }
 }
 
 /// A wast arg as a boxed Java value (autoboxed inside `new Object[]{...}`).
@@ -374,7 +259,7 @@ fn arg_java(arg: &WastArg<'_>) -> Result<String, String> {
             Ok(format!("Double.longBitsToDouble(0x{:x}L)", f.bits))
         }
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(WastArgCore::RefNull(hty)) => Err(heap_type_tag(hty)),
+        WastArg::Core(WastArgCore::RefNull(hty)) => Err(dewasm_test_helper::heap_type_tag(hty)),
         WastArg::Core(WastArgCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastArg::Core(WastArgCore::RefHost(_)) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
@@ -480,7 +365,7 @@ const PREAMBLE: &str = r#"public class Main {
         }
     }
 
-    // A JVM StackOverflowError is catchable, so exhaustion maps to it directly (like Ruby's SystemStackError). Each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later check (ADR-30).
+    // A JVM StackOverflowError is catchable, so exhaustion maps to it directly (like Ruby's SystemStackError). Each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later check.
     static void check_exhaust(String desc, Runnable thunk) {
         try {
             thunk.run();

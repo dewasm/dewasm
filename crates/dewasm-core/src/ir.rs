@@ -1,6 +1,6 @@
 //! Intermediate representation of a wasm module.
 //!
-//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is and flattens the value stack into "temps": one variable per (stack depth, type) pair, in the style of wasm2c. Every value-producing instruction is materialized into a temp assignment, which keeps evaluation order and trap points trivially correct. Expression folding for readability is a future optimization pass.
+//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is and flattens the value stack into "temps": one variable per (stack depth, type) pair, in the style of wasm2c. A value folds into its consumer where it can and takes a temp only where it must; `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ValType {
@@ -8,7 +8,7 @@ pub enum ValType {
     I64,
     F32,
     F64,
-    /// A nullable reference to a wasm function. Legal only as a table element type (ADR-16 table bulk ops); reference types used as value types are rejected at conversion time (ADR-24).
+    /// A nullable reference to a wasm function. Legal only as a table element type; reference types used as value types are rejected at conversion time.
     FuncRef,
 }
 
@@ -43,7 +43,7 @@ pub struct Module {
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
     pub start: Option<u32>,
-    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers, indexed by [`SourcePos::file`]. Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`, ADR-38).
+    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers, indexed by [`SourcePos::file`]. Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`).
     pub debug_files: Vec<String>,
 }
 
@@ -216,7 +216,7 @@ pub enum BrTarget {
     },
 }
 
-/// A resolved source position, indexing [`Module::debug_files`]. Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping (ADR-38); a `col` of 0 means the column is unknown (DWARF's "left edge").
+/// A resolved source position, indexing [`Module::debug_files`]. Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping; a `col` of 0 means the column is unknown (DWARF's "left edge").
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SourcePos {
     pub file: u32,
@@ -226,7 +226,7 @@ pub struct SourcePos {
 
 #[derive(Debug)]
 pub enum Stmt {
-    /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on (ADR-38). Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
+    /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on. Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
     SourceLine(SourcePos),
     Assign {
         dst: Temp,
@@ -348,7 +348,7 @@ pub enum Expr {
         addr: Box<Expr>,
         offset: u64,
     },
-    /// Operands are pre-evaluated temps, so no short-circuit semantics needed.
+    /// Neither arm can trap — the builder spills a trapping one to a temp — so backends may lower this as a lazy ternary even though wasm evaluates both arms.
     Select {
         cond: Box<Expr>,
         then: Box<Expr>,

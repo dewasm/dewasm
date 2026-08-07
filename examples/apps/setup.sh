@@ -3,8 +3,8 @@
 # Populate examples/apps/cache/ with the real-world example apps: prebuilt
 # wasm binaries fetched from upstream, or (sqlite3, libpcap, tree-sitter,
 # minigzip, ripgrep) version-pinned source releases built locally with zig or
-# cargo (ADR-22). Third-party artifacts are never committed (ADR-9); the apps
-# e2e test fails loudly when the cache is absent (ADR-15).
+# cargo. Third-party artifacts are never committed; the apps e2e test fails
+# loudly when the cache is absent.
 #
 # Each app is a standalone, directly-runnable script under scripts/ (e.g.
 # `scripts/sqlite3.sh` to (re)build just sqlite3 after bumping its pin); this

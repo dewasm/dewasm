@@ -1,6 +1,6 @@
 # requires: rt/f64_bits
 # pack's float<->double conversion canonicalizes NaNs, losing the payload
-# (measured, ADR-55). Take a software path for NaNs (ADR-2).
+# (measured). Take a software path for NaNs.
 sub f32_bits {
     my $x = $_[0];
     if ($x != $x) {

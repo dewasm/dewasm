@@ -320,7 +320,7 @@ public class Main {
     // buffer with allocRom, copy the ROM in, and initGame it. Every tick()
     // sets the input mask, advances one video frame, and composes the guest's
     // frame into the BufferedImage's backing int[] — the guest hands over one
-    // palette *index* per pixel plus a fixed 64-entry palette (ADR-59), so the
+    // palette *index* per pixel plus a fixed 64-entry palette, so the
     // palette is decoded once into the ARGB ints TYPE_INT_ARGB expects and
     // every pixel is one masked table lookup.
     private static final class NesEngine {

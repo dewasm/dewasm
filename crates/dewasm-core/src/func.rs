@@ -17,9 +17,6 @@ use crate::module::{unsupported, val_type};
 /// Node-count cap for a folded expression tree. Once a consumer would build a tree larger than this, its operands are spilled to temps first. The cap keeps the generated expressions shallow enough not to blow the recursive descent parser of any target language (Ruby/Python and friends parse expressions recursively and have finite stack budgets), and bounds the worst-case textual blow-up of backends whose inline lowerings duplicate an operand.
 const MAX_FOLD_SIZE: u32 = 32;
 
-/// Whether values fold. Kept as a knob so the pending-stack machinery can be introduced without behavioral change (every push materializes immediately), then flipped on once verified. Always `true` in shipped builds.
-const FOLD: bool = true;
-
 /// Side effects a pending expression carries, used to decide when it must be spilled before a later statement so it cannot observe that statement's effect (or so its own trap fires at the right point).
 #[derive(Clone, Copy, Default)]
 struct Effects {
@@ -94,7 +91,7 @@ pub struct FuncBuilder<'a> {
     temps: BTreeSet<Temp>,
     next_label: u32,
     result: Option<ir::Func>,
-    /// DWARF line table for source back-mapping, when `--dwarf-line` is on (ADR-38). `None` leaves the whole marker path inert.
+    /// DWARF line table for source back-mapping, when `--dwarf-line` is on. `None` leaves the whole marker path inert.
     line_table: Option<&'a LineTable>,
     /// The most recent source position resolved from an operator's offset while streaming this body. Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted. Tracking it as operators stream — rather than resolving only the emit-triggering operator — is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
     cur_pos: Option<SourcePos>,
@@ -149,7 +146,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Attach the DWARF line table so `emit` injects source-position markers (ADR-38). A no-op with `None` (the default), keeping non-`--dwarf-line` output byte-identical.
+    /// Attach the DWARF line table so `emit` injects source-position markers. A no-op with `None` (the default), keeping non-`--dwarf-line` output byte-identical.
     pub fn with_line_table(mut self, line_table: Option<&'a LineTable>) -> Self {
         self.line_table = line_table;
         self
@@ -177,8 +174,6 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.result.take().expect("function body finished"))
     }
 
-    // ---- stack / frame helpers -------------------------------------------
-
     fn cur(&mut self) -> &mut Frame {
         self.frames.last_mut().expect("frame stack is not empty")
     }
@@ -190,7 +185,7 @@ impl<'a> FuncBuilder<'a> {
         self.cur().stmts.push(stmt);
     }
 
-    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated. An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it. A no-op without a line table (ADR-38).
+    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated. An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it. A no-op without a line table.
     fn track_source_pos(&mut self, offset: usize) {
         let Some(table) = self.line_table else {
             return;
@@ -200,7 +195,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off (ADR-38). The caller pushes the returned marker; the two emit paths (`emit` and the function's fallthrough return) share this so both are annotated.
+    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off. The caller pushes the returned marker; the two emit paths (`emit` and the function's fallthrough return) share this so both are annotated.
     fn source_marker(&mut self) -> Option<Stmt> {
         self.line_table?;
         let pos = self.cur_pos?;
@@ -228,10 +223,6 @@ impl<'a> FuncBuilder<'a> {
             ty,
             pending: Some(Pending { expr, fx, size }),
         });
-        if !FOLD {
-            let top = self.stack.len() - 1;
-            self.spill(top);
-        }
     }
 
     /// Pop the top slot as an expression: its pending expression if any, else a reference to the temp it was materialized into.
@@ -542,7 +533,7 @@ impl<'a> FuncBuilder<'a> {
                     for i in (0..arity).rev() {
                         values[i] = self.pop_expr().0;
                     }
-                    // The fallthrough return does not route through `emit`, so annotate it here too (ADR-38); folded bodies frequently collapse to just this statement.
+                    // The fallthrough return does not route through `emit`, so annotate it here too; folded bodies frequently collapse to just this statement.
                     if let Some(marker) = self.source_marker() {
                         body.push(marker);
                     }
@@ -615,8 +606,6 @@ impl<'a> FuncBuilder<'a> {
             }
         }
     }
-
-    // ---- operator dispatch -----------------------------------------------
 
     fn op(&mut self, op: Operator<'_>) -> Result<()> {
         use ValType::*;
@@ -776,7 +765,7 @@ impl<'a> FuncBuilder<'a> {
                 self.pop_expr();
             }
             Operator::TypedSelect { ty } => {
-                // A numeric typed select is just an annotated select; a ref-typed one is a reference-types construct (ADR-24).
+                // A numeric typed select is just an annotated select; a ref-typed one is a reference-types construct.
                 val_type(ty)?;
                 self.select();
             }
@@ -934,7 +923,7 @@ impl<'a> FuncBuilder<'a> {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
-            // -- reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected (ADR-24).
+            // -- reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
             Operator::RefNull { .. }
             | Operator::RefFunc { .. }
             | Operator::RefIsNull

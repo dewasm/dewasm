@@ -1,7 +1,7 @@
 # One slot per element: a `[type_symbol, callable]` pair for funcref
-# tables, an arbitrary host value for externref tables, `nil` for null
-# (ADR-17). Which kind a table holds is fixed by validation; the runtime
-# never needs to distinguish them.
+# tables, or `nil` for a null slot. call_indirect compares type
+# keys, not module-local indices, so a shared table stays consistent
+# across modules.
 def initialize(size, max = nil)
   @slots = Array.new(size)
   @max = max

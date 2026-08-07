@@ -1,4 +1,4 @@
-//! End-to-end coverage for `--dwarf-line` source back-mapping (ADR-38).
+//! End-to-end coverage for `--dwarf-line` source back-mapping.
 //!
 //! Semantics-neutrality is the whole contract: the flag adds source-position markers (Go `//line`, Ruby comments) and changes nothing else. Each case converts the cached DWARF fixture both with and without the flag, then asserts (a) the flagged output actually carries fixture markers, (b) it renders and runs to the same stdout/exit as the plain output, and (c) stripping the marker lines from the flagged source yields the plain source byte-for-byte.
 //!
@@ -14,7 +14,7 @@ fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
 
-/// The cached DWARF fixture; a missing cache fails loud, never skips (ADR-15).
+/// The cached DWARF fixture; a missing cache fails loud, never skips.
 fn fixture_wasm() -> PathBuf {
     let p =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");
@@ -71,7 +71,7 @@ fn convert(target: &str, out: &Path, dwarf: bool) -> String {
     std::fs::read_to_string(out).unwrap()
 }
 
-/// `go build` a program in its own directory and run it, returning (stdout, exit code). A missing toolchain fails loud (ADR-15).
+/// `go build` a program in its own directory and run it, returning (stdout, exit code). A missing toolchain fails loud.
 fn run_go(prog: &Path) -> (String, i32) {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
@@ -122,7 +122,7 @@ fn strip_markers(src: &str, is_marker: impl Fn(&str) -> bool) -> String {
         .collect()
 }
 
-/// A Ruby/Python source-line marker: `# <path>:<line>` (possibly indented).
+/// A Ruby source-line marker: `# <path>:<line>` (possibly indented).
 fn is_comment_marker(line: &str) -> bool {
     let t = line.trim_start();
     let Some(rest) = t.strip_prefix("# ") else {
@@ -213,10 +213,10 @@ fn ruby_dwarf_line_markers_are_neutral_and_run() {
     assert_eq!((out_p, code_p), (out_d, code_d));
 }
 
-/// Backends without a marker rendering (Bash, Java, Python here checked for Python's comment form too) must still accept the flag and convert cleanly — the flag is universally accepted, semantics-neutral, and simply renders nothing where a backend opts out (ADR-38).
+/// `--dwarf-line` is accepted by every target, whether it renders markers (Python, Perl) or drops them (Bash, Java): only that conversion succeeds is asserted here, marker content is the Go and Ruby cases' business.
 #[test]
 fn dwarf_line_flag_is_accepted_by_all_targets() {
-    for target in ["bash", "python", "java"] {
+    for target in ["bash", "python", "perl", "java"] {
         let dir = tempdir(target);
         let out = dir.join(format!("out.{target}"));
         let r = run_dewasm(&[

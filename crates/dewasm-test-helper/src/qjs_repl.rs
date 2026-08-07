@@ -1,4 +1,4 @@
-//! The interactive-REPL transcript case (Fix 4): drive the *bare* QuickJS REPL (no script argument, so `_start` sees only argv[0] and QuickJS drops into its interactive loop) under a real pty and require the transcript to be byte-identical to the one wasmtime produces.
+//! The interactive-REPL transcript case: drive the *bare* QuickJS REPL (no script argument, so `_start` sees only argv[0] and QuickJS drops into its interactive loop) under a real pty and require the transcript to be byte-identical to the one wasmtime produces.
 //!
 //! The bare no-args invocation is the interactive REPL: a standalone backend runs `_start` with the host process's real argv, so spawning the converted program under the pty with no extra arguments is exactly `qjs` with an empty argument list — the same shape `wasmtime run qjs.wasm` (no trailing args) takes. The scripted session is fed with CR line endings because that is what a terminal sends on Enter; the pty driver's ICRNL then delivers NL to the guest, whose stdin reads a character device (matching wasmtime).
 //!
@@ -19,10 +19,9 @@ pub const QJS_REPL_SESSION: &[u8] = b"1+2\r[3,1,2].sort()\rMath.max(4,9)\r\\q\r"
 /// The QuickJS REPL prompt. The pty driver is prompt-driven off this: each scripted line is sent only after the prompt reappears, so the transcript is identical no matter how long a backend takes to start (see [`crate::run_under_pty`]).
 const QJS_PROMPT: &[u8] = b"qjs > ";
 
-/// Hard cap on the pty session (fail loud, ADR-15). Generous: the interactive loop is I/O-bound line editing, not the slow batch qjs cases, but the compiled backends may pay a one-time build inside `pty_command` first.
+/// Hard cap on the pty session (fail loud). Generous: the interactive loop is I/O-bound line editing, not the slow batch qjs cases, but the compiled backends may pay a one-time build inside `pty_command` first.
 const PTY_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// Path to the checked-in snapshot transcript.
 pub fn qjs_repl_snapshot_path() -> PathBuf {
     apps_snapshot_dir().join("qjs_repl_interactive.transcript")
 }

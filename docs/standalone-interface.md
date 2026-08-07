@@ -1,8 +1,8 @@
 # Standalone runtime interface
 
-A program converted with `--mode standalone` is a self-contained CLI: the generated `main` supplies the WASI guest its argv, environment, and filesystem preopens, and translates the guest's exit/trap into a process exit code. That interface is uniform across every backend and modelled on wasmtime's CLI, so a converted program behaves like the `.wasm` it came from. The decision and its rationale are [ADR-31](adr/31-standalone-runtime-interface.md).
+A program converted with `--mode standalone` is a self-contained CLI: the generated `main` supplies the WASI guest its argv, environment, and filesystem preopens, and translates the guest's exit/trap into a process exit code. That interface is uniform across every backend and modelled on wasmtime's CLI, so a converted program behaves like the `.wasm` it came from.
 
-Because the artifact is self-contained, its **internal** name is not part of any interface and is therefore fixed: the module class is `Program` (Ruby, Python, Perl, Java; Perl as `package Program`, Go as type `Program` in `package main`) and the Bash function prefix is `program_`. `--module-name` is a library-mode flag and is rejected together with `--mode standalone` ([ADR-63](adr/63-module-name-policy.md)).
+Because the artifact is self-contained, its **internal** name is not part of any interface and is therefore fixed: the module class is `Program` (Ruby, Python, Perl, Java; Perl as `package Program`, Go as type `Program` in `package main`) and the Bash function prefix is `program_`. `--module-name` is a library-mode flag and is rejected together with `--mode standalone`.
 
 ## Invocation
 
@@ -16,7 +16,7 @@ The generated `main` consumes a **leading run of `--dir` flags** and hands every
 - `--` ends flag parsing; every following token is a guest argument (use it to pass a guest a literal `--dir`).
 - The first token that is not a `--dir` flag also ends parsing; it and the rest are guest arguments.
 
-`<runner>` is the per-backend way to launch the program (below). `--dir` is a shim parsed *inside the generated program*, not a flag of the interpreter — so it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the `.wasm`.
+`<runner>` is the per-backend way to launch the program (below). `--dir` is a shim parsed *inside the generated program*, not a flag of the interpreter, so it comes after `<program>`, whereas wasmtime consumes its own `--dir` before the `.wasm`.
 
 ### Per-backend runner lines
 
@@ -33,16 +33,17 @@ The generated `main` consumes a **leading run of `--dir` flags** and hands every
 
 | Aspect | Behavior |
 | --- | --- |
-| `argv[0]` | The program name — the basename of the invoked program file (`prog.rb`, `prog`, `prog.sh`, ...), matching `basename(wasm)` under wasmtime. **Java exception:** the JVM does not pass the launched file name to `main`, so Java uses the module class name, which in standalone mode is the fixed `Program` ([ADR-63](adr/63-module-name-policy.md)). |
+| `argv[0]` | The program name, the basename of the invoked program file (`prog.rb`, `prog`, `prog.sh`, ...), matching `basename(wasm)` under wasmtime. **Java exception:** the JVM does not pass the launched file name to `main`, so Java uses the module class name, which in standalone mode is the fixed `Program`. |
 | `argv[1..]` | The tokens left after `--dir` parsing, in order. |
 | env | The whole process environment passes through to the guest. |
 | `proc_exit(N)` | Process exits with code `N`. |
 | `_start` returns | Process exits `0`. |
 | trap | `trap: <message>` on stderr, process exits **134**. |
+| `--dir` with no argument | `--dir requires a HOST::GUEST argument` on stderr, process exits **1**. |
 
 ## Bash `--dir`
 
-The Bash backend honors `--dir` with real WASI filesystem support ([ADR-34](adr/34-bash-wasi-filesystem.md)); a missing `--dir` argument fails loudly with exit 2. Bash reaches the same exit/trap surface as the other backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap; [ADR-11](adr/11-bash-backend-lowering.md)/[ADR-12](adr/12-bash-wasi.md)).
+The Bash backend honors `--dir` with real WASI filesystem support. It reaches the same exit/trap surface as the other backends through its status-cascade protocol (133 = `proc_exit`, 134 = trap).
 
 ## Example
 
@@ -55,4 +56,4 @@ $ cat /tmp/work/hello.txt
 hello, wasi fs!
 ```
 
-The same command under wasmtime — `wasmtime run --dir /tmp/work::/ wasi_standalone_dir.wat` — produces identical output; the shared `wasi_standalone_dir` e2e case runs it on every filesystem backend and re-runs it under wasmtime as ground truth ([ADR-27](adr/27-test-helper-crate.md)).
+The same command under wasmtime (`wasmtime run --dir /tmp/work::/ wasi_standalone_dir.wat`) produces identical output; the shared `wasi_standalone_dir` e2e case runs it on every filesystem backend and re-runs it under wasmtime as ground truth.

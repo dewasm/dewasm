@@ -12,7 +12,7 @@
 # (docs/apps-audit.md).
 #
 # A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended
-# deployment shape (ADR-61): the same module with the stdlib embedded by
+# deployment shape: the same module with the stdlib embedded by
 # `wasi-vfs pack` (wizer pre-initialization), self-contained — no preopens.
 # The official build links libwasi_vfs.a, which is what makes packing work.
 

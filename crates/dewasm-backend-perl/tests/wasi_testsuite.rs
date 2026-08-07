@@ -1,4 +1,4 @@
-//! Perl side of the official WASI p1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Perl backend's standalone interface. The generic harness lives in `dewasm-test-helper`.
+//! Perl side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Perl backend's standalone interface. The generic harness lives in `dewasm-test-helper`.
 
 use std::path::PathBuf;
 
@@ -6,7 +6,7 @@ use dewasm_backend::Backend;
 use dewasm_backend_perl::PerlBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution (ADR-8, policy in ADR-36): `(trial, tag)` — the out-of-scope `sock_shutdown` syscall (docs/support.md), like Ruby/Python. Unlike the Ruby/Python hosts, perl injects no environ entries of its own, so the `environ_*` trials pass without host-scoped entries.
+/// Known trial failures with their attribution: `(trial, tag)` — the out-of-scope `sock_shutdown` syscall (docs/support.md), like Ruby/Python. Unlike the Ruby/Python hosts, perl injects no environ entries of its own, so the `environ_*` trials pass without host-scoped entries.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscall (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),

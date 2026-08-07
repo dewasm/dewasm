@@ -1,6 +1,6 @@
 // Decode a chunked Base64 constant into one byte[]. A data segment can exceed
 // the 64KB Java string-literal limit, so the emitter splits it into chunks
-// each under the limit and this rejoins them (ADR-30). Element/data blobs are
+// each under the limit and this rejoins them. Element/data blobs are
 // never emitted as raw byte lists.
 static byte[] data_from_b64(String[] chunks) {
     java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();

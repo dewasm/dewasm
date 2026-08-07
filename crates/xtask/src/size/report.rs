@@ -1,6 +1,6 @@
 //! The two outputs of `cargo xtask size`: the machine-readable record under `benchmarks/results/` and the generated `docs/sizes/results.md`.
 //!
-//! Same discipline as the benchmark record (ADR-57, ADR-64): a measurement, not a compared snapshot, so no freshness test guards either file. The JSON is the record — host, every runtime's version string as captured by executing it, every counted file — and the markdown is a rendering of it: numbers, not prose. What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
+//! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file. The JSON is the record — host, every runtime's version string as captured by executing it, every counted file — and the markdown is a rendering of it: numbers, not prose. What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
 
 use std::fmt::Write as _;
 
@@ -63,12 +63,17 @@ pub struct Cell {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum Outcome {
-    /// Weighed.
-    Ok { bytes: u64 },
-    /// Deliberately not weighed (an uninstalled runtime, a cache file that is not there). Always reported, never silently dropped (ADR-15).
-    Skipped { reason: String },
+    Ok {
+        bytes: u64,
+    },
+    /// Deliberately not weighed (an uninstalled runtime, a cache file that is not there). Always reported, never silently dropped.
+    Skipped {
+        reason: String,
+    },
     /// Attempted and broke — a conversion error lands here.
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 impl Outcome {

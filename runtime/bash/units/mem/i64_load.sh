@@ -1,6 +1,6 @@
 # requires: mem/check
 # The top byte shifted by 56 wraps into the sign bit, which is exactly the
-# signed-64 bit-pattern representation of i64 (ADR-11).
+# signed-64 bit-pattern representation of i64.
 mem_i64_load() {
   local -n __m=${1}mem
   local a=$2

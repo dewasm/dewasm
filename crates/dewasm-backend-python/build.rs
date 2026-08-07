@@ -1,4 +1,4 @@
-//! Embeds the runtime units from runtime/python/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source). Mirrors the Ruby crate's build.rs (ADR-6); only the source directory differs.
+//! Embeds the runtime units from runtime/python/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source). Mirrors the Ruby crate's build.rs; only the source directory differs.
 
 use std::fmt::Write as _;
 use std::path::Path;

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Interactive terminal frontend for the dewasm-generated NES library
 # (nes_gen.sh, produced from examples/apps/cache/nes.wasm by build.sh --
-# our nes_demo.c wrapping the agnes emulator, ADR-50/53). Renders into any
+# our nes_demo.c wrapping the agnes emulator). Renders into any
 # ANSI truecolor terminal with half-block characters, the same trick as the
 # DOOM Bash frontend (../../doom/bash) and the other NES frontends.
 #
@@ -136,7 +136,7 @@ load_rom() {
     exit 1
   fi
   local i
-  # nes_mem is associative (ADR-51), so the subscript is NOT an arithmetic
+  # nes_mem is associative, so the subscript is NOT an arithmetic
   # context and must be pre-evaluated — SC2321's "remove the $((" assumes an
   # indexed array and would store under the literal key "ptr + i".
   # shellcheck disable=SC2321
@@ -325,8 +325,8 @@ run_smoke() {
   echo "smoke: ROM loaded, initGame OK, ${FRAME_W}x${FRAME_H} framebuffer, in $(fmt_secs $((t1 - t0)))s"
 
   # Tick to SMOKE_FRAMES with no input, the same driving contract as the
-  # cross-backend framebuffer snapshot (crates/dewasm-test-helper/src/nes.rs,
-  # ADR-53): Alter Ego opens on a near-black boot frame (1 color at ~15
+  # cross-backend framebuffer snapshot (crates/dewasm-test-helper/src/nes.rs):
+  # Alter Ego opens on a near-black boot frame (1 color at ~15
   # ticks) and only fades in its final, stable credits screen (7 distinct
   # colors) by frame ~37, so a shorter run would only ever screenshot black.
   # At tens of seconds per frame this is ~20 minutes -- a progress line per

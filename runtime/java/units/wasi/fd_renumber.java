@@ -1,6 +1,6 @@
-// Move the fd `from` onto the number `to`, closing whatever `to` held first
-// (ADR-40). Both must currently be open (renumbering onto an invalid target is
-// EBADF); the table entry and its rights meta move together, and `from` is
+// Move the fd `from` onto the number `to`, closing whatever `to` held first.
+// Both must currently be open (renumbering onto an invalid target is EBADF);
+// the table entry and its rights meta move together, and `from` is
 // then closed. Renumbering onto stdio or a preopen is allowed — the target's
 // old entry is simply replaced (only a guest-opened file carries a channel to
 // close).

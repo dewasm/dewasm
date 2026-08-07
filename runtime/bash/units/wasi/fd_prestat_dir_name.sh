@@ -1,5 +1,5 @@
 # requires: mem/check
-# WASI fd_prestat_dir_name (ADR-34): write a preopen dir fd's guest-visible name
+# WASI fd_prestat_dir_name: write a preopen dir fd's guest-visible name
 # into guest memory. A name longer than the caller's buffer is ENAMETOOLONG (37),
 # matching Ruby (runtime/ruby/units/wasi/fd_prestat_dir_name.rb). Only a
 # preopen (dir fd with <p>wname set) has a name; anything else is EBADF (8).

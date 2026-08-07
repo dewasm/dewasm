@@ -4,13 +4,15 @@
 
 ## Output shape
 
-A single `.py` module: the generated module as a class, with the runtime at **module top level** under the name `<Class>Rt` — `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace, [ADR-62](../adr/62-embedded-runtime-isolation.md)). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits. See [ADR-28](../adr/28-python-backend-lowering.md).
+A single `.py` module: the generated module as a class, with the runtime at **module top level** under the name `<Class>Rt`, so `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace). Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits.
 
-In **library** mode the class name is `--module-name` (required in library mode) taken verbatim, one identifier matching `[A-Za-z_][A-Za-z0-9_]*`; anything else is a conversion-time error, nothing is sanitized ([ADR-63](../adr/63-module-name-policy.md)). In **standalone** mode the class is always `Program` and `--module-name` is rejected.
+In **library** mode the class name is `--module-name` (required in library mode) taken verbatim, one identifier matching `[A-Za-z_][A-Za-z0-9_]*`; anything else is a conversion-time error, nothing is sanitized. In **standalone** mode the class is always `Program` and `--module-name` is rejected.
 
 ## Requirements
 
-`python3` **3.9 or newer** on `PATH` (or `$DEWASM_PYTHON`). No third-party packages — the output uses only the standard library.
+`python3` **3.9 or newer** on `PATH` (or `$DEWASM_PYTHON`). No third-party packages: the output uses only the standard library.
+
+**Avoid CPython 3.12.0 through 3.12.3.** A static-block limit in those releases breaks large generated modules with deeply nested loops (issue #21); 3.12.4 and newer are unaffected.
 
 ## Running it
 
@@ -30,11 +32,11 @@ print(inst.invoke("add", 2, 3))   # 5
 inst.memory                       # linear memory
 ```
 
-`proc_exit` raises `<Class>Rt.Exit` (with `.code`) — `AddRt.Exit` here; catch it around `invoke("_start")` in library mode.
+`proc_exit` raises `<Class>Rt.Exit` (with `.code`), spelled `AddRt.Exit` here; catch it around `invoke("_start")` in library mode.
 
 ## Capabilities
 
-Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 including the filesystem** (adopting the Ruby fs model, [ADR-14](../adr/14-ruby-wasi-filesystem.md)). Non-function imports, multiple tables, and table bulk ops are supported. Authoritative matrix: [docs/support.md](../support.md).
+Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 including the filesystem** (adopting the Ruby fs model). Non-function imports, multiple tables, and table bulk ops are supported. Authoritative matrix: [docs/support.md](../support.md).
 
 ## Providers and library usage
 
@@ -62,5 +64,5 @@ Preopen host directories for filesystem access via the constructor's `preopens` 
 ## Caveats
 
 - **Recursion / thread-stack depth.** Deeply recursive wasm (or deep call chains) can hit Python's recursion limit; raising it (`sys.setrecursionlimit`) and the thread stack size may be necessary for heavy programs.
-- Float division goes through the runtime's `fdiv` because Python raises on `x / 0.0` ([ADR-28](../adr/28-python-backend-lowering.md)).
-- Numeric conventions are the shared masked-unsigned model ([ADR-2](../adr/2-numeric-semantics.md)).
+- Float division goes through the runtime's `fdiv` because Python raises on `x / 0.0`.
+- Numeric conventions are the shared masked-unsigned model.

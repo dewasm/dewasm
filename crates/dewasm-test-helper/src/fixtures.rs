@@ -1,4 +1,4 @@
-//! Fixture paths and the one conversion policy the e2e suites share. Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root (ADR-27).
+//! Fixture paths and the one conversion policy the e2e suites share. Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root.
 
 use std::path::{Path, PathBuf};
 
@@ -9,17 +9,17 @@ pub fn examples_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/wat")
 }
 
-/// `examples/apps/cache/`, populated by `examples/apps/setup.sh` (ADR-9).
+/// `examples/apps/cache/`, populated by `examples/apps/setup.sh`.
 pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }
 
-/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures (the QuickJS `.js` scripts the Phase 5a filesystem app cases run).
+/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures: the QuickJS `.js` script the filesystem app cases run, the `rg`/`gzip` search-and-compress fixture trees, and the ExifTool image fixture.
 pub fn apps_fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")
 }
 
-/// `examples/apps/snapshots/`, the checked-in snapshot outputs captured from `wasmtime` (ADR-15).
+/// `examples/apps/snapshots/`, the checked-in snapshot outputs captured once from `wasmtime` so the suite does not need it installed.
 pub fn apps_snapshot_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/snapshots")
 }

@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p cache/c
 
-# Fail loudly with an actionable message rather than half-building (ADR-15).
+# Fail loudly with an actionable message rather than half-building.
 require_tool() {
   command -v "$1" >/dev/null && return
   echo "benchmarks/c/build.sh: $1 not found — $2" >&2

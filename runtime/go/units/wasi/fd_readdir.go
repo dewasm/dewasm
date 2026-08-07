@@ -4,12 +4,12 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
     if !ok {
         return wasiBadf
     }
-    if e := w.checkRight(fd, rightFdReaddir); e != wasiOk { // ADR-40
+    if e := w.checkRight(fd, rightFdReaddir); e != wasiOk {
         return e
     }
     // A cookie of 0 starts a fresh enumeration, so re-snapshot the directory
     // (a file created since the previous listing must appear); continuation
-    // cookies read the cached snapshot for a stable resume (ADR-40/ADR-14).
+    // cookies read the cached snapshot for a stable resume.
     if !entry.loaded || cookie == 0 {
         entry.entries = w.readdir_entries(entry.hostPath)
         entry.loaded = true
@@ -39,10 +39,10 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
 }
 
 // The readdir cookie is a 1-based index into this snapshot, cached on the
-// *wasiDir at the first call for that fd (ADR-14). os.ReadDir returns entries
+// *wasiDir at the first call for that fd. os.ReadDir returns entries
 // already sorted by name, matching the Python backend's explicit sort. Real
 // inodes are read via Lstat + syscall.Stat_t.Ino (the portable field the
-// filestat units already rely on; ADR-40) so d_ino matches fd_filestat_get.
+// filestat units already rely on) so d_ino matches fd_filestat_get.
 func (w *WASI) readdir_entries(hostPath string) []wasiDirent {
     entries := []wasiDirent{
         {name: []byte("."), filetype: 3, ino: w.inode(hostPath)},

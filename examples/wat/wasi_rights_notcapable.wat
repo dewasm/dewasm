@@ -1,4 +1,4 @@
-;; Per-fd rights enforcement (ADR-40): every probe prints "<tag><errno as two
+;; Per-fd rights enforcement: every probe prints "<tag><errno as two
 ;; decimal digits>\n" so the expected stdout pins each errno exactly.
 ;;   a/b/c/d — setup steps that must succeed (00),
 ;;   p/w     — fd_pread/fd_pwrite on a fd narrowed to no rights (76 NOTCAPABLE),

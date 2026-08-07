@@ -1,118 +1,35 @@
-//! Go side of the shared spec harness (ADR-3, ADR-27, ADR-29): converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
+//! Go side of the shared spec harness: converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
-//! Three Go facts shape the phrasing (ADR-29):
+//! Three Go facts shape the phrasing:
 //! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module — hence every export's signature — is known); the harness asserts the boxed `any` results to the expected type.
 //! - Type/method declarations cannot live inside `func main`, so per-module `Converted.source` is accumulated at package scope in the harness's file-scoped `decls` buffer (hoisted ahead of the body by `assemble`) while only instantiation/assertion statements go in the body.
-//! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable, killing the process), so the spec build instruments every generated function with a recursion guard (ADR-29) that turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
+//! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable, killing the process), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::hash::{Hash, Hasher};
 use std::process::{Command, Output};
 
 use dewasm_backend::Backend;
-use dewasm_backend_go::{find_go, GoBackend};
+use dewasm_backend_go::{go_string, GoBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
+use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
+
+mod common;
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too — but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's (ADR-16): the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too — but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 ///
-/// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the ADR-29 recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
+/// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 2, "import-limits"),
     ("linking0", 1, "linking"),
     ("load1", 5, "linking"),
-];
-
-/// Files `cargo test` runs by default (the non-ignored trials). Go compiles each `.wast` file to one program, so the default test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs every file (one `go build` per file — a few seconds each, dominated by compile latency).
-const CURATED_FILES: &[&str] = &[
-    "address",
-    "align",
-    "block",
-    "br",
-    "br_if",
-    "br_table",
-    "bulk",
-    "call",
-    "call_indirect",
-    "comments",
-    "const",
-    "conversions",
-    "custom",
-    "data",
-    "elem",
-    "endianness",
-    "f32",
-    "f32_bitwise",
-    "f32_cmp",
-    "f64",
-    "f64_bitwise",
-    "f64_cmp",
-    "fac",
-    "float_exprs",
-    "float_literals",
-    "float_memory",
-    "float_misc",
-    "forward",
-    "func",
-    "func_ptrs",
-    "global",
-    "i32",
-    "i64",
-    "if",
-    "imports",
-    "imports2",
-    "int_exprs",
-    "int_literals",
-    "labels",
-    "left-to-right",
-    "linking",
-    "linking0",
-    "load",
-    "load1",
-    "local_get",
-    "local_set",
-    "local_tee",
-    "loop",
-    "memory",
-    "memory_copy",
-    "memory_fill",
-    "memory_grow",
-    "memory_init",
-    "memory_redundancy",
-    "memory_size",
-    "memory_trap",
-    "names",
-    "nop",
-    "return",
-    "select",
-    "skip-stack-guard-page",
-    "stack",
-    "start",
-    "store",
-    "switch",
-    "table",
-    "table_copy",
-    "table_init",
-    "token",
-    "traps",
-    "type",
-    "unreachable",
-    "unreached-invalid",
-    "unreached-valid",
-    "unwind",
-    "utf8-custom-section-id",
-    "utf8-import-field",
-    "utf8-import-module",
-    "utf8-invalid-encoding",
 ];
 
 pub struct GoSpec;
@@ -126,53 +43,23 @@ impl BackendUnderTest for GoSpec {
         &GoBackend
     }
 
-    /// Compile `source` to a content-addressed cache binary (identical programs build once) and run it. A missing `go` toolchain fails loud (ADR-15); a build failure is surfaced as the build command's `Output` so the harness reports the compile error.
+    /// Compile `source` to the crate's shared cache binary (identical programs build once) and run it. A build failure is surfaced as the `go build` `Output` so the harness reports the compile error where it would report the program's own.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        let go = find_go()
-            .expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
-
-        let mut hasher = DefaultHasher::new();
-        source.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let cache = std::env::temp_dir().join("dewasm-go-cache");
-        std::fs::create_dir_all(&cache).unwrap();
-        let bin = cache.join(format!("spec-{hash:016x}"));
-
-        if !bin.exists() {
-            let src = cache.join(format!("spec-{hash:016x}.go"));
-            std::fs::write(&src, source).unwrap();
-            let tmp_bin = cache.join(format!(
-                "spec-{hash:016x}.{}.{}",
-                std::process::id(),
-                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            let build = Command::new(&go)
-                .arg("build")
-                .arg("-o")
-                .arg(&tmp_bin)
-                .arg(&src)
-                .output()
-                .expect("spawn go build");
-            if !build.status.success() {
-                return build;
-            }
-            let _ = std::fs::rename(&tmp_bin, &bin);
+        match common::build_go(source) {
+            Err(build) => build,
+            Ok(bin) => dewasm_test_helper::run_command_bytes(Command::new(&bin).args(args), stdin),
         }
-
-        dewasm_test_helper::run_command_bytes(Command::new(&bin).args(args), stdin)
     }
 }
-
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 impl dewasm_test_helper::SpecBackend for GoSpec {
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)] {
         EXPECTED_FAILURES
     }
 
+    /// Go compiles each `.wast` file to one program — a few seconds each, dominated by compile latency — so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(CURATED_FILES)
+        Some(dewasm_test_helper::curated_with(&["skip-stack-guard-page"]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -246,7 +133,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     }
 
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String> {
-        let mut parts = vec![go_str(name)];
+        let mut parts = vec![go_string(name)];
         for arg in args {
             parts.push(arg_go(arg)?);
         }
@@ -254,7 +141,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     }
 
     fn global_get(&self, var: &str, global: &str) -> String {
-        format!("{var}.globalGet({})", go_str(global))
+        format!("{var}.globalGet({})", go_string(global))
     }
 
     fn emit_check(
@@ -278,7 +165,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         let _ = writeln!(
             script,
             "check({}, func() (bool, any) {{ __r := {call}; return ({cmp}), __r }})",
-            go_str(desc)
+            go_string(desc)
         );
         Ok(())
     }
@@ -287,8 +174,8 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         let _ = writeln!(
             script,
             "check_trap({}, {}, func() {{ {call} }})",
-            go_str(desc),
-            go_str(message)
+            go_string(desc),
+            go_string(message)
         );
     }
 
@@ -296,7 +183,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         let _ = writeln!(
             script,
             "check_exhaust({}, func() {{ {call} }})",
-            go_str(desc)
+            go_string(desc)
         );
     }
 
@@ -304,7 +191,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         let _ = writeln!(
             script,
             "check({}, func() (bool, any) {{ {call}; return true, nil }})",
-            go_str(desc)
+            go_string(desc)
         );
     }
 
@@ -312,7 +199,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         let _ = writeln!(
             script,
             "check_unlinkable({}, func() {{ {call} }})",
-            go_str(desc)
+            go_string(desc)
         );
     }
 
@@ -351,7 +238,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     }
 }
 
-/// The external packages the assembled program references. Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import (ADR-29).
+/// The external packages the assembled program references, by the backend's own boundary-matching rule ([`dewasm_backend_go::selector_used`]). Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import. The candidate list stays local: it is what *this* program can reference, and importing more than that is a Go compile error.
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -363,7 +250,7 @@ fn scan_imports(text: &str) -> Vec<String> {
     ];
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {
-        if text.contains(sel) {
+        if dewasm_backend_go::selector_used(text, sel) {
             set.insert(path);
         }
     }
@@ -382,45 +269,13 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an ADR-7 import provider (ADR-16).
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an import provider.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
     for (name, var) in registered {
-        entries.push(format!("{}: {var}.Exports", go_str(name)));
+        entries.push(format!("{}: {var}.Exports", go_string(name)));
     }
     format!("Imports{{{}}}", entries.join(", "))
-}
-
-/// Go double-quoted string literal.
-fn go_str(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
-                let _ = write!(out, "\\x{:02x}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// Attribution for a ref heap type the harness cannot express as a Go value. Ref-typed args/results only occur in reference-types modules, which fail to convert (Feature::ReferenceTypes unsupported) and so are skipped upstream; this is defensive attribution.
-fn heap_type_tag(hty: &HeapType<'_>) -> String {
-    match hty {
-        HeapType::Abstract {
-            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
-            ..
-        } => "exception-handling".to_string(),
-        HeapType::Abstract { .. } => "gc".to_string(),
-        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
-    }
 }
 
 fn arg_go(arg: &WastArg<'_>) -> Result<String, String> {
@@ -430,7 +285,7 @@ fn arg_go(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F32(f)) => Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(WastArgCore::RefNull(hty)) => Err(heap_type_tag(hty)),
+        WastArg::Core(WastArgCore::RefNull(hty)) => Err(dewasm_test_helper::heap_type_tag(hty)),
         WastArg::Core(WastArgCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastArg::Core(WastArgCore::RefHost(_)) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),

@@ -6,7 +6,7 @@
 // as immediately ready, and unknown fds report EBADF. Clock subscriptions set
 // the wait deadline; if it elapses with no fd ready, the due clock subs fire.
 // Motivated by event-loop guests such as the QuickJS REPL, which blocks here on
-// stdin between prompts (ADR-14).
+// stdin between prompts.
 func (w *WASI) wasi_poll_oneoff(inPtr, outPtr, nsubs, neventsPtr uint32) uint32 {
     if nsubs == 0 {
         return wasiInval

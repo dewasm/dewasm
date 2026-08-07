@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_rename (ADR-34 D2): one of the four namespace-mutation units
+# WASI path_rename: one of the four namespace-mutation units
 # licensed to shell out — a single `--`-guarded `mv` on the two resolved
 # physical paths. rename(2) never follows trailing symlinks on either side
 # (it moves the link itself and replaces the destination link), so both
@@ -17,8 +17,8 @@
 #   - destination exists and both sides are directories: rename(2) replaces an
 #     *empty* destination directory atomically, but `mv olddir newdir` instead
 #     moves olddir *inside* newdir when newdir already exists. To match
-#     rename(2) (ADR-40), an existing empty destination directory is `rmdir`'d
-#     first (still within the ADR-34 D2 mkdir/rmdir/rm/mv license) and then the
+#     rename(2), an existing empty destination directory is `rmdir`'d
+#     first (still within the mkdir/rmdir/rm/mv license) and then the
 #     `mv` renames onto the freed name; a *non-empty* destination directory is
 #     ENOTEMPTY, since it cannot be replaced.
 #   - destination exists, both sides are non-directories: falls through to
@@ -27,7 +27,7 @@
 # remembered: a slash-suffixed existing non-directory is ENOTDIR on either
 # side; a nonexistent slash-suffixed source is ENOENT; a nonexistent
 # slash-suffixed destination just loses the slash and the rename proceeds,
-# as wasmtime does (ADR-49). Anything else `mv` fails on defaults to EIO.
+# as wasmtime does. Anything else `mv` fails on defaults to EIO.
 wasi_path_rename() {
   local __p=$1 __old_dirfd=$2 __old_path_ptr=$3 __old_path_len=$4
   local __new_dirfd=$5 __new_path_ptr=$6 __new_path_len=$7

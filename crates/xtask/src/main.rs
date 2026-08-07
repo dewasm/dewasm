@@ -1,10 +1,10 @@
 //! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former snapshot-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
 //!
-//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command (ADR-56): the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM frame, which stays on the embedded `wasmtime` crate because its custom-import interface can't run through `wasmtime run` (ADR-53). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
+//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, which stay on the embedded `wasmtime` crate because their custom export/import interfaces can't run through `wasmtime run` (issue #114). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
 //! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
-//! `size` is its size counterpart (ADR-64): per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime. Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`. Also a measurement rather than a snapshot.
+//! `size` is its size counterpart: per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime. Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`. Also a measurement rather than a snapshot.
 //!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
@@ -32,17 +32,20 @@ Commands:
                                from a live wasmtime: the app/gzip/filesystem
                                stdout files and the interactive-REPL transcript
                                under examples/apps/snapshots/, plus the DOOM
-                               frame there (doom_frame.ppm, the compared oracle,
-                               and a doom_frame.png rendering for human eyes). An
-                               optional substring `filter` limits it to matching
-                               snapshots (e.g. `update-snapshots doom`). Needs
-                               `wasmtime` on PATH and the apps cache populated
-                               (examples/apps/setup.sh; the DOOM frame
-                               needs examples/apps/scripts/doom.sh). Checked by
-                               the compare-only wasmtime freshness suite
-                               (`cargo test -p dewasm-test-helper --features
+                               and NES frames there (doom_frame.ppm and
+                               nes_frame.ppm, the compared oracles, and
+                               doom_frame.png/nes_frame.png renderings for
+                               human eyes). An optional substring `filter`
+                               limits it to matching snapshots (e.g.
+                               `update-snapshots doom`). Needs `wasmtime` on
+                               PATH and the apps cache populated
+                               (examples/apps/setup.sh; the DOOM frame needs
+                               examples/apps/scripts/doom.sh, the NES frame
+                               examples/apps/scripts/nes.sh). Checked by the
+                               compare-only wasmtime freshness suite (`cargo
+                               test -p dewasm-test-helper --features
                                wasmtime_test --test apps_wasmtime`) and the
-                               per-backend `doom_frame` cases.
+                               per-backend `doom_frame` and `nes_frame` cases.
     bench [filter] [options]   Run the cross-runtime benchmark suite: every
                                workload in benchmarks/ (and the app cases) on
                                every dewasm backend, on wasmtime and the other
@@ -116,7 +119,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Render `docs/support.md` from the backends' own declarations and write it to disk (ADR-8). The corresponding test (`crates/dewasm-cli/tests/support_docs.rs`) is compare-only and names this command in its failure message.
+/// Render `docs/support.md` from the backends' own declarations and write it to disk. The corresponding test (`crates/dewasm-cli/tests/support_docs.rs`) is compare-only and names this command in its failure message.
 fn update_support_docs() -> Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
     let rendered = render_support_docs();
@@ -125,22 +128,22 @@ fn update_support_docs() -> Result<()> {
     Ok(())
 }
 
-/// A capture closure's output: the `(path, bytes)` files to write for one target. Most targets yield one file; the DOOM frame yields two (the compared PPM plus a human-facing PNG sidecar).
+/// A capture closure's output: the `(path, bytes)` files to write for one target. Most targets yield one file; the DOOM and NES frames yield two (the compared PPM plus a human-facing PNG sidecar).
 type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
 
-/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud (ADR-15) on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
+/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
 struct SnapshotTarget {
     label: String,
     capture: Box<dyn Fn() -> Result<CapturedFiles>>,
 }
 
-/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM frame, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency (ADR-53). The DOOM target emits two files — the compared `doom_frame.ppm` and a `doom_frame.png` rendering of the same frame for human inspection (never compared by a test).
+/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM and NES frames, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency. Each of those two targets emits two files — the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
 fn snapshot_targets() -> Vec<SnapshotTarget> {
     let mut targets: Vec<SnapshotTarget> = dewasm_test_helper::wasmtime_snapshots()
         .into_iter()
         .map(|snap| SnapshotTarget {
             label: snap.label,
-            // Wrap the fail-loud capture (it panics with an ADR-15 setup
+            // Wrap the fail-loud capture (it panics with a setup
             // message) in `Ok` so every target shares one `Result` signature.
             capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
         })
@@ -166,7 +169,7 @@ fn snapshot_targets() -> Vec<SnapshotTarget> {
     targets
 }
 
-/// Regenerate every execution snapshot (ADR-56), or only those whose repo-relative label contains `filter`. One line per file written (path + byte count). An unmatched filter is an error, so a typo fails loud rather than silently doing nothing.
+/// Regenerate every execution snapshot, or only those whose repo-relative label contains `filter`. One line per file written (path + byte count). An unmatched filter is an error, so a typo fails loud rather than silently doing nothing.
 fn update_snapshots(filter: Option<&str>) -> Result<()> {
     let mut wrote = 0usize;
     for target in snapshot_targets() {

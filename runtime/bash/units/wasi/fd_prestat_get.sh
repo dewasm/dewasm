@@ -1,5 +1,5 @@
 # requires: mem/fill, mem/i32_store
-# prestat for a preopen dir fd (ADR-34): tag u8 = 0 (dir) at +0, 3 pad, then the
+# prestat for a preopen dir fd: tag u8 = 0 (dir) at +0, 3 pad, then the
 # guest-name byte length as u32 at +4. Only a preopen (dir fd with <p>wname set)
 # answers; anything else is EBADF (8), which is what stops a libc's preopen scan
 # — preopens are dense from fd 3, so the first non-preopen fd ends the scan.

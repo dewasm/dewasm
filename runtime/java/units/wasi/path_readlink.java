@@ -1,5 +1,5 @@
 // requires: memory/read_string, memory/init, memory/i32_store, wasi/resolve_path, wasi/errno_fs
-// Read a symlink's target into the guest buffer (ADR-40). The link itself is
+// Read a symlink's target into the guest buffer. The link itself is
 // resolved NOFOLLOW; the target string is returned verbatim (as the guest wrote
 // it at symlink time), truncated to buf_len — a short buffer takes the leading
 // bytes, matching the WASI contract, with bufused reporting what was written.

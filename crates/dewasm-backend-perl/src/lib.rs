@@ -1,12 +1,12 @@
 //! Perl backend: translates dewasm IR into a Perl package (plus a bundled lightweight runtime).
 //!
-//! Lowering conventions (ADR-55; numeric conventions ADR-2):
+//! Lowering conventions:
 //! - i32/i64 are masked-unsigned perl integers (IV/UV); signed views via `Rt::s32`/`Rt::s64` only where an instruction needs them. Operations whose intermediates exceed the NV-exact range (i32 mul, all i64 add/sub/mul, div/rem, shr_s) live in runtime helpers built on tightly-scoped `use integer` blocks or the exact unsigned-division idiom.
 //! - f32/f64 are native NVs; f32 results are re-rounded with `Rt::f32` (with the pack-'f' overflow boundary handled in software), NaN bit paths go through software bit conversion, and division goes through `Rt::fdiv` because perl dies on `x / 0.0`.
-//! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln` — `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby (ADR-42) and Python (ADR-28) need do not exist here.
+//! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln` — `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby and Python need do not exist here.
 //! - Call-stack exhaustion is enforced by an explicit depth counter (`local $Rt::DEPTH`), because runaway perl recursion only stops at the OOM killer.
 //!
-//! The runtime is composed from per-method units (ADR-6) in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`). Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
+//! The runtime is composed from per-method units in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`). Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -14,14 +14,14 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
-    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
+    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
+    local_runs, module_name_error, signed_view_rel_op, store_method, type_key, wasi_bundled,
+    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
     RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, LoadOp, Module, Stmt, StoreOp,
-    Temp, UnOp, ValType,
+    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -77,7 +77,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("{}package main;\n", bundler().bundle(seeds, 0)?))
 }
 
-/// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts. Honors `$DEWASM_PERL`, then `perl` (ADR-15: a missing or unsuitable interpreter is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts. Honors `$DEWASM_PERL`, then `perl` (a missing or unsuitable interpreter is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_perl() -> Option<std::path::PathBuf> {
     static PERL: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     PERL.get_or_init(find_perl_uncached).clone()
@@ -135,14 +135,13 @@ fn generate_package_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PerlBackend, module)?;
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob. Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
         data_offsets.push(acc);
         acc += data.data.len();
     }
-    // Perl package names are absolute (no lexical nesting), so the Embedded runtime is namespaced under the generated package by rewriting the `Rt::` prefix below; generated code references the same prefixed name directly.
     let rt_name = match linkage {
         RuntimeLinkage::Embedded => format!("{package_name}::Rt"),
         RuntimeLinkage::Alias(_) => "Rt".to_string(),
@@ -201,9 +200,9 @@ impl Backend for PerlBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Perl NVs are IEEE doubles; f32 re-rounding and the NaN paths follow ADR-2 (mirroring Ruby/Python).
+            // Perl NVs are IEEE doubles; f32 re-rounding and the NaN paths mirror Ruby/Python's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
-            // The wasm-1.0 completion (ADR-16 model): boxed globals, imported globals/memories/tables, multiple tables, and the table half of bulk memory.
+            // Wasm-1.0 completion — imported globals/memories/tables, multiple tables, table bulk ops — mirrors Ruby/Python's model.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -214,7 +213,7 @@ impl Backend for PerlBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its package name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        // Standalone output is a self-contained program: its package name is fixed, not derived. Library output uses the requested name verbatim, after validating it.
         let package_name = if opts.mode == Mode::Standalone {
             STANDALONE_PACKAGE.to_string()
         } else {
@@ -241,7 +240,7 @@ impl Backend for PerlBackend {
         let mut w = CodeWriter::new("\t");
         w.line("#!/usr/bin/env perl");
         w.line("# Generated by dewasm. Do not edit.");
-        // Externalized data blob (ADR-37): read once at load time from the sidecar next to this file, then sliced by the generated `substr($DATA_BLOB, o, len)` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // Externalized data blob: read once at load time from the sidecar next to this file, then sliced by the generated `substr($DATA_BLOB, o, len)` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 w.line("use File::Basename ();");
@@ -265,12 +264,12 @@ impl Backend for PerlBackend {
                 RuntimeLinkage::Embedded => format!("{package_name}::Rt"),
                 RuntimeLinkage::Alias(_) => "Rt".to_string(),
             };
-            let wasi = wasi_bundled(module, opts.default_wasi);
+            let wasi = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
             w.line("package main;");
             w.line("");
             if wasi {
-                // The standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                // The standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                 w.line("use File::Basename ();");
                 w.line("");
                 w.line("my %_preopens;");
@@ -326,7 +325,7 @@ impl Backend for PerlBackend {
             name: format!("{}.pl", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `substr($DATA_BLOB, o, len)` slices.
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `substr($DATA_BLOB, o, len)` slices.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -343,10 +342,10 @@ impl Backend for PerlBackend {
     }
 }
 
-/// The package a `--mode standalone` program defines (ADR-63): fixed, since nothing outside a self-contained program observes it.
+/// The package a `--mode standalone` program defines: fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_PACKAGE: &str = "Program";
 
-/// The library-mode module name must be a Perl package name — `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*` — and is used verbatim (ADR-63). Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas), so the grammar does not forbid them; the caller picks the case it wants and gets exactly that.
+/// The library-mode module name must be a Perl package name — `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*` — and is used verbatim. Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas), so the grammar does not forbid them; the caller picks the case it wants and gets exactly that.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
         is_ident(
@@ -367,7 +366,7 @@ fn check_module_name(name: &str) -> Result<()> {
 }
 
 /// Perl single-quoted string literal (no interpolation, so `$`/`@` in wasm names are inert; raw control bytes are legal inside single quotes).
-fn perl_string(s: &str) -> String {
+pub fn perl_string(s: &str) -> String {
     let mut out = String::from("'");
     for c in s.chars() {
         match c {
@@ -381,27 +380,7 @@ fn perl_string(s: &str) -> String {
 }
 
 fn hex_bytes(data: &[u8]) -> String {
-    let mut hex = String::with_capacity(data.len() * 2);
-    for b in data {
-        hex.push_str(&format!("{b:02x}"));
-    }
-    format!("pack('H*', '{hex}')")
-}
-
-/// WASI import module names the bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here.
-const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
-
-fn is_wasi_module(name: &str) -> bool {
-    WASI_MODULES.contains(&name)
-}
-
-/// Whether the generated package will carry the bundled WASI fallback (and so its constructor takes the `args`/`env`/`preopens` options and the standalone main parses `--dir`): any WASI import the runtime has a unit for, with `default_wasi` on.
-fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
-    default_wasi
-        && module
-            .imported_funcs
-            .iter()
-            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
+    format!("pack('H*', '{}')", hex_string(data))
 }
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
@@ -418,20 +397,31 @@ fn default_value(ty: ValType) -> &'static str {
     }
 }
 
+/// How a value type is spelled inside a structural type key ([`type_key`]). Only this backend's own artifacts ever read these, so the spelling is free.
+fn val_name(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I32 => "i32",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
+        ValType::F64 => "f64",
+        ValType::FuncRef => "funcref",
+    }
+}
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the file-scoped `$DATA_BLOB`) instead of embedded as `pack('H*', ...)` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the file-scoped `$DATA_BLOB`) instead of embedded as `pack('H*', ...)` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
-    /// The runtime's package name as generated code spells it: `Rt` under `Alias` linkage, `<Package>::Rt` under `Embedded` (perl package names are absolute).
+    /// The runtime's package name as generated code spells it: `Rt` under `Alias` linkage, `<Package>::Rt` under `Embedded`.
     rt_name: String,
 }
 
 impl<'a> Gen<'a> {
-    /// The Perl expression yielding a data segment's bytes: a slice of the externalized `$DATA_BLOB` when `--data-file` is on, else an inline `pack('H*', ...)` literal (ADR-37). Both yield a byte string.
+    /// The Perl expression yielding a data segment's bytes: a slice of the externalized `$DATA_BLOB` when `--data-file` is on, else an inline `pack('H*', ...)` literal. Both yield a byte string.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -531,7 +521,7 @@ impl<'a> Gen<'a> {
 
     fn initialize(&self, w: &mut CodeWriter) {
         let m = self.module;
-        let wasi_fallback = wasi_bundled(m, self.default_wasi);
+        let wasi_fallback = wasi_bundled(m, self.default_wasi, bundler());
         w.line("sub new {");
         w.indent();
         if wasi_fallback {
@@ -593,7 +583,7 @@ impl<'a> Gen<'a> {
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
-            // Fallback order (ADR-7): explicit import -> bundled WASI unit -> ENOSYS stub; non-WASI imports stay mandatory (a missing one is a link error).
+            // Fallback order: explicit import -> bundled WASI unit -> ENOSYS stub; non-WASI imports stay mandatory (a missing one is a link error).
             let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
@@ -702,7 +692,7 @@ impl<'a> Gen<'a> {
             export_entries.join(", ")
         ));
 
-        // Let import providers bind to the fully-constructed instance (ADR-7).
+        // Let import providers bind to the fully-constructed instance.
         if !m.imported_funcs.is_empty() {
             w.line("for my $_p (values %$imports) {");
             w.indent();
@@ -738,7 +728,7 @@ impl<'a> Gen<'a> {
         w.dedent();
         w.line("}");
         w.line("");
-        // The boxed Rt::Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell (ADR-16).
+        // The boxed Rt::Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell.
         w.line("sub global_export {");
         w.indent();
         w.line("my ($self, $name) = @_;");
@@ -753,7 +743,7 @@ impl<'a> Gen<'a> {
         w.dedent();
         w.line("}");
         w.line("");
-        // ADR-7 provider protocol: an instance is itself a valid import value.
+        // Provider protocol: an instance is itself a valid import value.
         w.line("sub wasm_import {");
         w.indent();
         w.line("my ($self, $name) = @_;");
@@ -774,8 +764,8 @@ impl<'a> Gen<'a> {
         ));
         w.dedent();
         w.line("}");
-        if wasi_bundled(self.module, self.default_wasi) {
-            // The bundled-WASI fallback (ADR-7): constructed lazily on the first unresolved WASI import, so a provider that covers every import keeps it unbuilt.
+        if wasi_bundled(self.module, self.default_wasi, bundler()) {
+            // The bundled-WASI fallback: constructed lazily on the first unresolved WASI import, so a provider that covers every import keeps it unbuilt.
             w.line("");
             w.line("sub _wasi_import {");
             w.indent();
@@ -793,35 +783,18 @@ impl<'a> Gen<'a> {
     }
 
     fn func_type_symbol(&self, func_idx: u32) -> String {
-        let idx = func_idx as usize;
-        let imports = self.module.imported_funcs.len();
-        let ty = if idx < imports {
-            self.module.imported_funcs[idx].type_idx
-        } else {
-            self.module.funcs[idx - imports].type_idx
-        };
-        self.type_symbol(ty)
+        self.type_symbol_of(self.module.func_type(func_idx))
     }
 
-    /// A structural key for a function type (not a module-local index), so a table shared across modules stays consistent.
     fn type_symbol(&self, type_idx: u32) -> String {
-        let ty = &self.module.types[type_idx as usize];
-        let names = |tys: &[ValType]| {
-            tys.iter()
-                .map(|t| match t {
-                    ValType::I32 => "i32",
-                    ValType::I64 => "i64",
-                    ValType::F32 => "f32",
-                    ValType::F64 => "f64",
-                    ValType::FuncRef => "funcref",
-                })
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        perl_string(&format!("{}->{}", names(&ty.params), names(&ty.results)))
+        self.type_symbol_of(&self.module.types[type_idx as usize])
     }
 
-    /// A callable for the function: the imported coderef itself, or a closure over the instance method.
+    /// A structural type key (see [`type_key`]) as a perl string literal, which is what the table stores and `call_indirect` compares.
+    fn type_symbol_of(&self, ty: &dewasm_core::ir::FuncType) -> String {
+        perl_string(&type_key(ty, val_name))
+    }
+
     fn func_closure(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("$self->{{if{func_idx}}}")
@@ -830,7 +803,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_key, coderef]` pair tables store (ADR-16).
+    /// A funcref value: the `[type_key, coderef]` pair tables store.
     fn func_pair(&self, func_idx: u32) -> String {
         format!(
             "[{}, {}]",
@@ -857,7 +830,7 @@ impl<'a> Gen<'a> {
         w.line(format!("sub _f{idx} {{"));
         w.indent();
         w.line(format!("my ($self{params}) = @_;"));
-        // The explicit call-depth cutoff (ADR-55): `local` restores the counter on every exit path, including a trap's die-unwind. Each call adds a frame-size weight, not 1 — a pure count lets a fat-frame runaway (spec `skip-stack-guard-page`: 1056 locals) heap-allocate gigabytes before tripping the limit, where byte-bounded native stacks exhaust in a few hundred frames.
+        // The explicit call-depth cutoff: `local` restores the counter on every exit path, including a trap's die-unwind. Each call adds a frame-size weight, not 1 — a pure count lets a fat-frame runaway (spec `skip-stack-guard-page`: 1056 locals) heap-allocate gigabytes before tripping the limit, where byte-bounded native stacks exhaust in a few hundred frames.
         self.use_unit("rt/exhausted");
         let frame_weight = 1 + (ty.params.len() + func.locals.len() + func.temps.len()) / 8;
         w.line(format!(
@@ -869,7 +842,7 @@ impl<'a> Gen<'a> {
             self.rt("exhausted"),
             self.rt_name
         ));
-        // Locals start at their type's default. A run of consecutive locals sharing one default is declared in a single statement — a list assignment of that many copies, or, where the default is `undef`, the bare declaration a fresh lexical already satisfies.
+        // A run of consecutive locals sharing one default is declared in a single statement — a list assignment of that many copies, or, where the default is `undef`, the bare declaration a fresh lexical already satisfies.
         for run in local_runs(&func.locals, default_value) {
             let default = default_value(func.locals[run.start]);
             let names: Vec<String> = run.map(|k| format!("$l{}", ty.params.len() + k)).collect();
@@ -900,7 +873,7 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Emit a statement sequence. Structured frames map directly onto perl's labeled blocks/loops (ADR-55): a referenced `Block` is `Ln: { ... }`, a referenced `Loop` is `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, and falling off the body exits), a referenced `If` gets a labeled block wrapper. Unreferenced labels need no frame at all — bodies are spliced inline.
+    /// Emit a statement sequence. Structured frames map directly onto perl's labeled blocks/loops: a referenced `Block` is `Ln: { ... }`, a referenced `Loop` is `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, and falling off the body exits), a referenced `If` gets a labeled block wrapper. Unreferenced labels need no frame at all — bodies are spliced inline.
     fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
         for stmt in stmts {
             match stmt {
@@ -1081,7 +1054,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment (ADR-38); inert.
+                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1118,7 +1091,6 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("$self->{{elem{seg}}} = [];"));
             }
-            // Handled in emit_seq, never routed here.
             Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
@@ -1140,7 +1112,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A branch is a direct `last`/`next` on the target frame's label (ADR-55): `last Ln` exits a block/if frame, `next Ln` re-enters a loop head. Branch operands travel through the frame's result temps via `assigns` first (self-assignments already filtered by the IR builder).
+    /// A branch is a direct `last`/`next` on the target frame's label: `last Ln` exits a block/if frame, `next Ln` re-enters a loop head. Branch operands travel through the frame's result temps via `assigns` first (self-assignments already filtered by the IR builder).
     fn branch(&self, w: &mut CodeWriter, target: &BrTarget) {
         match target {
             BrTarget::Return { values } => self.return_stmt(w, values),
@@ -1230,7 +1202,7 @@ impl<'a> Gen<'a> {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
-            Expr::Bin(op, a, b) => match rel_op(*op) {
+            Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
                 Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
                 None => format!("({}) != 0", self.expr(e)),
             },
@@ -1243,7 +1215,9 @@ impl<'a> Gen<'a> {
         match e {
             // Two negations cancel.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.cond(a),
-            Expr::Bin(op, ..) if rel_op(*op).is_some() => format!("!({})", self.cond(e)),
+            Expr::Bin(op, ..) if signed_view_rel_op(*op).is_some() => {
+                format!("!({})", self.cond(e))
+            }
             _ => format!("({}) == 0", self.expr(e)),
         }
     }
@@ -1314,11 +1288,11 @@ impl<'a> Gen<'a> {
     fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
         use BinOp::*;
         // A comparison is a Perl boolean; outside condition position it needs the conditional back to the i32 0 or 1 wasm expects (see `cond`).
-        if let Some(rel) = rel_op(op) {
+        if let Some(rel) = signed_view_rel_op(op) {
             return format!("({} ? 1 : 0)", self.rel(rel, a, b));
         }
         match op {
-            // i32 sums stay well inside the NV-exact range, so plain arithmetic plus a mask is exact; products are not (ADR-55), hence the helper.
+            // i32 sums stay well inside the NV-exact range, so plain arithmetic plus a mask is exact; products are not, hence the helper.
             I32Add => format!("((({a}) + ({b})) & 0xFFFFFFFF)"),
             I32Sub => format!("((({a}) - ({b})) & 0xFFFFFFFF)"),
             I32Mul => format!("{}({a}, {b})", self.rt("i32_mul")),
@@ -1339,7 +1313,7 @@ impl<'a> Gen<'a> {
             I32Shl => format!("((({a}) << (({b}) & 31)) & 0xFFFFFFFF)"),
             I32ShrU => format!("(({a}) >> (({b}) & 31))"),
             I32ShrS => format!("{}({a}, {b})", self.rt("i32_shr_s")),
-            // UV << wraps mod 2^64 (measured, ADR-55), so the mask suffices.
+            // UV << wraps mod 2^64 (measured), so the mask suffices.
             I64Shl => format!("((({a}) << (({b}) & 63)) & 0xFFFFFFFFFFFFFFFF)"),
             I64ShrU => format!("(({a}) >> (({b}) & 63))"),
             I64ShrS => format!("{}({a}, {b})", self.rt("i64_shr_s")),
@@ -1347,7 +1321,7 @@ impl<'a> Gen<'a> {
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
             I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            // Float add/sub/mul go through helpers because perl's arithmetic operators take an integer fast path that keeps integer exactness beyond double precision and drops -0.0 (measured, ADR-55).
+            // Float add/sub/mul go through helpers because perl's arithmetic operators take an integer fast path that keeps integer exactness beyond double precision and drops -0.0 (measured).
             F32Add => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fadd")),
             F32Sub => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fsub")),
             F32Mul => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fmul")),
@@ -1363,19 +1337,6 @@ impl<'a> Gen<'a> {
             _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
-}
-
-/// The Perl rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned IV/UVs, which perl's comparison operators order exactly, and perl's NV comparison matches wasm, NaN included; ADR-2, ADR-55). `bin` wraps the result back into an i32, `cond` takes it as it stands.
-fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    let (r, operands) = comparison(op)?;
-    Some((
-        r,
-        match operands {
-            CompareOperands::Signed32 => Some("s32"),
-            CompareOperands::Signed64 => Some("s64"),
-            _ => None,
-        },
-    ))
 }
 
 /// A Perl float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which perl's (correctly rounded) string->NV conversion parses back exactly; non-finite values never reach here.
@@ -1404,42 +1365,7 @@ fn seq_has_br_table(stmts: &[Stmt]) -> bool {
     })
 }
 
-fn load_method(op: LoadOp) -> &'static str {
-    use LoadOp::*;
-    match op {
-        I32Load => "i32_load",
-        I64Load => "i64_load",
-        F32Load => "f32_load",
-        F64Load => "f64_load",
-        I32Load8S => "i32_load8_s",
-        I32Load8U => "i32_load8_u",
-        I32Load16S => "i32_load16_s",
-        I32Load16U => "i32_load16_u",
-        I64Load8S => "i64_load8_s",
-        I64Load8U => "i64_load8_u",
-        I64Load16S => "i64_load16_s",
-        I64Load16U => "i64_load16_u",
-        I64Load32S => "i64_load32_s",
-        I64Load32U => "i64_load32_u",
-    }
-}
-
-fn store_method(op: StoreOp) -> &'static str {
-    use StoreOp::*;
-    match op {
-        I32Store => "i32_store",
-        I64Store => "i64_store",
-        F32Store => "f32_store",
-        F64Store => "f64_store",
-        I32Store8 => "i32_store8",
-        I32Store16 => "i32_store16",
-        I64Store8 => "i64_store8",
-        I64Store16 => "i64_store16",
-        I64Store32 => "i64_store32",
-    }
-}
-
-/// Codegen-shape test for the label lowering (ADR-55): multi-level branches must come out as direct `last`/`next` on perl labels, with no flag-variable cascade (Ruby's `__br`, ADR-42) sneaking back in.
+/// Codegen-shape test for the label lowering: multi-level branches must come out as direct `last`/`next` on perl labels, with no flag-variable cascade (Ruby's `__br`) sneaking back in.
 #[cfg(test)]
 mod branch_shape {
     use super::*;
@@ -1479,7 +1405,7 @@ mod branch_shape {
         assert!(source.contains("next L"), "loop back-edge:\n{source}");
         let lasts = source.matches("last L").count();
         assert!(lasts >= 3, "multi-level exits (got {lasts}):\n{source}");
-        // No flag-variable cascade (ADR-42/ADR-28 schemes must not reappear).
+        // No flag-variable cascade (Ruby's or Python's schemes must not reappear).
         assert!(!source.contains("__br"), "flag cascade leaked:\n{source}");
         assert!(!source.contains("$_br"), "flag register leaked:\n{source}");
     }
@@ -1525,7 +1451,7 @@ mod branch_shape {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby/Python units lint (ADR-6), adjusted for Perl syntax (`Rt::name(...)` calls, `'Rt::Class'` names, `$self->name(...)` sibling calls within a scope's package).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby/Python units lint, adjusted for Perl syntax (`Rt::name(...)` calls, `'Rt::Class'` names, `$self->name(...)` sibling calls within a scope's package).
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1539,7 +1465,7 @@ mod units {
         bundler().bundle_all(0).expect("full bundle resolves");
     }
 
-    /// The whole runtime bundle must be valid perl: `perl -c` the full bundle (the interpreted-language analog of the compiled backends' compile check). Fail-loud on a missing perl (ADR-15).
+    /// The whole runtime bundle must be valid perl: `perl -c` the full bundle (the interpreted-language analog of the compiled backends' compile check). Fail-loud on a missing perl.
     #[test]
     fn full_bundle_is_valid_perl() {
         let perl = find_perl()

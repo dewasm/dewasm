@@ -20,10 +20,11 @@ func (w *WASI) within(base, path string) bool {
 //
 // followLast=false resolves the parent but leaves the final component
 // untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that operate on a
-// symlink itself (lstat, unlink, rename, rmdir, mkdir). A trailing "." or ".."
-// is never a symlink, so those fall back to full resolution.
+// symlink itself (lstat, unlink, rename, rmdir, mkdir, link, symlink,
+// readlink). A trailing "." or ".." is never a symlink, so those fall back to
+// full resolution.
 //
-// Known limitation (ADR-14): this is a check-then-open, not an atomic
+// Known limitation: this is a check-then-open, not an atomic
 // openat(2)-beneath resolution — a TOCTOU race or a symlink planted inside the
 // sandbox between the check and the actual filesystem call could in principle
 // escape. Accepted for a single-process research/demo runtime.
@@ -36,7 +37,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if !ok {
         // A base fd that exists but is a file, not a directory: NOTDIR, so a
         // guest opening a path underneath a plain file gets the POSIX errno
-        // rather than BADF (ADR-40).
+        // rather than BADF.
         return "", wasiNotdir
     }
     if strings.ContainsRune(rel, 0) {
@@ -45,13 +46,13 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         return "", wasiInval
     }
     // A leading slash is an absolute guest path — never capable against a
-    // preopen root (rejected before any join could absorb it; ADR-40).
+    // preopen root (rejected before any join could absorb it).
     if strings.HasPrefix(rel, "/") {
         return "", wasiNotcapable
     }
     // Strip a trailing slash before the final-component bookkeeping below (an
     // empty last component silently degrades followLast) and re-check via
-    // trailingDirGate (issue #42).
+    // trailingDirCheck (issue #42).
     trailing := strings.HasSuffix(rel, "/")
     if trailing {
         rel = strings.TrimRight(rel, "/")
@@ -82,7 +83,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
             return "", wasiNotcapable
         }
         host := filepath.Join(realParent, last)
-        if e := w.trailingDirGate(trailing, host); e != wasiOk {
+        if e := w.trailingDirCheck(trailing, host); e != wasiOk {
             return "", e
         }
         return host, wasiOk
@@ -97,7 +98,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         if !w.within(base, real) {
             return "", wasiNotcapable
         }
-        if e := w.trailingDirGate(trailing, real); e != wasiOk {
+        if e := w.trailingDirCheck(trailing, real); e != wasiOk {
             return "", e
         }
         return real, wasiOk
@@ -115,10 +116,10 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     return filepath.Join(realParent, filepath.Base(joined)), wasiOk
 }
 
-// trailingDirGate: a slash-suffixed name may only resolve to a directory —
+// trailingDirCheck: a slash-suffixed name may only resolve to a directory —
 // an existing non-directory is ENOTDIR (issue #42). os.Stat follows
 // symlinks, as the slash requires; a missing target is each caller's case.
-func (w *WASI) trailingDirGate(trailing bool, host string) uint32 {
+func (w *WASI) trailingDirCheck(trailing bool, host string) uint32 {
     if !trailing {
         return wasiOk
     }

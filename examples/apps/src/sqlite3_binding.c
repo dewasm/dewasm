@@ -1,14 +1,14 @@
 /*
- * sqlite3_binding.c — our own committed C source (ADR-9 permits committing
- * first-party source; only third-party *artifacts* stay out of the tree).
+ * sqlite3_binding.c — our own committed C source (first-party source is
+ * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * Proves a guest->host callback round trip in library mode (Phase 5a): the
  * exported run_query() calls sqlite3_exec() with a C callback that forwards
  * every result row to an *imported* host function, env.host_row. The Ruby
- * apps e2e supplies host_row via the ADR-7 import-provider mechanism and
+ * apps e2e supplies host_row via the import-provider mechanism and
  * collects the rows. Built into cache/sqlite3-binding.wasm by
- * examples/apps/fetch.sh (a third artifact alongside the shell and the plain
- * reactor library; ADR-22) from the same pinned amalgamation, with the same
+ * examples/apps/scripts/sqlite3.sh (a third artifact alongside the shell and the plain
+ * reactor library) from the same pinned amalgamation, with the same
  * zig build flags.
  */
 #include "sqlite3.h"

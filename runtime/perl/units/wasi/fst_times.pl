@@ -1,6 +1,6 @@
 # Validate the fstflags and compute the (atime, mtime) pair for
 # Time::HiRes::utime in NV seconds, filling any field not being set from
-# the current stat times (ADR-40). ATIM with ATIM_NOW (or MTIM with
+# the current stat times. ATIM with ATIM_NOW (or MTIM with
 # MTIM_NOW) is a contradiction and yields INVAL; returns (atime, mtime,
 # err).
 use Time::HiRes ();

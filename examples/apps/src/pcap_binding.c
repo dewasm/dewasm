@@ -1,14 +1,14 @@
 /*
- * pcap_binding.c — our own committed C source (ADR-9 permits committing
- * first-party source; only third-party *artifacts* stay out of the tree).
+ * pcap_binding.c — our own committed C source (first-party source is
+ * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * A reactor library exporting a single BPF-filter-compilation entry point on
  * top of libpcap's platform-independent compiler (gencode.c/optimize.c). No
  * capture backend is built (see src/pcap_config.h); only pcap_compile_nopcap()
  * — which turns a textual filter like "tcp port 80" into a BPF program — is
- * reachable. Built into cache/libpcap.wasm by examples/apps/fetch.sh from the
+ * reachable. Built into cache/libpcap.wasm by examples/apps/scripts/libpcap.sh from the
  * pinned upstream release, with the same zig reactor flags as the sqlite3
- * apps (ADR-22).
+ * apps.
  */
 #include <stdint.h>
 #include <stdlib.h>

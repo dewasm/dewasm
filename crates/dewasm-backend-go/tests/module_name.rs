@@ -1,47 +1,21 @@
 //! The module-name policy for Go output: a library artifact is a Go *package*, so its name is validated, not sanitized; a standalone artifact is a program with fixed internal names, so its bytes do not depend on the name at all.
 
-use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasm_backend::Mode;
 use dewasm_backend_go::GoBackend;
 
 mod common;
 
-fn generate(mode: Mode, module_name: &str) -> anyhow::Result<String> {
-    let bytes = wat::parse_file(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/wat/add.wat"),
-    )?;
-    let module = dewasm_core::build_module(&bytes)?;
-    let files = GoBackend.generate(
-        &module,
-        &GenOptions {
-            mode,
-            module_name: module_name.to_string(),
-            runtime: RuntimeLinkage::Embedded,
-            default_wasi: true,
-            data_file: None,
-        },
-    )?;
-    Ok(String::from_utf8(files.into_iter().next().unwrap().contents).unwrap())
-}
+/// The shared two-export fixture, converted with WASI on: `library_artifact_is_importable_as_a_package` below compiles what this produces, so the fixture is the one a real embedder gets.
+const ADD_WAT: &str = include_str!("../../../examples/wat/add.wat");
 
-/// A library name that is not a Go identifier fails at conversion time (ADR-0), naming both the grammar and the offending value. Nothing is dropped, folded or prefixed to make it fit.
-#[test]
-fn library_rejects_a_non_identifier_module_name() {
-    for name in [
-        "sqlite3-shell",
-        "ruby packed",
-        "9lives",
-        "my.module",
-        "",
-        "naïve",
-    ] {
-        let err = generate(Mode::Library, name).expect_err("expected a rejection");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("[A-Za-z_][A-Za-z0-9_]*") && msg.contains(&format!("{name:?}")),
-            "error for {name:?} names neither the grammar nor the value: {msg}"
-        );
-    }
-}
+dewasm_test_helper::module_name_policy_suite!(
+    backend: GoBackend,
+    wat: ADD_WAT,
+    default_wasi: true,
+    invalid: ["sqlite3-shell", "ruby packed", "9lives", "my.module", "", "naïve"],
+    error_contains: "invalid go module name",
+    standalone_markers: ["\npackage main\n", "func NewProgram(", "func main() {"],
+);
 
 /// From a valid name, both mappings are total and fully specified: package = lowercased, type = first letter uppercased.
 #[test]
@@ -52,7 +26,7 @@ fn library_package_and_type_come_from_the_module_name() {
         ("MyLib", "mylib", "MyLib"),
         ("_x9", "_x9", "_x9"),
     ] {
-        let src = generate(Mode::Library, name).expect("generate");
+        let src = convert(name, Mode::Library).expect("generate");
         assert!(
             src.contains(&format!("\npackage {package}\n")),
             "{name:?} did not yield `package {package}`"
@@ -64,24 +38,20 @@ fn library_package_and_type_come_from_the_module_name() {
     }
 }
 
-/// Standalone output is `package main` with the fixed type `Program`, byte-identical however the artifact was named — the name reaches nothing an outsider can see.
+/// Standalone output is byte-identical however the artifact was named — including under a name library mode would reject, which is simply irrelevant here.
 #[test]
-fn standalone_is_byte_stable_and_fixed_shape() {
-    let a = generate(Mode::Standalone, "add").expect("generate");
-    let b = generate(Mode::Standalone, "somethingElse").expect("generate");
+fn standalone_is_byte_stable() {
+    let a = convert("add", Mode::Standalone).expect("generate");
+    let b = convert("somethingElse", Mode::Standalone).expect("generate");
     assert_eq!(a, b, "standalone output depends on the module name");
-    assert!(a.contains("\npackage main\n"));
-    assert!(a.contains("func NewProgram("));
-    assert!(a.contains("func main() {"));
-    // A name that library mode would reject is simply irrelevant here.
-    let dashed = generate(Mode::Standalone, "sqlite3-shell").expect("generate");
+    let dashed = convert("sqlite3-shell", Mode::Standalone).expect("generate");
     assert_eq!(a, dashed);
 }
 
 /// The embedding shape a consumer actually uses: the artifact is imported as a package from another one, with no host code inside it. `common::build_go` is exactly that layout (temp module, `main.go` importing the package), so this drives it end to end.
 #[test]
 fn library_artifact_is_importable_as_a_package() {
-    let src = generate(Mode::Library, "adder").expect("generate");
+    let src = convert("adder", Mode::Library).expect("generate");
     let glue = r#"func RunTest() {
 	inst := NewAdder(nil, nil, nil, nil)
 	fmt.Println(inst.Exports["add"].(func(uint32, uint32) uint32)(2, 3))

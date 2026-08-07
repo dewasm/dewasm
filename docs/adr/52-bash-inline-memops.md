@@ -1,6 +1,6 @@
 # ADR-52 — Bash Emitter Inlines Linear-Memory Loads and Stores
 
-Status: **Accepted, 2026-07-30.** The Bash emitter generates per-instruction loads/stores as inline arithmetic on the module's memory array instead of `mem_*` unit calls; the units remain for WASI and bulk/rare ops. DOOM's tick dropped 87s → 34s (2.5x) and initGame 198s → 103s on top of ADR-51's representation change, with identical framebuffer checksums and the full test green (spec 257/257).
+Status: **Accepted, 2026-07-30.** The Bash emitter generates per-instruction loads/stores as inline arithmetic on the module's memory array instead of `mem_*` unit calls; the units remain for WASI and bulk/rare ops. DOOM's tick dropped 87s → 34s (2.5x) and initGame 198s → 103s on top of ADR-51's representation change, with identical framebuffer checksums and the full test suite passing (spec 257/257).
 
 ## Context
 

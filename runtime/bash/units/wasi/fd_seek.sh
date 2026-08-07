@@ -1,5 +1,5 @@
 # requires: mem/i64_store
-# A file fd (kind 2) seeks within its whole-file byte buffer (ADR-34): whence 0/1/2
+# A file fd (kind 2) seeks within its whole-file byte buffer: whence 0/1/2
 # is SET/CUR/END against 0 / current offset / buffer length, a negative result is
 # EINVAL (28), and the new offset is stored back. stdio pipes cannot seek (ESPIPE);
 # a directory fd is EBADF. The i64 offset arrives as bash's signed-64 pattern.

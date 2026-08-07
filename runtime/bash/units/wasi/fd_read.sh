@@ -1,6 +1,6 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
 # Byte-wise binary-safe reads. A file fd (kind 2) copies from its whole-file
-# byte buffer at the current offset (ADR-34); stdin (kind 1, fd 0) consumes the
+# byte buffer at the current offset; stdin (kind 1, fd 0) consumes the
 # pushback buffer first (<p>wpush, a space-separated byte-ordinal list shared
 # with poll_oneoff), then reads live. A non-tty stdin reads via `read -d '' -n
 # 1`, where '' with success is a NUL byte and failure is EOF. A tty stdin

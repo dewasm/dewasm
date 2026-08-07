@@ -1,27 +1,12 @@
 # NES (Bash, ANSI terminal)
 
-An NES emulator running in pure GNU Bash. `build.sh` builds the checksum-pinned [agnes](https://github.com/kgabis/agnes) emulator (wrapped by our own [`nes_demo.c`](../../apps/src/nes_demo.c)) into a single import-free wasm module via [`../../apps/scripts/nes.sh`](../../apps/scripts/nes.sh), then runs it through `dewasm --target bash --mode library` to produce `nes_gen.sh` (generated Bash, gitignored, regenerated on every build), and `main.sh` loads a ROM into the module's memory, drives the exported `initGame`/`setInput`/`tickGame`, and renders the framebuffer into any ANSI truecolor terminal with half-block characters — the same shape as the DOOM Bash frontend ([`../../doom/bash`](../../doom/bash)) and the other NES frontends ([ADR-50](../../../docs/adr/50-doom-example-shape.md)). The NES CPU + PPU emulation is entirely the generated Bash; nothing about the emulator is reimplemented here.
+An NES emulator running in pure GNU Bash. `build.sh` builds the checksum-pinned [agnes](https://github.com/kgabis/agnes) emulator (wrapped by our own [`nes_demo.c`](../../apps/src/nes_demo.c)) into a single import-free wasm module via [`../../apps/scripts/nes.sh`](../../apps/scripts/nes.sh), then runs it through `dewasm --target bash --mode library` to produce `nes_gen.sh` (generated Bash, gitignored, regenerated on every build), and `main.sh` loads a ROM into the module's memory, drives the exported `initGame`/`setInput`/`tickGame`, and renders the framebuffer into any ANSI truecolor terminal with half-block characters — the same shape as the DOOM Bash frontend ([`../../doom/bash`](../../doom/bash)) and the other NES frontends. The NES CPU + PPU emulation is entirely the generated Bash; nothing about the emulator is reimplemented here.
 
 The demo ROM is **Alter Ego by Shiru**, released into the [public domain](https://shiru.untergrund.net). Pass a path to `run.sh`/`main.sh` to play a different iNES ROM.
 
 ## Honest performance
 
-This is an existence-proof demo, not a playable emulator, and the numbers say so plainly: **each `tickGame` (one 60Hz NES video frame) takes tens of seconds** (measured on an Apple Silicon laptop, headless) — ~17s for the early, near-black boot frames, and ~30s on average across the 40-frame boot-to-credits run. A real NES runs 60 frames a second; this frontend delivers one every half-minute or so, on the order of ~1000-2000x slower than real time. Rendering is not the bottleneck: sampling and drawing one frame into the terminal costs about 0.1s. The wasm execution — Bash interpreting the 6502 CPU core and the PPU scanline renderer, instruction by instruction, with no JIT — is the entire cost.
-
-| Phase | Time (reference machine) |
-| --- | --- |
-| Source `nes_gen.sh` + `nes_init` (memory + data/elem segments) | well under 1s |
-| Load ROM (`allocRom` + byte copy into memory + `initGame`) | ~1.2s |
-| `tickGame` (each — one emulated video frame) | ~17s early, rising as the screen fills |
-| Render one frame into the terminal | ~0.1s |
-
-Frame cost is not flat: the near-black boot frames are the cheapest (little for the PPU to draw), and cost climbs once Alter Ego's credits screen is up and animating — the whole 40-frame snapshot run measures ~20 minutes, i.e. ~30s/frame averaged. Sustained-100%-CPU thermal throttling on a laptop contributes to the later figures too; treat the ~17s early number as the cleaner floor.
-
-Handing the frame over as agnes's own palette indices instead of a BGRA image rendered inside the guest (issue #117) cut that run from ~25 minutes to ~20: the in-guest 61,440-pixel copy loop was ~20% of Bash's frame time, and the host now composes only the ~15k pixels a terminal actually samples.
-
-NES's 256×240 framebuffer is about 4.5x fewer pixels than DOOM's 640×400, and indeed a frame ticks well under DOOM's ~34s here — but the two aren't directly comparable (different guest workload entirely; DOOM also pays a much heavier `initGame`). The point is the same: genuinely running, not fast.
-
-Alter Ego opens on a near-black boot frame and only fades in its final, stable credits screen (7 distinct colors) by frame ~37, so the first ~15 frames of any run are essentially black while the ROM warms up the PPU — that is the ROM's own behavior, not a stall. The cross-backend framebuffer snapshot ([ADR-53](../../../docs/adr/53-doom-frame-snapshot.md)) pins frame 40 for exactly this reason.
+This is an existence-proof demo, not a playable emulator: each `tickGame` (one NES video frame) takes tens of seconds, from ~17s for early boot frames to ~30s average across the full 40-frame boot-to-credits run (rendering itself is well under 1s; measured on an Apple Silicon laptop, headless). Handing the frame over as agnes's own palette indices instead of a guest-rendered image (issue #117) cut that run from ~25 to ~20 minutes.
 
 ## Run
 
@@ -40,7 +25,7 @@ The sampled grid is capped at 128 columns (the NES's 256 native columns halved),
 
 ## Loading the ROM
 
-Unlike DOOM, whose WAD is embedded in its wasm module and delivered through a host import, the NES module has **zero wasm imports**: the frontend allocates a buffer with `allocRom(size)`, copies the iNES ROM bytes straight into the module's linear memory at the returned guest pointer (`od -An -v -tu1` decodes the file to one byte per token; a ~42KB ROM is a few seconds of array assignments, once, at startup), then calls `initGame()`, which hands that buffer to agnes and returns 1 on success. `screenOffset`/`paletteOffset`/`frameWidth`/`frameHeight` then report where the `256×240` index buffer and the palette live.
+Unlike DOOM's WAD (delivered through a host import), the NES module has zero wasm imports: the frontend allocates a buffer with `allocRom(size)`, copies the ROM bytes into it directly (a few seconds of array assignments for a ~42KB ROM, once, at startup), then calls `initGame()`, which hands the buffer to agnes.
 
 ## Controls
 

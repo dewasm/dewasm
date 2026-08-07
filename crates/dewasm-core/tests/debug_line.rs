@@ -1,4 +1,4 @@
-//! Core coverage for DWARF `.debug_line` source back-mapping (ADR-38): the `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers resolved through the interned [`ir::Module::debug_files`], and the default build stays byte-for-byte marker-free.
+//! Core coverage for DWARF `.debug_line` source back-mapping: the `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers resolved through the interned [`ir::Module::debug_files`], and the default build stays byte-for-byte marker-free.
 //!
 //! The fixture (`examples/apps/src/dwarf_fixture.c`, built by setup.sh into the cache with `-g -O1`) pins the one calibration constant this feature has — the DWARF address base. `add_mul` is a folded, single-statement function whose only marker must land on the exact source line of its first statement; a wrong base shifts that line (or drops the marker entirely), so this test fails loudly for any miscalibration.
 
@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use dewasm_core::ir::{ExportKind, SourcePos, Stmt};
 use dewasm_core::{build_module_with_options, BuildOptions};
 
-/// Cached DWARF fixture; a missing cache fails loud, never skips (ADR-15).
+/// Cached DWARF fixture; a missing cache fails loud with a setup instruction, never skips.
 fn fixture_bytes() -> Vec<u8> {
     let path: PathBuf =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");

@@ -16,7 +16,7 @@ use crate::ir;
 /// Knobs for [`build_module_with_options`]. Defaults reproduce [`build_module`] exactly, so every existing call site is byte-identical.
 #[derive(Debug, Default, Clone)]
 pub struct BuildOptions {
-    /// Parse `.debug_*` custom sections and emit [`ir::Stmt::SourceLine`] markers at source-line change points (ADR-38). Off by default.
+    /// Parse `.debug_*` custom sections and emit [`ir::Stmt::SourceLine`] markers at source-line change points. Off by default.
     pub debug_line: bool,
 }
 
@@ -24,7 +24,7 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory). The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation* (ADR-24): LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit — but every actual reference-types construct is rejected during IR building. Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
+/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory). The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit — but every actual reference-types construct is rejected during IR building. Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
 pub fn features() -> WasmFeatures {
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION
@@ -34,7 +34,7 @@ pub fn features() -> WasmFeatures {
         | WasmFeatures::REFERENCE_TYPES
 }
 
-/// Whether `bytes` is a component-model binary (layer 1) rather than a core module (layer 0). Core modules carry version 1 / layer 0 in bytes 4..8; components use layer 1 (`[.., 0x01, 0x00]`). Used to reject components with a clear error (ADR-24).
+/// Whether `bytes` is a component-model binary (layer 1) rather than a core module (layer 0). Core modules carry version 1 / layer 0 in bytes 4..8; components use layer 1 (`[.., 0x01, 0x00]`). Used to reject components with a clear error.
 pub fn is_component(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && bytes[0..4] == *b"\0asm" && bytes[6..8] == [0x01, 0x00]
 }
@@ -63,7 +63,7 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
 
 pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result<ir::Module> {
     if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
-        // Attribute the refusal to the proposals whose validator features would make the module validate (ADR-8); an empty feature list means "newer than this toolchain knows".
+        // Attribute the refusal to the proposals whose validator features would make the module validate; an empty feature list means "newer than this toolchain knows".
         let needed = classify_validation_failure(bytes).unwrap_or_default();
         return Err(anyhow::Error::new(UnsupportedError {
             features: needed,
@@ -71,7 +71,7 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
         }));
     }
 
-    // Build the DWARF line table up front (pre-pass), so every function body can resolve its operator offsets while translating (ADR-38).
+    // Build the DWARF line table up front (pre-pass), so every function body can resolve its operator offsets while translating.
     let line_table = if options.debug_line {
         collect_line_table(bytes)?
     } else {
@@ -332,7 +332,7 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
         }
     }
 
-    // Collapse runs of adjacent active data segments into single blobs (ADR-41). Semantics-preserving and unconditional: every backend emits one initializer per active segment, so the reduction composes downstream.
+    // Collapse runs of adjacent active data segments into single blobs. Semantics-preserving and unconditional: every backend emits one initializer per active segment, so the reduction composes downstream.
     crate::data_merge::merge_adjacent_data_segments(&mut module);
 
     Ok(module)
@@ -368,7 +368,7 @@ fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
     Some(active)
 }
 
-/// Map a wasm value type (as it appears in signatures, locals, globals, and block types) to the IR. Reference types are never legal as *value* types (ADR-24): funcref stays representable only via `table_elem_type` for a table's element typing; any reference type here is rejected.
+/// Map a wasm value type (as it appears in signatures, locals, globals, and block types) to the IR. Reference types are never legal as *value* types: funcref stays representable only via `table_elem_type` for a table's element typing; any reference type here is rejected.
 pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     Ok(match ty {
         wasmparser::ValType::I32 => ir::ValType::I32,
@@ -393,7 +393,7 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     })
 }
 
-/// Map a table's element type to the IR. Only funcref tables are supported (ADR-16); externref (and every other reference type) is rejected with the proposal that introduced it (ADR-24).
+/// Map a table's element type to the IR. Only funcref tables are supported; externref (and every other reference type) is rejected with the proposal that introduced it.
 pub(crate) fn table_elem_type(r: &wasmparser::RefType) -> Result<ir::ValType> {
     if *r == wasmparser::RefType::FUNCREF {
         return Ok(ir::ValType::FuncRef);

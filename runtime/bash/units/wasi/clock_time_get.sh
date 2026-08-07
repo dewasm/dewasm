@@ -1,6 +1,6 @@
 # requires: mem/i64_store
 # id 0 = realtime; ids 1-3 (monotonic, cputime) also read realtime — pure
-# bash has no monotonic clock source (documented deviation, ADR-12).
+# bash has no monotonic clock source (documented deviation).
 wasi_clock_time_get() {
   local __p=$1 __id=$2 __out=$4
   if (( __id < 0 || __id > 3 )); then

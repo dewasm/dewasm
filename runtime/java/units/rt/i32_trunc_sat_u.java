@@ -1,7 +1,7 @@
 // i32.trunc_sat_f32_u / i32.trunc_sat_f64_u: saturating unsigned truncation.
 // Java's `(int)(long)` would wrap past u32, so saturation is explicit (NaN->0,
 // clamp to [0, 2^32)); the signed saturating forms use a plain `(int)` cast,
-// which already matches wasm (ADR-2).
+// which already matches wasm.
 static int i32_trunc_sat_u(double x) {
     if (Double.isNaN(x)) {
         return 0;

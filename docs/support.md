@@ -2,11 +2,11 @@
 
 <!-- AUTO-GENERATED from the backend declarations; do not edit by hand. Regenerate: cargo xtask update-support-docs -->
 
-The spec harness only tolerates test skips attributable to a feature that is not `Supported` here ([ADR-8](adr/8-latest-testsuite-support-matrix.md)); an unattributable failure is treated as a bug. Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.
+The spec harness only tolerates test skips attributable to a feature that is not `Supported` here; an unattributable failure is treated as a bug. Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.
 
 ## Features
 
-The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-retire-support-levels.md)); every other `Feature` variant is rejected by the core for every backend ([ADR-24](adr/24-01-scope-reset.md)).
+The wasm 1.0 features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.
 
 | Feature | ruby | bash | python | perl | go | java |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ The wasm 1.0 features a backend can meaningfully differ on ([ADR-25](adr/25-reti
 
 ## WASI preview 1
 
-Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS stub ([ADR-7](adr/7-import-providers.md), bash conventions in [ADR-12](adr/12-bash-wasi.md)). `—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises (ADR-25).
+Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS stub. `—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.
 
 | Function | ruby | bash | python | perl | go | java |
 | --- | --- | --- | --- | --- | --- | --- |

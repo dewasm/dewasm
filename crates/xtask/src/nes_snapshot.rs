@@ -1,5 +1,5 @@
-//! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one
-//! (ADR-53): run the *original* `nes.wasm` under the wasmtime crate with the
+//! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one:
+//! run the *original* `nes.wasm` under the wasmtime crate with the
 //! deterministic driving contract (load the pinned ROM, tick [`NES_FRAMES`]
 //! frames with no input) and write the rendered frame to
 //! `examples/apps/snapshots/nes_frame.ppm`. wasmtime lives here, in dev tooling,
@@ -20,7 +20,6 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
     let mut store = Store::new(&engine, ());
-    // No imports (nes.wasm's import section is empty), so an empty linker suffices.
     let linker = Linker::new(&engine);
     let instance = linker.instantiate(&mut store, &module)?;
 
@@ -36,7 +35,6 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
     let init_game = instance.get_typed_func::<(), i32>(&mut store, "initGame")?;
     let tick = instance.get_typed_func::<(), ()>(&mut store, "tickGame")?;
 
-    // Allocate a ROM buffer in guest memory, copy the iNES bytes in, then load.
     let rom_ptr = alloc_rom.call(&mut store, rom.len() as i32)? as usize;
     memory.data_mut(&mut store)[rom_ptr..rom_ptr + rom.len()].copy_from_slice(rom);
     let ok = init_game.call(&mut store, ())?;
@@ -46,7 +44,6 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
         )));
     }
 
-    // N frames, no input.
     for _ in 0..dewasm_test_helper::NES_FRAMES {
         tick.call(&mut store, ())?;
     }
@@ -81,10 +78,7 @@ fn read_frame(
     Ok((screen, palette, w, h))
 }
 
-/// Recapture the NES framebuffer from a live (embedded) wasmtime and return both
-/// renderings: the P6 PPM bytes for `examples/apps/snapshots/nes_frame.ppm` (the
-/// compared oracle) and a PNG of the same frame for `nes_frame.png` (human
-/// inspection — never compared by a test).
+/// Recapture the NES framebuffer from the embedded wasmtime; returns the compared P6-PPM bytes plus a PNG for human inspection.
 pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::nes_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {

@@ -6,7 +6,7 @@
 # ready, and unknown fds report EBADF. Clock subscriptions set the wait
 # deadline; if it elapses with no fd ready, the due clock subs fire. Motivated
 # by event-loop guests such as the QuickJS REPL, which blocks here on stdin
-# between prompts (ADR-14).
+# between prompts.
 def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
   return ERRNO_INVAL if nsubs == 0
   ready = []   # [userdata, error, type, nbytes, flags] resolvable without waiting

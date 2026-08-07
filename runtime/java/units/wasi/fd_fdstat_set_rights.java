@@ -1,4 +1,4 @@
-// Narrow (never widen) an fd's stored capability rights (ADR-40). WASI rights
+// Narrow (never widen) an fd's stored capability rights. WASI rights
 // are monotonically droppable: a request for any bit the fd does not currently
 // hold is NOTCAPABLE, so a guest can shed authority but not regain it. The
 // enforcing syscalls (fd_read/write/seek/readdir, fd_filestat_set_size,

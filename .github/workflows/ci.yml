@@ -45,7 +45,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends binaryen bison flex
       - name: Add wasm32-wasip1 target (setup.sh builds ripgrep with it)
         run: rustup target add wasm32-wasip1
-      - name: Install wasi-vfs CLI (setup.sh packs ruby-packed with it, ADR-61)
+      - name: Install wasi-vfs CLI (setup.sh packs ruby-packed with it)
         run: |
           curl -fsSL --retry 5 -o /tmp/wasi-vfs-cli.zip \
             https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip
@@ -75,7 +75,7 @@ jobs:
       matrix:
         backend: [ruby, bash, python, go, java, perl]
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps, ADR-48) has
+    # The slow_test run (full spec suites + slow apps) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -97,7 +97,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       # The runner's system perl satisfies the backend's floor (>= 5.26 with
-      # ivsize=8/nvsize=8); verify loudly up front instead of skipping (ADR-15).
+      # ivsize=8/nvsize=8); verify loudly up front instead of skipping.
       - if: matrix.backend == 'perl'
         run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
       # ubuntu-24.04's system python 3.12.3 hits the static-block limit that
@@ -120,7 +120,7 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
-      # Speed categories (ADR-48): the `slow_test` feature runs the full spec suite plus the
+      # Speed categories: the `slow_test` feature runs the full spec suite plus the
       # slow per-case app cases (CI's main run). It deliberately excludes the
       # `ultra_slow_test` cases — the ~1 min+ pty / giant-`go build` cases that
       # timed out (#22) or exhausted runner memory (#23) — which run only locally.
@@ -131,7 +131,7 @@ jobs:
   core:
     needs: apps-cache
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps, ADR-48) has
+    # The slow_test run (full spec suites + slow apps) has
     # unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
@@ -166,10 +166,10 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # Speed categories (ADR-48): the `slow_test` feature covers what `--include-ignored`
+      # Speed categories: the `slow_test` feature covers what `--include-ignored`
       # used to un-ignore. `dewasm-test-helper/wasmtime_test` runs the
       # apps_wasmtime snapshot-freshness suite (execs `wasmtime run`, installed
-      # below, ADR-15); `dewasm-cli/slow_test` runs the slow cross-backend
+      # below); `dewasm-cli/slow_test` runs the slow cross-backend
       # `--data-file` real-app cases.
       - uses: bytecodealliance/actions/wasmtime/setup@v1
         if: github.event_name != 'pull_request'
