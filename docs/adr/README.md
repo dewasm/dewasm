@@ -7,7 +7,6 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 - **ADR-0** is the foundation document — start there for the project's goal, scope, and architecture.
 - Higher-numbered ADRs build on it and can be read as needed.
 - Each ADR opens with a **Status** paragraph: `Accepted`, `Proposed`, or `Superseded`, with a date and a one-paragraph "what landed / what remains" summary. Accepted ADRs whose implementation is still pending carry a parenthetical note (e.g. *not yet implemented*).
-- ADR-0 through ADR-5 were backfilled on 2026-07-23 from decisions made during initial planning and implementation.
 
 ## Index
 
@@ -76,7 +75,7 @@ This directory contains the Architecture Decision Records (ADRs) for dewasm. Eac
 | ADR-60 | [Ruby Backend: Flatten Only Deep Crossings](60-ruby-flatten-only-deep-crossings.md) | Accepted |
 | ADR-61 | [Cover ruby.wasm's wasi-vfs-Packed Shape by Packing In-Cache](61-wasi-vfs-packed-cruby.md) | Accepted |
 | ADR-62 | [`Embedded` Output Isolates Its Runtime per Artifact](62-embedded-runtime-isolation.md) | Accepted |
-| ADR-63 | [`--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode](63-module-name-policy.md) | Accepted (Go pending) |
+| ADR-63 | [`--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode](63-module-name-policy.md) | Accepted |
 | ADR-64 | [Record Distribution Size Beside Speed, in Raw Bytes](64-size-record.md) | Accepted |
 | ADR-65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted (Ruby only) |
 
@@ -87,7 +86,7 @@ When a decision with real alternatives is made:
 1. Take the next free number and create `docs/adr/<N>-<slug>.md`.
 2. Follow the structural contract: an opening **Status** paragraph (state, date, what landed / what remains), then **Context**, **Decision**, **Rejected alternatives**, **Consequences**.
 3. Add a row to the index table above, in ascending order.
-4. Cross-reference: link related ADRs, and cite the ADR from `AGENTS.md` or code comments where the rule is enforced.
+4. Cross-reference: link related ADRs, and link from the ADR out to the code and docs it governs. The reverse direction does not exist: docs and code comments state their constraints in place and never cite an ADR.
 
 Quality bar:
 
@@ -99,7 +98,7 @@ Quality bar:
 
 ## Relationship to other documents
 
-- **`AGENTS.md`** — the development contract for agents (and humans) working in this repository; cites ADRs where a rule needs its why.
-- **`README.md`** — user-facing overview; links here for design rationale.
-- **`docs/getting-started.md`** and **`docs/backends/`** — the user tutorial and per-target reference; they link to the lowering ADRs (4/11–13/28/29/30/55) for design rationale rather than restating it.
-- **`docs/docs-policy.md`** — the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).
+- **`AGENTS.md`**: the development contract for agents (and humans) working in this repository; it states each rule directly and cites no ADR.
+- **`README.md`**: user-facing overview. It points onward to `docs/getting-started.md`, `docs/backends/`, and `docs/support.md`, not into this directory.
+- **`docs/getting-started.md`** and **`docs/backends/`**: the user tutorial and per-target reference. They state the lowering rules in place and name no ADR, per `docs/docs-policy.md`; the rationale behind those rules lives here (ADR-4, ADR-11 to ADR-13, ADR-28 to ADR-30, ADR-55).
+- **`docs/docs-policy.md`**: the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).

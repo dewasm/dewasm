@@ -1,4 +1,4 @@
-//! Ruby end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations — every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration. The formerly Ruby-only scenarios (the ADR-7 provider model, embedded-runtime coexistence, cross-module table sharing, the sqlite3 C-API drive, WASI-filesystem internals, and the CPython/CRuby runtime demos) now run wherever a backend's declared capabilities cover them, with a REASON comment at any non-invocation.
+//! Ruby end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations — every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration — a non-invocation carries a REASON comment.
 
 use std::path::{Path, PathBuf};
 
@@ -80,8 +80,6 @@ impl BackendUnderTest for Ruby {
     }
 }
 
-// --------------------------------------------------------------------- Library-case glue.
-
 /// `add.wat`: call the exported functions and print each result.
 const RUBY_ADD_GLUE: &str = r#"inst = Add.new
 print inst.invoke("add", 2, 3), "\n"
@@ -89,7 +87,7 @@ print inst.invoke("add", 0xffffffff, 1), "\n"
 print inst.invoke("fib", 10), "\n"
 "#;
 
-/// The ADR-7 override/fallback glue (an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI). Intercepts fd_write and prints the actual bytes the module wrote.
+/// The override/fallback glue (an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI). Intercepts fd_write and prints the actual bytes the module wrote.
 const RUBY_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
@@ -133,7 +131,7 @@ print wasi.out
 print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\n"
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: reuses the override glue (fd_write intercepted, random_get falls back) plus one line probing that the bundled WASI *was* lazily constructed (ADR-7's `@wasi ||= ...`).
+/// The `partial_override_falls_back_to_bundled_wasi` glue: reuses the override glue (fd_write intercepted, random_get falls back) plus one line probing that the bundled WASI *was* lazily constructed (`@wasi ||= ...`).
 const RUBY_PARTIAL_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
@@ -167,8 +165,6 @@ end
 print captured.string
 "#;
 
-// --------------------------------------------------------------------- WASI filesystem glue.
-
 /// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const RUBY_FS_GLUE: &str = r#"inst = Prog.new({}, preopens: { "{guest}" => "{host}" })
 begin
@@ -184,7 +180,7 @@ _path, err = wasi.send(:resolve_path, 3, "etc")
 print(err.nil? ? "contained" : "rejected", "\n")
 "#;
 
-// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const RUBY_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs.new({}, args: ["qjs", "/work/qjs_file_io.js"], env: {}, preopens: {"/work" => "{scratch}"})
 begin
@@ -221,7 +217,7 @@ rescue Cruby::Rt::Exit
 end
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Rt::Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const RUBY_LIBSQLITE3_MEM: &str = r##"
@@ -271,7 +267,7 @@ db_mod.invoke("sqlite3_close", db)
 puts "C-API-OK"
 "##;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell).
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same fs stack as the shell).
 const RUBY_LIBSQLITE3_FILE: &str = r##"
 DB_MOD = Libsqlite3.new({}, preopens: { "/db" => "{scratch}" })
 DB_MOD.invoke("_initialize")
@@ -320,7 +316,7 @@ DB_MOD.invoke("sqlite3_close", db)
 puts "FILE-OK"
 "##;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import-provider mechanism and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the import-provider mechanism and collects the rows.
 const RUBY_SQLITE3_CALLBACK: &str = r##"
 ROWS = []
 MEM_HOLDER = {}
@@ -491,8 +487,6 @@ inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
 inst.invoke("zeroperl_flush")
 "##;
 
-// --------------------------------------------------------------------- Multi-module drive glue.
-
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
 const RUBY_SHARED_TABLE_GLUE: &str = r#"a = TableExp.new
 b = TableImp.new({ "a" => a })
@@ -513,7 +507,7 @@ rescue Alpha::Rt::Trap
 end
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
 const RUBY_DOOM_FRAME_GLUE: &str = r#"frame = { off: nil, w: 0, h: 0 }
 ms = [0]
 imports = {
@@ -569,8 +563,6 @@ $stdout.binmode
 $stdout.write("P6\n#{w} #{h}\n255\n")
 $stdout.write(rgb.pack("C*"))
 "#;
-
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
 
 dewasm_test_helper::library_add_e2e!(Ruby, RUBY_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Ruby, RUBY_OVERRIDE_GLUE);

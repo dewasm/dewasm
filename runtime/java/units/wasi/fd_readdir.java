@@ -10,7 +10,7 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     Dir dir = (Dir) e;
     // Re-snapshot on every cookie-0 (fresh-start) call so a directory mutated
     // between full reads is seen; a nonzero cookie resumes the snapshot the
-    // cookie was minted against (ADR-14's opaque-resume-point contract).
+    // cookie was minted against (the opaque-resume-point contract).
     if (!dir.loaded || cookie == 0) {
         dir.entries = readdir_entries(dir.hostPath);
         dir.loaded = true;
@@ -45,7 +45,7 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
 }
 
 // The readdir cookie is a 1-based index into this snapshot, cached on the Dir
-// at the first call for that fd (ADR-14). "." and ".." lead; the rest are
+// at the first call for that fd. "." and ".." lead; the rest are
 // sorted by name so the listing is deterministic across runs.
 private java.util.List<Dirent> readdir_entries(java.nio.file.Path hostPath) {
     java.util.List<Dirent> entries = new java.util.ArrayList<>();

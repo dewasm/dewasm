@@ -1,6 +1,6 @@
 # requires: mem/fill, mem/i32_store8, mem/i64_store
 # wasi_pack_filestat <p> <buf_ptr> <filetype> <size>: writes the 64-byte WASI
-# filestat struct into guest memory (ADR-34 D6, mirroring
+# filestat struct into guest memory (mirroring
 # runtime/ruby/units/wasi/pack_filestat.rb's layout). dev/ino and
 # atim/mtim/ctim are zeroed — Bash has no builtin to read real device/inode
 # numbers or timestamps, a documented deviation from Ruby (which packs

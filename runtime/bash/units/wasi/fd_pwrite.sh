@@ -1,5 +1,5 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
-# WASI fd_pwrite (ADR-34): byte-wise binary-safe write into a file fd's
+# WASI fd_pwrite: byte-wise binary-safe write into a file fd's
 # whole-file buffer at an explicit offset, leaving <p>wtell untouched and
 # ignoring APPEND (pwrite is explicitly positioned per WASI/POSIX, unlike
 # write); zero-fills any gap and marks the buffer dirty, same as fd_write's

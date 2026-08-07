@@ -1,6 +1,6 @@
 # requires: rt/f64_round_pack
 # Exact: every f32 value is representable in f64. NaN goes canonical
-# (arithmetic-op policy, ADR-13); subnormal f32 left-normalizes through
+# (arithmetic-op policy); subnormal f32 left-normalizes through
 # round_pack with zero sticky.
 rt_f64_promote() {
   local b=$1 pb s

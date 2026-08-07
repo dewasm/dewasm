@@ -1,5 +1,5 @@
 (module
-  ;; Standalone `--dir` round-trip (ADR-31): opens "hello.txt" under the first
+  ;; Standalone `--dir` round-trip: opens "hello.txt" under the first
   ;; preopen (fd 3), writes a line, reopens it read-only, reads it back, and
   ;; echoes it to stdout. Uses a valid WASI rights mask (0x3FFFFFFF) rather than
   ;; -1 so the same fixture is accepted by wasmtime as the ground-truth engine.

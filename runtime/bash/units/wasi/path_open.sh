@@ -1,5 +1,5 @@
 # requires: mem/i32_store, wasi/read_path, wasi/resolve_path, wasi/file_slurp
-# WASI path_open (ADR-34, rights in ADR-40), mirroring
+# WASI path_open, mirroring
 # runtime/ruby/units/wasi/path_open.rb. Resolves the guest path (lookupflags
 # bit 0 = follow symlinks), then opens a directory or a whole-file byte-buffer
 # fd. oflags: CREAT=0x1, DIRECTORY=0x2, EXCL=0x4, TRUNC=0x8; rights FD_READ=0x2
@@ -13,7 +13,7 @@
 # empty for a file). Opening a directory with FD_WRITE requested is EISDIR (31).
 # A missing directory with O_DIRECTORY is ENOENT (44), not ENOTDIR (54).
 # A symlink final component with NOFOLLOW (lookupflags bit 0 clear) is ELOOP
-# (32) — you cannot open the link itself (ADR-34 D3). The opened fd is written
+# (32) — you cannot open the link itself. The opened fd is written
 # to guest memory. R0 is the errno.
 wasi_path_open() {
   local __p=$1 __dirfd=$2 __dirflags=$3 __path_ptr=$4 __path_len=$5
@@ -35,11 +35,11 @@ wasi_path_open() {
   local __dir_inh=${__wrinh[$__dirfd]}
   if (( (__dir_base & 0x2000) == 0 )); then R0=76; return 0; fi          # NOTCAPABLE: no PATH_OPEN
   if (( (__oflags & 0x8) && (__dir_base & 0x80000) == 0 )); then R0=76; return 0; fi # TRUNC needs PATH_FILESTAT_SET_SIZE
-  # A symlink final component that was not followed cannot be opened (D3).
+  # A symlink final component that was not followed cannot be opened.
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
   # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in
   # resolve_path): O_CREAT must not create through the slash — per wasmtime
-  # (ADR-49) EINVAL on macOS / EISDIR on Linux; a plain open is ENOENT.
+  # EINVAL on macOS / EISDIR on Linux; a plain open is ENOENT.
   if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
     if (( __oflags & 0x1 )); then
       if [[ $OSTYPE == darwin* ]]; then

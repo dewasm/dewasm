@@ -1,4 +1,4 @@
-//! Whole-cache per-backend conversion suite (ADR-54): convert every cached
+//! Whole-cache per-backend conversion suite: convert every cached
 //! real-world app under `examples/apps/cache/` with a backend and require the
 //! conversion to complete with non-empty source — the generated program is
 //! never executed.
@@ -9,19 +9,19 @@
 //! family never reaches the Bash emitter. This suite closes that gap so every
 //! backend converts every app independent of whether it runs it — a conversion
 //! regression on an un-run pair now fails a fast, deterministic test instead of
-//! hiding until someone wires an execution case (ADR-54).
+//! hiding until someone wires an execution case.
 //!
 //! One libtest-mimic [`Trial`] per manifest entry, trial name = the cache-file
 //! stem so cargo's own name filter works (`cargo test --test convert qjs`). The
 //! manifest is fixed — one entry per `.wasm` the fetch scripts
 //! (`examples/apps/scripts/*.sh`) produce — with the conversion [`Mode`] each
 //! app's shape and the execution suites already use. A missing cache file fails
-//! the trial (ADR-15), it never skips.
+//! the trial, it never skips.
 //!
-//! `slow_test` mirrors the backend crate's feature of the same name (ADR-48): heavy
+//! `slow_test` mirrors the backend crate's feature of the same name: heavy
 //! trials — the ones whose dev-profile conversion measurably hurts the fast
 //! test — are `#[ignore]`d unless it is on. Which trials are heavy comes from
-//! measurement (ADR-54), not the artifact size alone.
+//! measurement, not the artifact size alone.
 
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use libtest_mimic::{Failed, Trial};
@@ -29,8 +29,6 @@ use libtest_mimic::{Failed, Trial};
 use crate::backend::{derive_module_name, module_name_style};
 use crate::fixtures::apps_cache_dir;
 
-/// One cached app: the cache-file stem (also the trial name), the conversion
-/// [`Mode`], and whether the trial is heavy enough to require `slow_test`.
 struct AppConvert {
     /// Cache-file stem: `<stem>.wasm` under `examples/apps/cache/`, and the
     /// trial name cargo's `--test convert <stem>` filter matches.
@@ -45,17 +43,16 @@ struct AppConvert {
     /// giant artifacts — `ruby` (~7–13 s), `cpython` (~2.6–5 s), and the 25 MB
     /// `zeroperl` (Perl 5.42, ~4–5 s on Ruby and Python) — cross the line; the
     /// next-slowest, `rg`, stays ~1.1–2.1 s in the same cluster as the sqlite
-    /// cases and is left in the fast test (ADR-54).
+    /// cases and is left in the fast test.
     heavy: bool,
 }
 
 /// Every `.wasm` the fetch scripts (`examples/apps/scripts/*.sh`) drop into
 /// `examples/apps/cache/`. Command-shaped apps (with a `_start`) convert
 /// `Standalone`; reactor/library artifacts convert `Library` — doom included,
-/// which every backend converts `Library` (ADR-53). The `heavy` flags are
-/// derived from measurement (ADR-54); see the module docs.
+/// which every backend converts `Library`. The `heavy` flags are
+/// derived from measurement; see the module docs.
 const MANIFEST: &[AppConvert] = &[
-    // Command-shaped (Standalone: a `_start`).
     AppConvert {
         stem: "cowsay",
         mode: Mode::Standalone,
@@ -101,7 +98,6 @@ const MANIFEST: &[AppConvert] = &[
         mode: Mode::Standalone,
         heavy: false,
     },
-    // Library/reactor artifacts.
     AppConvert {
         stem: "doom",
         mode: Mode::Library,
@@ -137,7 +133,7 @@ const MANIFEST: &[AppConvert] = &[
 /// Build one [`Trial`] per manifest entry for `backend` (the `apps_convert_suite!`
 /// entry point). Heavy trials are marked `#[ignore]`d unless `slow_test` (mirroring
 /// the backend crate's feature of the same name) is on — the same slow/fast split
-/// the spec harness applies to its non-curated files (ADR-48).
+/// the spec harness applies to its non-curated files.
 pub fn apps_convert_trials(backend: &'static (dyn Backend + Sync), slow_test: bool) -> Vec<Trial> {
     MANIFEST
         .iter()
@@ -156,7 +152,7 @@ pub fn apps_convert_main(backend: &'static (dyn Backend + Sync), slow_test: bool
 }
 
 /// Convert one cached app and require non-empty source. A missing cache file
-/// fails loud (ADR-15); a conversion error surfaces with its full chain so a
+/// fails loud; a conversion error surfaces with its full chain so a
 /// `check_module_support` rejection or a codegen bug reads plainly.
 fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Result<(), Failed> {
     let wasm = apps_cache_dir().join(format!("{}.wasm", entry.stem));
@@ -167,7 +163,7 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
         )));
     }
     let bytes = std::fs::read(&wasm).map_err(|e| format!("read {}: {e}", wasm.display()))?;
-    // Cache stems are kebab-case (`sqlite3-shell`); the backends take a module name in their own grammar and refuse to guess (ADR-63), so convert it here. Standalone entries do not use the name internally, but deriving uniformly keeps one rule.
+    // Cache stems are kebab-case (`sqlite3-shell`); the backends take a module name in their own grammar and refuse to guess, so convert it here. Standalone entries do not use the name internally, but deriving uniformly keeps one rule.
     let module_name = derive_module_name(module_name_style(backend.name()), entry.stem);
     let source = convert_source(backend, &bytes, entry.mode, &module_name)
         .map_err(|e| format!("{} convert failed: {e:#}", entry.stem))?;

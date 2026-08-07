@@ -6,7 +6,7 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   return ERRNO_NOTDIR unless parent.is_a?(WasiDir)
   return ERRNO_NOTCAPABLE unless fd_has_right?(dirfd, RIGHT_PATH_OPEN)
   # OFLAGS_TRUNC truncates on open; the spec requires the
-  # directory's PATH_FILESTAT_SET_SIZE right (ADR-40).
+  # directory's PATH_FILESTAT_SET_SIZE right.
   if oflags & 0x8 != 0 && !fd_has_right?(dirfd, RIGHT_PATH_FILESTAT_SET_SIZE)
     return ERRNO_NOTCAPABLE
   end
@@ -25,7 +25,7 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   exists = File.exist?(host_path) || File.symlink?(host_path)
   if trailing
     unless exists
-      # O_CREAT must not create through the slash; per wasmtime (ADR-49):
+      # O_CREAT must not create through the slash; per wasmtime:
       # EINVAL on macOS, EISDIR on Linux, plain open ENOENT on both.
       return ERRNO_NOENT if oflags & 0x1 == 0
       return RUBY_PLATFORM.include?("darwin") ? ERRNO_INVAL : ERRNO_ISDIR

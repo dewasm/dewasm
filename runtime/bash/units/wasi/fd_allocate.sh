@@ -1,5 +1,5 @@
-# WASI fd_allocate (ADR-40): ensure the file is at least offset+len bytes,
-# extending the whole-file byte buffer (ADR-34 D1) with zero bytes and marking
+# WASI fd_allocate: ensure the file is at least offset+len bytes,
+# extending the whole-file byte buffer with zero bytes and marking
 # it dirty; a request that does not grow past the current size is a no-op.
 # Purely in-memory — no external command, unlike the namespace-mutation four.
 # Only a regular-file fd (kind 2) can be allocated; a directory or stdio fd is

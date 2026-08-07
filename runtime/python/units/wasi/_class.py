@@ -10,7 +10,7 @@ ERRNO_NOTCAPABLE = 76
 # are modelled after wasmtime's wasi-common: a directory and a file each carry a
 # different default set, path_open narrows the requested rights against the
 # parent's inheriting set (then per-filetype), and fd_fdstat_set_rights can only
-# drop bits (ADR-40). Kept in the always-bundled prelude because __init__ seeds
+# drop bits. Kept in the always-bundled prelude because __init__ seeds
 # the parallel fd -> [base, inheriting, fdflags] meta map for every preopen and
 # for stdio, so the constants must exist whenever any WASI import is used.
 RIGHTS_FD_DATASYNC = 1 << 0
@@ -63,7 +63,7 @@ FILE_RIGHTS_BASE = (
     | RIGHTS_FD_FILESTAT_SET_TIMES | RIGHTS_POLL_FD_READWRITE)
 DIR_RIGHTS_INHERITING = DIR_RIGHTS_BASE | FILE_RIGHTS_BASE
 
-# A directory descriptor (ADR-14 / ADR-28): either a preopen (`preopen_name`
+# A directory descriptor: either a preopen (`preopen_name`
 # set to the guest-visible path passed in `preopens`) or a directory the guest
 # opened itself via path_open (`preopen_name` None). `entries` is the
 # fd_readdir listing cache, populated lazily. Nested in the WASI class (so
@@ -82,7 +82,7 @@ def __init__(self, args=None, env=None, preopens=None):
     self.fds = {0: sys.stdin.buffer, 1: sys.stdout.buffer, 2: sys.stderr.buffer}
     # Parallel per-fd capability map: fd -> [base, inheriting, fdflags]. stdio
     # gets the full file-right set (a stream can read/write/etc.); preopens get
-    # the directory base and the directory-plus-file inheriting set (ADR-40).
+    # the directory base and the directory-plus-file inheriting set.
     self.fd_meta = {
         0: [self.FILE_RIGHTS_BASE, 0, 0],
         1: [self.FILE_RIGHTS_BASE, 0, 0],
@@ -107,7 +107,7 @@ def __init__(self, args=None, env=None, preopens=None):
         next_fd += 1
     self.next_fd = next_fd
 
-# Import-provider object (ADR-7): a custom WASI runtime can replace this
+# Import-provider object: a custom WASI runtime can replace this
 # class wholesale by implementing wasm_import(name) and attach(instance).
 def wasm_import(self, name):
     return getattr(self, "wasi_" + name, None)

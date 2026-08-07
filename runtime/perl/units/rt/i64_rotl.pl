@@ -1,4 +1,4 @@
-# UV << wraps mod 2^64 (measured, ADR-55), so the overflowing half just
+# UV << wraps mod 2^64 (measured), so the overflowing half just
 # needs the final mask.
 sub i64_rotl {
     my ($a, $b) = @_;

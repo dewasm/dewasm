@@ -20,7 +20,7 @@ The criterion for guarding an op: **an op gets a quiet guard only when a real ho
 
 ## Rejected alternatives
 
-- **Guard every float binop defensively.** Pays the guard cost on ops no host has been observed to break; the spec harness runs on both dev (macOS) and CI (Linux) hosts, so a newly broken op surfaces as a red spec trial and gets its guard then, with evidence.
+- **Guard every float binop defensively.** Pays the guard cost on ops no host has been observed to break; the spec harness runs on both dev (macOS) and CI (Linux) hosts, so a newly broken op surfaces as a failing spec trial and gets its guard then, with evidence.
 - **Pin the CI/dev Ruby to an unaffected build.** Every GCC-built MRI folds (all probed versions, both architectures) — which in practice is every Linux ruby — and generated code must be correct on whatever host ruby a user runs.
 - **An `Rt.fsub` helper unit.** A method call per subtraction on the hot path; the inline guard is both faster and no less clear.
 

@@ -1,4 +1,4 @@
-//! The DOOM framebuffer-snapshot oracle (ADR-53): run the *original* `doom.wasm`
+//! The DOOM framebuffer-snapshot oracle: run the *original* `doom.wasm`
 //! under the wasmtime crate with the deterministic driving contract, and write
 //! the rendered frame to `examples/apps/snapshots/doom_frame.ppm`. wasmtime lives
 //! here, in dev tooling, not in `dewasm-test-helper` — the per-backend comparison
@@ -123,15 +123,9 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     Ok((frame, w, h))
 }
 
-/// Recapture the DOOM framebuffer from a live (embedded) wasmtime and return both
-/// renderings of it: the P6 PPM bytes for `examples/apps/snapshots/doom_frame.ppm`
-/// (the compared oracle) and a PNG of the same frame for
-/// `examples/apps/snapshots/doom_frame.png` (human inspection / the DOOM README —
-/// never compared by a test). The `update-snapshots` command writes both; the
-/// matching per-backend test (`crates/dewasm-test-helper/src/doom.rs`) compares
-/// only the PPM. This target stays on the embedded `wasmtime` crate — not the
-/// `Wasmtime` CLI backend the other snapshots use — because `doom.wasm`'s
-/// custom-import interface can't be driven through `wasmtime run` (ADR-53).
+/// Recapture the DOOM framebuffer from the embedded wasmtime; returns the compared P6-PPM bytes plus a PNG for human inspection.
+///
+/// `update-snapshots` writes both; the per-backend test compares only the PPM.
 pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::doom_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
@@ -174,7 +168,6 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for px in frame.chunks_exact(4) {
-        // memory order is B,G,R,A → PNG wants R,G,B; A is padding, dropped.
         rgb.extend_from_slice(&[px[2], px[1], px[0]]);
     }
     let mut out = Vec::new();

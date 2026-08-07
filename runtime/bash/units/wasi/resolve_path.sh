@@ -1,6 +1,6 @@
 # wasi_resolve_path <p> <dirfd> <rel> <follow>: resolve a guest-relative path
 # against a directory fd to a physical host path, confined to that dirfd's own
-# stored root (ADR-34, mirroring runtime/ruby/units/wasi/resolve_path.rb). R0 is
+# stored root (mirroring runtime/ruby/units/wasi/resolve_path.rb). R0 is
 # the errno (0 = ok), R1 the physical path on success.
 #
 # The parent is resolved physically via a `cd -P` subshell and the basename
@@ -9,10 +9,12 @@
 # resolves the whole path as a directory instead. Final-component symlinks:
 # a directory symlink is followed (via cd -P) when <follow> is 1; a file symlink
 # cannot be followed (no readlink builtin) and returns ELOOP (32), stricter than
-# Ruby (ADR-34). Check-then-open TOCTOU caveat carried over from ADR-14.
+# Ruby. Check-then-open TOCTOU caveat, as in Ruby: a resolved path can be
+# swapped before it is opened, so this is a single-process research/demo
+# runtime, not a multi-tenant sandbox host.
 #
 # A leading "/" makes the path absolute, which escapes the dirfd sandbox before
-# any join — NOTCAPABLE (76), not a lexical join under the root (ADR-40). A
+# any join — NOTCAPABLE (76), not a lexical join under the root. A
 # dirfd that names an open non-directory fd is ENOTDIR (54); an unopened fd is
 # EBADF (8).
 wasi_resolve_path() {
@@ -44,7 +46,7 @@ wasi_resolve_path() {
   # escape even when the resulting physical parent does not exist (so it cannot
   # be caught by the post-resolution containment check, which would misreport it
   # as ENOENT). A pure component walk: each name is +1 depth, `..` is -1, and a
-  # depth that ever goes negative has escaped the root (ADR-40).
+  # depth that ever goes negative has escaped the root.
   local __walk=$__rel __comp __depth=0
   while [[ -n $__walk ]]; do
     __comp=${__walk%%/*}

@@ -1,9 +1,8 @@
-//! The adjacent active-data-segment merging pass (ADR-41): assert the `module.datas` shape the pass produces from small wat inputs — merged runs, zero-filled gaps, the gap threshold, and every bail condition (bulk-memory ops, overlapping/descending offsets, `global.get` offsets).
+//! The adjacent active-data-segment merging pass: assert the `module.datas` shape the pass produces from small wat inputs — merged runs, zero-filled gaps, the gap threshold, and every bail condition (bulk-memory ops, overlapping/descending offsets, `global.get` offsets).
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{DataSegment, Expr, Module};
 
-/// Build a module from wat.
 fn module(wat: &str) -> Module {
     let bytes = wat::parse_str(wat).expect("wat parses");
     build_module(&bytes).expect("module builds")

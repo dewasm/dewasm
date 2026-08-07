@@ -1,5 +1,5 @@
 // f64.promote_f32: a NaN keeps its sign and its payload is shifted into the
-// wider significand (arithmetic result); finite values promote exactly (ADR-2).
+// wider significand (arithmetic result); finite values promote exactly.
 static double f64_promote(float x) {
     if (Float.isNaN(x)) {
         int b = Float.floatToRawIntBits(x);

@@ -1,7 +1,7 @@
 // requires: rt/trap
 // table.copy: move `length` funcref slots from `other` (possibly this table)
 // at `src` to this table at `dst`. Both ranges are bounds-checked before any
-// write; System.arraycopy handles overlap like memmove (ADR-16).
+// write; System.arraycopy handles overlap like memmove.
 void copy(int dst, Table other, int src, int length) {
     long d = Integer.toUnsignedLong(dst);
     long s = Integer.toUnsignedLong(src);

@@ -3,7 +3,7 @@ func (w *WASI) wasi_fd_filestat_set_size(fd uint32, size uint64) uint32 {
     if !ok {
         return wasiBadf
     }
-    if e := w.checkRight(fd, rightFdFilestatSetSize); e != wasiOk { // ADR-40
+    if e := w.checkRight(fd, rightFdFilestatSetSize); e != wasiOk {
         return e
     }
     if err := f.Truncate(int64(size)); err != nil {

@@ -1,5 +1,5 @@
 # WASI p1 rights bits and the per-filetype masks used to grant and enforce
-# capabilities (ADR-40). Kept in its own unit so every rights-aware syscall
+# capabilities. Kept in its own unit so every rights-aware syscall
 # can require it without pulling extra filesystem code. The `@fd_meta` map
 # (fd => [base, inheriting, fdflags]) that these operate on is seeded in
 # wasi/_class.

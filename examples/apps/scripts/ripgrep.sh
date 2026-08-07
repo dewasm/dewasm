@@ -21,7 +21,7 @@ if is_cached "$rg_stamp" "$rg_want" cache/rg.wasm; then
 fi
 
 require_tool rg cargo "install the Rust toolchain to build ripgrep"
-require_tool rg wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess ripgrep (ADR-39)"
+require_tool rg wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess ripgrep"
 rustup target list --installed 2>/dev/null | grep -qx wasm32-wasip1 || {
   echo "rg: wasm32-wasip1 target not installed — run: rustup target add wasm32-wasip1" >&2
   exit 1
@@ -34,7 +34,7 @@ tar xzf "$tmp/rg.tar.gz" -C "$tmp"
 echo "rg: building rg.wasm (cargo build --release --target wasm32-wasip1)"
 ( cd "$tmp/$RG_DIR" && cargo build --release --target wasm32-wasip1 )
 cp "$tmp/$RG_DIR/target/wasm32-wasip1/release/rg.wasm" cache/rg.wasm
-echo "rg: wasm-opt -O2 (ADR-39)"
+echo "rg: wasm-opt -O2"
 wasm_opt_inplace cache/rg.wasm
 
 write_stamp "$rg_stamp" "$rg_want"

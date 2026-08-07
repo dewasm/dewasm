@@ -1,5 +1,5 @@
 //! Shared constants and helpers for the NES framebuffer-snapshot test (issue
-//! #114), mirroring the DOOM one (ADR-53). The oracle (`cargo xtask
+//! #114), mirroring the DOOM one. The oracle (`cargo xtask
 //! update-snapshots`, whose NES target embeds the wasmtime crate — kept out of
 //! this crate's dependency tree) and the per-backend drivers (the language glue)
 //! must agree on one driving contract: load the pinned ROM, tick [`NES_FRAMES`]
@@ -33,16 +33,7 @@ pub const NES_FRAME_H: u32 = 240;
 /// i.e. 256 bytes. Fixed data, so a host reads it once.
 pub const NES_PALETTE_ENTRIES: usize = 64;
 
-/// Number of `tickGame` calls (one emulated video frame each) before the frame
-/// is captured, with no controller input. Chosen empirically as the smallest
-/// count that clears the ROM's boot to a clearly recognizable, non-degenerate
-/// screen: Alter Ego opens on a near-black boot frame (1 color at ~15 ticks),
-/// then fades in a credits screen that reaches its final, stable image by frame
-/// 37 (7 distinct colors, identical through 180+). 40 sits just inside that
-/// stable region with a small margin. Every frame is real wall time on the Bash
-/// backend later, so smaller is better — but a boring near-black frame is worse
-/// than a handful of extra ticks, so this trades ~3 ticks of margin for a solidly
-/// drawn screen. Pinned by the snapshot.
+/// Number of `tickGame` calls (one emulated video frame each) before the frame is captured, with no controller input: the smallest count reaching a stable, non-degenerate screen — Alter Ego boots near-black (~15 ticks), settles into its final credits image by frame 37, identical through 180+ — so 40 leaves a small margin. Every frame is real wall time under Bash, so smaller is better; pinned by the snapshot.
 pub const NES_FRAMES: u32 = 40;
 
 /// The cached `nes.wasm` reactor library (populated by
@@ -65,8 +56,7 @@ pub fn nes_frame_snapshot_path() -> PathBuf {
 /// Encode agnes's own frame representation — `w * h` palette indices plus the
 /// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette — as a binary P6 PPM. The
 /// exact byte layout the per-backend glue must reproduce on stdout for the
-/// snapshot comparison, mask included: `palette[index & 0x3f]` (indices above
-/// 63 occur, and agnes's own accessor masks them).
+/// snapshot comparison.
 pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8> {
     assert_eq!(
         screen.len(),
@@ -128,7 +118,7 @@ pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     );
 }
 
-/// Read the cached `nes.wasm`, failing loud (ADR-15) when it is absent.
+/// Read the cached `nes.wasm`, failing loud when it is absent.
 fn read_nes_wasm() -> Vec<u8> {
     let wasm = nes_wasm_path();
     assert!(

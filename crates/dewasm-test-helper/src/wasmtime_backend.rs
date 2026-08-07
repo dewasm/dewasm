@@ -1,4 +1,4 @@
-//! wasmtime as a [`BackendUnderTest`] (ADR-27): the snapshot-vs-wasmtime freshness checks run through the *same* shared app/gzip runners every real backend uses, rather than a hand-written per-case loop. wasmtime does not generate source — it runs the cached `.wasm` binary directly — so its `convert_app` returns the path to the exact cache binary the snapshots were captured from, and its `run`/`run_bytes` exec `wasmtime run <path>`.
+//! wasmtime as a [`BackendUnderTest`]: the snapshot-vs-wasmtime freshness checks run through the *same* shared app/gzip runners every real backend uses, rather than a hand-written per-case loop. wasmtime does not generate source — it runs the cached `.wasm` binary directly — so its `convert_app` returns the path to the exact cache binary the snapshots were captured from, and its `run`/`run_bytes` exec `wasmtime run <path>`.
 //!
 //! Public (not conditional behind the `wasmtime_test` feature, which only applies to the *tests* in `tests/apps_wasmtime.rs`) so that both that test file and `cargo xtask update-snapshots` can drive the same wasmtime-backed [`BackendUnderTest`] to (re)capture the execution snapshots.
 
@@ -57,7 +57,7 @@ impl BackendUnderTest for Wasmtime {
         path.to_string_lossy().into_owned()
     }
 
-    /// `source` is a cache-binary path (from `convert_app`), not generated code: exec `wasmtime run <path> <args...>` with `stdin` piped in. Per ADR-15 a missing `wasmtime` fails loud, never skips.
+    /// `source` is a cache-binary path (from `convert_app`), not generated code: exec `wasmtime run <path> <args...>` with `stdin` piped in. A missing `wasmtime` fails loud, never skips.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         assert!(
             Command::new("wasmtime").arg("--version").output().is_ok(),
@@ -76,7 +76,7 @@ impl BackendUnderTest for Wasmtime {
         )
     }
 
-    /// Run the filesystem app directly on the cache binary: `program` is the wasm path (from `convert_app`), so ignore the appended `glue` the default composes and instead exec `wasmtime run --dir <host>::<guest>... --env K=V... <wasm> <args[1..]>` (wasmtime injects argv0 itself). Per ADR-15 a missing `wasmtime` fails loud, never skips.
+    /// Run the filesystem app directly on the cache binary: `program` is the wasm path (from `convert_app`), so ignore the appended `glue` the default composes and instead exec `wasmtime run --dir <host>::<guest>... --env K=V... <wasm> <args[1..]>` (wasmtime injects argv0 itself). A missing `wasmtime` fails loud, never skips.
     fn run_app_fs(
         &self,
         program: &str,
@@ -104,7 +104,7 @@ impl BackendUnderTest for Wasmtime {
         run_command_bytes(&mut cmd, stdin)
     }
 
-    /// Standalone `--dir` ground truth (ADR-31): `program` is the wasm path (from `convert_app`), and `--dir` is a wasmtime host flag, so run `wasmtime run --dir HOST::GUEST... <wasm> args`. This is what the generated backends' own `--dir` parsing must reproduce. Per ADR-15 a missing `wasmtime` fails loud, never skips.
+    /// Standalone `--dir` ground truth: `program` is the wasm path (from `convert_app`), and `--dir` is a wasmtime host flag, so run `wasmtime run --dir HOST::GUEST... <wasm> args`. This is what the generated backends' own `--dir` parsing must reproduce. A missing `wasmtime` fails loud, never skips.
     fn run_standalone_dir(
         &self,
         program: &str,

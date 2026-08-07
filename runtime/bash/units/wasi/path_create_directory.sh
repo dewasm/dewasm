@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_create_directory (ADR-34 D2): creating a directory entry is one
+# WASI path_create_directory: creating a directory entry is one
 # of the four operations pure Bash cannot express at all, so this is one of
 # the only four units allowed to invoke an external POSIX command — a single
 # `--`-guarded `mkdir` on the resolved physical path. mkdir(2) never follows a
@@ -18,7 +18,7 @@ wasi_path_create_directory() {
   local __rel=$R1
   # Strip a trailing slash before the resolver's directory check: mkdir names
   # a directory anyway, and EEXIST is wasmtime's answer for mkdir("file/")
-  # where the hosts split (ADR-49).
+  # where the hosts split.
   local __stripped=$__rel
   while [[ $__stripped == */ ]]; do __stripped=${__stripped%/}; done
   [[ -n $__stripped ]] && __rel=$__stripped

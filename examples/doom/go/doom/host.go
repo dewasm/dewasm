@@ -280,8 +280,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 // runSmoke drives the game headlessly: no window, no ebiten loop. It exists
-// so CI and quick local checks can confirm the generated library still
-// links and produces a plausible frame without a display.
+// so a quick local check can confirm the generated library still links and
+// produces a plausible frame without a display.
 func runSmoke(tickGame func()) {
 	const ticks = 300
 	start := time.Now()

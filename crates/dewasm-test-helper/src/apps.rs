@@ -1,6 +1,6 @@
-//! End-to-end cases over real-world apps (examples/apps/, ADR-9): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (ADR-15) — running these does not itself need `wasmtime` installed.
+//! End-to-end cases over real-world apps (examples/apps/): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` — running these does not itself need `wasmtime` installed.
 //!
-//! Per ADR-15, missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`, ADR-27 revision). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature level.
+//! Missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it. Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`). `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow — softfloat makes QuickJS/SQLite take tens of seconds under Bash — so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -11,7 +11,7 @@ pub struct AppCase {
     pub name: &'static str,
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// Captured once via `wasmtime run` (ADR-15); the snapshot reference this case's generated-language output must match exactly.
+    /// Captured once via `wasmtime run`; the snapshot reference this case's generated-language output must match exactly.
     pub expect_stdout: &'static str,
     pub expect_code: i32,
 }
@@ -58,7 +58,7 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// The wasi-vfs-packed CRuby (ADR-61): `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape. Needs no preopens — a `require` from the stdlib proves the embedded VFS serves it — so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`. Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine). Slow, same as the unpacked case.
+/// The wasi-vfs-packed CRuby: `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape. Needs no preopens — a `require` from the stdlib proves the embedded VFS serves it — so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`. Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine). Slow, same as the unpacked case.
 pub const CRUBY_PACKED_HELLO: AppCase = AppCase {
     name: "ruby-packed",
     args: &[
@@ -70,7 +70,6 @@ pub const CRUBY_PACKED_HELLO: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// Convert the cached app `case` names with `lang`'s backend, run it, and diff against the case's snapshot output.
 fn run_app_case_inner(lang: &dyn BackendUnderTest, case: &AppCase) {
     let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
     assert!(
@@ -110,7 +109,7 @@ pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// Rerun an [`AppCase`] under `lang` (the wasmtime engine) and return its raw stdout — the bytes to write into the case's snapshot file (ADR-56). Used by `cargo xtask update-snapshots`; the compare-only `apps` suites never call it. Fails loud (ADR-15) on a missing cache or a capture whose exit status is not the pinned `expect_code`.
+/// Rerun an [`AppCase`] under `lang` (the wasmtime engine) and return its raw stdout — the bytes to write into the case's snapshot file. Used by `cargo xtask update-snapshots`; the compare-only `apps` suites never call it. Fails loud on a missing cache or a capture whose exit status is not the pinned `expect_code`.
 pub fn capture_app_stdout(lang: &dyn BackendUnderTest, case: &AppCase) -> Vec<u8> {
     let wasm_path = apps_cache_dir().join(format!("{}.wasm", case.name));
     assert!(
@@ -131,7 +130,7 @@ pub fn capture_app_stdout(lang: &dyn BackendUnderTest, case: &AppCase) -> Vec<u8
     output.stdout
 }
 
-/// Rerun the gzip *compress* case under `lang` and return its raw compressed stdout — the bytes for `examples/apps/snapshots/minigzip_compress.gz` (ADR-56). Fails loud on a missing cache or a nonzero exit.
+/// Rerun the gzip *compress* case under `lang` and return its raw compressed stdout — the bytes for `examples/apps/snapshots/minigzip_compress.gz`. Fails loud on a missing cache or a nonzero exit.
 pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
     assert!(
@@ -153,14 +152,15 @@ pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
     compressed.stdout
 }
 
-/// Run a slow [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. The perf opt-out now lives at the macro/feature level (`qjs_eval_e2e!`/`sqlite3_shell_e2e!` expand their `#[test]` as `#[ignore]`d unless the `slow_test` feature is on), so this runner — also used directly by the wasmtime suite — never needs its own opt-out.
+/// Run a slow [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally. Identical to [`run_app_case`] — the speed opt-out lives on the macro, not here, so the wasmtime suite can call either directly.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// The gzip byte-stdio stress cases (minigzip, the Phase 5b compression CLI): binary stdin/stdout the text-only app cases cannot carry (their `&str` stdin and `include_str!` snapshots require valid UTF-8; a gz stream is neither). Runs under *every* backend — Ruby and Bash both — since it is integer-only (no softfloat) and therefore fast even under Bash. Two cases:
+/// The gzip byte-stdio stress cases (minigzip, the compression CLI): binary stdin/stdout the text-only app cases cannot carry (their `&str` stdin and `include_str!` snapshots require valid UTF-8; a gz stream is neither). Every backend runs it; integer-only, so fast even under Bash. Two cases:
 ///
-/// * *compress* — feed a fixed text input on stdin, require the compressed stdout to be byte-identical to the snapshot captured from `wasmtime` (`examples/apps/snapshots/minigzip_compress.gz`). zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality. * *round trip* — compress, then decompress that output with `-d`, and require the result to equal the original input (self-checking; proves both directions of the binary stdio path).
+/// * *compress* — feed a fixed text input on stdin, require the compressed stdout to be byte-identical to the snapshot captured from `wasmtime` (`examples/apps/snapshots/minigzip_compress.gz`). zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality.
+/// * *round trip* — compress, then decompress that output with `-d`, and require the result to equal the original input (self-checking; proves both directions of the binary stdio path).
 pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
     assert!(
@@ -175,7 +175,6 @@ pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
     let snapshot = std::fs::read(apps_snapshot_dir().join("minigzip_compress.gz"))
         .expect("read minigzip snapshot");
 
-    // compress: stdout must be byte-identical to the wasmtime snapshot.
     let compressed = lang.run_bytes(&src, &[], &input);
     assert!(
         compressed.status.success(),
@@ -193,7 +192,6 @@ pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
         snapshot.len()
     );
 
-    // round trip: decompress the just-produced stream back to the original.
     let restored = lang.run_bytes(&src, &["-d"], &compressed.stdout);
     assert!(
         restored.status.success(),

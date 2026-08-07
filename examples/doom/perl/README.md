@@ -12,7 +12,7 @@ takes over the terminal (alternate screen, hidden cursor, raw input) and starts 
 
 ## Honest performance
 
-**Measured ~0.7 ticks/sec, headless, on an Apple Silicon laptop** -- against DOOM's own internal tic rate of 35Hz, and below even Python's ~1.3. DOOM's renderer is all integer math, so the usual Perl-backend cost center (float ops as sub calls, [ADR-55](../../../docs/adr/55-perl-backend-lowering.md)) barely applies; what's left is that plain Perl has no JIT and every generated function call pays the backend's recursion-depth accounting. This is not a playable game -- it's a slideshow with a crosshair.
+**Measured ~0.7 ticks/sec, headless, on an Apple Silicon laptop** -- against DOOM's own internal tic rate of 35Hz, and below even Python's ~1.3. DOOM's renderer is all integer math, so the usual Perl-backend cost center (float ops as sub calls) barely applies; what's left is that plain Perl has no JIT and every generated function call pays the backend's recursion-depth accounting. This is not a playable game -- it's a slideshow with a crosshair.
 
 It's still worth running, for the same reason the Python frontend is: the same unmodified wasm binary that plays smoothly through Go and Java runs, unmodified, through a plain Perl interpreter and comes out the other side rendering actual DOOM frames as ANSI escape codes. The terminal rendering itself costs ~6ms/frame -- noise against a ~1.4s tick.
 

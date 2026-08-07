@@ -14,7 +14,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     }
     // The opening dirfd must itself carry PATH_OPEN; O_TRUNC additionally spends
     // the directory's PATH_FILESTAT_SET_SIZE right (truncation is a size change),
-    // both enforced with NOTCAPABLE (ADR-40).
+    // both enforced with NOTCAPABLE.
     if (lacksRight(dirfd, R_PATH_OPEN)) {
         return WASI_NOTCAPABLE;
     }
@@ -35,7 +35,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     boolean isDir = java.nio.file.Files.isDirectory(hostPath);
     // The parent directory fd's inheriting rights cap what any child fd may
     // hold; the opened fd's filetype then masks that down to the directory-
-    // relevant or file-relevant rights (ADR-40).
+    // relevant or file-relevant rights.
     FdMeta dm = meta.get(dirfd);
     long dirInh = (dm != null) ? dm.inheriting : (DIR_RIGHTS | FILE_RIGHTS);
 
@@ -57,7 +57,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     } else if (trailingSlash) {
         // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when
         // missing — except O_CREAT, which must not create through the slash;
-        // per wasmtime (ADR-49): EINVAL on macOS, EISDIR on Linux.
+        // per wasmtime: EINVAL on macOS, EISDIR on Linux.
         if (exists) {
             return WASI_NOTDIR;
         }
@@ -80,7 +80,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         // rights_base=0 would resolve to {READ, CREATE}, fail to create, and
         // then error NoSuchFileException -> NOENT. Force WRITE whenever a
         // create/truncate option is present; the fd's reported and enforced
-        // rights still come from the rights model below (ADR-40).
+        // rights still come from the rights model below.
         if (write || create || excl || trunc) {
             opts.add(java.nio.file.StandardOpenOption.WRITE);
         }

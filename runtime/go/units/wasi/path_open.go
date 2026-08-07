@@ -6,13 +6,13 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     if err != wasiOk {
         return err
     }
-    // The base fd must carry PATH_OPEN (ADR-40); a rights-narrowed dir fd that
+    // The base fd must carry PATH_OPEN; a rights-narrowed dir fd that
     // dropped it can no longer open beneath itself.
     if e := w.checkRight(dirfd, rightPathOpen); e != wasiOk {
         return e
     }
     // OFLAGS_TRUNC truncates on open; that spends the directory's
-    // PATH_FILESTAT_SET_SIZE right (ADR-40), checked before the OS open can
+    // PATH_FILESTAT_SET_SIZE right, checked before the OS open can
     // touch the file.
     if oflags&0x8 != 0 { // oflags::TRUNC
         if e := w.checkRight(dirfd, rightPathFilestatSetSize); e != wasiOk {
@@ -33,7 +33,7 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     }
 
     // The rights a fd opened under this dir may hold are capped by the dir's
-    // inheriting set (ADR-40).
+    // inheriting set.
     var inheritMask uint64 = 0xFFFFFFFFFFFFFFFF
     if m, ok := w.meta[dirfd]; ok {
         inheritMask = m.inheriting
@@ -43,7 +43,7 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
 
     // A trailing slash forces directory semantics; on a non-directory it is
     // NOTDIR (routed through the O_DIRECTORY path below), on a directory it
-    // opens the directory (ADR-40).
+    // opens the directory.
     hasTrailingSlash := len(rel) > 0 && rel[len(rel)-1] == '/'
 
     if oflags&0x2 != 0 || hasTrailingSlash { // oflags::DIRECTORY
@@ -51,8 +51,8 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
         info, e := os.Stat(hostPath)
         if e != nil {
-            // O_CREAT must not create through a trailing slash; per wasmtime
-            // (ADR-49): EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+            // O_CREAT must not create through a trailing slash; per wasmtime:
+            // EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
             if hasTrailingSlash && oflags&0x2 == 0 && oflags&0x1 != 0 {
                 if runtime.GOOS == "darwin" {
                     return wasiInval
@@ -66,7 +66,7 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         }
         // A directory can never hold the per-file rights (FD_SEEK,
         // FD_FILESTAT_SET_SIZE, ...) even when requested: cap the grant to the
-        // directory masks (ADR-40), so e.g. requesting FD_SEEK on a dir yields
+        // directory masks, so e.g. requesting FD_SEEK on a dir yields
         // a fd whose base lacks it.
         w.fds[w.nextFd] = &wasiDir{hostPath: hostPath}
         w.meta[w.nextFd] = &wasiFdMeta{

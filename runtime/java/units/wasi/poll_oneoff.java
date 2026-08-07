@@ -5,7 +5,7 @@
 // treated as immediately ready, and unknown fds report EBADF. Clock
 // subscriptions set the wait deadline; if it elapses with no fd ready, the due
 // clock subs fire. Motivated by event-loop guests such as the QuickJS REPL,
-// which blocks here on stdin between prompts (ADR-14).
+// which blocks here on stdin between prompts.
 //
 // Java limitation: there is no select(2) on System.in, so an fd_read wait on
 // stdin is approximated by polling InputStream.available() with a 1 ms sleep.

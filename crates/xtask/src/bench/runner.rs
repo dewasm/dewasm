@@ -7,7 +7,7 @@
 //! * **dewasm-\*** — generated source on the host language. Codegen goes through the [`Backend`] trait, never the CLI binary. Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`).
 //! * **pywasm / wardite** — third-party interpreters, driven via `benchmarks/drivers/`, provisioned by `benchmarks/setup.sh`.
 //!
-//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (ADR-15 applied to tools: the harness keeps going, the gap is named in both outputs).
+//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (the harness keeps going, the gap is named in both outputs).
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -156,7 +156,7 @@ impl Runner {
         }
     }
 
-    /// The executable this runner launches, for the runners that *are* one executable: wasmtime and the other native runtimes. `None` for a dewasm backend or a driver, whose "runner" is a generated artifact plus a host interpreter. `cargo xtask size` weighs what this returns (ADR-64).
+    /// The executable this runner launches, for the runners that *are* one executable: wasmtime and the other native runtimes. `None` for a dewasm backend or a driver, whose "runner" is a generated artifact plus a host interpreter. `cargo xtask size` weighs what this returns.
     pub fn binary(&self) -> Option<PathBuf> {
         match &self.kind {
             Kind::Wasmtime => wasmtime_bin(),
@@ -459,7 +459,6 @@ impl Workshop {
 fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
     let backend = target.backend();
     let cache = bench_tmp_dir()?;
-    // Convert unconditionally and key the disk cache by what came out: the artifact must reflect *this* build's codegen, and only the compile step after it is expensive enough to be worth remembering.
     let source = convert(backend, bytes)?;
     let stem = format!("{}-{:016x}", backend.name(), hash_bytes(source.as_bytes()));
 
@@ -531,7 +530,7 @@ fn convert(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<String> {
                         &module,
                         &GenOptions {
                             mode: Mode::Standalone,
-                            // Only the output file's stem, which this suite never writes: a standalone artifact's internal names are fixed (ADR-63).
+                            // Only the output file's stem, which this suite never writes: a standalone artifact's internal names are fixed.
                             module_name: "prog".to_string(),
                             runtime: RuntimeLinkage::Embedded,
                             default_wasi: true,

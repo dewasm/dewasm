@@ -3,7 +3,7 @@
 # shellcheck source=common.sh
 
 # libpcap: BPF filter compiler, built from the pinned upstream source release
-# with zig (ADR-22) as a reactor library. Only the platform-independent
+# with zig as a reactor library. Only the platform-independent
 # filter-compilation TUs are built (no capture backend); src/pcap_config.h
 # stands in for ./configure's config.h (see its header comment), and our own
 # src/pcap_binding.c exports compile_filter(), which turns a textual filter
@@ -32,7 +32,7 @@ if is_cached "$pcap_stamp" "$pcap_want" cache/libpcap.wasm; then
 fi
 
 require_tool libpcap zig "install zig (e.g. brew install zig) to build the libpcap app"
-require_tool libpcap wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the libpcap app (ADR-39)"
+require_tool libpcap wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the libpcap app"
 require_tool libpcap bison "install bison (e.g. brew install bison) to regenerate the filter grammar"
 require_tool libpcap flex "install flex (e.g. brew install flex) to regenerate the filter scanner"
 
@@ -59,7 +59,7 @@ zig_cc_wasi -mexec-model=reactor -O2 \
   "${psrcs[@]}" src/pcap_binding.c \
   -Wl,--export=compile_filter -Wl,--export=malloc -Wl,--export=free \
   -o cache/libpcap.wasm
-echo "libpcap: wasm-opt -O2 (ADR-39)"
+echo "libpcap: wasm-opt -O2"
 wasm_opt_inplace cache/libpcap.wasm
 
 write_stamp "$pcap_stamp" "$pcap_want"

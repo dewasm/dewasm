@@ -2,10 +2,10 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# nes: an import-free NES emulator built from the pinned agnes source with zig
-# (ADR-22), plus a public-domain demo ROM. Shared between the NES example
-# frontends (ADR-50) and the deterministic framebuffer-snapshot test (ADR-53),
-# mirroring the DOOM fixture.
+# nes: an import-free NES emulator built from the pinned agnes source with
+# zig, plus a public-domain demo ROM. Shared between the NES example
+# frontends and the deterministic framebuffer-snapshot test, mirroring the
+# DOOM fixture.
 #
 # One reactor library, cache/nes.wasm, wraps agnes (kgabis/agnes) with our own
 # src/nes_demo.c (allocRom/initGame/setInput/tickGame + the frame accessors),
@@ -44,7 +44,7 @@ NES_EXPORTS=(
 )
 
 # The stamp covers both source pins, the ROM pin, the export list, and the
-# wasm-opt version (ADR-39), so editing any of them retriggers the build.
+# wasm-opt version, so editing any of them retriggers the build.
 nes_key="agnes:$AGNES_COMMIT h:$AGNES_H_SHA256 c:$AGNES_C_SHA256 rom:$ROM_SHA256 exports:${NES_EXPORTS[*]} wasm-opt:$(wasm_opt_version)"
 nes_stamp="cache/nes.src-sha256"
 if is_cached "$nes_stamp" "$nes_key" cache/nes.wasm cache/alter_ego.nes; then
@@ -54,7 +54,7 @@ fi
 
 require_tool nes zig "install zig (e.g. brew install zig) to build the nes app"
 require_tool nes unzip
-require_tool nes wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the nes app (ADR-39)"
+require_tool nes wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the nes app"
 require_tool nes wasm-dis "install binaryen (e.g. brew install binaryen) to verify the nes import section"
 
 echo "nes: fetching $ROM_URL"
@@ -68,7 +68,7 @@ fetch_verified "$AGNES_C_URL" "$AGNES_C_SHA256" "$tmp/agnes.c"
 
 echo "nes: building nes.wasm (zig cc, reactor)"
 mapfile -t exports < <(wl_exports "${NES_EXPORTS[@]}")
-# --strip-debug drops the DWARF wasm-opt cannot parse (ADR-39); -I $tmp lets
+# --strip-debug drops the DWARF wasm-opt cannot parse; -I $tmp lets
 # nes_demo.c find the fetched agnes.c/agnes.h, which it #includes rather than
 # linking as a separate TU.
 zig_cc_wasi -O2 -mexec-model=reactor -Wl,--strip-debug \
@@ -77,7 +77,7 @@ zig_cc_wasi -O2 -mexec-model=reactor -Wl,--strip-debug \
   "${exports[@]}" \
   -o cache/nes.wasm
 
-echo "nes: wasm-opt -O2 (ADR-39)"
+echo "nes: wasm-opt -O2"
 wasm_opt_inplace cache/nes.wasm
 
 # Import-free is a load-bearing property (the snapshot oracle wires no imports):

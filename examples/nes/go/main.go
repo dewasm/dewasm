@@ -33,7 +33,7 @@ var nesInst *Nes
 // rather than hardcoded, matching frameBuf's DOOM-frontend counterpart.
 // palette holds the module's fixed 64 colors as ready-to-copy opaque RGBA
 // quads, decoded once from paletteOffset: the guest hands over one palette
-// *index* per pixel, not a rendered image (ADR-59), so composing frameBuf is
+// *index* per pixel, not a rendered image, so composing frameBuf is
 // this frontend's job.
 var (
 	frameW, frameH int

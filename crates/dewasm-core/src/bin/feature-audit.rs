@@ -1,6 +1,6 @@
 //! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate, plus its WASI preview 1 import surface.
 //!
-//! This is the ADR-24 app audit test: before an app is pinned as a conversion target, run this tool on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `docs/apps-audit.md`.
+//! This is the app audit test: before an app is pinned as a conversion target, run this tool on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `docs/apps-audit.md`.
 //!
 //! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than the crate's `Feature` enum, so it keeps naming proposals the converter itself no longer models.
 //!
@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use wasmparser::{Parser, Payload, TypeRef, Validator, WasmFeatures};
 
-/// The 0.1 input scope of ADR-24: wasm 1.0 plus the baseline extensions every current toolchain emits.
+/// The 0.1 input scope: wasm 1.0 plus the baseline extensions every current toolchain emits.
 fn baseline() -> WasmFeatures {
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION

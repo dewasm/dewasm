@@ -1,5 +1,5 @@
 ;; Trailing-slash shapes across the path_* family (issue #42): unspecified by
-;; WASI, pinned to wasmtime 47 as measured on macOS and Linux (ADR-49). Each
+;; WASI, pinned to wasmtime 47 as measured on macOS and Linux. Each
 ;; probe prints "<tag><errno as two decimal digits>\n"; per-probe intent is
 ;; commented at each call, expectations live in the shared WASI_CASES entry.
 ;; Setup provides a file "file", a file "file2", and a directory "dir".

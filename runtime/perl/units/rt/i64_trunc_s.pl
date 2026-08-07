@@ -1,6 +1,6 @@
 # requires: rt/trap
 # -2^63 is itself an exact NV and in range; the nearest NV below it already
-# truncates out of range, so >= is the correct lower bound (ADR-55).
+# truncates out of range, so >= is the correct lower bound.
 use POSIX ();
 sub i64_trunc_s {
     my $x = $_[0];

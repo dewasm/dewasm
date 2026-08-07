@@ -2,7 +2,7 @@
 # module name is either a dict (name -> callable) or a provider object
 # responding to wasm_import(name); providers may also define
 # attach(instance), which generated code calls once the instance is fully
-# constructed (ADR-7).
+# constructed.
 @staticmethod
 def resolve_import(imports, mod, name):
     source = imports.get(mod)

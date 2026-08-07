@@ -1,7 +1,7 @@
 // requires: rt/trap
 // i32.trunc_f32_s / i32.trunc_f64_s: trapping signed truncation. Java's `(int)`
 // cast saturates, so wasm's two trap conditions (NaN, out-of-range) need
-// explicit checks (ADR-2). The source is always widened to double first
+// explicit checks. The source is always widened to double first
 // (exact for f32), so one helper serves both widths.
 static int i32_trunc_s(double x) {
     if (Double.isNaN(x)) {

@@ -2,7 +2,7 @@
 sub wasi_path_link {
     my ($self, $old_fd, $old_flags, $old_path_ptr, $old_path_len, $new_fd, $new_path_ptr, $new_path_len) = @_;
     # path_link operates on the source link itself; SYMLINK_FOLLOW is
-    # rejected rather than silently dereferenced (ADR-40).
+    # rejected rather than silently dereferenced.
     return ERRNO_INVAL if $old_flags & 0x1;
     my $old_rel = $self->{memory}->read_string($old_path_ptr, $old_path_len);
     my ($old_host, $old_err) = $self->resolve_path($old_fd, $old_rel, 0);

@@ -1,5 +1,5 @@
 # requires: wasi/fd_flush
-# WASI fd_sync (ADR-34 D1): sync is treated as flush — the whole-file-buffer
+# WASI fd_sync: sync is treated as flush — the whole-file-buffer
 # model has no separate durability barrier. Delegates to wasi_fd_flush, which
 # is already a no-op (R0=0) for a directory/stdio fd or a clean buffer; only a
 # genuinely unknown fd is rejected here (every other fd_* unit checks this).

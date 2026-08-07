@@ -4,7 +4,7 @@
 // nanoseconds). dev/ino/nlink come from the "unix:*" attribute view when the
 // platform supports it (macOS/Linux); the times all use the portable
 // lastModifiedTime (Java exposes no faithful atim/ctim), which suffices for the
-// guests we target (ADR-14). `follow` selects stat vs lstat.
+// guests we target. `follow` selects stat vs lstat.
 byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOException {
     java.nio.file.LinkOption[] opts = follow
         ? new java.nio.file.LinkOption[0]
@@ -26,7 +26,7 @@ byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOExce
     // collapsing them to mtime, so a guest that sets one and checks the others
     // stay put (fd_filestat_set_times) sees the distinction. Java exposes no
     // faithful ctim, so the change-time slot reuses creationTime as a
-    // best-effort stand-in (ADR-14).
+    // best-effort stand-in.
     long atime = a.lastAccessTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long mtime = a.lastModifiedTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long ctime = a.creationTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);

@@ -2,12 +2,12 @@
 //!
 //! The package clause follows the mode. Standalone output is `package main` with the fixed type `Program` and a `func main`, so a standalone artifact is byte-stable whatever it was named. Library output is `package <module name lowercased>` with the type `<module name, first letter uppercased>` — a Go artifact is a *package* an embedder imports, so the module name has to be a Go identifier and is rejected at conversion time when it is not (see [`validate_library_module_name`]).
 //!
-//! Lowering conventions (ADR-29; numeric conventions ADR-2):
+//! Lowering conventions:
 //! - i32/i64 are native `uint32`/`uint64` (masking is free — arithmetic wraps); signed views are `int32(x)`/`int64(x)` casts. f32/f64 are native `float32`/`float64`, so f32 re-rounding and IEEE float division need no helper (Go floats trap-free, unlike Python/Ruby/Bash).
 //! - NaN bit paths go through `math.Float32bits`/`Float64bits`, which are bit-preserving on native floats; only demote/promote reconstruct NaN payloads explicitly.
 //! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`. Unreferenced structures are spliced inline. Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
 //!
-//! The runtime is composed from per-method units (ADR-6) referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
+//! The runtime is composed from per-method units referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -15,13 +15,13 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_ident, is_wasi_module, load_method, module_name_error,
+    store_method, type_key, wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile,
+    RuntimeBundler, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, LoadOp, Module, Stmt, StoreOp,
-    Temp, UnOp, ValType,
+    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -73,7 +73,7 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Locate a `go` toolchain able to compile generated programs. Honors `$DEWASM_GO`, then `go` on `PATH` (ADR-15: a missing toolchain is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a `go` toolchain able to compile generated programs. Honors `$DEWASM_GO`, then `go` on `PATH` (a missing toolchain is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_go() -> Option<std::path::PathBuf> {
     static GO: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     GO.get_or_init(find_go_uncached).clone()
@@ -125,9 +125,9 @@ impl Backend for GoBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Go floats are native IEEE float32/float64; the NaN paths follow ADR-2 (ADR-29).
+            // Go floats are native IEEE float32/float64, and the NaN paths are bit-exact via `math.Float32bits`/`Float64bits`.
             Feature::Floats => SupportStatus::Supported,
-            // Wasm-1.0 completion (ADR-16 for Ruby, mirrored here): imported globals/memories/tables through the provider map with a Go type-assertion kind+type check, multiple tables, and the table half of bulk memory (passive/declared element segments, table.init/copy, elem.drop).
+            // Wasm-1.0 completion: imported globals/memories/tables through the provider map with a Go type-assertion kind+type check, multiple tables, and the table half of bulk memory (passive/declared element segments, table.init/copy, elem.drop).
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -144,7 +144,7 @@ impl Backend for GoBackend {
             name: format!("{}.go", opts.module_name),
             contents: contents.into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file. Only emitted when there is data to externalize.
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file. Only emitted when there is data to externalize.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -161,7 +161,7 @@ impl Backend for GoBackend {
     }
 }
 
-/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness (ADR-3): the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`. Returns the declarations and the runtime units they reference.
+/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness: the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`. Returns the declarations and the runtime units they reference.
 pub fn generate_program_with_units(
     module: &Module,
     type_name: &str,
@@ -209,25 +209,25 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let mut body = CodeWriter::new("\t");
     gen.emit_program(&mut body);
 
-    let wasi = wasi_bundled(module, opts.default_wasi);
+    let wasi = wasi_bundled(module, opts.default_wasi, bundler());
     if standalone {
         // main's recover arm references these runtime types.
         gen.use_unit("rt/trap");
         gen.use_unit("rt/exit");
     } else if wasi {
-        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`; that glue needs to catch a `proc_exit` (rtExit) to read the exit code, exactly as the standalone main does. Seed rt/exit so the type is always defined even for a module that never imports proc_exit itself (ADR-29).
+        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`; that glue needs to catch a `proc_exit` (rtExit) to read the exit code, exactly as the standalone main does. Seed rt/exit so the type is always defined even for a module that never imports proc_exit itself.
         gen.use_unit("rt/exit");
     }
     let uses = gen.uses.borrow().clone();
     let bundle = bundler().bundle(&uses, 0)?;
 
     let mut imports = scan_imports(&bundle, standalone);
-    // The standalone WASI main parses `--dir` flags with `strings` (ADR-31); that code lives in main_func (not the scanned bundle), so add the import here.
+    // The standalone WASI main parses `--dir` flags with `strings`; that code lives in main_func (not the scanned bundle), so add the import here.
     if standalone && wasi && !imports.iter().any(|i| i == "strings") {
         imports.push("strings".to_string());
         imports.sort();
     }
-    // Library mode admits host code written into the same package (a second file, or text appended to this one). Go requires all imports before other declarations, so glue appended to *this* file cannot carry its own `import`; the generated file imports `fmt` up front (marked used below) so such glue can print without one (ADR-29).
+    // Library mode admits host code written into the same package (a second file, or text appended to this one). Go requires all imports before other declarations, so glue appended to *this* file cannot carry its own `import`; the generated file imports `fmt` up front (marked used below) so such glue can print without one.
     if !standalone && !imports.iter().any(|i| i == "fmt") {
         imports.push("fmt".to_string());
         imports.sort();
@@ -237,7 +237,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     out.push_str(&format!("package {package}\n\n"));
     out.push_str(&import_block(&imports));
     out.push('\n');
-    // Data externalization (ADR-37): pull the segment bytes from a `//go:embed`ed sidecar. `embed` is a blank import (the package is used only through the directive, which — unlike a package-qualified selector — the import scanner cannot see; ADR-29), and the directive must sit immediately above its `var` with no intervening blank line. A separate `import` declaration is legal Go and keeps `import_block` untouched.
+    // Data externalization: pull the segment bytes from a `//go:embed`ed sidecar. `embed` is a blank import (the package is used only through the directive, which — unlike a package-qualified selector — the import scanner cannot see), and the directive must sit immediately above its `var` with no intervening blank line. A separate `import` declaration is legal Go and keeps `import_block` untouched.
     if let Some(cfg) = &opts.data_file {
         if !module.datas.is_empty() {
             out.push_str("import _ \"embed\"\n\n");
@@ -261,7 +261,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// The external packages a bundle references, plus `os` for a standalone main. Only the runtime bundle (controlled code) is scanned; generated program code emits no package-qualified selectors and data blobs are hex literals, so no user string can inject a false import (ADR-29). Line comments are stripped first: a prose "at instantiation time." must not pull in the `time` package (`//go:` directives survive in the emitted bundle regardless — this stripping only computes the import set).
+/// The external packages a bundle references, plus `os` for a standalone main. Only the runtime bundle (controlled code) is scanned; generated program code emits no package-qualified selectors and data blobs are hex literals, so no user string can inject a false import. Line comments are stripped first: a prose "at instantiation time." must not pull in the `time` package (`//go:` directives survive in the emitted bundle regardless — this stripping only computes the import set).
 fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     let candidates = [
         ("binary.", "encoding/binary"),
@@ -287,23 +287,6 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    // A selector only counts at an identifier boundary: `runtime.GOOS` must not register a use of `time.`.
-    fn selector_used(code: &str, sel: &str) -> bool {
-        let bytes = code.as_bytes();
-        let mut start = 0;
-        while let Some(i) = code[start..].find(sel) {
-            let idx = start + i;
-            if idx == 0 {
-                return true;
-            }
-            let prev = bytes[idx - 1];
-            if !(prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'.') {
-                return true;
-            }
-            start = idx + 1;
-        }
-        false
-    }
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {
         if selector_used(&code, sel) {
@@ -314,6 +297,24 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
         set.insert("os");
     }
     set.into_iter().map(|s| s.to_string()).collect()
+}
+
+/// Whether `text` uses the package selector `sel` (`"time."`, `"os."`, ...) — that is, whether it occurs at an identifier boundary. `runtime.GOOS` must not register a use of `time.`, and `p.os.x` must not register one of `os.`, so an occurrence preceded by an identifier character or a dot does not count. Public because the test crate's own scanners (the spec harness and the multi-module e2e composer assemble programs from several fragments and must compute the same import set) would otherwise re-derive this rule and drift from it.
+pub fn selector_used(text: &str, sel: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while let Some(i) = text[start..].find(sel) {
+        let idx = start + i;
+        if idx == 0 {
+            return true;
+        }
+        let prev = bytes[idx - 1];
+        if !(prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'.') {
+            return true;
+        }
+        start = idx + 1;
+    }
+    false
 }
 
 fn import_block(imports: &[String]) -> String {
@@ -329,7 +330,7 @@ fn import_block(imports: &[String]) -> String {
 }
 
 fn main_func(type_name: &str, wasi: bool) -> String {
-    // Standalone WASI parses the runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..], with argv[0] the program basename. Without WASI there is nothing to preopen and no argv to deliver.
+    // Standalone WASI parses the runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..], with argv[0] the program basename. Without WASI there is nothing to preopen and no argv to deliver.
     let (arg_setup, args_arg, env_arg, preopen_arg) = if wasi {
         (
             "\tpreopens := map[string]string{}\n\
@@ -398,23 +399,21 @@ fn main_func(type_name: &str, wasi: bool) -> String {
 const STANDALONE_PACKAGE: &str = "main";
 const STANDALONE_TYPE: &str = "Program";
 
-/// The grammar a library-mode module name must match: a Go identifier restricted to ASCII. Names are taken as written — there is no sanitization — so a name that cannot be a Go package/type name is a conversion-time error (ADR-0: fail at conversion, never at runtime), not something quietly rewritten into a name the embedder did not ask for.
+/// The grammar a library-mode module name must match: a Go identifier restricted to ASCII. Names are taken as written — there is no sanitization — so a name that cannot be a Go package/type name is a conversion-time error (fail at conversion, never at runtime), not something quietly rewritten into a name the embedder did not ask for.
 fn validate_library_module_name(name: &str) -> Result<()> {
-    let mut chars = name.chars();
-    let valid = match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {
-            chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-        }
-        _ => false,
-    };
-    if !valid {
-        anyhow::bail!(
-            "go library-mode module name {name:?} is not a Go identifier: it must match /\\A[A-Za-z_][A-Za-z0-9_]*\\z/ \
-             (the generated artifact declares `package <name lowercased>` and the type `<name capitalized>`). \
-             Pass --module-name with a conforming name."
-        );
+    if is_ident(
+        name,
+        |c| c.is_ascii_alphabetic() || c == '_',
+        |c| c.is_ascii_alphanumeric() || c == '_',
+    ) {
+        Ok(())
+    } else {
+        Err(module_name_error(
+            "go",
+            name,
+            "a single identifier matching [A-Za-z_][A-Za-z0-9_]* (the artifact declares `package <name lowercased>` and the type `<name capitalized>`)",
+        ))
     }
-    Ok(())
 }
 
 /// The package clause of a library artifact: the module name lowercased. Total on a validated name.
@@ -432,7 +431,7 @@ fn type_name(module_name: &str) -> String {
 }
 
 /// Go double-quoted string literal.
-fn go_string(s: &str) -> String {
+pub fn go_string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
         match c {
@@ -452,14 +451,10 @@ fn go_string(s: &str) -> String {
 }
 
 fn hex_bytes(data: &[u8]) -> String {
-    let mut hex = String::with_capacity(data.len() * 2);
-    for b in data {
-        hex.push_str(&format!("{b:02x}"));
-    }
-    format!("Rt.unhex(\"{hex}\")")
+    format!("Rt.unhex(\"{}\")", hex_string(data))
 }
 
-/// Prefix sums locating each data segment in the concatenated sidecar blob (ADR-37). Only consulted when `--data-file` externalizes the segments.
+/// Prefix sums locating each data segment in the concatenated sidecar blob. Only consulted when `--data-file` externalizes the segments.
 fn data_offsets(module: &Module) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
@@ -470,22 +465,7 @@ fn data_offsets(module: &Module) -> Vec<usize> {
     offsets
 }
 
-const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
-
-fn is_wasi_module(name: &str) -> bool {
-    WASI_MODULES.contains(&name)
-}
-
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
-
-/// Whether the generated code bundles the built-in WASI as an import fallback (and therefore takes `args`/`env` and constructs a `WASI`).
-fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
-    default_wasi
-        && module
-            .imported_funcs
-            .iter()
-            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
-}
 
 fn go_type(ty: ValType) -> &'static str {
     match ty {
@@ -547,7 +527,7 @@ fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
     format!("func({}){}", ps, go_results(results))
 }
 
-/// The recursion-guard budget (spec-harness builds only): each generated function adds its frame's slot count (`1 + params + locals + temps`) to the global `rtStack` on entry and traps once the running total exceeds this. It bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts the process fatally, ADR-29) into a catchable "call stack exhausted" trap the spec harness can observe. Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
+/// The recursion-guard budget (spec-harness builds only): each generated function adds its frame's slot count (`1 + params + locals + temps`) to the global `rtStack` on entry and traps once the running total exceeds this. It bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts the process fatally) into a catchable "call stack exhausted" trap the spec harness can observe. Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
 const SPEC_STACK_LIMIT: usize = 1024;
 
 struct Gen<'a> {
@@ -559,7 +539,7 @@ struct Gen<'a> {
     cur_locals: RefCell<Vec<ValType>>,
     /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard. Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
-    /// When `Some`, data segments are externalized into a `//go:embed`ed binary sidecar of this filename instead of embedded as `Rt.unhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a `//go:embed`ed binary sidecar of this filename instead of embedded as `Rt.unhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
@@ -569,7 +549,7 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// The Go expression yielding a data segment's bytes: a sub-slice of the embedded blob when `--data-file` is on (no runtime helper), else an `Rt.unhex(...)` inline hex literal (ADR-37).
+    /// The Go expression yielding a data segment's bytes: a sub-slice of the embedded blob when `--data-file` is on (no runtime helper), else an `Rt.unhex(...)` inline hex literal.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -609,19 +589,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The type of a function (defined or imported) by function index.
-    fn func_type(&self, func_idx: u32) -> &dewasm_core::ir::FuncType {
-        let idx = func_idx as usize;
-        let imports = self.module.imported_funcs.len();
-        let ty_idx = if idx < imports {
-            self.module.imported_funcs[idx].type_idx
-        } else {
-            self.module.funcs[idx - imports].type_idx
-        };
-        &self.module.types[ty_idx as usize]
-    }
-
-    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any` asserts each arg to its wasm param type and boxes every result into `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static typing (ADR-29). The harness compares the boxed results bit-exactly.
+    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any` asserts each arg to its wasm param type and boxes every result into `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static typing. The harness compares the boxed results bit-exactly.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         w.line(format!(
             "func (p *{}) invoke(name string, args ...any) []any {{",
@@ -633,7 +601,7 @@ impl<'a> Gen<'a> {
             let ExportKind::Func(idx) = export.kind else {
                 continue;
             };
-            let ty = self.func_type(idx);
+            let ty = self.module.func_type(idx);
             w.line(format!("case {}:", go_string(&export.name)));
             w.indent();
             let call_args = ty
@@ -699,12 +667,12 @@ impl<'a> Gen<'a> {
         if m.imported_memory.is_some() || m.memory.is_some() {
             w.line("memory *Memory");
         }
-        // Table index space = imported_tables ++ tables (ADR-16).
+        // Table index space = imported_tables ++ tables.
         let num_tables = m.imported_tables.len() + m.tables.len();
         for i in 0..num_tables {
             w.line(format!("t{i} *Table"));
         }
-        // Global index space = imported_globals ++ globals; every global is a boxed *global[T] (ADR-16).
+        // Global index space = imported_globals ++ globals; every global is a boxed *global[T].
         for (i, imp) in m.imported_globals.iter().enumerate() {
             w.line(format!("g{i} {}", global_field_type(imp.ty)));
         }
@@ -720,8 +688,8 @@ impl<'a> Gen<'a> {
             let ty = &m.types[imp.type_idx as usize];
             w.line(format!("if{i} {}", go_func_type(&ty.params, &ty.results)));
         }
-        if wasi_bundled(m, self.default_wasi) {
-            // The bundled WASI is built on first fallback, not in the ctor (ADR-7's lazy construction), so the ctor arguments are kept for `wasiInstance` to use.
+        if wasi_bundled(m, self.default_wasi, bundler()) {
+            // The bundled WASI is built on first fallback, not in the ctor, so the ctor arguments are kept for `wasiInstance` to use.
             w.line("wasi *WASI");
             w.line("wasiArgs []string");
             w.line("wasiEnv []string");
@@ -747,11 +715,9 @@ impl<'a> Gen<'a> {
         w.indent();
         w.line(format!("p := &{name}{{}}"));
 
-        // Memory: imported or locally defined.
         if let Some(import) = &m.imported_memory {
             self.emit_typed_import(w, "p.memory", "*Memory", &import.module, &import.name);
-        }
-        if let Some(mem) = &m.memory {
+        } else if let Some(mem) = &m.memory {
             self.use_unit("memory/_class");
             let max = mem.max_pages.map(|p| p as u32).unwrap_or(65536);
             w.line(format!(
@@ -759,7 +725,7 @@ impl<'a> Gen<'a> {
                 mem.min_pages as u32, max
             ));
         }
-        // Tables: imported first, then defined (index space is imported_tables ++ tables, ADR-16).
+        // Tables: imported first, then defined (index space is imported_tables ++ tables).
         for (i, import) in m.imported_tables.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -779,14 +745,14 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        let wasi = wasi_bundled(m, self.default_wasi);
+        let wasi = wasi_bundled(m, self.default_wasi, bundler());
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()
             || !m.imported_tables.is_empty()
             || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
-            // Kept for `wasiInstance`, which builds the bundled WASI the first time an import falls back to it (ADR-7): an embedder covering every WASI import never pays for one.
+            // Kept for `wasiInstance`, which builds the bundled WASI the first time an import falls back to it: an embedder covering every WASI import never pays for one.
             w.line("p.wasiArgs = args");
             w.line("p.wasiEnv = env");
             w.line("p.wasiPreopens = preopens");
@@ -804,7 +770,7 @@ impl<'a> Gen<'a> {
             self.emit_import(w, i, import);
         }
 
-        // Globals: imported first, then defined; every global is a boxed *global[T] (ADR-16). Defined globals' init exprs may read imported globals, so they must resolve after the imported ones.
+        // Globals: imported first, then defined; every global is a boxed *global[T]. Defined globals' init exprs may read imported globals, so they must resolve after the imported ones.
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -869,7 +835,7 @@ impl<'a> Gen<'a> {
             }
         }
 
-        // Exports map holds every export kind as `any` so a generated instance doubles as another module's import provider (`imports["M"] = inst.Exports`) — the mechanism the spec harness's `register` support uses (ADR-16). Globals export the shared box, not its value.
+        // Exports map holds every export kind as `any` so a generated instance doubles as another module's import provider (`imports["M"] = inst.Exports`) — the mechanism the spec harness's `register` support uses. Globals export the shared box, not its value.
         let mut export_entries = Vec::new();
         for export in &m.exports {
             let val = match export.kind {
@@ -889,7 +855,7 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Let import providers bind to the fully-constructed instance (ADR-7's `attach`, here the optional `Attach` half of the provider protocol).
+        // Let import providers bind to the fully-constructed instance (the optional `Attach` half of the provider protocol).
         if has_imports {
             w.line("for _, s := range imports {");
             w.indent();
@@ -916,7 +882,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The bundled WASI, built on first use (ADR-7). Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all — which is exactly what `p.wasi == nil` says — while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
+    /// The bundled WASI, built on first use. Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all — which is exactly what `p.wasi == nil` says — while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
     fn wasi_accessor(&self, w: &mut CodeWriter) {
         let m = self.module;
         w.line(format!(
@@ -942,19 +908,16 @@ impl<'a> Gen<'a> {
         let ty = &m.types[import.type_idx as usize];
         let go_ft = go_func_type(&ty.params, &ty.results);
 
-        // The fallback used when the embedder provides no explicit import.
         let fallback = if is_wasi_module(&import.module) && self.default_wasi {
             let unit = format!("wasi/{}", import.name);
             if bundler().has_unit(&unit) {
                 self.use_unit(&unit);
-                // A method value on the lazily built WASI: taking it here is what constructs the bundled WASI, so it exists exactly when some import fell back to it (ADR-7, mirroring Ruby's `@wasi ||=`).
+                // A method value on the lazily built WASI: taking it here is what constructs the bundled WASI, so it exists exactly when some import fell back to it (mirroring Ruby's `@wasi ||=`).
                 Some(format!("p.wasiInstance().wasi_{}", import.name))
             } else {
-                // ENOSYS: unimplemented WASI call.
                 Some(self.enosys_stub(ty))
             }
         } else {
-            // A missing non-WASI import is a link error.
             None
         };
 
@@ -982,7 +945,7 @@ impl<'a> Gen<'a> {
         w.indent();
         match fallback {
             Some(f) => w.line(format!("p.if{i} = {f}")),
-            // A missing non-WASI import is a link error at instantiation, not a deferred call-time failure (ADR-0; mirrors Ruby/Python).
+            // A missing non-WASI import is a link error at instantiation, not a deferred call-time failure (mirrors Ruby/Python).
             None => w.line(format!(
                 "{}({})",
                 self.rt("link_error"),
@@ -993,7 +956,7 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Resolve a non-function import (memory/table/global) into `target`, asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`). A present wrong-kind (or wrong-type) value is a link error; a missing one is a link error too (there is no fallback for these, unlike WASI funcs). The Go type assertion performs the ADR-16 kind check — and, for globals, the value-type check — inherently; mutability and min/max limits stay unchecked (the import-limits gap).
+    /// Resolve a non-function import (memory/table/global) into `target`, asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`). A present wrong-kind (or wrong-type) value is a link error; a missing one is a link error too (there is no fallback for these, unlike WASI funcs). The Go type assertion performs the kind check — and, for globals, the value-type check — inherently; mutability and min/max limits stay unchecked (the import-limits gap).
     fn emit_typed_import(
         &self,
         w: &mut CodeWriter,
@@ -1100,26 +1063,12 @@ impl<'a> Gen<'a> {
     }
 
     fn func_type_symbol(&self, func_idx: u32) -> String {
-        let idx = func_idx as usize;
-        let imports = self.module.imported_funcs.len();
-        let ty_idx = if idx < imports {
-            self.module.imported_funcs[idx].type_idx
-        } else {
-            self.module.funcs[idx - imports].type_idx
-        };
-        self.type_symbol(ty_idx)
+        type_key(self.module.func_type(func_idx), ty_suffix)
     }
 
-    /// A structural key for a function type (not a module-local index), so a table shared across modules stays consistent.
+    /// A structural key for a function type ([`type_key`]), spelled with this backend's own [`ty_suffix`]: a table is only ever shared between artifacts of one backend, so the spelling only has to be self-consistent here.
     fn type_symbol(&self, type_idx: u32) -> String {
-        let ty = &self.module.types[type_idx as usize];
-        let names = |tys: &[ValType]| {
-            tys.iter()
-                .map(|t| ty_suffix(*t))
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        format!("{}->{}", names(&ty.params), names(&ty.results))
+        type_key(&self.module.types[type_idx as usize], ty_suffix)
     }
 
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &Func) {
@@ -1145,7 +1094,7 @@ impl<'a> Gen<'a> {
         w.indent();
 
         if self.spec {
-            // Recursion guard (spec-harness only, ADR-29): bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap. The defer is registered before the check so the trapping frame's own cost is unwound too.
+            // Recursion guard (spec-harness only): bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap. The defer is registered before the check so the trapping frame's own cost is unwound too.
             let cost = 1 + local_types.len() + func.temps.len();
             w.line(format!("rtStack += {cost}"));
             w.line(format!("defer func() {{ rtStack -= {cost} }}()"));
@@ -1185,7 +1134,7 @@ impl<'a> Gen<'a> {
         self.emit_seq(w, &func.body);
 
         if !ty.results.is_empty() {
-            // A trailing terminator so Go's "missing return" is satisfied even when the body's own terminator is not the syntactic last stmt (unreachable code is not a Go error, ADR-29).
+            // A trailing terminator so Go's "missing return" is satisfied even when the body's own terminator is not the syntactic last stmt (unreachable code is not a Go error).
             let zeros = ty
                 .results
                 .iter()
@@ -1252,7 +1201,7 @@ impl<'a> Gen<'a> {
                 }
             }
             Stmt::SourceLine(pos) => {
-                // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw` (ADR-38). The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
+                // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw`. The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
                 let file = &self.module.debug_files[pos.file as usize];
                 if pos.col > 0 {
                     w.raw(format!("//line {file}:{}:{}\n", pos.line, pos.col));
@@ -1643,7 +1592,7 @@ impl<'a> Gen<'a> {
             I64GeS => format!("{}(int64({a}) >= int64({b}))", self.rt("b2i")),
             F32Add | F64Add => format!("({a} + {b})"),
             F32Sub | F64Sub => format!("({a} - {b})"),
-            // mul/div route through //go:noinline helpers so Go's compiler cannot fuse a following add/sub into an FMA, nor fold `x * 1.0` / `x / 1.0` to `x` (which would skip the sNaN quieting wasm mandates) — see the units (ADR-2).
+            // mul/div route through //go:noinline helpers so Go's compiler cannot fuse a following add/sub into an FMA, nor fold `x * 1.0` / `x / 1.0` to `x` (which would skip the sNaN quieting wasm mandates) — see the units.
             F32Mul => format!("{}({a}, {b})", self.rt("f32_mul")),
             F64Mul => format!("{}({a}, {b})", self.rt("f64_mul")),
             F32Div => format!("{}({a}, {b})", self.rt("f32_div")),
@@ -1668,43 +1617,7 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-fn load_method(op: LoadOp) -> &'static str {
-    use LoadOp::*;
-    match op {
-        I32Load => "i32_load",
-        I64Load => "i64_load",
-        F32Load => "f32_load",
-        F64Load => "f64_load",
-        I32Load8S => "i32_load8_s",
-        I32Load8U => "i32_load8_u",
-        I32Load16S => "i32_load16_s",
-        I32Load16U => "i32_load16_u",
-        I64Load8S => "i64_load8_s",
-        I64Load8U => "i64_load8_u",
-        I64Load16S => "i64_load16_s",
-        I64Load16U => "i64_load16_u",
-        I64Load32S => "i64_load32_s",
-        I64Load32U => "i64_load32_u",
-    }
-}
-
-fn store_method(op: StoreOp) -> &'static str {
-    use StoreOp::*;
-    match op {
-        I32Store => "i32_store",
-        I64Store => "i64_store",
-        F32Store => "f32_store",
-        F64Store => "f64_store",
-        I32Store8 => "i32_store8",
-        I32Store16 => "i32_store16",
-        I64Store8 => "i64_store8",
-        I64Store16 => "i64_store16",
-        I64Store32 => "i64_store32",
-    }
-}
-
-// --- read/use pre-pass (drives Go's unused-variable discipline) ------------
-
+/// Read/use pre-pass: collect which locals and temps a statement sequence reads, so emission can satisfy Go's unused-variable discipline.
 fn collect_reads_seq(
     stmts: &[Stmt],
     read_locals: &mut BTreeSet<u32>,
@@ -1862,7 +1775,7 @@ fn collect_reads_expr(
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `// requires:` header. Mirrors the Python backend's units lint (ADR-6), adjusted for Go syntax: `Rt.<name>` helper calls, `.memory.<name>` memory-method calls, and per-scope sibling calls through the receiver letter (`m`/`t`/`w`). A second test compiles the full bundle with `go build`, so a syntax error in any unit — not just the subset cowsay uses — is caught.
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `// requires:` header. Mirrors the Python backend's units lint, adjusted for Go syntax: `Rt.<name>` helper calls, `.memory.<name>` memory-method calls, and per-scope sibling calls through the receiver letter (`m`/`t`/`w`). A second test compiles the full bundle with `go build`, so a syntax error in any unit — not just the subset any one module uses — is caught.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1956,7 +1869,7 @@ mod units {
         );
     }
 
-    /// The whole runtime — every unit, not just the subset a given module uses — must be valid Go. Compile the full bundle with `go build` (ADR-15: a missing toolchain fails loud, it does not skip).
+    /// The whole runtime — every unit, not just the subset a given module uses — must be valid Go. Compile the full bundle with `go build` (a missing toolchain fails loud, it does not skip).
     #[test]
     fn all_units_compile_as_go() {
         let go = find_go()

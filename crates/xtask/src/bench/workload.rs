@@ -46,7 +46,7 @@ SELECT count(*) FROM t WHERE name LIKE '%7%';
 pub enum Kind {
     /// A `<module> <iterations>` microbenchmark from either family (`wat`, `c`). `iter_cap` bounds the harness's calibration.
     Micro { iter_cap: u64 },
-    /// A real cached app: fixed argv, optional stdin, no iteration parameter. Timed as whole wall time (ADR-57), so there is no zero run.
+    /// A real cached app: fixed argv, optional stdin, no iteration parameter. Timed as whole wall time, so there is no zero run.
     App { args: Vec<String>, stdin: String },
 }
 
@@ -57,7 +57,7 @@ pub struct Workload {
     /// Path to the `.wasm`; may not exist yet (see [`Workload::missing_reason`]).
     pub wasm: PathBuf,
     pub kind: Kind,
-    /// Runner labels this workload deliberately does not run on, each with the reason reported in the JSON and the doc. Never a silent omission (ADR-15's spirit: a gap is stated, not hidden).
+    /// Runner labels this workload deliberately does not run on, each with the reason reported in the JSON and the doc. Never a silent omission (a gap is stated, not hidden).
     pub exclude: &'static [(&'static str, &'static str)],
 }
 
@@ -146,7 +146,7 @@ fn discovered_micro_ids() -> Vec<String> {
         .collect()
 }
 
-/// The declared app cases: `cowsay`, a startup-dominated real program on a mid-sized module where every runner in the matrix competes, and `sqlite3_query` for sustained real work. Both are timed as whole wall time — an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract (ADR-57).
+/// The declared app cases: `cowsay`, a startup-dominated real program on a mid-sized module where every runner in the matrix competes, and `sqlite3_query` for sustained real work. Both are timed as whole wall time — an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
 fn app_workloads() -> Vec<Workload> {
     let cache = apps_cache_dir();
     vec![

@@ -6,7 +6,6 @@ use dewasm_core::ir::{BinOp, Expr, Func, Stmt};
 /// The node-count cap mirrored from `func.rs` (`MAX_FOLD_SIZE`).
 const MAX_FOLD_SIZE: u32 = 32;
 
-/// Build a module from wat and return its `idx`-th defined function.
 fn func(wat: &str, idx: usize) -> Func {
     let bytes = wat::parse_str(wat).expect("wat parses");
     let mut module = build_module(&bytes).expect("module builds");
@@ -111,7 +110,6 @@ fn local_set_spills_a_pending_that_reads_the_local() {
         0,
     );
     assert_eq!(f.temps.len(), 1, "the stale read is materialized");
-    // First statement is the spill of the old local value.
     assert!(
         matches!(
             &f.body[0],
@@ -138,7 +136,6 @@ fn a_call_spills_pending_memory_reads() {
                 i32.add))",
         1,
     );
-    // The load is materialized, and its assign precedes the call.
     let load_pos = f.body.iter().position(|s| {
         matches!(
             s,
@@ -192,7 +189,6 @@ fn select_spills_a_trapping_arm() {
         0,
     );
     assert_eq!(f.temps.len(), 1, "the trapping arm is materialized");
-    // Find the Select and confirm its then/els are pure (no Load node).
     let mut selects = 0;
     walk_exprs(&f.body, &mut |e| {
         if let Expr::Select { then, els, .. } = e {
@@ -236,7 +232,6 @@ fn return_value_is_inlined_and_temps_track_materialization() {
             (func (result i32) call $g))",
         1,
     );
-    // Exactly one temp: the call result.
     assert_eq!(f.temps.len(), 1);
     match &f.body[..] {
         [Stmt::Call { results, .. }, Stmt::Return { values }] => {

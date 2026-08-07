@@ -1,12 +1,12 @@
 /*
- * treesitter_binding.c — our own committed C source (ADR-9 permits committing
- * first-party source; only third-party *artifacts* stay out of the tree).
+ * treesitter_binding.c — our own committed C source (first-party source is
+ * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * A reactor library that parses a source string with the tree-sitter runtime
  * and the pre-generated tree-sitter-json grammar, then returns the parse
  * tree's S-expression. Built into cache/treesitter.wasm by
- * examples/apps/fetch.sh from the pinned tree-sitter + tree-sitter-json
- * releases, with the same zig reactor flags as the other C-API apps (ADR-22).
+ * examples/apps/scripts/treesitter.sh from the pinned tree-sitter + tree-sitter-json
+ * releases, with the same zig reactor flags as the other C-API apps.
  */
 #include <stdint.h>
 #include <stdlib.h>

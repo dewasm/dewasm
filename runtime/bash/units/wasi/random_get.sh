@@ -1,5 +1,5 @@
 # requires: mem/check
-# /dev/urandom through the read builtin: no external commands (ADR-5) and
+# /dev/urandom through the read builtin: no external commands and
 # no SRANDOM (bash 5.1+; the floor is 5.0). A NUL byte reads as ''.
 wasi_random_get() {
   local __p=$1 __ptr=$2 __len=$3

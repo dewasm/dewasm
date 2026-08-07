@@ -1,10 +1,10 @@
-//! Official WASI preview-1 conformance harness (ADR-36): drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the ADR-31 standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` list checked *both ways* (an unexpectedly-passing listed test is a hard failure, exactly like the spec harness).
+//! Official WASI preview-1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules (submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`) through the standalone interface. This mirrors `spec.rs`'s structure — one libtest-mimic [`Trial`] per `.wasm`, a fail-loud assert when the submodule is missing, and an `EXPECTED_FAILURES` list checked *both ways* (an unexpectedly-passing listed test is a hard failure, exactly like the spec harness).
 //!
 //! Each `<name>.wasm` may carry a co-located `<name>.json` manifest (the upstream v0 schema: `args`, `env`, `root`, `exit_code`, `stdout`, `stderr`). The runner converts the module in [`Mode::Standalone`], mounts the manifest's `root` fixture at guest `/` (via a fresh temp copy so trials stay hermetic), sets `env`/`args`, then asserts the process exit code and — when the manifest pins it — stdout/stderr. The `root`→`/` mapping mirrors upstream's own wasmtime adapter (`--dir {root}::/`).
 //!
-//! A conversion refusal attributed to a declared-unsupported feature, a wrong exit code, or a stdout mismatch is a *failure*; the list (ADR-8) then decides whether it is expected. Every list entry names the WASI function or interface behaviour responsible.
+//! A conversion refusal attributed to a declared-unsupported feature, a wrong exit code, or a stdout mismatch is a *failure*; the list then decides whether it is expected. Every list entry names the WASI function or interface behaviour responsible.
 //!
-//! The Rust suite runs with the host-matched strict errno mode injected (ADR-49); see [`evaluate`].
+//! The Rust suite runs with the host-matched strict errno mode injected; see [`evaluate`].
 //!
 //! A list entry may be *host-scoped*: some failures depend on the host libc or interpreter (e.g. macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`, or a Linux JDK truncating symlink times to microseconds). A backend declares those via `expected_failures_macos()`/`expected_failures_linux()`; the runner merges the host-matching list into the base list, so an entry that only trips on one host is not flagged as an unexpected pass on the other.
 
@@ -20,7 +20,7 @@ use crate::backend::BackendUnderTest;
 
 /// A backend wired into the WASI-testsuite harness: the base [`BackendUnderTest`] plus its known-failure list.
 pub trait WasiTestsuiteBackend: BackendUnderTest {
-    /// Known trial failures: `(trial name, attribution tag)`. The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`); the tag names the WASI function or interface behaviour that causes the failure (a declared ENOSYS gap, or an ADR-31 interface choice). A listed trial that *passes* is a hard failure — remove it (same both-ways discipline as `spec.rs`).
+    /// Known trial failures: `(trial name, attribution tag)`. The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`); the tag names the WASI function or interface behaviour that causes the failure (a declared ENOSYS gap, or a standalone-interface choice). A listed trial that *passes* is a hard failure — remove it (same both-ways discipline as `spec.rs`).
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)];
 
     /// Host-scoped list entries that only fail on a **macOS** host (host libc or interpreter behaviour, e.g. CoreFoundation injecting `__CF_USER_TEXT_ENCODING`). Merged into [`expected_failures`] only when the harness runs on macOS; ignored on other hosts, so the both-ways discipline still flags a genuine unexpected pass there.
@@ -34,7 +34,7 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     }
 }
 
-/// The three prebuilt suites we drive, all `wasm32-wasip1` (the standard goal for a dewasm backend: wasm 1.0 + full WASI p1). The Rust suite's `wasm32-wasip3` tree is deliberately excluded — preview 3 is component-model territory, rejected outright (ADR-24).
+/// The three prebuilt suites we drive, all `wasm32-wasip1` (the standard goal for a dewasm backend: wasm 1.0 + full WASI p1). The Rust suite's `wasm32-wasip3` tree is deliberately excluded — preview 3 is component-model territory, rejected outright.
 const SUITES: &[&str] = &["c", "rust", "assemblyscript"];
 
 /// The `tests/wasi-testsuite` submodule directory.
@@ -206,7 +206,7 @@ fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    // Pin the Rust suite's errno assertions to the host flavor (ADR-49): unset, upstream's TestConfig is Permissive — the union of its per-OS arms. Deliberate deviation from the manifest-only-env rule (commit 02c5ef5), scoped to Rust: the C/assemblyscript suites assert exact environ contents.
+    // Pin the Rust suite's errno assertions to the host flavor: unset, upstream's TestConfig is Permissive — the union of its per-OS arms. Deliberate deviation from the manifest-only-env rule, scoped to Rust: the C/assemblyscript suites assert exact environ contents.
     if case.trial_name.starts_with("rust/") {
         env.push((
             if std::env::consts::OS == "macos" {

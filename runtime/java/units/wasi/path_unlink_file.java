@@ -16,7 +16,7 @@ int wasi_path_unlink_file(int dirfd, int pathPtr, int pathLen) {
         return WASI_NOENT;
     }
     // Files.delete would remove an empty directory; unlink must fail on any
-    // directory. Errno per host, as wasmtime inherits it (ADR-49): EPERM on
+    // directory. Errno per host, as wasmtime inherits it: EPERM on
     // macOS, EISDIR on Linux.
     if (java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return System.getProperty("os.name").toLowerCase().contains("mac")

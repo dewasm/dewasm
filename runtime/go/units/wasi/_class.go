@@ -1,10 +1,10 @@
 // requires: memory/_class
-// The bundled WASI preview 1 runtime (ADR-29; filesystem model ADR-14, adopted
-// one-for-one from the Ruby/Python backends). Stdio and files are *os.File; a
+// The bundled WASI preview 1 runtime (filesystem model adopted one-for-one
+// from the Ruby/Python backends). Stdio and files are *os.File; a
 // directory — whether a preopen or one the guest opened via path_open — is a
 // *wasiDir. The fd table holds either, keyed by fd. Args/env are pre-encoded
 // byte strings; env is passed already-ordered ("K=V") and preopens are assigned
-// fds in sorted order, so there is no map-iteration nondeterminism (ADR-29).
+// fds in sorted order, so there is no map-iteration nondeterminism.
 const (
     wasiOk         uint32 = 0
     wasiBadf       uint32 = 8
@@ -12,10 +12,10 @@ const (
     wasiIo         uint32 = 29
     wasiNosys      uint32 = 52
     wasiSpipe      uint32 = 70
-    wasiNotcapable uint32 = 76 // rights-narrowing violation (ADR-40)
+    wasiNotcapable uint32 = 76 // rights-narrowing violation
 )
 
-// WASI p1 rights bits (ADR-40, per-fd rights model adopted from the reference
+// WASI p1 rights bits (per-fd rights model adopted from the reference
 // runtime's per-filetype masks). A preopen/dir fd carries dirRightsBase; a file
 // fd carries whatever path_open requested intersected with the dir's inheriting
 // set. Enforced NOTCAPABLE=76 in the fd_read/fd_write/fd_seek/fd_readdir/
@@ -80,7 +80,7 @@ const (
     fdflagAppend uint16 = 1 << 0
 )
 
-// Per-fd rights/flags carried alongside the fd-table entry (ADR-40). Every
+// Per-fd rights/flags carried alongside the fd-table entry. Every
 // live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
 type wasiFdMeta struct {
     base       uint64
@@ -88,7 +88,7 @@ type wasiFdMeta struct {
     fdflags    uint16
 }
 
-// A directory descriptor (ADR-14): either a preopen (preopenName set to the
+// A directory descriptor: either a preopen (preopenName set to the
 // guest-visible path passed in preopens) or a directory the guest opened itself
 // via path_open (preopenName nil). entries is the fd_readdir listing cache,
 // filled lazily; loaded guards the one-shot snapshot.
@@ -159,7 +159,7 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
 }
 
 // checkRight reports wasiOk if the fd holds `right`, else wasiNotcapable. An fd
-// with no tracked meta (should not happen for a live fd) is permitted (ADR-40).
+// with no tracked meta (should not happen for a live fd) is permitted.
 func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
     if m, ok := w.meta[fd]; ok && m.base&right == 0 {
         return wasiNotcapable

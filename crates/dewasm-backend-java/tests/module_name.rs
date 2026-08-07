@@ -1,28 +1,21 @@
-//! The module-name policy (ADR-63) for Java: a dotted library name splits into a `package` declaration plus a verbatim class name, an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program` (which is also its `argv[0]`, see docs/standalone-interface.md).
+//! The module-name policy for Java: a dotted library name splits into a `package` declaration plus a verbatim class name, an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program` (which is also its `argv[0]`, see docs/standalone-interface.md).
 
 use std::process::Command;
 
-use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasm_backend::Mode;
 use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 
 const ADD_WAT: &str = r#"(module
   (func (export "add") (param i32 i32) (result i32) (i32.add (local.get 0) (local.get 1))))"#;
 
-fn convert(name: &str, mode: Mode) -> anyhow::Result<String> {
-    let bytes = wat::parse_str(ADD_WAT)?;
-    let module = dewasm_core::build_module(&bytes)?;
-    let mut files = JavaBackend.generate(
-        &module,
-        &GenOptions {
-            mode,
-            module_name: name.to_string(),
-            runtime: RuntimeLinkage::Embedded,
-            default_wasi: false,
-            data_file: None,
-        },
-    )?;
-    Ok(String::from_utf8(files.remove(0).contents)?)
-}
+// Keywords like `int` are NOT rejected: the grammar is character-level only, and javac is the authority on the rest.
+dewasm_test_helper::module_name_policy_suite!(
+    backend: JavaBackend,
+    wat: ADD_WAT,
+    invalid: ["sqlite3-shell", "", "com..Add", "3Add", "com.Add."],
+    error_contains: "invalid java module name",
+    standalone_markers: ["final class Program {"],
+);
 
 /// The whole point of the dotted form: a conventional package *and* a conventional class name, with the embedder's `Main` appended to the same compilation unit (docs/backends/java.md) and therefore the same package.
 #[test]
@@ -77,7 +70,7 @@ fn dotted_name_emits_a_package_and_runs() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// An undotted name is the class name with no package line — byte-identical to what the old PascalCase derivation produced for names that were already Pascal.
+/// An undotted name is the class name, with no package line.
 #[test]
 fn undotted_name_emits_no_package() {
     let source = convert("Add", Mode::Library).expect("convert");
@@ -85,25 +78,9 @@ fn undotted_name_emits_no_package() {
     assert!(source.contains("final class Add {"));
 }
 
+/// Standalone output carries no `package` line either, even from a name whose dots would have produced one in library mode: the fixed class is also the artifact's `argv[0]`, which a package would have qualified.
 #[test]
-fn invalid_library_names_are_rejected() {
-    // Keywords like `int` are NOT rejected here: the grammar is character-level only, and javac is the authority on the rest (ADR-63).
-    for name in ["sqlite3-shell", "", "com..Add", "3Add", "com.Add."] {
-        let err = convert(name, Mode::Library)
-            .expect_err("an invalid java module name must be a conversion error");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("invalid java module name") && msg.contains("--module-name"),
-            "the error must name the grammar and the flag, got: {msg}"
-        );
-    }
-}
-
-/// Standalone output is a self-contained program: the requested name never reaches the source, and the module class (which is Java's `argv[0]`) is the fixed one.
-#[test]
-fn standalone_name_is_fixed() {
-    let source = convert("whatever-the-stem-was", Mode::Standalone).expect("convert");
-    assert!(source.contains("final class Program {"));
+fn standalone_emits_no_package() {
+    let source = convert("com.github.dewasm.Add", Mode::Standalone).expect("convert");
     assert!(!source.contains("package "));
-    assert!(!source.contains("whatever"));
 }

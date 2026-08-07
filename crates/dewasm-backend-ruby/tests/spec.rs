@@ -1,19 +1,19 @@
-//! Ruby side of the shared spec harness (ADR-3, ADR-27): converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH. The generic harness lives in `dewasm-test-helper`.
+//! Ruby side of the shared spec harness: converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use dewasm_backend::{Backend, RuntimeLinkage};
-use dewasm_backend_ruby::RubyBackend;
+use dewasm_backend_ruby::{ruby_string, RubyBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
+use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type — a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count reverted 59 → 28 when exception handling was removed (ADR-24): its "test" fixture module exports tags, so it no longer converts — the tag export is now rejected at conversion time — and the downstream type-mismatch checks it exposed are no longer reached.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type — a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
@@ -120,7 +120,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     }
 
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String> {
-        let mut parts = vec![ruby_str(name)];
+        let mut parts = vec![ruby_string(name)];
         for arg in args {
             parts.push(arg_rb(arg)?);
         }
@@ -128,7 +128,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     }
 
     fn global_get(&self, var: &str, global: &str) -> String {
-        format!("{var}.global_get({})", ruby_str(global))
+        format!("{var}.global_get({})", ruby_string(global))
     }
 
     fn emit_check(
@@ -152,7 +152,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
         let _ = writeln!(
             script,
             "check({}) do\n  __r = {call}\n  [({cmp}), __r]\nend",
-            ruby_str(desc)
+            ruby_string(desc)
         );
         Ok(())
     }
@@ -161,8 +161,8 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
         let _ = writeln!(
             script,
             "check_trap({}, {}) do\n  {call}\nend",
-            ruby_str(desc),
-            ruby_str(message)
+            ruby_string(desc),
+            ruby_string(message)
         );
     }
 
@@ -170,7 +170,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
         let _ = writeln!(
             script,
             "check_exhaust({}) do\n  {call}\nend",
-            ruby_str(desc)
+            ruby_string(desc)
         );
     }
 
@@ -178,7 +178,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
         let _ = writeln!(
             script,
             "check({}) do\n  {call}\n  [true, nil]\nend",
-            ruby_str(desc)
+            ruby_string(desc)
         );
     }
 
@@ -186,7 +186,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
         let _ = writeln!(
             script,
             "check_unlinkable({}) do\n  {call}\nend",
-            ruby_str(desc)
+            ruby_string(desc)
         );
     }
 
@@ -205,62 +205,17 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     }
 }
 
-/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an ADR-7 import provider (`Gen::body`'s generated `import(name)` method).
+/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an import provider (`Gen::body`'s generated `import(name)` method).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "$spectest".to_string();
     }
     let entries = registered
         .iter()
-        .map(|(name, var)| format!("{} => {var}", ruby_str(name)))
+        .map(|(name, var)| format!("{} => {var}", ruby_string(name)))
         .collect::<Vec<_>>()
         .join(", ");
     format!("$spectest.merge({{ {entries} }})")
-}
-
-fn ruby_str(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '#' => out.push_str("\\#"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
-                let _ = write!(out, "\\u{{{:x}}}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// Attribution for a null/ref heap type the harness cannot express as a Ruby value; the two reference-types hierarchies (and their bottoms, which are also just `nil`) are expressible.
-fn heap_type_tag(hty: &HeapType<'_>) -> String {
-    match hty {
-        HeapType::Abstract {
-            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
-            ..
-        } => "exception-handling".to_string(),
-        HeapType::Abstract { .. } => "gc".to_string(),
-        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
-    }
-}
-
-fn nullable_heap_type(hty: &HeapType<'_>) -> bool {
-    matches!(
-        hty,
-        HeapType::Abstract {
-            ty: AbstractHeapType::Func
-                | AbstractHeapType::Extern
-                | AbstractHeapType::Exn
-                | AbstractHeapType::NoFunc
-                | AbstractHeapType::NoExtern
-                | AbstractHeapType::NoExn
-                | AbstractHeapType::None,
-            ..
-        }
-    )
 }
 
 fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
@@ -271,13 +226,13 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
         WastArg::Core(WastArgCore::RefNull(hty)) => {
-            if nullable_heap_type(hty) {
+            if dewasm_test_helper::nullable_heap_type(hty) {
                 Ok("nil".to_string())
             } else {
-                Err(heap_type_tag(hty))
+                Err(dewasm_test_helper::heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself (ADR-17: externref = raw host value).
+        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself.
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -314,14 +269,14 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
         WastRet::Core(WastRetCore::RefNull(hty)) => match hty {
             None => Ok(format!("{value}.nil?")),
-            Some(hty) if nullable_heap_type(hty) => Ok(format!("{value}.nil?")),
-            Some(hty) => Err(heap_type_tag(hty)),
+            Some(hty) if dewasm_test_helper::nullable_heap_type(hty) => Ok(format!("{value}.nil?")),
+            Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
         },
         WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
         // `(ref.extern)`: any non-null externref.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("!{value}.nil?")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref — in ADR-17's representation, a `[type_symbol, callable]` pair.
+        // `(ref.func)`: any non-null funcref — the `[type_symbol, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),

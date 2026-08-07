@@ -8,11 +8,10 @@ sub wasi_path_open {
     my $follow = ($dirflags & 0x1) != 0;  # lookupflags::SYMLINK_FOLLOW
     my ($host, $err) = $self->resolve_path($dirfd, $rel, $follow);
     return $err if defined $err;
-    # The dirfd must itself carry PATH_OPEN (ADR-40); a rights-narrowed dir
+    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir
     # fd that dropped it can no longer open beneath itself.
     return ERRNO_NOTCAPABLE unless $self->{meta}{$dirfd}[0] & RIGHTS_PATH_OPEN;
-    # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd
-    # (ADR-40).
+    # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd.
     if (($oflags & 0x8) && !($self->{meta}{$dirfd}[0] & RIGHTS_PATH_FILESTAT_SET_SIZE)) {
         return ERRNO_NOTCAPABLE;
     }
@@ -28,7 +27,7 @@ sub wasi_path_open {
     $flags |= Fcntl::O_EXCL() if $oflags & 0x4;  # oflags::EXCL
     $flags |= Fcntl::O_TRUNC() if $oflags & 0x8;  # oflags::TRUNC
     # O_CREAT must not create through a trailing slash (issue #42); per
-    # wasmtime (ADR-49): EINVAL on macOS, EISDIR on Linux, plain open
+    # wasmtime: EINVAL on macOS, EISDIR on Linux, plain open
     # ENOENT.
     if (substr($host, -1) eq '/' && !lstat(substr($host, 0, -1))) {
         return ERRNO_NOENT unless $oflags & 0x1;  # no oflags::CREAT

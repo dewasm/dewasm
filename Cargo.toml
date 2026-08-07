@@ -22,7 +22,7 @@ dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 anyhow = "1"
 wasmparser = "0.254"
 # DWARF reader, core-only (backends never see it): parses `.debug_line` for
-# the opt-in `--dwarf-line` source back-mapping (ADR-38). Read side only.
+# the opt-in `--dwarf-line` source back-mapping. Read side only.
 gimli = { version = "0.31", default-features = false, features = ["read", "std"] }
 wat = "1"
 wast = "254"

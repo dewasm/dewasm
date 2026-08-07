@@ -1,4 +1,4 @@
-//! Python end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Python backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem (ADR-28), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
+//! Python end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Python backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem, so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
 
 use std::path::{Path, PathBuf};
 
@@ -21,7 +21,7 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports — its class body binds `Rt` at import time — so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt` (ADR-62); the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports — its class body binds `Rt` at import time — so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -80,8 +80,6 @@ impl BackendUnderTest for Python {
     }
 }
 
-// --------------------------------------------------------------------- Library-case glue.
-
 /// `add.wat`: call the exported functions and print each result.
 const PYTHON_ADD_GLUE: &str = r#"inst = Add()
 print(inst.invoke("add", 2, 3))
@@ -89,7 +87,7 @@ print(inst.invoke("add", 0xffffffff, 1))
 print(inst.invoke("fib", 10))
 "#;
 
-/// The ADR-7 override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
+/// The override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
 const PYTHON_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -187,8 +185,6 @@ sys.stdout.buffer.write(_data)
 sys.stdout.flush()
 "#;
 
-// --------------------------------------------------------------------- WASI filesystem glue.
-
 /// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const PYTHON_FS_GLUE: &str = r#"inst = Prog({}, preopens={"{guest}": "{host}"})
 try:
@@ -203,7 +199,7 @@ _path, err = wasi.resolve_path(3, "etc")
 print("contained" if err is None else "rejected")
 "#;
 
-// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PYTHON_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_file_io.js"], env={}, preopens={"/work": "{scratch}"})
 try:
@@ -240,7 +236,7 @@ except CrubyRt.Exit:
     pass
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's runtime Memory. Only the file-backed case uses {scratch}.
+// C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's runtime Memory. Only the file-backed case uses {scratch}.
 
 const PYTHON_LIBSQLITE3_MEM: &str = r#"
 db_mod = Libsqlite3({})
@@ -505,15 +501,13 @@ inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
 inst.invoke("zeroperl_flush")
 "#;
 
-// --------------------------------------------------------------------- Multi-module drive glue.
-
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
 const PYTHON_SHARED_TABLE_GLUE: &str = r#"a = TableExp()
 b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module. Each carries its own runtime class (`AlphaRt`/`BetaRt`, ADR-62), so their trap types are distinct objects and Alpha's trap is catchable by name.
+/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module. Each carries its own runtime class (`AlphaRt`/`BetaRt`), so their trap types are distinct objects and Alpha's trap is catchable by name.
 const PYTHON_EMBEDDED_COEXIST_GLUE: &str = r#"a = Alpha()
 b = Beta()
 print(a.invoke("div", 7, 2))
@@ -525,7 +519,7 @@ except AlphaRt.Trap:
     print("trapped")
 "#;
 
-/// DOOM (ADR-53): drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` are filled by the runner.
+/// DOOM: drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
 _frame = {"off": None, "w": 0, "h": 0}
@@ -533,7 +527,7 @@ _ms = {"v": 0}
 
 def _clock():
     # Self-advancing per call: matches the oracle so startup/inter-tic spins
-    # terminate and the frame stays deterministic (ADR-53).
+    # terminate and the frame stays deterministic.
     _ms["v"] += {clock_step}
     return _ms["v"]
 
@@ -613,8 +607,6 @@ out.write(rgb)
 out.flush()
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
 dewasm_test_helper::library_add_e2e!(Python, PYTHON_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Python, PYTHON_OVERRIDE_GLUE);
 dewasm_test_helper::custom_wasi_provider_e2e!(Python, PYTHON_CUSTOM_PROVIDER_GLUE);
@@ -627,7 +619,7 @@ dewasm_test_helper::wasi_suite!(Python, Poll);
 dewasm_test_helper::wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Python);
-// The standalone entrypoint's ADR-28 recursion mitigation (issue #31).
+// The standalone entrypoint's recursion mitigation (issue #31).
 dewasm_test_helper::deep_recursion_e2e!(Python);
 
 dewasm_test_helper::cowsay_args_e2e!(Python);
@@ -641,7 +633,7 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-// Ultra-slow category (ADR-48, issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
+// Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
 // e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
 // concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
 // where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI run; it
@@ -654,7 +646,7 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
-// Ultra-slow category (ADR-48, issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
+// Ultra-slow category (issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
 // Python module, and host CPython peaks at ~4.9 GB RSS compiling it — the memory criterion that put
 // the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
 // Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is

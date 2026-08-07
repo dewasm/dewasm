@@ -3,11 +3,11 @@
 # shellcheck source=common.sh
 
 # dwarf-fixture: a first-party C fixture built WITH DWARF (`-g`) so the
-# --dwarf-line source back-mapping test has a module carrying `.debug_line`
-# (ADR-38). The source is committed (src/dwarf_fixture.c, first-party — ADR-9);
-# unlike the other apps there is nothing to download, so the "pin" is the
-# sha256 of that source file: editing it rebuilds. Built at -O1 (not -O0) so the
-# fixture exercises the folded-expression marker path the core test calibrates.
+# --dwarf-line source back-mapping test has a module carrying `.debug_line`.
+# The source is committed (src/dwarf_fixture.c, first-party); unlike the
+# other apps there is nothing to download, so the "pin" is the sha256 of that
+# source file: editing it rebuilds. Built at -O1 (not -O0) so the fixture
+# exercises the folded-expression marker path the core test calibrates.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

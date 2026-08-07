@@ -7,7 +7,7 @@ func (w *WASI) wasi_fd_pwrite(fd, iovsPtr, iovsLen uint32, offset uint64, nwritt
     if w.isStdio(f) {
         return wasiSpipe
     }
-    if e := w.checkRight(fd, rightFdWrite); e != wasiOk { // ADR-40
+    if e := w.checkRight(fd, rightFdWrite); e != wasiOk {
         return e
     }
     written := uint32(0)
@@ -17,7 +17,7 @@ func (w *WASI) wasi_fd_pwrite(fd, iovsPtr, iovsLen uint32, offset uint64, nwritt
         chunk := w.memory.read_string(uint64(ptr), uint64(length))
         // syscall.Pwrite rather than f.WriteAt: WriteAt rejects a fd opened
         // O_APPEND ("invalid use of WriteAt"), and a positional write must
-        // ignore append anyway (ADR-40). Portable on darwin+linux.
+        // ignore append anyway. Portable on darwin+linux.
         n, err := syscall.Pwrite(int(f.Fd()), chunk, int64(offset+uint64(written)))
         written += uint32(n)
         if err != nil {

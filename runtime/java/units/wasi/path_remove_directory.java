@@ -20,7 +20,7 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
         return WASI_NOTDIR;
     }
     // rmdir through a trailing slash on an existing directory is EINVAL per
-    // wasmtime (ADR-49).
+    // wasmtime.
     if (rel.endsWith("/")) {
         return WASI_INVAL;
     }

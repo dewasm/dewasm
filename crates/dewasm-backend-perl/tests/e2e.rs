@@ -1,4 +1,4 @@
-//! Perl end-to-end suites (ADR-27): the shared case consts (`dewasm-test-helper`) wired up for the Perl backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Perl covers full WASI preview 1 incl. the filesystem (ADR-55/issue #69), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
+//! Perl end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Perl backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Perl covers full WASI preview 1 incl. the filesystem (issue #69), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +22,7 @@ impl BackendUnderTest for Perl {
             .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file and return the `require` preamble that loads them. The paths are absolute: `require` searches `@INC` for anything else, and `.` has not been on `@INC` since perl 5.26. Each file ends with `1;` so `require` sees the true value it demands. `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) written to `rt.pl`, required by every module file, so an imported table crosses modules; otherwise each file is a self-contained Embedded conversion carrying its own `<Package>::Rt` (ADR-55).
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file and return the `require` preamble that loads them. The paths are absolute: `require` searches `@INC` for anything else, and `.` has not been on `@INC` since perl 5.26. Each file ends with `1;` so `require` sees the true value it demands. `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) written to `rt.pl`, required by every module file, so an imported table crosses modules; otherwise each file is a self-contained Embedded conversion carrying its own `<Package>::Rt`.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -80,8 +80,6 @@ impl BackendUnderTest for Perl {
     }
 }
 
-// --------------------------------------------------------------------- Library-case glue.
-
 /// `add.wat`: call the exported functions and print each result.
 const PERL_ADD_GLUE: &str = r#"my $inst = Add->new({});
 print $inst->invoke('add', 2, 3), "\n";
@@ -89,7 +87,7 @@ print $inst->invoke('add', 0xffffffff, 1), "\n";
 print $inst->invoke('fib', 10), "\n";
 "#;
 
-/// The ADR-7 override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
+/// The override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
 const PERL_OVERRIDE_GLUE: &str = r#"my $inst;
 my $captured = '';
 my $fd_write = sub {
@@ -171,8 +169,6 @@ binmode(STDOUT);
 print $data;
 "#;
 
-// --------------------------------------------------------------------- WASI filesystem glue.
-
 /// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const PERL_FS_GLUE: &str = r#"my $inst = Prog->new({}, preopens => { '{guest}' => '{host}' });
 eval { $inst->invoke('_start'); };
@@ -188,7 +184,7 @@ my ($path, $err) = $wasi->resolve_path(3, 'etc');
 print defined $err ? "rejected\n" : "contained\n";
 "#;
 
-// --------------------------------------------------------------------- Filesystem app glue: package/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
+// Filesystem app glue: package/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PERL_QJS_FILE_IO_GLUE: &str = r#"my $inst = Qjs->new({}, args => ['qjs', '/work/qjs_file_io.js'], env => {}, preopens => { '/work' => '{scratch}' });
 eval { $inst->invoke('_start'); };
@@ -215,7 +211,7 @@ eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Cruby::Rt::Exit'));
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via the memory object. Only the file-backed case uses {scratch}.
+// C-API drive glue (sqlite3): malloc/pointer plumbing via the memory object. Only the file-backed case uses {scratch}.
 
 const PERL_LIBSQLITE3_MEM: &str = r#"
 my $db = Libsqlite3->new({});
@@ -481,7 +477,7 @@ $inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
 $inst->invoke('zeroperl_flush');
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` filled by the runner.
 const PERL_DOOM_FRAME_GLUE: &str = r#"my $frame = { off => undef, w => 0, h => 0 };
 my $ms = 0;
 my $doom = Doom->new({
@@ -539,8 +535,6 @@ print "P6\n$w $h\n255\n";
 print $rgb;
 "#;
 
-// --------------------------------------------------------------------- Multi-module drive glue.
-
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
 const PERL_SHARED_TABLE_GLUE: &str = r#"my $a = TableExp->new({});
 my $b = TableImp->new({ 'a' => $a });
@@ -558,8 +552,6 @@ print((ref($e) && $e->isa('Alpha::Rt::Trap') && !$e->isa('Beta::Rt::Trap')) ? 'd
 print "trapped\n" if ref($e) && $e->isa('Alpha::Rt::Trap');
 "#;
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
 dewasm_test_helper::library_add_e2e!(Perl, PERL_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Perl, PERL_OVERRIDE_GLUE);
 dewasm_test_helper::custom_wasi_provider_e2e!(Perl, PERL_CUSTOM_PROVIDER_GLUE);
@@ -572,7 +564,7 @@ dewasm_test_helper::wasi_suite!(Perl, Poll);
 dewasm_test_helper::wasi_suite!(Perl, Fs, PERL_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Perl, PERL_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Perl);
-// Perl recursion is heap-allocated (no host stack to overflow, ADR-55); the case pins that the entrypoint still surfaces proc_exit(42) through deep guest recursion.
+// Perl recursion is heap-allocated (no host stack to overflow); the case pins that the entrypoint still surfaces proc_exit(42) through deep guest recursion.
 dewasm_test_helper::deep_recursion_e2e!(Perl);
 
 dewasm_test_helper::cowsay_args_e2e!(Perl);
@@ -585,7 +577,7 @@ dewasm_test_helper::qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
-// Ultra-slow category (ADR-48): measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib (ADR-61), so it inherits the category.
+// Ultra-slow category: measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under. The packed variant is the same interpreter plus the wizer-embedded stdlib, so it inherits the category.
 dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Perl);
@@ -596,10 +588,10 @@ dewasm_test_helper::sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
 dewasm_test_helper::zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
-// Ultra-slow category (ADR-48): measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at `slow`.
+// Ultra-slow category: measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at `slow`.
 dewasm_test_helper::exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
-// Slow category like Ruby/Python (ADR-53): measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
+// Slow category like Ruby/Python: measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
 dewasm_test_helper::doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
 

@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_remove_directory (ADR-34 D2): one of the four namespace-mutation
+# WASI path_remove_directory: one of the four namespace-mutation
 # units licensed to shell out — a single `--`-guarded `rmdir` on the resolved
 # physical path. rmdir(2) never follows a trailing symlink, so resolution
 # uses follow_last=0, mirroring
@@ -19,7 +19,7 @@ wasi_path_remove_directory() {
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
   # rmdir through a trailing slash on an existing directory is EINVAL per
-  # wasmtime (ADR-49); other shapes come from resolve_path or the probes.
+  # wasmtime; other shapes come from resolve_path or the probes.
   if [[ $__rel == */ && -d $__host ]]; then
     R0=28 # EINVAL
     return 0

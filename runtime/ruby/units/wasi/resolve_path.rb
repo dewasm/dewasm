@@ -16,11 +16,11 @@ private :within?
 #
 # `follow_last: false` resolves the parent but leaves the final
 # component untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that
-# operate on a symlink itself (lstat, unlink, rename, rmdir, mkdir). A
-# trailing "." or ".." is never a symlink, so those fall back to full
-# resolution.
+# operate on a symlink itself (lstat, unlink, rename, rmdir, mkdir,
+# link, symlink, readlink). A trailing "." or ".." is never a symlink,
+# so those fall back to full resolution.
 #
-# Known limitation (ADR-14): this is a check-then-open, not an atomic
+# Known limitation: this is a check-then-open, not an atomic
 # openat(2)-beneath resolution — a TOCTOU race or a symlink planted
 # inside the sandbox between the check and the actual filesystem call
 # could in principle escape. Accepted for a single-process research/demo

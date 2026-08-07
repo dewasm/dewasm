@@ -1,4 +1,4 @@
-# Filesystem-only errno codes (ADR-14): kept out of the always-bundled
+# Filesystem-only errno codes: kept out of the always-bundled
 # wasi/_package prelude so a stdio-only WASI module (no path_* / fs-only
 # fd_* imports) doesn't carry them. ERRNO_NOTCAPABLE (76) lives in the
 # prelude: rights enforcement in fd_read/fd_write/etc. needs it even when

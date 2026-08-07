@@ -1,22 +1,22 @@
-//! Bash side of the shared spec harness (ADR-3, ADR-27): converts modules with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn result globals and the status-134 trap protocol), and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
+//! Bash side of the shared spec harness: converts modules with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn result globals and the status-134 trap protocol), and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
-//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list (ADR-3 pre-accepts this); the rest are `#[ignore]`d trials, so `cargo test -- --include-ignored` runs everything. The generic harness lives in `dewasm-test-helper`.
+//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list; the rest are `#[ignore]`d trials, so `cargo test -- --include-ignored` runs everything. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use dewasm_backend::Backend;
-use dewasm_backend_bash::BashBackend;
+use dewasm_backend_bash::{bash_str, BashBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures (ADR-35). Cross-module linking of function, global, memory, and now table imports (through PROVIDERS and the per-kind export maps) is fully wired; `assert_unlinkable` is checked for real. Two residual clusters, both pre-existing and out of this backend's scope to fix (matching the Ruby list, which has already covered every import kind for a while):
+/// Known assertion-level failures. Cross-module linking of function, global, memory, and now table imports (through PROVIDERS and the per-kind export maps) is fully wired; `assert_unlinkable` is checked for real. Two residual clusters, both pre-existing and out of this backend's scope to fix (matching the Ruby list, which has already covered every import kind for a while):
 ///
 /// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4): `rt_resolve_import` validates that a resolved import is the right *kind* (func/global/table/memory) but not the finer-grained wasm type — a function's param/result signature, a global's mutability, a table's min/max limits, or a memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) links instead of failing. Same accepted gap as the Ruby list's `import-limits`, and now the same count (28/2/4) since Bash supports every import kind Ruby does.
-/// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)` declaration or import is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24) regardless of backend. Both files exercise this via a module with two memories (one often an import of another module's exported memory); that module fails to convert, so the data/assertions that depended on it running observe stale (zeroed) state in a memory another, unrelated module still owns. Not a linking gap — every import in play resolves fine — and not fixable without the multi-memory proposal, which ADR-24 rejects outright.
+/// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)` declaration or import is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal) regardless of backend. Both files exercise this via a module with two memories (one often an import of another module's exported memory); that module fails to convert, so the data/assertions that depended on it running observe stale (zeroed) state in a memory another, unrelated module still owns. Not a linking gap — every import in play resolves fine — and not fixable without the multi-memory proposal, which is rejected outright as a post-1.0 wasm feature.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -25,7 +25,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "multi-memory"),
 ];
 
-/// Files `cargo test` runs by default: integer-only files the backend's current milestones cover, plus files whose value is their Rust-side assert_invalid checks and attributed `floats` skips.
+/// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial (`--include-ignored` or `slow_test` runs everything). Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat.
 const CURATED_FILES: &[&str] = &[
     "address",
     "address0",
@@ -175,7 +175,7 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
         registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
-        // Rebuild PROVIDERS from the *current* registered set before every instantiation (ADR-35): a plain reassignment fully replaces the associative array on bash >= 5, so a module registered after a failed one never leaves a stale provider entry behind.
+        // Rebuild PROVIDERS from the *current* registered set before every instantiation: a plain reassignment fully replaces the associative array on bash >= 5, so a module registered after a failed one never leaves a stale provider entry behind.
         let _ = writeln!(script, "{}", providers_line(registered));
         // A trap while instantiating a plain module directive aborts the file, mirroring an uncaught Ruby exception at toplevel.
         let _ = writeln!(
@@ -277,10 +277,6 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
     }
 }
 
-fn bash_str(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
 /// The PROVIDERS rebuild line for an instantiation: always the `spectest` host prefix plus each currently-`register`ed module mapped to its generation prefix (the `conv.handle` returned by `emit_instantiate`).
 fn providers_line(registered: &[(String, String)]) -> String {
     let mut entries = vec!["[spectest]=spectest_".to_string()];
@@ -293,7 +289,7 @@ fn providers_line(registered: &[(String, String)]) -> String {
 fn arg_bash(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok((*v as u32).to_string()),
-        // i64/f64 travel as the signed-64 bit pattern, f32 as its u32 pattern (ADR-11/ADR-13).
+        // i64/f64 travel as the signed-64 bit pattern, f32 as its u32 pattern.
         WastArg::Core(WastArgCore::I64(v)) => Ok(v.to_string()),
         WastArg::Core(WastArgCore::F32(f)) => Ok(f.bits.to_string()),
         WastArg::Core(WastArgCore::F64(f)) => Ok((f.bits as i64).to_string()),
@@ -406,7 +402,7 @@ ckl() {
   return 0
 }
 
-# The $spectest host module as an ADR-35 provider: a `spectest_`-prefixed
+# The $spectest host module as a provider: a `spectest_`-prefixed
 # family of per-kind export maps that PROVIDERS[spectest] points at. IMPORTS
 # stays declared (empty) as the function-only host override channel.
 declare -A IMPORTS=()
@@ -422,8 +418,8 @@ declare -A spectest_EXPORTS=(
 )
 # Global fixture values from the wast spectest host module: i32/i64 = 666;
 # f32 = the u32 bit pattern of 666.6f (1143383654); f64 = the signed-64 bit
-# pattern of 666.6 (4649074691427585229) — the bash float representation
-# (ADR-13). Globals flatten to their backing variable names (nameref depth 1).
+# pattern of 666.6 (4649074691427585229) — the bash float representation.
+# Globals flatten to their backing variable names (nameref depth 1).
 spectest_g_i32=666
 spectest_g_i64=666
 spectest_g_f32=1143383654

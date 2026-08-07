@@ -1,4 +1,4 @@
-//! Softfloat oracle (ADR-13): drives the bash float units with edge and seeded-random vectors and compares every result bit-for-bit against Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical NaN results, wasm min/max, the Ruby backend's trunc trap table). The spec harness remains the bar (ADR-3); this is the fast development net that pinpoints the exact op and operands on a regression.
+//! Softfloat oracle: drives the bash float units with edge and seeded-random vectors and compares every result bit-for-bit against Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical NaN results, wasm min/max, wasm's trunc trap table). The spec harness remains the bar; this is the fast development net that pinpoints the exact op and operands on a regression.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -416,7 +416,7 @@ const TRUNC_EDGES32: &[u32] = &[
     0x3f000000, // 0.5
 ];
 
-/// The Ruby backend's trunc semantics: NaN and out-of-range trap; the bound check is on the truncated value.
+/// Wasm's trunc semantics: NaN and out-of-range trap; the bound check is on the truncated value.
 fn oracle_trunc(x: f64, lo: f64, hi_excl: f64) -> Result<f64, &'static str> {
     if x.is_nan() {
         return Err("invalid conversion to integer");

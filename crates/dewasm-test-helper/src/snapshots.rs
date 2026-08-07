@@ -1,8 +1,8 @@
-//! The execution-snapshot registry (ADR-56): one entry per checked-in snapshot the wasmtime engine can regenerate, so `cargo xtask update-snapshots` regenerates every one from a single table instead of the former per-case manual `wasmtime run … >` redirection.
+//! The execution-snapshot registry: one entry per checked-in snapshot the wasmtime engine can regenerate, so `cargo xtask update-snapshots` regenerates every one from a single table instead of the former per-case manual `wasmtime run … >` redirection.
 //!
-//! Each [`WasmtimeSnapshot`] pairs a snapshot's write path with a capture closure that reruns the case under the shared [`Wasmtime`] `BackendUnderTest` and returns the bytes to write. The DOOM frame is deliberately **not** here: it needs the embedded `wasmtime` *crate* to drive `doom.wasm`'s custom-import interface (ADR-53), which this test-only helper crate must not depend on — xtask appends that target itself.
+//! Each [`WasmtimeSnapshot`] pairs a snapshot's write path with a capture closure that reruns the case under the shared [`Wasmtime`] `BackendUnderTest` and returns the bytes to write. The DOOM and NES frames are deliberately **not** here: each needs the embedded `wasmtime` *crate* to drive its custom-import interface (issue #114), which this test-only helper crate must not depend on — xtask appends those targets itself.
 //!
-//! The compare-only `apps`/`gzip`/`fs_apps` suites never touch this module: capture stays a separate, explicit code path (no env-var "update mode" on the tests), keeping the freshness comparison honest (ADR-27 revision, docs/testing.md).
+//! The compare-only `apps`/`gzip`/`fs_apps` suites never touch this module: capture stays a separate, explicit code path (no env-var "update mode" on the tests), keeping the freshness comparison honest (docs/testing.md).
 
 use std::path::PathBuf;
 
@@ -14,17 +14,16 @@ use crate::fixtures::apps_snapshot_dir;
 use crate::qjs_repl::{capture_qjs_repl_transcript, qjs_repl_snapshot_path};
 use crate::wasmtime_backend::Wasmtime;
 
-/// One regenerable execution snapshot: a repo-relative `label` (used for the optional substring filter and the printed line), the absolute `path` to write, and a `capture` closure that reruns the case under wasmtime and returns the bytes. `capture` fails loud (ADR-15) on a missing cache or a missing `wasmtime` — the underlying runners carry the exact setup message.
+/// One regenerable execution snapshot: a repo-relative `label` (used for the optional substring filter and the printed line), the absolute `path` to write, and a `capture` closure that reruns the case under wasmtime and returns the bytes. `capture` fails loud on a missing cache or a missing `wasmtime` — the underlying runners carry the exact setup message.
 pub struct WasmtimeSnapshot {
     pub label: String,
     pub path: PathBuf,
     pub capture: Box<dyn Fn() -> Vec<u8>>,
 }
 
-/// Every execution snapshot the `wasmtime` CLI can regenerate — the nine non-DOOM targets, each mapped to its snapshot file by the `<case>.stdout`/`.gz`/`.transcript` convention. xtask iterates these (plus the embedded-wasmtime DOOM frame) for `update-snapshots`.
+/// Every execution snapshot the `wasmtime` CLI can regenerate — the nine targets excluding DOOM and NES, each mapped to its snapshot file by the `<case>.stdout`/`.gz`/`.transcript` convention. xtask iterates these (plus the embedded-wasmtime DOOM and NES frames) for `update-snapshots`.
 pub fn wasmtime_snapshots() -> Vec<WasmtimeSnapshot> {
     let dir = apps_snapshot_dir();
-    // A checked-in file under `examples/apps/snapshots/`, named `<file>`.
     let app = |file: &str, capture: Box<dyn Fn() -> Vec<u8>>| WasmtimeSnapshot {
         label: format!("examples/apps/snapshots/{file}"),
         path: dir.join(file),

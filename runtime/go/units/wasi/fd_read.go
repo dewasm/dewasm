@@ -4,7 +4,7 @@ func (w *WASI) wasi_fd_read(fd, iovsPtr, iovsLen, nreadPtr uint32) uint32 {
     if !ok {
         return wasiBadf
     }
-    if e := w.checkRight(fd, rightFdRead); e != wasiOk { // ADR-40
+    if e := w.checkRight(fd, rightFdRead); e != wasiOk {
         return e
     }
     nread := uint32(0)

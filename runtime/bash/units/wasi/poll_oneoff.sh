@@ -1,7 +1,7 @@
 # requires: mem/fill, mem/i32_load, mem/i32_load8_u, mem/i32_load16_u, mem/i64_load, mem/i32_store, mem/i32_store8, mem/i32_store16, mem/i64_store
 # poll_oneoff waits until at least one subscription is ready, then writes one
 # event per ready subscription (WASI p1: 48-byte subscriptions in, 32-byte
-# events out; mirrors the Ruby unit, ADR-34 D4). fd_write on any writable fd, a
+# events out; mirrors the Ruby unit). fd_write on any writable fd, a
 # regular-file fd_read, and stdout/stderr reads are immediately ready; an
 # unknown or directory fd reports EBADF; only fd_read on stdin blocks. A clock
 # subscription sets the wait deadline; if it elapses with no fd ready the
@@ -15,7 +15,7 @@
 # line — see fd_read); a clock-only wait sleeps with a bash-only
 # coproc timer (a process substitution opened `<>` is rejected on some hosts, so
 # a coproc that blocks on its own pipe is the portable sleep). `now` comes from
-# EPOCHREALTIME, with monotonic falling back to realtime (the ADR-12 clock
+# EPOCHREALTIME, with monotonic falling back to realtime (a documented
 # deviation). LC_ALL=C keeps the byte ordinal conversion byte-granular.
 wasi_poll_oneoff() {
   local __p=$1 __in=$2 __out=$3 __nsubs=$4 __nevents_ptr=$5

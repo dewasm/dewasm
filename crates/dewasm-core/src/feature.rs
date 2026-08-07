@@ -1,4 +1,4 @@
-//! Feature taxonomy for the support matrix (ADR-8).
+//! Feature taxonomy for the support matrix.
 //!
 //! Every "unsupported" conversion error is attributed to one or more `Feature`s so the spec harness can tell declared gaps from regressions, and so docs/support.md can be generated from code.
 
@@ -8,14 +8,14 @@ use wasmparser::WasmFeatures;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Feature {
-    // Wasm 1.0 core capabilities dewasm has not implemented yet (explicit debt, first in line on the roadmap).
+    // Wasm 1.0 constructs the core IR accepts unconditionally; a backend that has not implemented one rejects it itself.
     ImportedGlobals,
     ImportedMemories,
     ImportedTables,
     MultipleTables,
     /// The table half of bulk memory: passive/declared element segments, expression element items, table.init/copy, elem.drop. (The memory half is supported.)
     TableBulkOps,
-    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose language has no usable floats (Bash, until the ADR-5 softfloat lands) refuses float-using modules at conversion time.
+    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose language has no usable floats must refuse float-using modules at conversion time until it has a softfloat (Bash already has one).
     Floats,
     // Post-1.0 proposals.
     ReferenceTypes,

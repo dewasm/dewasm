@@ -1,7 +1,7 @@
 # requires: rt/f64_bits
 # Perl's arithmetic operators take an integer fast path for integral
 # operands: it yields integer-exact results beyond double precision and
-# turns -0.0 operands into +0 (measured, ADR-55). The pack 'd' round-trip
+# turns -0.0 operands into +0 (measured). The pack 'd' round-trip
 # restores IEEE rounding, and exact-zero results get their IEEE sign back
 # by hand: a zero sum is negative only when both operands are -0.0.
 sub fadd {

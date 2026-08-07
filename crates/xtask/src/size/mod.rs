@@ -1,4 +1,4 @@
-//! `cargo xtask size` — the size record, sibling of the `bench` speed record (ADR-64).
+//! `cargo xtask size` — the size record, sibling of the `bench` speed record.
 //!
 //! It answers the distribution question with numbers: shipping a wasm program means shipping the binary *and* a runtime that can execute it, while shipping dewasm's output means shipping source to users who already have the interpreter. Which is smaller is a fact about a given app and a given backend, and this command measures it — per app, the wasm binary and every backend's converted standalone source, beside the installed size of every native runtime on the host.
 //!
@@ -46,7 +46,6 @@ impl Options {
     }
 }
 
-/// Entry point for the `size` subcommand.
 pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
     let opts = Options::parse(args)?;
 
@@ -161,9 +160,7 @@ fn prune_figs(written: &[String]) -> Result<()> {
     Ok(())
 }
 
-// ------------------------------------------------------------------ Runtimes.
-
-/// Every runtime that executes a `.wasm` directly, weighed as installed. An uninstalled one is recorded with the reason it is missing, never dropped (ADR-15).
+/// Every runtime that executes a `.wasm` directly, weighed as installed. An uninstalled one is recorded with the reason it is missing, never dropped.
 fn measure_runtimes() -> Vec<report::Runtime> {
     runners()
         .iter()
@@ -271,8 +268,6 @@ fn references(image: &[u8], name: &str) -> bool {
         .any(|window| window == name.as_bytes())
 }
 
-// ------------------------------------------------------------------ Apps.
-
 /// One app: the wasm binary's size, then every backend's converted source. A cache file that is not there makes the app and all six of its targets skipped-with-reason, naming the script that would fix it.
 fn measure_app(file: &str) -> App {
     let app = file.trim_end_matches(".wasm").to_string();
@@ -346,7 +341,7 @@ fn generated_bytes(backend: &'static (dyn Backend + Sync), bytes: &[u8]) -> Resu
                     &module,
                     &GenOptions {
                         mode: Mode::Standalone,
-                        // Only the output file's stem, which this command never writes: a standalone artifact's internal names are fixed (ADR-63).
+                        // Only the output file's stem, which this command never writes: a standalone artifact's internal names are fixed.
                         module_name: "prog".to_string(),
                         runtime: RuntimeLinkage::Embedded,
                         default_wasi: true,
@@ -360,8 +355,6 @@ fn generated_bytes(backend: &'static (dyn Backend + Sync), bytes: &[u8]) -> Resu
             .map_err(|_| anyhow::anyhow!("the codegen thread panicked"))?
     })
 }
-
-// ------------------------------------------------------------------ Paths.
 
 /// `docs/sizes/` — the generated `results.md` and its figures, beside the hand-written `README.md`.
 fn sizes_dir() -> PathBuf {

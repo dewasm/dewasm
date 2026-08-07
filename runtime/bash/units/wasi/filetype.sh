@@ -1,5 +1,5 @@
 # wasi_filetype <path>: WASI filetype for <path> via the test builtins, in
-# lstat order (ADR-34 D6, the bash analogue of
+# lstat order (the bash analogue of
 # runtime/ruby/units/wasi/wasi_filetype.rb, which checks a File::Stat/lstat
 # result). `-h` (symlink) must come first: `-d`/`-c`/`-b`/`-f` dereference a
 # symlink, so testing them first would report a directory-symlink as a plain
