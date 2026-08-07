@@ -777,7 +777,7 @@ impl<'a> Gen<'a> {
             let num_imported_globals = m.imported_globals.len();
             for (i, global) in m.globals.iter().enumerate() {
                 let idx = (num_imported_globals + i) as u32;
-                let init = self.expr(&global.init);
+                let init = self.expr_text(&global.init);
                 if self.boxed_globals.contains(&idx) {
                     self.use_unit("global/_class");
                     w.line(format!("@g{idx} = Rt::Global.new({init})"));
@@ -807,7 +807,7 @@ impl<'a> Gen<'a> {
                     } => {
                         self.use_unit("table/init");
                         w.line(format!("@elem{i} = [{}]", items()));
-                        let offset = self.expr(offset);
+                        let offset = self.expr_text(offset);
                         w.line(format!(
                             "@t{table_index}.init({offset}, @elem{i}, 0, {})",
                             elem.items.len()
@@ -822,7 +822,7 @@ impl<'a> Gen<'a> {
                         self.use_unit("memory/init");
                         w.line(format!(
                             "@m.init({}, {}, 0, {})",
-                            self.expr(offset),
+                            self.expr_text(offset),
                             self.data_expr(i, &data.data),
                             data.data.len()
                         ));
@@ -1041,7 +1041,7 @@ impl<'a> Gen<'a> {
                 } => {
                     // The arms stay inline — `if` is not a Ruby loop, so a `next`
                     // inside one already reaches the dispatch loop.
-                    st[cur].line(format!("if {}", self.cond(cond)));
+                    st[cur].line(format!("if {}", self.cond(cond).free()));
                     st[cur].indent();
                     let a = self.flat_seq(st, cur, then);
                     if !terminates(then) {
@@ -1079,13 +1079,17 @@ impl<'a> Gen<'a> {
     fn stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::Assign { dst, expr } => {
-                w.line(format!("{} = {}", temp(*dst), self.expr(expr)));
+                w.line(format!("{} = {}", temp(*dst), self.expr_text(expr)));
             }
             Stmt::LocalSet { idx, expr } => {
-                w.line(format!("l{idx} = {}", self.expr(expr)));
+                w.line(format!("l{idx} = {}", self.expr_text(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("{} = {}", self.global_ref(*idx), self.expr(expr)));
+                w.line(format!(
+                    "{} = {}",
+                    self.global_ref(*idx),
+                    self.expr_text(expr)
+                ));
             }
             Stmt::Store {
                 op,
@@ -1096,8 +1100,8 @@ impl<'a> Gen<'a> {
                 w.line(format!(
                     "@m.{}({}, {})",
                     self.mem(store_method(*op)),
-                    self.addr(addr, *offset),
-                    self.expr(value)
+                    self.addr(addr, *offset).free(),
+                    self.expr_text(value)
                 ));
             }
             Stmt::Block { label, body } => {
@@ -1142,7 +1146,7 @@ impl<'a> Gen<'a> {
                 els,
             } => {
                 let emit_if = |w: &mut CodeWriter, gen: &Self| {
-                    w.line(format!("if {}", gen.cond(cond)));
+                    w.line(format!("if {}", gen.cond(cond).free()));
                     w.indent();
                     if then.is_empty() {
                         w.line("nil");
@@ -1172,7 +1176,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
-                w.block(format!("if {}", self.cond(cond)), "end", |w| {
+                w.block(format!("if {}", self.cond(cond).free()), "end", |w| {
                     self.branch(w, target);
                 });
             }
@@ -1185,7 +1189,7 @@ impl<'a> Gen<'a> {
                     self.branch(w, default);
                     return;
                 }
-                w.line(format!("case {}", self.expr(index)));
+                w.line(format!("case {}", self.expr_text(index)));
                 for (i, target) in targets.iter().enumerate() {
                     w.line(format!("when {i}"));
                     w.indent();
@@ -1204,7 +1208,7 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                let args: Vec<String> = args.iter().map(|a| self.expr_text(a)).collect();
                 let call = self.call_string(*func, &args);
                 w.line(assign_results(results, call));
             }
@@ -1216,8 +1220,8 @@ impl<'a> Gen<'a> {
                 results,
             } => {
                 // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids building a `*args` array on either side; the splat `call` stays as the fallback for signatures wider than MAX_FIXED_ARITY (unobserved in the real-world apps, whose call_indirect arities top out at 8).
-                let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
-                call_args.extend(args.iter().map(|a| self.expr(a)));
+                let mut call_args = vec![self.expr_text(index), self.type_symbol(*type_idx)];
+                call_args.extend(args.iter().map(|a| self.expr_text(a)));
                 let method = if args.len() <= MAX_FIXED_ARITY {
                     let n = args.len();
                     self.use_unit(&format!("table/call{n}"));
@@ -1231,33 +1235,37 @@ impl<'a> Gen<'a> {
             }
             Stmt::MemoryGrow { dst, delta } => {
                 self.use_unit("memory/grow");
-                w.line(format!("{} = @m.grow({})", temp(*dst), self.expr(delta)));
+                w.line(format!(
+                    "{} = @m.grow({})",
+                    temp(*dst),
+                    self.expr_text(delta)
+                ));
             }
             Stmt::MemoryCopy { dst, src, len } => {
                 self.use_unit("memory/copy");
                 w.line(format!(
                     "@m.copy({}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.expr_text(dst),
+                    self.expr_text(src),
+                    self.expr_text(len)
                 ));
             }
             Stmt::MemoryFill { dst, val, len } => {
                 self.use_unit("memory/fill");
                 w.line(format!(
                     "@m.fill({}, {}, {})",
-                    self.expr(dst),
-                    self.expr(val),
-                    self.expr(len)
+                    self.expr_text(dst),
+                    self.expr_text(val),
+                    self.expr_text(len)
                 ));
             }
             Stmt::MemoryInit { seg, dst, src, len } => {
                 self.use_unit("memory/init");
                 w.line(format!(
                     "@m.init({}, @data{seg}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.expr_text(dst),
+                    self.expr_text(src),
+                    self.expr_text(len)
                 ));
             }
             Stmt::DataDrop { seg } => {
@@ -1273,9 +1281,9 @@ impl<'a> Gen<'a> {
                 self.use_unit("table/init");
                 w.line(format!(
                     "@t{table_index}.init({}, @elem{seg}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.expr_text(dst),
+                    self.expr_text(src),
+                    self.expr_text(len)
                 ));
             }
             Stmt::TableCopy {
@@ -1288,9 +1296,9 @@ impl<'a> Gen<'a> {
                 self.use_unit("table/copy");
                 w.line(format!(
                     "@t{dst_table}.copy({}, @t{src_table}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.expr_text(dst),
+                    self.expr_text(src),
+                    self.expr_text(len)
                 ));
             }
             Stmt::ElemDrop { seg } => {
@@ -1310,11 +1318,11 @@ impl<'a> Gen<'a> {
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
         match values {
             [] => w.line("return"),
-            [v] => w.line(format!("return {}", self.expr(v))),
+            [v] => w.line(format!("return {}", self.expr_text(v))),
             vs => {
                 let vs = vs
                     .iter()
-                    .map(|v| self.expr(v))
+                    .map(|v| self.expr_text(v))
                     .collect::<Vec<_>>()
                     .join(", ");
                 w.line(format!("return [{vs}]"));
@@ -1366,61 +1374,66 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn addr(&self, addr: &Expr, offset: u64) -> String {
+    fn addr(&self, addr: &Expr, offset: u64) -> Rendered {
         if offset == 0 {
             self.expr(addr)
         } else {
-            format!("{} + {offset}", self.expr(addr))
+            infix(
+                self.expr(addr),
+                "+",
+                Rendered::atom(offset.to_string()),
+                ADD,
+            )
         }
     }
 
-    fn expr(&self, expr: &Expr) -> String {
+    /// An expression in a position that constrains nothing, ready to be pasted into a statement.
+    fn expr_text(&self, expr: &Expr) -> String {
+        self.expr(expr).free()
+    }
+
+    fn expr(&self, expr: &Expr) -> Rendered {
         match expr {
-            Expr::I32Const(v) => v.to_string(),
-            Expr::I64Const(v) => v.to_string(),
+            Expr::I32Const(v) => number(v.to_string()),
+            Expr::I64Const(v) => number(v.to_string()),
             Expr::F32Const(bits) => {
                 let v = f32::from_bits(*bits);
                 if v.is_finite() {
-                    format!("{:?}", v as f64)
+                    number(format!("{:?}", v as f64))
                 } else {
-                    format!("{}(0x{bits:x})", self.rt("f32_from_bits"))
+                    self.call1("f32_from_bits", Rendered::atom(format!("0x{bits:x}")))
                 }
             }
             Expr::F64Const(bits) => {
                 let v = f64::from_bits(*bits);
                 if v.is_finite() {
-                    format!("{v:?}")
+                    number(format!("{v:?}"))
                 } else {
-                    format!("{}(0x{bits:x})", self.rt("f64_from_bits"))
+                    self.call1("f64_from_bits", Rendered::atom(format!("0x{bits:x}")))
                 }
             }
-            Expr::Temp(t) => temp(*t),
-            Expr::LocalGet(idx) => format!("l{idx}"),
-            Expr::GlobalGet(idx) => self.global_ref(*idx),
+            Expr::Temp(t) => Rendered::atom(temp(*t)),
+            Expr::LocalGet(idx) => Rendered::atom(format!("l{idx}")),
+            Expr::GlobalGet(idx) => Rendered::atom(self.global_ref(*idx)),
             // `eqz` of something already emitted as a Ruby boolean: read the wasm 0/1 straight off that boolean instead of materializing the operand's own 0/1 first and testing it.
-            Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) if is_boolean(a) => {
-                format!("({} ? 0 : 1)", self.cond(a))
-            }
-            Expr::Un(op, a) => self.un(*op, &self.expr(a)),
-            Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
-            Expr::Load { op, addr, offset } => {
-                format!(
-                    "@m.{}({})",
-                    self.mem(load_method(*op)),
-                    self.addr(addr, *offset)
-                )
-            }
+            Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) if is_boolean(a) => ternary(
+                self.cond(a),
+                Rendered::atom("0".to_string()),
+                Rendered::atom("1".to_string()),
+            ),
+            Expr::Un(op, a) => self.un(*op, self.expr(a)),
+            Expr::Bin(op, a, b) => self.bin(*op, self.expr(a), self.expr(b)),
+            Expr::Load { op, addr, offset } => Rendered::atom(format!(
+                "@m.{}({})",
+                self.mem(load_method(*op)),
+                self.addr(addr, *offset).free()
+            )),
             Expr::Select { cond, then, els } => {
-                format!(
-                    "({} ? {} : {})",
-                    self.cond(cond),
-                    self.expr(then),
-                    self.expr(els)
-                )
+                ternary(self.cond(cond), self.expr(then), self.expr(els))
             }
             Expr::MemorySize => {
                 self.use_unit("memory/size");
-                "@m.size".to_string()
+                Rendered::atom("@m.size".to_string())
             }
         }
     }
@@ -1428,145 +1441,335 @@ impl<'a> Gen<'a> {
     /// An expression in boolean context (an `if`/`br_if`/`select` test).
     ///
     /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a ternary only to undo it one operation later. Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `s32`/`s64`. Anything else keeps the `!= 0` test.
-    fn cond(&self, e: &Expr) -> String {
+    fn cond(&self, e: &Expr) -> Rendered {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
             Expr::Bin(op, a, b) => match rel_op(*op) {
-                Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
-                None => format!("{} != 0", self.expr(e)),
+                Some(rel) => self.rel(rel, self.expr(a), self.expr(b)),
+                None => self.zero_test("!=", e),
             },
-            _ => format!("{} != 0", self.expr(e)),
+            _ => self.zero_test("!=", e),
         }
     }
 
     /// The negation of [`cond`]: `e` is zero. A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats (both `x < y` and `x >= y` are false when either is NaN).
-    fn not_cond(&self, e: &Expr) -> String {
+    fn not_cond(&self, e: &Expr) -> Rendered {
         match e {
             // Two negations cancel.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.cond(a),
-            Expr::Bin(op, ..) if rel_op(*op).is_some() => format!("!({})", self.cond(e)),
-            _ => format!("{} == 0", self.expr(e)),
+            Expr::Bin(op, ..) if rel_op(*op).is_some() => not(self.cond(e)),
+            _ => self.zero_test("==", e),
         }
     }
 
-    fn un(&self, op: UnOp, a: &str) -> String {
+    /// `e == 0` / `e != 0`: the fallback test for a value that is not already a Ruby boolean.
+    fn zero_test(&self, op: &'static str, e: &Expr) -> Rendered {
+        compare(self.expr(e), op, Rendered::atom("0".to_string()), EQ)
+    }
+
+    /// A one-argument call to a runtime helper, recording its unit. The class includes `Rt`, so the helper is called by bare name; an argument position constrains nothing.
+    fn call1(&self, name: &str, a: Rendered) -> Rendered {
+        Rendered::atom(format!("{}({})", self.rt(name), a.free()))
+    }
+
+    /// A two-argument call to a runtime helper.
+    fn call2(&self, name: &str, a: Rendered, b: Rendered) -> Rendered {
+        Rendered::atom(format!("{}({}, {})", self.rt(name), a.free(), b.free()))
+    }
+
+    fn un(&self, op: UnOp, a: Rendered) -> Rendered {
         use UnOp::*;
         match op {
-            I32Eqz | I64Eqz => format!("({a} == 0 ? 1 : 0)"),
-            I32Clz => format!("{}({a})", self.rt("i32_clz")),
-            I32Ctz => format!("{}({a})", self.rt("i32_ctz")),
-            I64Clz => format!("{}({a})", self.rt("i64_clz")),
-            I64Ctz => format!("{}({a})", self.rt("i64_ctz")),
-            I32Popcnt | I64Popcnt => format!("{}({a})", self.rt("popcnt")),
-            F32Abs => format!("{}({a})", self.rt("f32_abs")),
-            F32Neg => format!("{}({a})", self.rt("f32_neg")),
-            F64Abs => format!("{}({a})", self.rt("f64_abs")),
-            F64Neg => format!("{}({a})", self.rt("f64_neg")),
-            F32Ceil | F64Ceil => format!("{}({a})", self.rt("fceil")),
-            F32Floor | F64Floor => format!("{}({a})", self.rt("ffloor")),
-            F32Trunc | F64Trunc => format!("{}({a})", self.rt("ftrunc")),
-            F32Nearest | F64Nearest => format!("{}({a})", self.rt("fnearest")),
-            F32Sqrt => format!("{}({}({a}))", self.rt("f32"), self.rt("fsqrt")),
-            F64Sqrt => format!("{}({a})", self.rt("fsqrt")),
-            I32WrapI64 => format!("({a} & 0xffffffff)"),
-            I32TruncF32S | I32TruncF64S => format!("{}({a})", self.rt("i32_trunc_s")),
-            I32TruncF32U | I32TruncF64U => format!("{}({a})", self.rt("i32_trunc_u")),
-            I64TruncF32S | I64TruncF64S => format!("{}({a})", self.rt("i64_trunc_s")),
-            I64TruncF32U | I64TruncF64U => format!("{}({a})", self.rt("i64_trunc_u")),
-            I32TruncSatF32S | I32TruncSatF64S => format!("{}({a})", self.rt("i32_trunc_sat_s")),
-            I32TruncSatF32U | I32TruncSatF64U => format!("{}({a})", self.rt("i32_trunc_sat_u")),
-            I64TruncSatF32S | I64TruncSatF64S => format!("{}({a})", self.rt("i64_trunc_sat_s")),
-            I64TruncSatF32U | I64TruncSatF64U => format!("{}({a})", self.rt("i64_trunc_sat_u")),
-            I64ExtendI32S => format!("{}({a})", self.rt("i64_extend_i32_s")),
-            I64ExtendI32U => a.to_string(),
-            F32ConvertI32S => format!("{}({}({a}).to_f)", self.rt("f32"), self.rt("s32")),
-            F32ConvertI32U => format!("{}({a}.to_f)", self.rt("f32")),
-            F32ConvertI64S => format!("{}({}({a}))", self.rt("cvt_f32_i"), self.rt("s64")),
-            F32ConvertI64U => format!("{}({a})", self.rt("cvt_f32_i")),
-            F64ConvertI32S => format!("{}({a}).to_f", self.rt("s32")),
-            F64ConvertI32U => format!("{a}.to_f"),
-            F64ConvertI64S => format!("{}({}({a}))", self.rt("cvt_f64_i"), self.rt("s64")),
-            F64ConvertI64U => format!("{}({a})", self.rt("cvt_f64_i")),
-            F32DemoteF64 => format!("{}({a})", self.rt("f32_demote")),
-            F64PromoteF32 => format!("{}({a})", self.rt("f64_promote")),
-            I32ReinterpretF32 => format!("{}({a})", self.rt("i32_reinterpret_f32")),
-            I64ReinterpretF64 => format!("{}({a})", self.rt("i64_reinterpret_f64")),
-            F32ReinterpretI32 => format!("{}({a})", self.rt("f32_reinterpret_i32")),
-            F64ReinterpretI64 => format!("{}({a})", self.rt("f64_reinterpret_i64")),
-            I32Extend8S => format!("{}({a})", self.rt("i32_extend8_s")),
-            I32Extend16S => format!("{}({a})", self.rt("i32_extend16_s")),
-            I64Extend8S => format!("{}({a})", self.rt("i64_extend8_s")),
-            I64Extend16S => format!("{}({a})", self.rt("i64_extend16_s")),
-            I64Extend32S => format!("{}({a})", self.rt("i64_extend32_s")),
+            I32Eqz | I64Eqz => ternary(
+                compare(a, "==", Rendered::atom("0".to_string()), EQ),
+                Rendered::atom("1".to_string()),
+                Rendered::atom("0".to_string()),
+            ),
+            I32Clz => self.call1("i32_clz", a),
+            I32Ctz => self.call1("i32_ctz", a),
+            I64Clz => self.call1("i64_clz", a),
+            I64Ctz => self.call1("i64_ctz", a),
+            I32Popcnt | I64Popcnt => self.call1("popcnt", a),
+            F32Abs => self.call1("f32_abs", a),
+            F32Neg => self.call1("f32_neg", a),
+            F64Abs => self.call1("f64_abs", a),
+            F64Neg => self.call1("f64_neg", a),
+            F32Ceil | F64Ceil => self.call1("fceil", a),
+            F32Floor | F64Floor => self.call1("ffloor", a),
+            F32Trunc | F64Trunc => self.call1("ftrunc", a),
+            F32Nearest | F64Nearest => self.call1("fnearest", a),
+            F32Sqrt => {
+                let r = self.call1("fsqrt", a);
+                self.call1("f32", r)
+            }
+            F64Sqrt => self.call1("fsqrt", a),
+            I32WrapI64 => mask32(a),
+            I32TruncF32S | I32TruncF64S => self.call1("i32_trunc_s", a),
+            I32TruncF32U | I32TruncF64U => self.call1("i32_trunc_u", a),
+            I64TruncF32S | I64TruncF64S => self.call1("i64_trunc_s", a),
+            I64TruncF32U | I64TruncF64U => self.call1("i64_trunc_u", a),
+            I32TruncSatF32S | I32TruncSatF64S => self.call1("i32_trunc_sat_s", a),
+            I32TruncSatF32U | I32TruncSatF64U => self.call1("i32_trunc_sat_u", a),
+            I64TruncSatF32S | I64TruncSatF64S => self.call1("i64_trunc_sat_s", a),
+            I64TruncSatF32U | I64TruncSatF64U => self.call1("i64_trunc_sat_u", a),
+            I64ExtendI32S => self.call1("i64_extend_i32_s", a),
+            I64ExtendI32U => a,
+            F32ConvertI32S => {
+                let s = self.call1("s32", a);
+                self.call1("f32", to_f(s))
+            }
+            F32ConvertI32U => self.call1("f32", to_f(a)),
+            F32ConvertI64S => {
+                let s = self.call1("s64", a);
+                self.call1("cvt_f32_i", s)
+            }
+            F32ConvertI64U => self.call1("cvt_f32_i", a),
+            F64ConvertI32S => to_f(self.call1("s32", a)),
+            F64ConvertI32U => to_f(a),
+            F64ConvertI64S => {
+                let s = self.call1("s64", a);
+                self.call1("cvt_f64_i", s)
+            }
+            F64ConvertI64U => self.call1("cvt_f64_i", a),
+            F32DemoteF64 => self.call1("f32_demote", a),
+            F64PromoteF32 => self.call1("f64_promote", a),
+            I32ReinterpretF32 => self.call1("i32_reinterpret_f32", a),
+            I64ReinterpretF64 => self.call1("i64_reinterpret_f64", a),
+            F32ReinterpretI32 => self.call1("f32_reinterpret_i32", a),
+            F64ReinterpretI64 => self.call1("f64_reinterpret_i64", a),
+            I32Extend8S => self.call1("i32_extend8_s", a),
+            I32Extend16S => self.call1("i32_extend16_s", a),
+            I64Extend8S => self.call1("i64_extend8_s", a),
+            I64Extend16S => self.call1("i64_extend16_s", a),
+            I64Extend32S => self.call1("i64_extend32_s", a),
         }
     }
 
-    fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
+    fn bin(&self, op: BinOp, a: Rendered, b: Rendered) -> Rendered {
         use BinOp::*;
         // A comparison is a Ruby boolean; outside condition position it needs the ternary back to the i32 0 or 1 wasm expects (see `cond`).
         if let Some(rel) = rel_op(op) {
-            return format!("({} ? 1 : 0)", self.rel(rel, a, b));
+            return ternary(
+                self.rel(rel, a, b),
+                Rendered::atom("1".to_string()),
+                Rendered::atom("0".to_string()),
+            );
         }
         match op {
-            I32Add => format!("(({a} + {b}) & 0xffffffff)"),
-            I32Sub => format!("(({a} - {b}) & 0xffffffff)"),
-            I32Mul => format!("(({a} * {b}) & 0xffffffff)"),
-            I64Add => format!("{}({a} + {b})", self.rt("m64")),
-            I64Sub => format!("{}({a} - {b})", self.rt("m64")),
-            I64Mul => format!("{}({a} * {b})", self.rt("m64")),
-            I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
-            I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
-            I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
-            I32RemU => format!("{}({a}, {b})", self.rt("i32_rem_u")),
-            I64DivS => format!("{}({a}, {b})", self.rt("i64_div_s")),
-            I64DivU => format!("{}({a}, {b})", self.rt("i64_div_u")),
-            I64RemS => format!("{}({a}, {b})", self.rt("i64_rem_s")),
-            I64RemU => format!("{}({a}, {b})", self.rt("i64_rem_u")),
-            I32And | I64And => format!("({a} & {b})"),
-            I32Or | I64Or => format!("({a} | {b})"),
-            I32Xor | I64Xor => format!("({a} ^ {b})"),
-            I32Shl => format!("(({a} << ({b} & 31)) & 0xffffffff)"),
-            I32ShrU => format!("({a} >> ({b} & 31))"),
-            I32ShrS => {
-                format!("(({}({a}) >> ({b} & 31)) & 0xffffffff)", self.rt("s32"))
-            }
-            I64Shl => format!("{}({a} << ({b} & 63))", self.rt("m64")),
-            I64ShrU => format!("({a} >> ({b} & 63))"),
+            I32Add => mask32(infix(a, "+", b, ADD)),
+            I32Sub => mask32(infix(a, "-", b, ADD)),
+            I32Mul => mask32(infix(a, "*", b, MUL)),
+            I64Add => self.call1("m64", infix(a, "+", b, ADD)),
+            I64Sub => self.call1("m64", infix(a, "-", b, ADD)),
+            I64Mul => self.call1("m64", infix(a, "*", b, MUL)),
+            I32DivS => self.call2("i32_div_s", a, b),
+            I32DivU => self.call2("i32_div_u", a, b),
+            I32RemS => self.call2("i32_rem_s", a, b),
+            I32RemU => self.call2("i32_rem_u", a, b),
+            I64DivS => self.call2("i64_div_s", a, b),
+            I64DivU => self.call2("i64_div_u", a, b),
+            I64RemS => self.call2("i64_rem_s", a, b),
+            I64RemU => self.call2("i64_rem_u", a, b),
+            I32And | I64And => infix(a, "&", b, BIT_AND),
+            I32Or | I64Or => infix(a, "|", b, BIT_OR),
+            I32Xor | I64Xor => infix(a, "^", b, BIT_OR),
+            I32Shl => mask32(infix(a, "<<", shift_count(b, 31), SHIFT)),
+            I32ShrU => infix(a, ">>", shift_count(b, 31), SHIFT),
+            I32ShrS => mask32(infix(self.call1("s32", a), ">>", shift_count(b, 31), SHIFT)),
+            I64Shl => self.call1("m64", infix(a, "<<", shift_count(b, 63), SHIFT)),
+            I64ShrU => infix(a, ">>", shift_count(b, 63), SHIFT),
             I64ShrS => {
-                format!("{}({}({a}) >> ({b} & 63))", self.rt("m64"), self.rt("s64"))
+                let s = self.call1("s64", a);
+                self.call1("m64", infix(s, ">>", shift_count(b, 63), SHIFT))
             }
-            I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
-            I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
-            I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
-            I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            F32Add => format!("{}({a} + {b})", self.rt("f32")),
-            F32Sub => format!("{}({a} - {b})", self.rt("f32")),
-            F32Mul => format!("{}({a} * {b})", self.rt("f32")),
-            F32Div => format!("{}({a} / {b})", self.rt("f32")),
-            F64Add => format!("({a} + {b})"),
+            I32Rotl => self.call2("i32_rotl", a, b),
+            I32Rotr => self.call2("i32_rotr", a, b),
+            I64Rotl => self.call2("i64_rotl", a, b),
+            I64Rotr => self.call2("i64_rotr", a, b),
+            F32Add => self.call1("f32", infix(a, "+", b, ADD)),
+            F32Sub => self.call1("f32", infix(a, "-", b, ADD)),
+            F32Mul => self.call1("f32", infix(a, "*", b, MUL)),
+            F32Div => self.call1("f32", infix(a, "/", b, MUL)),
+            F64Add => infix(a, "+", b, ADD),
             // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub. The host `-` therefore cannot be trusted to return an arithmetic NaN. Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free. ADR-47, issue #11.
-            F64Sub => format!("((r = {a} - {b}) == r ? r : {}(r))", self.rt("quiet_nan")),
-            F64Mul => format!("({a} * {b})"),
-            F64Div => format!("({a} / {b})"),
-            F32Min | F64Min => format!("{}({a}, {b})", self.rt("fmin")),
-            F32Max | F64Max => format!("{}({a}, {b})", self.rt("fmax")),
-            F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
-            F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
+            F64Sub => {
+                let r = Rendered::atom("r".to_string());
+                // The assignment's parens are required: `=` binds looser than everything around it.
+                let store = Rendered::atom(format!("(r = {})", infix(a, "-", b, ADD).free()));
+                ternary(
+                    compare(store, "==", r.clone(), EQ),
+                    r.clone(),
+                    self.call1("quiet_nan", r),
+                )
+            }
+            F64Mul => infix(a, "*", b, MUL),
+            F64Div => infix(a, "/", b, MUL),
+            F32Min | F64Min => self.call2("fmin", a, b),
+            F32Max | F64Max => self.call2("fmax", a, b),
+            F32Copysign => self.call2("f32_copysign", a, b),
+            F64Copysign => self.call2("f64_copysign", a, b),
             _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
 
     /// A comparison as a Ruby boolean, from a `rel_op` mapping and the already rendered operands.
-    fn rel(&self, (r, sign): (&str, Option<&str>), a: &str, b: &str) -> String {
+    fn rel(&self, (r, sign): (&'static str, Option<&str>), a: Rendered, b: Rendered) -> Rendered {
+        let prec = if r == "==" || r == "!=" { EQ } else { CMP };
         match sign {
-            None => format!("{a} {r} {b}"),
+            None => compare(a, r, b, prec),
             Some(sign) => {
                 let f = self.rt(sign);
-                format!("{f}({a}) {r} {f}({b})")
+                compare(
+                    Rendered::atom(format!("{f}({})", a.free())),
+                    r,
+                    Rendered::atom(format!("{f}({})", b.free())),
+                    prec,
+                )
             }
         }
     }
+}
+
+/// Ruby's operator precedence over the subset the generated code emits, tightest first. Only the levels an emitted expression can sit at are named; `**`, `&&`, `||` and the rest are never built here.
+///
+/// Two of these differ from C and are the reason the table is written out rather than assumed: `&` binds *tighter* than `|` and `^`, and all three bind tighter than the comparisons.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Prec {
+    /// A literal, variable, ivar, or anything ending in a call's closing paren.
+    Atom,
+    /// `!x`, and a negative numeric literal.
+    Unary,
+    Mul,
+    Add,
+    Shift,
+    BitAnd,
+    BitOr,
+    Cmp,
+    Eq,
+    /// `c ? t : e`, the loosest thing built here — and so also the limit of a position that constrains nothing.
+    Ternary,
+}
+
+use Prec::{Add as ADD, BitAnd as BIT_AND, BitOr as BIT_OR, Cmp as CMP, Eq as EQ, Mul as MUL};
+use Prec::{Shift as SHIFT, Ternary as FREE};
+
+impl Prec {
+    /// The next tighter level: the limit for an operand that must not sit at this one unparenthesized.
+    fn tighter(self) -> Prec {
+        match self {
+            Prec::Atom | Prec::Unary => Prec::Atom,
+            Prec::Mul => Prec::Unary,
+            Prec::Add => Prec::Mul,
+            Prec::Shift => Prec::Add,
+            Prec::BitAnd => Prec::Shift,
+            Prec::BitOr => Prec::BitAnd,
+            Prec::Cmp => Prec::BitOr,
+            Prec::Eq => Prec::Cmp,
+            Prec::Ternary => Prec::Eq,
+        }
+    }
+}
+
+/// A rendered Ruby expression together with how tightly it binds, so that each operand is parenthesized only where its context would otherwise reparse it (ADR-65).
+#[derive(Clone)]
+struct Rendered {
+    src: String,
+    prec: Prec,
+    /// The top-level operator, for the one place equal precedence is not enough to decide: an associative operator may take an equal-precedence right operand only if it is the same operator. Empty for everything else.
+    op: &'static str,
+}
+
+impl Rendered {
+    /// Something that binds as tightly as a name: a literal, a variable, or a call.
+    fn atom(src: String) -> Rendered {
+        Rendered {
+            src,
+            prec: Prec::Atom,
+            op: "",
+        }
+    }
+
+    /// The rendering as an operand of a context that accepts anything up to `limit`, parenthesized if it binds looser.
+    fn at(self, limit: Prec) -> String {
+        if self.prec <= limit {
+            self.src
+        } else {
+            format!("({})", self.src)
+        }
+    }
+
+    /// The rendering in a position that constrains nothing: a statement's right-hand side, an `if`/`case` subject, a call argument, an array element.
+    fn free(self) -> String {
+        self.at(FREE)
+    }
+}
+
+/// A numeric literal. A negative one carries a unary minus, so it binds like a unary expression and is parenthesized where an atom is required.
+fn number(src: String) -> Rendered {
+    let prec = if src.starts_with('-') {
+        Prec::Unary
+    } else {
+        Prec::Atom
+    };
+    Rendered { src, prec, op: "" }
+}
+
+/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one — associative over integers, where the only operands these have.
+fn infix(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
+    let associative = matches!(op, "&" | "|" | "^") && b.op == op;
+    let right_limit = if associative { prec } else { prec.tighter() };
+    Rendered {
+        src: format!("{} {op} {}", a.at(prec), b.at(right_limit)),
+        prec,
+        op,
+    }
+}
+
+/// `a OP b` for the comparison and equality families, which Ruby parses as non-associative (`a == b == c` is a syntax error): neither operand may sit at the operator's own level.
+fn compare(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
+    Rendered {
+        src: format!("{} {op} {}", a.at(prec.tighter()), b.at(prec.tighter())),
+        prec,
+        op: "",
+    }
+}
+
+/// `c ? t : e`. The ternary is right-associative, so only the else-branch may hold another one unparenthesized.
+fn ternary(c: Rendered, t: Rendered, e: Rendered) -> Rendered {
+    Rendered {
+        src: format!(
+            "{} ? {} : {}",
+            c.at(FREE.tighter()),
+            t.at(FREE.tighter()),
+            e.at(FREE)
+        ),
+        prec: Prec::Ternary,
+        op: "",
+    }
+}
+
+fn not(a: Rendered) -> Rendered {
+    Rendered {
+        src: format!("!{}", a.at(Prec::Unary)),
+        prec: Prec::Unary,
+        op: "",
+    }
+}
+
+/// `x & 0xffffffff`, the i32 wrap.
+fn mask32(a: Rendered) -> Rendered {
+    infix(a, "&", Rendered::atom("0xffffffff".to_string()), BIT_AND)
+}
+
+/// A shift count, masked to the width wasm defines it modulo.
+fn shift_count(b: Rendered, mask: u32) -> Rendered {
+    infix(b, "&", Rendered::atom(mask.to_string()), BIT_AND)
+}
+
+/// `x.to_f`. A receiver binds as tightly as a call, so anything looser is parenthesized.
+fn to_f(a: Rendered) -> Rendered {
+    Rendered::atom(format!("{}.to_f", a.at(Prec::Atom)))
 }
 
 /// The Ruby rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Ruby `Float` comparison matches wasm, NaN included; ADR-2). `bin` wraps the result back into an i32, `cond` takes it as it stands.
@@ -1757,6 +1960,80 @@ mod units {
             problems.is_empty(),
             "unit dependency drift:\n{}",
             problems.join("\n")
+        );
+    }
+}
+
+/// Shape checks for precedence-aware parenthesization (ADR-65). The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish — that the parens a shape does not need are gone, and that the ones it does need are still there.
+#[cfg(test)]
+mod parens {
+    use super::*;
+
+    fn body(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// One function of two i32 params whose body is `expr`, stored into a local so folding cannot drop it.
+    fn i32_expr(expr: &str) -> String {
+        body(&format!(
+            "(module (func (export \"f\") (param i32 i32) (result i32) (local.set 0 {expr}) (local.get 0)))"
+        ))
+    }
+
+    fn assert_line(src: &str, want: &str) {
+        assert!(
+            src.lines().any(|l| l.trim() == want),
+            "expected line `{want}` in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn tighter_operands_lose_their_parens() {
+        // `+` binds tighter than `&`, `>>` tighter than `&`: the wrap needs no group.
+        assert_line(
+            &i32_expr("(i32.add (local.get 0) (local.get 1))"),
+            "l0 = l0 + l1 & 0xffffffff",
+        );
+        assert_line(
+            &i32_expr("(i32.shr_u (local.get 0) (local.get 1))"),
+            "l0 = l0 >> (l1 & 31)",
+        );
+        // A materialized comparison is a bare ternary in a statement position.
+        assert_line(
+            &i32_expr("(i32.lt_u (local.get 0) (local.get 1))"),
+            "l0 = l0 < l1 ? 1 : 0",
+        );
+    }
+
+    #[test]
+    fn looser_operands_keep_their_parens() {
+        // `|` and `^` share a level, so the right operand would reassociate.
+        assert_line(
+            &i32_expr("(i32.or (local.get 0) (i32.xor (local.get 0) (local.get 1)))"),
+            "l0 = l0 | (l0 ^ l1)",
+        );
+        // A shift count is a `&`, looser than the shift itself.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (i32.and (local.get 0) (local.get 1)))"),
+            "l0 = l0 << (l0 & l1 & 31) & 0xffffffff",
+        );
+        // Ruby's equality family is non-associative: `a == b == 0` is a syntax error.
+        assert_line(
+            &i32_expr("(i32.eqz (i32.and (local.get 0) (local.get 1)))"),
+            "l0 = l0 & l1 == 0 ? 1 : 0",
+        );
+        // A comparison is negated whole, and `!` binds tighter than it (ADR-2: flipping the operator would be wrong for NaN).
+        assert!(
+            body(
+                "(module (func (export \"f\") (param f64 f64) (result i32) (local i32) \
+                 (if (i32.eqz (f64.lt (local.get 0) (local.get 1))) (then (local.set 2 (i32.const 1)))) (local.get 2)))"
+            )
+            .contains("if !(l0 < l1)"),
+            "the negated comparison lost its group"
         );
     }
 }

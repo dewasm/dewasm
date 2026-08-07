@@ -7,7 +7,7 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-08-06T03:52:05Z.
+Measured 2026-08-06T04:31:17Z.
 
 | | |
 | --- | --- |
@@ -57,7 +57,7 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 | Target | Size |
 | --- | --- |
 | wasm binary | 772 kB |
-| `ruby` | 2.16 MB |
+| `ruby` | 2.11 MB |
 | `python` | 2.03 MB |
 | `perl` | 2.55 MB |
 | `bash` | 7.73 MB |
@@ -68,13 +68,13 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-shell-dark.svg">
-  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 8.10 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
+  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 7.94 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.31 MB |
-| `ruby` | 8.10 MB |
+| `ruby` | 7.94 MB |
 | `python` | 8.40 MB |
 | `perl` | 12.9 MB |
 | `bash` | 37.6 MB |
@@ -91,7 +91,7 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.54 MB |
-| `ruby` | 7.23 MB |
+| `ruby` | 7.09 MB |
 | `python` | 7.07 MB |
 | `perl` | 10.5 MB |
 | `bash` | 27.0 MB |
@@ -102,13 +102,13 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-ruby-dark.svg">
-  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 73.1 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number." src="figs/app-ruby.svg">
+  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 72.0 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number." src="figs/app-ruby.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 35.0 MB |
-| `ruby` | 73.1 MB |
+| `ruby` | 72.0 MB |
 | `python` | 82.2 MB |
 | `perl` | 135 MB |
 | `bash` | 311 MB |
