@@ -33,6 +33,8 @@ pub fn bundler() -> &'static RuntimeBundler {
         RuntimeBundler::new(
             "//",
             "\t",
+            // Emit unit bodies exactly as written (they are space-indented, unlike the tabbed base indent).
+            0,
             vec![
                 RuntimeScope {
                     prefix: "rt",

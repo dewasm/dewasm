@@ -290,10 +290,10 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             if line.is_empty() {
                 script.push('\n');
             } else {
-                let _ = writeln!(script, "    {line}");
+                let _ = writeln!(script, "\t{line}");
             }
         }
-        script.push_str("    print(\"RESULT pass=%d fail=%d\" % (_pass, _fail))\n");
+        script.push_str("\tprint(\"RESULT pass=%d fail=%d\" % (_pass, _fail))\n");
         script.push_str(POSTAMBLE);
         Ok(script)
     }

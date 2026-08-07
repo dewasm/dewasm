@@ -135,6 +135,78 @@ pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> b
     }
 }
 
+/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none — equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included (ADR-2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CompareOperands {
+    Float,
+    IntEq,
+    Signed32,
+    Signed64,
+    Unsigned32,
+    Unsigned64,
+}
+
+/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them — how to spell a view their representation does not already provide — instead of each restating which of the 74 `BinOp`s are comparisons.
+pub fn comparison(op: ir::BinOp) -> Option<(&'static str, CompareOperands)> {
+    use ir::BinOp::*;
+    use CompareOperands::*;
+    Some(match op {
+        I32Eq | I64Eq => ("==", IntEq),
+        I32Ne | I64Ne => ("!=", IntEq),
+        F32Eq | F64Eq => ("==", Float),
+        F32Ne | F64Ne => ("!=", Float),
+        F32Lt | F64Lt => ("<", Float),
+        F32Gt | F64Gt => (">", Float),
+        F32Le | F64Le => ("<=", Float),
+        F32Ge | F64Ge => (">=", Float),
+        I32LtS => ("<", Signed32),
+        I32GtS => (">", Signed32),
+        I32LeS => ("<=", Signed32),
+        I32GeS => (">=", Signed32),
+        I64LtS => ("<", Signed64),
+        I64GtS => (">", Signed64),
+        I64LeS => ("<=", Signed64),
+        I64GeS => (">=", Signed64),
+        I32LtU => ("<", Unsigned32),
+        I32GtU => (">", Unsigned32),
+        I32LeU => ("<=", Unsigned32),
+        I32GeU => (">=", Unsigned32),
+        I64LtU => ("<", Unsigned64),
+        I64GtU => (">", Unsigned64),
+        I64LeU => ("<=", Unsigned64),
+        I64GeU => (">=", Unsigned64),
+        _ => return None,
+    })
+}
+
+/// Whether `e` is a comparison or an `eqz` — the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
+pub fn is_boolean(e: &ir::Expr) -> bool {
+    match e {
+        ir::Expr::Un(ir::UnOp::I32Eqz | ir::UnOp::I64Eqz, _) => true,
+        ir::Expr::Bin(op, ..) => comparison(*op).is_some(),
+        _ => false,
+    }
+}
+
+/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals` — the grouping behind initializing a run in one statement. What a run is worth sharing differs per language (a rendered default value, a type name), so the caller supplies `key` and renders each range itself.
+pub fn local_runs<K: PartialEq>(
+    locals: &[ir::ValType],
+    mut key: impl FnMut(ir::ValType) -> K,
+) -> Vec<std::ops::Range<usize>> {
+    let mut runs = Vec::new();
+    let mut start = 0;
+    while start < locals.len() {
+        let k = key(locals[start]);
+        let mut end = start + 1;
+        while end < locals.len() && key(locals[end]) == k {
+            end += 1;
+        }
+        runs.push(start..end);
+        start = end;
+    }
+    runs
+}
+
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time, violating ADR-0).
     stmts.iter().any(|stmt| match stmt {
@@ -236,12 +308,15 @@ pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
     units: BTreeMap<String, RuntimeUnit>,
     indent_str: &'static str,
+    unit_indent: usize,
 }
 
 impl RuntimeBundler {
+    /// `indent_str` is one indent level of the emitted bundle; `unit_indent` is the width of one indent level *in the unit sources*, so that their own indentation can be re-emitted in `indent_str` (0 leaves body lines exactly as written).
     pub fn new(
         comment_prefix: &str,
         indent_str: &'static str,
+        unit_indent: usize,
         scopes: Vec<RuntimeScope>,
         sources: &[(&str, &str)],
     ) -> Result<Self> {
@@ -285,6 +360,7 @@ impl RuntimeBundler {
             scopes,
             units,
             indent_str,
+            unit_indent,
         };
         for unit in bundler.units.values() {
             for dep in &unit.requires {
@@ -385,15 +461,27 @@ impl RuntimeBundler {
         self.bundle(&seeds, base_indent)
     }
 
+    /// Emit one line at `indent` levels. A unit source is written space-indented at `unit_indent` per level; each such leading run becomes one `indent_str` here, so the bundle carries the caller's indentation style throughout instead of mixing it with the sources'. Spaces beyond the last whole run (an indentation that is not a multiple of `unit_indent`, e.g. an aligned continuation) are kept as spaces.
     fn push_line(&self, out: &mut String, indent: usize, line: &str) {
         if line.trim().is_empty() {
             out.push('\n');
             return;
         }
-        for _ in 0..indent {
+        let (levels, spaces, rest) = match self.unit_indent {
+            0 => (0, 0, line),
+            width => {
+                let rest = line.trim_start_matches(' ');
+                let leading = line.len() - rest.len();
+                (leading / width, leading % width, rest)
+            }
+        };
+        for _ in 0..indent + levels {
             out.push_str(self.indent_str);
         }
-        out.push_str(line);
+        for _ in 0..spaces {
+            out.push(' ');
+        }
+        out.push_str(rest);
         out.push('\n');
     }
 }
