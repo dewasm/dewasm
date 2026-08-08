@@ -694,6 +694,7 @@ dewasm_test_helper::wasi_root_containment_e2e!(Bash, BASH_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Bash);
 // The standalone entrypoint already raises the process stack rlimit before running any guest code; that covers 5000 guest frames too.
 dewasm_test_helper::deep_recursion_e2e!(Bash);
+dewasm_test_helper::folded_temp_reuse_e2e!(Bash);
 
 dewasm_test_helper::cowsay_args_e2e!(Bash);
 dewasm_test_helper::cowsay_stdin_e2e!(Bash);
