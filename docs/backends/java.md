@@ -18,7 +18,7 @@ Control flow uses a per-function branch register `_br`.
 
 ## Requirements
 
-`java` and `javac` on `PATH` (or `$DEWASM_JAVA`/`$DEWASM_JAVAC`), **JDK 11 or newer** (standard APIs only).
+`java` and `javac` on `PATH`, **JDK 11 or newer** (standard APIs only).
 
 ## Running it
 

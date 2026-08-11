@@ -17,12 +17,13 @@ A document a user would never open, but an agent must consult before changing so
 | [AGENTS.md](../AGENTS.md) | The agent contract: the rules that bind every change | Agents, contributors | By hand |
 | [agents/decisions/](decisions/README.md) | Design decisions with rationale and rejected alternatives, numbered and cited as "decision N" | Agents, future maintainers | By hand (procedure and quality bar in its README) |
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
+| [agents/test-authoring.md](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and contributors writing tests | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
 | [docs/standalone-interface.md](../docs/standalone-interface.md) | The standalone runtime interface (argv, `--dir`, env, exit/trap), uniform across backends | Users running standalone output | By hand |
 | [docs/support.md](../docs/support.md) | The feature / WASI matrix per backend | Everyone | **Generated: never hand-edit** |
 | [docs/apps-audit.md](../docs/apps-audit.md) | The real-world app test record and feature verdicts | Contributors, evaluators | By hand |
-| [docs/testing.md](../docs/testing.md) | What `cargo test` needs and why it fails loud | Contributors | By hand |
+| [docs/testing.md](../docs/testing.md) | How to run the test suites: what each one needs installed, and why it fails loud | Contributors | By hand |
 | [docs/related-work.md](../docs/related-work.md) | Comparison with prior art | Evaluators | By hand |
 | [docs/benchmarks/](../docs/benchmarks/README.md) | How to run the benchmark suite and read its numbers | Contributors | By hand |
 | [docs/benchmarks/results.md](../docs/benchmarks/results.md) | Measured performance, with figures under `figs/` | Evaluators | **Generated: never hand-edit** |
@@ -49,7 +50,8 @@ A document a user would never open, but an agent must consult before changing so
 ## Where new content goes
 
 - A user-facing capability or a new target → a bullet in the README's capability list, a page under `docs/backends/`, and (if it needs a walkthrough) a section in getting-started.
-- A contributor-facing setup requirement → `docs/testing.md`.
+- A contributor-facing setup requirement, or how to run a suite → `docs/testing.md`.
+- A test-structure or test-authoring convention → `agents/test-authoring.md`.
 - A design decision → a new record (see [agents/decisions/README.md](decisions/README.md)).
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
 - A new real-world app target → an audited row in `docs/apps-audit.md`.

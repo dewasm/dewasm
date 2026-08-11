@@ -31,7 +31,9 @@ Everything else the test suite needs (interpreters, submodules, the apps cache) 
 
 After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`.
 The slower test categories are opt-in cargo features: `--features slow_test` (CI's main run) adds each backend's slow app cases and the full spec-testsuite run; `--features ultra_slow_test` adds the cases CI cannot afford, run in local pre-release verification.
+Do not use `-- --include-ignored`: the set it selects is not a designed configuration in this project, so what it runs can change without notice; opt in through the features instead.
 Which case sits in which category, and why, is pinned at its callsite in that backend's `e2e.rs`; the mechanism is in docs/testing.md.
+How the suites are laid out and what a new case must look like — the `e2e.rs` contract, the speed tokens, the `EXPECTED_FAILURES` policy — is in [`agents/test-authoring.md`](agents/test-authoring.md).
 When support declarations or WASI units change, regenerate `docs/support.md` with `cargo xtask update-support-docs`.
 
 ## Decisions

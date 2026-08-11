@@ -13,7 +13,7 @@ In **standalone** mode the class is always `Program` and `--module-name` is reje
 
 ## Requirements
 
-`python3` **3.9 or newer** on `PATH` (or `$DEWASM_PYTHON`).
+`python3` **3.9 or newer** on `PATH`.
 No third-party packages: the output uses only the standard library.
 
 **Avoid CPython 3.12.0 through 3.12.3.**
