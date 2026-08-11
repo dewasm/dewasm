@@ -29,7 +29,7 @@ There are some features for testing:
 | --- | --- |
 | `slow_test` | CI's main run: the slow app cases and the full spec testsuite. |
 | `ultra_slow_test` | Implies `slow_test`; the cases CI cannot afford by wall time or memory, run in local pre-release verification. |
-| `wasmtime_test` | The snapshot freshness checks, which need a live `wasmtime`; see below. |
+| `wasmtime_test` | The snapshot freshness checks, which need the `xtask` binary built; see below. |
 
 ## Snapshots
 
@@ -40,12 +40,14 @@ Checked-in snapshots are code-derived, never hand-written; a stale one fails a c
 | `docs/support.md` | `cargo xtask update-support-docs` |
 | every execution snapshot (`examples/apps/snapshots/*`) | `cargo xtask update-snapshots [filter]` |
 
-A snapshot claims "this is what `wasmtime run` produces", so it can go stale.
-The opt-in freshness check runs the cached binaries under a live `wasmtime` and compares against the checked-in files:
+A snapshot claims "this is what wasmtime produces", so it can go stale.
+The opt-in freshness check reruns the cached binaries and compares against the checked-in files.
+Both it and the capture embed the `wasmtime` crate pinned by `Cargo.lock` — no `wasmtime` install is involved — and reach it through the `xtask` binary, which the suite never builds for you:
 
 ```console
+$ cargo build -p xtask
 $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 ```
 
-`cargo xtask update-snapshots [filter]` captures the execution snapshots the same way, so it also needs `wasmtime` on `PATH` and the apps cache.
+`cargo xtask update-snapshots [filter]` captures the execution snapshots the same way, so it needs only the apps cache.
 On a clean tree it must reproduce every file byte-for-byte: a resulting `git status` diff is a capture bug or genuine nondeterminism, not a routine update.

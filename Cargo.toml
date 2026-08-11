@@ -34,3 +34,20 @@ serde_json = "1"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# The crates that compile a guest module inside the xtask snapshot runner.
+# Unoptimized they take ~60 s over a 34 MB app rather than ~7 s, which the snapshot capture and the freshness suite pay on every heavy case; the runner itself stays on the plain dev profile the tests resolve it in.
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+
+[profile.dev.package.cranelift-frontend]
+opt-level = 3
+
+[profile.dev.package.regalloc2]
+opt-level = 3
+
+[profile.dev.package.wasmtime-environ]
+opt-level = 3
+
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 3

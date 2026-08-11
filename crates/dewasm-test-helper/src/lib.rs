@@ -70,7 +70,7 @@ pub use wasi::{
     WasiCase, WasiCheck, WasiKind, WASI_CASES,
 };
 pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
-pub use wasmtime_backend::Wasmtime;
+pub use wasmtime_backend::{wasi_runner_argv, wasi_runner_bin, Wasmtime};
 
 /// The `harness = false` `main` of a backend's spec integration test: builds one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and runs them with cargo's own test arguments (name filter, `--ignored`/`--include-ignored`, thread count). `$lang` must be a promotable-to-`'static` value — the backend `Spec` structs are unit structs, so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
 #[macro_export]
