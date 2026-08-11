@@ -17,13 +17,12 @@
 #
 # nes_mem (the module's linear memory) is a global associative array,
 # declared by nes_init; this script never uses `set -u` because sparse reads
-# of it default to 0, matching the rest of the bash backend
-# (docs/adr/51-bash-assoc-memory.md) -- and never leans on `set -e` around a
-# nes_* call either, because a generated function routinely computes an
-# intermediate value of exactly 0, which bash treats as a "failed" command.
-# The backend's status-cascade convention
-# (docs/adr/11-bash-backend-lowering.md) has every generated function return
-# its real status explicitly, so this script checks *that* after each call.
+# of it default to 0, matching the rest of the bash backend -- and never
+# leans on `set -e` around a nes_* call either, because a generated function
+# routinely computes an intermediate value of exactly 0, which bash treats as
+# a "failed" command. The backend's status-cascade convention has every
+# generated function return its real status explicitly, so this script checks
+# *that* after each call.
 set -o pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then

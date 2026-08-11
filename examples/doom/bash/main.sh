@@ -17,12 +17,11 @@
 # doom_mem (the module's linear memory) is a global associative array,
 # declared by doom_init; this script never uses `set -u` because sparse
 # reads of it are meant to default to 0, matching the rest of the bash
-# backend (see docs/adr/51-bash-assoc-memory.md) -- and never relies on
-# `set -e` around any doom_* call either, because a generated function's
-# internal arithmetic routinely computes an intermediate value of exactly
-# 0, which bash treats as a "failed" command; the backend's own
-# status-cascade convention (docs/adr/11-bash-backend-lowering.md) already
-# has every generated function return its real status explicitly via
+# backend -- and never relies on `set -e` around any doom_* call either,
+# because a generated function's internal arithmetic routinely computes
+# an intermediate value of exactly 0, which bash treats as a "failed"
+# command; the backend's own status-cascade convention already has every
+# generated function return its real status explicitly via
 # `return 0`/`return $?`, so this script checks *that* after every call
 # instead of leaning on errexit.
 set -o pipefail
