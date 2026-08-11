@@ -9,7 +9,7 @@ The repository's documents have two disjoint readers.
 A user or an evaluator opens the README, the tutorial, the per-backend reference, the support matrix, the measurement records.
 An agent about to change something reads `AGENTS.md`, the decision records, and the document taxonomy — material a user would never open, and which a user browsing `docs/` had to walk past.
 
-Both lived under `docs/`, so the layout said nothing about who a file was for, and the rule that separates them (only agent-facing documents cite a decision) had to be carried in prose against a directory structure that contradicted it.
+Both lived under `docs/`, so the layout said nothing about who a file was for, and the rule that separates them (nothing outside the agent-facing set references the agent-facing material) had to be carried in prose against a directory structure that contradicted it.
 
 The records were named "Architecture Decision Records".
 "Architecture" described almost none of them — demo shapes, test harnesses, benchmark design — and the acronym "ADR" only resolves for a reader who already knows the expansion, which is exactly what the vocabulary rule forbids.
@@ -25,8 +25,8 @@ Split the top level by audience.
 - `agents/decisions/` holds the decision records, `agents/docs-policy.md` the taxonomy for both directories.
 - The records are "decisions": `agents/decisions/<N>-<slug>.md`, cited as "decision N".
   The term "ADR" is removed everywhere, identifiers included.
-- The citation rule is stated as a directory rule: only files under `agents/` and `AGENTS.md` cite a decision.
-  Everything else states its constraint in place, and the record links outward.
+- The reference rule is stated as a directory rule: nothing outside `agents/` references anything under it (`AGENTS.md`, `CLAUDE.md`, and `.claude/` excepted).
+  Everything else states its constraint in place, and an `agents/` document links outward.
 - A skill under `.claude/skills/` is a Claude Code router — a description that gets auto-invoked, plus a pointer.
   The test: if deleting `.claude/` would lose information rather than convenience, the substance belongs under `agents/`.
   A project-local skill is named with a `dewasm-` prefix, because the skill namespace is shared with the user's global skills.
@@ -55,7 +55,7 @@ Split the top level by audience.
 
 ## Consequences
 
-- Positive: the audience question is answered by the path, so a new document has one obvious home and the citation rule reads off the tree.
+- Positive: the audience question is answered by the path, so a new document has one obvious home and the reference rule reads off the tree.
 - Positive: the decision records are reachable by any agent from `AGENTS.md` alone; `.claude/` holds routing only, and can be deleted without loss of substance.
 - Negative: links to `docs/adr/...` from outside the repository — issues, pull requests, external references — break, since a moved path is not redirected.
   Paid once, on the smallest tree this project will have again.

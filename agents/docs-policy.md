@@ -36,8 +36,9 @@ A document a user would never open, but an agent must consult before changing so
   Everywhere else, **link** to it rather than copying the matrix.
 - **Decisions go in a decision record, not in prose docs.**
   Anything with real alternatives is recorded under `agents/decisions/`.
-- **Only files under `agents/` and `AGENTS.md` cite a decision record.**
-  Code and user-facing docs state their constraint in place; the record links outward to the code and docs it governs, never the reverse.
+- **Nothing outside `agents/` references anything under it.**
+  `AGENTS.md`, `CLAUDE.md`, and `.claude/` are the exceptions.
+  Code and user-facing docs state their constraint in place; an `agents/` document links outward to the code and docs it concerns, never the reverse.
 - **A skill under `.claude/skills/` is a router, not a store.**
   Claude Code auto-invokes a skill by its description, which is what a skill is for; the substance it routes to belongs under `agents/`.
   The test: if deleting `.claude/` would lose information rather than convenience, the file is holding content it should be pointing at.
