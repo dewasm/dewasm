@@ -51,6 +51,7 @@ Applies to all prose: docs, comments, PR text.
 - Do not wrap lines at a fixed column; start each sentence on its own line. (Commit message bodies keep their ~72-column convention.)
 - Do not coin metaphor-based vocabulary: write "CI passes", not "CI is green"; "snapshot test", not "golden test". A term must be understandable without knowing the image behind it.
 - Use one term per concept; do not vary wording for style.
+- Do not use dashes (`—`, `–`) as punctuation; use a colon, a comma, parentheses, or a new sentence. Hyphens in words and ranges stay, and so does `—` as a table placeholder.
 - One paragraph explains one thing. A side note worth keeping gets its own paragraph; usually it is worth deleting instead.
 - Prefer a self-contained example, a table, or a figure over prose describing one.
 
