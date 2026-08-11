@@ -14,7 +14,7 @@ In **standalone** mode the package is always `Program` and `--module-name` is re
 
 ## Requirements
 
-`perl` **5.26 or newer** on `PATH` (or `$DEWASM_PERL`), built with 64-bit integers and IEEE doubles (`ivsize=8`, `nvsize=8`, which any stock perl on a 64-bit OS has).
+`perl` **5.26 or newer** on `PATH`, built with 64-bit integers and IEEE doubles (`ivsize=8`, `nvsize=8`, which any stock perl on a 64-bit OS has).
 No CPAN modules: the output uses only core modules (`POSIX`, `Config`, `Cwd`, `Errno`, `Fcntl`, `Time::HiRes`, `File::Basename`, `IO::Handle`).
 The generated prelude verifies the integer/double sizes at load time and dies loudly otherwise.
 

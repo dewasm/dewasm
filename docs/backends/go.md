@@ -25,7 +25,7 @@ The package is also what isolates one artifact from another: each carries its ow
 
 ## Requirements
 
-`go` on `PATH` (or `$DEWASM_GO`), **1.18 or newer** (the runtime uses generics).
+`go` on `PATH`, **1.18 or newer** (the runtime uses generics).
 Standalone output is a normal Go program: `go run` or `go build` it.
 Library output is a package to import (see below).
 
