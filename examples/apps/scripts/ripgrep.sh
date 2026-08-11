@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # ripgrep: built from the pinned source release with cargo for wasm32-wasip1.
 # Default features (which already exclude pcre2); no tweaks needed: ripgrep

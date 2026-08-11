@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # libpcap: BPF filter compiler, built from the pinned upstream source release with zig as a reactor library.
 # Only the platform-independent filter-compilation TUs are built (no capture backend); src/pcap_config.h stands in for ./configure's config.h (see its header comment), and our own src/pcap_binding.c exports compile_filter(), which turns a textual filter like "tcp port 80" into a serialized BPF program in guest memory. libpcap

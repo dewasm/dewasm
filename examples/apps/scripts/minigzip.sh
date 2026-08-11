@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # minigzip: zlib's stdio (de)compression demo, built from the pinned zlib source release with zig.
 # Integer-only and tiny, with binary stdin/stdout, the byte-exact-stdio stress that runs under BOTH backends.

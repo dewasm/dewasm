@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # cowsay: the classic args+stdout demo, from the Wasmer registry.
 

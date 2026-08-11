@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # nes: an import-free NES emulator built from the pinned agnes source with zig, plus a public-domain demo ROM.
 # Shared between the NES example frontends and the deterministic framebuffer-snapshot test, mirroring the

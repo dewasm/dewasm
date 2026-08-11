@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # dwarf-fixture: a first-party C fixture built WITH DWARF (`-g`) so the
 # --dwarf-line source back-mapping test has a module carrying `.debug_line`.

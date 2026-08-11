@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # tree-sitter: the incremental-parsing runtime plus the tree-sitter-json grammar, built from the pinned upstream releases with zig as a reactor library.
 # The runtime is a single-TU amalgamation (lib/src/lib.c);

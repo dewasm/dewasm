@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # CPython 3.14.6: an unofficial wasm32-wasip1 build
 # (brettcannon/cpython-wasi-build: the PSF distributes no WASI binaries; this is a CPython core dev's build).

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=common.sh
 
 # ExifTool on zeroperl: 6over3/exiftool's build pipeline flattens ExifTool
 # 13.x's CLI driver into a single ~100 KB script (perltidy-minified, the two
