@@ -1,7 +1,7 @@
 // requires: rt/trap
 // call_indirect dispatch: bounds-check, null-check, structural-type-check, and
 // return the Fn to invoke. The type string is a structural key so a table
-// shared across modules stays consistent (ADR-30).
+// shared across modules stays consistent.
 Rt.Fn call(int index, String ty) {
     if (index < 0 || index >= slots.length) {
         Rt.trap("undefined element");

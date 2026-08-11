@@ -1,6 +1,6 @@
-//! Python side of the shared spec harness (ADR-3, ADR-27, ADR-28): converts modules with the Python backend, phrases assertions as Python (`check`/ `check_trap`/`check_exhaust`/`check_unlinkable` helpers, bit-exact float comparison via `Rt.f32_bits`/`Rt.f64_bits`), and runs the script with the `python3` on PATH. The generic harness lives in `dewasm-test-helper`.
+//! Python side of the shared spec harness: converts modules with the Python backend, phrases assertions as Python (`check`/ `check_trap`/`check_exhaust`/`check_unlinkable` helpers, bit-exact float comparison via `Rt.f32_bits`/`Rt.f64_bits`), and runs the script with the `python3` on PATH. The generic harness lives in `dewasm-test-helper`.
 //!
-//! Two Python facts shape the phrasing (ADR-28):
+//! Two Python facts shape the phrasing:
 //! - Assertions are passed as zero-arg lambdas because Python has no statement blocks; the value under test is bound inside the lambda with an inner `(lambda __r: (<cmp>, __r))(<call>)`.
 //! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash — the guest-side analogue of the harness's `convert_on_big_stack`. `check_exhaust` lowers the limit around itself, because there the limit is not headroom but the entire cost of the check; see the comment on `_EXHAUST_RECURSION_LIMIT`.
 
@@ -9,101 +9,19 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use dewasm_backend::{Backend, RuntimeLinkage};
-use dewasm_backend_python::PythonBackend;
+use dewasm_backend_python::{py_string, PythonBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
+use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list (ADR-16): the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list: the only open gap is `import-limits` — `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
     ("load1", 5, "linking"),
-];
-
-/// Files `cargo test` runs by default. Python executes wasm several times slower than Ruby — the full 257-file run takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file — so, like Bash (ADR-3 pre-accepts this), the test runs a curated list covering every semantic area (integers, floats, control flow, memory/table, globals, linking, bulk ops) plus the whole list; `cargo test -- --include-ignored` runs everything.
-const CURATED_FILES: &[&str] = &[
-    "address",
-    "align",
-    "block",
-    "br",
-    "br_if",
-    "br_table",
-    "bulk",
-    "call",
-    "call_indirect",
-    "comments",
-    "const",
-    "conversions",
-    "custom",
-    "data",
-    "elem",
-    "endianness",
-    "f32",
-    "f32_bitwise",
-    "f32_cmp",
-    "f64",
-    "f64_bitwise",
-    "f64_cmp",
-    "fac",
-    "float_exprs",
-    "float_literals",
-    "float_memory",
-    "float_misc",
-    "forward",
-    "func",
-    "func_ptrs",
-    "global",
-    "i32",
-    "i64",
-    "if",
-    "imports",
-    "imports2",
-    "int_exprs",
-    "int_literals",
-    "labels",
-    "left-to-right",
-    "linking",
-    "linking0",
-    "load",
-    "load1",
-    "local_get",
-    "local_set",
-    "local_tee",
-    "loop",
-    "memory",
-    "memory_copy",
-    "memory_fill",
-    "memory_grow",
-    "memory_init",
-    "memory_redundancy",
-    "memory_size",
-    "memory_trap",
-    "names",
-    "nop",
-    "return",
-    "select",
-    "stack",
-    "start",
-    "store",
-    "switch",
-    "table",
-    "table_copy",
-    "table_init",
-    "token",
-    "traps",
-    "type",
-    "unreachable",
-    "unreached-invalid",
-    "unreached-valid",
-    "unwind",
-    "utf8-custom-section-id",
-    "utf8-import-field",
-    "utf8-import-module",
-    "utf8-invalid-encoding",
 ];
 
 pub struct PythonSpec;
@@ -128,8 +46,9 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         EXPECTED_FAILURES
     }
 
+    /// Python executes wasm several times slower than Ruby — the full 257-file run takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file — so, like Bash, a plain `cargo test` runs only the shared curated list.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(CURATED_FILES)
+        Some(dewasm_test_helper::CURATED_SPEC_FILES)
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -161,7 +80,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             &RuntimeLinkage::Alias("Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global (ADR-28). The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name — drop it and rely on the module global.
+        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global. The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name — drop it and rely on the module global.
         let source = source
             .strip_prefix("Rt = Rt\n\n\n")
             .unwrap_or(&source)
@@ -208,7 +127,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     }
 
     fn invoke(&self, var: &str, name: &str, args: &[WastArg<'_>]) -> Result<String, String> {
-        let mut parts = vec![py_str(name)];
+        let mut parts = vec![py_string(name)];
         for arg in args {
             parts.push(arg_py(arg)?);
         }
@@ -216,7 +135,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     }
 
     fn global_get(&self, var: &str, global: &str) -> String {
-        format!("{var}.global_get({})", py_str(global))
+        format!("{var}.global_get({})", py_string(global))
     }
 
     fn emit_check(
@@ -240,7 +159,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         let _ = writeln!(
             script,
             "check({}, lambda: (lambda __r: (({cmp}), __r))({call}))",
-            py_str(desc)
+            py_string(desc)
         );
         Ok(())
     }
@@ -249,25 +168,29 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         let _ = writeln!(
             script,
             "check_trap({}, {}, lambda: {call})",
-            py_str(desc),
-            py_str(message)
+            py_string(desc),
+            py_string(message)
         );
     }
 
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str) {
-        let _ = writeln!(script, "check_exhaust({}, lambda: {call})", py_str(desc));
+        let _ = writeln!(script, "check_exhaust({}, lambda: {call})", py_string(desc));
     }
 
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
         let _ = writeln!(
             script,
             "check({}, lambda: (({call}), (True, None))[1])",
-            py_str(desc)
+            py_string(desc)
         );
     }
 
     fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
-        let _ = writeln!(script, "check_unlinkable({}, lambda: {call})", py_str(desc));
+        let _ = writeln!(
+            script,
+            "check_unlinkable({}, lambda: {call})",
+            py_string(desc)
+        );
     }
 
     fn assemble(
@@ -299,65 +222,17 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     }
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an ADR-7 import provider (`wasm_import`).
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an import provider (`wasm_import`).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "_spectest".to_string();
     }
     let entries = registered
         .iter()
-        .map(|(name, var)| format!("{}: {var}", py_str(name)))
+        .map(|(name, var)| format!("{}: {var}", py_string(name)))
         .collect::<Vec<_>>()
         .join(", ");
     format!("{{**_spectest, {entries}}}")
-}
-
-/// Python double-quoted string literal.
-fn py_str(s: &str) -> String {
-    let mut out = String::from("\"");
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || (c as u32) == 0x7f => {
-                let _ = write!(out, "\\x{:02x}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// Attribution for a null/ref heap type the harness cannot express as a Python value; the reference-types hierarchies (and their bottoms, also just `None`) are expressible.
-fn heap_type_tag(hty: &HeapType<'_>) -> String {
-    match hty {
-        HeapType::Abstract {
-            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
-            ..
-        } => "exception-handling".to_string(),
-        HeapType::Abstract { .. } => "gc".to_string(),
-        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
-    }
-}
-
-fn nullable_heap_type(hty: &HeapType<'_>) -> bool {
-    matches!(
-        hty,
-        HeapType::Abstract {
-            ty: AbstractHeapType::Func
-                | AbstractHeapType::Extern
-                | AbstractHeapType::Exn
-                | AbstractHeapType::NoFunc
-                | AbstractHeapType::NoExtern
-                | AbstractHeapType::NoExn
-                | AbstractHeapType::None,
-            ..
-        }
-    )
 }
 
 fn arg_py(arg: &WastArg<'_>) -> Result<String, String> {
@@ -368,13 +243,13 @@ fn arg_py(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
         WastArg::Core(WastArgCore::RefNull(hty)) => {
-            if nullable_heap_type(hty) {
+            if dewasm_test_helper::nullable_heap_type(hty) {
                 Ok("None".to_string())
             } else {
-                Err(heap_type_tag(hty))
+                Err(dewasm_test_helper::heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself (ADR-17: externref = raw host value).
+        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself.
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -411,14 +286,16 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
         WastRet::Core(WastRetCore::RefNull(hty)) => match hty {
             None => Ok(format!("{value} is None")),
-            Some(hty) if nullable_heap_type(hty) => Ok(format!("{value} is None")),
-            Some(hty) => Err(heap_type_tag(hty)),
+            Some(hty) if dewasm_test_helper::nullable_heap_type(hty) => {
+                Ok(format!("{value} is None"))
+            }
+            Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
         },
         WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
         // `(ref.extern)`: any non-null externref.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("{value} is not None")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref — in ADR-17's representation, a `[type_string, callable]` pair.
+        // `(ref.func)`: any non-null funcref — the `[type_string, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "(isinstance({value}, list) and isinstance({value}[0], str))"
         )),
@@ -478,16 +355,10 @@ def check_trap(desc, msg, thunk):
 
 
 # Exhaustion is detected by descending until the recursion limit trips, so the
-# limit is a direct multiplier on how long every assert_exhaustion case takes.
-# No such case in the testsuite has a reachable base case: call/call_indirect's
-# `runaway`/`mutual-runaway` and skip-stack-guard-page's
-# `function-with-many-locals` recurse unconditionally, and fac's
-# `fac-rec 0x40000000` would need 2^30 frames — so a lower limit changes only how
-# fast the descent ends, never whether it ends. The deepest bounded
-# prefix any of them walks before entering the runaway part is 908 Python frames
-# (`test-guard-page-skip 900`: 901 guest frames plus the harness), so 20000
-# leaves ~20x headroom, and 20x CPython's own default limit of 1000. The global
-# limit set in the postamble stays high for the checks that legitimately recurse.
+# limit multiplies the cost of every assert_exhaustion case. No such case has a
+# reachable base case, so a lower limit only ends the descent sooner. The
+# deepest bounded prefix any of them walks first is 908 Python frames
+# (`test-guard-page-skip 900`), leaving 20000 ~20x headroom.
 _EXHAUST_RECURSION_LIMIT = 20000
 
 
@@ -549,15 +420,12 @@ _spectest = {
 
 const POSTAMBLE: &str = r#"
 
-# The limit is a ceiling for the checks that legitimately recurse, not a budget:
-# with check_exhaust capping itself at _EXHAUST_RECURSION_LIMIT, the deepest
-# descent the whole 257-file run performs is that cap, and no other check comes
-# near it (the run still passes with this global limit lowered to the cap). The
-# thread stack is sized for that descent: CPython <= 3.10 keeps a C frame per
-# Python frame and needs ~1 KiB each (20000 frames measured to fault below 24 MiB
-# and survive above it), 3.11+ moves them off the C stack entirely, so 64 MiB is
-# ~3x the worst-case need. Oversizing is not free — every parallel spec trial
-# reserves this much.
+# A ceiling for the checks that legitimately recurse, not a budget: with
+# check_exhaust capping itself, the deepest descent of the whole run is
+# _EXHAUST_RECURSION_LIMIT. The thread stack is sized for that: CPython <= 3.10
+# keeps a C frame per Python frame at ~1 KiB each (20000 frames measured to
+# fault below 24 MiB and survive above it), so 64 MiB is ~3x the worst case.
+# Oversizing is not free — every parallel spec trial reserves this much.
 sys.setrecursionlimit(1000000)
 try:
     threading.stack_size(64 * 1024 * 1024)

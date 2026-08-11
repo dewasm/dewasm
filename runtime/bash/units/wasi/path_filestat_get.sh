@@ -1,5 +1,5 @@
 # requires: wasi/read_path, wasi/resolve_path, wasi/filetype, wasi/pack_filestat, wasi/file_size
-# WASI path_filestat_get (ADR-34): lookupflags bit 0 = SYMLINK_FOLLOW, passed
+# WASI path_filestat_get: lookupflags bit 0 = SYMLINK_FOLLOW, passed
 # straight through to wasi_resolve_path's <follow> so a not-followed final
 # symlink is stat'd as itself (filetype 7), mirroring
 # runtime/ruby/units/wasi/path_filestat_get.rb's stat/lstat split. A missing
@@ -10,7 +10,7 @@
 # free from `File.stat`/`lstat` raising `ENOENT`. Filetype otherwise comes
 # from the test builtins (wasi_filetype). Size is only meaningful for a
 # regular file: for that case, an open file fd on the *same* resolved host
-# path wins over the on-disk size (last one found, matching D1's own
+# path wins over the on-disk size (last one found, matching the buffer's own
 # last-flush-wins rule for two fds on one file) so a write-then-stat on the
 # same path is coherent before the buffer is flushed; otherwise the on-disk
 # size (wasi_file_size) is used. Every other filetype (directory, symlink,

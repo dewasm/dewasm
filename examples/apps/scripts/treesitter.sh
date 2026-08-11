@@ -3,7 +3,7 @@
 # shellcheck source=common.sh
 
 # tree-sitter: the incremental-parsing runtime plus the tree-sitter-json
-# grammar, built from the pinned upstream releases with zig (ADR-22) as a
+# grammar, built from the pinned upstream releases with zig as a
 # reactor library. The runtime is a single-TU amalgamation (lib/src/lib.c);
 # tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen). Our
 # own src/treesitter_binding.c exports parse_source(), which parses a source
@@ -28,7 +28,7 @@ if is_cached "$ts_stamp" "$ts_want" cache/treesitter.wasm; then
 fi
 
 require_tool treesitter zig "install zig (e.g. brew install zig) to build the tree-sitter app"
-require_tool treesitter wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the tree-sitter app (ADR-39)"
+require_tool treesitter wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the tree-sitter app"
 
 echo "treesitter: fetching $TS_URL"
 new_tmpdir
@@ -45,7 +45,7 @@ zig_cc_wasi -mexec-model=reactor -O2 -Wl,--strip-debug \
   "$tmp/$TS_DIR/lib/src/lib.c" "$tmp/$TSJSON_DIR/src/parser.c" src/treesitter_binding.c \
   -Wl,--export=parse_source -Wl,--export=malloc -Wl,--export=free \
   -o cache/treesitter.wasm
-echo "treesitter: wasm-opt -O2 (ADR-39)"
+echo "treesitter: wasm-opt -O2"
 wasm_opt_inplace cache/treesitter.wasm
 
 write_stamp "$ts_stamp" "$ts_want"

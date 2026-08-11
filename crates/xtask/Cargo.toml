@@ -41,5 +41,5 @@ serde_json.workspace = true
 png = "0.18.1"
 # std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our
 # anyhow flow); cranelift+runtime is the embedder. No wasi/component/gc: the
-# DOOM oracle only instantiates a baseline module and calls exports (ADR-53).
+# DOOM oracle only instantiates a baseline module and calls exports.
 wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "std"] }

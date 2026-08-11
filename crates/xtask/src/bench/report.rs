@@ -1,6 +1,6 @@
 //! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks/results.md`.
 //!
-//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them — unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots (ADR-56). The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
+//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them — unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots. The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
 
 use std::fmt::Write as _;
 
@@ -58,12 +58,15 @@ pub struct Cell {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum Outcome {
-    /// Measured.
     Ok(Measurement),
     /// Deliberately not run (unavailable runner, unbuilt module, declared exclusion). Always reported, never silently dropped.
-    Skipped { reason: String },
+    Skipped {
+        reason: String,
+    },
     /// Attempted and broke. A stdout mismatch against wasmtime lands here too — a wrong answer is a hard failure, not a slow pass.
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -74,7 +77,7 @@ pub struct Measurement {
     #[serde(default)]
     pub runs_per_sample: Option<u64>,
     pub reps: usize,
-    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run — process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time (ADR-57).
+    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run — process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time.
     pub cold_start: Option<Samples>,
     /// `t(N)`: the full run.
     pub total: Samples,
@@ -193,7 +196,6 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
         if let Some(chart) = charts.iter().find(|chart| chart.workload == workload) {
             render_chart(out, chart);
         }
-        // The ratio column compares like with like: normalized throughput for a microbenchmark, whole wall time for an app (which has no iteration parameter).
         let is_app = workload.starts_with("app/");
         let baseline = cells
             .iter()

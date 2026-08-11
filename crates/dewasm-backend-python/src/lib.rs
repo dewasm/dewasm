@@ -1,14 +1,22 @@
 //! Python backend: translates dewasm IR into a Python module (a class plus a bundled lightweight runtime).
 //!
-//! Lowering conventions (ADR-28; numeric conventions ADR-2):
+//! Lowering conventions:
 //! - i32/i64 are unsigned (masked) Python ints; signed views via `Rt.s32/s64` only where an instruction needs them.
 //! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`. Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
-//! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting (ADR-28).
+//! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting.
 //! - A branch crossing many frames pays one test per crossed frame under that register, so a function holding a deep enough crossing has those frames dissolved into a state machine instead (see [`flat`]); shallower branches keep the register, in the same function.
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact — `<Class>Rt` — so two generated artifacts in one namespace keep independent runtimes (ADR-62); `Alias` linkage keeps the shared `Rt`.
+//! The runtime is composed from per-method units and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact — `<Class>Rt` — so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
 
-mod flat;
+/// Flat dispatch, shared with the Ruby backend ([`dewasm_backend::flat`]); only the threshold below is this backend's own.
+mod flat {
+    pub use dewasm_backend::flat::*;
+
+    /// Crossing depth from which a branch is worth a dispatch.
+    ///
+    /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces. Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s). A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition) — which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
+    pub const DEEP_CROSSING: usize = 16;
+}
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -16,14 +24,14 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
-    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
-    RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
+    local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
+    wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, LoadOp, Module, Stmt, StoreOp,
-    Temp, UnOp, ValType,
+    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -79,7 +87,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (ADR-15: a missing or too-old interpreter is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (a missing or too-old interpreter is a loud failure at the call site, not here — this only reports what qualifies).
 pub fn find_python() -> Option<std::path::PathBuf> {
     static PYTHON: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     PYTHON.get_or_init(find_python_uncached).clone()
@@ -137,7 +145,7 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob. Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -163,7 +171,7 @@ fn generate_class_inner(
     match linkage {
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
-                // Namespace the runtime under the generated class (ADR-62): the units reference the runtime only as the module global `Rt.<name>`, never inside a string literal (the units lint enforces that), so one textual replace moves every reference onto the per-artifact name.
+                // Namespace the runtime under the generated class: the units reference the runtime only as the module global `Rt.<name>`, never inside a string literal (the units lint enforces that), so one textual replace moves every reference onto the per-artifact name.
                 out.push_str(&format!("class {rt_name}:\n"));
                 out.push_str(
                     &bundler()
@@ -198,9 +206,9 @@ impl Backend for PythonBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Python floats are IEEE doubles; f32 re-rounding and the NaN paths follow ADR-2 (mirroring Ruby).
+            // Python floats are IEEE doubles; f32 re-rounding and the NaN paths mirror Ruby's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
-            // The wasm-1.0 completion (ADR-16 model): boxed globals, imported globals/memories/tables, multiple tables, and the table half of bulk memory.
+            // Wasm-1.0 completion — imported globals/memories/tables, multiple tables, table bulk ops — mirrors Ruby's model.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -211,7 +219,7 @@ impl Backend for PythonBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its class name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        // Standalone output is a self-contained program: its class name is fixed, not derived. Library output uses the requested name verbatim, after validating it.
         let class_name = if opts.mode == Mode::Standalone {
             STANDALONE_CLASS.to_string()
         } else {
@@ -245,11 +253,11 @@ impl Backend for PythonBackend {
         w.line("import struct");
         w.line("import sys");
         if opts.mode == Mode::Standalone {
-            // For the ADR-28 guest thread in the standalone entrypoint.
+            // For the guest thread in the standalone entrypoint.
             w.line("import threading");
         }
         w.line("import time");
-        // Externalized data blob (ADR-37): read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // Externalized data blob: read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 w.line("");
@@ -264,13 +272,13 @@ impl Backend for PythonBackend {
         w.raw(&class_src);
 
         if opts.mode == Mode::Standalone {
-            let wasi_kwargs = wasi_bundled(module, opts.default_wasi);
+            let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
             w.line("");
             w.line("if __name__ == \"__main__\":");
             w.indent();
             if wasi_kwargs {
-                // Parse the standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                 w.line("_pre = {}");
                 w.line("_argv = sys.argv[1:]");
                 w.line("_i = 0");
@@ -313,7 +321,7 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
-            // ADR-28: run the guest on a big-stack thread with a raised recursion limit. Unlike the spec harness, which knows every recursion it drives is either shallow or deliberately runaway and sizes both down accordingly, a standalone guest may recurse arbitrarily deep for real work, so the pairing here stays generous: 1e6 frames at the ~1 KiB of C stack CPython <= 3.10 spends per frame. The thread carries exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
+            // Run the guest on a big-stack thread with a raised recursion limit. A standalone guest may recurse arbitrarily deep for real work, so the sizing is generous: 1e6 frames at the ~1 KiB of C stack CPython <= 3.10 spends per frame. The thread relays exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");
@@ -364,7 +372,7 @@ impl Backend for PythonBackend {
             name: format!("{}.py", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -381,7 +389,7 @@ impl Backend for PythonBackend {
     }
 }
 
-/// The module-level name the generated class references its runtime by. `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt` (ADR-62); `Alias` output points at a runtime someone else emitted, which is always the shared `Rt`.
+/// The module-level name the generated class references its runtime by. `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt`; `Alias` output points at a runtime someone else emitted, which is always the shared `Rt`.
 fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     match linkage {
         RuntimeLinkage::Embedded => format!("{class_name}Rt"),
@@ -389,10 +397,10 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     }
 }
 
-/// The class a `--mode standalone` program defines (ADR-63): fixed, since nothing outside a self-contained program observes it.
+/// The class a `--mode standalone` program defines: fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a single Python identifier and is used verbatim (ADR-63). Everything the backend emits lives in one module (no package split is ever produced, so a dotted name would have nothing to mean), hence no separator.
+/// The library-mode module name must be a single Python identifier and is used verbatim. Everything the backend emits lives in one module (no package split is ever produced, so a dotted name would have nothing to mean), hence no separator.
 fn check_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -410,7 +418,7 @@ fn check_module_name(name: &str) -> Result<()> {
 }
 
 /// Python double-quoted string literal.
-fn py_string(s: &str) -> String {
+pub fn py_string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
         match c {
@@ -430,36 +438,16 @@ fn py_string(s: &str) -> String {
 }
 
 fn hex_bytes(data: &[u8]) -> String {
-    let mut hex = String::with_capacity(data.len() * 2);
-    for b in data {
-        hex.push_str(&format!("{b:02x}"));
-    }
-    format!("bytes.fromhex(\"{hex}\")")
-}
-
-/// WASI import module names the bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here.
-const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
-
-fn is_wasi_module(name: &str) -> bool {
-    WASI_MODULES.contains(&name)
+    format!("bytes.fromhex(\"{}\")", hex_string(data))
 }
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
-
-/// Whether the generated class bundles the built-in WASI as an import fallback (and therefore takes `args`/`env`/`preopens` keyword arguments).
-fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
-    default_wasi
-        && module
-            .imported_funcs
-            .iter()
-            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
-}
 
 fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
-/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body — a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest (ADR-60).
+/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body — a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
 ///
 /// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch — `pos` is the top, the branch leaves its own innermost frame and crosses nothing — or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in. A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name. A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
 fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
@@ -521,6 +509,17 @@ fn default_value(ty: ValType) -> &'static str {
     }
 }
 
+/// How a value type is spelled inside a structural type key ([`type_key`]). Only this backend's own artifacts ever read these, so the spelling is free.
+fn val_name(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I32 => "i32",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
+        ValType::F64 => "f64",
+        ValType::FuncRef => "funcref",
+    }
+}
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
@@ -528,7 +527,7 @@ struct Gen<'a> {
     uses: RefCell<BTreeSet<String>>,
     /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]). `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
     flat: RefCell<Option<flat::Plan>>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
@@ -536,7 +535,7 @@ struct Gen<'a> {
 }
 
 impl<'a> Gen<'a> {
-    /// The Python expression yielding a data segment's bytes: a slice of the externalized `DATA_BLOB` when `--data-file` is on, else an inline `bytes.fromhex` literal (ADR-37). Both yield a `bytes` object.
+    /// The Python expression yielding a data segment's bytes: a slice of the externalized `DATA_BLOB` when `--data-file` is on, else an inline `bytes.fromhex` literal. Both yield a `bytes` object.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -635,7 +634,7 @@ impl<'a> Gen<'a> {
 
     fn initialize(&self, w: &mut CodeWriter) {
         let m = self.module;
-        let wasi_fallback = wasi_bundled(m, self.default_wasi);
+        let wasi_fallback = wasi_bundled(m, self.default_wasi, bundler());
         let header = if wasi_fallback {
             "def __init__(self, imports=None, args=None, env=None, preopens=None):"
         } else {
@@ -698,7 +697,7 @@ impl<'a> Gen<'a> {
         }
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
-            // Fallback order (ADR-7): explicit import -> bundled WASI unit (constructed lazily) -> ENOSYS stub; non-WASI imports stay mandatory (a missing one is a link error).
+            // Fallback order: explicit import -> bundled WASI unit (constructed lazily) -> ENOSYS stub; non-WASI imports stay mandatory (a missing one is a link error).
             let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
@@ -802,7 +801,7 @@ impl<'a> Gen<'a> {
         }
         w.line(format!("self.exports = {{{}}}", export_entries.join(", ")));
 
-        // Let import providers bind to the fully-constructed instance (ADR-7).
+        // Let import providers bind to the fully-constructed instance.
         if !m.imported_funcs.is_empty() {
             w.line("for _p in imports.values():");
             w.indent();
@@ -826,7 +825,7 @@ impl<'a> Gen<'a> {
     }
 
     fn helpers(&self, w: &mut CodeWriter) {
-        // The memory is named at every load and store, so the attribute is short; the property keeps the name the provider protocol (ADR-7) and embedders use.
+        // The memory is named at every load and store, so the attribute is short; the property keeps the name the provider protocol and embedders use.
         w.line("@property");
         w.line("def memory(self):");
         w.indent();
@@ -843,7 +842,7 @@ impl<'a> Gen<'a> {
         w.line("return getattr(self, self.GLOBAL_EXPORTS[name]).value");
         w.dedent();
         w.line("");
-        // The boxed Rt.Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell (ADR-16).
+        // The boxed Rt.Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell.
         w.line("def global_export(self, name):");
         w.indent();
         w.line("return getattr(self, self.GLOBAL_EXPORTS[name])");
@@ -854,7 +853,7 @@ impl<'a> Gen<'a> {
         w.line("return getattr(self, self.TABLE_EXPORTS[name])");
         w.dedent();
         w.line("");
-        // ADR-7 provider protocol: an instance is itself a valid import value.
+        // Provider protocol: an instance is itself a valid import value.
         w.line("def wasm_import(self, name):");
         w.indent();
         w.line("if name in self.exports:");
@@ -883,7 +882,7 @@ impl<'a> Gen<'a> {
             self.rt_name
         ));
         w.dedent();
-        if wasi_bundled(self.module, self.default_wasi) {
+        if wasi_bundled(self.module, self.default_wasi, bundler()) {
             w.line("");
             w.line("def _wasi_import(self, name):");
             w.indent();
@@ -897,32 +896,16 @@ impl<'a> Gen<'a> {
     }
 
     fn func_type_symbol(&self, func_idx: u32) -> String {
-        let idx = func_idx as usize;
-        let imports = self.module.imported_funcs.len();
-        let ty = if idx < imports {
-            self.module.imported_funcs[idx].type_idx
-        } else {
-            self.module.funcs[idx - imports].type_idx
-        };
-        self.type_symbol(ty)
+        self.type_symbol_of(self.module.func_type(func_idx))
     }
 
-    /// A structural key for a function type (not a module-local index), so a table shared across modules stays consistent.
     fn type_symbol(&self, type_idx: u32) -> String {
-        let ty = &self.module.types[type_idx as usize];
-        let names = |tys: &[ValType]| {
-            tys.iter()
-                .map(|t| match t {
-                    ValType::I32 => "i32",
-                    ValType::I64 => "i64",
-                    ValType::F32 => "f32",
-                    ValType::F64 => "f64",
-                    ValType::FuncRef => "funcref",
-                })
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        py_string(&format!("{}->{}", names(&ty.params), names(&ty.results)))
+        self.type_symbol_of(&self.module.types[type_idx as usize])
+    }
+
+    /// A structural type key (see [`type_key`]) as a Python string literal, which is what the table stores and `call_indirect` compares.
+    fn type_symbol_of(&self, ty: &dewasm_core::ir::FuncType) -> String {
+        py_string(&type_key(ty, val_name))
     }
 
     fn func_ref(&self, func_idx: u32) -> String {
@@ -933,7 +916,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_key, callable]` pair tables store (ADR-16).
+    /// A funcref value: the `[type_key, callable]` pair tables store.
     fn func_pair(&self, func_idx: u32) -> String {
         format!(
             "[{}, {}]",
@@ -959,7 +942,7 @@ impl<'a> Gen<'a> {
         }
         w.line(format!("def _f{idx}(self{params}):"));
         w.indent();
-        // Locals start at their type's default. Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
+        // Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
         for run in local_runs(&func.locals, default_value) {
             let default = default_value(func.locals[run.start]);
             let names = run
@@ -979,7 +962,11 @@ impl<'a> Gen<'a> {
                 .join(" = ");
             w.line(format!("{decl} = 0"));
         }
-        *self.flat.borrow_mut() = flat::plan(&func.body, &compute_frame_paths(&func.body));
+        *self.flat.borrow_mut() = flat::plan(
+            &func.body,
+            &compute_frame_paths(&func.body),
+            flat::DEEP_CROSSING,
+        );
         // The branch register is declared only when the cascade can actually use it: a branch to a frame that survives the plan still relays through `_br`, one addressed by state never does, and a function with no label branch at all never reads it either.
         if self.seq_has_relay_branch(&func.body) {
             w.line("_br = 0");
@@ -1092,7 +1079,7 @@ impl<'a> Gen<'a> {
         cur
     }
 
-    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while` (ADR-28).
+    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while`.
     ///
     /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement — nested constructs included — is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
     ///
@@ -1114,7 +1101,7 @@ impl<'a> Gen<'a> {
         let mut i = 0;
         while i < stmts.len() {
             let stmt = &stmts[i];
-            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe — an open suite already holds a real statement, and nothing here can touch `_br` (ADR-38).
+            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe — an open suite already holds a real statement, and nothing here can touch `_br`.
             if !stmt_emits(stmt) {
                 self.simple_stmt_or_skip(w, stmt);
                 i += 1;
@@ -1427,7 +1414,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment (ADR-38); inert.
+                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1464,7 +1451,6 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("self.elem{seg} = []"));
             }
-            // Handled in emit_seq, never routed here.
             Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
@@ -1498,7 +1484,7 @@ impl<'a> Gen<'a> {
                     w.line(format!("_state = {st}; continue"));
                     return;
                 }
-                // is_loop is irrelevant here: the loop trailer turns `_br == <loop id>` into a `continue`; a block/if exit is handled by the guards skipping to the label's reset marker (ADR-28).
+                // is_loop is irrelevant here: the loop trailer turns `_br == <loop id>` into a `continue`; a block/if exit is handled by the guards skipping to the label's reset marker.
                 w.line(format!("_br = {label}"));
             }
         }
@@ -1535,7 +1521,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded (ADR-28). Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
+    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded. Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
     fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
         match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
@@ -1636,7 +1622,7 @@ impl<'a> Gen<'a> {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
-            Expr::Bin(op, a, b) => match rel_op(*op) {
+            Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
                 Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
                 None => format!("({}) != 0", self.expr(e)),
             },
@@ -1649,7 +1635,9 @@ impl<'a> Gen<'a> {
         match e {
             // Two negations cancel.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.cond(a),
-            Expr::Bin(op, ..) if rel_op(*op).is_some() => format!("not ({})", self.cond(e)),
+            Expr::Bin(op, ..) if signed_view_rel_op(*op).is_some() => {
+                format!("not ({})", self.cond(e))
+            }
             _ => format!("{} == 0", self.expr(e)),
         }
     }
@@ -1720,7 +1708,7 @@ impl<'a> Gen<'a> {
     fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
         use BinOp::*;
         // A comparison is a Python boolean; outside condition position it needs the conditional back to the i32 0 or 1 wasm expects (see `cond`).
-        if let Some(rel) = rel_op(op) {
+        if let Some(rel) = signed_view_rel_op(op) {
             return format!("(1 if {} else 0)", self.rel(rel, a, b));
         }
         match op {
@@ -1769,19 +1757,6 @@ impl<'a> Gen<'a> {
             _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
-}
-
-/// The Python rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Python `float` comparison matches wasm, NaN included; ADR-2). `bin` wraps the result back into an i32, `cond` takes it as it stands.
-fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    let (r, operands) = comparison(op)?;
-    Some((
-        r,
-        match operands {
-            CompareOperands::Signed32 => Some("s32"),
-            CompareOperands::Signed64 => Some("s64"),
-            _ => None,
-        },
-    ))
 }
 
 /// A Python float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which Python's `float()` parses back exactly; only the spelling of infinities/`e` notation differs, and non-finite values never reach here.
@@ -1838,59 +1813,7 @@ fn stmt_emits(stmt: &Stmt) -> bool {
     }
 }
 
-/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. `flat_seq` appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative — answering `false` only re-emits the transition that used to be there unconditionally.
-fn terminates(stmts: &[Stmt]) -> bool {
-    let Some(last) = stmts
-        .iter()
-        .rev()
-        .find(|s| !matches!(s, Stmt::SourceLine(_)))
-    else {
-        return false;
-    };
-    match last {
-        Stmt::Br(_) | Stmt::Return { .. } | Stmt::Unreachable => true,
-        // Neither arm falling through means the `if` itself does not.
-        Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
-        _ => false,
-    }
-}
-
-fn load_method(op: LoadOp) -> &'static str {
-    use LoadOp::*;
-    match op {
-        I32Load => "i32_load",
-        I64Load => "i64_load",
-        F32Load => "f32_load",
-        F64Load => "f64_load",
-        I32Load8S => "i32_load8_s",
-        I32Load8U => "i32_load8_u",
-        I32Load16S => "i32_load16_s",
-        I32Load16U => "i32_load16_u",
-        I64Load8S => "i64_load8_s",
-        I64Load8U => "i64_load8_u",
-        I64Load16S => "i64_load16_s",
-        I64Load16U => "i64_load16_u",
-        I64Load32S => "i64_load32_s",
-        I64Load32U => "i64_load32_u",
-    }
-}
-
-fn store_method(op: StoreOp) -> &'static str {
-    use StoreOp::*;
-    match op {
-        I32Store => "i32_store",
-        I64Store => "i64_store",
-        F32Store => "f32_store",
-        F64Store => "f64_store",
-        I32Store8 => "i32_store8",
-        I32Store16 => "i32_store16",
-        I64Store8 => "i64_store8",
-        I64Store16 => "i64_store16",
-        I64Store32 => "i64_store32",
-    }
-}
-
-/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus a `continue` into the dispatch loop; a shallow one must keep the ADR-28 branch register, which the Ruby measurements behind ADR-60 found cheaper than a dispatch at that depth.
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus a `continue` into the dispatch loop; a shallow one must keep the `_br` branch register, measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1903,7 +1826,7 @@ mod cascade {
         src
     }
 
-    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length — the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings (ADR-60).
+    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length — the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings.
     fn tower(depth: usize) -> String {
         let opens = (0..depth)
             .map(|i| format!("(block $l{i}"))
@@ -1935,7 +1858,7 @@ mod cascade {
 
     #[test]
     fn shallow_multi_level_br_keeps_the_relay() {
-        // The same tower, one level below the threshold: a relay of that depth is cheaper than a dispatch, so nothing dissolves (ADR-60).
+        // The same tower, one level below the threshold: a relay of that depth is cheaper than a dispatch, so nothing dissolves.
         let src = convert(&tower(flat::DEEP_CROSSING - 1));
         assert!(
             src.contains("_br = "),
@@ -1970,7 +1893,7 @@ mod cascade {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby backend's units lint (ADR-6), adjusted for Python syntax (`Rt.<name>` staticmethod/const references, `self.memory.<name>` memory calls, and `self.<name>(...)` sibling calls within a scope's nested class).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby backend's units lint, adjusted for Python syntax (`Rt.<name>` staticmethod/const references, `self.memory.<name>` memory calls, and `self.<name>(...)` sibling calls within a scope's nested class).
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1983,14 +1906,14 @@ mod units {
         bundler().bundle_all(0).expect("full bundle resolves");
     }
 
-    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text (ADR-62), which is sound only while every `Rt.` in a unit is code. A `Rt.` inside a string literal would be rewritten too, silently changing program-visible text (a trap message, an errno key); no unit has one today, and this keeps it that way. Triple-quoted strings are rejected outright, since the single-line scanner cannot see across them.
+    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text, which is sound only while every `Rt.` in a unit is code. A `Rt.` inside a string literal would be rewritten too, silently changing program-visible text (a trap message, an errno key); no unit has one today, and this keeps it that way. Triple-quoted strings are rejected outright, since the single-line scanner cannot see across them.
     #[test]
     fn no_rt_reference_inside_a_string_literal() {
         let mut problems = Vec::new();
         for unit in bundler().units() {
             assert!(
                 !unit.body.contains("\"\"\"") && !unit.body.contains("'''"),
-                "{}: triple-quoted string — the ADR-62 rename lint cannot scan it",
+                "{}: triple-quoted string — the rename lint cannot scan it",
                 unit.id
             );
             for (n, line) in unit.body.lines().enumerate() {

@@ -9,7 +9,7 @@ int wasi_fd_filestat_get(int fd, int bufPtr) {
     } else if (isStdio(e)) {
         // Stdio has no host path to stat; report a zeroed filestat tagged as a
         // character device (filetype 2), the honest best-effort for an
-        // inherited stream (ADR-30).
+        // inherited stream.
         byte[] buf = new byte[64];
         buf[16] = 2;
         memory.init(Integer.toUnsignedLong(bufPtr), buf, 0, 64);

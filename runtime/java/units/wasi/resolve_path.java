@@ -19,10 +19,11 @@ private static boolean within(java.nio.file.Path base, java.nio.file.Path path) 
 //
 // followLast=false resolves the parent but leaves the final component
 // untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that operate on a
-// symlink itself (lstat, unlink, rename, rmdir, mkdir). A trailing "." or ".."
-// is never a symlink, so those fall back to full resolution.
+// symlink itself (lstat, unlink, rename, rmdir, mkdir, link, symlink,
+// readlink). A trailing "." or ".." is never a symlink, so those fall back to
+// full resolution.
 //
-// Known limitation (ADR-14): this is a check-then-open, not an atomic
+// Known limitation: this is a check-then-open, not an atomic
 // openat(2)-beneath resolution — a TOCTOU race or a symlink planted inside the
 // sandbox between the check and the actual filesystem call could in principle
 // escape. Accepted for a single-process research/demo runtime.
@@ -30,7 +31,7 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     Object e = fds.get(dirfd);
     if (!(e instanceof Dir)) {
         // A non-directory fd (a regular file, or stdio) used as a dirfd is
-        // ENOTDIR; only an fd absent from the table is EBADF (ADR-40).
+        // ENOTDIR; only an fd absent from the table is EBADF.
         return new Resolved(null, fds.containsKey(dirfd) ? WASI_NOTDIR : WASI_BADF);
     }
     Dir dir = (Dir) e;

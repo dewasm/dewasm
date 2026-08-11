@@ -13,7 +13,7 @@ module SQLite3
 
     def initialize
       # Preopening "/" at "/" makes guest paths identical to host paths, so
-      # the database file lands wherever Rails configured it (ADR-14 sandbox
+      # the database file lands wherever Rails configured it (sandbox
       # caveats accepted — this is a demo embedding, not a sandbox).
       @mod = Sqlite3Wasm.new({}, preopens: { "/" => "/" })
       @mod.invoke("_initialize")
@@ -101,7 +101,7 @@ module SQLite3
       end
     end
 
-    # --- ADR-2 masked-unsigned <-> Ruby signed ------------------------------
+    # --- masked-unsigned <-> Ruby signed ------------------------------
 
     def to_s64(v)
       v >= 0x8000_0000_0000_0000 ? v - (1 << 64) : v

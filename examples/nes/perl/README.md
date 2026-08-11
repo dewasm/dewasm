@@ -1,6 +1,6 @@
 # NES (Perl, ANSI terminal)
 
-An interactive frontend for `nes.wasm` (agnes, ADR-22/50) that renders straight
+An interactive frontend for `nes.wasm` (agnes) that renders straight
 into the terminal -- no window, no GPU. `build.sh` builds the reactor library
 (`examples/apps/scripts/nes.sh`, cached) and converts it to Perl with dewasm
 (`nes_gen.pl`, gitignored, regenerated on every build); `main.pl` loads the
@@ -42,33 +42,11 @@ the first non-flag argument in either mode; it defaults to
 
 ## Honest performance
 
-**Measured ~0.87 ticks/sec, headless, on an Apple Silicon laptop** -- against
-the NES's own 60Hz frame rate, and a bit faster than DOOM's ~0.7 despite a
-smaller framebuffer (256x240 vs. DOOM's 640x400) mattering less than the
-6502+PPU emulation cost per tick. This is not a playable game -- it's a
-slideshow. The terminal rendering itself costs ~4ms/frame, noise against a
->1s tick.
-
-It's still worth running, for the same reason the DOOM frontend is: the same
-unmodified wasm binary that plays smoothly through a native runtime runs,
-unmodified, through a plain Perl interpreter and comes out the other side
-rendering actual NES frames as ANSI escape codes. `--smoke`'s frame (40 ticks,
-no input) is byte-identical to the pinned oracle snapshot
-(`examples/apps/snapshots/nes_frame.ppm`), confirming the driving contract
-matches wasmtime's exactly.
+**Measured ~0.87 ticks/sec, headless, on an Apple Silicon laptop** -- a bit faster than DOOM's Perl frontend's ~0.7, but not playable. `--smoke`'s 40-tick frame is byte-identical to the pinned oracle snapshot (`examples/apps/snapshots/nes_frame.ppm`), confirming the driving contract matches wasmtime's exactly.
 
 ## Rendering
 
-Each character cell shows two vertically-stacked pixels via the upper-half-block
-character `▀`: the foreground color is the top pixel, the background color is
-the bottom pixel, both set with 24-bit truecolor escapes. The NES's native
-256x240 framebuffer (no upscaling, unlike DOOM's 2x) is downsampled to fit the
-terminal, capped at 256 columns, with one row reserved for the status line.
-Only cells that changed since the previous frame are redrawn, and an SGR code
-is skipped whenever a cell's color matches the previous cell's -- at this tick
-rate the diffing is far from necessary, but it's the reference pattern shared
-with the DOOM and Ruby/Python/Bash frontends and it keeps a slow link (e.g.
-ssh) usable.
+Each cell renders two vertically-stacked pixels as a half-block character with 24-bit truecolor SGR; the NES's native 256x240 framebuffer (no upscaling, unlike DOOM's 2x) is downsampled to fit the terminal (capped at 256 columns), with unchanged cells and repeated SGR codes skipped -- the same reference pattern shared with the DOOM and Ruby/Python/Bash frontends.
 
 ## Controls
 

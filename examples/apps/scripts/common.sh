@@ -3,10 +3,10 @@
 # Shared helpers for the per-app fetch/build scripts in this directory.
 #
 # Every scripts/<name>.sh sources this file, then either downloads a pinned,
-# checksum-verified prebuilt wasm or builds one from a pinned source release
-# (ADR-22). Third-party artifacts are never committed (ADR-9): everything
-# lands in examples/apps/cache/ (gitignored), and the apps e2e test fails
-# loudly when the cache is absent (ADR-15).
+# checksum-verified prebuilt wasm or builds one from a pinned source release.
+# Third-party artifacts are never committed: everything lands in
+# examples/apps/cache/ (gitignored), and the apps e2e test fails loudly when
+# the cache is absent.
 #
 # Sourcing this file cd's to examples/apps (so cache/ and src/ resolve the
 # same way whether a script is run directly or via setup.sh) and
@@ -32,7 +32,7 @@ fetch_verified() {
   echo "$2  $3" | shasum -a 256 -c - >/dev/null
 }
 
-# require_tool <app> <cmd> [install-hint]: fail loudly (ADR-15) when a build
+# require_tool <app> <cmd> [install-hint]: fail loudly when a build
 # prerequisite is missing, naming the app and, when given, how to install it.
 require_tool() {
   command -v "$2" >/dev/null && return
@@ -71,7 +71,7 @@ write_stamp() {
   printf '%s\n' "$2" >"$1"
 }
 
-# --- wasm-opt -O2 preprocessing (ADR-39) for the locally-built modules.
+# --- wasm-opt -O2 preprocessing for the locally-built modules.
 # Every module built from source here (sqlite3, minigzip, libpcap, tree-sitter,
 # ripgrep — but not the DWARF fixture, which needs its debug info) is
 # post-processed: it shrinks them and normalizes the overlong call_indirect
@@ -146,7 +146,7 @@ archive_extract_file() {
 # leading path components (so it lands at <destdir>/<inner-minus-strip>). Only
 # <inner> is unpacked, not the whole archive. zip has no strip flag, so the zip
 # path only supports strip=0 (all it is asked for); a strip>0 zip would need
-# extend-and-relocate, added when something needs it (ADR-0: fail, don't guess).
+# extend-and-relocate, added when something needs it (fail, don't guess).
 archive_extract_tree() {
   local ar="$1" kind="$2" inner="$3" dest="$4" strip="${5:-0}"
   rm -rf "$dest"

@@ -1,5 +1,7 @@
 //! Backend trait and code emission utilities shared by all language backends.
 
+pub mod flat;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{bail, Result};
@@ -33,16 +35,16 @@ pub enum RuntimeLinkage {
 #[derive(Clone, Debug)]
 pub struct GenOptions {
     pub mode: Mode,
-    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim — no sanitization (ADR-63). In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
+    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim — no sanitization. In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
     /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide. Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
-    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals (ADR-37). When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob. Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
+    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals. When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob. Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
     pub data_file: Option<DataFileConfig>,
 }
 
-/// Configuration for data-segment externalization (ADR-37).
+/// Configuration for data-segment externalization.
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
     /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
@@ -59,20 +61,20 @@ pub trait Backend {
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
 
-    /// Declared support level per feature (ADR-8). The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
+    /// Declared support per feature. The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
     }
 
-    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`). Feeds the generated support docs (ADR-25).
+    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`). Feeds the generated support docs.
     fn has_wasi_p1(&self, name: &str) -> bool {
         let _ = name;
         false
     }
 }
 
-/// Reject, with the same `UnsupportedError` attribution the core converter uses (ADR-0), any construct the shared IR now represents but this specific `backend` has not declared `Supported` (ADR-8). The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct; a backend that hasn't implemented one of them yet must refuse it itself, at conversion time, rather than mis-lower it.
+/// Reject, with the same `UnsupportedError` attribution the core converter uses, any construct the shared IR now represents but this specific `backend` has not declared `Supported`. The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct; a backend that hasn't implemented one of them yet must refuse it itself, at conversion time, rather than mis-lower it.
 pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Result<()> {
     // `used` is a closure so the usage scan (an IR walk for TableBulkOps) only runs for features the backend has *not* declared Supported.
     let require = |feature: Feature, used: &dyn Fn() -> bool, detail: &str| -> Result<()> {
@@ -117,16 +119,16 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
     Ok(())
 }
 
-/// Reject a library-mode module name that does not fit `language`'s grammar (ADR-63). `grammar` is the prose form of the rule, quoted verbatim in the message: an invalid name is a conversion-time error, never a silent transformation, so the message must be enough to fix the invocation without reading the source.
+/// Reject a library-mode module name that does not fit `language`'s grammar. `grammar` is the prose form of the rule, quoted verbatim in the message: an invalid name is a conversion-time error, never a silent transformation, so the message must be enough to fix the invocation without reading the source.
 pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::Error {
     anyhow::anyhow!(
         "invalid {language} module name {name:?}: it must be {grammar}. \
          Pass a valid one with --module-name (the default is the input file stem), \
-         or drop --module-name for --mode standalone, whose internal name is fixed (ADR-63)."
+         or drop --module-name for --mode standalone, whose internal name is fixed."
     )
 }
 
-/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest` — the shape every backend's module-name grammar is built out of (ADR-63).
+/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest` — the shape every backend's module-name grammar is built out of.
 pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> bool {
     let mut chars = seg.chars();
     match chars.next() {
@@ -135,7 +137,7 @@ pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> b
     }
 }
 
-/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none — equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included (ADR-2).
+/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none — equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CompareOperands {
     Float,
@@ -146,7 +148,7 @@ pub enum CompareOperands {
     Unsigned64,
 }
 
-/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them — how to spell a view their representation does not already provide — instead of each restating which of the 74 `BinOp`s are comparisons.
+/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them — how to spell a view their representation does not already provide — instead of each restating which `BinOp`s are comparisons.
 pub fn comparison(op: ir::BinOp) -> Option<(&'static str, CompareOperands)> {
     use ir::BinOp::*;
     use CompareOperands::*;
@@ -179,6 +181,19 @@ pub fn comparison(op: ir::BinOp) -> Option<(&'static str, CompareOperands)> {
     })
 }
 
+/// The operator and the signed view for a backend whose integers are stored masked-unsigned and whose native float comparison already answers wasm's way, NaN included: the operator from [`comparison`], paired with the runtime helper (`s32`/`s64`) the operands must go through, or `None` wherever the stored representation already compares correctly.
+pub fn signed_view_rel_op(op: ir::BinOp) -> Option<(&'static str, Option<&'static str>)> {
+    let (r, operands) = comparison(op)?;
+    Some((
+        r,
+        match operands {
+            CompareOperands::Signed32 => Some("s32"),
+            CompareOperands::Signed64 => Some("s64"),
+            _ => None,
+        },
+    ))
+}
+
 /// Whether `e` is a comparison or an `eqz` — the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
 pub fn is_boolean(e: &ir::Expr) -> bool {
     match e {
@@ -207,8 +222,100 @@ pub fn local_runs<K: PartialEq>(
     runs
 }
 
+/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. A flat lowering appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative — answering `false` only re-emits the transition that used to be there unconditionally.
+pub fn terminates(stmts: &[ir::Stmt]) -> bool {
+    let Some(last) = stmts
+        .iter()
+        .rev()
+        .find(|s| !matches!(s, ir::Stmt::SourceLine(_)))
+    else {
+        return false;
+    };
+    match last {
+        ir::Stmt::Br(_) | ir::Stmt::Return { .. } | ir::Stmt::Unreachable => true,
+        // Neither arm falling through means the `if` itself does not.
+        ir::Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
+        _ => false,
+    }
+}
+
+/// The runtime-unit name for `op`'s memory read (`i32_load8_u`, …), as the runtime units spell it. Shared because the unit names are: a backend that renames one renames the unit, not this table. Bash keeps its own copy, which deliberately routes float loads to the integer units.
+pub fn load_method(op: ir::LoadOp) -> &'static str {
+    use ir::LoadOp::*;
+    match op {
+        I32Load => "i32_load",
+        I64Load => "i64_load",
+        F32Load => "f32_load",
+        F64Load => "f64_load",
+        I32Load8S => "i32_load8_s",
+        I32Load8U => "i32_load8_u",
+        I32Load16S => "i32_load16_s",
+        I32Load16U => "i32_load16_u",
+        I64Load8S => "i64_load8_s",
+        I64Load8U => "i64_load8_u",
+        I64Load16S => "i64_load16_s",
+        I64Load16U => "i64_load16_u",
+        I64Load32S => "i64_load32_s",
+        I64Load32U => "i64_load32_u",
+    }
+}
+
+/// The runtime-unit name for `op`'s memory write, the [`load_method`] counterpart.
+pub fn store_method(op: ir::StoreOp) -> &'static str {
+    use ir::StoreOp::*;
+    match op {
+        I32Store => "i32_store",
+        I64Store => "i64_store",
+        F32Store => "f32_store",
+        F64Store => "f64_store",
+        I32Store8 => "i32_store8",
+        I32Store16 => "i32_store16",
+        I64Store8 => "i64_store8",
+        I64Store16 => "i64_store16",
+        I64Store32 => "i64_store32",
+    }
+}
+
+/// A structural key for a function type — `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`. `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules. A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend — which is why `name_of` stays the caller's.
+pub fn type_key(ty: &ir::FuncType, name_of: fn(ir::ValType) -> &'static str) -> String {
+    let names = |tys: &[ir::ValType]| {
+        tys.iter()
+            .map(|t| name_of(*t))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    format!("{}->{}", names(&ty.params), names(&ty.results))
+}
+
+/// `data` as lowercase two-digit-per-byte hex, the payload every backend's embedded data-segment literal wraps (`pack("H*")`, `bytes.fromhex`, `Rt.unhex`). Written without a per-byte `format!`: a real app's segments run to megabytes, and CPython's alone would cost tens of millions of allocations.
+pub fn hex_string(data: &[u8]) -> String {
+    const DIGITS: [u8; 16] = *b"0123456789abcdef";
+    let mut out = String::with_capacity(data.len() * 2);
+    for b in data {
+        out.push(DIGITS[(b >> 4) as usize] as char);
+        out.push(DIGITS[(b & 0xf) as usize] as char);
+    }
+    out
+}
+
+/// WASI import module names a bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding — a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
+pub const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
+
+pub fn is_wasi_module(name: &str) -> bool {
+    WASI_MODULES.contains(&name)
+}
+
+/// Whether the generated artifact carries the built-in WASI as an import fallback — and so takes the backend's args/env/preopens entry points, and its standalone main parses `--dir`. True when `default_wasi` is on and the module imports at least one WASI function `bundler` has a unit for.
+pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBundler) -> bool {
+    default_wasi
+        && module
+            .imported_funcs
+            .iter()
+            .any(|f| is_wasi_module(&f.module) && bundler.has_unit(&format!("wasi/{}", f.name)))
+}
+
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
-    // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time, violating ADR-0).
+    // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
     stmts.iter().any(|stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
         ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
@@ -237,7 +344,7 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     })
 }
 
-/// The full WASI preview 1 surface, for the generated support docs; which of these a backend implements is derived from its runtime units (`bundler().has_unit("wasi/<name>")`). The bool marks whether the function is in scope: `false` for the out-of-scope surface (sockets, `proc_raise`) that no toolchain output exercises and even wasmtime leaves unimplemented (ADR-25).
+/// The full WASI preview 1 surface, for the generated support docs; which of these a backend implements is derived from its runtime units (`bundler().has_unit("wasi/<name>")`). The bool marks whether the function is in scope: `false` for the out-of-scope surface (sockets, `proc_raise`) that no toolchain output exercises and even wasmtime leaves unimplemented.
 pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("args_get", true),
     ("args_sizes_get", true),
@@ -527,7 +634,6 @@ impl CodeWriter {
         self.indent -= 1;
     }
 
-    /// line(open); indent(); f(); dedent(); line(close)
     pub fn block(
         &mut self,
         open: impl AsRef<str>,

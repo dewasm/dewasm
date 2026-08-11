@@ -1,6 +1,6 @@
 # NES (Python, ANSI terminal)
 
-An interactive NES frontend that renders into the terminal instead of a window (see `../go` for the pixel-window frontend), the same technique the [DOOM Python frontend](../../doom/python/) uses. `build.sh` builds `cache/nes.wasm` (an [agnes](https://github.com/kgabis/agnes)-based emulator wrapped by `examples/apps/src/nes_demo.c`, ADR-59) via `examples/apps/scripts/nes.sh` and converts it to Python with dewasm (`nes_gen.py`, gitignored, regenerated on every build). Unlike `../../doom`, `nes.wasm` has **zero host imports** -- no console messages, no save games, no clock -- so `main.py` only loads a ROM into the module's linear memory and drives the game loop itself: pacing, input polling, and frame presentation are entirely the host's job (the module has no clock import of its own to pace against, unlike DOOM's internal 35Hz timer). Stdlib only: no third-party packages, nothing to `pip install`.
+An interactive NES frontend that renders into the terminal instead of a window (see `../go` for the pixel-window frontend), the same technique the [DOOM Python frontend](../../doom/python/) uses. `build.sh` builds `cache/nes.wasm` (an [agnes](https://github.com/kgabis/agnes)-based emulator wrapped by `examples/apps/src/nes_demo.c`) via `examples/apps/scripts/nes.sh` and converts it to Python with dewasm (`nes_gen.py`, gitignored, regenerated on every build). Unlike `../../doom`, `nes.wasm` has **zero host imports** -- no console messages, no save games, no clock -- so `main.py` only loads a ROM into the module's linear memory and drives the game loop itself: pacing, input polling, and frame presentation are entirely the host's job (the module has no clock import of its own to pace against, unlike DOOM's internal 35Hz timer). Stdlib only: no third-party packages, nothing to `pip install`.
 
 ## Run
 
@@ -12,15 +12,11 @@ builds and takes over the terminal (alternate screen, hidden cursor, raw input) 
 
 ## Honest performance
 
-**Measured ~1.1-1.3 frames/sec (headless `--smoke`, on an Apple Silicon laptop)** -- against the NES's native ~60Hz frame rate. CPython interprets the generated Python source line by line with no JIT; agnes's 6502/PPU emulation is much lighter than DOOM's software renderer, but dewasm's Python backend cost is dominated by per-instruction interpretation overhead rather than game complexity, so this frontend lands in roughly the same range as the [DOOM Python frontend](../../doom/python/)'s ~1.3 ticks/sec despite emulating a much simpler machine -- see `../ruby/` and `../perl/` for the same ROM measurably faster (Ruby with YJIT), and `../go/`/`../java/` for it at full native speed. This is not a playable game -- movement reads as a slideshow, not motion.
-
-Pacing targets 60Hz (the NTSC NES's real rate is ~60.0988Hz -- close enough that no calibration is needed): the frontend sleeps when it's running ahead of schedule and never sleeps when it can't keep up, so it plays at the fastest rate the interpreter can sustain instead of stalling behind a fixed budget. In practice the tick is always the bottleneck here, so the sleep never fires.
+**Measured ~1.1-1.3 frames/sec (headless `--smoke`, on an Apple Silicon laptop)** -- against the NES's ~60Hz frame rate, in the same range as the [DOOM Python frontend](../../doom/python/)'s ~1.3 ticks/sec; not playable, movement reads as a slideshow. The tick is always the bottleneck, so the 60Hz pacing sleep never fires in practice.
 
 ## Rendering
 
-The module hands over agnes's own frame representation -- one palette *index* per pixel at `screenOffset()`, plus the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`) -- rather than a rendered image, so composing pixels is this frontend's job and only the pixels a cell actually samples are ever looked up.
-
-Each character cell shows two vertically-stacked pixels via the upper-half-block character `▀`: the foreground color is the top pixel, the background color is the bottom pixel, both set with 24-bit truecolor escapes. Unlike DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200), agnes's 256x240 framebuffer is already the NES's native resolution, so pixels are read 1:1 and nearest-neighbor-fit to however many columns/rows the terminal actually has (capped at 256 columns, one row reserved for the status line). Only cells that changed since the previous frame are redrawn, and repeated colors within a redrawn run don't re-emit their escape code.
+The module hands over agnes's own frame representation, one palette *index* per pixel (masked with `0x3f`) plus the fixed 64-entry palette, rather than a rendered image, drawn as native-resolution (no upscaling, unlike DOOM's 2x) half-block characters with unchanged cells and repeated escape codes skipped -- the same reference pattern shared with the sibling frontends.
 
 ## Controls
 

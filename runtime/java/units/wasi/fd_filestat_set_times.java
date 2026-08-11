@@ -1,4 +1,4 @@
-// Set the atim/mtim of an open fd (ADR-40). fst_flags selects which of atim and
+// Set the atim/mtim of an open fd. fst_flags selects which of atim and
 // mtim to set and whether to "now"; setting a timestamp both explicitly and to
 // "now" is EINVAL. A null FileTime leaves that timestamp untouched, so a guest
 // can change one without disturbing the other.

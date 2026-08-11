@@ -1,6 +1,6 @@
-//! End-to-end coverage for `--data-file` data-segment externalization (ADR-37). For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
+//! End-to-end coverage for `--data-file` data-segment externalization. For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention (ADR-48) for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -11,7 +11,6 @@ use dewasm_backend_perl::find_perl;
 use dewasm_backend_python::find_python;
 use dewasm_backend_ruby::find_ruby;
 
-/// The built `dewasm` binary under test (Cargo sets this for integration tests).
 fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
@@ -59,7 +58,6 @@ fn tempdir(tag: &str) -> PathBuf {
     dir
 }
 
-/// Run `dewasm` with `args`, returning the raw `Output` (no success assertion).
 fn run_dewasm(args: &[&str]) -> Output {
     Command::new(dewasm_bin())
         .args(args)
@@ -164,8 +162,6 @@ fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-// -------------------------------------------------------------------------- Inline-fixture parity (default test).
-
 #[test]
 fn ruby_data_file_matches_embedded() {
     let dir = tempdir("ruby");
@@ -208,9 +204,7 @@ fn ruby_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    // Sidecar carries exactly the concatenated segment bytes.
     assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
-    // Externalized source is smaller than the embedded hex form.
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -424,7 +418,6 @@ fn java_data_file_matches_embedded() {
     write(&wat, &fixture_wat());
     let watp = wat.to_str().unwrap();
 
-    // Embedded: source in one dir, compiled into its own class dir.
     let embedded = dir.join("embedded").join("Main.java");
     let ecls = dir.join("embedded-cls");
     std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
@@ -488,8 +481,6 @@ fn java_data_file_matches_embedded() {
     assert_eq!(code_e, code_x);
 }
 
-// -------------------------------------------------------------------------- Loud rejections (default test).
-
 #[test]
 fn rejects_unsupported_targets_and_stdout() {
     let dir = tempdir("reject");
@@ -499,7 +490,7 @@ fn rejects_unsupported_targets_and_stdout() {
     let sidecar = dir.join("d.bin");
     let sc = sidecar.to_str().unwrap();
 
-    // Bash is the sole target that rejects `--data-file` (its data lives in the runtime, ADR-37); the error names the target.
+    // Bash is the sole target that rejects `--data-file` (its data lives in the runtime); the error names the target.
     let out = dir.join("out.bash");
     let r = run_dewasm(&[
         watp,
@@ -639,8 +630,6 @@ fn rejects_data_file_colliding_with_generated_name() {
     assert!(!out.exists(), "no source may be written on rejection");
     assert!(!sidecar.exists(), "no sidecar may be written on rejection");
 }
-
-// -------------------------------------------------------------------------- Real-app parity (slow: `#[ignore]`d unless `--features slow_test`; also run with --include-ignored).
 
 fn qjs_wasm() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/qjs.wasm")

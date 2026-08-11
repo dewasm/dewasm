@@ -1,6 +1,6 @@
-//! C-API-driving app cases (ADR-27): a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
+//! C-API-driving app cases: a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
 //!
-//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `sqlite3_file_c_api_e2e!`, `sqlite3_callback_binding_e2e!`). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration (ADR-27 revision); every backend does, Bash included — a guest pointer is just a decimal in its `R0` result global and guest memory is the module's byte array (issue #138). These cases reconvert the ~5 MB sqlite3 artifacts, so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
+//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `pcap_compile_e2e!`, `zeroperl_eval_e2e!`, …). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration; every backend does, Bash included — a guest pointer is just a decimal in its `R0` result global and guest memory is the module's byte array (issue #138). These cases reconvert artifacts ranging from 1.5 MB (tree-sitter) to 25 MB (zeroperl), so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -14,7 +14,7 @@ use crate::glue::fill;
 /// A C-API-driving case: convert `wasm` (cache stem) to library class `class`, append the backend's glue, run it, and require exactly `expect_stdout`.
 pub struct CApiCase {
     pub name: &'static str,
-    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the kebab-case name [`BackendUnderTest::module_name`] converts into the conversion module name (ADR-63).
+    /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the kebab-case name [`BackendUnderTest::module_name`] converts into the conversion module name.
     pub wasm: &'static str,
     /// The library class name the glue instantiates — what the Pascal derivation of `wasm` yields (the Bash glue instead spells the snake derivation's `<name>_` prefix).
     pub class: &'static str,
@@ -41,7 +41,7 @@ fn assert_dbfile(scratch: &Path) {
     );
 }
 
-/// The library half of the sqlite3 build (ADR-22): the C API driven in memory. version + two SELECT rows + a sentinel, all pinned by the amalgamation version. In-memory (`:memory:`), so the `{scratch}` placeholder goes unused.
+/// The library half of the sqlite3 build: the C API driven in memory. version + two SELECT rows + a sentinel, all pinned by the amalgamation version. In-memory (`:memory:`), so the `{scratch}` placeholder goes unused.
 pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     name: "libsqlite3_c_api",
     wasm: "libsqlite3",
@@ -51,7 +51,7 @@ pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// The same C API opening a *file* under a preopen (ADR-22): create+insert, close, reopen, select — proving the C-API path hits the same ADR-14 fs stack as the shell. The glue preopens the fresh scratch dir via `{scratch}` and leaves a nonzero DB file on the host.
+/// The same C API opening a *file* under a preopen: create+insert, close, reopen, select — proving the C-API path hits the same fs stack as the shell. The glue preopens the fresh scratch dir via `{scratch}` and leaves a nonzero DB file on the host.
 pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     name: "sqlite3_file_c_api",
     wasm: "libsqlite3",
@@ -61,7 +61,7 @@ pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     assert_host: assert_dbfile,
 };
 
-/// Guest->host callback round trip (ADR-22): our own committed C (examples/apps/src/sqlite3_binding.c) exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import provider and collects the rows.
+/// Guest->host callback round trip: our own committed C (examples/apps/src/sqlite3_binding.c) exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the import provider and collects the rows.
 pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     name: "sqlite3_callback_binding",
     wasm: "sqlite3-binding",
@@ -71,7 +71,7 @@ pub const SQLITE3_CALLBACK_BINDING: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// libpcap BPF filter compilation (ADR-22): our own committed C (examples/apps/src/pcap_binding.c) exports `compile_filter`, which runs libpcap's platform-independent BPF compiler (`pcap_compile_nopcap`) on a textual filter and serializes the resulting program into guest memory as `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`. The glue drives `compile_filter("tcp port 80", DLT_EN10MB=1, 65535)`, prints each insn as `code jt jf k`, and a sentinel. The pinned output is the canonical tcp-port-80 filter (ethertype IPv6 0x86dd/IPv4 0x0800, IP proto TCP=6, port 80), deterministic because BPF programs hold offsets/constants only, no addresses. In-memory, so `{scratch}` goes unused.
+/// libpcap BPF filter compilation: our own committed C (examples/apps/src/pcap_binding.c) exports `compile_filter`, which runs libpcap's platform-independent BPF compiler (`pcap_compile_nopcap`) on a textual filter and serializes the resulting program into guest memory as `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`. The glue drives `compile_filter("tcp port 80", DLT_EN10MB=1, 65535)`, prints each insn as `code jt jf k`, and a sentinel. The pinned output is the canonical tcp-port-80 filter (ethertype IPv6 0x86dd/IPv4 0x0800, IP proto TCP=6, port 80), deterministic because BPF programs hold offsets/constants only, no addresses. In-memory, so `{scratch}` goes unused.
 pub const PCAP_COMPILE: CApiCase = CApiCase {
     name: "pcap_compile",
     wasm: "libpcap",
@@ -84,7 +84,7 @@ pub const PCAP_COMPILE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// tree-sitter JSON parse (ADR-22): our own committed C (examples/apps/src/treesitter_binding.c) exports `parse_source`, which parses a source string with the tree-sitter runtime + the pre-generated tree-sitter-json grammar and returns the parse tree's S-expression (a malloc'd C string) via `ts_node_string`. The glue parses the fixed snippet `{"key": [1, true, null]}`, prints the S-expression, and a sentinel. The output is deterministic (tree-sitter's node naming is fixed by the pinned grammar). In-memory, so `{scratch}` goes unused.
+/// tree-sitter JSON parse: our own committed C (examples/apps/src/treesitter_binding.c) exports `parse_source`, which parses a source string with the tree-sitter runtime + the pre-generated tree-sitter-json grammar and returns the parse tree's S-expression (a malloc'd C string) via `ts_node_string`. The glue parses the fixed snippet `{"key": [1, true, null]}`, prints the S-expression, and a sentinel. The output is deterministic (tree-sitter's node naming is fixed by the pinned grammar). In-memory, so `{scratch}` goes unused.
 pub const TREESITTER_PARSE: CApiCase = CApiCase {
     name: "treesitter_parse",
     wasm: "treesitter",
@@ -95,19 +95,7 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// zeroperl Perl-5.42 eval (ADR-54 retraction, issue #67): the prebuilt
-/// `@6over3/zeroperl-ts` reactor exposes an embedding C API; the glue drives it
-/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
-/// memory → `zeroperl_eval` → `zeroperl_flush`. Two host-environment pieces the
-/// deferred verdict presumed were blockers are supplied entirely from the glue,
-/// not the runtime: the imported `env.call_host_function` is a zero-returning
-/// stub (only ever called when the guest registers host callbacks, which this
-/// program does not), and `zeroperl_init` needs `/dev/null` resolvable so the
-/// glue preopens it (mapped guest→host `/dev/null`; without it init returns 1).
-/// The asyncify and setjmp/longjmp machinery the verdict also cited is
-/// module-internal (binaryen transforms; the setjmp is a port of ruby.wasm's
-/// `rb_wasm_setjmp`) and needs nothing from us. The pinned output is a regex +
-/// `printf` line — deterministic, exercising a real slice of the Perl core.
+/// zeroperl Perl-5.42 eval (retraction, issue #67): the prebuilt `@6over3/zeroperl-ts` reactor exposes an embedding C API; the glue drives `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`. The imported `env.call_host_function` is a zero-returning stub (called only if the guest registers host callbacks, which this program does not); `zeroperl_init` needs `/dev/null` resolvable, so the glue preopens it (mapped guest→host `/dev/null`) — without it, init returns 1. The pinned output is a regex + `printf` line, deterministic.
 pub const ZEROPERL_EVAL: CApiCase = CApiCase {
     name: "zeroperl_eval",
     wasm: "zeroperl",
@@ -117,18 +105,7 @@ pub const ZEROPERL_EVAL: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// ExifTool 13.42 on zeroperl (issue #70): the flattened `exiftool` CLI driver
-/// (6over3/exiftool `src/exiftool`, fetched into `cache/exiftool-lib/`) run on
-/// the *same* `cache/zeroperl.wasm` reactor — the `@6over3/zeroperl-ts` build
-/// embeds the full `Image::ExifTool` module tree in its SFS blob, so `use
-/// Image::ExifTool` resolves in-guest with no module preopen (only the driver
-/// script and the image are staged). The glue drives the embedding C API
-/// `_initialize` → `zeroperl_init` → `zeroperl_eval` of a driver snippet that
-/// sets `@ARGV`/`$0` and `do`es the script, then `zeroperl_flush`. Deterministic
-/// tags only (`-S -Make -Model -DateTimeOriginal`) over the committed
-/// `exif_fixture.jpg`, cross-checked against host exiftool. `/dev/null` is
-/// preopened for `zeroperl_init` (see [`ZEROPERL_EVAL`]); the image is staged
-/// into a fresh scratch dir preopened at `/img`, the driver at `/work`.
+/// ExifTool 13.42 on zeroperl (issue #70): the flattened `exiftool` CLI driver (6over3/exiftool `src/exiftool`, fetched into `cache/exiftool-lib/`) runs on the *same* `cache/zeroperl.wasm` reactor, whose `@6over3/zeroperl-ts` SFS blob already embeds the full `Image::ExifTool` module tree, so `use Image::ExifTool` resolves in-guest with no module preopen. The glue drives `_initialize` → `zeroperl_init` → `zeroperl_eval` of a driver snippet that sets `@ARGV`/`$0` and `do`es the script, then `zeroperl_flush`. Deterministic tags only (`-S -Make -Model -DateTimeOriginal`) over the committed `exif_fixture.jpg`, cross-checked against host exiftool; the image is staged at `/img`, the driver at `/work` (`/dev/null` preopened for `zeroperl_init` as in [`ZEROPERL_EVAL`]).
 pub const EXIFTOOL_EXTRACT: CApiCase = CApiCase {
     name: "exiftool_extract",
     wasm: "zeroperl",

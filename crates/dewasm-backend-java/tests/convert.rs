@@ -1,4 +1,4 @@
-//! Java side of the whole-cache convert suite (ADR-54): converts every cached
+//! Java side of the whole-cache convert suite: converts every cached
 //! real-world app with the Java backend and requires the conversion to complete
 //! with non-empty source, without compiling or running it. The generic harness
 //! lives in `dewasm-test-helper`.

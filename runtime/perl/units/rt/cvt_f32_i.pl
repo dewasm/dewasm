@@ -1,7 +1,7 @@
 # requires: rt/f32
 # Convert a signed integer to f32 with correct rounding. Values beyond 2^53
 # are pre-rounded to odd so the int->double->single chain cannot
-# double-round (ADR-2).
+# double-round.
 sub cvt_f32_i {
     my $v = $_[0];
     my $a = $v < 0 ? -$v : $v;

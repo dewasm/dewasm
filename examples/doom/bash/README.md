@@ -14,7 +14,7 @@ This is an existence-proof demo, not a playable game, and the numbers say so pla
 | `tickGame` (each) | ~34s |
 | Render one frame into the terminal | well under 1s |
 
-This is only feasible at all because of two prior perf changes to the Bash backend: [ADR-51](../../../docs/adr/51-bash-assoc-memory.md) made linear memory an associative array instead of a linked-list-backed indexed array (DOOM's `initGame` never finished in 3+ CPU-hours before that change), and [ADR-52](../../../docs/adr/52-bash-inline-memops.md) inlined load/store instructions instead of calling a runtime unit per access, cutting `tickGame` from 87s to 34s on top. Both were general backend changes, not anything specific to DOOM or this frontend.
+This is only feasible at all because of two prior perf changes to the Bash backend: making linear memory an associative array instead of a linked-list-backed indexed array (DOOM's `initGame` never finished in 3+ CPU-hours before that change), and inlining load/store instructions instead of calling a runtime unit per access, cutting `tickGame` from 87s to 34s on top. Both were general backend changes, not anything specific to DOOM or this frontend.
 
 ## Run
 
@@ -34,7 +34,7 @@ It is a Gist rather than a file in this repository on purpose: dewasm is MIT, bu
 
 Same half-block trick as `../ruby` and `../python`: each terminal cell shows two vertically-stacked source pixels as `▀`, colored with 24-bit truecolor SGR (`\e[38;2;R;G;Bm` for the top pixel, `\e[48;2;R;G;Bm` for the bottom). DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200) lives in `doom_mem`, the module's linear memory — a plain Bash associative array, one byte per address, read directly rather than copied out through a runtime call, so the renderer just samples it.
 
-The sampled grid is capped at 160 columns rather than the 320 that would use every native pixel once: at 640x400, a full 320-wide sampling is 128,000 byte reads per frame, and this frontend would rather spend that budget staying comfortably under a second than chase detail nobody will see clearly through a terminal font anyway. 160 columns (160x100 logical pixels, 160x50 cells) is 48,000 reads and renders in well under a second — irrelevant next to a 34-second tick, but the render loop is written the same way it would need to be if it mattered (no per-cell `printf`, no command substitution in the hot path, the whole frame built as one string and emitted with a single `printf`), because "irrelevant here" isn't the same as "acceptable to write carelessly." Unlike `../ruby`, there is no frame-to-frame diffing — at this tick rate a full redraw costs nothing — but an SGR escape is still skipped whenever it repeats the previous *cell's* color, which is nearly free and shrinks the string a lot on DOOM's large flat-color areas (its software renderer is paletted, VGA Mode 13h, at most 256 colors).
+The sampled grid is capped at 160 columns rather than 320 (128,000 vs. 48,000 byte reads per frame; either is irrelevant next to a 34-second tick, and 160 already exceeds what most terminal fonts resolve). Unlike `../ruby`, there is no frame-to-frame diffing here (a full redraw is free at this tick rate), but a repeated SGR escape is still skipped, which shrinks output a lot on DOOM's flat-color areas.
 
 ## Controls
 

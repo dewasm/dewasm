@@ -1,6 +1,6 @@
 # requires: wasi/fd_flush
 # Closing a file fd (kind 2) flushes a dirty buffer to disk, then drops the
-# buffer and its parallel fd-table entries (ADR-34). fds are never reused. A
+# buffer and its parallel fd-table entries. fds are never reused. A
 # directory or stdio fd just leaves the table. A flush failure's errno (R0,
 # the only channel wasi_fd_flush reports through) is propagated so the guest
 # learns its writes were lost — but the fd state is released either way: the

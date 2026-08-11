@@ -1,4 +1,4 @@
-// Phase 5a QuickJS file-I/O fixture (our own committed code, ADR-9).
+// Phase 5a QuickJS file-I/O fixture (our own committed code).
 //
 // Exercises QuickJS-ng's std/os modules against a WASI preopened scratch
 // directory mounted at /work: write a file, read it back, print it. Run as

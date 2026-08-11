@@ -1,4 +1,4 @@
-//! The `go build` step the Go crate's test binaries share: compile generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once) and hand back the path.
+//! The `go build` step the Go crate's test binaries share: compile generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once) and hand back the path. The cache is keyed on the source alone and shared by every suite in the crate (e2e, spec, wasi-testsuite, module-name), so a program two of them happen to agree on is built once.
 //!
 //! Two layouts, selected by the artifact's own `package` clause — the one fact that decides how Go can build it:
 //!
@@ -17,7 +17,7 @@ use dewasm_backend_go::find_go;
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Compile `source` to a content-addressed cache binary and return its path. `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `go` toolchain is a loud failure (ADR-15).
+/// Compile `source` to a content-addressed cache binary and return its path. `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `go` toolchain is a loud failure.
 pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
@@ -105,31 +105,6 @@ fn run_build(
         cmd.env("GOWORK", "off");
     }
     cmd.output().expect("spawn go build")
-}
-
-/// Derive a module name the Go backend accepts in library mode (`/\A[A-Za-z_][A-Za-z0-9_]*\z/`) from a cache stem or class name the shared case tables carry (`sqlite3-binding`, `Qjs`, `doom`): drop the separators and capitalize each part, which is idempotent on the names that already conform, so `Qjs` stays `Qjs` and `doom` becomes `Doom` (package `doom`, type `Doom` — what every Go glue already instantiates).
-///
-/// Local to this crate for now: `BackendUnderTest` is growing a shared derivation of the same shape, and this should collapse into it once that lands.
-pub fn go_module_name(name: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for c in name.chars() {
-        if c.is_ascii_alphanumeric() {
-            if upper {
-                out.push(c.to_ascii_uppercase());
-                upper = false;
-            } else {
-                out.push(c);
-            }
-        } else {
-            upper = true;
-        }
-    }
-    assert!(
-        out.chars().next().is_some_and(|c| c.is_ascii_alphabetic()),
-        "cannot derive a Go module name from {name:?}"
-    );
-    out
 }
 
 /// The package `source` declares. The first line starting with `package ` is the clause itself: everything before it in generated output is `//` comments.

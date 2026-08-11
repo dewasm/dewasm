@@ -1,5 +1,5 @@
 # requires: mem/check, mem/i32_store, wasi/filetype
-# WASI fd_readdir (ADR-34): the first call for a dir fd snapshots the listing
+# WASI fd_readdir: the first call for a dir fd snapshots the listing
 # into <p>wdn<fd>/<p>wdt<fd> (names/filetypes) — glob the host directory once
 # with dotglob+nullglob (restored unconditionally right after, via the saved
 # `shopt -p` string), strip to basenames, insertion-sort byte-wise
@@ -63,7 +63,7 @@ wasi_fd_readdir() {
   local -n __m=${__p}mem
   local LC_ALL=C
   local __out=() __outlen=0 __ri=$__cookie __name __nlen __next __ck __b __mk
-  # The u64 cookie arrives as bash's signed-64 bit pattern (ADR-11): a
+  # The u64 cookie arrives as bash's signed-64 bit pattern: a
   # negative value is a huge unsigned position past any snapshot's end, so
   # report end-of-directory (an empty result, matching wasmtime) instead of
   # letting the loop read negative subscripts.

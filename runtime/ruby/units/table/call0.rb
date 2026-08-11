@@ -1,5 +1,5 @@
 # requires: rt/trap
-# Fixed-arity `call_indirect` for a 0-argument signature (ADR-44): same
+# Fixed-arity `call_indirect` for a 0-argument signature: same
 # dispatch and trap contract as `call`, but no `*args`/splat array is
 # built on either the caller or the callee side.
 def call0(i, type_key)

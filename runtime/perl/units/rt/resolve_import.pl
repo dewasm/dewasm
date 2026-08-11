@@ -1,6 +1,6 @@
 # Resolve one import from the embedder's imports hashref. The value under a
 # module name is either a plain hashref (name -> value) or a provider
-# object responding to wasm_import(name) (ADR-7).
+# object responding to wasm_import(name).
 sub resolve_import {
     my ($imports, $mod, $name) = @_;
     my $source = $imports->{$mod};

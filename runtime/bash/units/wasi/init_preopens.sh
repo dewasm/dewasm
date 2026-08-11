@@ -1,5 +1,5 @@
 # wasi_init_preopens <p>: register the standalone/library preopens from the
-# ordered WASI_DIRS array (the bash analogue of Ruby's `preopens:` kwarg, ADR-34)
+# ordered WASI_DIRS array (the bash analogue of Ruby's `preopens:` kwarg)
 # and initialize the parallel fd-table arrays for this prefix. Each WASI_DIRS
 # entry is 'HOST::GUEST' (no `::` means guest==host); the host is resolved
 # physically via `cd -P` (a non-directory host through its parent), and a host
@@ -10,7 +10,7 @@
 # IMPORTS/PROVIDERS never gets this state); an unset/empty WASI_DIRS just
 # initializes the arrays.
 #
-# Per-fd rights (ADR-40): <p>wrbase / <p>wrinh hold the u64 rights masks a fd
+# Per-fd rights: <p>wrbase / <p>wrinh hold the u64 rights masks a fd
 # exposes through fd_fdstat_get and enforces on fd_read/write/seek/readdir/
 # filestat_set_size; <p>wfdflags holds the u16 open fdflags. stdio gets all-ones
 # (a char device the guest may freely use). A preopen directory gets the

@@ -1,4 +1,4 @@
-# pack/unpack 'd' is a byte copy, so NaN payloads survive (ADR-55).
+# pack/unpack 'd' is a byte copy, so NaN payloads survive.
 sub f64_load {
     my ($self, $a) = @_;
     $self->check($a, 8);

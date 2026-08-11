@@ -1,4 +1,4 @@
-// Filesystem-only errno codes (ADR-14): kept out of the always-bundled
+// Filesystem-only errno codes: kept out of the always-bundled
 // wasi/_class prelude so a stdio-only WASI module (no path_* / fs-only fd_*
 // imports) doesn't carry them. The base codes (BADF/INVAL/IO/SPIPE) live in
 // _class since stdio needs them too.
@@ -19,7 +19,7 @@ const (
 // One host-error-to-WASI-errno mapping shared by every filesystem syscall, so
 // the same host error never maps to different codes depending on which syscall
 // raised it. Go wraps the raw errno in *fs.PathError/*os.LinkError, so unwrap
-// it with errors.As (ADR-14).
+// it with errors.As.
 func (w *WASI) fs_errno(err error) uint32 {
     var errno syscall.Errno
     if errors.As(err, &errno) {

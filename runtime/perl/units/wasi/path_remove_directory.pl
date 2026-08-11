@@ -6,7 +6,7 @@ sub wasi_path_remove_directory {
     my ($host, $err) = $self->resolve_path($dirfd, $rel, 0);
     return $err if defined $err;
     # rmdir through a trailing slash on an existing directory is EINVAL per
-    # wasmtime (ADR-49); other shapes come from the host call.
+    # wasmtime; other shapes come from the host call.
     return ERRNO_INVAL if substr($host, -1) eq '/' && -d substr($host, 0, -1);
     rmdir($host) or return $self->fs_errno(0 + $!);
     return ERRNO_SUCCESS;

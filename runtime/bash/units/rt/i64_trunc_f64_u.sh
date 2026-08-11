@@ -1,6 +1,7 @@
 # requires: rt/trap
 # At e == 63 the m << 11 deliberately wraps negative: that wrapped value
-# is exactly the u64 bit pattern of the result (ADR-11 representation).
+# is exactly the u64 bit pattern of the result, since bash holds an i64 as
+# its signed-64 bit pattern.
 rt_i64_trunc_f64_u() {
   local a=$1 pa s e m
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

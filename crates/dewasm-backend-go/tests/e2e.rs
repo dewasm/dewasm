@@ -1,10 +1,11 @@
-//! Go end-to-end suites (ADR-27): the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Go backend. Per the ADR-27 revision this file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
+//! Go end-to-end suites: the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Go backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
 //!
-//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` (ADR-27's hook) to compile-and-execute instead of interpreting: `go build` the generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem (ADR-29).
+//! Go is a *compiled* backend, so it overrides `BackendUnderTest::run` to compile-and-execute instead of interpreting: `go build` the generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once), then run the binary directly. Running the binary (not `go run`) is required because `go run` does not propagate the guest exit code (it prints "exit status N" and exits 1); the WASI args/env case asserts an exact exit code. Go covers full WASI preview 1 incl. the filesystem.
 //!
 //! Library-mode output is `package <module name>`, not `package main`, so a library case is not a runnable file on its own: [`common::build_go`] wraps it in a throwaway Go module whose `main` imports the package and calls the glue's `RunTest`. That is why every library glue below defines `func RunTest()` where it used to define `func main()`; the multi-module glue keeps `func main` because its driver *is* the `package main` file of a module `compose_modules` lays out on disk.
 
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 use std::path::Path;
 use std::process::{Command, Output};
 
@@ -14,7 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 
 mod common;
 
-use common::{build_go, build_go_dir, go_module_name, package_clause};
+use common::{build_go, build_go_dir, package_clause};
 
 pub struct Go;
 
@@ -27,21 +28,15 @@ impl BackendUnderTest for Go {
         &GoBackend
     }
 
-    /// Convert a cached app, deriving a conforming module name from the cache stem the shared case tables carry (`sqlite3-binding`): a library-mode Go artifact declares `package <name lowercased>`, so a dashed stem is rejected at conversion time now. Standalone conversions are unaffected (the name is unused there), so this normalizes unconditionally.
-    fn convert_app(&self, bytes: &[u8], mode: Mode, name: &str) -> String {
-        dewasm_test_helper::convert_on_big_stack(self.backend(), bytes, mode, &go_module_name(name))
-    }
-
-    /// Compile `source` to a cache binary (keyed by content hash) and run it with `args`/`stdin`. A missing `go` toolchain is a loud failure (ADR-15); a build failure is surfaced as the build command's `Output` so the caller's `status.success()` assertion reports the compile error.
+    /// Compile `source` to a cache binary (keyed by content hash) and run it with `args`/`stdin`. A missing `go` toolchain is a loud failure; a build failure is surfaced as the build command's `Output` so the caller's `status.success()` assertion reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match build_go(source) {
-            // A build failure is surfaced as the build `Output` so the caller's `status.success()` assertion reports the compile error.
             Err(build) => build,
             Ok(bin) => dewasm_test_helper::run_command_bytes(Command::new(&bin).args(args), stdin),
         }
     }
 
-    /// Build `source` to the cache binary and run it under a pty. A build failure fails loud (ADR-15): there is no `status` for the caller to inspect on the pty path, so panic with the compiler output.
+    /// Build `source` to the cache binary and run it under a pty. A build failure fails loud: there is no `status` for the caller to inspect on the pty path, so panic with the compiler output.
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let bin = build_go(source).unwrap_or_else(|build| {
             panic!(
@@ -58,7 +53,7 @@ impl BackendUnderTest for Go {
 
     /// Lay out a multi-module case as a throwaway Go module in `dir` and return the driver file's `package main` clause — everything else the driver needs, its imports included, comes from the case glue, because Go rejects an unused import and only the glue knows what it uses.
     ///
-    /// `shared_runtime` mirrors the spec harness (ADR-29): each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and all of it goes into a single `modules.go` of the *same* `package main` as the driver. A shared runtime cannot be split into a package per module: the runtime types would then be distinct types per package, and a table value crossing modules would no longer typecheck. `shared_runtime=false` is the opposite layout and needs no trick at all — each module is a library conversion, which since #155 declares `package <module name>`, so writing them into `alpha/` and `beta/` beside the driver gives two artifacts with their own runtime, their own trap type, and no shared identifier whatsoever (ADR-62).
+    /// `shared_runtime` mirrors the spec harness: each module is emitted as bare package-level declarations against one flat top-level runtime (`generate_program_with_units`), the referenced units are unioned and bundled once, and all of it goes into a single `modules.go` of the *same* `package main` as the driver. A shared runtime cannot be split into a package per module: the runtime types would then be distinct types per package, and a table value crossing modules would no longer typecheck. `shared_runtime=false` is the opposite layout and needs no trick at all — each module is a library conversion, which since #155 declares `package <module name>`, so writing them into `alpha/` and `beta/` beside the driver gives two artifacts with their own runtime, their own trap type, and no shared identifier whatsoever.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -83,7 +78,7 @@ impl BackendUnderTest for Go {
                 .expect("bundle runtime");
             let decls = decls.join("\n");
             let imports = scan_imports(&format!("{bundle}\n{decls}"));
-            // `generate_program_with_units` emits spec-mode declarations whose recursion guard references a shared `rtStack` counter, declared in the spec harness's PREAMBLE; the multi-module composition must declare it too (ADR-29).
+            // `generate_program_with_units` emits spec-mode declarations whose recursion guard references a shared `rtStack` counter, declared in the spec harness's PREAMBLE; the multi-module composition must declare it too.
             std::fs::write(
                 dir.join("modules.go"),
                 format!(
@@ -119,7 +114,7 @@ impl BackendUnderTest for Go {
     }
 }
 
-/// The external packages an assembled multi-module program references (mirrors the spec harness's scanner). Only controlled fragments — the runtime bundle and generated declarations — are scanned, so no user string can inject a false import (ADR-29).
+/// The external packages an assembled multi-module program references, by the backend's own boundary-matching rule ([`dewasm_backend_go::selector_used`]); mirrors the spec harness's scanner. Only controlled fragments — the runtime bundle and generated declarations — are scanned, so no user string can inject a false import. The candidate list stays local: it is what *this* program can reference, and importing more than that is a Go compile error.
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -131,7 +126,7 @@ fn scan_imports(text: &str) -> Vec<String> {
     ];
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {
-        if text.contains(sel) {
+        if dewasm_backend_go::selector_used(text, sel) {
             set.insert(path);
         }
     }
@@ -144,7 +139,7 @@ fn import_block(imports: &[String]) -> String {
     }
     let mut out = String::from("import (\n");
     for path in imports {
-        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("\t{path:?}\n"));
+        let _ = writeln!(out, "\t{path:?}");
     }
     out.push_str(")\n");
     out
@@ -161,7 +156,7 @@ const GO_ADD_GLUE: &str = r#"func RunTest() {
 }
 "#;
 
-/// The ADR-7 override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
+/// The override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
 const GO_OVERRIDE_GLUE: &str = r#"func RunTest() {
 	var captured []byte
 	var inst *Prog
@@ -436,7 +431,7 @@ const GO_LIBSQLITE3_MEM: &str = r#"func RunTest() {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same ADR-14 fs stack as the shell).
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same fs stack as the shell).
 const GO_LIBSQLITE3_FILE: &str = r#"func RunTest() {
 	inst := NewLibsqlite3(nil, nil, nil, map[string]string{"/db": "{scratch}"})
 	inst.Exports["_initialize"].(func())()
@@ -509,7 +504,7 @@ const GO_LIBSQLITE3_FILE: &str = r#"func RunTest() {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the ADR-7 import-provider map and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row`. The glue provides `host_row` via the import-provider map and collects the rows.
 const GO_SQLITE3_CALLBACK: &str = r#"func RunTest() {
 	var rows []string
 	var mem *Memory
@@ -713,7 +708,7 @@ do '/work/exiftool';
 
 // --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the ADR-7 provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`). Both modules share the driver's `package main`, so they are named unqualified; the driver file carries its own imports (`compose_modules` writes only the package clause, since Go rejects an unused import).
+/// Driver for the shared-table case: instantiate `TableExp` (exports the table), then `TableImp` linked against it via the provider (`otherInst.Exports` as the module provider, as the spec harness's cross-module `register` path does), and print its `call0` result (`42`). Both modules share the driver's `package main`, so they are named unqualified; the driver file carries its own imports (`compose_modules` writes only the package clause, since Go rejects an unused import).
 const GO_SHARED_TABLE_GLUE: &str = r#"
 import "fmt"
 
@@ -763,7 +758,7 @@ func main() {
 }
 "#;
 
-/// DOOM (ADR-53): deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
+/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot. Library-mode Go imports `fmt` but not `os`, so the binary frame goes out via `fmt.Print(string(...))`. `{ticks}`/`{clock_step}` filled by the runner.
 const GO_DOOM_FRAME_GLUE: &str = r#"func RunTest() {
 	var ms uint64
 	var frameOff, frameW, frameH uint32
@@ -812,20 +807,13 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func RunTest() {
 /// the `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the
 /// wasmtime snapshot.
 ///
-/// Unlike every other backend's glue, this is a function rather than a static
-/// `&str` const. Library-mode Go's generated file imports only `fmt` (plus
-/// whatever the wasm module's own decompiled code happens to reference) —
-/// Go requires every `import` to appear before all other top-level
-/// declarations, so glue text *appended* after the generated class cannot
-/// add its own `import "os"` to open `{rom}`'s host path (`go build` rejects
-/// a trailing import with "imports must appear before other declarations").
-/// With no WASI imports either (`nes.wasm` imports nothing at all) there is
-/// no other route to `os` for a free host-file read. So the ROM's bytes are
-/// read here, at test time, and embedded as a `\xHH`-escaped Go string
-/// literal — a `[]byte(...)` conversion of an escaped string literal needs no
-/// import, the same trick the Go backend's own codegen uses for a module's
-/// data segments (`Rt.unhex`, `f0`'s `p.memory.init` call in a converted
-/// `nes.wasm`).
+/// A function rather than a static `&str` const, unlike every other backend's
+/// glue: Go requires every `import` to appear before all other top-level
+/// declarations, so glue *appended* after the generated code cannot add its own
+/// `import "os"` to read `{rom}` — and `nes.wasm` imports nothing, so there is
+/// no WASI route to the host either. The ROM is therefore read here, at test
+/// time, and embedded as a `\xHH`-escaped string literal, the same
+/// import-free escape route the backend uses for data segments.
 fn go_nes_frame_glue() -> String {
     let rom = std::fs::read(dewasm_test_helper::alter_ego_rom_path())
         .expect("read alter_ego_rom_path — see examples/apps/scripts/nes.sh");
@@ -870,8 +858,6 @@ fn go_nes_frame_glue() -> String {
     )
 }
 
-// --------------------------------------------------------------------- Suite wiring (ADR-27): each per-case macro invocation declares participation.
-
 dewasm_test_helper::library_add_e2e!(Go, GO_ADD_GLUE);
 dewasm_test_helper::wasi_import_override_e2e!(Go, GO_OVERRIDE_GLUE);
 dewasm_test_helper::stdio_capture_e2e!(Go, GO_STDIO_CAPTURE_GLUE);
@@ -889,7 +875,7 @@ dewasm_test_helper::deep_recursion_e2e!(Go);
 
 dewasm_test_helper::cowsay_args_e2e!(Go);
 dewasm_test_helper::cowsay_stdin_e2e!(Go);
-// The `ultra` cases (ADR-48) are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23): kept out of CI's `slow_test` run, run only under `--features ultra_slow_test` or `-- --include-ignored`. The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at `slow`.
+// The `ultra` cases are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23). The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at `slow`.
 dewasm_test_helper::qjs_eval_e2e!(Go, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Go, ultra);
 dewasm_test_helper::gzip_e2e!(Go);
@@ -898,7 +884,7 @@ dewasm_test_helper::qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// Ultra-slow category (ADR-48): the ~35 MB CRuby wasm's ~242 MB Go source takes `go build` well past the ~5-minute ADR-24 practicality bar and CI's own budget (convert + build + run measured ~14m54s locally) — wall time is the cost, not feasibility. The 49 MB wasi-vfs-packed variant (ADR-61) is the same interpreter plus embedded stdlib (~14m13s), so it inherits the category.
+// Ultra: the ~35 MB CRuby wasm becomes ~242 MB of Go, measured ~14m54s end to end — wall time is the cost, not feasibility. The 49 MB wasi-vfs-packed variant is the same interpreter plus embedded stdlib (~14m13s).
 dewasm_test_helper::cruby_hello_e2e!(Go, GO_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Go, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Go);
@@ -908,7 +894,7 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
-// The zeroperl reactor cases (issue #139) join the `ultra` giants above: the 25 MB reactor becomes a ~90 MB Go program whose `go build` dominates the run — measured 71 s (zeroperl_eval) and 92 s (exiftool_extract), well past the ~1-min bar.
+// The zeroperl reactor cases (issue #139) join the `ultra` giants above: the 25 MB reactor becomes a ~90 MB Go program whose `go build` dominates the run — measured 71 s (zeroperl_eval) and 92 s (exiftool_extract).
 dewasm_test_helper::zeroperl_eval_e2e!(Go, GO_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Go, GO_EXIFTOOL, ultra);
 

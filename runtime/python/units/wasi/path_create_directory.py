@@ -2,7 +2,7 @@
 def wasi_path_create_directory(self, dirfd, path_ptr, path_len):
     rel = self.memory.read_string(path_ptr, path_len).decode("utf-8", "surrogateescape")
     # Strip a trailing slash: mkdir names a directory anyway, and EEXIST is
-    # wasmtime's answer for mkdir("file/") where the hosts split (ADR-49).
+    # wasmtime's answer for mkdir("file/") where the hosts split.
     core = rel.rstrip("/")
     if core:
         rel = core

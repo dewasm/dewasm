@@ -3,7 +3,7 @@ def wasi_path_symlink(old_ptr, old_len, dirfd, new_ptr, new_len)
   target = @memory.read_string(old_ptr, old_len)
   new_rel = @memory.read_string(new_ptr, new_len)
   # The link's *contents* are stored verbatim (containment is enforced when
-  # a later resolve follows the link, ADR-40) — except an absolute target,
+  # a later resolve follows the link) — except an absolute target,
   # which could never resolve inside the sandbox, so reject it up front.
   return ERRNO_NOTCAPABLE if target.start_with?("/")
   host_path, err = resolve_path(dirfd, new_rel, follow_last: false)

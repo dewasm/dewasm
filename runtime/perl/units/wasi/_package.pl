@@ -1,7 +1,7 @@
-# WASI preview 1 runtime state (ADR-14 model, mirroring the Ruby/Python
+# WASI preview 1 runtime state (mirroring the Ruby/Python
 # runtimes): a fd table plus a parallel per-fd capability map, seeded from
 # the constructor's preopens. Per-fd rights are modelled after wasmtime's
-# wasi-common (ADR-40): a directory and a file each carry a different
+# wasi-common: a directory and a file each carry a different
 # default set, path_open narrows the requested rights against the parent's
 # inheriting set (then per-filetype), and fd_fdstat_set_rights can only
 # drop bits. Kept in the always-bundled prelude because new() seeds the
@@ -99,7 +99,7 @@ sub new {
     };
     # stdio gets the full file-right set (a stream can read/write/etc.);
     # preopens get the directory base and the directory-plus-file
-    # inheriting set (ADR-40).
+    # inheriting set.
     $self->{meta} = {
         0 => [FILE_RIGHTS_BASE, 0, 0],
         1 => [FILE_RIGHTS_BASE, 0, 0],
@@ -123,7 +123,7 @@ sub new {
     return $self;
 }
 
-# Import-provider protocol (ADR-7): a custom WASI runtime can replace this
+# Import-provider protocol: a custom WASI runtime can replace this
 # package wholesale by implementing wasm_import($name) and attach($instance).
 sub wasm_import {
     my ($self, $name) = @_;

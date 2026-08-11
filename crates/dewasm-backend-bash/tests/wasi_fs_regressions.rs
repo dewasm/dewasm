@@ -40,7 +40,7 @@ fn run_module(name: &str, wat_src: &str, glue: &str) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// The standard `_start` glue (`e2e.rs`'s `BASH_FS_GLUE` with the preopen inlined): preopen `host` at guest `/`, run `_start`, surface a `proc_exit` code — `invoke` returns status 133 with the code in `$EXIT_CODE` (ADR-12) — as a trailing decimal line.
+/// The standard `_start` glue (`e2e.rs`'s `BASH_FS_GLUE` with the preopen inlined): preopen `host` at guest `/`, run `_start`, surface a `proc_exit` code — `invoke` returns status 133 with the code in `$EXIT_CODE` — as a trailing decimal line.
 fn start_glue(host: &Path) -> String {
     format!(
         r#"WASI_DIRS=('{}::/')
@@ -152,7 +152,7 @@ fn rename_trailing_slash_on_file_destination_is_enotdir() {
     assert_eq!(std::fs::read_to_string(dir.join("dst")).unwrap(), "d");
 }
 
-/// A trailing slash on a *nonexistent* destination is stripped and the rename proceeds onto the bare name — wasmtime's behavior (ADR-49). The raw hosts diverge here (macOS ENOENT / Linux ENOTDIR), hence the pin.
+/// A trailing slash on a *nonexistent* destination is stripped and the rename proceeds onto the bare name — wasmtime's behavior. The raw hosts diverge here (macOS ENOENT / Linux ENOTDIR), hence the pin.
 #[test]
 fn rename_trailing_slash_missing_destination_strips_and_renames() {
     let dir = scratch_dir("slash-dst-missing");

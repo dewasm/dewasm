@@ -17,7 +17,7 @@
 ;; work but still prints, which is how the harness measures startup in
 ;; isolation. Only args_sizes_get / args_get / fd_write / proc_exit are
 ;; imported and the bodies stick to i32/i64/f64, because the pure-Ruby and
-;; pure-Python interpreters this suite compares cannot do more than that (ADR-57).
+;; pure-Python interpreters this suite compares cannot do more than that.
 ;;
 ;; Memory map, shared by every microbenchmark. It starts at 0x1000 rather than at 0
 ;; because wasm3 traps with "out of bounds memory access" whenever a WASI out

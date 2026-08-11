@@ -9,7 +9,7 @@
 #   cache/wat/*.wasm  the hand-written microbenchmarks, via wat/build.sh
 #   cache/c/*.wasm    the C microbenchmarks, via c/build.sh
 #
-# Third-party artifacts are never committed (ADR-9) and the cache is gitignored.
+# Third-party artifacts are never committed, and the cache is gitignored.
 # Idempotent: re-running is a no-op beyond re-checking the pins and rebuilding
 # the microbenchmarks.
 #
@@ -28,7 +28,7 @@ mkdir -p cache
 PYWASM_VERSION=2.2.3
 WARDITE_VERSION=0.9.0
 
-# Fail loudly with an actionable message rather than half-installing (ADR-15).
+# Fail loudly with an actionable message rather than half-installing.
 require_tool() {
   command -v "$1" >/dev/null && return
   echo "benchmarks/setup.sh: $1 not found — $2" >&2

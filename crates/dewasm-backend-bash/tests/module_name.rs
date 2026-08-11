@@ -1,26 +1,18 @@
-//! The module-name policy (ADR-63) for Bash: a library name is one identifier, lowercased into the global function/variable prefix — the single deliberate mapping the policy keeps, because bash has no case-carrying namespace. An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
+//! The module-name policy for Bash: a library name is one identifier, lowercased into the global function/variable prefix — the single deliberate mapping the policy keeps, because bash has no case-carrying namespace. An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
 
-use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasm_backend::Mode;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 
 const ADD_WAT: &str = r#"(module
   (func (export "add") (param i32 i32) (result i32) (i32.add (local.get 0) (local.get 1))))"#;
 
-fn convert(name: &str, mode: Mode) -> anyhow::Result<String> {
-    let bytes = wat::parse_str(ADD_WAT)?;
-    let module = dewasm_core::build_module(&bytes)?;
-    let mut files = BashBackend.generate(
-        &module,
-        &GenOptions {
-            mode,
-            module_name: name.to_string(),
-            runtime: RuntimeLinkage::Embedded,
-            default_wasi: false,
-            data_file: None,
-        },
-    )?;
-    Ok(String::from_utf8(files.remove(0).contents)?)
-}
+dewasm_test_helper::module_name_policy_suite!(
+    backend: BashBackend,
+    wat: ADD_WAT,
+    invalid: ["sqlite3-shell", "", "a.b", "3add"],
+    error_contains: "invalid bash module name",
+    standalone_markers: ["program_init"],
+);
 
 /// The prefix is the name lowercased plus `_` — a total mapping, stated rather than guessed.
 #[test]
@@ -42,25 +34,4 @@ fn prefix_is_the_lowercased_name_and_runs() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(String::from_utf8_lossy(&out.stdout), "5\n");
-}
-
-#[test]
-fn invalid_library_names_are_rejected() {
-    for name in ["sqlite3-shell", "", "a.b", "3add"] {
-        let err = convert(name, Mode::Library)
-            .expect_err("an invalid bash module name must be a conversion error");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("invalid bash module name") && msg.contains("--module-name"),
-            "the error must name the grammar and the flag, got: {msg}"
-        );
-    }
-}
-
-/// Standalone output is a self-contained program: the requested name never reaches the source.
-#[test]
-fn standalone_prefix_is_fixed() {
-    let source = convert("whatever-the-stem-was", Mode::Standalone).expect("convert");
-    assert!(source.contains("program_init"));
-    assert!(!source.contains("whatever"));
 }

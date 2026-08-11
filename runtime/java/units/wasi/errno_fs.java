@@ -1,4 +1,4 @@
-// Filesystem-only errno codes (ADR-14): kept out of the always-bundled
+// Filesystem-only errno codes: kept out of the always-bundled
 // wasi/_class prelude so a stdio-only WASI module (no path_* / fs-only fd_*
 // imports) doesn't carry them. The base codes (BADF/INVAL/IO/SPIPE) live in
 // _class since stdio needs them too.
@@ -12,12 +12,12 @@ static final int WASI_NOTDIR = 54;
 static final int WASI_NOTEMPTY = 55;
 static final int WASI_PERM = 63;
 // WASI_NOTCAPABLE (76) lives in the always-bundled wasi/_class prelude, since
-// the rights model enforces it from stdio-core fd_* units too (ADR-40).
+// the rights model enforces it from stdio-core fd_* units too.
 
 // One host-error-to-WASI-errno mapping shared by every filesystem syscall, so
 // the same host error never maps to different codes depending on which syscall
 // raised it. Java's NIO raises typed subclasses of IOException, so match on
-// those (ADR-30); everything else falls back to EIO. Note the honest gaps vs
+// those; everything else falls back to EIO. Note the honest gaps vs
 // the Go/Python backends, which read the raw errno: Java exposes no distinct
 // exception for EISDIR, ELOOP, or ENAMETOOLONG at open/stat time, so those
 // host conditions surface as EIO here unless a syscall detects them itself

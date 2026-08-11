@@ -5,7 +5,7 @@ sub wasi_fd_write {
     return ERRNO_BADF if !defined($e) || $e->{dir};
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_WRITE;
     # fdflags::APPEND is honoured here (not via O_APPEND on the OS handle)
-    # so fd_fdstat_set_flags(0) can turn it back off (ADR-40).
+    # so fd_fdstat_set_flags(0) can turn it back off.
     if (($self->{meta}{$fd}[2] & 0x1) && !defined($e->{std})) {
         return ERRNO_IO unless defined sysseek($e->{fh}, 0, 2);
     }

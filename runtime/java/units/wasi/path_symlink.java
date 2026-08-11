@@ -1,7 +1,7 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 // Create a symlink whose content is the guest's target string stored VERBATIM
 // (never pre-resolved): confinement happens later, when something follows the
-// link (resolve_path's realpath + containment check), not at creation (ADR-40).
+// link (resolve_path's realpath + containment check), not at creation.
 // An absolute target is rejected outright — it could only ever escape the
 // preopen tree at follow time. The link's own parent is resolved NOFOLLOW.
 int wasi_path_symlink(int oldPtr, int oldLen, int fd, int newPtr, int newLen) {

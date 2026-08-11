@@ -1,5 +1,5 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
-# WASI fd_pread (ADR-34): byte-wise binary-safe read from a file fd's
+# WASI fd_pread: byte-wise binary-safe read from a file fd's
 # whole-file buffer at an explicit offset, leaving <p>wtell untouched
 # (mirrors fd_read's kind-2 path exactly, minus the offset tracking). stdio
 # (kind 1) cannot seek (ESPIPE, matching fd_seek/Ruby's ERRNO_SPIPE); a

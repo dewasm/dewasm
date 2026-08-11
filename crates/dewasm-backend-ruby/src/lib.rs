@@ -1,13 +1,20 @@
 //! Ruby backend: translates dewasm IR into a Ruby class plus a bundled lightweight runtime.
 //!
-//! Lowering conventions (ADR-4; numeric conventions ADR-2):
+//! Lowering conventions:
 //! - i32/i64 are unsigned (masked) Ruby Integers; signed views via `s32`/`s64` only where an instruction needs them.
 //! - f32/f64 are Ruby Floats; f32 results are re-rounded with `f32`.
 //! - `br` lowers to a method-local `__br` label-variable cascade: blocks and referenced ifs are `begin...end while false`, loops are `while true`, and a multi-level branch sets `__br` to the target label id and `break`s, each crossed frame's epilogue relaying it until the target lands.
+//! - A branch crossing 16 frames or more is addressed by value instead: the frames it crosses dissolve into a `case state` dispatch loop, so it costs one assignment at any depth (see [`flat`]). Shallower crossings keep the cascade and uncrossed frames stay structured, side by side in the same function.
 //!
-//! The runtime is composed from per-method units (ADR-6) and referenced by the relative name `Rt`, so linkage (embedded per class, shared, or a future gem) is the caller's choice.
+//! The runtime is composed from per-method units and referenced by the relative name `Rt`, so linkage (embedded per class or shared) is the caller's choice.
 
-mod flat;
+/// Flat dispatch, shared with the Python backend ([`dewasm_backend::flat`]); only the threshold below is Ruby's own.
+mod flat {
+    pub use dewasm_backend::flat::*;
+
+    /// Crossing depth from which a branch is worth a dispatch. A relay costs one compare per crossed frame — measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32 — while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked: it puts the two measured workloads on the side each was measured to prefer — `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
+    pub const DEEP_CROSSING: usize = 16;
+}
 
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
@@ -15,14 +22,14 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, comparison, is_boolean, is_ident, local_runs, module_name_error, Backend,
-    CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
-    RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
+    local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
+    wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, LoadOp, Module, Stmt, StoreOp, Temp,
-    UnOp, ValType,
+    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -78,7 +85,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a ruby interpreter able to run generated scripts. Unlike `dewasm_backend_bash::find_bash5`'s version floor: no alternate-path search is needed (ruby is expected on `PATH`), but the generated runtime's memory model is `IO::Buffer`-backed (see docs/adr/33-ruby-io-buffer-memory.md), which requires Ruby >= 3.4. Per ADR-15, fail loud with a setup instruction rather than silently skipping.
+/// Locate a ruby interpreter able to run generated scripts: the `ruby` on `PATH`, and at least 3.4, because the generated runtime's memory is `IO::Buffer`-backed. A missing or too-old interpreter fails loud with a setup instruction rather than silently skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
     static RUBY: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     RUBY.get_or_init(find_ruby_uncached).clone()
@@ -126,14 +133,14 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
-    // A global needs a shared mutable cell (`Rt::Global`, ADR-16) only if it can cross an instantiation boundary: imported (came from another instance) or exported (another instance may import it later). Every other global is local to this class and never observed from outside it, so it can be a plain ivar holding the value directly.
+    // A global needs a shared mutable cell (`Rt::Global`) only if it can cross an instantiation boundary: imported (came from another instance) or exported (another instance may import it later). Every other global is local to this class and never observed from outside it, so it can be a plain ivar holding the value directly.
     let boxed_globals: BTreeSet<u32> = (0..module.imported_globals.len() as u32)
         .chain(module.exports.iter().filter_map(|e| match e.kind {
             ExportKind::Global(idx) => Some(idx),
             _ => None,
         }))
         .collect();
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob (ADR-37). Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob. Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -188,14 +195,13 @@ impl Backend for RubyBackend {
         "rb"
     }
 
-    // The Ruby backend's remaining wasm-1.0 + WASI p1 gaps: a dozen WASI p1 functions and the import-limits list (ADR-16).
     fn has_wasi_p1(&self, name: &str) -> bool {
         bundler().has_unit(&format!("wasi/{name}"))
     }
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Part of the wasm 1.0 baseline for Ruby; the row exists for backends whose language lacks floats (ADR-5).
+            // Part of the wasm 1.0 baseline for Ruby; the row exists for backends whose language lacks floats.
             Feature::Floats => SupportStatus::Supported,
             Feature::ImportedGlobals
             | Feature::ImportedMemories
@@ -207,7 +213,7 @@ impl Backend for RubyBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its class name is fixed, not derived (ADR-63). Library output uses the requested name verbatim, after validating it.
+        // Standalone output is a self-contained program: its class name is fixed, not derived. Library output uses the requested name verbatim, after validating it.
         let class_name = if opts.mode == Mode::Standalone {
             STANDALONE_CLASS.to_string()
         } else {
@@ -238,11 +244,11 @@ impl Backend for RubyBackend {
         w.raw(&class_src);
 
         if opts.mode == Mode::Standalone {
-            let wasi_kwargs = wasi_bundled(module, opts.default_wasi);
+            let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
             w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
                 if wasi_kwargs {
-                    // Parse the standalone runtime interface (ADR-31): a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                    // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                     w.line("preopens = {}");
                     w.line("argv = ARGV.dup");
                     w.line("while (a = argv.first)");
@@ -299,7 +305,7 @@ impl Backend for RubyBackend {
             name: format!("{}.rb", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar (ADR-37): every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls. Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -316,10 +322,10 @@ impl Backend for RubyBackend {
     }
 }
 
-/// The class a `--mode standalone` program defines (ADR-63). A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
+/// The class a `--mode standalone` program defines. A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a Ruby constant path — `::`-separated segments, each `[A-Z][A-Za-z0-9_]*` — and is used verbatim (ADR-63). Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
+/// The library-mode module name must be a Ruby constant path — `::`-separated segments, each `[A-Z][A-Za-z0-9_]*` — and is used verbatim. Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
         is_ident(
@@ -339,7 +345,7 @@ fn check_module_name(name: &str) -> Result<()> {
     }
 }
 
-/// Ruby's `class A::B::C` needs `A` and `A::B` to already exist, and a generated file must be loadable both on its own and next to something that already defined them. Each ancestor therefore gets a guarded definition: define it only when the constant is not already there, in outermost-first order (ADR-63). An ancestor that exists as a *class* is left alone (the guard skips it); an ancestor bound to a non-module constant fails loudly at load, which is the correct outcome.
+/// `class A::B::C` needs `A` and `A::B` to exist, and the file must load both on its own and next to something that already defined them: each ancestor gets an unless-defined? guard, outermost first. An ancestor that already exists is left alone, whatever it is — bound to a non-module constant it fails loudly at load, which is the correct outcome.
 fn ancestor_guards(class_name: &str) -> String {
     let segs: Vec<&str> = class_name.split("::").collect();
     let mut out = String::new();
@@ -352,7 +358,8 @@ fn ancestor_guards(class_name: &str) -> String {
     out
 }
 
-fn ruby_string(s: &str) -> String {
+/// Ruby double-quoted string literal (`#` escaped too, since it opens an interpolation).
+pub fn ruby_string(s: &str) -> String {
     let mut out = String::from("\"");
     for c in s.chars() {
         match c {
@@ -370,33 +377,13 @@ fn ruby_string(s: &str) -> String {
 }
 
 fn hex_bytes(data: &[u8]) -> String {
-    let mut hex = String::with_capacity(data.len() * 2);
-    for b in data {
-        hex.push_str(&format!("{b:02x}"));
-    }
-    format!("[\"{hex}\"].pack(\"H*\")")
+    format!("[\"{}\"].pack(\"H*\")", hex_string(data))
 }
 
-/// WASI import module names the bundled runtime answers for. `wasi_unstable` (snapshot 0) shares the ABI of preview 1 for everything we implement except fd_seek's whence encoding (snapshot 0 modules that actually seek may misbehave; acceptable until snapshot 0 gets its own units).
-const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
-
-/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method (ADR-44); wider signatures fall back to the splat `call`. The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
+/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method; wider signatures fall back to the splat `call`. The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
 const MAX_FIXED_ARITY: usize = 8;
 
-fn is_wasi_module(name: &str) -> bool {
-    WASI_MODULES.contains(&name)
-}
-
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
-
-/// Whether the generated class bundles the built-in WASI as an import fallback (and therefore takes `args:`/`env:` keyword arguments).
-fn wasi_bundled(module: &Module, default_wasi: bool) -> bool {
-    default_wasi
-        && module
-            .imported_funcs
-            .iter()
-            .any(|f| is_wasi_module(&f.module) && bundler().has_unit(&format!("wasi/{}", f.name)))
-}
 
 /// Per-function frame classification for the label-variable cascade.
 #[derive(Default)]
@@ -407,7 +394,7 @@ struct FrameSets {
     wrapped: HashSet<u32>,
     /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve — the `while` compiles to a `while`.
     break_ok: HashSet<u32>,
-    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing — dissolving any frame it crosses forces the rest (ADR-60).
+    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing — dissolving any frame it crosses forces the rest.
     paths: Vec<Vec<u32>>,
 }
 
@@ -415,14 +402,7 @@ struct FrameSets {
 ///
 /// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch — `pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing — or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
 ///
-/// The one outward shape that marks nothing is `break_ok`: a branch crossing a
-/// single loop that is the **sole** statement of the block it targets. Ruby's
-/// `break` leaves that loop and lands at the block's end — the same place, in
-/// O(1) — so the frames stay structured. `sole` rather than `last` is a
-/// correctness requirement, not conservatism; see the comment on the check.
-/// It is also not propagated through `if` arms: a `break` from inside an `if`
-/// lands after the `if`, and proving that is still the block's end is more than
-/// this rule needs to claim.
+/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets. Ruby's `break` leaves that loop and lands at the block's end — the same place, in O(1) — so the frames stay structured. `sole` rather than `last` is a correctness requirement, not conservatism. It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
 fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
     let mut sets = FrameSets::default();
     let mut stack: Vec<(u32, bool)> = Vec::new();
@@ -520,19 +500,19 @@ struct Gen<'a> {
     uses: RefCell<BTreeSet<String>>,
     /// Per-function frame classification, set by `function()`: which frames carry a land-or-relay epilogue and which loops wrap their body. See `compute_frame_sets`.
     frames: RefCell<FrameSets>,
-    /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares the top of this stack against a `br`'s target to decide between the depth-1 fast path (a plain `break`/`next` that leaves the innermost frame directly) and the cascade (`__br = <id>; break`, relayed by each crossed frame's epilogue until the target lands).
+    /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares its top against a `br`'s target; see the fast path there.
     frame_stack: RefCell<Vec<u32>>,
     /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]). `branch()` consults it to emit `state = N; next` instead of the cascade.
     flat: RefCell<Option<flat::Plan>>,
-    /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there and ADR-16.
+    /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there.
     boxed_globals: BTreeSet<u32>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals (ADR-37); `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
 
 impl<'a> Gen<'a> {
-    /// The Ruby expression yielding a data segment's bytes: a slice of the externalized blob when `--data-file` is on, else an inline packed-hex literal (ADR-37). Both yield an ASCII-8BIT (binary) string.
+    /// The Ruby expression yielding a data segment's bytes: a slice of the externalized blob when `--data-file` is on, else an inline packed-hex literal. Both yield an ASCII-8BIT (binary) string.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             format!(
@@ -596,7 +576,7 @@ impl<'a> Gen<'a> {
         name
     }
 
-    /// Resolve one import and validate its kind (ADR-7's mechanism, generalized to every import kind): a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
+    /// Resolve one import and validate its kind — one mechanism covering every import kind, not only functions: a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
     fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
         self.use_unit("rt/resolve_import");
         self.use_unit("rt/check_import_kind");
@@ -621,7 +601,7 @@ impl<'a> Gen<'a> {
     fn body(&self, w: &mut CodeWriter) {
         self.initialize(w);
         w.line("");
-        // The memory is named at every load and store, so the ivar is short; the accessor keeps the name the provider protocol (ADR-7) and embedders use.
+        // The memory is named at every load and store, so the ivar is short; the accessor keeps the name the provider protocol and embedders use.
         w.line("attr_reader :exports");
         w.line("");
         w.line("def memory = @m");
@@ -643,7 +623,7 @@ impl<'a> Gen<'a> {
             w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
         });
         w.line("");
-        // ADR-7 provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace — the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
+        // Provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace — the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
         w.block("def import(name)", "end", |w| {
             w.line("return @exports[name] if @exports.key?(name)");
             w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
@@ -692,7 +672,7 @@ impl<'a> Gen<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         w.line(format!("MEMORY_EXPORTS = [{memory_entries}].freeze"));
-        // Externalized data blob (ADR-37): read once at class-definition time, kept binary (ASCII-8BIT, as File.binread returns). Only emitted when there is data to externalize.
+        // Externalized data blob: read once at class-definition time, kept binary (ASCII-8BIT, as File.binread returns). Only emitted when there is data to externalize.
         if let Some(name) = &self.data_file {
             if !m.datas.is_empty() {
                 w.line(format!(
@@ -703,7 +683,7 @@ impl<'a> Gen<'a> {
         }
         w.line("");
 
-        let wasi_fallback = wasi_bundled(m, self.default_wasi);
+        let wasi_fallback = wasi_bundled(m, self.default_wasi, bundler());
         let header = if wasi_fallback {
             "def initialize(imports = {}, args: [], env: {}, preopens: {})"
         } else {
@@ -716,8 +696,7 @@ impl<'a> Gen<'a> {
                     self.resolve_import_string("memory", &import.module, &import.name),
                     self.missing_import_string(&import.module, &import.name),
                 ));
-            }
-            if let Some(mem) = &m.memory {
+            } else if let Some(mem) = &m.memory {
                 self.use_unit("memory/_class");
                 let max = mem
                     .max_pages
@@ -757,7 +736,7 @@ impl<'a> Gen<'a> {
                             import.name
                         )
                     } else {
-                        "->(*) { 52 } # ENOSYS: not implemented yet".to_string()
+                        "->(*) { 52 }".to_string() // ENOSYS: not implemented yet
                     }
                 } else {
                     self.missing_import_string(&import.module, &import.name)
@@ -858,35 +837,18 @@ impl<'a> Gen<'a> {
     }
 
     fn func_type_symbol(&self, func_idx: u32) -> String {
-        let idx = func_idx as usize;
-        let imports = self.module.imported_funcs.len();
-        let ty = if idx < imports {
-            self.module.imported_funcs[idx].type_idx
-        } else {
-            self.module.funcs[idx - imports].type_idx
-        };
-        self.type_symbol(ty)
+        self.type_symbol_of(self.module.func_type(func_idx))
     }
 
-    /// call_indirect compares types structurally, and a table can be shared across modules (imported tables), so the runtime type id must not come from any module-local index space: derive an interned symbol from the type's shape instead.
     fn type_symbol(&self, type_idx: u32) -> String {
-        let ty = &self.module.types[type_idx as usize];
-        let names = |tys: &[ValType]| {
-            tys.iter()
-                .map(|t| match t {
-                    ValType::I32 => "i32",
-                    ValType::I64 => "i64",
-                    ValType::F32 => "f32",
-                    ValType::F64 => "f64",
-                    ValType::FuncRef => "funcref",
-                })
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        format!(":\"{}->{}\"", names(&ty.params), names(&ty.results))
+        self.type_symbol_of(&self.module.types[type_idx as usize])
     }
 
-    /// A callable object for the function (used in tables and exports).
+    /// A structural type key (see [`type_key`]) as an interned Ruby symbol, which is what the table stores and `call_indirect` compares.
+    fn type_symbol_of(&self, ty: &dewasm_core::ir::FuncType) -> String {
+        format!(":\"{}\"", type_key(ty, val_name))
+    }
+
     fn func_ref(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("@if{func_idx}")
@@ -895,7 +857,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_symbol, callable]` pair tables store (ADR-16). Element items and `call_indirect` agree on this shape.
+    /// A funcref value: the `[type_symbol, callable]` pair tables store. Element items and `call_indirect` agree on this shape.
     fn func_pair(&self, func_idx: u32) -> String {
         format!(
             "[{}, {}]",
@@ -929,7 +891,7 @@ impl<'a> Gen<'a> {
             format!("def _f{idx}({params})")
         };
         w.block(header, "end", |w| {
-            // Locals start at their type's default. Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
+            // Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
             for run in local_runs(&func.locals, default_value) {
                 let default = default_value(func.locals[run.start]);
                 let names = run
@@ -938,7 +900,7 @@ impl<'a> Gen<'a> {
                     .join(" = ");
                 w.line(format!("{names} = {default}"));
             }
-            let plan = flat::plan(&func.body, &self.frames.borrow().paths);
+            let plan = flat::plan(&func.body, &self.frames.borrow().paths, flat::DEEP_CROSSING);
             // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
@@ -1219,7 +1181,7 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                // Fixed-arity dispatch (ADR-44): a per-arity `callN` avoids building a `*args` array on either side; the splat `call` stays as the fallback for signatures wider than MAX_FIXED_ARITY (unobserved in the real-world apps, whose call_indirect arities top out at 8).
+                // Fixed-arity dispatch: a per-arity `callN` avoids building a `*args` array on either side; the splat `call` stays as the fallback for signatures wider than MAX_FIXED_ARITY (unobserved in the real-world apps, whose call_indirect arities top out at 8).
                 let mut call_args = vec![self.expr_text(index), self.type_symbol(*type_idx)];
                 call_args.extend(args.iter().map(|a| self.expr_text(a)));
                 let method = if args.len() <= MAX_FIXED_ARITY {
@@ -1308,7 +1270,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment (ADR-38); inert.
+                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1445,7 +1407,7 @@ impl<'a> Gen<'a> {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
-            Expr::Bin(op, a, b) => match rel_op(*op) {
+            Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
                 Some(rel) => self.rel(rel, self.expr(a), self.expr(b)),
                 None => self.zero_test("!=", e),
             },
@@ -1458,7 +1420,7 @@ impl<'a> Gen<'a> {
         match e {
             // Two negations cancel.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.cond(a),
-            Expr::Bin(op, ..) if rel_op(*op).is_some() => not(self.cond(e)),
+            Expr::Bin(op, ..) if signed_view_rel_op(*op).is_some() => not(self.cond(e)),
             _ => self.zero_test("==", e),
         }
     }
@@ -1468,7 +1430,7 @@ impl<'a> Gen<'a> {
         compare(self.expr(e), op, Rendered::atom("0".to_string()), EQ)
     }
 
-    /// A one-argument call to a runtime helper, recording its unit. The class includes `Rt`, so the helper is called by bare name; an argument position constrains nothing.
+    /// A one-argument call to a runtime helper, recording its unit.
     fn call1(&self, name: &str, a: Rendered) -> Rendered {
         Rendered::atom(format!("{}({})", self.rt(name), a.free()))
     }
@@ -1549,7 +1511,7 @@ impl<'a> Gen<'a> {
     fn bin(&self, op: BinOp, a: Rendered, b: Rendered) -> Rendered {
         use BinOp::*;
         // A comparison is a Ruby boolean; outside condition position it needs the ternary back to the i32 0 or 1 wasm expects (see `cond`).
-        if let Some(rel) = rel_op(op) {
+        if let Some(rel) = signed_view_rel_op(op) {
             return ternary(
                 self.rel(rel, a, b),
                 Rendered::atom("1".to_string()),
@@ -1592,7 +1554,7 @@ impl<'a> Gen<'a> {
             F32Mul => self.call1("f32", infix(a, "*", b, MUL)),
             F32Div => self.call1("f32", infix(a, "/", b, MUL)),
             F64Add => infix(a, "+", b, ADD),
-            // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub. The host `-` therefore cannot be trusted to return an arithmetic NaN. Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free. ADR-47, issue #11.
+            // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub. The host `-` therefore cannot be trusted to return an arithmetic NaN. Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free. See issue #11.
             F64Sub => {
                 let r = Rendered::atom("r".to_string());
                 // The assignment's parens are required: `=` binds looser than everything around it.
@@ -1613,7 +1575,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A comparison as a Ruby boolean, from a `rel_op` mapping and the already rendered operands.
+    /// A comparison as a Ruby boolean, from a [`signed_view_rel_op`] mapping and the already rendered operands.
     fn rel(&self, (r, sign): (&'static str, Option<&str>), a: Rendered, b: Rendered) -> Rendered {
         let prec = if r == "==" || r == "!=" { EQ } else { CMP };
         match sign {
@@ -1671,7 +1633,7 @@ impl Prec {
     }
 }
 
-/// A rendered Ruby expression together with how tightly it binds, so that each operand is parenthesized only where its context would otherwise reparse it (ADR-65).
+/// A rendered Ruby expression together with how tightly it binds, so that each operand is parenthesized only where its context would otherwise reparse it.
 #[derive(Clone)]
 struct Rendered {
     src: String,
@@ -1715,7 +1677,7 @@ fn number(src: String) -> Rendered {
     Rendered { src, prec, op: "" }
 }
 
-/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one — associative over integers, where the only operands these have.
+/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one — those are associative over the integers that are their only operands.
 fn infix(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
     let associative = matches!(op, "&" | "|" | "^") && b.op == op;
     let right_limit = if associative { prec } else { prec.tighter() };
@@ -1772,41 +1734,6 @@ fn to_f(a: Rendered) -> Rendered {
     Rendered::atom(format!("{}.to_f", a.at(Prec::Atom)))
 }
 
-/// The Ruby rendering of a wasm comparison: the operator, and the runtime signed view its operands go through — `None` wherever the stored representation already compares correctly (integers are masked-unsigned, and Ruby `Float` comparison matches wasm, NaN included; ADR-2). `bin` wraps the result back into an i32, `cond` takes it as it stands.
-fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
-    let (r, operands) = comparison(op)?;
-    Some((
-        r,
-        match operands {
-            CompareOperands::Signed32 => Some("s32"),
-            CompareOperands::Signed64 => Some("s64"),
-            _ => None,
-        },
-    ))
-}
-
-/// Whether `stmts` unconditionally leaves the current dispatch state, so a
-/// transition appended after it would be unreachable. `flat_seq` appends a
-/// frame's exit transition on the way out, and for a body already ending in a
-/// `br`, `return` or `unreachable` that copy is dead. Deliberately conservative
-/// — answering `false` only re-emits the transition that used to be there
-/// unconditionally.
-fn terminates(stmts: &[Stmt]) -> bool {
-    let Some(last) = stmts
-        .iter()
-        .rev()
-        .find(|s| !matches!(s, Stmt::SourceLine(_)))
-    else {
-        return false;
-    };
-    match last {
-        Stmt::Br(_) | Stmt::Return { .. } | Stmt::Unreachable => true,
-        // Neither arm falling through means the `if` itself does not.
-        Stmt::If { then, els, .. } => !els.is_empty() && terminates(then) && terminates(els),
-        _ => false,
-    }
-}
-
 fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
@@ -1816,6 +1743,17 @@ fn default_value(ty: ValType) -> &'static str {
         ValType::I32 | ValType::I64 => "0",
         ValType::F32 | ValType::F64 => "0.0",
         ValType::FuncRef => "nil",
+    }
+}
+
+/// How a value type is spelled inside a structural type key ([`type_key`]). Only this backend's own artifacts ever read these, so the spelling is free.
+fn val_name(ty: ValType) -> &'static str {
+    match ty {
+        ValType::I32 => "i32",
+        ValType::I64 => "i64",
+        ValType::F32 => "f32",
+        ValType::F64 => "f64",
+        ValType::FuncRef => "funcref",
     }
 }
 
@@ -1830,42 +1768,7 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-fn load_method(op: LoadOp) -> &'static str {
-    use LoadOp::*;
-    match op {
-        I32Load => "i32_load",
-        I64Load => "i64_load",
-        F32Load => "f32_load",
-        F64Load => "f64_load",
-        I32Load8S => "i32_load8_s",
-        I32Load8U => "i32_load8_u",
-        I32Load16S => "i32_load16_s",
-        I32Load16U => "i32_load16_u",
-        I64Load8S => "i64_load8_s",
-        I64Load8U => "i64_load8_u",
-        I64Load16S => "i64_load16_s",
-        I64Load16U => "i64_load16_u",
-        I64Load32S => "i64_load32_s",
-        I64Load32U => "i64_load32_u",
-    }
-}
-
-fn store_method(op: StoreOp) -> &'static str {
-    use StoreOp::*;
-    match op {
-        I32Store => "i32_store",
-        I64Store => "i64_store",
-        F32Store => "f32_store",
-        F64Store => "f64_store",
-        I32Store8 => "i32_store8",
-        I32Store16 => "i32_store16",
-        I64Store8 => "i64_store8",
-        I64Store16 => "i64_store16",
-        I64Store32 => "i64_store32",
-    }
-}
-
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles (ADR-6).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1964,7 +1867,7 @@ mod units {
     }
 }
 
-/// Shape checks for precedence-aware parenthesization (ADR-65). The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish — that the parens a shape does not need are gone, and that the ones it does need are still there.
+/// Shape checks for precedence-aware parenthesization. The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish — that the parens a shape does not need are gone, and that the ones it does need are still there.
 #[cfg(test)]
 mod parens {
     use super::*;
@@ -2026,7 +1929,7 @@ mod parens {
             &i32_expr("(i32.eqz (i32.and (local.get 0) (local.get 1)))"),
             "l0 = l0 & l1 == 0 ? 1 : 0",
         );
-        // A comparison is negated whole, and `!` binds tighter than it (ADR-2: flipping the operator would be wrong for NaN).
+        // A comparison is negated whole, and `!` binds tighter than it (flipping the operator would be wrong for NaN).
         assert!(
             body(
                 "(module (func (export \"f\") (param f64 f64) (result i32) (local i32) \
@@ -2038,7 +1941,7 @@ mod parens {
     }
 }
 
-/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw` (ADR-4); a shallow one must keep the ADR-42 relay, which ADR-60 measured cheaper than a dispatch at that depth.
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw`; a shallow one must keep the `__br` relay, measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -2064,7 +1967,7 @@ mod cascade {
           (local.get 1)))
     "#;
 
-    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so ADR-58's exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
+    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so the sole-statement exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
     const SOLE_LOOP_EXIT: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)
@@ -2096,7 +1999,7 @@ mod cascade {
     /// A `br_table` tower `depth` blocks deep whose table names every level, so
     /// the outermost target is crossed by a branch of exactly that path length —
     /// the wasm compilation of a C `switch`, and the shape whose size decides
-    /// between the two lowerings (ADR-60).
+    /// between the two lowerings.
     fn tower(depth: usize) -> String {
         let opens = (0..depth)
             .map(|i| format!("(block $l{i}"))
@@ -2122,7 +2025,7 @@ mod cascade {
         assert!(src.contains("state = 0"), "no dispatch entry in:\n{src}");
         assert!(src.contains("case state"), "no dispatch in:\n{src}");
         assert!(src.contains("; next"), "no state transition in:\n{src}");
-        // The retired shapes: scope-walking relay (ADR-42) and catch/throw (ADR-4).
+        // The retired shapes: scope-walking relay and catch/throw.
         assert!(!src.contains("elsif __br"), "relay arm survived in:\n{src}");
         assert!(
             !src.contains("end while false"),
@@ -2135,7 +2038,7 @@ mod cascade {
     #[test]
     fn shallow_multi_level_br_keeps_the_relay() {
         // The same tower, one level below the threshold: a relay of that depth
-        // is cheaper than a dispatch, so nothing dissolves (ADR-60).
+        // is cheaper than a dispatch, so nothing dissolves.
         let src = convert(&tower(flat::DEEP_CROSSING - 1));
         assert!(
             src.contains("elsif __br"),
@@ -2151,7 +2054,7 @@ mod cascade {
     #[test]
     fn mixed_depths_stay_structured() {
         // The three-deep mixed-target shape: every crossing is shallow, so the
-        // whole function keeps ADR-42's frames and its wrapped-loop back-edge.
+        // whole function keeps the cascade's structured frames and its wrapped-loop back-edge.
         let src = convert(MIXED_DEPTHS);
         assert!(src.contains("while true"), "no structured loop in:\n{src}");
         assert!(

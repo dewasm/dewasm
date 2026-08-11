@@ -1,4 +1,4 @@
-//! The base backend-under-test abstraction (ADR-27) and the process plumbing every suite shares. `BackendUnderTest` is the layer that even a pre-spec backend (the "cowsay first" bring-up path of ADR-24) can implement: name it, hand back its `Backend`, and say how to run generated output. Interpreted backends get `run` for free from `interpreter`; compiled targets override `run` itself.
+//! The base backend-under-test abstraction and the process plumbing every suite shares. `BackendUnderTest` is the layer that even a pre-spec backend (the "cowsay first" bring-up path) can implement: name it, hand back its `Backend`, and say how to run generated output. Interpreted backends get `run` for free from `interpreter`; compiled targets override `run` itself.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -7,7 +7,7 @@ use dewasm_backend::{Backend, Mode};
 
 use crate::pty::PtyCommand;
 
-/// How a backend spells a module name (ADR-63): the two shapes the product grammars ask for.
+/// How a backend spells a module name: the two shapes the product grammars ask for.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ModuleNameStyle {
     /// `sqlite3-shell` -> `Sqlite3Shell`. Ruby needs the leading capital; Python, Perl and Java accept it and read conventionally with it. Go too: it derives *both* names from this one (package `sqlite3shell`, type `Sqlite3Shell`), and only a Pascal input yields a conventional pair.
@@ -16,7 +16,7 @@ pub enum ModuleNameStyle {
     Snake,
 }
 
-/// Turn a kebab-case test-world name into a module name valid for `style` (ADR-63). Test and tooling names are kebab/stem case (`sqlite3-shell`, `ruby-packed`, `prog`); the product refuses to guess what such a name should become, so the test side converts explicitly. Total on the documented input domain `[a-z0-9]+(-[a-z0-9]+)*`; a name outside it panics rather than producing something the backend would then reject with a confusing message.
+/// Turn a kebab-case test-world name into a module name valid for `style`. Test and tooling names are kebab/stem case (`sqlite3-shell`, `ruby-packed`, `prog`); the product refuses to guess what such a name should become, so the test side converts explicitly. Total on the documented input domain `[a-z0-9]+(-[a-z0-9]+)*`; a name outside it panics rather than producing something the backend would then reject with a confusing message.
 ///
 /// This lives in the test helper on purpose: it is test infrastructure, not a product surface. Nothing in `crates/dewasm-backend*` or the CLI performs any name transformation.
 pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
@@ -43,7 +43,7 @@ pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
     }
 }
 
-/// The style each backend's grammar wants (ADR-63), keyed by [`Backend::name`] so a backend gets the right one without restating it in every `BackendUnderTest` impl. Bash is the lone snake case; everything else — including Go, which builds its package *and* type name out of this one string — reads best from Pascal. Unknown names (the wasmtime stand-in, which never generates) take the majority style.
+/// The style each backend's grammar wants, keyed by [`Backend::name`] so a backend gets the right one without restating it in every `BackendUnderTest` impl. Bash is the lone snake case; everything else — including Go, which builds its package *and* type name out of this one string — reads best from Pascal. Unknown names (the wasmtime stand-in, which never generates) take the majority style.
 pub fn module_name_style(backend: &str) -> ModuleNameStyle {
     match backend {
         "bash" => ModuleNameStyle::Snake,
@@ -57,12 +57,12 @@ pub trait BackendUnderTest: Sync {
     /// The backend itself. `+ Sync` so app conversion can run on a scoped worker thread (`convert_on_big_stack`).
     fn backend(&self) -> &'static (dyn Backend + Sync);
 
-    /// The library-mode module name this backend should be handed for the kebab-case test name `kebab` (ADR-63). The default routes [`Backend::name`] through [`module_name_style`]; a backend overrides only if its grammar wants something else.
+    /// The library-mode module name this backend should be handed for the kebab-case test name `kebab`. The default routes [`Backend::name`] through [`module_name_style`]; a backend overrides only if its grammar wants something else.
     fn module_name(&self, kebab: &str) -> String {
         derive_module_name(module_name_style(self.backend().name()), kebab)
     }
 
-    /// Interpreter used by `run`'s default implementation. Per ADR-15 a missing interpreter must panic (fail loud), never skip. Compiled backends override `run` directly and need not implement this.
+    /// Interpreter used by `run`'s default implementation. A missing interpreter must panic (fail loud), never skip. Compiled backends override `run` directly and need not implement this.
     fn interpreter(&self) -> PathBuf {
         unimplemented!(
             "an interpreted backend must implement interpreter(); \
@@ -91,7 +91,7 @@ pub trait BackendUnderTest: Sync {
         crate::convert_on_big_stack(self.backend(), bytes, mode, name)
     }
 
-    /// Prepare a *pty* run of standalone `source` with `args` (see [`crate::run_under_pty`]). Returns the command to spawn on a pty. The default — for interpreted backends — writes `source` to a temp script and runs `interpreter <script> <args...>`, exactly mirroring [`Self::run_bytes`]'s default but without capturing through pipes. Compiled backends (Go, Java) override this to build `source` first and return the resulting run command. A missing toolchain fails loud (ADR-15).
+    /// Prepare a *pty* run of standalone `source` with `args` (see [`crate::run_under_pty`]). Returns the command to spawn on a pty. The default — for interpreted backends — writes `source` to a temp script and runs `interpreter <script> <args...>`, exactly mirroring [`Self::run_bytes`]'s default but without capturing through pipes. Compiled backends (Go, Java) override this to build `source` first and return the resulting run command. A missing toolchain fails loud.
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
         let script = write_temp_script(source, self.backend().file_extension());
         let mut argv = vec![script.to_string_lossy().into_owned()];
@@ -124,7 +124,7 @@ pub trait BackendUnderTest: Sync {
         )
     }
 
-    /// Run library-mode `program` (from [`Self::convert_app`]) as a filesystem app: append the already-filled instantiation `glue` (a named backend const with its `{scratch}`/`{cache}` placeholders resolved by the runner, ADR-27 revision), feed `stdin`, and return the process `Output`. The default runs `program` + `glue` through `run_bytes`, so the static `args`/`env`/`preopens` are written literally inside `glue` and ignored here; an engine-under-test that runs the wasm binary directly (wasmtime) overrides this to exec the binary (`program` is the wasm path) with those host `args`/`env`/`preopens` and ignores `glue`.
+    /// Run library-mode `program` (from [`Self::convert_app`]) as a filesystem app: append the already-filled instantiation `glue` (a named backend const with its `{scratch}`/`{cache}` placeholders resolved by the runner), feed `stdin`, and return the process `Output`. The default runs `program` + `glue` through `run_bytes`, so the static `args`/`env`/`preopens` are written literally inside `glue` and ignored here; an engine-under-test that runs the wasm binary directly (wasmtime) overrides this to exec the binary (`program` is the wasm path) with those host `args`/`env`/`preopens` and ignores `glue`.
     fn run_app_fs(
         &self,
         program: &str,
@@ -138,7 +138,7 @@ pub trait BackendUnderTest: Sync {
         self.run_bytes(&format!("{program}\n{glue}"), &[], stdin)
     }
 
-    /// Run a *standalone*-mode `program` through the standalone runtime interface (ADR-31): the generated main parses a leading run of `--dir HOST::GUEST` flags itself, then hands the rest to the guest as `argv[1..]`. The default (every generated backend) execs the program with those `--dir` flags followed by `args` — exactly what a user types — via [`Self::run_bytes`] (compiled backends build first through their `run_bytes` override). wasmtime overrides this: `--dir` is a *host* runtime flag there, so it runs `wasmtime run --dir HOST::GUEST... <wasm> args` instead. Same case feeds both, mirroring [`Self::run_app_fs`].
+    /// Run a *standalone*-mode `program` through the standalone runtime interface: the generated main parses a leading run of `--dir HOST::GUEST` flags itself, then hands the rest to the guest as `argv[1..]`. The default (every generated backend) execs the program with those `--dir` flags followed by `args` — exactly what a user types — via [`Self::run_bytes`] (compiled backends build first through their `run_bytes` override). wasmtime overrides this: `--dir` is a *host* runtime flag there, so it runs `wasmtime run --dir HOST::GUEST... <wasm> args` instead. Same case feeds both, mirroring [`Self::run_app_fs`].
     fn run_standalone_dir(
         &self,
         program: &str,
@@ -156,7 +156,7 @@ pub trait BackendUnderTest: Sync {
         self.run_bytes(program, &flag_refs, stdin)
     }
 
-    /// Run a *standalone*-mode `program` through the standalone interface (ADR-31) like [`Self::run_standalone_dir`], but additionally set `env` on the child process and return the full [`Output`] — the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]), which [`Self::run_standalone_dir`] cannot give (it inherits the parent env and its callers discard the exit code). `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags the generated `main` parses; `args` follow as guest `argv[1..]`.
+    /// Run a *standalone*-mode `program` through the standalone interface like [`Self::run_standalone_dir`], but additionally set `env` on the child process and return the full [`Output`] — the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]), which [`Self::run_standalone_dir`] cannot give (it inherits the parent env and its callers discard the exit code). `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags the generated `main` parses; `args` follow as guest `argv[1..]`.
     ///
     /// The default reuses the backend's own launch recipe ([`Self::pty_command`] — interpreter + temp script for the interpreted backends, a freshly built binary for the compiled ones) so no per-backend override is needed, then drives it through pipes with exactly `env` as the child environment and `stdin` fed.
     fn run_standalone_wasi(
@@ -175,7 +175,7 @@ pub trait BackendUnderTest: Sync {
         argv.extend(args.iter().map(|a| a.to_string()));
         let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         let cmd = self.pty_command(program, &argv_refs);
-        // The guest must observe exactly the manifest env (upstream's wasmtime adapter passes only `--env k=v`, isolating the guest from the host environment); dewasm's ADR-31 programs pass the whole process env through, so the isolation has to happen here instead (ADR-40). With the child PATH gone, exec would fall back to the OS default path and pick the *system* interpreter (ruby 2.6 / bash 3.2 on macOS), so a bare program name is resolved against the parent PATH first.
+        // The guest must observe exactly the manifest env (upstream's wasmtime adapter passes only `--env k=v`, isolating the guest from the host environment); dewasm's standalone programs pass the whole process env through, so the isolation has to happen here instead. With the child PATH gone, exec would fall back to the OS default path and pick the *system* interpreter (ruby 2.6 / bash 3.2 on macOS), so a bare program name is resolved against the parent PATH first.
         let resolved = resolve_in_parent_path(&cmd.program);
         let mut command = Command::new(resolved);
         command.args(&cmd.args);
@@ -224,7 +224,7 @@ pub fn run_command_bytes(cmd: &mut Command, stdin: &[u8]) -> Output {
     child.wait_with_output().expect("wait")
 }
 
-/// Write `script` to a temp file (extension `ext`) and run it under `interpreter`, returning the raw `Output`. The pid + counter pair keeps paths unique across both parallel test threads and concurrent `cargo test` processes.
+/// Write `script` to a temp file (extension `ext`) and run it under `interpreter`, returning the raw `Output`.
 pub fn run_script(
     interpreter: &Path,
     script: &str,
@@ -263,7 +263,7 @@ pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
 mod tests {
     use super::{derive_module_name, module_name_style, ModuleNameStyle};
 
-    /// The derivation reproduces exactly the names the deleted per-backend sanitizers produced for these inputs, which is what lets the glue consts stay untouched (ADR-63).
+    /// The derivation reproduces exactly the names the deleted per-backend sanitizers produced for these inputs, which is what lets the glue consts stay untouched.
     #[test]
     fn kebab_derivation_matches_the_names_the_glue_consts_spell() {
         for (kebab, pascal, snake) in [

@@ -2,14 +2,14 @@
 # frozen_string_literal: true
 
 # Interactive terminal frontend for the dewasm-generated NES library
-# (nes_gen.rb, produced from the agnes-based cache/nes.wasm by build.sh,
-# ADR-59). Unlike ../doom, nes.wasm has zero host imports — there's nothing
+# (nes_gen.rb, produced from the agnes-based cache/nes.wasm by build.sh).
+# Unlike ../../doom, nes.wasm has zero host imports — there's nothing
 # to wire up — so this frontend only has to load a ROM into the module's
 # linear memory and drive the game loop itself: pacing, input polling, and
-# rendering all belong wholly to the host (ADR-59), unlike DOOM where the
+# rendering all belong wholly to the host, unlike DOOM where the
 # module paces itself off a `timeInMilliseconds` import.
 #
-# Rendering reuses ../doom/ruby's half-block truecolor trick (this is not a
+# Rendering reuses ../../doom/ruby's half-block truecolor trick (this is not a
 # downgrade even from a pixel window: a terminal has orders of magnitude
 # fewer cells to redraw than a window has pixels), and the key-hold
 # heuristic for terminals delivering only key presses.
@@ -54,7 +54,7 @@ end
 # Renders the frame into ANSI half-block terminal cells: each character cell
 # shows two vertically-stacked source pixels via "▀" (foreground = top pixel,
 # background = bottom pixel, both 24-bit truecolor SGR) — the same trick as
-# ../doom/ruby's Renderer, ported here with one difference: the NES's 256x240
+# ../../doom/ruby's Renderer, ported here with one difference: the NES's 256x240
 # framebuffer is already native resolution (no implicit 2x upscale like DOOM's
 # 640x400), so the pixel cap is the frame's own width, not half of it. This
 # diffing/escape-sequence bookkeeping is the performance-sensitive part of this
@@ -62,7 +62,7 @@ end
 # contents and the terminal's own cursor position, and only emits an SGR code
 # when a cell's color actually changed.
 #
-# The guest hands over palette *indices*, not colors (ADR-59), which suits this
+# The guest hands over palette *indices*, not colors, which suits this
 # renderer exactly: a terminal cell samples one pixel out of several, so the
 # only palette lookups performed are the sampled ones — and since a color is a
 # function of its index, the whole SGR string per index is precomputed once and
@@ -295,7 +295,7 @@ end
 
 def new_nes
   nes = Nes.new
-  # Reactor init before any other export (ADR-59; nes.wasm has no WASI
+  # Reactor init before any other export (nes.wasm has no WASI
   # surface to run it implicitly).
   nes.invoke("_initialize")
   nes
@@ -398,8 +398,8 @@ def run_interactive(rom_path)
       status_window_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       status_ticks = 0
       status_text = "dewasm NES | starting... | q/^C quit  arrows d-pad  x=A z=B  enter=start  space=select"
-      # Fixed-timestep pacing: the module has no clock import of its own
-      # (ADR-59), so 60Hz is entirely the host's job. Cap at 60 ticks/sec by
+      # Fixed-timestep pacing: the module has no clock import of its own,
+      # so 60Hz is entirely the host's job. Cap at 60 ticks/sec by
       # sleeping when ahead of schedule; when the interpreter can't keep up,
       # never sleep and just resync the schedule to "now" instead of trying
       # to burn through a backlog of missed frames.

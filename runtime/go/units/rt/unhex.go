@@ -1,6 +1,6 @@
 // Decode a lowercase-hex string into bytes. Data/element blobs are emitted as
 // hex literals (never raw byte lists) so they compile fast and cannot hide a
-// package-selector substring from the import scanner (ADR-29).
+// package-selector substring from the import scanner.
 func (rt) unhex(s string) []byte {
     b := make([]byte, len(s)/2)
     for i := 0; i < len(b); i++ {

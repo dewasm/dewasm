@@ -1,6 +1,6 @@
-//! Spec test harness (ADR-3, skip policy revised by ADR-8): parses every .wast file of the testsuite submodule (tests/spec, tracking upstream latest), translates each module with a target-language backend, generates a script that runs all assertions, and executes it with the real interpreter for that language. The language-specific pieces live behind the `SpecBackend` trait (implemented in each backend crate); everything about directive iteration, skip attribution, and result accounting is shared here.
+//! Spec test harness: parses every .wast file of the testsuite submodule (tests/spec, tracking upstream latest), translates each module with a target-language backend, generates a script that runs all assertions, and executes it with the real interpreter for that language. The language-specific pieces live behind the `SpecBackend` trait (implemented in each backend crate); everything about directive iteration, skip attribution, and result accounting is shared here.
 //!
-//! Skips must be *attributable*: a module that fails to convert carries an `UnsupportedError` naming the declared-unsupported features, and every directive skipped because of it is counted under those feature ids. A conversion failure without attribution is a dewasm bug and fails the suite. Validation failures beyond every proposal this toolchain knows are reported as `unknown-proposal` but tolerated (the converter refused cleanly, which is the ADR-0 contract).
+//! Skips must be *attributable*: a module that fails to convert carries an `UnsupportedError` naming the declared-unsupported features, and every directive skipped because of it is counted under those feature ids. A conversion failure without attribution is a dewasm bug and fails the suite. Validation failures beyond every proposal this toolchain knows are reported as `unknown-proposal` but tolerated (the converter refused cleanly).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -9,12 +9,13 @@ use dewasm_backend::SupportStatus;
 use dewasm_core::feature::{Feature, UnsupportedError};
 use dewasm_core::ir;
 use libtest_mimic::{Failed, Trial};
+use wast::core::{AbstractHeapType, HeapType};
 use wast::parser::{self, ParseBuffer};
 use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
 
 use crate::backend::BackendUnderTest;
 
-/// The script-phrasing layer of a backend under test (ADR-27): how to convert a module, how to phrase each assertion in that language, and how to bundle the runtime. `name`/`backend`/`interpreter`/`run` come from the base [`BackendUnderTest`] trait. `emit_*` methods append to the script body; returning `Err(tag)` skips the directive under that attribution tag.
+/// The script-phrasing layer of a backend under test: how to convert a module, how to phrase each assertion in that language, and how to bundle the runtime. `name`/`backend`/`interpreter`/`run` come from the base [`BackendUnderTest`] trait. `emit_*` methods append to the script body; returning `Err(tag)` skips the directive under that attribution tag.
 pub trait SpecBackend: BackendUnderTest {
     /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
@@ -84,14 +85,132 @@ pub struct Converted {
     pub units: BTreeSet<String>,
 }
 
+/// The `.wast` files a plain `cargo test` runs for a backend whose per-file cost makes the whole 257-file testsuite too slow to be the default: one file per semantic area — integers, floats, control flow, memory/table, globals, linking, bulk ops. Every other file is still a trial, `#[ignore]`d, so `--include-ignored` runs everything. The selection is a property of the testsuite rather than of a target language, so the backends that curate at all share it; one that needs more files adds them with [`curated_with`].
+pub const CURATED_SPEC_FILES: &[&str] = &[
+    "address",
+    "align",
+    "block",
+    "br",
+    "br_if",
+    "br_table",
+    "bulk",
+    "call",
+    "call_indirect",
+    "comments",
+    "const",
+    "conversions",
+    "custom",
+    "data",
+    "elem",
+    "endianness",
+    "f32",
+    "f32_bitwise",
+    "f32_cmp",
+    "f64",
+    "f64_bitwise",
+    "f64_cmp",
+    "fac",
+    "float_exprs",
+    "float_literals",
+    "float_memory",
+    "float_misc",
+    "forward",
+    "func",
+    "func_ptrs",
+    "global",
+    "i32",
+    "i64",
+    "if",
+    "imports",
+    "imports2",
+    "int_exprs",
+    "int_literals",
+    "labels",
+    "left-to-right",
+    "linking",
+    "linking0",
+    "load",
+    "load1",
+    "local_get",
+    "local_set",
+    "local_tee",
+    "loop",
+    "memory",
+    "memory_copy",
+    "memory_fill",
+    "memory_grow",
+    "memory_init",
+    "memory_redundancy",
+    "memory_size",
+    "memory_trap",
+    "names",
+    "nop",
+    "return",
+    "select",
+    "stack",
+    "start",
+    "store",
+    "switch",
+    "table",
+    "table_copy",
+    "table_init",
+    "token",
+    "traps",
+    "type",
+    "unreachable",
+    "unreached-invalid",
+    "unreached-valid",
+    "unwind",
+    "utf8-custom-section-id",
+    "utf8-import-field",
+    "utf8-import-module",
+    "utf8-invalid-encoding",
+];
+
+/// [`CURATED_SPEC_FILES`] plus `extra`. Leaked because [`SpecBackend::curated_files`] hands back a `'static` slice and each backend calls this once per suite run, when its trials are built.
+pub fn curated_with(extra: &[&'static str]) -> &'static [&'static str] {
+    let mut files = CURATED_SPEC_FILES.to_vec();
+    files.extend_from_slice(extra);
+    Vec::leak(files)
+}
+
+/// The attribution tag for a heap type no backend can express as a host value: the wasm proposal the type belongs to, so the skipped directive is counted against the *feature* rather than against the backend. Classifies the wast type only — no target language enters into it, which is why every backend shares one copy.
+pub fn heap_type_tag(hty: &HeapType<'_>) -> String {
+    match hty {
+        HeapType::Abstract {
+            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
+            ..
+        } => "exception-handling".to_string(),
+        HeapType::Abstract { .. } => "gc".to_string(),
+        HeapType::Concrete(_) | HeapType::Exact(_) => "function-references".to_string(),
+    }
+}
+
+/// Whether `ref.null <hty>` is expressible as the host language's own null: the two reference-types hierarchies and their bottoms are (all of them are just the host's nil/None/undef), anything else is not and is skipped under [`heap_type_tag`].
+pub fn nullable_heap_type(hty: &HeapType<'_>) -> bool {
+    matches!(
+        hty,
+        HeapType::Abstract {
+            ty: AbstractHeapType::Func
+                | AbstractHeapType::Extern
+                | AbstractHeapType::Exn
+                | AbstractHeapType::NoFunc
+                | AbstractHeapType::NoExtern
+                | AbstractHeapType::NoExn
+                | AbstractHeapType::None,
+            ..
+        }
+    )
+}
+
 /// The tests/spec submodule directory (upstream testsuite).
 fn spec_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")
 }
 
-/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). File selection is now cargo's own: the trial name is the file stem, so `cargo test --test spec i32` runs the `i32`-named file(s) via the built-in name filter. Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set and `--include-ignored` (or `--ignored`) runs the whole testsuite. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
+/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). The trial name is the file stem, so cargo's own name filter applies: `cargo test --test spec i32` runs the `i32`-named file(s). Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set and `--include-ignored` (or `--ignored`) runs the whole testsuite. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
 ///
-/// `slow_test` mirrors the backend crate's feature of the same name (CI's main run, ADR-48): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
+/// `slow_test` mirrors the backend crate's feature of the same name (CI's main run): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
 pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial> {
     let dir = spec_dir();
     assert!(
@@ -112,7 +231,6 @@ pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial
         .collect();
     names.sort();
 
-    // With `slow_test` on, the whole testsuite runs (nothing curated => nothing ignored below), matching the old `--include-ignored` main run.
     let curated: Option<BTreeSet<&'static str>> = if slow_test {
         None
     } else {
@@ -139,7 +257,7 @@ pub fn spec_main(lang: &'static dyn SpecBackend, slow_test: bool) {
     libtest_mimic::run(&args, spec_trials(lang, slow_test)).exit();
 }
 
-/// Run one `.wast` file and apply the per-file checks that the old aggregate suite applied globally: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression. Checks (a)/(c) are per-file here, equivalent to the old global check because the global sets are the union of the per-file sets. A passing trial stays quiet; failures carry the per-file summary and detail.
+/// Run one `.wast` file and apply the per-file checks: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression. A passing trial stays quiet; failures carry the per-file summary and detail.
 fn run_trial(lang: &dyn SpecBackend, name: &str, path: &Path) -> Result<(), Failed> {
     let stats = run_file(lang, name, path).map_err(|err| format!("{name}: {err:#}"))?;
 

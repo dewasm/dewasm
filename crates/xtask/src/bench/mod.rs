@@ -1,8 +1,8 @@
 //! `cargo xtask bench` — the cross-runtime benchmark suite.
 //!
-//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`. Neither is a compared snapshot — a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast ADR-56's execution snapshots).
+//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`. Neither is a compared snapshot — a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
 //!
-//! The layout mirrors what has to be got right:
+//! The modules:
 //!
 //! * [`workload`] — what is measured: `<module> <iterations>` microbenchmarks discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
 //! * [`runner`] — where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
@@ -10,9 +10,9 @@
 //! * [`report`] — the JSON record and the markdown rendering of it.
 //! * [`chart`] — the static SVGs `docs/benchmarks/results.md` embeds, one per workload, regenerated from the same record.
 //!
-//! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one (ADR-15's fail-loud-not-skip policy).
+//! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one.
 
-// `chart`, `report` and `runner` are also what `cargo xtask size` is built on: the same lollipop drawing, the same host block, the same runtime table (ADR-64).
+// `chart`, `report` and `runner` are also what `cargo xtask size` is built on: the same lollipop drawing, the same host block, the same runtime table.
 pub mod chart;
 mod measure;
 pub mod report;
@@ -97,7 +97,6 @@ impl Options {
     }
 }
 
-/// Entry point for the `bench` subcommand.
 pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
     let opts = Options::parse(args)?;
 
@@ -220,7 +219,7 @@ fn describe(workload: &Workload) -> String {
 
 /// The measuring run: every selected pair, then the two output files.
 fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
-    // wasmtime is not optional: it is both the ceiling every ratio is taken against and the oracle every runner's stdout is diffed against. Without it the suite would produce numbers with nothing to check them, so it fails loud instead (ADR-15).
+    // wasmtime is not optional: it is both the ceiling every ratio is taken against and the oracle every runner's stdout is diffed against. Without it the suite would produce numbers with nothing to check them, so it fails loud instead.
     if let Err(reason) = runners
         .iter()
         .find(|runner| matches!(runner.kind, Kind::Wasmtime))
@@ -459,7 +458,7 @@ fn measure_cell(
             )
         }
         workload::Kind::App { args, stdin } => {
-            // Apps are timed as whole wall time (ADR-57): no zero run, so cold_start stays `None`.
+            // Apps are timed as whole wall time: no zero run, so cold_start stays `None`.
             let (k, samples, last) = repeat_app(
                 &launch,
                 args,
@@ -558,8 +557,6 @@ fn samples_of(min_s: f64, median_s: f64, samples_s: Vec<f64>) -> Samples {
     }
 }
 
-// ------------------------------------------------------------------ Paths.
-
 /// The repo root, canonicalized so the `crates/xtask/../..` spelling never reaches a message a human reads.
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -603,7 +600,7 @@ fn charts_dir() -> PathBuf {
     docs_dir().join("benchmarks").join("figs")
 }
 
-/// `examples/apps/cache/`, where the app workloads' modules live (ADR-9).
+/// `examples/apps/cache/`, where the app workloads' modules live.
 pub fn apps_cache_dir() -> PathBuf {
     dewasm_test_helper::apps_cache_dir()
 }
@@ -618,8 +615,6 @@ pub fn write_file(path: &Path, contents: &str) -> Result<()> {
     println!("wrote {} ({} bytes)", path.display(), contents.len());
     Ok(())
 }
-
-// ------------------------------------------------------------------ Host description.
 
 pub fn host_info() -> report::Host {
     report::Host {
@@ -678,8 +673,6 @@ fn shell_line(program: &str, args: &[&str]) -> Option<String> {
         .find(|line| !line.is_empty())
         .map(str::to_string)
 }
-
-// ------------------------------------------------------------------ Time.
 
 /// The current UTC time as `YYYY-MM-DDTHH:MM:SSZ`. Hand-rolled rather than pulling `chrono` in for one timestamp in a dev tool.
 pub fn utc_timestamp() -> String {

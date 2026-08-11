@@ -6,7 +6,7 @@ sub wasi_fd_readdir {
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_READDIR;
     # cookie 0 starts a fresh enumeration, so re-scan the directory then; a
     # non-zero cookie resumes the snapshot cached from that start (the
-    # opaque-resume-point contract, ADR-14).
+    # opaque-resume-point contract).
     if (!defined($e->{entries}) || $cookie == 0) {
         $e->{entries} = $self->readdir_entries($e->{path});
         return ERRNO_IO unless defined $e->{entries};

@@ -67,20 +67,19 @@ fn main() -> Result<()> {
     if cli.no_default_wasi && mode == Mode::Standalone {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
     }
-    // A standalone artifact is a self-contained program; its internal class/package/prefix name is not part of any interface, so it is fixed per backend and naming it is a mistake worth reporting rather than ignoring (ADR-63).
+    // A standalone artifact is a self-contained program; its internal class/package/prefix name is not part of any interface, so it is fixed per backend and naming it is a mistake worth reporting rather than ignoring.
     if cli.module_name.is_some() && mode == Mode::Standalone {
         bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
-    // Data-segment externalization (ADR-37): opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
+    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
                 "ruby" | "go" | "python" | "java" | "perl" => {}
                 "bash" => bail!(
                     "--data-file is not supported for the bash target: the bash \
-                     backend embeds data segments in its runtime, not as a sidecar \
-                     (ADR-37)"
+                     backend embeds data segments in its runtime, not as a sidecar"
                 ),
                 other => bail!("--data-file is not supported for target {other}"),
             }
@@ -90,7 +89,7 @@ fn main() -> Result<()> {
                      must be written to a real path next to the generated program"
                 );
             }
-            // A --data-file resolving to the same file as -o would clobber the generated source; fail before anything is written (ADR-0).
+            // A --data-file resolving to the same file as -o would clobber the generated source; fail before anything is written.
             if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
                 bail!(
                     "--data-file {} resolves to the same file as the output path {}: \
@@ -109,7 +108,7 @@ fn main() -> Result<()> {
         None => None,
     };
 
-    // Library mode requires an explicit name (ADR-63): deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed. Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
+    // Library mode requires an explicit name: deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed. Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
     let module_name = match (mode, cli.module_name) {
         (Mode::Standalone, _) => "program".to_string(),
         (Mode::Library, Some(name)) => name,
@@ -130,7 +129,7 @@ fn main() -> Result<()> {
         default_wasi: !cli.no_default_wasi,
         data_file,
     };
-    // Component-model binaries (layer 1) are out of scope (ADR-24): reject them at conversion time with a clear, attributed error (ADR-0).
+    // Component-model binaries (layer 1) are out of scope: reject them at conversion time with a clear, attributed error.
     if dewasm_core::is_component(&bytes) {
         return Err(dewasm_core::feature::UnsupportedError::new(
             dewasm_core::feature::Feature::ComponentModel,
@@ -146,9 +145,9 @@ fn main() -> Result<()> {
     )?;
     let files = backend.generate(&module, &opts)?;
 
-    // Route by name: the data sidecar (its `name` is the configured `sidecar_name`) goes to `--data-file`'s path, the primary source to `-o` (ADR-37).
+    // Route by name: the data sidecar (its `name` is the configured `sidecar_name`) goes to `--data-file`'s path, the primary source to `-o`.
     let sidecar_name = opts.data_file.as_ref().map(|c| c.sidecar_name.as_str());
-    // A generated source sharing `sidecar_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and sidecar collide, `matching == files.len()` = no sidecar emitted and the match is the source itself (ADR-0).
+    // A generated source sharing `sidecar_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and sidecar collide, `matching == files.len()` = no sidecar emitted and the match is the source itself.
     if let Some(name) = sidecar_name {
         let matching = files.iter().filter(|f| f.name == name).count();
         if matching > 1 || matching == files.len() {

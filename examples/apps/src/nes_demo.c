@@ -1,11 +1,11 @@
 /*
- * nes_demo.c — our own committed C source (ADR-9 permits committing first-party
- * source; only third-party *artifacts* stay out of the tree).
+ * nes_demo.c — our own committed C source (first-party source is fine to
+ * commit; only third-party *artifacts* stay out of the tree).
  *
  * A thin reactor wrapper around agnes (kgabis/agnes, pinned by
  * examples/apps/scripts/nes.sh) that exposes a minimal, import-free driving
  * surface for the NES framebuffer-snapshot example (issue #114), mirroring the
- * DOOM demo's shape (ADR-50/53): a host allocates the ROM, loads it, ticks
+ * DOOM demo's shape: a host allocates the ROM, loads it, ticks
  * frames with an input bitmask, then reads the frame straight out of guest
  * memory.
  *

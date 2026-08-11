@@ -1,5 +1,5 @@
 # requires: wasi/fd_flush
-# WASI fd_renumber (ADR-40): atomically move the open fd <from> into the slot
+# WASI fd_renumber: atomically move the open fd <from> into the slot
 # <to>, closing whatever <to> was. Both must currently be open — an unopened
 # endpoint is EBADF (8) — which is why `fd_renumber(valid, closed)` fails and
 # why renumbering onto stdio or a preopen (both open) works. Every parallel

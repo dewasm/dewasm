@@ -1,13 +1,14 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_link (ADR-40): create a hard link <new_path> under <new_fd> to the
+# WASI path_link: create a hard link <new_path> under <new_fd> to the
 # existing <old_path> under <old_fd>. A licensed `--`-guarded `ln -P` (beyond
-# ADR-34 D2's four) — `-P` hard-links a symlink source itself rather than its
-# pointee, so a link to a dangling or looping symlink is created without ever
-# following it. Both endpoints are resolved with sandbox containment, NOFOLLOW
-# (hard-linking never dereferences a trailing symlink). Symlink-following
-# (LOOKUPFLAGS_SYMLINK_FOLLOW on old_flags) is rejected with EINVAL (28). A
-# missing source is ENOENT (44); a directory source is EPERM (63); an existing
-# destination is EEXIST (20); a destination with a trailing slash is ENOENT (44).
+# the four mkdir/rmdir/rm/mv commands) — `-P` hard-links a symlink source
+# itself rather than its pointee, so a link to a dangling or looping symlink is
+# created without ever following it. Both endpoints are resolved with sandbox
+# containment, NOFOLLOW (hard-linking never dereferences a trailing symlink).
+# Symlink-following (LOOKUPFLAGS_SYMLINK_FOLLOW on old_flags) is rejected with
+# EINVAL (28). A missing source is ENOENT (44); a directory source is EPERM
+# (63); an existing destination is EEXIST (20); a destination with a trailing
+# slash is ENOENT (44).
 wasi_path_link() {
   local __p=$1 __old_fd=$2 __old_flags=$3 __old_ptr=$4 __old_len=$5
   local __new_fd=$6 __new_ptr=$7 __new_len=$8

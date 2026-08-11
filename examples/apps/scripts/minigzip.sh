@@ -3,7 +3,7 @@
 # shellcheck source=common.sh
 
 # minigzip: zlib's stdio (de)compression demo, built from the pinned zlib
-# source release with zig (ADR-22). Integer-only and tiny, with binary
+# source release with zig. Integer-only and tiny, with binary
 # stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.
 # No upstream distributes a wasm32-wasi minigzip, so it is compiled locally.
 # The gz stream zlib writes here is fully deterministic (mtime 0, OS byte 3),
@@ -30,7 +30,7 @@ if is_cached "$minigzip_stamp" "$minigzip_want" cache/minigzip.wasm; then
 fi
 
 require_tool minigzip zig "install zig (e.g. brew install zig) to build the minigzip app"
-require_tool minigzip wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the minigzip app (ADR-39)"
+require_tool minigzip wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the minigzip app"
 
 echo "minigzip: fetching $ZLIB_URL"
 new_tmpdir
@@ -39,11 +39,11 @@ tar xzf "$tmp/zlib.tar.gz" -C "$tmp"
 echo "minigzip: building minigzip.wasm (zig cc)"
 srcs=()
 for s in "${ZLIB_SRCS[@]}"; do srcs+=("$tmp/$ZLIB_DIR/$s"); done
-# --strip-debug drops the DWARF wasm-opt cannot parse (ADR-39).
+# --strip-debug drops the DWARF wasm-opt cannot parse.
 zig_cc_wasi -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" -Wl,--strip-debug \
   "${srcs[@]}" "$tmp/$ZLIB_DIR/test/minigzip.c" \
   -o cache/minigzip.wasm
-echo "minigzip: wasm-opt -O2 (ADR-39)"
+echo "minigzip: wasm-opt -O2"
 wasm_opt_inplace cache/minigzip.wasm
 
 write_stamp "$minigzip_stamp" "$minigzip_want"

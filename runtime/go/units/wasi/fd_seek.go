@@ -11,7 +11,7 @@ func (w *WASI) wasi_fd_seek(fd uint32, offset uint64, whence, outPtr uint32) uin
     if whence > 2 {
         return wasiInval
     }
-    if e := w.checkRight(fd, rightFdSeek); e != wasiOk { // ADR-40
+    if e := w.checkRight(fd, rightFdSeek); e != wasiOk {
         return e
     }
     pos, err := f.Seek(int64(offset), int(whence))

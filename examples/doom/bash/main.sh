@@ -5,9 +5,8 @@
 # as ../ruby and ../python -- there is no pixel-window option here because
 # the point of this frontend is that it needs none: the bash backend runs
 # DOOM's initGame in ~103s and each tickGame in ~34s (measured on the
-# reference machine, after the ADR-51 associative-memory and ADR-52
-# inline-load/store work; see ../README.md and docs/adr/51-*.md,
-# docs/adr/52-*.md), so this is an existence-proof demo -- about two
+# reference machine, after the associative-memory and inline-load/store
+# work; see ../README.md), so this is an existence-proof demo -- about two
 # minutes to boot, one frame roughly every half a minute -- not a game
 # anyone will speedrun. See README.md for the honest framing.
 #

@@ -1,8 +1,9 @@
-;; Trailing slashes through symlinks (issue #42): pinned to wasmtime 47 on
-;; both hosts (ADR-49). Setup: file "file", symlink "linkfile" -> "file",
-;; directory "sd1". Probes print "<tag><errno>\n" and are commented at each
-;; call; expectations live in the shared WASI_CASES entry. Left unpinned:
-;; nofollow filestat of "linkfile/" (wasmtime's two hosts disagree).
+;; Trailing slashes through symlinks (issue #42): unspecified by WASI, so
+;; pinned to wasmtime 47 as measured on both hosts. Setup: file "file",
+;; symlink "linkfile" -> "file", directory "sd1". Probes print
+;; "<tag><errno>\n" and are commented at each call; expectations live in the
+;; shared WASI_CASES entry. Left unpinned: nofollow filestat of "linkfile/"
+;; (wasmtime's two hosts disagree).
 (module
   (import "wasi_snapshot_preview1" "path_readlink"
     (func $path_readlink (param i32 i32 i32 i32 i32 i32) (result i32)))

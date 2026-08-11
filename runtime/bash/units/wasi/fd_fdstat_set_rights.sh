@@ -1,4 +1,4 @@
-# WASI fd_fdstat_set_rights (ADR-40): narrow an fd's stored rights. Rights can
+# WASI fd_fdstat_set_rights: narrow an fd's stored rights. Rights can
 # only be dropped, never regained — any requested bit not already held (in base
 # or inheriting) is ENOTCAPABLE (76); an equal-or-narrower set is applied and
 # returns success (which is why `supports_rights`, re-granting the current set,

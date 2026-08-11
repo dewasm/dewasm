@@ -1,8 +1,8 @@
 /*
  * pcap_config.h — first-party stand-in for libpcap's ./configure output
- * (ADR-9 permits committing first-party source). libpcap's build normally
+ * (first-party source is fine to commit). libpcap's build normally
  * generates config.h by probing the host; there is no wasm32-wasi host to
- * probe, so fetch.sh copies this file in as <config.h> on the include path
+ * probe, so scripts/libpcap.sh copies this file in as <config.h> on the include path
  * and compiles only the platform-independent BPF-compiler translation units
  * (no capture backend). It captures three things:
  *
@@ -14,7 +14,7 @@
  *   3. A baseline-wasm setjmp/longjmp stand-in. libpcap reports filter syntax
  *      errors by longjmp()ing back to a setjmp() at the top of pcap_compile();
  *      wasip1's <setjmp.h> refuses to compile without the wasm exception-
- *      handling proposal (out of dewasm's 0.1 scope, ADR-24). Since a *valid*
+ *      handling proposal (out of dewasm's 0.1 scope). Since a *valid*
  *      filter — the only kind this demo compiles — never takes the error path,
  *      setjmp() collapses to 0 (always the success arm) and longjmp() to a
  *      trap. Compiling an invalid filter would trap instead of returning an

@@ -1,6 +1,6 @@
 //! Regression tests for issue #27's memory-size overflow: Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes, so a spec-legal size of 32768+ pages (2 GiB+) cannot be represented. `memory.grow` must answer -1 (never `NegativeArraySizeException` from the overflowing int multiply), and instantiating a module whose *initial* size already exceeds the cap must fail with a clear trap, not the raw exception.
 //!
-//! These cases are Java-only (the cap is a JVM artifact — the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe (ADR-30). A missing `javac`/`java` fails loud (ADR-15).
+//! These cases are Java-only (the cap is a JVM artifact — the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe. A missing `javac`/`java` fails loud.
 
 use std::process::{Command, Output};
 

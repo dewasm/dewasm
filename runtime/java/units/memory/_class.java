@@ -2,7 +2,7 @@
 // Linear memory: a byte[] with a little-endian ByteBuffer view, plus a page
 // cap. Effective addresses are computed as unsigned longs by callers (guest
 // addr + offset can exceed 2^31), so every method takes a long address and the
-// bounds check is exact (ADR-30). The ByteBuffer is re-wrapped on grow.
+// bounds check is exact. The ByteBuffer is re-wrapped on grow.
 byte[] d;
 java.nio.ByteBuffer bb;
 int maxPages;
