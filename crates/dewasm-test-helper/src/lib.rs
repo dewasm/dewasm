@@ -7,6 +7,7 @@ mod apps_fs;
 mod backend;
 mod doom;
 mod fixtures;
+mod folding;
 mod glue;
 mod library;
 mod multimodule;
@@ -44,6 +45,7 @@ pub use fixtures::{
     apps_cache_dir, apps_fixtures_dir, apps_snapshot_dir, convert, convert_bytes,
     convert_on_big_stack, examples_dir, fresh_scratch_dir,
 };
+pub use folding::run_folded_temp_reuse;
 pub use library::{
     run_library_case, LibraryCase, CUSTOM_WASI_PROVIDER, LIBRARY_ADD, PARTIAL_OVERRIDE,
     STDIO_CAPTURE, WASI_IMPORT_OVERRIDE,
@@ -314,6 +316,17 @@ macro_rules! deep_recursion_e2e {
         #[test]
         fn deep_recursion() {
             $crate::run_deep_recursion(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` requiring `$lang`'s generated code to keep folded operands alive across temp-slot reuse: convert `folded_temp_reuse.wat` standalone, run it, and require the guest's `proc_exit(42)` — see [`run_folded_temp_reuse`](crate::run_folded_temp_reuse). No glue — the fixture checks its own arithmetic. Core folding is language-independent, so every backend wires this.
+#[macro_export]
+macro_rules! folded_temp_reuse_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn folded_temp_reuse() {
+            $crate::run_folded_temp_reuse(&$lang);
         }
     };
 }

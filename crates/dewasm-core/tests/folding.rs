@@ -244,3 +244,88 @@ fn return_value_is_inlined_and_temps_track_materialization() {
         other => panic!("unexpected call/return shape: {other:?}"),
     }
 }
+
+#[test]
+fn a_call_result_spills_a_pending_that_reads_its_slot() {
+    // `(one() + two())` is pending at depth 0 and reads the temp at depth 1, which the third call's result then takes: the pending must be spilled before that call, or the addition would read 100 twice.
+    let f = func(
+        "(module
+            (func $one (result i32) i32.const 1)
+            (func $two (result i32) i32.const 2)
+            (func $big (result i32) i32.const 100)
+            (func (result i32)
+                call $one call $two i32.add
+                call $big i32.add))",
+        3,
+    );
+    let add_spill = f
+        .body
+        .iter()
+        .position(|s| {
+            matches!(
+                s,
+                Stmt::Assign {
+                    expr: Expr::Bin(BinOp::I32Add, ..),
+                    ..
+                }
+            )
+        })
+        .expect("the pending addition is spilled");
+    let calls_before = f.body[..add_spill]
+        .iter()
+        .filter(|s| matches!(s, Stmt::Call { .. }))
+        .count();
+    assert_eq!(
+        calls_before, 2,
+        "the spill sits between the second and third call: {:?}",
+        f.body
+    );
+}
+
+#[test]
+fn a_spill_flushes_a_pending_that_reads_the_reused_slot() {
+    // Same shape without a call: the store spills the pending load into the temp at depth 1, which the pending addition at depth 0 reads, so that addition has to be spilled first.
+    let f = func(
+        "(module
+            (memory 1)
+            (func $one (result i32) i32.const 1)
+            (func $two (result i32) i32.const 2)
+            (func (result i32)
+                call $one call $two i32.add
+                i32.const 0 i32.load
+                i32.const 4 i32.const 7 i32.store
+                i32.add))",
+        2,
+    );
+    let add_spill = f
+        .body
+        .iter()
+        .position(|s| {
+            matches!(
+                s,
+                Stmt::Assign {
+                    expr: Expr::Bin(BinOp::I32Add, ..),
+                    ..
+                }
+            )
+        })
+        .expect("the pending addition is spilled");
+    let load_spill = f
+        .body
+        .iter()
+        .position(|s| {
+            matches!(
+                s,
+                Stmt::Assign {
+                    expr: Expr::Load { .. },
+                    ..
+                }
+            )
+        })
+        .expect("the pending load is spilled by the store");
+    assert!(
+        add_spill < load_spill,
+        "the addition is read out before the load overwrites its operand slot: {:?}",
+        f.body
+    );
+}

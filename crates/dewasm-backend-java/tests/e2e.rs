@@ -850,6 +850,7 @@ dewasm_test_helper::wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Java);
 // The standalone entrypoint runs the guest on a dedicated 64 MiB thread (mirroring Python's mitigation), since Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
 dewasm_test_helper::deep_recursion_e2e!(Java);
+dewasm_test_helper::folded_temp_reuse_e2e!(Java);
 
 dewasm_test_helper::cowsay_args_e2e!(Java);
 dewasm_test_helper::cowsay_stdin_e2e!(Java);
