@@ -4,5 +4,5 @@
 
 ## Claude Code
 
-- Skills are auto-discovered from [`.claude/skills/`](.claude/skills/); each `SKILL.md`'s `description:` routes to it, so no catalogue is kept here. `adr-author` covers writing a new ADR under `docs/adr/`.
+- Skills are auto-discovered from [`.claude/skills/`](.claude/skills/); each `SKILL.md`'s `description:` routes to it, so no catalogue is kept here. `adr-author` routes to the authoring procedure for a new decision record under `agents/decisions/`.
 - A subagent does not inherit this contract; restate what binds it (the spec harness must pass, the `tests/spec` read-only rule) in its prompt.

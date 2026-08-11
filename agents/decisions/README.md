@@ -2,13 +2,18 @@
 
 This directory contains the Architecture Decision Records (ADRs) for dewasm.
 Each document captures a significant design decision: its context, the decision with its rationale, the rejected alternatives, and the consequences.
+The entries keep the `ADR-N` identifier they were written under; it is an opaque historical name, not a claim about where the file lives.
 
 ## How to read
 
 - **ADR-0** is the foundation document — start there for the project's goal, scope, and architecture.
 - Higher-numbered ADRs build on it and can be read as needed.
-- Each ADR opens with a **Status** paragraph: `Accepted`, `Proposed`, or `Superseded`, with a date and a one-paragraph "what landed / what remains" summary.
-  Accepted ADRs whose implementation is still pending carry a parenthetical note (e.g. *not yet implemented*).
+- Each ADR opens with a **Status** paragraph: the status label, a date, and a one-paragraph "what landed / what remains" summary.
+- The status label is exactly one of two values: `Accepted`, or `Superseded (ADR-N)` naming what replaced it.
+  The parenthetical is required on `Superseded`; a record that does not name its successor leaves the reader with nowhere to go.
+- There is no `Proposed`: a decision is recorded once it is made, and a tentative idea lives in an issue until then.
+- Scope and progress qualifiers never go in the label.
+  That an ADR covers one backend only, or that part of it has since been replaced, belongs in the Status paragraph, which has room to say what and why.
 
 ## Index
 
@@ -56,7 +61,7 @@ Each document captures a significant design decision: its context, the decision 
 | ADR-39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
 | ADR-40 | [WASI p1 Completion: Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment](40-wasi-p1-completion.md) | Accepted |
 | ADR-41 | [Merge Adjacent Active Data Segments at Build Time](41-adjacent-data-segment-merging.md) | Accepted |
-| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted (relay protocol superseded by ADR-58) |
+| ADR-42 | [Ruby Backend: Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted |
 | ADR-43 | [Ruby Backend: i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | ADR-44 | [Ruby Backend: Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
 | ADR-45 | [Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
@@ -79,35 +84,62 @@ Each document captures a significant design decision: its context, the decision 
 | ADR-62 | [`Embedded` Output Isolates Its Runtime per Artifact](62-embedded-runtime-isolation.md) | Accepted |
 | ADR-63 | [`--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode](63-module-name-policy.md) | Accepted |
 | ADR-64 | [Record Distribution Size Beside Speed, in Raw Bytes](64-size-record.md) | Accepted |
-| ADR-65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted (Ruby only) |
+| ADR-65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted |
+| ADR-66 | [`agents/` for Agent-Facing Documents, `docs/` for Human-Facing Ones](66-agents-directory.md) | Accepted |
 
 ## Adding a new ADR
 
-When a decision with real alternatives is made:
+### Does the decision need one?
 
-1. Take the next free number and create `docs/adr/<N>-<slug>.md`.
-2. Follow the structural contract: an opening **Status** paragraph (state, date, what landed / what remains), then **Context**, **Decision**, **Rejected alternatives**, **Consequences**.
-3. Add a row to the index table above, in ascending order.
+An ADR records a decision with rationale and rejected alternatives, or a standing policy.
+If no alternatives were weighed, there is nothing to record:
+
+- A mechanical change with no live alternatives → the commit message is enough.
+- Behavior the spec harness already enforces → the harness binds (ADR-3), and an ADR records *why*, never a normative description the harness already carries.
+- A survey or a measurement with no decision attached → leave it in the issue or the pull request, and cite it from the ADR that uses it.
+
+### Procedure
+
+1. Take the next free number: `ls agents/decisions/` gives the highest `N`, and yours is `N + 1`, with no zero padding.
+   Create `agents/decisions/<N>-<slug>.md`.
+2. Follow the skeleton:
+
+   ```markdown
+   # ADR-N — <title>
+
+   Status: **Accepted, <YYYY-MM-DD>.** <one paragraph: what landed / what remains.>
+
+   ## Context
+   ## Decision              <- the discriminating criterion, as a reusable rule
+   ## Rejected alternatives <- each with the reason it lost
+   ## Consequences          <- positive / negative / carry-over
+   ```
+
+3. Add a row to the index above, in ascending order, carrying the same status label as the file.
 4. Cross-reference: link related ADRs, and link from the ADR out to the code and docs it governs.
-   Code and user-facing docs never cite an ADR; they state their constraints in place.
-   The one inbound citer is `AGENTS.md`.
+   Files outside `agents/` never cite an ADR; they state their constraint in place.
+   If the decision changes how contributors must work, add or adjust the one-line rule in `AGENTS.md` citing the ADR: the rule there, the why here, never both in full.
+5. If it supersedes an earlier ADR, set that one's label to `Superseded (ADR-N)` in both the file and the index, and link forward from its Status paragraph.
 
-Quality bar:
+Then verify:
 
-- An ADR records a **decision with rationale and rejected alternatives**, or a standing policy.
-  State the *criterion* that discriminated between the options as a reusable rule, not just "we picked B".
-- A mechanical change with no live alternatives does not need an ADR — the commit message is enough.
+- The index row count matches the file count: `ls agents/decisions/*.md | grep -v README | wc -l` against the table.
+- Every relative link in the new ADR resolves.
+
+### Quality bar
+
+- State the *criterion* that discriminated between the options as a reusable rule, not just "we picked B".
 - **Length tracks stakes.**
   The common failure mode is writing too much, not too little.
-  Move research material (surveys, comparison tables) out of the ADR and cite it; keep the ADR the decision, not the research.
+  ADR-5 is a reasonable length for a policy-sized decision, ADR-0 for a foundation-sized one.
+- Move research material (surveys, comparison tables) out of the ADR and cite it; the ADR is the decision, not the research.
 - Anchor claims to real code (`crates/.../file.rs`, `runtime/<lang>/`) where possible.
-- The spec testsuite binds behaviour (ADR-3); an ADR records *why*, never a normative description that the harness already enforces.
 
 ## Relationship to other documents
 
 - **`AGENTS.md`**: the development contract for agents (and humans) working in this repository; it states each rule in full and cites the ADR that holds the rationale.
+- **`agents/docs-policy.md`**: the document taxonomy — which file each kind of content belongs in, why `agents/` and `docs/` are split by audience, and why `docs/support.md` is generated, never hand-edited.
 - **`README.md`**: user-facing overview.
   It points onward to `docs/getting-started.md`, `docs/backends/`, and `docs/support.md`, not into this directory.
 - **`docs/getting-started.md`** and **`docs/backends/`**: the user tutorial and per-target reference.
-  They state the lowering rules in place and name no ADR, per `docs/docs-policy.md`; the rationale behind those rules lives here (ADR-4, ADR-11 to ADR-13, ADR-28 to ADR-30, ADR-55).
-- **`docs/docs-policy.md`**: the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).
+  They state the lowering rules in place and name no ADR; the rationale behind those rules lives here (ADR-4, ADR-11 to ADR-13, ADR-28 to ADR-30, ADR-55).

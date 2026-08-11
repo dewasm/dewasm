@@ -1,7 +1,7 @@
 # ADR-60 — Ruby Backend: Flatten Only Deep Crossings
 
 Status: **Accepted, 2026-08-04.**
-`flat::plan` (`crates/dewasm-backend-ruby/src/flat.rs`) dissolves a frame only when some branch crossing it spans at least `DEEP_CROSSING` (16) frames; every shallower branch keeps ADR-42's `__br` relay, in the same function, side by side.
+`flat::plan` (the `flat` module of `crates/dewasm-backend-ruby/src/lib.rs`) dissolves a frame only when some branch crossing it spans at least `DEEP_CROSSING` (16) frames; every shallower branch keeps ADR-42's `__br` relay, in the same function, side by side.
 Refines [ADR-58](58-ruby-branch-by-value.md), which flattened every crossed frame.
 
 ## Context
@@ -22,7 +22,7 @@ Relay and dispatch coexist in one function; `__br` is hoisted whenever any cross
 ## Rejected alternatives
 
 - **Keep ADR-58's flatten-everything.**
-  Loses ~15% on the NES workload for no correctness gain; contradicts flat.rs's own documented "flatten branches, not loops" finding.
+  Loses ~15% on the NES workload for no correctness gain; contradicts the `flat` module's own documented "flatten branches, not loops" finding.
 - **Structured loops nested inside the flat function** (emit a real `while` around a state sub-range no external transition enters).
   Strictly more general, but the depth threshold already separates every workload measured, without a second lowering form to verify; revisit only if a module shows a deep crossing *and* a hot interior loop in the same function.
 - **A derived (non-judgement) threshold.**

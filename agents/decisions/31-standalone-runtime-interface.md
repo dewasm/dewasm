@@ -3,7 +3,7 @@
 **Status:** Accepted — 2026-07-27.
 The runtime conventions of a `--mode standalone` program — how it receives argv and directory preopens, and how `proc_exit`/trap map to a process exit — are now one interface, uniform across all five backends and modelled on wasmtime's CLI.
 Landed: repeatable `--dir HOST::GUEST` flags parsed by the generated main; `DEWASM_PREOPEN` removed; argv[0], env, and the trap exit code unified; Bash rejects `--dir` loudly.
-The reference is [docs/standalone-interface.md](../standalone-interface.md).
+The reference is [docs/standalone-interface.md](../../docs/standalone-interface.md).
 
 **Revision, 2026-07-27:** Bash's `--dir` rejection is superseded by [ADR-34](34-bash-wasi-filesystem.md) — the Bash backend now honors `--dir` with real filesystem support.
 
@@ -24,7 +24,7 @@ Aligning to it makes the generated programs behave like the binary they were con
 ## Decision
 
 One documented interface, implemented in every backend's generated standalone main.
-Full reference: [docs/standalone-interface.md](../standalone-interface.md).
+Full reference: [docs/standalone-interface.md](../../docs/standalone-interface.md).
 
 - **Invocation:** `<runner> <program> [--dir HOST::GUEST]... [--] [guest args...]`.
   The generated main consumes a leading run of `--dir` flags (both `--dir X` and `--dir=X`), stopping at `--` or the first non-`--dir` token; everything after is the guest's `argv[1..]`.

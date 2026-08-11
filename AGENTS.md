@@ -2,7 +2,7 @@
 
 - Claude Code reads CLAUDE.md, not AGENTS.md; CLAUDE.md pulls this file in with `@AGENTS.md`.
 - Everything here loads into every session. Keep it short and keep it INSTRUCTIONS; explain a rule's why only when the why changes what you do.
-- Material needed only inside one area belongs in .claude/skills/ or docs/, never here.
+- Material needed only inside one area belongs in agents/ or docs/, never here; a .claude/skills/ entry only routes to it.
 -->
 
 # AGENTS.md
@@ -34,11 +34,13 @@ The slower test categories are opt-in cargo features: `--features slow_test` (CI
 Which case sits in which category, and why, is pinned at its callsite in that backend's `e2e.rs`; the mechanism is in docs/testing.md.
 When support declarations or WASI units change, regenerate `docs/support.md` with `cargo xtask update-support-docs`.
 
-## ADRs
+## Decisions
 
-Significant decisions, anything with real alternatives, are recorded in [`docs/adr/`](docs/adr/README.md): its README holds the index and the quality bar, and the `adr-author` skill holds the procedure.
-An ADR is agent-facing memory, so only agent-facing documents (this file) may cite one.
-Code and user-facing docs state their constraints in place, and the ADR links out to the code it governs, never the reverse.
+Significant decisions, anything with real alternatives, are recorded in [`agents/decisions/`](agents/decisions/README.md): its README holds the index, the authoring procedure, and the quality bar.
+The entries keep the historical `ADR-N` identifiers they were written under, so "ADR-58" still names one.
+Only files under `agents/` and this file cite a decision.
+Code and user-facing docs state their constraints in place, and the decision links out to the code it governs, never the reverse.
+`agents/` is for documents an agent reads while working; `docs/` is for documents a human reads ([`agents/docs-policy.md`](agents/docs-policy.md)).
 
 ## Writing style
 
