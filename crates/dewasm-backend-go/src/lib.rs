@@ -73,7 +73,8 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Locate a `go` toolchain able to compile generated programs. Honors `$DEWASM_GO`, then `go` on `PATH` (a missing toolchain is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a `go` toolchain able to compile generated programs: `$DEWASM_GO` first, then `go` on `PATH`.
+/// A missing toolchain is a loud failure at the call site, not here.
 pub fn find_go() -> Option<std::path::PathBuf> {
     static GO: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     GO.get_or_init(find_go_uncached).clone()
@@ -127,7 +128,6 @@ impl Backend for GoBackend {
         match feature {
             // Go floats are native IEEE float32/float64, and the NaN paths are bit-exact via `math.Float32bits`/`Float64bits`.
             Feature::Floats => SupportStatus::Supported,
-            // Wasm-1.0 completion: imported globals/memories/tables through the provider map with a Go type-assertion kind+type check, multiple tables, and the table half of bulk memory (passive/declared element segments, table.init/copy, elem.drop).
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -205,7 +205,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         data_offsets: data_offsets(module),
     };
 
-    // Body: the generated struct + constructor + methods, into its own writer so the `uses` set is fully populated before we bundle the runtime.
+    // Into its own writer: the `uses` set must be complete before the runtime bundle is assembled.
     let mut body = CodeWriter::new("\t");
     gen.emit_program(&mut body);
 
@@ -416,7 +416,7 @@ fn validate_library_module_name(name: &str) -> Result<()> {
     }
 }
 
-/// The package clause of a library artifact: the module name lowercased. Total on a validated name.
+/// The package clause of a library artifact. Total on a validated name.
 fn package_name(module_name: &str) -> String {
     module_name.to_ascii_lowercase()
 }
@@ -1795,7 +1795,6 @@ mod units {
 
         let rt_call = Regex::new(r"Rt\.([a-z_][a-z0-9_]*)").unwrap();
         let memory_call = Regex::new(r"\.memory\.([a-z_][a-z0-9_]*)").unwrap();
-        // One precompiled sibling-call matcher per non-rt unit (`<recv>.<name>(`).
         let recv_of = |scope: &str| -> Option<&'static str> {
             match scope {
                 "memory" => Some("m"),

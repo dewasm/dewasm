@@ -1,6 +1,5 @@
 // requires: rt/trap
-// call_indirect dispatch: bounds-check, null-check, structural-type-check, and
-// return the Fn to invoke. The type string is a structural key so a table
+// The type string is a structural key, not a module-local type index, so a table
 // shared across modules stays consistent.
 Rt.Fn call(int index, String ty) {
     if (index < 0 || index >= slots.length) {

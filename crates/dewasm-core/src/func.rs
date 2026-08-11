@@ -75,7 +75,7 @@ struct Pending {
     size: u32,
 }
 
-/// One operand-stack slot: its type, and a pending expression when the value has not been spilled to a temp yet.
+/// One operand-stack slot. `pending` is `None` once the value has been spilled to its temp.
 struct Slot {
     ty: ValType,
     pending: Option<Pending>,
@@ -198,7 +198,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off. The caller pushes the returned marker; the two emit paths (`emit` and the function's fallthrough return) share this so both are annotated.
+    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off.
     fn source_marker(&mut self) -> Option<Stmt> {
         self.line_table?;
         let pos = self.cur_pos?;
@@ -209,7 +209,7 @@ impl<'a> FuncBuilder<'a> {
         Some(Stmt::SourceLine(pos))
     }
 
-    /// Push a materialized value: allocate a temp for the top slot and record it in `self.temps`. Used for values that are never folded (call results, `memory.grow`) and by `spill`.
+    /// Push a value that is materialized immediately: the ones that never fold (call results, `memory.grow`), and `spill`'s.
     fn push_temp(&mut self, ty: ValType) -> Temp {
         let depth = self.stack.len() as u32;
         self.spill_clobbered(depth);
@@ -219,7 +219,6 @@ impl<'a> FuncBuilder<'a> {
         temp
     }
 
-    /// Push a folded (pending) value. Does not touch `self.temps`.
     fn push_pending(&mut self, ty: ValType, expr: Expr, fx: Effects, size: u32) {
         self.stack.push(Slot {
             ty,
@@ -227,7 +226,6 @@ impl<'a> FuncBuilder<'a> {
         });
     }
 
-    /// Pop the top slot as an expression: its pending expression if any, else a reference to the temp it was materialized into.
     fn pop_expr(&mut self) -> (Expr, Effects, u32) {
         let slot = self.stack.pop().expect("value stack is not empty");
         match slot.pending {
@@ -254,7 +252,6 @@ impl<'a> FuncBuilder<'a> {
         self.stack[idx].pending.as_ref().is_some_and(|p| p.fx.trap)
     }
 
-    /// Materialize the pending value at stack index `idx` into its temp, emitting the assignment. A no-op if already materialized.
     fn spill(&mut self, idx: usize) {
         if self.stack[idx].pending.is_none() {
             return;
@@ -304,7 +301,6 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Spill the whole stack (used at control-flow boundaries).
     fn spill_all(&mut self) {
         for idx in 0..self.stack.len() {
             self.spill(idx);

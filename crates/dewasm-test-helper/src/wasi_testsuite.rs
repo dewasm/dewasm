@@ -37,7 +37,6 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
 /// The three prebuilt suites we drive, all `wasm32-wasip1` (the standard goal for a dewasm backend: wasm 1.0 + full WASI p1). The Rust suite's `wasm32-wasip3` tree is deliberately excluded — preview 3 is component-model territory, rejected outright.
 const SUITES: &[&str] = &["c", "rust", "assemblyscript"];
 
-/// The `tests/wasi-testsuite` submodule directory.
 fn testsuite_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/wasi-testsuite")
 }
@@ -61,7 +60,6 @@ impl Manifest {
     }
 }
 
-/// A single enumerated test: the module path, its manifest, and the trial name.
 struct Case {
     trial_name: String,
     wasm: PathBuf,
@@ -280,7 +278,6 @@ fn attribute(err: &anyhow::Error) -> Attribution {
     }
 }
 
-/// Convert `bytes` to a standalone program with `backend`, returning the source text or an attributed refusal.
 fn convert_standalone(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<String, Attribution> {
     let module = dewasm_core::build_module(bytes).map_err(|e| attribute(&e))?;
     let mut units = backend

@@ -23,7 +23,6 @@ use crate::size::report::{App, Cell, Component, Outcome};
 /// The corpus, in report order: a small utility, a database shell, a JavaScript engine, a whole Ruby. Fixed rather than "everything in the cache" — these four span two orders of magnitude of wasm size, and a record whose contents depend on which apps happen to be built is not comparable with the next one.
 const CORPUS: [&str; 4] = ["cowsay.wasm", "sqlite3-shell.wasm", "qjs.wasm", "ruby.wasm"];
 
-/// Parsed `cargo xtask size` arguments.
 struct Options {
     /// Re-render `docs/sizes/results.md` and its figures from a stored record instead of measuring. Converting the corpus with six backends takes minutes, so a wording fix must not require re-measuring — the JSON is the record, the markdown is a view of it.
     render: Option<PathBuf>,
@@ -72,7 +71,6 @@ fn backends() -> Vec<(&'static str, &'static (dyn Backend + Sync))> {
     ]
 }
 
-/// The measuring run: the runtimes, then the corpus, then the two output files.
 fn run() -> Result<()> {
     let runtimes = measure_runtimes();
     let apps: Vec<App> = CORPUS.iter().map(|file| measure_app(file)).collect();
@@ -118,7 +116,7 @@ fn run() -> Result<()> {
     );
 }
 
-/// The doc half of the output: the figures under `docs/sizes/figs/`, then `docs/sizes/results.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the figures as well as the prose.
+/// Both the measuring run and `--render` go through here, so a stored record regenerates the figures as well as the prose.
 ///
 /// Figures the record no longer covers are deleted: an orphan SVG looks current while nothing links it.
 fn write_doc(report: &report::Report) -> Result<()> {
@@ -138,7 +136,6 @@ fn write_doc(report: &report::Report) -> Result<()> {
     )
 }
 
-/// Remove every `.svg` under `docs/sizes/figs/` that this render did not write.
 fn prune_figs(written: &[String]) -> Result<()> {
     let Ok(entries) = std::fs::read_dir(figs_dir()) else {
         return Ok(());

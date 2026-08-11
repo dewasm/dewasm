@@ -76,7 +76,7 @@ pub fn prefix_runtime_names(bundle: &str, prefix: &str) -> String {
     let bytes = bundle.as_bytes();
     let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
     let mut out = String::with_capacity(bundle.len());
-    // Everything before `copied` is already in `out`; a match copies the run before it, then the prefix, and skips past the name.
+    // Invariant: everything before `copied` is already in `out`.
     let mut copied = 0;
     let mut i = 0;
     while i < bytes.len() {
@@ -256,7 +256,7 @@ impl Backend for BashBackend {
             // Each wasm call nests one native bash function call, and a deeply recursive guest (e.g. QuickJS's interactive REPL, whose startup alone reaches tens of thousands of frames) can exhaust the *process's* C stack — not the bounded, trappable wasm one (FUNCNEST) — and crash with a real SIGSEGV rather than a caught wasm trap. Raise the soft rlimit to the max this process is allowed before running any guest code; both attempts degrade silently (`|| true`) since a sandboxed environment may refuse both, in which case behavior is unchanged from before this line existed.
             w.line("ulimit -s unlimited 2>/dev/null || ulimit -s \"$(ulimit -Hs)\" 2>/dev/null || true");
             if wasi_bundled(module, opts.default_wasi, bundler()) {
-                // Standalone runtime interface: consume a leading run of `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..]. The Bash backend now honors --dir with real filesystem support, mirroring the Ruby standalone parser.
+                // Standalone runtime interface, mirroring the Ruby standalone parser: consume a leading run of `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                 w.line("WASI_DIRS=()");
                 w.line("while (( $# )); do");
                 w.line("\tcase \"$1\" in");
@@ -398,7 +398,7 @@ impl<'a> Gen<'a> {
         let link_err = self.rt("rt_link_err");
         w.line(format!("{p}init() {{"));
         w.indent();
-        // Emission order mirrors the Ruby backend: import registries, memory, tables, WASI state, then imports resolved kind by kind, then defined state, then export maps, then start.
+        // Emission order mirrors the Ruby backend.
         let num_imported_globals = m.imported_globals.len();
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()

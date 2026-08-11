@@ -80,7 +80,6 @@ impl BackendUnderTest for Perl {
     }
 }
 
-/// `add.wat`: call the exported functions and print each result.
 const PERL_ADD_GLUE: &str = r#"my $inst = Add->new({});
 print $inst->invoke('add', 2, 3), "\n";
 print $inst->invoke('add', 0xffffffff, 1), "\n";

@@ -206,7 +206,6 @@ fn resolve_in_parent_path(program: &Path) -> PathBuf {
     program.to_path_buf()
 }
 
-/// Spawn `cmd` with `stdin` piped in and both output streams captured, returning the raw `Output`.
 pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {
     run_command_bytes(cmd, stdin.as_bytes())
 }
@@ -224,7 +223,6 @@ pub fn run_command_bytes(cmd: &mut Command, stdin: &[u8]) -> Output {
     child.wait_with_output().expect("wait")
 }
 
-/// Write `script` to a temp file (extension `ext`) and run it under `interpreter`, returning the raw `Output`.
 pub fn run_script(
     interpreter: &Path,
     script: &str,
@@ -263,7 +261,7 @@ pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
 mod tests {
     use super::{derive_module_name, module_name_style, ModuleNameStyle};
 
-    /// The derivation reproduces exactly the names the deleted per-backend sanitizers produced for these inputs, which is what lets the glue consts stay untouched.
+    /// The glue consts spell these names literally, so the derivation must keep producing them.
     #[test]
     fn kebab_derivation_matches_the_names_the_glue_consts_spell() {
         for (kebab, pascal, snake) in [

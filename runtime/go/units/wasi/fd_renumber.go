@@ -1,8 +1,6 @@
-// Renumber `from` onto `to`: both must be live descriptors (BADF otherwise,
-// matching the reference table.renumber). The resource currently at `to` is
-// released (a real file handle is closed; a preopen/dir has none, and stdio
-// must never be closed), then `from`'s entry and its rights meta move to `to`
-// and `from` is retired. Used to overwrite stdio and preopen slots.
+// Both endpoints must be live descriptors, else BADF (matching the reference
+// table.renumber). The descriptor being overwritten is released, except stdio,
+// which must never be closed, and a preopen/dir, which has no OS handle.
 func (w *WASI) wasi_fd_renumber(from, to uint32) uint32 {
     fromEntry, ok := w.fds[from]
     if !ok {

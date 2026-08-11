@@ -90,7 +90,7 @@ pub fn build_go_dir(dir: &std::path::Path) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-/// `go build -o out target`, optionally from `cwd` (the temp module root for the package layout).
+/// `cwd`, when given, is the temp module root the package layout is built from.
 fn run_build(
     go: &std::path::Path,
     out: &std::path::Path,

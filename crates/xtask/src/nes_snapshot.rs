@@ -51,9 +51,7 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
     read_frame(&mut store, &instance, memory)
 }
 
-/// Read `frameWidth`/`frameHeight`/`screenOffset`/`paletteOffset` and slice the
-/// index buffer and the palette out of guest memory. Split out so `memory` is
-/// not borrowed across the export calls above.
+/// Split out so `memory` is not borrowed across the export calls above.
 fn read_frame(
     store: &mut Store<()>,
     instance: &Instance,

@@ -1,7 +1,5 @@
 # requires: rt/trap
-# Fixed-arity `call_indirect` for a 7-argument signature: same
-# dispatch and trap contract as `call`, but no `*args`/splat array is
-# built on either the caller or the callee side.
+# Same dispatch and trap contract as `call`, with no `*args`/splat array built on either side.
 def call7(i, type_key, a0, a1, a2, a3, a4, a5, a6)
   Rt.trap("undefined element") if i >= @slots.size
   slot = @slots[i]

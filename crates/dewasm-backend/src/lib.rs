@@ -44,7 +44,6 @@ pub struct GenOptions {
     pub data_file: Option<DataFileConfig>,
 }
 
-/// Configuration for data-segment externalization.
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
     /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.

@@ -1,7 +1,5 @@
 def wasi_fd_renumber(self, fd, to):
-    # Both descriptors must currently be open; the destination's own resource is
-    # closed, then the source is moved onto it and the source number retired
-    # (works onto stdio and preopens too).
+    # Both endpoints must be open fds: renumbering onto an unused number is BADF.
     if fd not in self.fds or to not in self.fds:
         return self.ERRNO_BADF
     dst = self.fds[to]

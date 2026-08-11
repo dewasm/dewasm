@@ -80,7 +80,6 @@ impl BackendUnderTest for Python {
     }
 }
 
-/// `add.wat`: call the exported functions and print each result.
 const PYTHON_ADD_GLUE: &str = r#"inst = Add()
 print(inst.invoke("add", 2, 3))
 print(inst.invoke("add", 0xffffffff, 1))

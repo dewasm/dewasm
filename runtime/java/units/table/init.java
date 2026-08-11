@@ -1,6 +1,5 @@
 // requires: rt/trap
-// Copy `length` funcrefs from `src` into the table at `dst` (active element
-// segment at instantiation).
+// Also used to initialize active element segments at instantiation time.
 void init(int dst, Rt.Funcref[] src, int srcOff, int length) {
     long d = Integer.toUnsignedLong(dst);
     long s = Integer.toUnsignedLong(srcOff);

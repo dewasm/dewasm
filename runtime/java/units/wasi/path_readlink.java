@@ -1,8 +1,8 @@
 // requires: memory/read_string, memory/init, memory/i32_store, wasi/resolve_path, wasi/errno_fs
-// Read a symlink's target into the guest buffer. The link itself is
-// resolved NOFOLLOW; the target string is returned verbatim (as the guest wrote
-// it at symlink time), truncated to buf_len — a short buffer takes the leading
-// bytes, matching the WASI contract, with bufused reporting what was written.
+// The link itself is resolved NOFOLLOW; the target string is returned verbatim
+// (as the guest wrote it at symlink time), truncated to buf_len — a short buffer
+// takes the leading bytes, matching the WASI contract, with bufused reporting
+// what was written.
 int wasi_path_readlink(int fd, int pathPtr, int pathLen, int bufPtr, int bufLen, int bufusedPtr) {
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),

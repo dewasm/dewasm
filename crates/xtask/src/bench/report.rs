@@ -115,7 +115,7 @@ impl Report {
     }
 }
 
-/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables, inline ADR links — plus the generated-file marker `docs/support.md` carries.
+/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables — plus the generated-file marker `docs/support.md` carries.
 ///
 /// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`; each one is embedded above the table for its own workload. Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {

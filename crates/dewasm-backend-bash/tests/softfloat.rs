@@ -551,7 +551,6 @@ fn softfloat_conversions() {
         );
     }
 
-    // promote / demote
     let mut f32s: Vec<i64> = F32_EDGES.iter().map(|&v| v as i64).collect();
     let mut f64s: Vec<i64> = F64_EDGES.iter().map(|&v| v as i64).collect();
     for _ in 0..1500 {
@@ -577,7 +576,6 @@ fn softfloat_conversions() {
         cases.push("f32_demote", a, 0, expect);
     }
 
-    // truncations, f64 and f32 sources
     let mut trunc64: Vec<i64> = F64_EDGES.iter().map(|&v| v as i64).collect();
     trunc64.extend(TRUNC_EDGES64.iter().map(|&v| v as i64));
     for _ in 0..1000 {

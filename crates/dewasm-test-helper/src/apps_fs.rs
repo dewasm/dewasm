@@ -205,7 +205,6 @@ pub(crate) fn stage_into(fixtures: &Path, scratch: &Path, stage: &[Stage]) {
     }
 }
 
-/// Recursively copy the contents of `src` into `dst`, creating `dst`.
 fn copy_tree(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
     for entry in std::fs::read_dir(src).unwrap() {
@@ -267,7 +266,6 @@ fn drive_fs_app_case(
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
     // Convert under `class`, not the cache stem: the two diverge for CRuby (see the field). `class` is already a valid module name for every backend, so it is passed verbatim rather than derived. wasmtime ignores the name (it runs the bytes directly).
     let program = lang.convert_app(&bytes, Mode::Library, case.class);
-    // Resolve the runtime host paths the glue const left as placeholders. The scratch preopen and the cache root are all any current case needs.
     let filled_glue = fill(
         glue,
         &[
