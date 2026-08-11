@@ -1,4 +1,5 @@
-//! The engine `update-snapshots` captures with: the [`BackendUnderTest`] surface the shared case runners expect, backed by [`crate::wasi_run`] in this process. The freshness suite spawns the same runner as a child instead, so capture and comparison execute the identical wasm under the identical WASI configuration.
+//! The engine `update-snapshots` captures with: the [`BackendUnderTest`] surface the shared case runners expect, backed by [`crate::wasi_run`] in this process.
+//! The freshness suite spawns the same runner as a child instead, so capture and comparison execute the identical wasm under the identical WASI configuration.
 //!
 //! The interactive-REPL transcript is the one case that still needs a child process — a pty session has to hand its slave to one — and there it runs this very binary as the runner.
 
@@ -76,7 +77,8 @@ fn capture(argv: Vec<String>, stdin: &[u8]) -> Output {
     }
 }
 
-/// An [`ExitStatus`] carrying `code`. It has no portable constructor, so each platform builds the raw status its `code()` decodes.
+/// An [`ExitStatus`] carrying `code`.
+/// It has no portable constructor, so each platform builds the raw status its `code()` decodes.
 #[cfg(unix)]
 fn exit_status(code: i32) -> ExitStatus {
     use std::os::unix::process::ExitStatusExt;
