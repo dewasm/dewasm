@@ -15,7 +15,7 @@ workspace = true
 # slow per-case macros (dewasm-test-helper) as active
 # `#[test]`s instead of `#[ignore]`d ones, and runs the full spec testsuite —
 # CI's main run. `ultra_slow_test` additionally un-ignores the cases measured
-# at ~1 min+ on a CI runner (the zeroperl reactor cases, whose ~99 MB generated
+# at ~1 min+ locally (the zeroperl reactor cases, whose ~99 MB generated
 # source `javac`s for ~45 s even on a fast laptop), which are kept out of CI
 # and run only in local pre-release verification.
 slow_test = []

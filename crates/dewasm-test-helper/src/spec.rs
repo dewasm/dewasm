@@ -19,7 +19,7 @@ use crate::backend::BackendUnderTest;
 pub trait SpecBackend: BackendUnderTest {
     /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
-    /// The non-ignored set: files run by a plain `cargo test`. Every other `.wast` file still becomes a trial, but marked `#[ignore]`d, so `cargo test -- --ignored` / `--include-ignored` runs the whole testsuite. `None` marks nothing ignored — the whole testsuite runs by default (used by the fast interpreters).
+    /// The non-ignored set: files run by a plain `cargo test`. Every other `.wast` file still becomes a trial, but marked `#[ignore]`d. `None` marks nothing ignored — the whole testsuite runs by default (used by the fast interpreters).
     fn curated_files(&self) -> Option<&'static [&'static str]>;
     /// Units the harness helpers themselves use.
     fn seed_units(&self) -> &'static [&'static str];
@@ -85,7 +85,7 @@ pub struct Converted {
     pub units: BTreeSet<String>,
 }
 
-/// The `.wast` files a plain `cargo test` runs for a backend whose per-file cost makes the whole 257-file testsuite too slow to be the default: one file per semantic area — integers, floats, control flow, memory/table, globals, linking, bulk ops. Every other file is still a trial, `#[ignore]`d, so `--include-ignored` runs everything. The selection is a property of the testsuite rather than of a target language, so the backends that curate at all share it; one that needs more files adds them with [`curated_with`].
+/// The `.wast` files a plain `cargo test` runs for a backend whose per-file cost makes the whole 257-file testsuite too slow to be the default: one file per semantic area — integers, floats, control flow, memory/table, globals, linking, bulk ops. Every other file is still a trial, `#[ignore]`d, unless the backend crate's `slow_test` feature is on. The selection is a property of the testsuite rather than of a target language, so the backends that curate at all share it; one that needs more files adds them with [`curated_with`].
 pub const CURATED_SPEC_FILES: &[&str] = &[
     "address",
     "align",
@@ -207,7 +207,7 @@ fn spec_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")
 }
 
-/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). The trial name is the file stem, so cargo's own name filter applies: `cargo test --test spec i32` runs the `i32`-named file(s). Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set and `--include-ignored` (or `--ignored`) runs the whole testsuite. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
+/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). The trial name is the file stem, so cargo's own name filter applies: `cargo test --test spec i32` runs the `i32`-named file(s). Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
 ///
 /// `slow_test` mirrors the backend crate's feature of the same name (CI's main run): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
 pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial> {

@@ -85,26 +85,45 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a ruby interpreter able to run generated scripts: the `ruby` on `PATH`, and at least 3.4, because the generated runtime's memory is `IO::Buffer`-backed. A missing or too-old interpreter fails loud with a setup instruction rather than silently skipping.
+/// Locate a ruby interpreter able to run generated scripts: at least 3.4, because the generated runtime's memory is `IO::Buffer`-backed.
+/// Honors `$DEWASM_RUBY`, then `ruby` on `PATH`.
+/// A missing or too-old interpreter fails loud with a setup instruction rather than silently skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
     static RUBY: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     RUBY.get_or_init(find_ruby_uncached).clone()
 }
 
-/// The probe behind [`find_ruby`], memoized there: it spawns a process per call, and the interpreter cannot change under a running process.
+/// The probe behind [`find_ruby`], memoized there: it spawns a process per candidate per call, and the interpreter cannot change under a running process.
 fn find_ruby_uncached() -> Option<std::path::PathBuf> {
-    let out = std::process::Command::new("ruby")
-        .args(["-e", "print RUBY_VERSION"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
+    use std::path::PathBuf;
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(env) = std::env::var("DEWASM_RUBY") {
+        candidates.push(PathBuf::from(env));
     }
-    let version = String::from_utf8_lossy(&out.stdout);
-    let mut parts = version.trim().split('.');
-    let major: u32 = parts.next()?.parse().ok()?;
-    let minor: u32 = parts.next()?.parse().ok()?;
-    ((major, minor) >= (3, 4)).then(|| std::path::PathBuf::from("ruby"))
+    candidates.push(PathBuf::from("ruby"));
+    for candidate in candidates {
+        let Ok(out) = std::process::Command::new(&candidate)
+            .args(["-e", "print RUBY_VERSION"])
+            .output()
+        else {
+            continue;
+        };
+        if !out.status.success() {
+            continue;
+        }
+        let version = String::from_utf8_lossy(&out.stdout);
+        let mut parts = version.trim().split('.');
+        let (Some(major), Some(minor)) = (
+            parts.next().and_then(|p| p.parse::<u32>().ok()),
+            parts.next().and_then(|p| p.parse::<u32>().ok()),
+        ) else {
+            continue;
+        };
+        if (major, minor) >= (3, 4) {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// Generate one class for `module`. Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).

@@ -188,7 +188,7 @@ macro_rules! module_name_policy_suite {
 /// Internal: wrap a generated `#[test]` item in the speed-category `#[ignore]` attribute. The per-case app macros below delegate here so a callsite can pick the category without duplicating the cfg_attr. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::test_speed!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
 ///
 /// * `slow` — conditional on the backend crate's `slow_test` feature (CI's main run category). This is the default for every slow-case macro.
-/// * `ultra` — conditional on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more on a CI runner. These are kept out of CI and run only under `--features ultra_slow_test` or `-- --include-ignored`, in local pre-release verification.
+/// * `ultra` — conditional on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more locally. These are kept out of CI and run only under `--features ultra_slow_test`, in local pre-release verification.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! test_speed {
@@ -202,7 +202,7 @@ macro_rules! test_speed {
     (ultra, $item:item) => {
         #[cfg_attr(
             not(feature = "ultra_slow_test"),
-            ignore = "ultra-slow app case (1min+ on a CI runner): --features ultra_slow_test"
+            ignore = "ultra-slow app case: --features ultra_slow_test"
         )]
         $item
     };
@@ -342,7 +342,7 @@ macro_rules! wasi_root_containment_e2e {
     };
 }
 
-/// Per-case app macros: each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test` or `cargo test -- --include-ignored`). A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`].
+/// Per-case app macros: each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test`). A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`].
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -366,7 +366,7 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled — run it with `--features slow_test` or `cargo test -- --include-ignored`. Pass a trailing `ultra` to promote it to the ultra-slow category ([`test_speed!`]).
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled — run it with `--features slow_test`. Pass a trailing `ultra` to promote it to the ultra-slow category ([`test_speed!`]).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {

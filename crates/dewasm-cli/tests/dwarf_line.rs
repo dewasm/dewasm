@@ -101,7 +101,8 @@ fn run_go(prog: &Path) -> (String, i32) {
 }
 
 fn run_ruby(prog: &Path) -> (String, i32) {
-    let ruby = find_ruby().expect("ruby >= 3.4 not found on PATH — see docs/testing.md");
+    let ruby =
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .current_dir(prog.parent().unwrap())

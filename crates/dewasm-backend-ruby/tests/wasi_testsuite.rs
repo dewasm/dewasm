@@ -41,7 +41,8 @@ impl BackendUnderTest for RubyWasi {
     }
 
     fn interpreter(&self) -> PathBuf {
-        dewasm_backend_ruby::find_ruby().expect("ruby not found on PATH — see docs/testing.md")
+        dewasm_backend_ruby::find_ruby()
+            .expect("ruby not found on PATH (or $DEWASM_RUBY) — see docs/testing.md")
     }
 }
 

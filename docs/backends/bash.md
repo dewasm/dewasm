@@ -46,7 +46,7 @@ The e2e override, custom-provider and partial-override glue (`crates/dewasm-back
 
 - **Speed.**
   Bash arithmetic is signed-64 only, and every float operation is softfloat integer arithmetic, so float-heavy programs are slow.
-  The slow apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only under the `slow_test` cargo feature (or `cargo test -- --include-ignored`).
+  The slow apps (QuickJS, SQLite) are `#[ignore]`d for Bash by default and run only under the `slow_test` cargo feature.
   Slower still, in the `ultra_slow_test` category (kept out of CI): the interactive qjs REPL pty case, the interpreter and reactor giants (CPython, CRuby, zeroperl), and the DOOM and NES frame snapshots.
   Integer-only programs (cowsay, minigzip) run fine.
 - Every generated function ends with an explicit `return 0`; a trailing arithmetic statement would otherwise leak status 1 (the units lint enforces this).

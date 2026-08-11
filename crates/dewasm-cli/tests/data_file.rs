@@ -1,6 +1,6 @@
 //! End-to-end coverage for `--data-file` data-segment externalization. For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test` or `--include-ignored`).
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -71,7 +71,8 @@ fn write(path: &Path, contents: &str) {
 
 /// Run a Ruby program from its own directory (so `__dir__`-relative sidecar loads resolve), returning (stdout, exit code).
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
-    let ruby = find_ruby().expect("ruby >= 3.4 not found on PATH — see docs/testing.md");
+    let ruby =
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .args(args)
@@ -642,7 +643,7 @@ const QJS_STDOUT: &str = "42\n";
 #[test]
 #[cfg_attr(
     not(feature = "slow_test"),
-    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test or -- --include-ignored"
+    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test"
 )]
 fn ruby_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
@@ -698,7 +699,7 @@ fn ruby_qjs_data_file_matches_embedded() {
 #[test]
 #[cfg_attr(
     not(feature = "slow_test"),
-    ignore = "slow: go build of the cached qjs.wasm source (multi-second): --features slow_test or -- --include-ignored"
+    ignore = "slow: go build of the cached qjs.wasm source (multi-second): --features slow_test"
 )]
 fn go_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
@@ -758,7 +759,7 @@ fn go_qjs_data_file_matches_embedded() {
 #[test]
 #[cfg_attr(
     not(feature = "slow_test"),
-    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test or -- --include-ignored"
+    ignore = "slow: converts and runs the cached qjs.wasm (multi-second): --features slow_test"
 )]
 fn python_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
@@ -814,7 +815,7 @@ fn python_qjs_data_file_matches_embedded() {
 #[test]
 #[cfg_attr(
     not(feature = "slow_test"),
-    ignore = "slow: javac of the cached qjs.wasm source (multi-second): --features slow_test or -- --include-ignored"
+    ignore = "slow: javac of the cached qjs.wasm source (multi-second): --features slow_test"
 )]
 fn java_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();

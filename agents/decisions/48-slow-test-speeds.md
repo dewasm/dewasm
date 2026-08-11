@@ -17,7 +17,7 @@ Two explicit speed categories, named for what they test:
 - `slow_test` (renamed from `heavy_test`): cases CI verifies on every push to main.
   The feature also un-ignores the spec harness's non-curated run, so the CI switch from `--include-ignored` to `--features slow_test` drops nothing unintended.
 - `ultra_slow_test = ["slow_test"]`: cases CI deliberately does not run.
-  **Criterion: roughly one minute per test on a CI runner** (observed, not estimated — a case is promoted on evidence from a real run).
+  **Criterion: roughly one minute per test, measured locally** (observed, not estimated — a case is promoted on evidence from a real run).
   The speed category is chosen per callsite in each backend's `tests/e2e.rs`, so the same case can be ultra for go (compiling a CPython-sized program) and slow for java.
 
 Local speeds: `cargo test` (fast test) → `--features slow_test` (what CI's main run runs) → `--features ultra_slow_test` (everything); `-- --include-ignored` remains the feature-independent way to run everything.

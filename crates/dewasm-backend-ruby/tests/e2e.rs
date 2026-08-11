@@ -18,7 +18,7 @@ impl BackendUnderTest for Ruby {
     }
 
     fn interpreter(&self) -> PathBuf {
-        find_ruby().expect("ruby not found on PATH — see docs/testing.md")
+        find_ruby().expect("ruby not found on PATH (or $DEWASM_RUBY) — see docs/testing.md")
     }
 
     /// Write each `.wat` module of a multi-module case into `dir` as its own `.rb` file and return the `require_relative` preamble that loads them. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) written to `rt.rb`, so an imported table crosses modules (as the spec harness's `register` path does) — each module file requires it first, since its class body resolves `::Rt` at load time. Otherwise each file is a self-contained Embedded conversion carrying its own nested `Rt`.
