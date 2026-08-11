@@ -43,7 +43,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
     build_module_with_options(bytes, &BuildOptions::default())
 }
 
-/// Pre-pass (only when DWARF line back-mapping is requested): scan the payloads for `.debug_*` custom sections and the code section's content start, then build the line table. It runs before the main loop because `.debug_line` custom sections normally appear *after* the code section, so the table must exist before any function body is translated.
+/// Build the line table in a pre-pass of its own, because `.debug_line` custom sections normally appear *after* the code section: the table must exist before any function body is translated.
 fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
     let mut debug_sections: HashMap<String, Vec<u8>> = HashMap::new();
     let mut code_section_start: u64 = 0;
@@ -71,7 +71,6 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
         }));
     }
 
-    // Build the DWARF line table up front (pre-pass), so every function body can resolve its operator offsets while translating.
     let line_table = if options.debug_line {
         collect_line_table(bytes)?
     } else {

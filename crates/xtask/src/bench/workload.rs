@@ -42,7 +42,6 @@ SELECT count(*) FROM t WHERE name LIKE '%7%';
 .quit
 ";
 
-/// What a workload is and how to invoke it.
 pub enum Kind {
     /// A `<module> <iterations>` microbenchmark from either family (`wat`, `c`). `iter_cap` bounds the harness's calibration.
     Micro { iter_cap: u64 },
@@ -50,7 +49,6 @@ pub enum Kind {
     App { args: Vec<String>, stdin: String },
 }
 
-/// One benchmarkable program.
 pub struct Workload {
     /// The filter/report label, e.g. `wat/i32_alu`, `c/sha256` or `app/sqlite3_query`. The part before the slash is the family, which is also the source directory for a microbenchmark.
     pub label: String,
@@ -67,7 +65,6 @@ impl Workload {
         if self.wasm.is_file() {
             return None;
         }
-        // Each microbenchmark family has its own build script, named by the family segment of the label.
         let build = match self.kind {
             Kind::Micro { .. } => format!("benchmarks/{}/build.sh", self.family()),
             Kind::App { .. } => "examples/apps/setup.sh".to_string(),
@@ -83,7 +80,6 @@ impl Workload {
         self.label.split('/').next().unwrap_or(&self.label)
     }
 
-    /// The exclusion reason for `runner`, if this workload declares one.
     pub fn excluded(&self, runner: &str) -> Option<&'static str> {
         self.exclude
             .iter()

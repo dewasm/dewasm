@@ -16,7 +16,6 @@ pub struct AppCase {
     pub expect_code: i32,
 }
 
-/// cowsay driven purely by argv.
 pub const COWSAY_ARGS: AppCase = AppCase {
     name: "cowsay",
     args: &["Hello", "from", "dewasm!"],
@@ -25,7 +24,6 @@ pub const COWSAY_ARGS: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// cowsay reading its message from stdin.
 pub const COWSAY_STDIN: AppCase = AppCase {
     name: "cowsay",
     args: &[],

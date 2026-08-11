@@ -37,7 +37,6 @@ const DEFAULT_TARGET_MS: u64 = 300;
 /// Default per-process wall-clock ceiling. Generous — a Bash sample legitimately takes minutes — but finite, so a runner that turns out slower than expected costs one timeout instead of hanging the suite.
 const DEFAULT_TIMEOUT_S: u64 = 900;
 
-/// Parsed `cargo xtask bench` arguments.
 struct Options {
     filter: Option<String>,
     reps: usize,
@@ -140,14 +139,12 @@ fn matches(filter: &Option<String>, workload: &Workload, runners: &[Runner]) -> 
             .any(|runner| runner.label.contains(needle.as_str()))
 }
 
-/// Whether one (workload, runner) pair is selected.
 fn pair_matches(filter: &Option<String>, workload: &Workload, runner: &Runner) -> bool {
     filter.as_ref().is_none_or(|needle| {
         workload.label.contains(needle.as_str()) || runner.label.contains(needle.as_str())
     })
 }
 
-/// `--list`: the matrix and each runner's availability, without running anything.
 fn list(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
     println!("Runners ({}):", runners.len());
     for runner in runners {
@@ -205,7 +202,6 @@ fn list(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()
     Ok(())
 }
 
-/// One line describing a ready workload for `--list`.
 fn describe(workload: &Workload) -> String {
     match &workload.kind {
         workload::Kind::Micro { iter_cap } => {
@@ -217,7 +213,6 @@ fn describe(workload: &Workload) -> String {
     }
 }
 
-/// The measuring run: every selected pair, then the two output files.
 fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
     // wasmtime is not optional: it is both the ceiling every ratio is taken against and the oracle every runner's stdout is diffed against. Without it the suite would produce numbers with nothing to check them, so it fails loud instead.
     if let Err(reason) = runners
@@ -297,7 +292,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     );
 }
 
-/// The doc half of the output: the charts under `docs/benchmarks/figs/`, then `docs/benchmarks/results.md` embedding them. Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
+/// Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
 ///
 /// Charts not covered by the record are deleted: an orphan SVG looks current while nothing links it. The doc and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
@@ -320,7 +315,6 @@ fn write_doc(report: &report::Report) -> Result<()> {
     )
 }
 
-/// Remove every `.svg` under `docs/benchmarks/` that this render did not write.
 fn prune_charts(written: &[String]) -> Result<()> {
     let Ok(entries) = std::fs::read_dir(charts_dir()) else {
         return Ok(());
@@ -342,7 +336,7 @@ fn prune_charts(written: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Measure every selected runner for one workload, appending a [`Cell`] per pair — including the skips, which is what keeps a gap from reading as coverage.
+/// Appends a [`Cell`] per (workload, runner) pair, the skips included: a gap must never read as coverage.
 fn measure_workload(
     opts: &Options,
     runners: &[Runner],
@@ -415,7 +409,7 @@ fn skipped(workload: &Workload, runner: &Runner, reason: String) -> Cell {
     }
 }
 
-/// The whole measurement of one (workload, runner) pair. A microbenchmark times the zero run, calibrates the iteration count against it, then takes the timed repetitions; an app just takes the timed repetitions of one whole run. Either way the resulting stdout is diffed against wasmtime at the same iteration count.
+/// The whole measurement of one (workload, runner) pair. The resulting stdout is diffed against wasmtime at the same iteration count.
 fn measure_cell(
     opts: &Options,
     workload: &Workload,

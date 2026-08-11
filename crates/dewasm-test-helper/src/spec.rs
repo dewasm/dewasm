@@ -203,7 +203,6 @@ pub fn nullable_heap_type(hty: &HeapType<'_>) -> bool {
     )
 }
 
-/// The tests/spec submodule directory (upstream testsuite).
 fn spec_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")
 }
@@ -240,7 +239,6 @@ pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial
     names
         .into_iter()
         .map(|name| {
-            // Nothing curated => nothing ignored (the whole suite is the default); otherwise files outside the curated set are ignored.
             let ignored = curated
                 .as_ref()
                 .is_some_and(|set| !set.contains(name.as_str()));
@@ -563,7 +561,7 @@ fn run_directives(
                 let call = match exec {
                     WastExecute::Invoke(inv) => gen.invoke_expr(&inv),
                     WastExecute::Wat(wat) => {
-                        // instantiation trap: convert the module inline
+                        // assert_trap on a module: the instantiation itself is what must trap.
                         gen.convert_quote_wat(QuoteWat::Wat(wat), &desc)
                             .map(|conv| {
                                 let registered = gen.registered_pairs();

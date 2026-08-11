@@ -42,9 +42,7 @@ sub wasi_path_open {
     }
     my ($base, $inheriting);
     if (($st[2] & 0170000) == 0040000) {  # a directory
-        # Opening a directory: keep a dir entry (sysread on it is not
-        # meaningful), narrow to the directory rights, and drop the
-        # throwaway OS handle.
+        # sysread on a directory is not meaningful, so keep a dir entry instead.
         close($fh);
         my $real = Cwd::realpath($host);
         return $self->fs_errno(0 + $!) unless defined $real;

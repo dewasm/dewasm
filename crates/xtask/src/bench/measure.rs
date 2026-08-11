@@ -14,7 +14,6 @@ use anyhow::{Context, Result};
 
 use crate::bench::runner::Launch;
 
-/// One process execution.
 pub struct RunOutcome {
     /// Wall time from just before `spawn` to the child's exit.
     pub wall: Duration,

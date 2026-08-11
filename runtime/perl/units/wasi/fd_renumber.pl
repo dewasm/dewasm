@@ -1,9 +1,7 @@
 # requires:
 sub wasi_fd_renumber {
     my ($self, $fd, $to) = @_;
-    # Both descriptors must currently be open; the destination's own
-    # resource is closed, then the source is moved onto it and the source
-    # number retired (works onto stdio and preopens too).
+    # Both endpoints must be open fds: renumbering onto an unused number is BADF.
     return ERRNO_BADF unless exists $self->{fds}{$fd} && exists $self->{fds}{$to};
     my $dst = $self->{fds}{$to};
     close($dst->{fh}) if !$dst->{dir} && !defined($dst->{std});

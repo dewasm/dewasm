@@ -298,7 +298,7 @@ macro_rules! wasi_suite {
     };
 }
 
-/// One `#[test]` exercising the standalone `--dir` interface for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed. No glue — standalone needs none. Wired by every filesystem backend (and re-run under wasmtime as ground truth); Bash joined once its WASI filesystem landed.
+/// One `#[test]` exercising the standalone `--dir` interface for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed. No glue — standalone needs none. Wired by every filesystem backend, and re-run under wasmtime as ground truth.
 #[macro_export]
 macro_rules! standalone_dir_e2e {
     ($lang:expr) => {

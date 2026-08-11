@@ -1,7 +1,6 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Create a hard link new = old, both endpoints contained. Both endpoints are
-// resolved NOFOLLOW and LOOKUPFLAGS_SYMLINK_FOLLOW is rejected as EINVAL like
-// the other backends.
+// Both endpoints are resolved NOFOLLOW, and LOOKUPFLAGS_SYMLINK_FOLLOW is
+// rejected as EINVAL like the other backends.
 func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDirfd, newPathPtr, newPathLen uint32) uint32 {
     if oldFlags&0x1 != 0 { // lookupflags::SYMLINK_FOLLOW
         return wasiInval

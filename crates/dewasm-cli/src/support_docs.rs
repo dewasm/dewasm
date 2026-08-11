@@ -21,7 +21,6 @@ const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::Floats,
 ];
 
-/// Render `docs/support.md` from the backends' own capability declarations.
 pub fn render_support_docs() -> String {
     let backends: Vec<&dyn Backend> = vec![
         &RubyBackend,

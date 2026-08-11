@@ -123,7 +123,6 @@ impl Theme {
     }
 }
 
-/// One plotted row.
 pub struct Row {
     pub label: String,
     /// In whatever unit the chart's [`Units`] spells; seconds here, bytes in the size record.
@@ -142,7 +141,6 @@ const SECONDS: Units = Units {
     tick: fmt_tick,
 };
 
-/// The four families named in every benchmark chart's legend.
 const BENCH_LEGEND: [(Family, &str); 4] = [
     (Family::Baseline, "wasmtime (baseline)"),
     (Family::Dewasm, "dewasm backends"),

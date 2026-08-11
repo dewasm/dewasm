@@ -119,7 +119,7 @@ fn find_python_uncached() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one class for `module`. Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
+/// Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_class_with_units(
     module: &Module,
     class_name: &str,
@@ -942,7 +942,7 @@ impl<'a> Gen<'a> {
         }
         w.line(format!("def _f{idx}(self{params}):"));
         w.indent();
-        // Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
+        // The defaults are immutable literals, so a chained assignment binds every name to its own value rather than to one shared object.
         for run in local_runs(&func.locals, default_value) {
             let default = default_value(func.locals[run.start]);
             let names = run
@@ -978,7 +978,7 @@ impl<'a> Gen<'a> {
                 self.emit_seq(w, &func.body, &mut guarded, true);
             }
             Some(n) => {
-                // Each state is rendered into its own writer, then stitched under its arm of the dispatch. Every state body ends in a transition, a `return` or a trap (see `flat_seq`), so no arm falls through to the next round with the same state.
+                // Every state body ends in a transition, a `return` or a trap (see `flat_seq`), so no arm falls through to the next round with the same state.
                 let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("\t")).collect();
                 let last = self.flat_seq(&mut st, 0, &func.body);
                 // Falling off the body ends the function; leave the dispatch loop through its `else`. A body that cannot fall off needs no such exit.
@@ -1001,7 +1001,7 @@ impl<'a> Gen<'a> {
     ///
     /// A run starts unguarded: every frame enclosing a sequence `flat_seq` walks is dissolved (dissolution is transitive up the spine), so every branch escaping the run is addressed by state and leaves `_br` alone.
     fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
-        let mut run = 0; // start of the pending run of non-dissolved statements
+        let mut pending_start = 0;
         for (i, stmt) in stmts.iter().enumerate() {
             let plan_hit = {
                 let p = self.flat.borrow();
@@ -1020,11 +1020,11 @@ impl<'a> Gen<'a> {
             let Some((target, after)) = plan_hit else {
                 continue;
             };
-            if run < i {
+            if pending_start < i {
                 let mut guarded = false;
-                self.emit_seq(&mut st[cur], &stmts[run..i], &mut guarded, false);
+                self.emit_seq(&mut st[cur], &stmts[pending_start..i], &mut guarded, false);
             }
-            run = i + 1;
+            pending_start = i + 1;
             match stmt {
                 Stmt::Block { body, .. } => {
                     cur = self.flat_seq(st, cur, body);
@@ -1072,9 +1072,9 @@ impl<'a> Gen<'a> {
                 _ => unreachable!("only frames are dissolved"),
             }
         }
-        if run < stmts.len() {
+        if pending_start < stmts.len() {
             let mut guarded = false;
-            self.emit_seq(&mut st[cur], &stmts[run..], &mut guarded, false);
+            self.emit_seq(&mut st[cur], &stmts[pending_start..], &mut guarded, false);
         }
         cur
     }
@@ -1414,7 +1414,6 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1848,7 +1847,6 @@ mod cascade {
     #[test]
     fn deep_multi_level_br_is_addressed_by_value() {
         let src = convert(&tower(flat::DEEP_CROSSING + 2));
-        // The dispatch loop, and a branch that names its target as a number.
         assert!(src.contains("_state = 0"), "no dispatch entry in:\n{src}");
         assert!(src.contains("if _state < "), "no dispatch tree in:\n{src}");
         assert!(src.contains("; continue"), "no transition in:\n{src}");
@@ -2033,7 +2031,6 @@ mod units {
                 );
             }
 
-            // Sibling calls within the same scope's nested class.
             for (sibling, re) in &sibling_calls {
                 let Some(name) = sibling.strip_prefix(&format!("{scope}/")) else {
                     continue;

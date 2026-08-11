@@ -100,7 +100,6 @@ fn run_go(prog: &Path) -> (String, i32) {
     )
 }
 
-/// Run a Ruby program, returning (stdout, exit code).
 fn run_ruby(prog: &Path) -> (String, i32) {
     let ruby = find_ruby().expect("ruby >= 3.4 not found on PATH — see docs/testing.md");
     let out = Command::new(ruby)
@@ -148,7 +147,6 @@ fn go_dwarf_line_markers_are_neutral_and_build() {
     let plain = convert("go", &plain_path, false);
     let dwarf = convert("go", &dwarf_path, true);
 
-    // The flag must actually produce fixture markers.
     let fixture_markers: Vec<&str> = dwarf
         .lines()
         .filter(|l| l.starts_with("//line ") && l.contains("dwarf_fixture.c"))
@@ -170,14 +168,12 @@ fn go_dwarf_line_markers_are_neutral_and_build() {
         assert_ne!(after, "0", "//line must never carry line 0: {l:?}");
     }
 
-    // Neutrality: stripping every `//line` directive reproduces the plain file.
     let stripped = strip_markers(&dwarf, |l| l.starts_with("//line "));
     assert_eq!(
         stripped, plain,
         "flagged Go source must equal plain after stripping //line"
     );
 
-    // Same runtime behavior.
     let (out_p, code_p) = run_go(&plain_path);
     let (out_d, code_d) = run_go(&dwarf_path);
     assert_eq!(out_p, FIXTURE_STDOUT);
@@ -200,7 +196,6 @@ fn ruby_dwarf_line_markers_are_neutral_and_run() {
         "expected a Ruby comment marker into dwarf_fixture.c"
     );
 
-    // Neutrality: markers are the only additions.
     let stripped = strip_markers(&dwarf, is_comment_marker);
     assert_eq!(
         stripped, plain,

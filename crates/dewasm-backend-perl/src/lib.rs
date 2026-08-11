@@ -109,7 +109,7 @@ fn find_perl_uncached() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one package for `module`. Returns the package source and the set of runtime units it needs (already bundled inside for `Embedded`).
+/// Returns the package source and the set of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_package_with_units(
     module: &Module,
     package_name: &str,
@@ -173,7 +173,7 @@ fn generate_package_inner(
             }
         }
         RuntimeLinkage::Alias(path) => {
-            // Generated code references the runtime as `Rt` directly; a shared runtime under any other name is aliased in via a stash alias.
+            // Generated code references the runtime as `Rt` directly.
             if path != "Rt" {
                 out.push_str(&format!("BEGIN {{ *Rt:: = \\%{path}::; }}\n\n"));
             }
@@ -842,7 +842,7 @@ impl<'a> Gen<'a> {
             self.rt("exhausted"),
             self.rt_name
         ));
-        // A run of consecutive locals sharing one default is declared in a single statement — a list assignment of that many copies, or, where the default is `undef`, the bare declaration a fresh lexical already satisfies.
+        // A fresh perl lexical is already `undef`, so a run defaulting to `undef` needs no initializer.
         for run in local_runs(&func.locals, default_value) {
             let default = default_value(func.locals[run.start]);
             let names: Vec<String> = run.map(|k| format!("$l{}", ty.params.len() + k)).collect();
@@ -1054,7 +1054,6 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1399,9 +1398,7 @@ mod branch_shape {
                   (local.set 1 (i32.const 7)))
                 (local.get 1)))"#,
         );
-        // The loop is a labeled `while (1)`; both blocks are labeled bare blocks.
         assert!(source.contains(": while (1) {"), "loop frame:\n{source}");
-        // Branches are direct label exits/continues: the back-edge is a `next`, the block exits are `last`s at two different depths.
         assert!(source.contains("next L"), "loop back-edge:\n{source}");
         let lasts = source.matches("last L").count();
         assert!(lasts >= 3, "multi-level exits (got {lasts}):\n{source}");
@@ -1555,7 +1552,6 @@ mod units {
                 demand(dep, &format!("Rt::{name}"));
             }
 
-            // Sibling calls within the same scope's package.
             for (sibling, re) in &sibling_calls {
                 let Some(name) = sibling.strip_prefix(&format!("{scope}/")) else {
                     continue;

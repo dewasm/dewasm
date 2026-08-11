@@ -140,7 +140,6 @@ fn generate_class_inner(
             _ => None,
         }))
         .collect();
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob. Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -473,8 +472,8 @@ fn walk_frame_sets(
 fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets) {
     if let BrTarget::Label { label, .. } = target {
         if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
-            // Outward branch (target is not the innermost frame): mark the whole inclusive path from the target to the innermost frame.
-            if pos + 1 < stack.len() {
+            let outward = pos + 1 < stack.len();
+            if outward {
                 // Unless it is Ruby's `break`: crossing exactly one loop that
                 // ends the block being targeted. That already lands where the
                 // branch wants to go, at O(1), so nothing on the path dissolves.
@@ -672,7 +671,7 @@ impl<'a> Gen<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         w.line(format!("MEMORY_EXPORTS = [{memory_entries}].freeze"));
-        // Externalized data blob: read once at class-definition time, kept binary (ASCII-8BIT, as File.binread returns). Only emitted when there is data to externalize.
+        // Externalized data blob: read once at class-definition time, kept binary (ASCII-8BIT, as File.binread returns).
         if let Some(name) = &self.data_file {
             if !m.datas.is_empty() {
                 w.line(format!(
@@ -891,7 +890,7 @@ impl<'a> Gen<'a> {
             format!("def _f{idx}({params})")
         };
         w.block(header, "end", |w| {
-            // Consecutive locals sharing one default are initialized in a single chained assignment — the defaults are immutable literals, so every name ends up bound to its own value, not to a shared object.
+            // The chained assignment is sound only because the defaults are immutable literals: every name ends up bound to its own value, not to one shared object.
             for run in local_runs(&func.locals, default_value) {
                 let default = default_value(func.locals[run.start]);
                 let names = run
@@ -1270,7 +1269,6 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
             Stmt::SourceLine(pos) => {
-                // A source-position back-mapping comment; inert.
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
@@ -1435,7 +1433,6 @@ impl<'a> Gen<'a> {
         Rendered::atom(format!("{}({})", self.rt(name), a.free()))
     }
 
-    /// A two-argument call to a runtime helper.
     fn call2(&self, name: &str, a: Rendered, b: Rendered) -> Rendered {
         Rendered::atom(format!("{}({}, {})", self.rt(name), a.free(), b.free()))
     }
@@ -1719,7 +1716,6 @@ fn not(a: Rendered) -> Rendered {
     }
 }
 
-/// `x & 0xffffffff`, the i32 wrap.
 fn mask32(a: Rendered) -> Rendered {
     infix(a, "&", Rendered::atom("0xffffffff".to_string()), BIT_AND)
 }
@@ -1729,7 +1725,7 @@ fn shift_count(b: Rendered, mask: u32) -> Rendered {
     infix(b, "&", Rendered::atom(mask.to_string()), BIT_AND)
 }
 
-/// `x.to_f`. A receiver binds as tightly as a call, so anything looser is parenthesized.
+/// A receiver binds as tightly as a call, so anything looser is parenthesized.
 fn to_f(a: Rendered) -> Rendered {
     Rendered::atom(format!("{}.to_f", a.at(Prec::Atom)))
 }
@@ -1789,7 +1785,6 @@ mod units {
         let rt_call = Regex::new(r"Rt\.([a-z_][a-z0-9_]*)").unwrap();
         let rt_const = Regex::new(r"Rt::([A-Z]\w*)").unwrap();
         let memory_call = Regex::new(r"@memory\.([a-z_][a-z0-9_]*)").unwrap();
-        // One precompiled bare-call matcher per unit name.
         let bare_calls: Vec<(&str, Regex)> = unit_ids
             .iter()
             .map(|id| {
@@ -2021,7 +2016,6 @@ mod cascade {
     #[test]
     fn deep_multi_level_br_is_addressed_by_value() {
         let src = convert(&tower(flat::DEEP_CROSSING + 2));
-        // The dispatch loop, and a branch that names its target as a number.
         assert!(src.contains("state = 0"), "no dispatch entry in:\n{src}");
         assert!(src.contains("case state"), "no dispatch in:\n{src}");
         assert!(src.contains("; next"), "no state transition in:\n{src}");

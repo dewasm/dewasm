@@ -46,8 +46,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
     try:
         st = os.fstat(fd)
         if (st.st_mode & 0o170000) == 0o040000:  # a directory
-            # Opening a directory: keep a WasiDir (os.fdopen would raise on it),
-            # narrow to the directory rights, and drop the throwaway os handle.
+            # os.fdopen would raise on a directory, so keep a WasiDir instead.
             os.close(fd)
             self.fds[self.next_fd] = self.WasiDir(os.path.realpath(host_path), None, None)
             base = fs_rights_base & self.fd_meta[dirfd][1] & self.DIR_RIGHTS_BASE

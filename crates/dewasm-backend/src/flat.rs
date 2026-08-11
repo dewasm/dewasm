@@ -58,16 +58,10 @@ pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<P
     }
     // Two closures, to a joint fixpoint.
     //
-    // *Paths.* A `state = N; next` must not be captured on its way to the
-    // dispatch loop, so once any frame a branch crosses is dissolved, every
-    // frame it crosses has to go — the branch can no longer be a relay.
+    // *Paths.* A `state = N; next` must not be captured on its way to the dispatch loop, so once any frame a branch crosses is dissolved, every frame it crosses has to go — the branch can no longer be a relay.
     //
-    // *Ancestors.* Dissolution is transitive up the spine for the same reason:
-    // a frame that still exists would capture a jump aimed at the dispatch
-    // loop, and would have to run its landing marker after a body that no
-    // longer falls out of it. What survives is the leaves: loops and blocks
-    // with no escaping branch anywhere inside them — which is precisely where
-    // keeping the structured form was measured to matter.
+    // *Ancestors.* Dissolution is transitive up the spine for the same reason: a frame that still exists would capture a jump aimed at the dispatch loop, and would have to run its landing marker after a body that no longer falls out of it.
+    // What survives is the leaves: loops and blocks with no escaping branch anywhere inside them — which is precisely where keeping the structured form was measured to matter.
     loop {
         let before = dissolved.len();
         for path in paths {
@@ -146,9 +140,7 @@ fn assign(stmts: &[Stmt], plan: &mut Plan) {
             Stmt::If {
                 label, then, els, ..
             } => {
-                // `if` is not a loop, so a jump inside it already reaches the
-                // dispatch loop; it only needs a landing state when it is
-                // itself a branch target that something escapes.
+                // `if` is not a loop, so a jump inside it already reaches the dispatch loop; it only needs a landing state when it is itself a branch target that something escapes.
                 assign(then, plan);
                 assign(els, plan);
                 if plan.dissolved.contains(&label.id) {

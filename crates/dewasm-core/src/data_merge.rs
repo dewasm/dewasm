@@ -16,7 +16,6 @@ use crate::ir::{DataSegment, Expr, Module, Stmt};
 /// Largest gap worth bridging with zero fill. Tuned to the always-on inline cost (the core cannot see `GenOptions`), not wasm2go's externalize-only 4096.
 const MAX_MERGE_GAP: u64 = 64;
 
-/// Merge runs of adjacent active data segments in `module`, in place.
 pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
     // Property 1: any body that references a segment by index (bulk memory) makes renumbering unsafe.
     if module.funcs.iter().any(|f| body_refs_segment(&f.body)) {

@@ -357,7 +357,6 @@ impl Driver {
         }
     }
 
-    /// The driver script this runner executes.
     fn script(&self) -> PathBuf {
         match self {
             Driver::PywasmCPython | Driver::PywasmPyPy => drivers_dir().join("pywasm.py"),
@@ -374,7 +373,6 @@ pub struct Workshop {
     artifacts: HashMap<(u64, &'static str), Artifact>,
 }
 
-/// What a backend's output is once it is ready to run.
 #[derive(Clone)]
 enum Artifact {
     /// An interpreted backend: a generated script on disk.
@@ -665,7 +663,7 @@ fn ruby_jit_available(ruby: &Path, flag: &str) -> Result<(), String> {
         })
 }
 
-/// Whether `program args...` runs and exits 0. Used for every availability probe.
+/// Whether `program args...` runs and exits 0.
 fn probe(program: &Path, args: &[&str]) -> bool {
     Command::new(program)
         .args(args)

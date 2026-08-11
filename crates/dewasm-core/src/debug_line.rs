@@ -106,7 +106,6 @@ impl LineTable {
     }
 }
 
-/// Intern a file path, returning its index in `files`.
 fn intern(files: &mut Vec<String>, map: &mut HashMap<String, u32>, name: String) -> u32 {
     if let Some(&id) = map.get(&name) {
         return id;

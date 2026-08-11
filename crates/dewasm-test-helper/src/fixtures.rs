@@ -32,7 +32,6 @@ pub fn fresh_scratch_dir(name: &str) -> PathBuf {
     dir
 }
 
-/// Convert raw wasm bytes with `backend`.
 pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str) -> String {
     let module = dewasm_core::build_module(bytes).expect("build IR");
     let source = backend
@@ -53,7 +52,6 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
     String::from_utf8(source).expect("generated source is valid UTF-8")
 }
 
-/// Convert a `.wat` fixture with `backend`.
 pub fn convert(backend: &dyn Backend, wat_path: &Path, mode: Mode, name: &str) -> String {
     let bytes = wat::parse_file(wat_path).expect("parse wat");
     convert_bytes(backend, &bytes, mode, name)

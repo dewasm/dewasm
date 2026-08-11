@@ -1,6 +1,6 @@
 // requires: memory/i32_store, memory/i32_store8, memory/init
-// Shared by args_get/environ_get: lay out a NUL-terminated string list, writing
-// each element's pointer into the pointer array and the bytes into the buffer.
+// The WASI two-part layout shared by args_get/environ_get: a pointer array plus
+// NUL-terminated bytes in a separate buffer.
 int write_string_list(byte[][] xs, int listPtr, int bufPtr) {
     long lp = Integer.toUnsignedLong(listPtr);
     long bp = Integer.toUnsignedLong(bufPtr);

@@ -180,7 +180,6 @@ impl Backend for JavaBackend {
         match feature {
             // Java floats are native IEEE float/double; NaN paths mirror Ruby's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
-            // Wasm-1.0 completion, mirroring Go's model: imported globals/memories/tables through the provider map with an `instanceof` kind check, multiple tables, and the table half of bulk memory (passive/declared element segments, table.init/copy, elem.drop).
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -290,7 +289,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     gen.partitioned
         .set(module.funcs.len() > FN_PARTITION_THRESHOLD);
 
-    // Emit the module class body into its own writer so `uses` is populated before the runtime bundle is assembled.
+    // Into its own writer: `uses` must be complete before the runtime bundle is assembled.
     let mut body = CodeWriter::new("\t");
     gen.constructor(&mut body);
     // Externalized data blob: a static field loaded once from the sidecar next to this program, sliced by the generated `Arrays.copyOfRange(DATA_BLOB, …)` calls. Only emitted when there is data to externalize (otherwise the generated code never reads it).
@@ -339,7 +338,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// Re-indent a block of source by `levels` (four spaces each), leaving blank lines empty.
+/// Re-indent a block of source by `levels`, leaving blank lines empty.
 fn reindent(src: &str, levels: usize) -> String {
     let pad = "\t".repeat(levels);
     let mut out = String::new();
@@ -1156,7 +1155,6 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let ty = &m.types[import.type_idx as usize];
 
-        // Whether the fallback below needs the bundled WASI built first (its `__w` local).
         let mut needs_wasi = false;
         let fallback = if is_wasi_module(&import.module) && self.default_wasi {
             let unit = format!("wasi/{}", import.name);
@@ -1896,7 +1894,6 @@ impl<'a> Gen<'a> {
             0 => {}
             1 => w.line(format!("{} = {};", self.ret(), self.expr(&values[0]))),
             _ => {
-                // Multi-value: box each into the function's `Object[]` register.
                 let vs = values
                     .iter()
                     .map(|v| self.expr(v))
@@ -2202,7 +2199,6 @@ fn ret_slot_init(results: &[ValType]) -> String {
     }
 }
 
-/// Box an `Object` back to a Java primitive of the wasm value type.
 fn unbox(ty: ValType, expr: &str) -> String {
     match ty {
         ValType::I32 => format!("(int)(Integer) {expr}"),
