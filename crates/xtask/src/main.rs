@@ -1,6 +1,6 @@
 //! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`). Replaces the former snapshot-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
 //!
-//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, which stay on the embedded `wasmtime` crate because their custom export/import interfaces can't run through `wasmtime run` (issue #114). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
+//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine WASI-runner files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, whose custom export/import interfaces are driven directly instead (issue #114). All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`, so regeneration reproduces the same bytes on every host. `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
 //! `run-wasi`, `doom-frame` and `nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
 //!
@@ -14,6 +14,7 @@ mod bench;
 mod doom_snapshot;
 mod nes_snapshot;
 mod size;
+mod snapshot_engine;
 mod wasi_run;
 
 use std::io::Write;
@@ -24,6 +25,7 @@ use dewasm_cli::support_docs::render_support_docs;
 
 use crate::doom_snapshot::capture_doom_frame;
 use crate::nes_snapshot::capture_nes_frame;
+use crate::snapshot_engine::EmbeddedWasmtime;
 
 const USAGE: &str = "\
 Usage: cargo xtask <command> [args]
@@ -33,7 +35,7 @@ Commands:
                                capability declarations. Checked by
                                `cargo test -p dewasm-cli --test support_docs`.
     update-snapshots [filter]  Regenerate every checked-in execution snapshot
-                               from a live wasmtime: the app/gzip/filesystem
+                               from the embedded wasmtime: the app/gzip/filesystem
                                stdout files and the interactive-REPL transcript
                                under examples/apps/snapshots/, plus the DOOM
                                and NES frames there (doom_frame.ppm and
@@ -41,13 +43,12 @@ Commands:
                                doom_frame.png/nes_frame.png renderings for
                                human eyes). An optional substring `filter`
                                limits it to matching snapshots (e.g.
-                               `update-snapshots doom`). Needs `wasmtime` on
-                               PATH and the apps cache populated
-                               (examples/apps/setup.sh; the DOOM frame needs
-                               examples/apps/scripts/doom.sh, the NES frame
-                               examples/apps/scripts/nes.sh). Checked by the
-                               compare-only wasmtime freshness suite (`cargo
-                               test -p dewasm-test-helper --features
+                               `update-snapshots doom`). Needs the apps cache
+                               populated (examples/apps/setup.sh; the DOOM
+                               frame needs examples/apps/scripts/doom.sh, the
+                               NES frame examples/apps/scripts/nes.sh).
+                               Checked by the compare-only freshness suite
+                               (`cargo test -p dewasm-test-helper --features
                                wasmtime_test --test apps_wasmtime`) and the
                                per-backend `doom_frame` and `nes_frame` cases.
     run-wasi [opts] <wasm>     Run a WASI command on the embedded wasmtime,
@@ -165,17 +166,18 @@ struct SnapshotTarget {
     capture: Box<dyn Fn() -> Result<CapturedFiles>>,
 }
 
-/// Every execution snapshot `update-snapshots` regenerates: the nine wasmtime-CLI targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the embedded-wasmtime DOOM and NES frames, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency. Each of those two targets emits two files — the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
+/// Every execution snapshot `update-snapshots` regenerates: the nine WASI-runner targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the DOOM and NES frames, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency. Each of those two targets emits two files — the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
 fn snapshot_targets() -> Vec<SnapshotTarget> {
-    let mut targets: Vec<SnapshotTarget> = dewasm_test_helper::wasmtime_snapshots()
-        .into_iter()
-        .map(|snap| SnapshotTarget {
-            label: snap.label,
-            // Wrap the fail-loud capture (it panics with a setup
-            // message) in `Ok` so every target shares one `Result` signature.
-            capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
-        })
-        .collect();
+    let mut targets: Vec<SnapshotTarget> =
+        dewasm_test_helper::wasmtime_snapshots(&EmbeddedWasmtime)
+            .into_iter()
+            .map(|snap| SnapshotTarget {
+                label: snap.label,
+                // Wrap the fail-loud capture (it panics with a setup
+                // message) in `Ok` so every target shares one `Result` signature.
+                capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
+            })
+            .collect();
     targets.push(SnapshotTarget {
         label: "examples/apps/snapshots/doom_frame.ppm".to_string(),
         capture: Box::new(|| {

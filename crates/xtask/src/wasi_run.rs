@@ -1,4 +1,4 @@
-//! The WASI command runner behind `cargo xtask run-wasi`.
+//! The WASI command runner behind `cargo xtask run-wasi`, and the in-process entry point the snapshot capture uses.
 //!
 //! The flags mirror the `wasmtime run` subset the snapshot cases were captured with, so the runner is a drop-in replacement for a `wasmtime` CLI on `PATH`:
 //!
@@ -13,7 +13,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::p1::{self, WasiP1Ctx};
+use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 use wasmtime_wasi::{DirPerms, FilePerms, I32Exit, WasiCtxBuilder};
+
+/// A cap on what one captured run may write. `MemoryOutputPipe` allocates nothing up front, and a guest that exceeds the cap traps instead of silently truncating, so this only has to be larger than any snapshot.
+const CAPTURE_CAPACITY: usize = 256 << 20;
 
 /// One WASI command invocation: a wasm file plus the guest-visible environment `wasmtime run` would build for it.
 pub struct WasiRun {
@@ -23,6 +27,13 @@ pub struct WasiRun {
     pub env: Vec<(String, String)>,
     /// `(host, guest)` preopen pairs.
     pub dirs: Vec<(PathBuf, String)>,
+}
+
+/// What a captured run produced: the in-process counterpart of [`std::process::Output`].
+pub struct Captured {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub code: i32,
 }
 
 impl WasiRun {
@@ -71,6 +82,23 @@ impl WasiRun {
         let mut builder = self.builder()?;
         builder.inherit_stdio();
         execute(builder.build_p1(), &self.wasm).map_err(from_wasmtime)
+    }
+
+    /// Run with `stdin` fed from memory and both output streams captured.
+    pub fn capture(&self, stdin: &[u8]) -> Result<Captured> {
+        let stdout = MemoryOutputPipe::new(CAPTURE_CAPACITY);
+        let stderr = MemoryOutputPipe::new(CAPTURE_CAPACITY);
+        let mut builder = self.builder()?;
+        builder
+            .stdin(MemoryInputPipe::new(stdin.to_vec()))
+            .stdout(stdout.clone())
+            .stderr(stderr.clone());
+        let code = execute(builder.build_p1(), &self.wasm).map_err(from_wasmtime)?;
+        Ok(Captured {
+            stdout: stdout.contents().to_vec(),
+            stderr: stderr.contents().to_vec(),
+            code,
+        })
     }
 
     /// The guest-visible context minus the stdio wiring: argv, environment, preopens.
