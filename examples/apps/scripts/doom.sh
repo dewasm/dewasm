@@ -5,7 +5,7 @@
 # doom: the jacobenget/doom.wasm v0.1.0 release binary (DOOM shareware, WAD
 # embedded). Shared between the examples/doom demo frontends and the
 # deterministic framebuffer-snapshot test, so it lives in the apps
-# cache like every other fixture — checksum-pinned here, unlike the old
+# cache like every other fixture, checksum-pinned here, unlike the old
 # examples/doom/fetch.sh which downloaded it unverified.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

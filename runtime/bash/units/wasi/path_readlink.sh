@@ -4,7 +4,7 @@
 # written (truncated to buf_len, never NUL-terminated). Resolution is NOFOLLOW
 # (the link itself is the target of the call), so only the link's parent is
 # sandbox-contained; reading the link's own target uses a single `--`-guarded
-# `readlink` — a licensed external command (beyond the four mkdir/rmdir/rm/mv
+# `readlink`, a licensed external command (beyond the four mkdir/rmdir/rm/mv
 # commands) used only for this syscall, distinct from path *resolution*, which
 # still cannot follow a file symlink in pure bash. A missing path is ENOENT
 # (44); a non-symlink is EINVAL (28).

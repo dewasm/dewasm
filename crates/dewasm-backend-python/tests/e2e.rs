@@ -18,10 +18,10 @@ impl BackendUnderTest for Python {
     }
 
     fn interpreter(&self) -> PathBuf {
-        find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
+        find_python().expect("python3 >= 3.9 not found on PATH: see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports — its class body binds `Rt` at import time — so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports (its class body binds `Rt` at import time), so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -140,7 +140,7 @@ sys.stdout.write(wasi.out.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back — so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
 const PYTHON_PARTIAL_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -162,7 +162,7 @@ sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout — the Python mirror of Ruby's StringIO idiom.
+/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout, the Python mirror of Ruby's StringIO idiom.
 const PYTHON_STDIO_CAPTURE_GLUE: &str = r#"import io
 import sys
 
@@ -437,7 +437,7 @@ print("TS-OK")
 
 /// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
 /// zero-returning `env.call_host_function` import stub (only invoked when the
-/// guest registers host callbacks — this program registers none) and a
+/// guest registers host callbacks: this program registers none) and a
 /// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
 /// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
 /// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
@@ -467,12 +467,12 @@ inst.invoke("zeroperl_flush")
 /// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
 /// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
 /// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// module tree, so `use Image::ExifTool` resolves in-guest with no module
 /// preopen. Instantiated like [`PYTHON_ZEROPERL_EVAL`] (the
 /// `call_host_function` stub + a `/dev/null` preopen), plus the staged image at
 /// `/img`. The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it
 /// first overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal
-/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit` — then
+/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`, and then
 /// `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1. Only
 /// deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
 const PYTHON_EXIFTOOL: &str = r#"
@@ -635,7 +635,7 @@ dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
 // Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
 // e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
-// concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
+// concurrent threads: three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
 // where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI run; it
 // still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
@@ -647,7 +647,7 @@ dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBAC
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 // Ultra-slow category (issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
-// Python module, and host CPython peaks at ~4.9 GB RSS compiling it — the memory criterion that put
+// Python module, and host CPython peaks at ~4.9 GB RSS compiling it, the memory criterion that put
 // the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
 // Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is
 // what puts the eval case here; the two share the one oversized module.

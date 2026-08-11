@@ -14,7 +14,7 @@ workspace = true
 
 [features]
 # Opt-in: enables the wasmtime snapshot-freshness suite (tests/apps_wasmtime.rs),
-# which needs a real `wasmtime` install — kept out of the default suite's
+# which needs a real `wasmtime` install, kept out of the default suite's
 # required tools. See docs/testing.md.
 wasmtime_test = []
 
@@ -33,7 +33,7 @@ serde_json.workspace = true
 # Real pty pair for the interactive-REPL transcript tests: the qjs
 # REPL only enters its interactive line-editing path when stdin is a tty, so
 # proving it byte-identical to wasmtime needs a genuine pty, not a pipe. A
-# plain (non-dev) dependency is fine — this whole crate is test-only
+# plain (non-dev) dependency is fine: this whole crate is test-only
 # (`publish = false`) and its modules are consumed as normal library code by
 # the backend crates' `tests/`.
 portable-pty = "0.9"

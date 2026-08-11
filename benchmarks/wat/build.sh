@@ -17,7 +17,7 @@ mkdir -p cache/wat
 # Fail loudly with an actionable message rather than half-building.
 require_tool() {
   command -v "$1" >/dev/null && return
-  echo "benchmarks/wat/build.sh: $1 not found — $2" >&2
+  echo "benchmarks/wat/build.sh: $1 not found: $2" >&2
   exit 1
 }
 

@@ -12,7 +12,7 @@ interface Fn {
 }
 
 // A module source that resolves import names on demand, so one object can
-// stand in for a whole module in the imports map — the Java shape of the
+// stand in for a whole module in the imports map, the Java shape of the
 // shared import-provider protocol (Ruby's `import`, Python's `wasm_import`).
 // Returning null for a name leaves that import unresolved, exactly as an
 // absent map entry does, so the module still falls back to its bundled WASI /

@@ -2,7 +2,7 @@
 # rounded to nearest-even, where sk means "strictly more than m, by less
 # than one unit in m's last place".
 #
-# Contract: 0 <= m < 2^63, and if m < 2^53 then sk == 0 — callers must
+# Contract: 0 <= m < 2^63, and if m < 2^53 then sk == 0. Callers must
 # never require a left normalization with sticky bits pending (add is
 # exact in its cancellation cases; mul/div/sqrt pre-normalize operands).
 # The subnormal shift d is clamped to 54: it can reach ~2100 for tiny

@@ -27,7 +27,7 @@ impl BackendUnderTest for Java {
     /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache and run it with `args`/`stdin`. A missing `javac`/`java` is a loud failure; a compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
-            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
         match build_java(source) {
             Err(build) => build,
             Ok(classdir) => dewasm_test_helper::run_command_bytes(
@@ -44,7 +44,7 @@ impl BackendUnderTest for Java {
     /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty. A compile failure fails loud: there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
-            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
         let classdir = build_java(source).unwrap_or_else(|build| {
             panic!(
                 "javac failed for the pty run:\n{}",
@@ -64,7 +64,7 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file. Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project. `shared_runtime` mirrors the spec harness's `register` path — each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has. Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file. Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project. `shared_runtime` mirrors the spec harness's `register` path: each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has. Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -107,10 +107,10 @@ impl BackendUnderTest for Java {
         String::new()
     }
 
-    /// Compile every `.java` file in `dir` — the module files `compose_modules` wrote plus the driver, written here as `Main.java` — in one `javac` invocation, then run `Main` from that directory. No content-addressed cache: each case gets a fresh directory, and there are only a handful of small files.
+    /// Compile every `.java` file in `dir` (the module files `compose_modules` wrote plus the driver, written here as `Main.java`) in one `javac` invocation, then run `Main` from that directory. No content-addressed cache: each case gets a fresh directory, and there are only a handful of small files.
     fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
         let java =
-            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
         std::fs::write(dir.join("Main.java"), driver).unwrap();
         let mut sources: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
             .unwrap()
@@ -145,7 +145,7 @@ const JAVA_ADD_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues — intercept fd_write and print the actual bytes written.
+/// The override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI. Mirrors the other backends' override glues: intercept fd_write and print the actual bytes written.
 const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -172,7 +172,7 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `wasmImport(name)` resolves every function and `attach(instance)` binds the memory (the Java shape of Ruby's `import`/`attach`), so no import falls back and `p.wasi` stays null.
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale: `wasmImport(name)` resolves every function and `attach(instance)` binds the memory (the Java shape of Ruby's `import`/`attach`), so no import falls back and `p.wasi` stays null.
 const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
     static class MyWasi implements Prog.Rt.ImportProvider {
         Prog inst;
@@ -214,7 +214,7 @@ const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback — `wasiInstance()` constructs it as the constructor takes the adapter.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback: `wasiInstance()` constructs it as the constructor takes the adapter.
 const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -242,7 +242,7 @@ const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `wasi_stdio_capture` glue: Java's bundled WASI is built by the module ctor's `fd_write` fallback and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction — the Java mirror of Ruby's `$stdout` redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
+/// The `wasi_stdio_capture` glue: Java's bundled WASI is built by the module ctor's `fd_write` fallback and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction, the Java mirror of Ruby's `$stdout` redirect. Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
 const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, null);
@@ -341,7 +341,7 @@ const JAVA_CRUBY_HELLO_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory. No wasmtime snapshot (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
@@ -408,7 +408,7 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same fs stack as the shell), leaving a nonzero DB file on the host.
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select: the file lifecycle through the C API (same fs stack as the shell), leaving a nonzero DB file on the host.
 const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -476,7 +476,7 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)` — the lambda returns null). The glue provides `host_row` via the import-provider mechanism and collects the rows.
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)`, so the lambda returns null). The glue provides `host_row` via the import-provider mechanism and collects the rows.
 const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Sqlite3Binding inst;
@@ -547,13 +547,13 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
 
 /// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
 /// zero-returning `env.call_host_function` import stub (only invoked when the
-/// guest registers host callbacks — this program registers none) and a
+/// guest registers host callbacks, and this program registers none) and a
 /// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
 /// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
 /// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
 /// capture and a `printf`, so its stdout is deterministic. Java has no raw string literal
 /// at the JDK 11 baseline, so the Perl source is concatenated with its
-/// backslashes doubled — every `\` below belongs to Perl.
+/// backslashes doubled: every `\` below belongs to Perl.
 const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
     static Zeroperl inst;
 
@@ -589,12 +589,12 @@ const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
 /// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
 /// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
 /// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// module tree, so `use Image::ExifTool` resolves in-guest with no module
 /// preopen. Instantiated like [`JAVA_ZEROPERL_EVAL`] (the `call_host_function`
 /// stub + a `/dev/null` preopen), plus the staged image at `/img`. The Perl
 /// driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides
 /// `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back
-/// into `eval_pv` instead of tripping `proc_exit` — then `zeroperl_flush`
+/// into `eval_pv` instead of tripping `proc_exit`, then `zeroperl_flush`
 /// pushes ExifTool's buffered stdout out through fd 1. Only deterministic tags
 /// are requested (`-S -Make -Model -DateTimeOriginal`).
 const JAVA_EXIFTOOL: &str = r#"public class Main {
@@ -870,7 +870,7 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the 25 MB reactor becomes ~99 MB of Java, measured 43 s (zeroperl_eval) and 51 s (exiftool_extract). They also drove `FN_PARTITION_THRESHOLD` down to 2000 — zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
+// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the 25 MB reactor becomes ~99 MB of Java, measured 43 s (zeroperl_eval) and 51 s (exiftool_extract). They also drove `FN_PARTITION_THRESHOLD` down to 2000: zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);

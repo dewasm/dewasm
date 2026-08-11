@@ -1,26 +1,26 @@
 //! Whole-cache per-backend conversion suite: convert every cached
 //! real-world app under `examples/apps/cache/` with a backend and require the
-//! conversion to complete with non-empty source — the generated program is
-//! never executed.
+//! conversion to complete with non-empty source.
+//! The generated program is never executed.
 //!
 //! The execution e2e suites (`apps`, `apps_fs`, `apps_capi`, `doom`) only ever
 //! feed the emitter the (backend × app) pairs a backend also *runs*: CRuby is
 //! only converted under Go, CPython only under Java, and the whole filesystem
 //! family never reaches the Bash emitter. This suite closes that gap so every
-//! backend converts every app independent of whether it runs it — a conversion
+//! backend converts every app independent of whether it runs it: a conversion
 //! regression on an un-run pair now fails a fast, deterministic test instead of
 //! hiding until someone wires an execution case.
 //!
 //! One libtest-mimic [`Trial`] per manifest entry, trial name = the cache-file
 //! stem so cargo's own name filter works (`cargo test --test convert qjs`). The
-//! manifest is fixed — one entry per `.wasm` the fetch scripts
-//! (`examples/apps/scripts/*.sh`) produce — with the conversion [`Mode`] each
+//! manifest is fixed, one entry per `.wasm` the fetch scripts
+//! (`examples/apps/scripts/*.sh`) produce, with the conversion [`Mode`] each
 //! app's shape and the execution suites already use. A missing cache file fails
 //! the trial, it never skips.
 //!
 //! `slow_test` mirrors the backend crate's feature of the same name: heavy
-//! trials — the ones whose dev-profile conversion measurably hurts the fast
-//! test — are `#[ignore]`d unless it is on. Which trials are heavy comes from
+//! trials (the ones whose dev-profile conversion measurably hurts the fast
+//! test) are `#[ignore]`d unless it is on. Which trials are heavy comes from
 //! measurement, not the artifact size alone.
 
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
@@ -34,23 +34,23 @@ struct AppConvert {
     /// trial name cargo's `--test convert <stem>` filter matches.
     stem: &'static str,
     /// The shape the app converts under: `Standalone` for command-shaped apps
-    /// (a `_start`), `Library` for reactor/library artifacts — the same mode
+    /// (a `_start`), `Library` for reactor/library artifacts, the same mode
     /// each execution e2e suite already converts the artifact with.
     mode: Mode,
     /// Heavy: dev-profile conversion exceeds ~2 s on every backend, measurably
     /// slowing the fast test, so the trial is `#[ignore]`d unless the backend
     /// crate's `slow_test` feature is on. Measured, not guessed: only the three
-    /// giant artifacts — `ruby` (~7–13 s), `cpython` (~2.6–5 s), and the 25 MB
-    /// `zeroperl` (Perl 5.42, ~4–5 s on Ruby and Python) — cross the line; the
-    /// next-slowest, `rg`, stays ~1.1–2.1 s in the same cluster as the sqlite
+    /// giant artifacts cross the line: `ruby` (~7-13 s), `cpython` (~2.6-5 s),
+    /// and the 25 MB `zeroperl` (Perl 5.42, ~4-5 s on Ruby and Python); the
+    /// next-slowest, `rg`, stays ~1.1-2.1 s in the same cluster as the sqlite
     /// cases and is left in the fast test.
     heavy: bool,
 }
 
 /// Every `.wasm` the fetch scripts (`examples/apps/scripts/*.sh`) drop into
 /// `examples/apps/cache/`. Command-shaped apps (with a `_start`) convert
-/// `Standalone`; reactor/library artifacts convert `Library` — doom included,
-/// which every backend converts `Library`. The `heavy` flags are
+/// `Standalone`; reactor/library artifacts convert `Library` (doom included,
+/// which every backend converts `Library`). The `heavy` flags are
 /// derived from measurement; see the module docs.
 const MANIFEST: &[AppConvert] = &[
     AppConvert {
@@ -132,7 +132,7 @@ const MANIFEST: &[AppConvert] = &[
 
 /// Build one [`Trial`] per manifest entry for `backend` (the `apps_convert_suite!`
 /// entry point). Heavy trials are marked `#[ignore]`d unless `slow_test` (mirroring
-/// the backend crate's feature of the same name) is on — the same slow/fast split
+/// the backend crate's feature of the same name) is on: the same slow/fast split
 /// the spec harness applies to its non-curated files.
 pub fn apps_convert_trials(backend: &'static (dyn Backend + Sync), slow_test: bool) -> Vec<Trial> {
     MANIFEST
@@ -158,7 +158,7 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
     let wasm = apps_cache_dir().join(format!("{}.wasm", entry.stem));
     if !wasm.exists() {
         return Err(Failed::from(format!(
-            "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
+            "{} not cached: run examples/apps/setup.sh (see docs/testing.md)",
             entry.stem
         )));
     }
@@ -180,7 +180,7 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
 /// the conversion error. Runs on a roomy stack for the same reason as
 /// [`crate::convert_on_big_stack`] (SQLite-class control-flow nesting overflows
 /// the 2 MiB test-thread default); using it uniformly is harmless. Unlike that
-/// helper this one is fallible — a convert suite reports a failure, it does not
+/// helper this one is fallible: a convert suite reports a failure, it does not
 /// panic on one.
 fn convert_source(
     backend: &(dyn Backend + Sync),

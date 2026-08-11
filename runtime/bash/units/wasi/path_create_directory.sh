@@ -1,14 +1,14 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_create_directory: creating a directory entry is one
 # of the four operations pure Bash cannot express at all, so this is one of
-# the only four units allowed to invoke an external POSIX command — a single
+# the only four units allowed to invoke an external POSIX command, a single
 # `--`-guarded `mkdir` on the resolved physical path. mkdir(2) never follows a
 # trailing symlink (an existing one there is EEXIST, not "enter it"), so
 # resolution uses follow_last=0, mirroring
 # runtime/ruby/units/wasi/path_create_directory.rb. mkdir's own diagnostics
 # aren't parsed (they're not machine-readable); the errno comes from a
 # post-hoc probe instead: an existing path is EEXIST, anything else defaults
-# to ENOENT (a parent-permission failure would also surface as ENOENT here —
+# to ENOENT (a parent-permission failure would also surface as ENOENT here,
 # an accepted imprecision of probing after the fact rather than reading the
 # real errno).
 wasi_path_create_directory() {

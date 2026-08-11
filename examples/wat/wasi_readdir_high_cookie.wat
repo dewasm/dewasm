@@ -1,6 +1,6 @@
 ;; fd_readdir with a dircookie whose high bit is set: the u64 cookie is an
 ;; unsigned position far past any snapshot's end, so each call must succeed
-;; with zero dirent bytes (matching wasmtime) — never crash in a runtime that
+;; with zero dirent bytes (matching wasmtime): never crash in a runtime that
 ;; holds the cookie in a signed type, and never return entries. Two shapes:
 ;; 0x8000000000000000 truncates to index 0 (the silently-wrong-entries shape)
 ;; and 0x8000000000000063's low bits land past the snapshot end (the

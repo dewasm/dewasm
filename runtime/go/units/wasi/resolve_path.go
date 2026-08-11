@@ -25,7 +25,7 @@ func (w *WASI) within(base, path string) bool {
 // full resolution.
 //
 // Known limitation: this is a check-then-open, not an atomic
-// openat(2)-beneath resolution — a TOCTOU race or a symlink planted inside the
+// openat(2)-beneath resolution: a TOCTOU race or a symlink planted inside the
 // sandbox between the check and the actual filesystem call could in principle
 // escape. Accepted for a single-process research/demo runtime.
 func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, uint32) {
@@ -45,7 +45,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         // what the guests treat as ERRNO_INVAL/ILSEQ.
         return "", wasiInval
     }
-    // A leading slash is an absolute guest path — never capable against a
+    // A leading slash is an absolute guest path, never capable against a
     // preopen root (rejected before any join could absorb it).
     if strings.HasPrefix(rel, "/") {
         return "", wasiNotcapable
@@ -65,7 +65,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if !w.within(base, filepath.Clean(joined)) {
         return "", wasiNotcapable
     }
-    // The final component as the *guest* wrote it — not filepath.Base(joined),
+    // The final component as the *guest* wrote it, not filepath.Base(joined),
     // which Cleans "." / ".." away and would report the parent's own name (Go's
     // filepath.Join Cleans, unlike Python's os.path.join). A trailing "." or
     // ".." is never a symlink, so those must fall through to full resolution.
@@ -116,8 +116,8 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     return filepath.Join(realParent, filepath.Base(joined)), wasiOk
 }
 
-// trailingDirCheck: a slash-suffixed name may only resolve to a directory —
-// an existing non-directory is ENOTDIR (issue #42). os.Stat follows
+// trailingDirCheck: a slash-suffixed name may only resolve to a directory.
+// An existing non-directory is ENOTDIR (issue #42). os.Stat follows
 // symlinks, as the slash requires; a missing target is each caller's case.
 func (w *WASI) trailingDirCheck(trailing bool, host string) uint32 {
     if !trailing {

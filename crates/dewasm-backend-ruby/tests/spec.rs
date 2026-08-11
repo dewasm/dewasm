@@ -13,7 +13,7 @@ use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type — a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type: a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
@@ -36,7 +36,7 @@ impl BackendUnderTest for RubySpec {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_ruby::find_ruby()
-            .expect("ruby not found on PATH (or $DEWASM_RUBY) — see docs/testing.md")
+            .expect("ruby not found on PATH (or $DEWASM_RUBY): see docs/testing.md")
     }
 }
 
@@ -206,7 +206,7 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     }
 }
 
-/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an import provider (`Gen::body`'s generated `import(name)` method).
+/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance doubles as an import provider (`Gen::body`'s generated `import(name)` method).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "$spectest".to_string();
@@ -277,7 +277,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         // `(ref.extern)`: any non-null externref.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("!{value}.nil?")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref — the `[type_symbol, callable]` pair.
+        // `(ref.func)`: any non-null funcref, the `[type_symbol, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),
@@ -339,7 +339,7 @@ end
 # Upstream's assert_unlinkable message text never matches ours (we don't
 # reproduce wasm engines' wording); a raised Rt::LinkError confirms the
 # import was correctly rejected as unlinkable. Any other error means the
-# module *linked* and then crashed — that must not count as a pass.
+# module *linked* and then crashed, which must not count as a pass.
 def check_unlinkable(desc)
   yield
   $fail += 1

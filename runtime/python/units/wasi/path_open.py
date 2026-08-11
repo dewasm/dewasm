@@ -53,7 +53,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
             inheriting = fs_rights_inheriting & self.fd_meta[dirfd][1] & self.DIR_RIGHTS_INHERITING
         else:
             # Unbuffered (raw) so os.pread/os.pwrite stay coherent with
-            # read/write/seek — sqlite mixes both on one fd.
+            # read/write/seek: sqlite mixes both on one fd.
             io_mode = "rb+" if (read and write) else ("wb" if write else "rb")
             self.fds[self.next_fd] = os.fdopen(fd, io_mode, buffering=0)
             base = fs_rights_base & self.fd_meta[dirfd][1] & self.FILE_RIGHTS_BASE

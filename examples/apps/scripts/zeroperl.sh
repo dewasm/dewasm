@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# zeroperl: a WASI reactor build of Perl 5.42 (6over3/zeroperl — the org
+# zeroperl: a WASI reactor build of Perl 5.42 (6over3/zeroperl: the org
 # renamed from uswriting). The source repo cuts no releases/tags, so the
 # pinnable distribution is the npm wrapper `@6over3/zeroperl-ts`, which ships
 # the prebuilt zeroperl.wasm under dist/esm/. Licensing: the zeroperl source

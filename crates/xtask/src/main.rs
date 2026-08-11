@@ -2,11 +2,11 @@
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine WASI-runner files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, whose custom export/import interfaces are driven directly instead (issue #114).
 //! All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`, so regeneration reproduces the same bytes on every host.
-//! `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
+//! `update-support-docs` stays separate: `docs/support.md` is generated documentation, not an execution snapshot.
 //!
 //! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
 //!
-//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
+//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot: a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
 //! `size` is its size counterpart: per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime. Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`. Also a measurement rather than a snapshot.
 //!
@@ -94,14 +94,14 @@ fn update_support_docs() -> Result<()> {
 /// A capture closure's output: the `(path, bytes)` files to write for one target. Most targets yield one file; the DOOM and NES frames yield two (the compared PPM plus a human-facing PNG sidecar).
 type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
 
-/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud on a missing cache / missing wasmtime — the underlying runners carry the exact setup message.
+/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write. Capture fails loud on a missing cache / missing wasmtime: the underlying runners carry the exact setup message.
 struct SnapshotTarget {
     label: String,
     capture: Box<dyn Fn() -> Result<CapturedFiles>>,
 }
 
 /// Every execution snapshot `update-snapshots` regenerates: the nine WASI-runner targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the DOOM and NES frames, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency.
-/// Each of those two targets emits two files — the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
+/// Each of those two targets emits two files: the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
 fn snapshot_targets() -> Vec<SnapshotTarget> {
     let mut targets: Vec<SnapshotTarget> =
         dewasm_test_helper::wasmtime_snapshots(&EmbeddedWasmtime)

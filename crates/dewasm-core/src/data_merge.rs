@@ -4,10 +4,10 @@
 //!
 //! Four properties keep the rewrite sound. 1, 3 and 4 are checked up front and failing any bails the whole pass; 2 holds by construction, since the pass rebuilds the list in declaration order.
 //!
-//! 1. **No `memory.init`/`data.drop`** — they address segments by index.
-//! 2. **Declaration order is preserved** — segments apply in order, later writes win.
-//! 3. **Active `i32.const` segments are ascending and non-overlapping** — so no const-offset segment sits inside a zero-filled gap.
-//! 4. **No `global.get` offsets** — such a segment's runtime-unknown target could sit inside a gap and be clobbered by the blob's zeros (issue #28).
+//! 1. **No `memory.init`/`data.drop`**: they address segments by index.
+//! 2. **Declaration order is preserved**: segments apply in order, later writes win.
+//! 3. **Active `i32.const` segments are ascending and non-overlapping**, so no const-offset segment sits inside a zero-filled gap.
+//! 4. **No `global.get` offsets**: such a segment's runtime-unknown target could sit inside a gap and be clobbered by the blob's zeros (issue #28).
 //!
 //! Passive segments carry no memory effect once 1 holds and pass through without closing a run.
 

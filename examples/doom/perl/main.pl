@@ -137,8 +137,8 @@ sub key_map {
 # character cell shows two vertically-stacked source pixels via "▀"
 # (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
 # SGR). This is the performance-sensitive part of this frontend in the other
-# frontends' languages — much less so in Perl, where a single tick already
-# costs over a second — but the same diff strategy is kept: track the
+# frontends' languages (much less so in Perl, where a single tick already
+# costs over a second), but the same diff strategy is kept: track the
 # previous frame's cell contents and the cursor/SGR state, and only emit
 # escape codes for cells that actually changed (DOOM's software renderer is
 # paletted, so most cells repeat exactly from one frame to the next).

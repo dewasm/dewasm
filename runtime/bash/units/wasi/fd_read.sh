@@ -102,7 +102,7 @@ wasi_fd_read() {
         # further byte is taken only while input is already available. `read
         # -t 0` reports readiness without consuming (success iff a byte is
         # ready), giving the readpartial short-read semantics wasmtime/Ruby
-        # offer and that line-buffered tty guests (the QuickJS REPL) need — a
+        # offer and that line-buffered tty guests (the QuickJS REPL) need: a
         # full iovec is not drained past what one interactive line delivered.
         if (( __total > 0 )) && ! IFS= read -r -t 0; then
           __stop=1

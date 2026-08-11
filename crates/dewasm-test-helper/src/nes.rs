@@ -1,19 +1,19 @@
 //! Shared constants and helpers for the NES framebuffer-snapshot test (issue
 //! #114), mirroring the DOOM one. The oracle (`cargo xtask
-//! update-snapshots`, whose NES target embeds the wasmtime crate — kept out of
+//! update-snapshots`, whose NES target embeds the wasmtime crate, kept out of
 //! this crate's dependency tree) and the per-backend drivers (the language glue)
 //! must agree on one driving contract: load the pinned ROM, tick [`NES_FRAMES`]
 //! frames with **no input**, then dump the framebuffer. agnes's emulation is
 //! deterministic (fixed-point integer, no wall clock), so every backend and the
-//! wasmtime oracle produce byte-identical pixels — no synthetic clock is needed,
+//! wasmtime oracle produce byte-identical pixels: no synthetic clock is needed,
 //! unlike DOOM.
 //!
 //! "Dump the framebuffer" means agnes's own representation, not a rendered
 //! image (issue #117): `screenOffset()` points at `frameWidth * frameHeight`
 //! palette *indices* (row-major, one byte per pixel) and `paletteOffset()` at
 //! the fixed [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette, so a host composes
-//! a pixel as `palette[screen[i] & 0x3f]` — see [`nes_frame_to_ppm`], which is
-//! both the oracle's encoder and the shape every backend's glue reproduces. The
+//! a pixel as `palette[screen[i] & 0x3f]` (see [`nes_frame_to_ppm`], which is
+//! both the oracle's encoder and the shape every backend's glue reproduces). The
 //! `& 0x3f` mask is load-bearing: indices above 63 occur.
 
 use std::path::PathBuf;
@@ -33,7 +33,7 @@ pub const NES_FRAME_H: u32 = 240;
 /// i.e. 256 bytes. Fixed data, so a host reads it once.
 pub const NES_PALETTE_ENTRIES: usize = 64;
 
-/// Number of `tickGame` calls (one emulated video frame each) before the frame is captured, with no controller input: the smallest count reaching a stable, non-degenerate screen — Alter Ego boots near-black (~15 ticks), settles into its final credits image by frame 37, identical through 180+ — so 40 leaves a small margin. Every frame is real wall time under Bash, so smaller is better; pinned by the snapshot.
+/// Number of `tickGame` calls (one emulated video frame each) before the frame is captured, with no controller input: the smallest count reaching a stable, non-degenerate screen: Alter Ego boots near-black (~15 ticks), settles into its final credits image by frame 37, identical through 180+, so 40 leaves a small margin. Every frame is real wall time under Bash, so smaller is better; pinned by the snapshot.
 pub const NES_FRAMES: u32 = 40;
 
 /// The cached `nes.wasm` reactor library (populated by
@@ -53,8 +53,8 @@ pub fn nes_frame_snapshot_path() -> PathBuf {
     crate::fixtures::apps_snapshot_dir().join("nes_frame.ppm")
 }
 
-/// Encode agnes's own frame representation — `w * h` palette indices plus the
-/// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette — as a binary P6 PPM. The
+/// Encode agnes's own frame representation (`w * h` palette indices plus the
+/// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette) as a binary P6 PPM. The
 /// exact byte layout the per-backend glue must reproduce on stdout for the
 /// snapshot comparison.
 pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8> {
@@ -102,7 +102,7 @@ pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot = std::fs::read(nes_frame_snapshot_path())
-        .expect("read nes frame snapshot — regenerate with `cargo xtask update-snapshots`");
+        .expect("read nes frame snapshot: regenerate with `cargo xtask update-snapshots`");
     assert!(
         output.stdout == snapshot,
         "nes frame under {}: rendered frame differs from the snapshot ({} vs {} snapshot bytes)\nstderr: {}",
@@ -123,7 +123,7 @@ fn read_nes_wasm() -> Vec<u8> {
     let wasm = nes_wasm_path();
     assert!(
         wasm.exists(),
-        "nes not cached — run examples/apps/scripts/nes.sh (see docs/testing.md)"
+        "nes not cached: run examples/apps/scripts/nes.sh (see docs/testing.md)"
     );
     std::fs::read(&wasm).expect("read nes.wasm")
 }

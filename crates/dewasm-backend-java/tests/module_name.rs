@@ -53,7 +53,7 @@ fn dotted_name_emits_a_package_and_runs() {
         String::from_utf8_lossy(&build.stderr)
     );
 
-    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
     let out = Command::new(&java)
         .arg("-cp")
         .arg(&dir)

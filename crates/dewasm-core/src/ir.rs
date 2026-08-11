@@ -348,7 +348,7 @@ pub enum Expr {
         addr: Box<Expr>,
         offset: u64,
     },
-    /// Neither arm can trap — the builder spills a trapping one to a temp — so backends may lower this as a lazy ternary even though wasm evaluates both arms.
+    /// Neither arm can trap (the builder spills a trapping one to a temp), so backends may lower this as a lazy ternary even though wasm evaluates both arms.
     Select {
         cond: Box<Expr>,
         then: Box<Expr>,

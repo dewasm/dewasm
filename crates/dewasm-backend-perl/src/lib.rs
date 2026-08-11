@@ -3,7 +3,7 @@
 //! Lowering conventions:
 //! - i32/i64 are masked-unsigned perl integers (IV/UV); signed views via `Rt::s32`/`Rt::s64` only where an instruction needs them. Operations whose intermediates exceed the NV-exact range (i32 mul, all i64 add/sub/mul, div/rem, shr_s) live in runtime helpers built on tightly-scoped `use integer` blocks or the exact unsigned-division idiom.
 //! - f32/f64 are native NVs; f32 results are re-rounded with `Rt::f32` (with the pack-'f' overflow boundary handled in software), NaN bit paths go through software bit conversion, and division goes through `Rt::fdiv` because perl dies on `x / 0.0`.
-//! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln` — `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby and Python need do not exist here.
+//! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln`: `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby and Python need do not exist here.
 //! - Call-stack exhaustion is enforced by an explicit depth counter (`local $Rt::DEPTH`), because runaway perl recursion only stops at the OOM killer.
 //!
 //! The runtime is composed from per-method units in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`). Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
@@ -77,7 +77,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("{}package main;\n", bundler().bundle(seeds, 0)?))
 }
 
-/// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts. Honors `$DEWASM_PERL`, then `perl` (a missing or unsuitable interpreter is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts. Honors `$DEWASM_PERL`, then `perl` (a missing or unsuitable interpreter is a loud failure at the call site, not here: this only reports what qualifies).
 pub fn find_perl() -> Option<std::path::PathBuf> {
     static PERL: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     PERL.get_or_init(find_perl_uncached).clone()
@@ -202,7 +202,7 @@ impl Backend for PerlBackend {
         match feature {
             // Perl NVs are IEEE doubles; f32 re-rounding and the NaN paths mirror Ruby/Python's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
-            // Wasm-1.0 completion — imported globals/memories/tables, multiple tables, table bulk ops — mirrors Ruby/Python's model.
+            // Wasm-1.0 completion (imported globals/memories/tables, multiple tables, table bulk ops) mirrors Ruby/Python's model.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -345,7 +345,7 @@ impl Backend for PerlBackend {
 /// The package a `--mode standalone` program defines: fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_PACKAGE: &str = "Program";
 
-/// The library-mode module name must be a Perl package name — `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*` — and is used verbatim. Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas), so the grammar does not forbid them; the caller picks the case it wants and gets exactly that.
+/// The library-mode module name must be a Perl package name (`::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*`) and is used verbatim. Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas), so the grammar does not forbid them; the caller picks the case it wants and gets exactly that.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
         is_ident(
@@ -830,7 +830,7 @@ impl<'a> Gen<'a> {
         w.line(format!("sub _f{idx} {{"));
         w.indent();
         w.line(format!("my ($self{params}) = @_;"));
-        // The explicit call-depth cutoff: `local` restores the counter on every exit path, including a trap's die-unwind. Each call adds a frame-size weight, not 1 — a pure count lets a fat-frame runaway (spec `skip-stack-guard-page`: 1056 locals) heap-allocate gigabytes before tripping the limit, where byte-bounded native stacks exhaust in a few hundred frames.
+        // The explicit call-depth cutoff: `local` restores the counter on every exit path, including a trap's die-unwind. Each call adds a frame-size weight, not 1: a pure count lets a fat-frame runaway (spec `skip-stack-guard-page`: 1056 locals) heap-allocate gigabytes before tripping the limit, where byte-bounded native stacks exhaust in a few hundred frames.
         self.use_unit("rt/exhausted");
         let frame_weight = 1 + (ty.params.len() + func.locals.len() + func.temps.len()) / 8;
         w.line(format!(
@@ -873,7 +873,7 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Emit a statement sequence. Structured frames map directly onto perl's labeled blocks/loops: a referenced `Block` is `Ln: { ... }`, a referenced `Loop` is `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, and falling off the body exits), a referenced `If` gets a labeled block wrapper. Unreferenced labels need no frame at all — bodies are spliced inline.
+    /// Emit a statement sequence. Structured frames map directly onto perl's labeled blocks/loops: a referenced `Block` is `Ln: { ... }`, a referenced `Loop` is `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, and falling off the body exits), a referenced `If` gets a labeled block wrapper. Unreferenced labels need no frame at all: bodies are spliced inline.
     fn emit_seq(&self, w: &mut CodeWriter, stmts: &[Stmt]) {
         for stmt in stmts {
             match stmt {
@@ -1196,7 +1196,7 @@ impl<'a> Gen<'a> {
 
     /// `expr` in a condition context, as a Perl boolean.
     ///
-    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Perl boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt::s32`/`Rt::s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Perl boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt::s32`/`Rt::s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
     fn cond(&self, e: &Expr) -> String {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
@@ -1466,7 +1466,7 @@ mod units {
     #[test]
     fn full_bundle_is_valid_perl() {
         let perl = find_perl()
-            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md");
+            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md");
         let bundle = format!(
             "{}package main;\n1;\n",
             bundler().bundle_all(0).expect("full bundle resolves")

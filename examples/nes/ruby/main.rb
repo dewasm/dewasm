@@ -3,8 +3,8 @@
 
 # Interactive terminal frontend for the dewasm-generated NES library
 # (nes_gen.rb, produced from the agnes-based cache/nes.wasm by build.sh).
-# Unlike ../../doom, nes.wasm has zero host imports — there's nothing
-# to wire up — so this frontend only has to load a ROM into the module's
+# Unlike ../../doom, nes.wasm has zero host imports (there's nothing
+# to wire up), so this frontend only has to load a ROM into the module's
 # linear memory and drive the game loop itself: pacing, input polling, and
 # rendering all belong wholly to the host, unlike DOOM where the
 # module paces itself off a `timeInMilliseconds` import.
@@ -42,7 +42,7 @@ BUTTON_BITS = {
 
 # Read the ROM file, copy it into the module's linear memory via allocRom,
 # and initialize the emulator. Raises if the ROM is rejected (unsupported
-# mapper or corrupt file) — the module's own way of signalling failure.
+# mapper or corrupt file), the module's own way of signalling failure.
 def load_rom(nes, path)
   rom = File.binread(path)
   ptr = nes.invoke("allocRom", rom.bytesize)
@@ -53,7 +53,7 @@ end
 
 # Renders the frame into ANSI half-block terminal cells: each character cell
 # shows two vertically-stacked source pixels via "▀" (foreground = top pixel,
-# background = bottom pixel, both 24-bit truecolor SGR) — the same trick as
+# background = bottom pixel, both 24-bit truecolor SGR), the same trick as
 # ../../doom/ruby's Renderer, ported here with one difference: the NES's 256x240
 # framebuffer is already native resolution (no implicit 2x upscale like DOOM's
 # 640x400), so the pixel cap is the frame's own width, not half of it. This
@@ -64,7 +64,7 @@ end
 #
 # The guest hands over palette *indices*, not colors, which suits this
 # renderer exactly: a terminal cell samples one pixel out of several, so the
-# only palette lookups performed are the sampled ones — and since a color is a
+# only palette lookups performed are the sampled ones, and since a color is a
 # function of its index, the whole SGR string per index is precomputed once and
 # the frame diff compares indices directly.
 # Fixed status-line colors (white on black), independent of the game's own
@@ -287,7 +287,7 @@ def write_ppm(path, w, h, screen, palette)
 end
 
 # The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding),
-# read once — it never changes, unlike the per-frame index buffer.
+# read once: it never changes, unlike the per-frame index buffer.
 def read_palette(nes)
   bytes = nes.memory.buffer.get_string(nes.invoke("paletteOffset"), 64 * 4).bytes
   Array.new(64) { |i| bytes[i * 4, 3] }

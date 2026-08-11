@@ -1,4 +1,4 @@
-# WASI fd_advise: advisory only — the whole-file buffer model has no
+# WASI fd_advise: advisory only. The whole-file buffer model has no
 # readahead/cache to tune, so this validates the fd and returns success
 # (ERRNO_SUCCESS), the same no-op a host is free to give. An unopened fd is
 # EBADF (8).

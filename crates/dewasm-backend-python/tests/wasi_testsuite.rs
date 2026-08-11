@@ -6,7 +6,7 @@ use dewasm_backend::Backend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution: `(trial, tag)` — the out-of-scope `sock_shutdown` syscall and the environ entries the CPython host injects itself, which count-exact `environ_*` assertions cannot absorb.
+/// Known trial failures with their attribution, `(trial, tag)`: the out-of-scope `sock_shutdown` syscall and the environ entries the CPython host injects itself, which count-exact `environ_*` assertions cannot absorb.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscall (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -39,7 +39,7 @@ impl BackendUnderTest for PythonWasi {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_python::find_python()
-            .expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
+            .expect("python3 >= 3.9 not found on PATH: see docs/testing.md")
     }
 }
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# exif_fixture.py — first-party generator for the exiftool e2e image fixture.
+# exif_fixture.py: first-party generator for the exiftool e2e image fixture.
 #
 # Hand-assembles a tiny (~200 byte) JPEG whose only real content is an EXIF
-# APP1 segment carrying three deterministic tags — Make, Model, and
-# DateTimeOriginal — so the exiftool-on-zeroperl case can pin an exact output
+# APP1 segment carrying three deterministic tags (Make, Model, and
+# DateTimeOriginal), so the exiftool-on-zeroperl case can pin an exact output
 # string. Everything is fixed, so the bytes are reproducible.
 #
 # The scan payload is a single grey pixel's worth of placeholder marker

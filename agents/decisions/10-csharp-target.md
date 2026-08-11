@@ -1,4 +1,4 @@
-# Decision 10 — Add C# to the Target Languages, Paired with Java
+# Decision 10: Add C# to the Target Languages, Paired with Java
 
 Status: **Accepted, 2026-07-23.**
 Amends decision 0's target list; no backend work has started.
@@ -8,7 +8,7 @@ Planned order: Ruby → Bash → Java → C# → Go → Python → PHP, with Jav
 ## Context
 
 C# was simply missing from the original target list (user call-out).
-It fits the decision 0 criterion — a mainstream language whose ecosystem does not ship a wasm runtime by default in the places dewasmify targets — and no wasm→C# *source* translator exists.
+It fits the decision 0 criterion (a mainstream language whose ecosystem does not ship a wasm runtime by default in the places dewasmify targets), and no wasm→C# *source* translator exists.
 
 ## Decision
 
@@ -18,10 +18,10 @@ A shared lowering-conventions decision for the pair is expected when that milest
 
 ## Rejected alternatives
 
-- **Not adding it** — the omission was an oversight, not a decision.
-- **Revisiting JavaScript on the same grounds** — unchanged from decision 0: wasm2js exists and every JS runtime ships a wasm engine.
+- **Not adding it**: the omission was an oversight, not a decision.
+- **Revisiting JavaScript on the same grounds**: unchanged from decision 0: wasm2js exists and every JS runtime ships a wasm engine.
 
 ## Consequences
 
 - README target table and roadmap gain C#; the support matrix (docs/support.md) grows a column when the backend lands.
-- The Java/C# milestone produces one design, two emitters — a first test of how much backend machinery (decision 6 units, lowering tables) is reusable across similar languages.
+- The Java/C# milestone produces one design, two emitters, a first test of how much backend machinery (decision 6 units, lowering tables) is reusable across similar languages.

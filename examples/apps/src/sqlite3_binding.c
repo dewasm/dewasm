@@ -1,5 +1,5 @@
 /*
- * sqlite3_binding.c — our own committed C source (first-party source is
+ * sqlite3_binding.c: our own committed C source (first-party source is
  * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * Proves a guest->host callback round trip in library mode (Phase 5a): the

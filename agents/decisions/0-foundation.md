@@ -1,4 +1,4 @@
-# Decision 0 — Foundation and Core Architecture
+# Decision 0: Foundation and Core Architecture
 
 Status: **Accepted, 2026-07-23.**
 Backfilled; the decision was made during initial planning and implementation.
@@ -8,8 +8,9 @@ Amended by [decision 10](10-csharp-target.md): C# joins the target list, paired 
 ## Context
 
 Programs compiled to WebAssembly (from C, C++, Rust, ...) normally need a wasm runtime to execute.
-Existing source-to-source translators remove that requirement but each targets exactly one language — wasm2c / w2c2 (C), wasm2js (JavaScript), wasm2go (Go), unwasm (PHP), wasm2lua (Lua) — and no tool covers multiple target languages from one codebase.
-dewasmify's goal is to translate wasm binaries into source code of *many* languages, so a tool built once (e.g. in Rust) can run anywhere the target language runs — including places with no wasm runtime at all, such as a plain Bash environment.
+Existing source-to-source translators remove that requirement but each targets exactly one language: wasm2c / w2c2 (C), wasm2js (JavaScript), wasm2go (Go), unwasm (PHP), wasm2lua (Lua).
+No tool covers multiple target languages from one codebase.
+dewasmify's goal is to translate wasm binaries into source code of *many* languages, so a tool built once (e.g. in Rust) can run anywhere the target language runs, including places with no wasm runtime at all, such as a plain Bash environment.
 
 ## Decision
 
@@ -24,16 +25,16 @@ dewasmify's goal is to translate wasm binaries into source code of *many* langua
 - **Target language priority: Ruby → Bash → Java → Go → Python → PHP.**
   Bash is the defining demonstration (running C/Rust tools with no hardware-specific binary at all); Ruby went first to validate the pipeline (implemented).
   JavaScript is deliberately absent.
-- **Name: `dewasmify`** — the tool strips ("de-") the wasm out of a program.
+- **Name: `dewasmify`**: the tool strips ("de-") the wasm out of a program.
   Crate, CLI, and repository share the name.
   *Amended by [decision 26](26-rename-dewasm.md) (2026-07-25): renamed to `dewasm`.*
 
 ## Rejected alternatives
 
-- **Contributing to / forking the single-language translators** — six divergent codebases with different IRs and test rigs; the shared-IR economics are the point of this project.
-- **JavaScript as an early target** — wasm2js exists and every JS runtime ships a wasm engine; little value added.
+- **Contributing to / forking the single-language translators**: six divergent codebases with different IRs and test rigs; the shared-IR economics are the point of this project.
+- **JavaScript as an early target**: wasm2js exists and every JS runtime ships a wasm engine; little value added.
   May be revisited later.
-- **Naming the project `wasmify`** — reads as "convert *to* wasm" and collides with an existing npm package.
+- **Naming the project `wasmify`**: reads as "convert *to* wasm" and collides with an existing npm package.
 
 ## Consequences
 

@@ -6,12 +6,12 @@ use dewasm_backend::Backend;
 use dewasm_backend_bash::BashBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution: `(trial, tag)` — out-of-scope syscalls (timestamps, sockets), the file-symlink-follow limit (pure bash has no `readlink` for path resolution), stat-precision gaps with no `stat` license (dev/ino), the whole-file-buffer divergence, and environ entries bash itself exports (PWD/SHLVL/_), which count-exact `environ_*` assertions cannot absorb.
+/// Known trial failures with their attribution `(trial, tag)`: out-of-scope syscalls (timestamps, sockets), the file-symlink-follow limit (pure bash has no `readlink` for path resolution), stat-precision gaps with no `stat` license (dev/ino), the whole-file-buffer divergence, and environ entries bash itself exports (PWD/SHLVL/_), which count-exact `environ_*` assertions cannot absorb.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Sockets — out of scope (docs/support.md).
+    // Sockets: out of scope (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // Timestamp setters — deliberately not implemented: `touch` is not a namespace-mutation op, so it falls outside the narrow license that lets Bash shell out to `mkdir`/`rmdir`/`rm`/`mv`, and fd/path_filestat_set_times and the tests that exercise them stay ENOSYS.
+    // Timestamp setters, deliberately not implemented: `touch` is not a namespace-mutation op, so it falls outside the narrow license that lets Bash shell out to `mkdir`/`rmdir`/`rm`/`mv`, and fd/path_filestat_set_times and the tests that exercise them stay ENOSYS.
     ("rust/fd_filestat_set", "fd_filestat_set_times (ENOSYS)"),
     ("rust/fstflags_validate", "fd_filestat_set_times (ENOSYS)"),
     ("rust/path_filestat", "path_filestat_set_times (ENOSYS)"),
@@ -69,7 +69,7 @@ impl BackendUnderTest for BashWasi {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_bash::find_bash5().expect(
-            "bash >= 5 not found on PATH, $DEWASM_BASH, or a Homebrew path — see docs/testing.md",
+            "bash >= 5 not found on PATH, $DEWASM_BASH, or a Homebrew path: see docs/testing.md",
         )
     }
 }

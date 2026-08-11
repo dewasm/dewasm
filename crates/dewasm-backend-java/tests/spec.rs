@@ -1,7 +1,7 @@
 //! Java side of the shared spec harness: converts each module with the Java backend to a package-private module class (carrying a reflective `invoke`/`globalGet` dispatcher), phrases every assertion as compiled Java (`check`/`check_trap`/`check_exhaust`/`check_unlinkable`, bit-exact float comparison via `Float.floatToRawIntBits` / `Double.doubleToRawLongBits`), assembles one self-contained `Main.java` per `.wast` file, and `javac`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Java facts shape the phrasing:
-//! - A JVM `StackOverflowError` is *catchable* (unlike Go's fatal goroutine overflow), so exhaustion maps directly: `check_exhaust` catches it, exactly as Ruby catches `SystemStackError`. No spec-build recursion guard is instrumented into the generated functions — each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later, independent check.
+//! - A JVM `StackOverflowError` is *catchable* (unlike Go's fatal goroutine overflow), so exhaustion maps directly: `check_exhaust` catches it, exactly as Ruby catches `SystemStackError`. No spec-build recursion guard is instrumented into the generated functions: each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later, independent check.
 //! - Type/class declarations cannot live inside a method, so per-module classes are accumulated in the harness's file-scoped `decls` buffer (hoisted ahead of `main`'s body by `assemble`) while only instantiation/assertion statements go in `main`.
 
 use std::collections::BTreeSet;
@@ -17,7 +17,7 @@ use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof` — not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. Java's counts match Ruby's, not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here.
+/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof`, not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. Java's counts match Ruby's, not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here.
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
@@ -43,7 +43,7 @@ impl BackendUnderTest for JavaSpec {
     /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache (identical programs compile once) and run it. A missing `javac`/`java` fails loud; a `javac` failure is surfaced as its `Output` so the harness reports the compile error.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
-            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
         let classdir = match common::build_java(source) {
             Err(build) => return build,
             Ok(classdir) => classdir,
@@ -240,7 +240,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
     }
 }
 
-/// The imports object: `spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an import provider.
+/// The imports object: `spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance's `Exports` map doubles as an import provider.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\", _spectest".to_string()];
     for (name, var) in registered {

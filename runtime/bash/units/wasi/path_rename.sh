@@ -1,6 +1,6 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_rename: one of the four namespace-mutation units
-# licensed to shell out — a single `--`-guarded `mv` on the two resolved
+# licensed to shell out, a single `--`-guarded `mv` on the two resolved
 # physical paths. rename(2) never follows trailing symlinks on either side
 # (it moves the link itself and replaces the destination link), so both
 # resolutions use follow_last=0, mirroring
@@ -85,7 +85,7 @@ wasi_path_rename() {
       fi
       if ! command rmdir -- "$__new_host" 2>/dev/null; then
         # The destination survived, so the `mv` below would nest the source
-        # inside it instead of replacing it — report the failure instead.
+        # inside it instead of replacing it. Report the failure.
         # Re-probe emptiness: an entry that appeared since the check above is
         # rename(2)'s ENOTEMPTY; anything else (e.g. a permission error on the
         # parent) is the unit's default EIO.

@@ -176,7 +176,7 @@ WASI(String[] args, String[] env, java.util.Map<String, String> preopens) {
             }
             // The host path must resolve, but need not be a directory: like the
             // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for
-            // the zeroperl reactor's init probe) is accepted — the guest
+            // the zeroperl reactor's init probe) is accepted: the guest
             // resolves it as the preopen root itself.
             if (!java.nio.file.Files.exists(real)) {
                 throw new RuntimeException(

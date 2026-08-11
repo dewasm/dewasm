@@ -1,5 +1,5 @@
 // f32.min: a NaN operand yields wasm's canonical NaN (a legal min result and,
-// being quiet, satisfies nan:arithmetic too — Java's Math.min would pass a
+// being quiet, satisfies nan:arithmetic too, while Java's Math.min would pass a
 // signaling operand through unquieted). min(-0, +0) is -0.
 static float f32_min(float a, float b) {
     if (Float.isNaN(a) || Float.isNaN(b)) {

@@ -2,9 +2,9 @@
 # rt_resolve_import <mod> <name> <kind>; kind in func|global|table|memory.
 # The bash shape of the import-provider protocol. Resolution order:
 #   (1) for funcs only, an IMPORTS[mod.name] override wins (host wiring);
-#   (2) PROVIDERS[mod] names a prefix <q> that owns per-kind export maps —
+#   (2) PROVIDERS[mod] names a prefix <q> that owns per-kind export maps,
 #       <q>EXPORTS (funcs), <q>GLOBAL_EXPORTS, <q>TABLE_EXPORTS,
-#       <q>MEMORY_EXPORTS — whose value under `name` is returned in the
+#       <q>MEMORY_EXPORTS, whose value under `name` is returned in the
 #       global RESOLVED. The value's meaning is kind-specific (the caller
 #       knows the kind it asked for): a func command name, a global's
 #       target variable name, a table's array base name, a memory prefix.

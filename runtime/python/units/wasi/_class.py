@@ -96,7 +96,7 @@ def __init__(self, args=None, env=None, preopens=None):
     for guest, host in (preopens or {}).items():
         # The host path must resolve, but need not be a directory: like the
         # Ruby/Perl runtimes, a single-file preopen (e.g. '/dev/null' for the
-        # zeroperl reactor's init probe) is accepted — the guest resolves it
+        # zeroperl reactor's init probe) is accepted: the guest resolves it
         # as the preopen root itself.
         real = os.path.realpath(host)
         if not os.path.exists(real):

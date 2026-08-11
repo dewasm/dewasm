@@ -1,7 +1,7 @@
 // requires: memory/_class
 // The bundled WASI preview 1 runtime (filesystem model adopted one-for-one
 // from the Ruby/Python backends). Stdio and files are *os.File; a
-// directory — whether a preopen or one the guest opened via path_open — is a
+// directory (whether a preopen or one the guest opened via path_open) is a
 // *wasiDir. The fd table holds either, keyed by fd. Args/env are pre-encoded
 // byte strings; env is passed already-ordered ("K=V") and preopens are assigned
 // fds in sorted order, so there is no map-iteration nondeterminism.
@@ -145,7 +145,7 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
         }
         // The host path must resolve, but need not be a directory: like the
         // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the
-        // zeroperl reactor's init probe) is accepted — the guest resolves it
+        // zeroperl reactor's init probe) is accepted: the guest resolves it
         // as the preopen root itself.
         if _, err := os.Stat(real); err != nil {
             panic("preopen " + guest + " => " + preopens[guest] + ": does not exist")

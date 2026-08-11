@@ -13,7 +13,7 @@
 # empty for a file). Opening a directory with FD_WRITE requested is EISDIR (31).
 # A missing directory with O_DIRECTORY is ENOENT (44), not ENOTDIR (54).
 # A symlink final component with NOFOLLOW (lookupflags bit 0 clear) is ELOOP
-# (32) — you cannot open the link itself. The opened fd is written
+# (32): you cannot open the link itself. The opened fd is written
 # to guest memory. R0 is the errno.
 wasi_path_open() {
   local __p=$1 __dirfd=$2 __dirflags=$3 __path_ptr=$4 __path_len=$5
@@ -38,8 +38,8 @@ wasi_path_open() {
   # A symlink final component that was not followed cannot be opened.
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
   # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in
-  # resolve_path): O_CREAT must not create through the slash — per wasmtime
-  # EINVAL on macOS / EISDIR on Linux; a plain open is ENOENT.
+  # resolve_path): O_CREAT must not create through the slash (per wasmtime,
+  # EINVAL on macOS / EISDIR on Linux); a plain open is ENOENT.
   if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
     if (( __oflags & 0x1 )); then
       if [[ $OSTYPE == darwin* ]]; then

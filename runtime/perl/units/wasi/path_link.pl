@@ -13,7 +13,7 @@ sub wasi_path_link {
     # WASI must hardlink the source link itself, but macOS link(2) follows
     # a source symlink (Linux's does not) and core perl has no linkat to
     # ask for NOFOLLOW (Ruby binds it via Fiddle). Clone the symlink
-    # instead: same target, though a distinct inode/link count — the
+    # instead: same target, though a distinct inode/link count, the
     # closest core-perl emulation. An existing destination still reports
     # EEXIST, as link(2) would.
     if ($^O eq 'darwin' && -l $old_host) {

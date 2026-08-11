@@ -48,7 +48,7 @@ pub struct FsAppCase {
     pub env: &'static [(&'static str, &'static str)],
     /// Guest path -> scratch-relative subdir (`""` = scratch root).
     pub preopens: &'static [(&'static str, &'static str)],
-    /// Guest path -> cache-relative subdir, preopened **directly from the app cache** (`examples/apps/cache/<rel>`) rather than copied into scratch. The language-runtime apps (CPython/CRuby) mount their multi-hundred-MB stdlib trees this way — copying them per run would be prohibitive.
+    /// Guest path -> cache-relative subdir, preopened **directly from the app cache** (`examples/apps/cache/<rel>`) rather than copied into scratch. The language-runtime apps (CPython/CRuby) mount their multi-hundred-MB stdlib trees this way: copying them per run would be prohibitive.
     pub cache_preopens: &'static [(&'static str, &'static str)],
     pub stage: &'static [Stage],
     pub runs: &'static [FsRun],
@@ -166,7 +166,7 @@ pub const CPYTHON_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
-/// CRuby 3.4 executing a one-liner — the "Ruby on Ruby" goal demo — reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \ -e 'puts "hello from cruby #{6*7}"'
+/// CRuby 3.4 executing a one-liner (the "Ruby on Ruby" goal demo), reading its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`. The heaviest case overall: a ~35 MB wasm. Ground truth (wasmtime): wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \ -e 'puts "hello from cruby #{6*7}"'
 pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     name: "cruby_hello",
     wasm: "ruby",
@@ -218,7 +218,7 @@ fn copy_tree(src: &Path, dst: &Path) {
     }
 }
 
-/// Stage, preopen, convert, and run every [`FsRun`] of `case` under `lang` with its per-language `glue`, returning the fresh scratch dir and each run's [`Output`] (in `case.runs` order). The shared core of [`run_fs_app_case`] (which then asserts stdout + host effects) and [`capture_fs_app_stdout`] (which extracts one run's stdout for the snapshot). Every run must exit zero (fail loud) — the multi-run cases depend on earlier runs' host effects (e.g. sqlite3 creates the DB file before the reopen), so a broken run must stop both the compare and the capture.
+/// Stage, preopen, convert, and run every [`FsRun`] of `case` under `lang` with its per-language `glue`, returning the fresh scratch dir and each run's [`Output`] (in `case.runs` order). The shared core of [`run_fs_app_case`] (which then asserts stdout + host effects) and [`capture_fs_app_stdout`] (which extracts one run's stdout for the snapshot). Every run must exit zero (fail loud): the multi-run cases depend on earlier runs' host effects (e.g. sqlite3 creates the DB file before the reopen), so a broken run must stop both the compare and the capture.
 fn drive_fs_app_case(
     lang: &dyn BackendUnderTest,
     case: &FsAppCase,
@@ -246,7 +246,7 @@ fn drive_fs_app_case(
             let host = cache.join(rel);
             assert!(
                 host.is_dir(),
-                "{} cache tree {rel} not present — run examples/apps/setup.sh (see docs/testing.md)",
+                "{} cache tree {rel} not present: run examples/apps/setup.sh (see docs/testing.md)",
                 case.name
             );
             (*guest, host)
@@ -260,7 +260,7 @@ fn drive_fs_app_case(
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
     assert!(
         wasm_path.exists(),
-        "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
+        "{} not cached: run examples/apps/setup.sh (see docs/testing.md)",
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
@@ -301,7 +301,7 @@ fn drive_fs_app_case(
     (scratch, outputs)
 }
 
-/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner — also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it — never needs its own opt-out.
+/// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally. The perf opt-out lives at the macro/feature level (see the module docs), so this runner (also called directly by the wasmtime suite, which passes an empty `glue` since its `run_app_fs` override ignores it) never needs its own opt-out.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
     for (run, output) in case.runs.iter().zip(&outputs) {
@@ -324,7 +324,7 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
     );
 }
 
-/// Rerun a filesystem app `case` under `lang` (the wasmtime engine) and return the raw stdout of its snapshot-bearing run — the bytes to write into that case's `.stdout` snapshot. Only the cases with a checked-in snapshot file (`QJS_FILE_IO`, `SQLITE3_SHELL_DBFILE`, `RG_SEARCH`) are captured this way; each has exactly one run whose `expect_stdout` is `Some` (the others assert only host-side effects, or pin an inline string with no file). All runs execute in sequence — the earlier ones set up host state the captured run reads — but only that one run's stdout is returned, so it byte-matches the `include_str!` the case compares against.
+/// Rerun a filesystem app `case` under `lang` (the wasmtime engine) and return the raw stdout of its snapshot-bearing run: the bytes to write into that case's `.stdout` snapshot. Only the cases with a checked-in snapshot file (`QJS_FILE_IO`, `SQLITE3_SHELL_DBFILE`, `RG_SEARCH`) are captured this way; each has exactly one run whose `expect_stdout` is `Some` (the others assert only host-side effects, or pin an inline string with no file). All runs execute in sequence (the earlier ones set up host state the captured run reads), but only that one run's stdout is returned, so it byte-matches the `include_str!` the case compares against.
 pub fn capture_fs_app_stdout(lang: &dyn BackendUnderTest, case: &FsAppCase) -> Vec<u8> {
     let (_scratch, outputs) = drive_fs_app_case(lang, case, "");
     let idx = case

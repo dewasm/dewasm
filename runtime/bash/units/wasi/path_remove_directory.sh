@@ -1,6 +1,6 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_remove_directory: one of the four namespace-mutation
-# units licensed to shell out — a single `--`-guarded `rmdir` on the resolved
+# units licensed to shell out, a single `--`-guarded `rmdir` on the resolved
 # physical path. rmdir(2) never follows a trailing symlink, so resolution
 # uses follow_last=0, mirroring
 # runtime/ruby/units/wasi/path_remove_directory.rb. rmdir's own diagnostics

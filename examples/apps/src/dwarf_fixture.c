@@ -1,4 +1,4 @@
-// dwarf_fixture.c — first-party DWARF fixture for the --dwarf-line source
+// dwarf_fixture.c: first-party DWARF fixture for the --dwarf-line source
 // back-mapping test. Built by examples/apps/scripts/dwarf-fixture.sh with
 //   zig cc -target wasm32-wasi -g -O1 -o cache/dwarf-fixture.wasm
 //

@@ -37,7 +37,7 @@ fetch_verified() {
 require_tool() {
   command -v "$2" >/dev/null && return
   if [ -n "${3:-}" ]; then
-    echo "$1: $2 not found — $3" >&2
+    echo "$1: $2 not found: $3" >&2
   else
     echo "$1: $2 not found" >&2
   fi
@@ -45,7 +45,7 @@ require_tool() {
 }
 
 # new_tmpdir: create a scratch dir in $tmp, removed when the script exits.
-# Each script is its own process, so the EXIT trap suffices — no manual
+# Each script is its own process, so the EXIT trap suffices: no manual
 # cleanup/trap-reset needed.
 new_tmpdir() {
   tmp=$(mktemp -d)
@@ -73,10 +73,10 @@ write_stamp() {
 
 # --- wasm-opt -O2 preprocessing for the locally-built modules.
 # Every module built from source here (sqlite3, minigzip, libpcap, tree-sitter,
-# ripgrep — but not the DWARF fixture, which needs its debug info) is
+# ripgrep, but not the DWARF fixture, which needs its debug info) is
 # post-processed: it shrinks them and normalizes the overlong call_indirect
 # immediates the LLVM toolchain emits (so the converter sees pure baseline
-# wasm). Baseline features only — never SIMD/atomics/EH — and no
+# wasm). Baseline features only (never SIMD/atomics/EH) and no
 # wasm-ctor-eval. The stamp for each such module includes `wasm-opt --version`
 # so a wasm-opt upgrade re-triggers the build.
 WASM_OPT_FEATURES=(
@@ -90,7 +90,7 @@ wasm_opt_inplace() {
 # wasm-opt is absent, so the cache misses and the loud prereq check fires).
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
 
-# zig_cc_wasi <args...>: `zig cc` for the wasm32-wasi target — the one flag
+# zig_cc_wasi <args...>: `zig cc` for the wasm32-wasi target, the one flag
 # every locally-compiled module shares. Per-app choices (the reactor exec
 # model, -O level, includes, --strip-debug) stay at the call site.
 zig_cc_wasi() {
@@ -105,7 +105,7 @@ wl_exports() {
 }
 
 # fetch_app <name> <url> <sha256> [wasm_path_in_tarball]: download a pinned
-# prebuilt wasm — a standalone .wasm asset when wasm_path is empty, else the
+# prebuilt wasm, a standalone .wasm asset when wasm_path is empty, else the
 # named entry inside a .tar.gz. Stamp = the source sha.
 fetch_app() {
   local name="$1" url="$2" sha256="$3" wasm_path="${4:-}"
@@ -114,7 +114,7 @@ fetch_app() {
     echo "$name: cached"
     return
   fi
-  [ -f "$out" ] && echo "$name: cached copy predates the current pin — refetching"
+  [ -f "$out" ] && echo "$name: cached copy predates the current pin, refetching"
   echo "$name: fetching $url"
   new_tmpdir
   if [ -z "$wasm_path" ]; then
@@ -131,7 +131,7 @@ fetch_app() {
 
 # archive_extract_file <archive> <kind> <inner> <dest>: extract the single
 # member <inner> from a .zip / .tar.gz to <dest>. Goes through stdout
-# (unzip -p / tar -O), so only that one member is unpacked — no scratch tree,
+# (unzip -p / tar -O), so only that one member is unpacked: no scratch tree,
 # and crucially none of the bulk (cruby's tarball carries a multi-hundred-MB
 # static lib we never want on disk).
 archive_extract_file() {

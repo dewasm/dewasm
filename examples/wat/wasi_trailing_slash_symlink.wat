@@ -34,15 +34,15 @@
     (call $report (i32.const 116)
       (call $path_readlink (i32.const 3) (i32.const 0) (i32.const 9)
         (i32.const 64) (i32.const 32) (i32.const 100)))
-    ;; u: symlink("s", "sd1/") — existing directory behind the slash.
+    ;; u: symlink("s", "sd1/"). An existing directory behind the slash.
     (call $report (i32.const 117)
       (call $path_symlink (i32.const 16) (i32.const 1)
         (i32.const 3) (i32.const 24) (i32.const 4)))
-    ;; v: symlink("s", "file/") — existing non-directory behind the slash.
+    ;; v: symlink("s", "file/"). An existing non-directory behind the slash.
     (call $report (i32.const 118)
       (call $path_symlink (i32.const 16) (i32.const 1)
         (i32.const 3) (i32.const 32) (i32.const 5)))
-    ;; w: symlink("s", "dang/") — nothing behind the slash.
+    ;; w: symlink("s", "dang/"). Nothing behind the slash.
     (call $report (i32.const 119)
       (call $path_symlink (i32.const 16) (i32.const 1)
         (i32.const 3) (i32.const 40) (i32.const 5)))))

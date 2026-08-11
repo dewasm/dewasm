@@ -122,8 +122,8 @@ jobs:
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
       # Speed categories: the `slow_test` feature runs the full spec suite plus the
       # slow per-case app cases (CI's main run). It deliberately excludes the
-      # `ultra_slow_test` cases — the ~1 min+ pty / giant-`go build` cases that
-      # timed out (#22) or exhausted runner memory (#23) — which run only locally.
+      # `ultra_slow_test` cases, which run only locally: the ~1 min+ pty /
+      # giant-`go build` cases that timed out (#22) or exhausted runner memory (#23).
       - name: Test (slow)
         if: github.event_name != 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast --features dewasm-backend-${{ matrix.backend }}/slow_test
@@ -167,7 +167,7 @@ jobs:
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
       # Speed categories: the `slow_test` feature covers the slow cases.
-      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite, which execs the xtask binary (it embeds the pinned wasmtime crate, so nothing is installed for it) and never builds it — hence the explicit build step below; `dewasm-cli/slow_test` runs the slow cross-backend `--data-file` real-app cases.
+      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite, which execs the xtask binary (it embeds the pinned wasmtime crate, so nothing is installed for it) and never builds it, hence the explicit build step below; `dewasm-cli/slow_test` runs the slow cross-backend `--data-file` real-app cases.
       - name: Build the snapshot runner
         if: github.event_name != 'pull_request'
         run: cargo build -p xtask

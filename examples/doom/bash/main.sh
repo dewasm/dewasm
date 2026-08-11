@@ -133,7 +133,7 @@ imp_on_game_init() {
 }
 
 # Read by doom_rt_resolve_import in the sourced doom_gen.sh (IMPORTS[mod.name]),
-# not anywhere in this script — hence the unused-variable suppression.
+# not anywhere in this script, hence the unused-variable suppression.
 # shellcheck disable=SC2034
 declare -A IMPORTS=(
   ['console.onErrorMessage']=imp_on_error

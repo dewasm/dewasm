@@ -5,7 +5,7 @@
 #
 # The parent is resolved physically via a `cd -P` subshell and the basename
 # appended lexically, so `..`/symlinks in the parent are collapsed before the
-# containment check — nesting can't launder an escape. A trailing "."/".."
+# containment check: nesting can't launder an escape. A trailing "."/".."
 # resolves the whole path as a directory instead. Final-component symlinks:
 # a directory symlink is followed (via cd -P) when <follow> is 1; a file symlink
 # cannot be followed (no readlink builtin) and returns ELOOP (32), stricter than
@@ -14,7 +14,7 @@
 # runtime, not a multi-tenant sandbox host.
 #
 # A leading "/" makes the path absolute, which escapes the dirfd sandbox before
-# any join — NOTCAPABLE (76), not a lexical join under the root. A
+# any join: NOTCAPABLE (76), not a lexical join under the root. A
 # dirfd that names an open non-directory fd is ENOTDIR (54); an unopened fd is
 # EBADF (8).
 wasi_resolve_path() {
@@ -42,7 +42,7 @@ wasi_resolve_path() {
     __slash=1
     while [[ $__rel == */ ]]; do __rel=${__rel%/}; done
   fi
-  # Reject a path that lexically ascends above the dirfd root via `..` — an
+  # Reject a path that lexically ascends above the dirfd root via `..`, an
   # escape even when the resulting physical parent does not exist (so it cannot
   # be caught by the post-resolution containment check, which would misreport it
   # as ENOENT). A pure component walk: each name is +1 depth, `..` is -1, and a
@@ -72,7 +72,7 @@ wasi_resolve_path() {
       # one: wasi-libc addresses a path that *is* a preopen (the zeroperl
       # reactor's "/dev/null") as that preopen's fd plus the relative path ".",
       # which lands here. Collapse that "." onto the root, which is already
-      # stored physically — the same resolution Ruby's `File.realpath` and
+      # stored physically, the same resolution Ruby's `File.realpath` and
       # Perl's `Cwd::realpath` give a file. Only the root is collapsed: a
       # "somefile/." deeper in the tree keeps failing.
       if [[ $__base == "." && ${__joined%/.} == "${__root%/}" && -e $__root ]]; then
@@ -85,7 +85,7 @@ wasi_resolve_path() {
   else
     local __dir=${__joined%/*}
     # A root-preopen entry ("/etc") strips to an empty parent, not the
-    # filesystem root — `cd -P -- ""` is a bash error ("null directory"), not
+    # filesystem root: `cd -P -- ""` is a bash error ("null directory"), not
     # a no-op. Without this, every path under a root preopen (`WASI_DIRS=('/::/')`)
     # would resolve to ENOENT regardless of containment.
     [[ -z $__dir ]] && __dir=/

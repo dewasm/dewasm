@@ -36,7 +36,7 @@ module SQLite3
       @readonly = (flags & Constants::Open::READONLY) != 0
 
       # The wasm guest sees the host filesystem 1:1 (the driver preopens "/"),
-      # but its cwd is not the Ruby process's cwd — absolutize relative paths
+      # but its cwd is not the Ruby process's cwd: absolutize relative paths
       # so both agree on where the database lives.
       @path =
         if file.empty? || file == ":memory:" || file.start_with?("file:")
@@ -205,7 +205,7 @@ module SQLite3
 
     # The real gem implements this as a Ruby busy_handler retry loop; a
     # guest->host callback is not available here, so sqlite's built-in
-    # timeout handler stands in — same observable outcome (SQLITE_BUSY after
+    # timeout handler stands in: same observable outcome (SQLITE_BUSY after
     # ~ms milliseconds → BusyException → ActiveRecord::StatementTimeout).
     def busy_handler_timeout=(ms)
       busy_timeout(ms)

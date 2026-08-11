@@ -14,7 +14,7 @@ module SQLite3
     def initialize
       # Preopening "/" at "/" makes guest paths identical to host paths, so
       # the database file lands wherever Rails configured it (sandbox
-      # caveats accepted — this is a demo embedding, not a sandbox).
+      # caveats accepted: this is a demo embedding, not a sandbox).
       @mod = Sqlite3Wasm.new({}, preopens: { "/" => "/" })
       @mod.invoke("_initialize")
       @mem = @mod.memory

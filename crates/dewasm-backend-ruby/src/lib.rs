@@ -12,7 +12,7 @@
 mod flat {
     pub use dewasm_backend::flat::*;
 
-    /// Crossing depth from which a branch is worth a dispatch. A relay costs one compare per crossed frame — measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32 — while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked: it puts the two measured workloads on the side each was measured to prefer — `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
+    /// Crossing depth from which a branch is worth a dispatch. A relay costs one compare per crossed frame (measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32), while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked, since it puts the two measured workloads on the side each was measured to prefer: `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
     pub const DEEP_CROSSING: usize = 16;
 }
 
@@ -343,7 +343,7 @@ impl Backend for RubyBackend {
 /// The class a `--mode standalone` program defines. A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a Ruby constant path — `::`-separated segments, each `[A-Z][A-Za-z0-9_]*` — and is used verbatim. Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
+/// The library-mode module name must be a Ruby constant path (`::`-separated segments, each `[A-Z][A-Za-z0-9_]*`) and is used verbatim. Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
         is_ident(
@@ -363,7 +363,7 @@ fn check_module_name(name: &str) -> Result<()> {
     }
 }
 
-/// `class A::B::C` needs `A` and `A::B` to exist, and the file must load both on its own and next to something that already defined them: each ancestor gets an unless-defined? guard, outermost first. An ancestor that already exists is left alone, whatever it is — bound to a non-module constant it fails loudly at load, which is the correct outcome.
+/// `class A::B::C` needs `A` and `A::B` to exist, and the file must load both on its own and next to something that already defined them: each ancestor gets an unless-defined? guard, outermost first. An ancestor that already exists is left alone, whatever it is: bound to a non-module constant it fails loudly at load, which is the correct outcome.
 fn ancestor_guards(class_name: &str) -> String {
     let segs: Vec<&str> = class_name.split("::").collect();
     let mut out = String::new();
@@ -410,17 +410,17 @@ struct FrameSets {
     crossed: HashSet<u32>,
     /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`. Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
     wrapped: HashSet<u32>,
-    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve — the `while` compiles to a `while`.
+    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve: the `while` compiles to a `while`.
     break_ok: HashSet<u32>,
-    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing — dissolving any frame it crosses forces the rest.
+    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing: dissolving any frame it crosses forces the rest.
     paths: Vec<Vec<u32>>,
 }
 
 /// Compute the [`FrameSets`] for a function body.
 ///
-/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch — `pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing — or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
+/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch (`pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing) or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
 ///
-/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets. Ruby's `break` leaves that loop and lands at the block's end — the same place, in O(1) — so the frames stay structured. `sole` rather than `last` is a correctness requirement, not conservatism. It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
+/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets. Ruby's `break` leaves that loop and lands at the block's end (the same place, in O(1)), so the frames stay structured. `sole` rather than `last` is a correctness requirement, not conservatism. It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
 fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
     let mut sets = FrameSets::default();
     let mut stack: Vec<(u32, bool)> = Vec::new();
@@ -436,7 +436,7 @@ fn walk_frame_sets(
 ) {
     // "Sole statement", not merely "last": if the block held anything besides the
     // loop, that other statement could dissolve, which dissolves the block by the
-    // ancestor rule while the loop itself stays a Ruby `while` — and then a
+    // ancestor rule while the loop itself stays a Ruby `while`, and then a
     // `state = N; next` aimed at the dispatch loop is captured by that `while`.
     // Requiring the loop to be the whole body makes the block dissolvable only
     // through the loop, so the two always dissolve together.
@@ -557,12 +557,12 @@ impl<'a> Gen<'a> {
         self.frames.borrow().wrapped.contains(&label_id)
     }
 
-    /// Whether the frame currently on top of `frame_stack` has an enclosing capturing frame — i.e. a `break` emitted in its epilogue has a loop to bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so the outermost frame omits the relay arm (a pending branch can never target something outside it, so that arm is also dead).
+    /// Whether the frame currently on top of `frame_stack` has an enclosing capturing frame, i.e. a `break` emitted in its epilogue has a loop to bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so the outermost frame omits the relay arm (a pending branch can never target something outside it, so that arm is also dead).
     fn has_enclosing_frame(&self) -> bool {
         self.frame_stack.borrow().len() > 1
     }
 
-    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope — from a nested relay or a direct exit — skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward. Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
+    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope, from a nested relay or a direct exit, skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward. Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
     fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
         if self.has_enclosing_frame() {
             w.line(format!(
@@ -594,7 +594,8 @@ impl<'a> Gen<'a> {
         name
     }
 
-    /// Resolve one import and validate its kind — one mechanism covering every import kind, not only functions: a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
+    /// Resolve one import and validate its kind.
+    /// One mechanism covers every import kind, not only functions: a present-but-wrong-kind value raises immediately (a link error), a missing one returns nil so the caller's `|| fallback` applies.
     fn resolve_import_string(&self, kind: &str, module: &str, name: &str) -> String {
         self.use_unit("rt/resolve_import");
         self.use_unit("rt/check_import_kind");
@@ -641,7 +642,7 @@ impl<'a> Gen<'a> {
             w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
         });
         w.line("");
-        // Provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace — the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
+        // Provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace, the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
         w.block("def import(name)", "end", |w| {
             w.line("return @exports[name] if @exports.key?(name)");
             w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
@@ -1019,7 +1020,7 @@ impl<'a> Gen<'a> {
                 Stmt::If {
                     cond, then, els, ..
                 } => {
-                    // The arms stay inline — `if` is not a Ruby loop, so a `next`
+                    // The arms stay inline: `if` is not a Ruby loop, so a `next`
                     // inside one already reaches the dispatch loop.
                     st[cur].line(format!("if {}", self.cond(cond).free()));
                     st[cur].indent();
@@ -1341,7 +1342,7 @@ impl<'a> Gen<'a> {
                         return;
                     }
                 }
-                // Fast path — a br whose target is the innermost enclosing frame leaves it directly: `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
+                // Fast path (a br whose target is the innermost enclosing frame leaves it directly): `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
                 if via_var {
@@ -1419,7 +1420,7 @@ impl<'a> Gen<'a> {
 
     /// An expression in boolean context (an `if`/`br_if`/`select` test).
     ///
-    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a ternary only to undo it one operation later. Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `s32`/`s64`. Anything else keeps the `!= 0` test.
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a ternary only to undo it one operation later. Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `s32`/`s64`. Anything else keeps the `!= 0` test.
     fn cond(&self, e: &Expr) -> Rendered {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
@@ -1625,7 +1626,7 @@ enum Prec {
     BitOr,
     Cmp,
     Eq,
-    /// `c ? t : e`, the loosest thing built here — and so also the limit of a position that constrains nothing.
+    /// `c ? t : e`, the loosest thing built here, and so also the limit of a position that constrains nothing.
     Ternary,
 }
 
@@ -1693,7 +1694,7 @@ fn number(src: String) -> Rendered {
     Rendered { src, prec, op: "" }
 }
 
-/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one — those are associative over the integers that are their only operands.
+/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one: those are associative over the integers that are their only operands.
 fn infix(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
     let associative = matches!(op, "&" | "|" | "^") && b.op == op;
     let right_limit = if associative { prec } else { prec.tighter() };
@@ -1881,7 +1882,7 @@ mod units {
     }
 }
 
-/// Shape checks for precedence-aware parenthesization. The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish — that the parens a shape does not need are gone, and that the ones it does need are still there.
+/// Shape checks for precedence-aware parenthesization. The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish: that the parens a shape does not need are gone, and that the ones it does need are still there.
 #[cfg(test)]
 mod parens {
     use super::*;
@@ -1955,7 +1956,7 @@ mod parens {
     }
 }
 
-/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus `next` into the dispatch loop — never by `catch`/`throw`; a shallow one must keep the `__br` relay, measured cheaper than a dispatch at that depth.
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value (a state assignment plus `next` into the dispatch loop), never by `catch`/`throw`; a shallow one must keep the `__br` relay, measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1968,7 +1969,8 @@ mod cascade {
         src
     }
 
-    // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single `br_table` whose targets span all three nesting depths (self-exit, loop-continue from a nested frame, and outer-block-exit), exercising the fast path, a wrapped loop, and a relayed landing at once.
+    // block $A { loop $B { block $C { br_table $C $B $A } ... } }
+    // A single `br_table` whose targets span all three nesting depths (self-exit, loop-continue from a nested frame, and outer-block-exit), exercising the fast path, a wrapped loop, and a relayed landing at once.
     const MIXED_DEPTHS: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)
@@ -1981,7 +1983,8 @@ mod cascade {
           (local.get 1)))
     "#;
 
-    // block $done { loop $l { br_if $done ...; br $l } } — the standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so the sole-statement exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression — dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
+    // block $done { loop $l { br_if $done ...; br $l } }
+    // The standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so the sole-statement exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression: dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
     const SOLE_LOOP_EXIT: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)
@@ -2011,7 +2014,7 @@ mod cascade {
     }
 
     /// A `br_table` tower `depth` blocks deep whose table names every level, so
-    /// the outermost target is crossed by a branch of exactly that path length —
+    /// the outermost target is crossed by a branch of exactly that path length:
     /// the wasm compilation of a C `switch`, and the shape whose size decides
     /// between the two lowerings.
     fn tower(depth: usize) -> String {

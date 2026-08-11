@@ -1,4 +1,4 @@
-# Decision 2 — Numeric Semantics Strategy for Dynamically-Typed Targets
+# Decision 2: Numeric Semantics Strategy for Dynamically-Typed Targets
 
 Status: **Accepted, 2026-07-23.**
 Backfilled; implemented for Ruby in `runtime/ruby/runtime.rb`.
@@ -12,7 +12,7 @@ Ruby/Python have arbitrary-precision integers and only doubles; the spec testsui
 ## Decision
 
 - **Integers are stored as masked unsigned values** (`x & 0xffffffff` / `& 0xffff...`), the signed view derived only where an instruction needs it (`div_s`, `lt_s`, `shr_s`, ...) via `s32`/`s64` helpers.
-  Criterion: the *storage* representation should make the more mechanical operation free — masking after add/sub/mul is unavoidable either way, while unsigned compare/div/shift come for free on non-negative integers and memory stores need no sign fix-up.
+  Criterion: the *storage* representation should make the more mechanical operation free: masking after add/sub/mul is unavoidable either way, while unsigned compare/div/shift come for free on non-negative integers and memory stores need no sign fix-up.
   This convention is shared by all bignum-style backends so lowering tables stay parallel.
 - **f32/f64 are host doubles; every f32 operation result is re-rounded to single precision.**
   Sound for add/sub/mul/div/sqrt because 53 ≥ 2·24 + 2 (double rounding is innocuous at that precision gap).
@@ -25,8 +25,8 @@ Ruby/Python have arbitrary-precision integers and only doubles; the spec testsui
 
 ## Rejected alternatives
 
-- **Representing floats as bit-pattern integers everywhere** — makes every arithmetic op a pack/unpack round-trip; only needed at the (few) lossy conversion points.
-- **Signed storage representation** — every memory store, unsigned compare, and unsigned div/shift would need fix-ups; the testsuite is dominated by unsigned-view operations.
+- **Representing floats as bit-pattern integers everywhere**: makes every arithmetic op a pack/unpack round-trip; only needed at the (few) lossy conversion points.
+- **Signed storage representation**: every memory store, unsigned compare, and unsigned div/shift would need fix-ups; the testsuite is dominated by unsigned-view operations.
 
 ## Consequences
 

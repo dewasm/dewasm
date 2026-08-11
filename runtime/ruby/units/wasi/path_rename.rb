@@ -11,7 +11,7 @@ def wasi_path_rename(old_dirfd, old_path_ptr, old_path_len, new_dirfd, new_path_
   # The preserved slash lets the host rename(2) enforce the existing and
   # missing shapes; a *nonexistent* slash-suffixed destination is stripped
   # so the rename proceeds, as wasmtime does (issue #42). Probe the
-  # bare path — stat on "x/" fails ENOTDIR and reads as missing.
+  # bare path: stat on "x/" fails ENOTDIR and reads as missing.
   if new_host.end_with?("/")
     new_bare = new_host.delete_suffix("/")
     new_host = new_bare unless File.exist?(new_bare) || File.symlink?(new_bare)

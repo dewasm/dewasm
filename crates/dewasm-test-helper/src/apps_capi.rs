@@ -1,6 +1,6 @@
-//! C-API-driving app cases: a converted library-mode artifact whose C API is driven directly from host-language glue — `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
+//! C-API-driving app cases: a converted library-mode artifact whose C API is driven directly from host-language glue: `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider. Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
 //!
-//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `pcap_compile_e2e!`, `zeroperl_eval_e2e!`, …). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration; every backend does, Bash included — a guest pointer is just a decimal in its `R0` result global and guest memory is the module's byte array (issue #138). These cases reconvert artifacts ranging from 1.5 MB (tree-sitter) to 25 MB (zeroperl), so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
+//! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `pcap_compile_e2e!`, `zeroperl_eval_e2e!`, …). The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir. Which backends invoke a macro is the capability declaration; every backend does, Bash included: a guest pointer is just a decimal in its `R0` result global and guest memory is the module's byte array (issue #138). These cases reconvert artifacts ranging from 1.5 MB (tree-sitter) to 25 MB (zeroperl), so each per-case macro expands its generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; [`run_capi_case`] itself just runs the case unconditionally.
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,7 @@ pub struct CApiCase {
     pub name: &'static str,
     /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`), also the kebab-case name [`BackendUnderTest::module_name`] converts into the conversion module name.
     pub wasm: &'static str,
-    /// The library class name the glue instantiates — what the Pascal derivation of `wasm` yields (the Bash glue instead spells the snake derivation's `<name>_` prefix).
+    /// The library class name the glue instantiates: what the Pascal derivation of `wasm` yields (the Bash glue instead spells the snake derivation's `<name>_` prefix).
     pub class: &'static str,
     /// The fixed stdout the drive must produce (no wasmtime snapshot possible).
     pub expect_stdout: &'static str,
@@ -51,7 +51,7 @@ pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// The same C API opening a *file* under a preopen: create+insert, close, reopen, select — proving the C-API path hits the same fs stack as the shell. The glue preopens the fresh scratch dir via `{scratch}` and leaves a nonzero DB file on the host.
+/// The same C API opening a *file* under a preopen: create+insert, close, reopen, select, proving the C-API path hits the same fs stack as the shell. The glue preopens the fresh scratch dir via `{scratch}` and leaves a nonzero DB file on the host.
 pub const SQLITE3_FILE_C_API: CApiCase = CApiCase {
     name: "sqlite3_file_c_api",
     wasm: "libsqlite3",
@@ -95,7 +95,7 @@ pub const TREESITTER_PARSE: CApiCase = CApiCase {
     assert_host: assert_none,
 };
 
-/// zeroperl Perl-5.42 eval (retraction, issue #67): the prebuilt `@6over3/zeroperl-ts` reactor exposes an embedding C API; the glue drives `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`. The imported `env.call_host_function` is a zero-returning stub (called only if the guest registers host callbacks, which this program does not); `zeroperl_init` needs `/dev/null` resolvable, so the glue preopens it (mapped guest→host `/dev/null`) — without it, init returns 1. The pinned output is a regex + `printf` line, deterministic.
+/// zeroperl Perl-5.42 eval (retraction, issue #67): the prebuilt `@6over3/zeroperl-ts` reactor exposes an embedding C API; the glue drives `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`. The imported `env.call_host_function` is a zero-returning stub (called only if the guest registers host callbacks, which this program does not); `zeroperl_init` needs `/dev/null` resolvable, so the glue preopens it (mapped guest→host `/dev/null`), without which init returns 1. The pinned output is a regex + `printf` line, deterministic.
 pub const ZEROPERL_EVAL: CApiCase = CApiCase {
     name: "zeroperl_eval",
     wasm: "zeroperl",
@@ -124,7 +124,7 @@ pub fn run_capi_case(lang: &dyn BackendUnderTest, case: &CApiCase, glue: &str) {
     let wasm_path = cache.join(format!("{}.wasm", case.wasm));
     assert!(
         wasm_path.exists(),
-        "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
+        "{} not cached: run examples/apps/setup.sh (see docs/testing.md)",
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");

@@ -1,6 +1,6 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
-//! * [`run_once`] times one whole process, spawn to exit, under a hard timeout. The timer starts *before* `spawn` — startup is deliberately inside, because the `<iterations> = 0` run subtracts it back out.
+//! * [`run_once`] times one whole process, spawn to exit, under a hard timeout. The timer starts *before* `spawn`: startup is deliberately inside, because the `<iterations> = 0` run subtracts it back out.
 //! * [`calibrate`] ramps the iteration count per runner until the compute time reaches the target; a fixed count cannot serve runners thousands of times apart.
 //! * [`stats`] reports minimum *and* median, so noise is visible instead of hidden.
 
@@ -134,7 +134,7 @@ pub fn run_once(
     })
 }
 
-/// App sampling: one sample is the mean of `k` back-to-back executions, with `k` chosen from the warmup's wall time so a sample lasts roughly `target` — the iteration calibration applied at the process level, since an app has no `<iterations>` to scale. A run slower than the target keeps `k = 1`. Returns `(k, samples, last outcome)`; the measured quantity is still one whole execution, batching only steadies it.
+/// App sampling: one sample is the mean of `k` back-to-back executions, with `k` chosen from the warmup's wall time so a sample lasts roughly `target`: the iteration calibration applied at the process level, since an app has no `<iterations>` to scale. A run slower than the target keeps `k = 1`. Returns `(k, samples, last outcome)`; the measured quantity is still one whole execution, batching only steadies it.
 pub fn repeat_app(
     launch: &Launch,
     args: &[String],

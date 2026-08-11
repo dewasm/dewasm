@@ -1,10 +1,10 @@
 ;; Per-fd rights enforcement: every probe prints "<tag><errno as two
 ;; decimal digits>\n" so the expected stdout pins each errno exactly.
-;;   a/b/c/d — setup steps that must succeed (00),
-;;   p/w     — fd_pread/fd_pwrite on a fd narrowed to no rights (76 NOTCAPABLE),
-;;   t       — O_TRUNC open under a dirfd without PATH_FILESTAT_SET_SIZE (76,
-;;             and the host file must stay untruncated),
-;;   o       — any open under a dirfd without PATH_OPEN (76).
+;;   a/b/c/d: setup steps that must succeed (00),
+;;   p/w:     fd_pread/fd_pwrite on a fd narrowed to no rights (76 NOTCAPABLE),
+;;   t:       O_TRUNC open under a dirfd without PATH_FILESTAT_SET_SIZE (76,
+;;            and the host file must stay untruncated),
+;;   o:       any open under a dirfd without PATH_OPEN (76).
 (module
   (import "wasi_snapshot_preview1" "path_open"
     (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
@@ -55,7 +55,7 @@
     ;; c: narrow the preopen dirfd to PATH_OPEN only (0x2000), inheriting rw.
     (call $report (i32.const 99)
       (call $set_rights (i32.const 3) (i64.const 0x2000) (i64.const 0x42)))
-    ;; t: O_TRUNC (oflags 0x8) without PATH_FILESTAT_SET_SIZE is NOTCAPABLE —
+    ;; t: O_TRUNC (oflags 0x8) without PATH_FILESTAT_SET_SIZE is NOTCAPABLE,
     ;; and must not truncate the host file.
     (call $report (i32.const 116)
       (call $path_open (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 8)

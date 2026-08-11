@@ -1,10 +1,10 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_unlink_file: one of the four namespace-mutation units
-# licensed to shell out — a single `--`-guarded `rm` (never `-r`) on the
+# licensed to shell out, a single `--`-guarded `rm` (never `-r`) on the
 # resolved physical path. unlink(2) never follows a trailing symlink (it
 # removes the link itself), so resolution uses follow_last=0, mirroring
 # runtime/ruby/units/wasi/path_unlink_file.rb. A directory target is rejected
-# up front with the host-split errno wasmtime inherits — EPERM on macOS,
+# up front with the host-split errno wasmtime inherits: EPERM on macOS,
 # EISDIR on Linux. A missing path is ENOENT; any other `rm` failure
 # defaults to EIO.
 wasi_path_unlink_file() {

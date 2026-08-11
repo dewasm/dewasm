@@ -1,12 +1,12 @@
 # requires: mem/check, mem/i32_store, wasi/filetype
 # WASI fd_readdir: the first call for a dir fd snapshots the listing
-# into <p>wdn<fd>/<p>wdt<fd> (names/filetypes) — glob the host directory once
+# into <p>wdn<fd>/<p>wdt<fd> (names/filetypes). Glob the host directory once
 # with dotglob+nullglob (restored unconditionally right after, via the saved
 # `shopt -p` string), strip to basenames, insertion-sort byte-wise
 # (`LC_ALL=C`; Bash has no builtin sort), then prepend "."/".." (type 3).
 # Later calls for the same fd reuse the cached snapshot, so the cookie is a
 # stable 1-based index into a point-in-time listing, not a live cursor under
-# concurrent mutation — mirrors runtime/ruby/units/wasi/fd_readdir.rb's
+# concurrent mutation. Mirrors runtime/ruby/units/wasi/fd_readdir.rb's
 # `WasiDir#entries` cache and Ruby's own `.sort` (byte order under LC_ALL=C).
 # Packs the 24-byte dirent (d_next u64 resume cookie, d_ino u64 = 0, d_namlen
 # u32, d_type u8 + 3 pad) followed by the unpadded name bytes; a dirent may be

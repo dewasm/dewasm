@@ -24,7 +24,7 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory). The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit — but every actual reference-types construct is rejected during IR building. Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
+/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory). The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit, but every actual reference-types construct is rejected during IR building. Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
 pub fn features() -> WasmFeatures {
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION
@@ -424,7 +424,7 @@ pub(crate) fn heap_type_feature(hty: &wasmparser::HeapType) -> Feature {
     }
 }
 
-/// Evaluate a constant expression: a plain constant, or (MVP rule) a `global.get` of an imported immutable global — the validator already enforces that constraint, so the index is used as-is. Reference constants only appear in element items (`elem_item_expr`); a global whose init is a reference constant is rejected earlier by `val_type` refusing its ref-typed content type.
+/// Evaluate a constant expression: a plain constant, or (MVP rule) a `global.get` of an imported immutable global: the validator already enforces that constraint, so the index is used as-is. Reference constants only appear in element items (`elem_item_expr`); a global whose init is a reference constant is rejected earlier by `val_type` refusing its ref-typed content type.
 fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {

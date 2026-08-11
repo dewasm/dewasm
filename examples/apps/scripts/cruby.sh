@@ -7,13 +7,13 @@
 # interpreter reads at startup; the multi-hundred-MB libruby-static.a and the
 # rest of the tree are not needed at run time and are left out (the extract
 # helpers unpack only the two named members). The e2e case preopens
-# cache/ruby-lib/usr at guest /usr. Ruby-only, heavy — execution behind the
+# cache/ruby-lib/usr at guest /usr. Ruby-only, heavy: execution behind the
 # `heavy_test` cargo feature. The "Ruby on Ruby" goal demo
 # (docs/apps-audit.md).
 #
 # A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended
 # deployment shape: the same module with the stdlib embedded by
-# `wasi-vfs pack` (wizer pre-initialization), self-contained — no preopens.
+# `wasi-vfs pack` (wizer pre-initialization), self-contained: no preopens.
 # The official build links libwasi_vfs.a, which is what makes packing work.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"

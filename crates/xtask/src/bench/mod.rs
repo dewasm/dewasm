@@ -1,16 +1,16 @@
-//! `cargo xtask bench` — the cross-runtime benchmark suite.
+//! `cargo xtask bench`: the cross-runtime benchmark suite.
 //!
-//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`. Neither is a compared snapshot — a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
+//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite). Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`. Neither is a compared snapshot: a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
 //!
 //! The modules:
 //!
-//! * [`workload`] — what is measured: `<module> <iterations>` microbenchmarks discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
-//! * [`runner`] — where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
-//! * [`measure`] — how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
-//! * [`report`] — the JSON record and the markdown rendering of it.
-//! * [`chart`] — the static SVGs `docs/benchmarks/results.md` embeds, one per workload, regenerated from the same record.
+//! * [`workload`] is what is measured: `<module> <iterations>` microbenchmarks discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
+//! * [`runner`] is where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
+//! * [`measure`] is how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
+//! * [`report`]: the JSON record and the markdown rendering of it.
+//! * [`chart`]: the static SVGs `docs/benchmarks/results.md` embeds, one per workload, regenerated from the same record.
 //!
-//! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero — a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one.
+//! Two rules run through all of it. Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero: a wrong answer produced quickly is not a result. And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one.
 
 // `chart`, `report` and `runner` are also what `cargo xtask size` is built on: the same lollipop drawing, the same host block, the same runtime table.
 pub mod chart;
@@ -34,7 +34,7 @@ use crate::bench::workload::Workload;
 const DEFAULT_REPS: usize = 5;
 /// Default compute time the iteration calibrator aims each sample at.
 const DEFAULT_TARGET_MS: u64 = 300;
-/// Default per-process wall-clock ceiling. Generous — a Bash sample legitimately takes minutes — but finite, so a runner that turns out slower than expected costs one timeout instead of hanging the suite.
+/// Default per-process wall-clock ceiling. Generous (a Bash sample legitimately takes minutes) but finite, so a runner that turns out slower than expected costs one timeout instead of hanging the suite.
 const DEFAULT_TIMEOUT_S: u64 = 900;
 
 struct Options {
@@ -43,7 +43,7 @@ struct Options {
     target: Duration,
     timeout: Duration,
     list: bool,
-    /// Re-render `docs/benchmarks/results.md` from a stored result file instead of measuring. A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring — the JSON is the record, the markdown is only a view of it.
+    /// Re-render `docs/benchmarks/results.md` from a stored result file instead of measuring. A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring: the JSON is the record, the markdown is only a view of it.
     render: Option<PathBuf>,
 }
 
@@ -221,7 +221,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
         .expect("the matrix always contains wasmtime")
         .availability()
     {
-        bail!("{reason} — the benchmark suite needs wasmtime as its baseline and its correctness reference");
+        bail!("{reason}: the benchmark suite needs wasmtime as its baseline and its correctness reference");
     }
 
     let runtimes: Vec<report::Runtime> = runners
@@ -570,17 +570,17 @@ fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
 
-/// `benchmarks/cache/` — built microbenchmark modules, one subdirectory per family (`wat/`, `c/`), *and* the interpreter dependencies `benchmarks/setup.sh` provisions.
+/// `benchmarks/cache/`: built microbenchmark modules, one subdirectory per family (`wat/`, `c/`), *and* the interpreter dependencies `benchmarks/setup.sh` provisions.
 pub fn bench_cache_dir() -> PathBuf {
     bench_root().join("cache")
 }
 
-/// `benchmarks/drivers/` — the pywasm and wardite driver scripts.
+/// `benchmarks/drivers/`: the pywasm and wardite driver scripts.
 pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
 
-/// `benchmarks/results/` — every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
+/// `benchmarks/results/` holds every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
 pub fn results_dir() -> PathBuf {
     bench_root().join("results")
 }
@@ -589,7 +589,7 @@ pub fn docs_dir() -> PathBuf {
     repo_root().join("docs")
 }
 
-/// `docs/benchmarks/figs/` — the generated SVG charts `docs/benchmarks/results.md` embeds.
+/// `docs/benchmarks/figs/`: the generated SVG charts `docs/benchmarks/results.md` embeds.
 fn charts_dir() -> PathBuf {
     docs_dir().join("benchmarks").join("figs")
 }
@@ -683,7 +683,7 @@ pub fn utc_timestamp() -> String {
     )
 }
 
-/// Days since the Unix epoch to a civil `(year, month, day)` — Howard Hinnant's `civil_from_days`, which is exact for the whole proleptic Gregorian range.
+/// Days since the Unix epoch to a civil `(year, month, day)`: Howard Hinnant's `civil_from_days`, which is exact for the whole proleptic Gregorian range.
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let shifted = days + 719_468;
     let era = if shifted >= 0 {

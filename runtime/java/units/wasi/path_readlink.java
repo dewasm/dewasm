@@ -1,6 +1,6 @@
 // requires: memory/read_string, memory/init, memory/i32_store, wasi/resolve_path, wasi/errno_fs
 // The link itself is resolved NOFOLLOW; the target string is returned verbatim
-// (as the guest wrote it at symlink time), truncated to buf_len — a short buffer
+// (as the guest wrote it at symlink time), truncated to buf_len: a short buffer
 // takes the leading bytes, matching the WASI contract, with bufused reporting
 // what was written.
 int wasi_path_readlink(int fd, int pathPtr, int pathLen, int bufPtr, int bufLen, int bufusedPtr) {
@@ -12,8 +12,8 @@ int wasi_path_readlink(int fd, int pathPtr, int pathLen, int bufPtr, int bufLen,
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
-    // An existing slash-suffixed name resolved (following) to a directory —
-    // non-directories were ENOTDIR in resolve_path — and a directory is not a
+    // An existing slash-suffixed name resolved (following) to a directory
+    // (non-directories were ENOTDIR in resolve_path) and a directory is not a
     // symlink: EINVAL, like the host readlink(2). Missing falls through.
     if (rel.endsWith("/") && java.nio.file.Files.exists(p)) {
         return WASI_INVAL;

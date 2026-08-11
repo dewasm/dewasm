@@ -1,7 +1,7 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_link: create a hard link <new_path> under <new_fd> to the
 # existing <old_path> under <old_fd>. A licensed `--`-guarded `ln -P` (beyond
-# the four mkdir/rmdir/rm/mv commands) — `-P` hard-links a symlink source
+# the four mkdir/rmdir/rm/mv commands): `-P` hard-links a symlink source
 # itself rather than its pointee, so a link to a dangling or looping symlink is
 # created without ever following it. Both endpoints are resolved with sandbox
 # containment, NOFOLLOW (hard-linking never dereferences a trailing symlink).

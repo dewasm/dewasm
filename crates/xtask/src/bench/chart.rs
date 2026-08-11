@@ -2,9 +2,9 @@
 //!
 //! SVG files, not Mermaid: the span forces a log10 axis, which Mermaid's `xychart` lacks. Two files per chart, not CSS `prefers-color-scheme`: GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between baked-in modes.
 //!
-//! The form is a horizontal lollipop, fastest at the top — not bars, because a bar encodes length from a zero that a log axis does not have. Color carries the runner family, never the rank, and every row is direct-labelled.
+//! The form is a horizontal lollipop, fastest at the top, not bars, because a bar encodes length from a zero that a log axis does not have. Color carries the runner family, never the rank, and every row is direct-labelled.
 //!
-//! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app — the title says which), never a ratio, so charts can be read against each other. The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
+//! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app, the title says which), never a ratio, so charts can be read against each other. The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
 //!
 //! [`lollipop`] and the theme around it are the drawing, with the unit left open; `cargo xtask size` draws its byte figures with the same function so the two records look like one family of charts.
 
@@ -39,7 +39,7 @@ pub struct Chart {
     pub dark: String,
 }
 
-/// What one point on the axis is a duration *of*. Both arms are seconds — this only names the denominator, which the title and alt text have to state or the two kinds of chart would look comparable when they are not.
+/// What one point on the axis is a duration *of*. Both arms are seconds: this only names the denominator, which the title and alt text have to state or the two kinds of chart would look comparable when they are not.
 #[derive(Clone, Copy, PartialEq)]
 enum Quantity {
     /// A microbenchmark: compute time `t(N) - t(0)` divided by the calibrated iteration count.
@@ -64,9 +64,9 @@ pub enum Family {
     /// wasmtime here; the wasm binary itself in the size record.
     Baseline,
     Dewasm,
-    /// A wasm runtime executing the module natively — wasmer, wasmedge, wazero, wasm3. Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
+    /// A wasm runtime executing the module natively: wasmer, wasmedge, wazero, wasm3. Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
     Native,
-    /// A wasm interpreter written in a host language — pywasm, wardite. The comparison dewasm actually cares about.
+    /// A wasm interpreter written in a host language: pywasm, wardite. The comparison dewasm actually cares about.
     Interpreter,
 }
 
@@ -81,7 +81,7 @@ fn family(runner: &str) -> Family {
     }
 }
 
-/// Slots 1-4 of the validated categorical palette, plus the surface and text tokens. Dark is a selected variant — its own steps for the dark surface, not an inversion of the light one.
+/// Slots 1-4 of the validated categorical palette, plus the surface and text tokens. Dark is a selected variant: its own steps for the dark surface, not an inversion of the light one.
 pub struct Theme {
     surface: &'static str,
     text_primary: &'static str,
@@ -148,7 +148,7 @@ const BENCH_LEGEND: [(Family, &str); 4] = [
     (Family::Interpreter, "wasm interpreters in a host language"),
 ];
 
-/// A chart for every workload the record has at least two measurements for, in document order. A workload the run did not cover simply produces none — `--render` has to work on an old or filtered record too.
+/// A chart for every workload the record has at least two measurements for, in document order. A workload the run did not cover simply produces none: `--render` has to work on an old or filtered record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
     ordered_workloads(report)
         .into_iter()
@@ -243,7 +243,7 @@ pub fn lollipop(
     let plot_bottom = PLOT_TOP + ROW_H * rows.len() as f64;
     let height = plot_bottom + 30.0;
 
-    // The axis starts at the power of ten at or below the fastest value, so the fastest row still gets a readable rule, and ends at the slowest value itself — rounding that end up to the next power of ten would leave most of the plot empty.
+    // The axis starts at the power of ten at or below the fastest value, so the fastest row still gets a readable rule, and ends at the slowest value itself: rounding that end up to the next power of ten would leave most of the plot empty.
     let min = rows[0].value;
     let max = rows[rows.len() - 1].value;
     let first_tick = min.log10().floor() as i32;
@@ -372,7 +372,7 @@ fn text_width(text: &str, font_size: f64) -> f64 {
     text.chars().count() as f64 * font_size * 0.55
 }
 
-/// A factor between two plotted values, used for the span sentence in the alt text. Rounded to three significant figures above 1000x — `23100x`, not `23102x`.
+/// A factor between two plotted values, used for the span sentence in the alt text. Rounded to three significant figures above 1000x: `23100x`, not `23102x`.
 pub fn fmt_ratio(ratio: f64) -> String {
     if ratio < 10.0 {
         format!("{ratio:.2}x")
@@ -392,7 +392,7 @@ fn si_unit(seconds: f64) -> (f64, &'static str) {
         .unwrap_or((1e-9, "ns"))
 }
 
-/// A duration at three significant figures with an SI prefix — `2.41 ns`, `55.0 µs`, `1.23 s`. The unit is chosen from the *rounded* value, so 999.6 ns reads `1.00 µs` rather than `1000 ns`.
+/// A duration at three significant figures with an SI prefix: `2.41 ns`, `55.0 µs`, `1.23 s`. The unit is chosen from the *rounded* value, so 999.6 ns reads `1.00 µs` rather than `1000 ns`.
 fn fmt_time(seconds: f64) -> String {
     let rounded = round3(seconds);
     let (scale, unit) = si_unit(rounded);
@@ -407,7 +407,7 @@ fn fmt_time(seconds: f64) -> String {
     format!("{mantissa:.decimals$} {unit}")
 }
 
-/// A power-of-ten gridline label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`. Bare mantissa and unit, no decimals — an exponent (`1e-9`) is a notation a reader has to decode, and these labels are read at a glance.
+/// A power-of-ten gridline label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`. Bare mantissa and unit, no decimals: an exponent (`1e-9`) is a notation a reader has to decode, and these labels are read at a glance.
 fn fmt_tick(seconds: f64) -> String {
     let (scale, unit) = si_unit(seconds);
     format!("{:.0} {unit}", seconds / scale)

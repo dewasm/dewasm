@@ -72,7 +72,7 @@ fn write(path: &Path, contents: &str) {
 /// Run a Ruby program from its own directory (so `__dir__`-relative sidecar loads resolve), returning (stdout, exit code).
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby =
-        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .args(args)
@@ -85,7 +85,7 @@ fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 /// `go build` a program in its own directory (so `//go:embed` resolves) and run the resulting binary, returning (stdout, exit code).
 fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
     let dir = prog.parent().unwrap();
     let bin = dir.join("prog_bin");
     let build = Command::new(&go)
@@ -111,7 +111,7 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 
 /// Run a Python program from its own directory (so the sidecar, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
 fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
-    let python = find_python().expect("python3 not found on PATH — see docs/testing.md");
+    let python = find_python().expect("python3 not found on PATH: see docs/testing.md");
     let out = Command::new(python)
         .arg(prog)
         .args(args)
@@ -124,7 +124,7 @@ fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 /// Run a Perl program from its own directory (so the sidecar, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
 fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let perl = find_perl()
-        .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md");
+        .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md");
     let out = Command::new(perl)
         .arg(prog)
         .args(args)
@@ -152,7 +152,7 @@ fn compile_java(src: &Path, classdir: &Path) {
 
 /// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the sidecar sitting alongside `Main.class`), returning (stdout, exit code).
 fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
-    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
     let out = Command::new(&java)
         .arg("-cp")
         .arg(classdir)
@@ -649,7 +649,7 @@ fn ruby_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-ruby");
@@ -705,7 +705,7 @@ fn go_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-go");
@@ -765,7 +765,7 @@ fn python_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-python");
@@ -821,7 +821,7 @@ fn java_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-java");

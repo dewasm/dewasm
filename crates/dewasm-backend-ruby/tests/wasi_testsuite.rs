@@ -6,7 +6,7 @@ use dewasm_backend::Backend;
 use dewasm_backend_ruby::RubyBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution: `(trial, tag)`. Two kinds remain, both attributed honestly: * declared out-of-scope syscalls (`sock_shutdown`; docs/support.md) — filling the gap later flips the entry to a hard failure; * environment variables the host interpreter itself injects (macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest legitimately observes, so count-exact `environ_*` assertions cannot hold even though the harness runs trials with a cleared environment.
+/// Known trial failures with their attribution: `(trial, tag)`. Two kinds remain, both attributed honestly: * declared out-of-scope syscalls (`sock_shutdown`; docs/support.md): filling the gap later flips the entry to a hard failure; * environment variables the host interpreter itself injects (macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`), which the guest legitimately observes, so count-exact `environ_*` assertions cannot hold even though the harness runs trials with a cleared environment.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscalls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -42,7 +42,7 @@ impl BackendUnderTest for RubyWasi {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_ruby::find_ruby()
-            .expect("ruby not found on PATH (or $DEWASM_RUBY) — see docs/testing.md")
+            .expect("ruby not found on PATH (or $DEWASM_RUBY): see docs/testing.md")
     }
 }
 

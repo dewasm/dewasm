@@ -19,7 +19,7 @@ impl BackendUnderTest for Perl {
 
     fn interpreter(&self) -> PathBuf {
         find_perl()
-            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
+            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md")
     }
 
     /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file and return the `require` preamble that loads them. The paths are absolute: `require` searches `@INC` for anything else, and `.` has not been on `@INC` since perl 5.26. Each file ends with `1;` so `require` sees the true value it demands. `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) written to `rt.pl`, required by every module file, so an imported table crosses modules; otherwise each file is a self-contained Embedded conversion carrying its own `<Package>::Rt`.
@@ -132,7 +132,7 @@ print $wasi->{out};
 print 'bundled wasi constructed: ', (defined $inst->{_wasi} ? 'true' : 'false'), "\n";
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back — so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
 const PERL_PARTIAL_OVERRIDE_GLUE: &str = r#"my $inst;
 my $captured = '';
 my $fd_write = sub {
@@ -150,7 +150,8 @@ print $captured;
 print 'bundled wasi constructed: ', (defined $inst->{_wasi} ? 'true' : 'false'), "\n";
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect STDOUT's file descriptor to an anonymous (unlinked) temp file — perl's native embedder-controlled sink that still supports the runtime's raw syswrite — run, restore, then print the captured bytes to the real stdout.
+/// The `wasi_stdio_capture` glue: redirect STDOUT's file descriptor to an anonymous (unlinked) temp file, run, restore, then print the captured bytes to the real stdout.
+/// The temp file is perl's native embedder-controlled sink that still supports the runtime's raw syswrite.
 const PERL_STDIO_CAPTURE_GLUE: &str = r#"open(my $cap, '+>', undef) or die "capture: $!";
 open(my $saved, '>&', \*STDOUT) or die "dup: $!";
 open(STDOUT, '>&', $cap) or die "redirect: $!";
@@ -411,7 +412,7 @@ print "TS-OK\n";
 
 /// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
 /// zero-returning `env.call_host_function` import stub (only invoked when the
-/// guest registers host callbacks — this program registers none) and a
+/// guest registers host callbacks: this program registers none) and a
 /// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
 /// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
 /// memory → `zeroperl_eval` → `zeroperl_flush`. Perl-on-Perl: the guest snippet

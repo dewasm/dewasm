@@ -1,7 +1,7 @@
 # requires: wasi/fd_flush
 # WASI fd_renumber: atomically move the open fd <from> into the slot
-# <to>, closing whatever <to> was. Both must currently be open — an unopened
-# endpoint is EBADF (8) — which is why `fd_renumber(valid, closed)` fails and
+# <to>, closing whatever <to> was. Both must currently be open: an unopened
+# endpoint is EBADF (8). That is why `fd_renumber(valid, closed)` fails and
 # why renumbering onto stdio or a preopen (both open) works. Every parallel
 # fd-table slot (kind, offset, path, name, rights, fdflags, append, dirty) and,
 # for a regular-file fd, the whole-file byte buffer moves from <from> to <to>;

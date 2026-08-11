@@ -5,13 +5,13 @@
 # sqlite3: built from the pinned amalgamation source with zig.
 #
 # One pinned source release yields three artifacts:
-#   cache/sqlite3-shell.wasm   — the CLI shell (standalone: _start, stdio)
-#   cache/libsqlite3.wasm      — a reactor library exporting the sqlite3 C
-#                                API, driven from Ruby in the apps e2e
-#   cache/sqlite3-binding.wasm — the same reactor library plus our own
-#                                src/sqlite3_binding.c (run_query), which
-#                                calls back into an imported env.host_row:
-#                                a guest->host callback round-trip proof
+#   cache/sqlite3-shell.wasm:   the CLI shell (standalone: _start, stdio)
+#   cache/libsqlite3.wasm:      a reactor library exporting the sqlite3 C
+#                               API, driven from Ruby in the apps e2e
+#   cache/sqlite3-binding.wasm: the same reactor library plus our own
+#                               src/sqlite3_binding.c (run_query), which
+#                               calls back into an imported env.host_row:
+#                               a guest->host callback round-trip proof
 # No upstream distributes a C-API-exporting wasm32-wasi build, which is
 # why these are compiled locally rather than downloaded.
 

@@ -53,7 +53,7 @@ DIR_BASE_RIGHTS = RIGHT_PATH_CREATE_DIRECTORY | RIGHT_PATH_CREATE_FILE |
 DIR_INHERITING_RIGHTS = DIR_BASE_RIGHTS | FILE_BASE_RIGHTS
 
 # True when fd's stored base rights include `right`. An fd with no meta
-# (should not happen — every entry is seeded) is treated as fully capable.
+# (should not happen: every entry is seeded) is treated as fully capable.
 def fd_has_right?(fd, right)
   meta = @fd_meta[fd]
   meta.nil? || (meta[0] & right) == right

@@ -1,11 +1,11 @@
 /*
- * pcap_binding.c — our own committed C source (first-party source is
+ * pcap_binding.c: our own committed C source (first-party source is
  * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * A reactor library exporting a single BPF-filter-compilation entry point on
  * top of libpcap's platform-independent compiler (gencode.c/optimize.c). No
  * capture backend is built (see src/pcap_config.h); only pcap_compile_nopcap()
- * — which turns a textual filter like "tcp port 80" into a BPF program — is
+ * (which turns a textual filter like "tcp port 80" into a BPF program) is
  * reachable. Built into cache/libpcap.wasm by examples/apps/scripts/libpcap.sh from the
  * pinned upstream release, with the same zig reactor flags as the sqlite3
  * apps.
@@ -24,7 +24,7 @@
  * prototypes live in <netdb.h>) but ships no implementation, so the reactor
  * link would otherwise fail with undefined symbols. Name-based filters are
  * out of scope for this demo (which compiles numeric filters like
- * "tcp port 80"), so these stubs simply report "not found" — the numeric
+ * "tcp port 80"), so these stubs simply report "not found". The numeric
  * path never calls them.
  */
 int getaddrinfo(const char *node, const char *service,
@@ -57,7 +57,7 @@ struct netent *getnetbyname(const char *name) {
  * Returns the guest pointer to that buffer, or 0 on any error (compile
  * failure or out-of-memory). The caller reads bf_len, then that many 8-byte
  * instructions, and frees the buffer with free(). NB: an *invalid* filter
- * expression traps rather than returning 0 — libpcap reports filter syntax
+ * expression traps rather than returning 0: libpcap reports filter syntax
  * errors via longjmp, and the baseline-wasm setjmp/longjmp stand-in in
  * src/pcap_config.h turns that unwind into a trap. Valid filters, the only
  * ones this demo drives, compile and serialize normally.

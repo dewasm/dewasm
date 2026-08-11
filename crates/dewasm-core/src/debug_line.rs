@@ -9,7 +9,7 @@ use crate::ir::SourcePos;
 
 /// The wasm DWARF code-address convention.
 ///
-/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset. But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets. So to look a resolved operator up in the line table we subtract the code section's content start — that is the address base.
+/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset. But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets. So to look a resolved operator up in the line table we subtract the code section's content start, and that is the address base.
 fn address_base(code_section_start: u64) -> u64 {
     code_section_start
 }
@@ -60,7 +60,7 @@ impl LineTable {
             };
             let mut state = program.rows();
             while let Some((header, row)) = state.next_row().context("reading a line-table row")? {
-                // An `end_sequence` boundary, or a row DWARF marks as having no source line (line 0 — a compiler-generated prologue or epilogue), maps to nothing: record it as a gap so a lookup landing there yields no position rather than a bogus `line 0` directive (which Go's `//line` rejects).
+                // An `end_sequence` boundary, or a row DWARF marks as having no source line (line 0, a compiler-generated prologue or epilogue), maps to nothing: record it as a gap so a lookup landing there yields no position rather than a bogus `line 0` directive (which Go's `//line` rejects).
                 if row.end_sequence() || row.line().is_none() {
                     rows.push(Row {
                         address: row.address(),

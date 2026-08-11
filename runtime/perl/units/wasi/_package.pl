@@ -75,7 +75,7 @@ use constant DIR_RIGHTS_INHERITING => DIR_RIGHTS_BASE | FILE_RIGHTS_BASE;
 # * stdio:  { fh => glob ref, std => 0|1|2 } (SPIPE on seek/tell/pread/
 #   pwrite, never closed; keyed by the `std` field, in lockstep with the
 #   fd table, not by whatever the globals point at when a syscall runs);
-# * file:   { fh => handle, path => host path } — sysopen'd, unbuffered
+# * file:   { fh => handle, path => host path }, sysopen'd, unbuffered
 #   (sysread/syswrite/sysseek only), so pread/pwrite emulation and
 #   read/write/seek stay coherent on one fd (sqlite mixes both);
 # * dir:    { dir => 1, path => realpath'd host path, preopen => guest
@@ -110,7 +110,7 @@ sub new {
     for my $guest (sort keys %$preopens) {
         # The host path must resolve, but need not be a directory: like the
         # Ruby runtime, a single-file preopen (e.g. '/dev/null' for the
-        # zeroperl reactor's init probe) is accepted — the guest resolves
+        # zeroperl reactor's init probe) is accepted: the guest resolves
         # it as the preopen root itself.
         my $real = Cwd::realpath($preopens->{$guest});
         die "preopen '$guest' => '$preopens->{$guest}': does not exist\n"

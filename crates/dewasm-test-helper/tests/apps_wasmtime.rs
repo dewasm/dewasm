@@ -4,7 +4,7 @@
 //! Build it once with `cargo build -p xtask`; this suite never builds it and never skips when it is missing.
 //!
 //! Named `apps_wasmtime` for the family: a future engine-under-test (wasmer, wasmedge) would join here the same way.
-//! Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise — this suite exists to check the checker, not to run on every `cargo test`.
+//! Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise: this suite exists to check the checker, not to run on every `cargo test`.
 //!
 //! Run it with:
 //!
@@ -51,7 +51,7 @@ fn sqlite3_shell() {
     );
 }
 
-// The wasi-vfs-packed CRuby: its `AppCase` expectation is an inline string (deterministic one-liner, same convention as the interpreter fs hellos), so this run is what validates it against a live engine — with zero preopens, which is the point of the packed shape.
+// The wasi-vfs-packed CRuby: its `AppCase` expectation is an inline string (deterministic one-liner, same convention as the interpreter fs hellos), so this run is what validates it against a live engine, with zero preopens, which is the point of the packed shape.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn cruby_packed_hello() {
@@ -140,7 +140,7 @@ fn assert_frame_snapshot(subcommand: &str, path: &std::path::Path) {
     );
     let snapshot = std::fs::read(path).unwrap_or_else(|e| {
         panic!(
-            "{} not readable ({e}) — regenerate with `cargo xtask update-snapshots` \
+            "{} not readable ({e}): regenerate with `cargo xtask update-snapshots` \
              (see docs/testing.md)",
             path.display()
         )
@@ -166,14 +166,14 @@ fn qjs_repl_interactive_snapshot() {
     let snapshot =
         std::fs::read(dewasm_test_helper::qjs_repl_snapshot_path()).unwrap_or_else(|e| {
             panic!(
-                "qjs repl snapshot {:?} not readable ({e}) — regenerate with \
+                "qjs repl snapshot {:?} not readable ({e}): regenerate with \
              `cargo xtask update-snapshots` (see docs/testing.md)",
                 dewasm_test_helper::qjs_repl_snapshot_path()
             )
         });
     let got = dewasm_test_helper::capture_qjs_repl_transcript(&dewasm_test_helper::Wasmtime);
     // Under Linux the engine leaves one extra trailing CRLF on pty teardown that macOS (where the snapshot was captured) does not; the converted backends match the snapshot byte-for-byte on both hosts, so the difference is in the engine's exit path, outside the transcript's meaningful content (it ends at the `\q` echo).
-    // Compare modulo trailing CRLFs here only — the per-backend comparison stays exact (issue #33).
+    // Compare modulo trailing CRLFs here only: the per-backend comparison stays exact (issue #33).
     dewasm_test_helper::assert_transcript_eq(
         trim_trailing_crlfs(&got),
         trim_trailing_crlfs(&snapshot),

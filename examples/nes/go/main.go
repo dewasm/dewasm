@@ -1,7 +1,7 @@
 // Command nes is an interactive frontend for the dewasm-generated NES
 // library (nes_gen.go, produced from the agnes-based cache/nes.wasm by
-// build.sh). Unlike the DOOM frontend, nes.wasm has zero host imports —
-// there's nothing to wire up — so main.go only has to load a ROM into the
+// build.sh). Unlike the DOOM frontend, nes.wasm has zero host imports
+// (there's nothing to wire up), so main.go only has to load a ROM into the
 // module's linear memory and drive the game loop with ebiten for rendering
 // and keyboard input.
 //

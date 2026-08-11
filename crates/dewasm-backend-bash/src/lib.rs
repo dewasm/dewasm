@@ -5,7 +5,7 @@
 //! - f32/f64 are their bit patterns (u32 / signed-64), computed by the pure-Bash softfloat units; reinterprets and float loads/stores are the identity over the integer paths.
 //! - Structured control flow maps to `while :; do ...; break; done` wrappers; `br` becomes `break N`/`continue N` (bash counts only loops, `if` adds no level). Unreferenced labels emit no wrapper.
 //! - Functions return values through the globals `R0, R1, ...`; traps set `TRAP_MSG` and propagate status 134 through `|| return $?` chains. Every generated function ends with an explicit `return 0` because a trailing arithmetic statement would leak status 1.
-//! - One module instance per generation-time prefix: functions `<p>f<i>`, state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space table), entry points `<p>init`, `<p>invoke`, `<p>global_get`, and — for `Embedded` linkage — the bundled runtime under the same prefix (`<p>rt_trap`, `<p>mem_i32_load`, ...). `TRAP_MSG`, `EXIT_CODE`, the `R0..` result registers and `IMPORTS`/`PROVIDERS` stay global: they are the calling protocol two artifacts must share to link at all. Imported functions resolve from the caller's `IMPORTS` array; other import kinds resolve through `PROVIDERS` + per-kind export maps, with imported globals and imported memory aliased in via `declare -gn` namerefs.
+//! - One module instance per generation-time prefix: functions `<p>f<i>`, state `<p>g<i>`/`<p>mem`/`<p>t<i>` (per unified-index-space table), entry points `<p>init`, `<p>invoke`, `<p>global_get`, and, for `Embedded` linkage, the bundled runtime under the same prefix (`<p>rt_trap`, `<p>mem_i32_load`, ...). `TRAP_MSG`, `EXIT_CODE`, the `R0..` result registers and `IMPORTS`/`PROVIDERS` stay global: they are the calling protocol two artifacts must share to link at all. Imported functions resolve from the caller's `IMPORTS` array; other import kinds resolve through `PROVIDERS` + per-kind export maps, with imported globals and imported memory aliased in via `declare -gn` namerefs.
 //!
 //! Requires bash >= 5 (namerefs, associative arrays).
 
@@ -71,7 +71,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     bundler().bundle(seeds, 0)
 }
 
-/// Rewrite every runtime function name in a bundle to carry `prefix`, so the artifact's runtime is its own: `rt_trap` -> `<p>rt_trap`, `mem_i32_load` -> `<p>mem_i32_load`. A name is an identifier starting at a non-word character and beginning with one of the four unit scopes — the same grammar the units lint uses to find cross-unit references, which is what makes the rewrite complete. Definitions and call sites are both identifiers, so one pass over the text moves the whole runtime; a units lint keeps these names out of string literals, where a rewrite would change program-visible text. Applied to the bundle only, never to the generated module body (which can be hundreds of megabytes): its call sites are emitted with the prefix already in place.
+/// Rewrite every runtime function name in a bundle to carry `prefix`, so the artifact's runtime is its own: `rt_trap` -> `<p>rt_trap`, `mem_i32_load` -> `<p>mem_i32_load`. A name is an identifier starting at a non-word character and beginning with one of the four unit scopes: the same grammar the units lint uses to find cross-unit references, which is what makes the rewrite complete. Definitions and call sites are both identifiers, so one pass over the text moves the whole runtime; a units lint keeps these names out of string literals, where a rewrite would change program-visible text. Applied to the bundle only, never to the generated module body (which can be hundreds of megabytes): its call sites are emitted with the prefix already in place.
 pub fn prefix_runtime_names(bundle: &str, prefix: &str) -> String {
     let bytes = bundle.as_bytes();
     let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
@@ -135,7 +135,7 @@ fn find_bash5_uncached() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one module for `module` with all names prefixed by `prefix` (e.g. `"m1_"`), calling the runtime under its flat unprefixed names — the `Alias` shape, paired with [`shared_runtime`]. Returns the source and the set of runtime units it needs; the caller decides whether to bundle them alongside.
+/// Generate one module for `module` with all names prefixed by `prefix` (e.g. `"m1_"`), calling the runtime under its flat unprefixed names: the `Alias` shape, paired with [`shared_runtime`]. Returns the source and the set of runtime units it needs; the caller decides whether to bundle them alongside.
 pub fn generate_module_with_units(
     module: &Module,
     prefix: &str,
@@ -253,7 +253,7 @@ impl Backend for BashBackend {
             w.line("");
             w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
             w.indent();
-            // Each wasm call nests one native bash function call, and a deeply recursive guest (e.g. QuickJS's interactive REPL, whose startup alone reaches tens of thousands of frames) can exhaust the *process's* C stack — not the bounded, trappable wasm one (FUNCNEST) — and crash with a real SIGSEGV rather than a caught wasm trap. Raise the soft rlimit to the max this process is allowed before running any guest code; both attempts degrade silently (`|| true`) since a sandboxed environment may refuse both, in which case behavior is unchanged from before this line existed.
+            // Each wasm call nests one native bash function call, and a deeply recursive guest (e.g. QuickJS's interactive REPL, whose startup alone reaches tens of thousands of frames) can exhaust the *process's* C stack, not the bounded, trappable wasm one (FUNCNEST), and crash with a real SIGSEGV rather than a caught wasm trap. Raise the soft rlimit to the max this process is allowed before running any guest code; both attempts degrade silently (`|| true`) since a sandboxed environment may refuse both, in which case behavior is unchanged from before this line existed.
             w.line("ulimit -s unlimited 2>/dev/null || ulimit -s \"$(ulimit -Hs)\" 2>/dev/null || true");
             if wasi_bundled(module, opts.default_wasi, bundler()) {
                 // Standalone runtime interface, mirroring the Ruby standalone parser: consume a leading run of `--dir HOST::GUEST` flags into WASI_DIRS (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
@@ -292,7 +292,7 @@ impl Backend for BashBackend {
 /// The function/state prefix a `--mode standalone` program uses: fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_PREFIX: &str = "program_";
 
-/// The library-mode module name must be a single identifier `[A-Za-z_][A-Za-z0-9_]*`. Bash has no case-carrying namespace — every generated name is a global shell identifier — so the name is *lowercased* to build the prefix; that is the one deliberate mapping left in the product, and it is total and fully specified, unlike the lossy per-backend sanitizers that were removed.
+/// The library-mode module name must be a single identifier `[A-Za-z_][A-Za-z0-9_]*`. Bash has no case-carrying namespace (every generated name is a global shell identifier), so the name is *lowercased* to build the prefix; that is the one deliberate mapping left in the product, and it is total and fully specified, unlike the lossy per-backend sanitizers that were removed.
 fn check_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -453,7 +453,7 @@ impl<'a> Gen<'a> {
             w.line(format!("{p}t{idx}ty=()"));
             w.line(format!("{p}t{idx}sz={}", table.min));
         }
-        // The bundled WASI's state is only *needed* by an import that actually falls back to it: one the embedder supplied through IMPORTS/PROVIDERS never reads a `<p>w*` variable. So the import loop below records whether any fallback happened, and the state is built iff one did — the shell-variable counterpart of the other backends' lazy `@wasi ||=` construction, and the observable the `custom_wasi_provider`/`partial_override` cases turn on. Still eager within `<p>init`: nothing is deferred to the first syscall, so the preopen validation keeps failing instantiation rather than a later call.
+        // The bundled WASI's state is only *needed* by an import that actually falls back to it: one the embedder supplied through IMPORTS/PROVIDERS never reads a `<p>w*` variable. So the import loop below records whether any fallback happened, and the state is built iff one did, the shell-variable counterpart of the other backends' lazy `@wasi ||=` construction, and the observable the `custom_wasi_provider`/`partial_override` cases turn on. Still eager within `<p>init`: nothing is deferred to the first syscall, so the preopen validation keeps failing instantiation rather than a later call.
         let wasi_state = wasi_bundled(m, self.default_wasi, bundler());
         if wasi_state {
             w.line("local __wasi_fb=0");
@@ -522,7 +522,7 @@ impl<'a> Gen<'a> {
             self.emit_assign(w, &format!("{p}g{idx}"), &global.init);
         }
         for (n, elem) in m.elems.iter().enumerate() {
-            // Stage the segment as a temporary element array (function command names, `''` for a `ref.null` item) plus its structural type keys (same convention, `''` for the null items), mirroring the data-segment mem_init staging below. `ElemItem::Global` never reaches here: a ref-typed global (the only kind `global.get` could target inside an elem expression) is rejected by dewasm-core's `val_type` as soon as the Global/Import section is parsed (module.rs), which happens before the Element section — so a module containing one never makes it past conversion in the first place.
+            // Stage the segment as a temporary element array (function command names, `''` for a `ref.null` item) plus its structural type keys (same convention, `''` for the null items), mirroring the data-segment mem_init staging below. `ElemItem::Global` never reaches here: a ref-typed global (the only kind `global.get` could target inside an elem expression) is rejected by dewasm-core's `val_type` as soon as the Global/Import section is parsed (module.rs), which happens before the Element section, so a module containing one never makes it past conversion in the first place.
             let mut names = Vec::new();
             let mut keys = Vec::new();
             for item in &elem.items {
@@ -564,7 +564,7 @@ impl<'a> Gen<'a> {
                         self.rt("tab_init"),
                         elem.items.len()
                     ));
-                    // Active segments are auto-dropped right after instantiation (spec: table.init then an implicit elem.drop), so clear the staging array the same way an explicit ElemDrop would — a later table.init against this segment then traps 'out of bounds table access' like a genuinely dropped one.
+                    // Active segments are auto-dropped right after instantiation (spec: table.init then an implicit elem.drop), so clear the staging array the same way an explicit ElemDrop would: a later table.init against this segment then traps 'out of bounds table access' like a genuinely dropped one.
                     w.line(format!("{p}elem{n}=()"));
                     w.line(format!("{p}elem{n}ty=()"));
                 }
@@ -1341,9 +1341,9 @@ fn access_bytes(method: &str) -> u32 {
 }
 
 /// One little-endian byte cell of `<mem>` at effective address `ea` (already a
-/// plain integer var): `<mem>[$ea]` for byte 0, `<mem>[$((ea+k))]` for k>0 —
-/// the pre-expanded canonical-decimal key the assoc representation needs so it
-/// stays on bash's fast subscript path.
+/// plain integer var): `<mem>[$ea]` for byte 0, `<mem>[$((ea+k))]` for k>0 (the
+/// pre-expanded canonical-decimal key the assoc representation needs so it
+/// stays on bash's fast subscript path).
 fn mem_byte(mem: &str, ea: &str, k: u32) -> String {
     if k == 0 {
         format!("{mem}[${ea}]")
@@ -1389,7 +1389,7 @@ fn load_inline_expr(method: &str, mem: &str, ea: &str) -> String {
 
 /// Inline byte-store statements reproducing a `mem_<method>` store body: low
 /// byte first, `v >> 8*k & 0xff` per cell. The arithmetic right shift on a
-/// negative i64 pattern is harmless — `& 0xff` masks the dragged-in sign bits.
+/// negative i64 pattern is harmless: `& 0xff` masks the dragged-in sign bits.
 fn store_inline_stmts(method: &str, mem: &str, ea: &str, v: &str) -> Vec<String> {
     (0..access_bytes(method))
         .map(|k| {
@@ -1613,7 +1613,7 @@ fn store_method(op: StoreOp) -> &'static str {
     }
 }
 
-/// Lint for the bash runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header, and every unit function must end with an explicit `return`/`:` — a trailing arithmetic statement would leak status 1 into the `|| return $?` trap cascade. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles.
+/// Lint for the bash runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header, and every unit function must end with an explicit `return`/`:`, since a trailing arithmetic statement would leak status 1 into the `|| return $?` trap cascade. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles.
 #[cfg(test)]
 mod units {
     use super::*;

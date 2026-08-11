@@ -1,4 +1,5 @@
-//! The adjacent active-data-segment merging pass: assert the `module.datas` shape the pass produces from small wat inputs — merged runs, zero-filled gaps, the gap threshold, and every bail condition (bulk-memory ops, overlapping/descending offsets, `global.get` offsets).
+//! The adjacent active-data-segment merging pass: assert the `module.datas` shape the pass produces from small wat inputs.
+//! The cases cover merged runs, zero-filled gaps, the gap threshold, and every bail condition (bulk-memory ops, overlapping/descending offsets, `global.get` offsets).
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{DataSegment, Expr, Module};
@@ -86,7 +87,7 @@ fn global_get_offset_bails_the_whole_pass() {
 
 #[test]
 fn global_get_before_mergeable_consts_bails_the_whole_pass() {
-    // Issue #28 regression. With `base = 4` at instantiation, "XX" lands at 4..6 — inside the 2..8 gap that merging the two const segments would zero-fill. The merged blob is emitted *after* the global.get segment, so its zeros would clobber "XX". The pass must therefore leave every segment untouched, keeping the final memory image identical.
+    // Issue #28 regression. With `base = 4` at instantiation, "XX" lands at 4..6, inside the 2..8 gap that merging the two const segments would zero-fill. The merged blob is emitted *after* the global.get segment, so its zeros would clobber "XX". The pass must therefore leave every segment untouched, keeping the final memory image identical.
     let m = module(
         r#"(module
             (import "env" "base" (global $base i32))

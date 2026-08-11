@@ -13,7 +13,7 @@ sub wasi_poll_oneoff {
     my ($self, $in_ptr, $out_ptr, $nsubs, $nevents_ptr) = @_;
     return ERRNO_INVAL if $nsubs == 0;
     my @ready;    # [userdata, error, type, nbytes, flags] resolvable without waiting
-    my @waiters;  # [userdata, type, fh] fd_read on stdin — needs a host wait
+    my @waiters;  # [userdata, type, fh] fd_read on stdin: needs a host wait
     my @clocks;   # [userdata, rel_ns]
     for my $i (0 .. $nsubs - 1) {
         my $base = $in_ptr + $i * 48;

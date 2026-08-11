@@ -10,7 +10,7 @@ sub wasi_fd_read {
         my $len = $self->{memory}->i32_load($iovs_ptr + $i * 8 + 4);
         next if $len == 0;
         # sysread is a raw read(2): it returns as soon as any bytes are
-        # available — the WASI short-read semantics wasmtime uses — so an
+        # available (the WASI short-read semantics wasmtime uses), so an
         # interactive tty stdin (the QuickJS REPL under a pty) never
         # deadlocks waiting for a full buffer.
         my $chunk = '';

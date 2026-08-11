@@ -1,4 +1,4 @@
-# Decision 7 — Import Providers and the Default WASI Fallback
+# Decision 7: Import Providers and the Default WASI Fallback
 
 Status: **Accepted, 2026-07-23.**
 Implemented for Ruby: the provider protocol and resolution order in generated `initialize` (`crates/dewasm-backend-ruby/src/lib.rs`), `Rt.resolve_import` (`runtime/ruby/units/rt/resolve_import.rb`), and `Rt::WASI` implementing the protocol itself (`runtime/ruby/units/wasi/_class.rb`).
@@ -6,13 +6,13 @@ Generalized to non-function imports and to generated classes implementing the pr
 
 ## Context
 
-Imports could only be supplied as a Hash of per-function callables, which made a whole-runtime replacement impractical: a WASI implementation is coupled to the guest memory, but the memory exists only after `new` returns while imports must go *into* `new` — the classic instantiation circularity.
+Imports could only be supplied as a Hash of per-function callables, which made a whole-runtime replacement impractical: a WASI implementation is coupled to the guest memory, but the memory exists only after `new` returns while imports must go *into* `new`, the classic instantiation circularity.
 Library mode also refused to instantiate WASI-importing modules at all unless the embedder hand-implemented preview 1.
 
 Survey of how real systems break the circularity:
 
-- **Node.js `node:wasi`**: a WASI object yields the import object; `wasi.start(instance)` binds the exported memory before execution — a provider with a bind step.
-- **wasm2c / w2c2** (source translators): every embedder-implemented import receives the module instance as its first argument (`u32 w2c_host_fill_buf(w2c_host* instance, ...)`) — per-call context.
+- **Node.js `node:wasi`**: a WASI object yields the import object; `wasi.start(instance)` binds the exported memory before execution, a provider with a bind step.
+- **wasm2c / w2c2** (source translators): every embedder-implemented import receives the module instance as its first argument (`u32 w2c_host_fill_buf(w2c_host* instance, ...)`): per-call context.
 - **wasmtime / wazero / Chicory**: host functions receive a per-call context (Caller / api.Module / Instance) and fetch memory from it.
 
 ## Decision
@@ -30,11 +30,11 @@ Survey of how real systems break the circularity:
 
 ## Rejected alternatives
 
-- **Per-call context argument on every import callable** (wasm2c style) — taxes the common case (plain lambdas, the spectest harness) with a changed signature; Ruby closures plus `attach` reach the same power.
-- **Strict imports only (status quo)** — makes WASI-importing modules unusable as libraries in practice.
-- **Memory-name binding only** (Node's `start` looks up `exports.memory`) — `attach(instance)` is a superset and needs no export-name contract.
-- **Unconditional eager construction of the bundled WASI** — pays the `binmode` side effect and an object even when the embedder provided everything.
-- **Deferring construction to the first syscall invocation** — extra lambda indirection for little gain over construction-time laziness (user call).
+- **Per-call context argument on every import callable** (wasm2c style): taxes the common case (plain lambdas, the spectest harness) with a changed signature; Ruby closures plus `attach` reach the same power.
+- **Strict imports only (status quo)**: makes WASI-importing modules unusable as libraries in practice.
+- **Memory-name binding only** (Node's `start` looks up `exports.memory`): `attach(instance)` is a superset and needs no export-name contract.
+- **Unconditional eager construction of the bundled WASI**: pays the `binmode` side effect and an object even when the embedder provided everything.
+- **Deferring construction to the first syscall invocation**: extra lambda indirection for little gain over construction-time laziness (user call).
 
 ## Consequences
 

@@ -5,7 +5,7 @@ use dewasm_backend::Mode;
 use crate::backend::BackendUnderTest;
 use crate::fixtures::{convert, examples_dir};
 
-/// Run the folded-temp-reuse case (`folded_temp_reuse_e2e!`): convert `folded_temp_reuse.wat` in *standalone* mode and run it. The fixture computes two pure-arithmetic expressions whose operands sit in temp slots that a later call result / spill reuses, checks both against their constant results and reports through `proc_exit`, so the exit code alone says which one was clobbered (1 or 2; 42 means both are right). No glue — the fixture checks itself.
+/// Run the folded-temp-reuse case (`folded_temp_reuse_e2e!`): convert `folded_temp_reuse.wat` in *standalone* mode and run it. The fixture computes two pure-arithmetic expressions whose operands sit in temp slots that a later call result / spill reuses, checks both against their constant results and reports through `proc_exit`, so the exit code alone says which one was clobbered (1 or 2; 42 means both are right). No glue: the fixture checks itself.
 pub fn run_folded_temp_reuse(lang: &dyn BackendUnderTest) {
     let src = convert(
         lang.backend(),

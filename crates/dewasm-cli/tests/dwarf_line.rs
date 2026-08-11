@@ -20,7 +20,7 @@ fn fixture_wasm() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");
     assert!(
         p.exists(),
-        "dwarf-fixture not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "dwarf-fixture not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     p
 }
@@ -74,7 +74,7 @@ fn convert(target: &str, out: &Path, dwarf: bool) -> String {
 /// `go build` a program in its own directory and run it, returning (stdout, exit code). A missing toolchain fails loud.
 fn run_go(prog: &Path) -> (String, i32) {
     let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
     let dir = prog.parent().unwrap();
     let bin = dir.join("prog_bin");
     let build = Command::new(&go)
@@ -102,7 +102,7 @@ fn run_go(prog: &Path) -> (String, i32) {
 
 fn run_ruby(prog: &Path) -> (String, i32) {
     let ruby =
-        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .current_dir(prog.parent().unwrap())

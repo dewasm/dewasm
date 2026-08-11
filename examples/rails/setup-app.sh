@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 if [ -d app ]; then
-  echo "setup-app: app/ already exists — remove it first to regenerate" >&2
+  echo "setup-app: app/ already exists. Remove it first to regenerate" >&2
   exit 1
 fi
 
@@ -25,4 +25,4 @@ cp app-template/post.rb app/app/models/post.rb
 mkdir -p app/db/migrate
 cp app-template/create_posts_migration.rb app/db/migrate/20260728000001_create_posts.rb
 
-echo "setup-app: done — next: ./run.sh"
+echo "setup-app: done. Next: ./run.sh"

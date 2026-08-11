@@ -1,6 +1,6 @@
 # requires: mem/fill, mem/i32_store8, mem/i32_store16, mem/i64_store
-# 24-byte fdstat: filetype u8 at +0 by fd kind — 3 = directory, 4 = regular
-# file, or (stdio) 2 = char device when a tty else 4 — fdflags u16 at
+# 24-byte fdstat: filetype u8 at +0 by fd kind (3 = directory, 4 = regular
+# file, or for stdio 2 = char device when a tty else 4), fdflags u16 at
 # +2, then the stored rights_base/inheriting u64 at +8/+16. The rights
 # are what path_open granted (all-ones for stdio/preopens); reporting them
 # instead of a flat all-ones is what the rights-narrowing conformance tests

@@ -14,7 +14,7 @@ var Rt rt
 type Imports map[string]any
 
 // ImportProvider is a module source that resolves names on demand, so one
-// object can stand in for a whole module — the Go shape of the shared
+// object can stand in for a whole module, the Go shape of the shared
 // import-provider protocol (Ruby's `import`, Python's `wasm_import`).
 // Returning nil for a name leaves that import unresolved, exactly as an absent
 // map entry does, so the module still falls back to its bundled WASI / link

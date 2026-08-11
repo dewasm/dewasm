@@ -15,7 +15,7 @@
 # filestat_set_size; <p>wfdflags holds the u16 open fdflags. stdio gets all-ones
 # (a char device the guest may freely use). A preopen directory gets the
 # canonical WASI directory rights: base = the directory-applicable set
-# (0x7BFFE98 — the PATH_* ops plus FD_READDIR/FD_FILESTAT_GET/... but *not* the
+# (0x7BFFE98: the PATH_* ops plus FD_READDIR/FD_FILESTAT_GET/... but *not* the
 # regular-file ops like FD_READ/FD_SEEK/FD_FILESTAT_SET_SIZE), inheriting =
 # base | the regular-file base (0xFFFFFFF, every p1 right below SOCK_*). A file
 # fd's masks are narrowed from these at path_open time.
@@ -49,7 +49,7 @@ wasi_init_preopens() {
     fi
     # The host path must resolve, but need not be a directory: like the
     # Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the
-    # zeroperl reactor's init probe) is accepted — the guest resolves it as the
+    # zeroperl reactor's init probe) is accepted: the guest resolves it as the
     # preopen root itself. A directory is resolved physically by entering it;
     # anything else by resolving its parent and re-attaching the basename.
     if [[ -d $__host ]]; then

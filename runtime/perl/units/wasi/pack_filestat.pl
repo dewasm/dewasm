@@ -1,7 +1,7 @@
 # requires: wasi/wasi_filetype
 # Packs a Time::HiRes::stat result (arrayref) into a WASI filestat (64
 # bytes): dev, ino, filetype (+7 pad), nlink, size, atim/mtim/ctim (all
-# u64, times in nanoseconds — quantized to what NV seconds can carry,
+# u64, times in nanoseconds, quantized to what NV seconds can carry,
 # roughly 400ns granularity at the current epoch).
 sub pack_filestat {
     my ($self, $st) = @_;

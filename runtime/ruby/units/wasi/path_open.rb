@@ -15,7 +15,7 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   host_path, err = resolve_path(dirfd, rel, follow_last: follow)
   return err if err
   # This unit's branches decide the slash shapes, so strip the preserved
-  # slash (issue #42) — stat on "file/" fails ENOTDIR and misreads probes.
+  # slash (issue #42): stat on "file/" fails ENOTDIR and misreads probes.
   trailing = host_path.end_with?("/")
   host_path = host_path.delete_suffix("/")
   # Without SYMLINK_FOLLOW, a symlink at the final component is an error

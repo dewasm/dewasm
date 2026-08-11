@@ -31,7 +31,7 @@ WARDITE_VERSION=0.9.0
 # Fail loudly with an actionable message rather than half-installing.
 require_tool() {
   command -v "$1" >/dev/null && return
-  echo "benchmarks/setup.sh: $1 not found — $2" >&2
+  echo "benchmarks/setup.sh: $1 not found: $2" >&2
   exit 1
 }
 

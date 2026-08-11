@@ -123,7 +123,7 @@ end
 # wasm execution, so it diffs against the previous frame's cell contents
 # and its own idea of where the terminal's cursor already sits, and only
 # emits an SGR code when a cell's color actually differs from the one
-# before it — DOOM's software renderer is paletted, so most cells repeat
+# before it: DOOM's software renderer is paletted, so most cells repeat
 # exactly from one frame to the next.
 # Fixed status-line colors (white on black), independent of the game's own
 # palette -- without an explicit color the status line inherits whatever

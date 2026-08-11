@@ -81,7 +81,7 @@ impl WasiRun {
     }
 
     /// Run with the host's stdin/stdout/stderr, returning the guest's exit status.
-    /// The guest sees whatever those three descriptors are — a pty slave included, which is what makes the interactive-REPL transcript reproducible.
+    /// The guest sees whatever those three descriptors are, a pty slave included, which is what makes the interactive-REPL transcript reproducible.
     pub fn run_inheriting_stdio(&self) -> Result<i32> {
         let mut builder = self.builder()?;
         builder.inherit_stdio();

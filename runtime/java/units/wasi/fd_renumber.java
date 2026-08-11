@@ -1,5 +1,5 @@
 // Both endpoints must currently be open: renumbering onto an unused number is
-// EBADF. Renumbering onto stdio or a preopen is allowed — the target's old entry
+// EBADF. Renumbering onto stdio or a preopen is allowed: the target's old entry
 // is simply replaced (only a guest-opened file carries a channel to close).
 int wasi_fd_renumber(int from, int to) {
     if (!fds.containsKey(from) || !fds.containsKey(to)) {

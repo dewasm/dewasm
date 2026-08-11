@@ -1,12 +1,12 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_symlink: create a symbolic link named <new_path> under the
-# dirfd whose target string is <old_path>, written VERBATIM — the guest target
+# dirfd whose target string is <old_path>, written VERBATIM. The guest target
 # is never resolved or made absolute, so a relative link stays relative and a
 # dangling link is created as-is. This is a fifth namespace-mutation syscall
 # licensed (beyond the four mkdir/rmdir/rm/mv commands) to shell out to a
 # single `--`-guarded `ln -s`; only the link's own parent is resolved with
 # sandbox containment.
-# A destination that already exists is EEXIST (20) — ENOTDIR (54) when it is
+# A destination that already exists is EEXIST (20), or ENOTDIR (54) when it is
 # a slash-suffixed non-directory; a slash on a not-yet-existing
 # destination is ENOENT (44). The target string itself is not followed, so a
 # file-symlink target does not hit the pure-bash follow limitation.

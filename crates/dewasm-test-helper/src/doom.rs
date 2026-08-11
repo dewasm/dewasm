@@ -1,14 +1,14 @@
 //! Shared constants and helpers for the DOOM framebuffer-snapshot test.
 //!
 //! The oracle (`cargo xtask update-snapshots`, whose DOOM target embeds the
-//! wasmtime crate — kept out of this crate's own dependency tree) and the per-backend drivers
+//! wasmtime crate, kept out of this crate's own dependency tree) and the per-backend drivers
 //! (the language glue below) must agree on exactly one driving contract: a
 //! synthetic clock self-advancing [`DOOM_CLOCK_STEP_MS`] ms per read, [`DOOM_TICKS`]
 //! `tickGame` calls, no input. The frame is then a deterministic, backend-independent
 //! function of that schedule (DOOM's renderer is fixed-point integer), so
 //! every backend and the wasmtime oracle produce byte-identical pixels.
 //!
-//! The snapshot is a P6 PPM ([`frame_to_ppm`]) — the alpha byte of the module's
+//! The snapshot is a P6 PPM ([`frame_to_ppm`]): the alpha byte of the module's
 //! `B,G,R,A` framebuffer is padding and is dropped, matching the demo frontends'
 //! own screenshot writers (`examples/doom/ruby/main.rb`).
 
@@ -32,12 +32,12 @@ pub const DOOM_FRAME_H: u32 = 400;
 /// that moves on every read exits those spins and stays a pure function of the
 /// wasm (identical call sequence across the oracle and every backend).
 ///
-/// The step is *large* on purpose: DOOM caps how many game tics it simulates per frame (spiral-of-death protection), so a big jump between clock reads skips ahead just like a real clock would. A 1 ms step instead accumulates ~80 tics of simulated time per frame — byte-identical either way, but tens of times more work, turning the Bash run from a few minutes into the better part of an hour. 1000 ms keeps the whole run to a couple dozen clock reads.
+/// The step is *large* on purpose: DOOM caps how many game tics it simulates per frame (spiral-of-death protection), so a big jump between clock reads skips ahead just like a real clock would. A 1 ms step instead accumulates ~80 tics of simulated time per frame: byte-identical either way, but tens of times more work, turning the Bash run from a few minutes into the better part of an hour. 1000 ms keeps the whole run to a couple dozen clock reads.
 pub const DOOM_CLOCK_STEP_MS: i64 = 1000;
 
-/// Number of `tickGame` calls before the frame is captured. Kept minimal — two
+/// Number of `tickGame` calls before the frame is captured. Kept minimal: two
 /// ticks already clear DOOM's startup to a non-degenerate frame (the oracle
-/// asserts the colour count) — because each tick is ~tens of seconds under Bash,
+/// asserts the colour count), because each tick is ~tens of seconds under Bash,
 /// so every extra tick is real wall time in Bash's ultra-slow category; pinned by the
 /// snapshot.
 pub const DOOM_TICKS: u32 = 2;
@@ -94,7 +94,7 @@ pub fn run_doom_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot = std::fs::read(doom_frame_snapshot_path())
-        .expect("read doom frame snapshot — regenerate with `cargo xtask update-snapshots`");
+        .expect("read doom frame snapshot: regenerate with `cargo xtask update-snapshots`");
     assert!(
         output.stdout == snapshot,
         "doom frame under {}: rendered frame differs from the snapshot ({} vs {} snapshot bytes)\nstderr: {}",
@@ -115,7 +115,7 @@ fn read_doom_wasm() -> Vec<u8> {
     let wasm = doom_wasm_path();
     assert!(
         wasm.exists(),
-        "doom not cached — run examples/apps/scripts/doom.sh (see docs/testing.md)"
+        "doom not cached: run examples/apps/scripts/doom.sh (see docs/testing.md)"
     );
     std::fs::read(&wasm).expect("read doom.wasm")
 }

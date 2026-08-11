@@ -9,7 +9,7 @@ int wasi_fd_fdstat_get(int fd, int outPtr) {
         filetype = 3; // directory
     } else if (isStdio(e)) {
         // A tty reports as a character device (2); a pipe/redirect reports as a
-        // regular file (4), so guests' isatty() stays false under piped I/O —
+        // regular file (4), so guests' isatty() stays false under piped I/O,
         // matching the wasmtime snapshot captured with piped stdin.
         filetype = (System.console() != null) ? 2 : 4;
     }

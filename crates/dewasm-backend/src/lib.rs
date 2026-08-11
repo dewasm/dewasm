@@ -35,7 +35,7 @@ pub enum RuntimeLinkage {
 #[derive(Clone, Debug)]
 pub struct GenOptions {
     pub mode: Mode,
-    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim — no sanitization. In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
+    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim, with no sanitization. In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
     /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide. Disable to keep generated libraries free of ambient authority.
@@ -127,7 +127,7 @@ pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::E
     )
 }
 
-/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest` — the shape every backend's module-name grammar is built out of.
+/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest`: the shape every backend's module-name grammar is built out of.
 pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> bool {
     let mut chars = seg.chars();
     match chars.next() {
@@ -136,7 +136,7 @@ pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> b
     }
 }
 
-/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none — equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included.
+/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none: equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CompareOperands {
     Float,
@@ -147,7 +147,7 @@ pub enum CompareOperands {
     Unsigned64,
 }
 
-/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them — how to spell a view their representation does not already provide — instead of each restating which `BinOp`s are comparisons.
+/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them (how to spell a view their representation does not already provide) instead of each restating which `BinOp`s are comparisons.
 pub fn comparison(op: ir::BinOp) -> Option<(&'static str, CompareOperands)> {
     use ir::BinOp::*;
     use CompareOperands::*;
@@ -193,7 +193,7 @@ pub fn signed_view_rel_op(op: ir::BinOp) -> Option<(&'static str, Option<&'stati
     ))
 }
 
-/// Whether `e` is a comparison or an `eqz` — the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
+/// Whether `e` is a comparison or an `eqz`: the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
 pub fn is_boolean(e: &ir::Expr) -> bool {
     match e {
         ir::Expr::Un(ir::UnOp::I32Eqz | ir::UnOp::I64Eqz, _) => true,
@@ -202,7 +202,7 @@ pub fn is_boolean(e: &ir::Expr) -> bool {
     }
 }
 
-/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals` — the grouping behind initializing a run in one statement. What a run is worth sharing differs per language (a rendered default value, a type name), so the caller supplies `key` and renders each range itself.
+/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals`: the grouping behind initializing a run in one statement. What a run is worth sharing differs per language (a rendered default value, a type name), so the caller supplies `key` and renders each range itself.
 pub fn local_runs<K: PartialEq>(
     locals: &[ir::ValType],
     mut key: impl FnMut(ir::ValType) -> K,
@@ -221,7 +221,7 @@ pub fn local_runs<K: PartialEq>(
     runs
 }
 
-/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. A flat lowering appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative — answering `false` only re-emits the transition that used to be there unconditionally.
+/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. A flat lowering appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative: answering `false` only re-emits the transition that used to be there unconditionally.
 pub fn terminates(stmts: &[ir::Stmt]) -> bool {
     let Some(last) = stmts
         .iter()
@@ -275,7 +275,7 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
     }
 }
 
-/// A structural key for a function type — `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`. `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules. A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend — which is why `name_of` stays the caller's.
+/// A structural key for a function type: `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`. `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules. A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend, which is why `name_of` stays the caller's.
 pub fn type_key(ty: &ir::FuncType, name_of: fn(ir::ValType) -> &'static str) -> String {
     let names = |tys: &[ir::ValType]| {
         tys.iter()
@@ -297,14 +297,14 @@ pub fn hex_string(data: &[u8]) -> String {
     out
 }
 
-/// WASI import module names a bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding — a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
+/// WASI import module names a bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding: a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
 pub const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 pub fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
 }
 
-/// Whether the generated artifact carries the built-in WASI as an import fallback — and so takes the backend's args/env/preopens entry points, and its standalone main parses `--dir`. True when `default_wasi` is on and the module imports at least one WASI function `bundler` has a unit for.
+/// Whether the generated artifact carries the built-in WASI as an import fallback, and so takes the backend's args/env/preopens entry points, and its standalone main parses `--dir`. True when `default_wasi` is on and the module imports at least one WASI function `bundler` has a unit for.
 pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBundler) -> bool {
     default_wasi
         && module

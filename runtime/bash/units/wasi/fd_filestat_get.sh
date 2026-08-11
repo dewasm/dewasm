@@ -2,7 +2,7 @@
 # WASI fd_filestat_get: a directory fd (kind 3) reports type 3, size
 # 0 (directory sizes aren't tracked); a file fd (kind 2) reports type 4 and
 # size = its live whole-file buffer length (`${#buf[@]}`), which is coherent
-# with unflushed writes — unlike stat(2)ing the on-disk file, this sees bytes
+# with unflushed writes. Unlike stat(2)ing the on-disk file, this sees bytes
 # the guest wrote but hasn't synced yet. Stdio reuses fd_fdstat_get's own
 # tty-vs-regular convention (type 2 if a tty, else 4) so the two calls agree
 # on what a stdio fd "is".

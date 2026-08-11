@@ -13,8 +13,8 @@ workspace = true
 [features]
 # Opt-in test speed categories (see docs/testing.md). `slow_test` expands the slow
 # per-case macros (dewasm-test-helper) as active `#[test]`s
-# instead of `#[ignore]`d ones and runs the full spec testsuite — CI's
-# main run. `ultra_slow_test` additionally un-ignores the cases kept out
+# instead of `#[ignore]`d ones and runs the full spec testsuite (CI's
+# main run). `ultra_slow_test` additionally un-ignores the cases kept out
 # of CI (the packed-CRuby case, whose host-CPython compile peaks at ~12 GB and
 # OOMs the runner next to the other giants, issue #126); run only in local
 # pre-release verification.

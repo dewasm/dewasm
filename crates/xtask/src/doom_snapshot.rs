@@ -1,7 +1,7 @@
 //! The DOOM framebuffer-snapshot oracle: run the *original* `doom.wasm`
 //! under the wasmtime crate with the deterministic driving contract, and write
 //! the rendered frame to `examples/apps/snapshots/doom_frame.ppm`. wasmtime lives
-//! here, in dev tooling, not in `dewasm-test-helper` — the per-backend comparison
+//! here, in dev tooling, not in `dewasm-test-helper`: the per-backend comparison
 //! never needs an embedder, only the committed snapshot this produces. A PNG
 //! rendering of the same frame is emitted alongside it for human inspection (the
 //! DOOM README); only the PPM is the compared oracle.
@@ -107,7 +107,7 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
         .get_memory(&mut store, "memory")
         .expect("doom.wasm has no `memory` export");
 
-    // initGame (fires onGameInit), then N ticks — no key events. The clock
+    // initGame (fires onGameInit), then N ticks: no key events. The clock
     // self-advances on every read, so nothing is stepped here.
     init.call(&mut store, ())?;
     for _ in 0..dewasm_test_helper::DOOM_TICKS {
@@ -117,7 +117,7 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     let off = store
         .data()
         .frame_off
-        .expect("ui.drawFrame never fired — no frame to capture") as usize;
+        .expect("ui.drawFrame never fired: no frame to capture") as usize;
     let (w, h) = (store.data().frame_w, store.data().frame_h);
     let frame = memory.data(&store)[off..off + (w * h * 4) as usize].to_vec();
     Ok((frame, w, h))
@@ -130,7 +130,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::doom_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
         format!(
-            "read {} — run examples/apps/scripts/doom.sh first",
+            "read {}: run examples/apps/scripts/doom.sh first",
             wasm_path.display()
         )
     })?;
@@ -152,7 +152,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         .len();
     ensure!(
         distinct > 50,
-        "captured frame looks degenerate ({distinct} distinct colors) — check the tick count/clock"
+        "captured frame looks degenerate ({distinct} distinct colors): check the tick count/clock"
     );
 
     Ok((
@@ -164,7 +164,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 /// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit
 /// RGB PNG. Settings are the crate defaults, kept fixed so regeneration is
 /// byte-stable (verified by capturing twice and diffing). This PNG is a
-/// human-facing sidecar only — no test compares it.
+/// human-facing sidecar only: no test compares it.
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for px in frame.chunks_exact(4) {

@@ -1,4 +1,4 @@
-# Decision 29 — Go Backend Lowering Conventions
+# Decision 29: Go Backend Lowering Conventions
 
 Status: **Accepted, 2026-07-26.**
 Implemented in `crates/dewasm-backend-go/src/lib.rs`, `runtime/go/units/`, and `crates/dewasm-backend-go/tests/{spec,e2e}.rs`: wasm 1.0 with the spec harness passing ([decision 3](3-testing-strategy.md), [decision 16](16-ruby-wasm1-completion.md)) and full WASI preview 1 including the filesystem, adopting [decision 14](14-ruby-wasi-filesystem.md)'s model.

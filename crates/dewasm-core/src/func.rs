@@ -30,7 +30,7 @@ struct Effects {
     memory: bool,
     /// May trap (a load, a divide/remainder, or a non-saturating float->int truncation).
     trap: bool,
-    /// Deepest temp slot the expression reads, if it reads any. Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand — so a pending at depth d legitimately keeps reading temps at depths above d. Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
+    /// Deepest temp slot the expression reads, if it reads any. Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand, so a pending at depth d legitimately keeps reading temps at depths above d. Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
     max_temp_read: Option<u32>,
 }
 
@@ -96,7 +96,7 @@ pub struct FuncBuilder<'a> {
     result: Option<ir::Func>,
     /// DWARF line table for source back-mapping, when `--dwarf-line` is on. `None` leaves the whole marker path inert.
     line_table: Option<&'a LineTable>,
-    /// The most recent source position resolved from an operator's offset while streaming this body. Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted. Tracking it as operators stream — rather than resolving only the emit-triggering operator — is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
+    /// The most recent source position resolved from an operator's offset while streaming this body. Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted. Tracking it as operators stream (rather than resolving only the emit-triggering operator) is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
     cur_pos: Option<SourcePos>,
     /// The last source position actually emitted as a marker in this function, so only change points produce one (per-function: reset for every body).
     last_pos: Option<SourcePos>,
@@ -1162,7 +1162,7 @@ fn un_traps(op: UnOp) -> bool {
     )
 }
 
-/// Attribute an untranslated operator to a feature. Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts — an unclassified operator here is a dewasm bug and the spec harness treats it as such.
+/// Attribute an untranslated operator to a feature. Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts: an unclassified operator here is a dewasm bug and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[

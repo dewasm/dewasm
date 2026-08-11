@@ -1,6 +1,6 @@
 //! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks/results.md`.
 //!
-//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them — unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots. The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
+//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them, unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots. The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample. The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
 
 use std::fmt::Write as _;
 
@@ -63,7 +63,7 @@ pub enum Outcome {
     Skipped {
         reason: String,
     },
-    /// Attempted and broke. A stdout mismatch against wasmtime lands here too — a wrong answer is a hard failure, not a slow pass.
+    /// Attempted and broke. A stdout mismatch against wasmtime lands here too: a wrong answer is a hard failure, not a slow pass.
     Failed {
         reason: String,
     },
@@ -77,11 +77,11 @@ pub struct Measurement {
     #[serde(default)]
     pub runs_per_sample: Option<u64>,
     pub reps: usize,
-    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run — process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time.
+    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run: process startup plus module load, the cold-start metric that gets subtracted from `t(N)`. `null` for an app, which is timed as whole wall time.
     pub cold_start: Option<Samples>,
     /// `t(N)`: the full run.
     pub total: Samples,
-    /// `t(N) - t(0)` on the minima. `null` when there is no `t(0)` to subtract, or when the difference came out non-positive (pure noise — the workload is too small to see on this runner).
+    /// `t(N) - t(0)` on the minima. `null` when there is no `t(0)` to subtract, or when the difference came out non-positive (pure noise: the workload is too small to see on this runner).
     pub compute_s: Option<f64>,
     pub ns_per_op_min: Option<f64>,
     pub ns_per_op_median: Option<f64>,
@@ -102,7 +102,7 @@ pub struct Samples {
 pub enum Verification {
     /// This runner *is* the reference (wasmtime).
     Reference,
-    /// stdout was byte-identical to wasmtime's at the same iteration count. A mismatch never reaches here — it is an [`Outcome::Failed`].
+    /// stdout was byte-identical to wasmtime's at the same iteration count. A mismatch never reaches here: it is an [`Outcome::Failed`].
     Match,
 }
 
@@ -115,7 +115,7 @@ impl Report {
     }
 }
 
-/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` — no front matter, plain `##` headings, markdown tables — plus the generated-file marker `docs/support.md` carries.
+/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` (no front matter, plain `##` headings, markdown tables), plus the generated-file marker `docs/support.md` carries.
 ///
 /// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`; each one is embedded above the table for its own workload. Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
@@ -205,7 +205,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                 _ => None,
             });
 
-        // The table is the reference, not the finding, so it goes behind a disclosure: chart visible, numbers one click away. The blank line after </summary> is load-bearing — GitHub will not render a markdown table inside <details> without it.
+        // The table is the reference, not the finding, so it goes behind a disclosure: chart visible, numbers one click away. The blank line after </summary> is load-bearing: GitHub will not render a markdown table inside <details> without it.
         let _ = writeln!(
             out,
             "<details>\n<summary>Full numbers for <code>{workload}</code></summary>\n"
@@ -226,7 +226,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                     let span = if is_app { 5 } else { 7 };
                     let _ = writeln!(
                         out,
-                        "| `{}` |{} **FAILED** — {} |",
+                        "| `{}` |{} **FAILED**: {} |",
                         cell.runner,
                         " |".repeat(span - 1),
                         md_cell(reason)

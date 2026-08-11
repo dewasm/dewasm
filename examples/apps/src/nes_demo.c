@@ -1,5 +1,5 @@
 /*
- * nes_demo.c — our own committed C source (first-party source is fine to
+ * nes_demo.c: our own committed C source (first-party source is fine to
  * commit; only third-party *artifacts* stay out of the tree).
  *
  * A thin reactor wrapper around agnes (kgabis/agnes, pinned by
@@ -9,8 +9,8 @@
  * frames with an input bitmask, then reads the frame straight out of guest
  * memory.
  *
- * The frame is handed over exactly as agnes keeps it — a 256x240 buffer of one
- * palette *index* per pixel plus the fixed 64-entry palette — instead of a
+ * The frame is handed over exactly as agnes keeps it (a 256x240 buffer of one
+ * palette *index* per pixel plus the fixed 64-entry palette) instead of a
  * BGRA image rendered in-guest per pixel, which cost 12-15% of frame time on
  * every backend for no added information (issue #117). A host composes a pixel
  * as `palette[screen[y * width + x] & 0x3f]` → R,G,B (the 4th palette byte is
@@ -81,7 +81,7 @@ void tickGame(void) { agnes_next_frame(g_agnes); }
 int screenOffset(void) { return (int)(unsigned long)g_agnes->ppu.screen_buffer; }
 
 /* Guest pointer to the palette: 64 entries of 4 bytes each, R,G,B,A (alpha is
- * padding). Fixed data — reading it once is enough. */
+ * padding). Fixed data: reading it once is enough. */
 int paletteOffset(void) { return (int)(unsigned long)g_colors; }
 
 /* Framebuffer dimensions (AGNES_SCREEN_WIDTH/AGNES_SCREEN_HEIGHT). */

@@ -1,7 +1,7 @@
 //! Go side of the shared spec harness: converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
 //!
 //! Three Go facts shape the phrasing:
-//! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module — hence every export's signature — is known); the harness asserts the boxed `any` results to the expected type.
+//! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module, and hence every export's signature, is known); the harness asserts the boxed `any` results to the expected type.
 //! - Type/method declarations cannot live inside `func main`, so per-module `Converted.source` is accumulated at package scope in the harness's file-scoped `decls` buffer (hoisted ahead of the body by `assemble`) while only instantiation/assertion statements go in the body.
 //! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable, killing the process), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
 
@@ -20,7 +20,7 @@ mod common;
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too — but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
 ///
 /// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
@@ -57,7 +57,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         EXPECTED_FAILURES
     }
 
-    /// Go compiles each `.wast` file to one program — a few seconds each, dominated by compile latency — so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
+    /// Go compiles each `.wast` file to one program (a few seconds each, dominated by compile latency), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&["skip-stack-guard-page"]))
     }
@@ -269,7 +269,7 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance's `Exports` map doubles as an import provider.
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance's `Exports` map doubles as an import provider.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
     for (name, var) in registered {

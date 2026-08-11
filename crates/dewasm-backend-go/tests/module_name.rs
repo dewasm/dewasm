@@ -38,7 +38,7 @@ fn library_package_and_type_come_from_the_module_name() {
     }
 }
 
-/// Standalone output is byte-identical however the artifact was named — including under a name library mode would reject, which is simply irrelevant here.
+/// Standalone output is byte-identical however the artifact was named, including under a name library mode would reject, which is simply irrelevant here.
 #[test]
 fn standalone_is_byte_stable() {
     let a = convert("add", Mode::Standalone).expect("generate");

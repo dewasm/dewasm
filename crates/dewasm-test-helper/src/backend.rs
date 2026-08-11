@@ -43,7 +43,7 @@ pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
     }
 }
 
-/// The style each backend's grammar wants, keyed by [`Backend::name`] so a backend gets the right one without restating it in every `BackendUnderTest` impl. Bash is the lone snake case; everything else — including Go, which builds its package *and* type name out of this one string — reads best from Pascal. Unknown names (the wasmtime stand-in, which never generates) take the majority style.
+/// The style each backend's grammar wants, keyed by [`Backend::name`] so a backend gets the right one without restating it in every `BackendUnderTest` impl. Bash is the lone snake case; everything else (including Go, which builds its package *and* type name out of this one string) reads best from Pascal. Unknown names (the wasmtime stand-in, which never generates) take the majority style.
 pub fn module_name_style(backend: &str) -> ModuleNameStyle {
     match backend {
         "bash" => ModuleNameStyle::Snake,
@@ -91,7 +91,7 @@ pub trait BackendUnderTest: Sync {
         crate::convert_on_big_stack(self.backend(), bytes, mode, name)
     }
 
-    /// Prepare a *pty* run of standalone `source` with `args` (see [`crate::run_under_pty`]). Returns the command to spawn on a pty. The default — for interpreted backends — writes `source` to a temp script and runs `interpreter <script> <args...>`, exactly mirroring [`Self::run_bytes`]'s default but without capturing through pipes. Compiled backends (Go, Java) override this to build `source` first and return the resulting run command. A missing toolchain fails loud.
+    /// Prepare a *pty* run of standalone `source` with `args` (see [`crate::run_under_pty`]). Returns the command to spawn on a pty. The default (for interpreted backends) writes `source` to a temp script and runs `interpreter <script> <args...>`, exactly mirroring [`Self::run_bytes`]'s default but without capturing through pipes. Compiled backends (Go, Java) override this to build `source` first and return the resulting run command. A missing toolchain fails loud.
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
         let script = write_temp_script(source, self.backend().file_extension());
         let mut argv = vec![script.to_string_lossy().into_owned()];
@@ -103,7 +103,7 @@ pub trait BackendUnderTest: Sync {
         }
     }
 
-    /// Write each of `modules` into `dir` as its own file, the way a user of this backend would ship several converted artifacts, and return the *driver preamble*: the source that loads those files in the host language. The runner appends the case glue to that preamble and runs the result from `dir` through [`Self::run_in_dir`]. `modules` is `(wat filename in examples/wat, class/type name)` pairs. `shared_runtime` selects the linkage: `true` emits every module against ONE shared runtime, written out as its own file too (so an imported table can cross modules — the `shared_table` case); `false` converts each module independently in library mode, each carrying its own runtime (the `embedded_coexist` case). Only backends wired into the multi-module macros implement this, each using its own crate's API (the test-helper crate cannot depend on a concrete backend). See [`crate::run_multi_module_case`].
+    /// Write each of `modules` into `dir` as its own file, the way a user of this backend would ship several converted artifacts, and return the *driver preamble*: the source that loads those files in the host language. The runner appends the case glue to that preamble and runs the result from `dir` through [`Self::run_in_dir`]. `modules` is `(wat filename in examples/wat, class/type name)` pairs. `shared_runtime` selects the linkage: `true` emits every module against ONE shared runtime, written out as its own file too (so an imported table can cross modules: the `shared_table` case); `false` converts each module independently in library mode, each carrying its own runtime (the `embedded_coexist` case). Only backends wired into the multi-module macros implement this, each using its own crate's API (the test-helper crate cannot depend on a concrete backend). See [`crate::run_multi_module_case`].
     fn compose_modules(
         &self,
         dir: &Path,
@@ -114,7 +114,7 @@ pub trait BackendUnderTest: Sync {
         unimplemented!("a multi-module backend must implement compose_modules()")
     }
 
-    /// Run the multi-module `driver` (the preamble from [`Self::compose_modules`] plus the case glue) against the module files sitting in `dir`. The default — every interpreted backend — writes the driver as `dir/driver.<ext>` and execs the interpreter on it with `dir` as the working directory, so the language's own relative loading (`require_relative`, `sys.path[0]`, `source`) finds the files beside it. The compiled backends override this to build the directory instead.
+    /// Run the multi-module `driver` (the preamble from [`Self::compose_modules`] plus the case glue) against the module files sitting in `dir`. The default (every interpreted backend) writes the driver as `dir/driver.<ext>` and execs the interpreter on it with `dir` as the working directory, so the language's own relative loading (`require_relative`, `sys.path[0]`, `source`) finds the files beside it. The compiled backends override this to build the directory instead.
     fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
         let path = dir.join(format!("driver.{}", self.backend().file_extension()));
         std::fs::write(&path, driver).unwrap();
@@ -138,7 +138,7 @@ pub trait BackendUnderTest: Sync {
         self.run_bytes(&format!("{program}\n{glue}"), &[], stdin)
     }
 
-    /// Run a *standalone*-mode `program` through the standalone runtime interface: the generated main parses a leading run of `--dir HOST::GUEST` flags itself, then hands the rest to the guest as `argv[1..]`. The default (every generated backend) execs the program with those `--dir` flags followed by `args` — exactly what a user types — via [`Self::run_bytes`] (compiled backends build first through their `run_bytes` override). wasmtime overrides this: `--dir` is a *host* runtime flag there, so it runs `wasmtime run --dir HOST::GUEST... <wasm> args` instead. Same case feeds both, mirroring [`Self::run_app_fs`].
+    /// Run a *standalone*-mode `program` through the standalone runtime interface: the generated main parses a leading run of `--dir HOST::GUEST` flags itself, then hands the rest to the guest as `argv[1..]`. The default (every generated backend) execs the program with those `--dir` flags followed by `args` (exactly what a user types) via [`Self::run_bytes`] (compiled backends build first through their `run_bytes` override). wasmtime overrides this: `--dir` is a *host* runtime flag there, so it runs `wasmtime run --dir HOST::GUEST... <wasm> args` instead. Same case feeds both, mirroring [`Self::run_app_fs`].
     fn run_standalone_dir(
         &self,
         program: &str,
@@ -156,9 +156,9 @@ pub trait BackendUnderTest: Sync {
         self.run_bytes(program, &flag_refs, stdin)
     }
 
-    /// Run a *standalone*-mode `program` through the standalone interface like [`Self::run_standalone_dir`], but additionally set `env` on the child process and return the full [`Output`] — the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]), which [`Self::run_standalone_dir`] cannot give (it inherits the parent env and its callers discard the exit code). `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags the generated `main` parses; `args` follow as guest `argv[1..]`.
+    /// Run a *standalone*-mode `program` through the standalone interface like [`Self::run_standalone_dir`], but additionally set `env` on the child process and return the full [`Output`]: the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]), which [`Self::run_standalone_dir`] cannot give (it inherits the parent env and its callers discard the exit code). `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags the generated `main` parses; `args` follow as guest `argv[1..]`.
     ///
-    /// The default reuses the backend's own launch recipe ([`Self::pty_command`] — interpreter + temp script for the interpreted backends, a freshly built binary for the compiled ones) so no per-backend override is needed, then drives it through pipes with exactly `env` as the child environment and `stdin` fed.
+    /// The default reuses the backend's own launch recipe ([`Self::pty_command`]: interpreter + temp script for the interpreted backends, a freshly built binary for the compiled ones) so no per-backend override is needed, then drives it through pipes with exactly `env` as the child environment and `stdin` fed.
     fn run_standalone_wasi(
         &self,
         program: &str,

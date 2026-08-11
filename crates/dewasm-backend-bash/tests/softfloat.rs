@@ -126,7 +126,7 @@ fn f64_arith_cases(cases: &mut Cases) {
 }
 
 fn run_cases(cases: &Cases) {
-    let bash = find_bash5().expect("bash >= 5 not found — see docs/testing.md");
+    let bash = find_bash5().expect("bash >= 5 not found: see docs/testing.md");
     let runtime = dewasm_backend_bash::shared_runtime(&cases.units).expect("bundle float units");
     let script = format!(
         "{runtime}\nwhile IFS=' ' read -r __op __a __b; do\n  \"rt_$__op\" \"$__a\" \"$__b\"\n  __st=$?\n  if (( __st == 134 )); then\n    echo \"T $TRAP_MSG\"\n  else\n    echo \"$(( R0 ))\"\n  fi\ndone < \"$1\"\n"

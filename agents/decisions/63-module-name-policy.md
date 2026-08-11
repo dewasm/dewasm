@@ -1,4 +1,4 @@
-# Decision 63 — `--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode
+# Decision 63: `--module-name` Fixed in Standalone, Validated Verbatim in Library Mode
 
 Status: **Accepted, 2026-08-05.**
 Landed for every backend and the CLI: the per-backend PascalCase sanitizers (and Bash's snake analogue) are deleted, a standalone artifact's internal name is fixed, and a library-mode name is used exactly as given or refused.

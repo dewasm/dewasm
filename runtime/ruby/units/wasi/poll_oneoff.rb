@@ -10,7 +10,7 @@
 def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
   return ERRNO_INVAL if nsubs == 0
   ready = []   # [userdata, error, type, nbytes, flags] resolvable without waiting
-  waiters = [] # [userdata, type, io] fd_read on stdin — needs a host wait
+  waiters = [] # [userdata, type, io] fd_read on stdin: needs a host wait
   clocks = []  # [userdata, rel_ns]
   nsubs.times do |i|
     base = in_ptr + i * 48

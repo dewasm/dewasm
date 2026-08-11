@@ -14,10 +14,10 @@ func (w *WASI) wasi_path_rename(oldDirfd, oldPathPtr, oldPathLen, newDirfd, newP
     }
     // Trailing slashes (issue #42): existing non-directories were
     // ENOTDIR in resolve_path; a nonexistent slash-suffixed destination is
-    // renamed bare, as wasmtime strips it — the resolved path already is.
+    // renamed bare, as wasmtime strips it: the resolved path already is.
     // syscall.Rename, not os.Rename: Go's os.Rename wrapper Lstats the
     // destination and, when it is a directory, returns a synthetic EEXIST on
-    // macOS instead of letting rename(2) replace an empty target dir — the
+    // macOS instead of letting rename(2) replace an empty target dir, the
     // atomic dir-onto-empty-dir semantics the suite requires. The raw syscall
     // has the correct POSIX behaviour (ENOTEMPTY on a non-empty target,
     // EISDIR/ENOTDIR on type mismatches).

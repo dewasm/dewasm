@@ -6,7 +6,7 @@
 //! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting.
 //! - A branch crossing many frames pays one test per crossed frame under that register, so a function holding a deep enough crossing has those frames dissolved into a state machine instead (see [`flat`]); shallower branches keep the register, in the same function.
 //!
-//! The runtime is composed from per-method units and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact — `<Class>Rt` — so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
+//! The runtime is composed from per-method units and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact (`<Class>Rt`), so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
 
 /// Flat dispatch, shared with the Ruby backend ([`dewasm_backend::flat`]); only the threshold below is this backend's own.
 mod flat {
@@ -14,7 +14,7 @@ mod flat {
 
     /// Crossing depth from which a branch is worth a dispatch.
     ///
-    /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces. Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s). A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition) — which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
+    /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces. Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s). A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition), which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
     pub const DEEP_CROSSING: usize = 16;
 }
 
@@ -87,7 +87,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (a missing or too-old interpreter is a loud failure at the call site, not here — this only reports what qualifies).
+/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (a missing or too-old interpreter is a loud failure at the call site, not here: this only reports what qualifies).
 pub fn find_python() -> Option<std::path::PathBuf> {
     static PYTHON: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     PYTHON.get_or_init(find_python_uncached).clone()
@@ -208,7 +208,7 @@ impl Backend for PythonBackend {
         match feature {
             // Python floats are IEEE doubles; f32 re-rounding and the NaN paths mirror Ruby's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
-            // Wasm-1.0 completion — imported globals/memories/tables, multiple tables, table bulk ops — mirrors Ruby's model.
+            // Wasm-1.0 completion (imported globals/memories/tables, multiple tables, table bulk ops) mirrors Ruby's model.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -447,9 +447,9 @@ fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
-/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body — a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
+/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body: a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
 ///
-/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch — `pos` is the top, the branch leaves its own innermost frame and crosses nothing — or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in. A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name. A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
+/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top, the branch leaves its own innermost frame and crosses nothing) or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in. A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name. A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
 fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
     let mut paths = Vec::new();
     let mut stack: Vec<u32> = Vec::new();
@@ -1046,7 +1046,7 @@ impl<'a> Gen<'a> {
                 Stmt::If {
                     cond, then, els, ..
                 } => {
-                    // The arms stay inline — `if` is not a Python loop, so a `continue` inside one already reaches the dispatch loop. An arm that changes state carries on in the new state's writer, at its top level, which is reachable only through the transition emitted under this `if`.
+                    // The arms stay inline: `if` is not a Python loop, so a `continue` inside one already reaches the dispatch loop. An arm that changes state carries on in the new state's writer, at its top level, which is reachable only through the transition emitted under this `if`.
                     st[cur].line(format!("if {}:", self.cond(cond)));
                     st[cur].indent();
                     let a = self.flat_seq(st, cur, then);
@@ -1081,7 +1081,7 @@ impl<'a> Gen<'a> {
 
     /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while`.
     ///
-    /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement — nested constructs included — is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
+    /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement (nested constructs included) is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
     ///
     /// `tail` says nothing runs after this sequence before the function falls off: no following statement in any enclosing sequence, and no enclosing loop back-edge (the flat dispatch passes `false` throughout). In that position a landing marker (`if _br == N: _br = 0`) writes a register nothing will read again, so it is skipped; a stale nonzero `_br` at fall-off is unobservable.
     ///
@@ -1101,7 +1101,7 @@ impl<'a> Gen<'a> {
         let mut i = 0;
         while i < stmts.len() {
             let stmt = &stmts[i];
-            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe — an open suite already holds a real statement, and nothing here can touch `_br`.
+            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe: an open suite already holds a real statement, and nothing here can touch `_br`.
             if !stmt_emits(stmt) {
                 self.simple_stmt_or_skip(w, stmt);
                 i += 1;
@@ -1201,7 +1201,7 @@ impl<'a> Gen<'a> {
         free
     }
 
-    /// Fuse a call-family producer with the adjacent statement that consumes its whole result: `s0 = self._f1(...)` + `l2 = s0` becomes `l2 = self._f1(...)`. Sound because temps are stack slots: a write at depth `d` immediately followed by a statement whose entire right-hand side is that slot is that value's one and only pop — a value with more readers (a block result, a branch operand) is never consumed adjacently in full. Only call-shaped producers are fused; pure-expression producers are already folded into their consumers by the IR builder.
+    /// Fuse a call-family producer with the adjacent statement that consumes its whole result: `s0 = self._f1(...)` + `l2 = s0` becomes `l2 = self._f1(...)`. Sound because temps are stack slots: a write at depth `d` immediately followed by a statement whose entire right-hand side is that slot is that value's one and only pop: a value with more readers (a block result, a branch operand) is never consumed adjacently in full. Only call-shaped producers are fused; pure-expression producers are already folded into their consumers by the IR builder.
     fn fused_call_line(&self, producer: &Stmt, consumer: Option<&Stmt>) -> Option<String> {
         let (produced, call) = match producer {
             Stmt::Call {
@@ -1616,7 +1616,7 @@ impl<'a> Gen<'a> {
 
     /// An expression in boolean context (an `if`/`br_if` test).
     ///
-    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0 — so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Python boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Python boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
     fn cond(&self, e: &Expr) -> String {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
@@ -1774,7 +1774,7 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-/// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits, leaves holding the state bodies — O(log n) compares per transition. Ruby's `case/when` dispatch is a single hash probe, but CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares: on the packed-CRuby conversion the linear chain (largest machine 1,463 states) measured 1.22x *slower* than the relay cascade it replaced, and the tree is what makes the flat lowering pay for itself. `lo..=hi` is the id range this subtree serves; id `texts.len()` is the exit state, reachable only as a transition target, whose leaf is `break`. A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
+/// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits, leaves holding the state bodies, at O(log n) compares per transition. Ruby's `case/when` dispatch is a single hash probe, but CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares: on the packed-CRuby conversion the linear chain (largest machine 1,463 states) measured 1.22x *slower* than the relay cascade it replaced, and the tree is what makes the flat lowering pay for itself. `lo..=hi` is the id range this subtree serves; id `texts.len()` is the exit state, reachable only as a transition target, whose leaf is `break`. A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
 fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize) {
     if lo == hi {
         if lo == texts.len() {
@@ -1799,7 +1799,7 @@ fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize
     w.dedent();
 }
 
-/// Whether `stmt` emits at least one real Python statement. A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them — the suite could end up holding no statement, which Python rejects.
+/// Whether `stmt` emits at least one real Python statement. A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them: the suite could end up holding no statement, which Python rejects.
 fn stmt_emits(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::SourceLine(_) => false,
@@ -1812,7 +1812,7 @@ fn stmt_emits(stmt: &Stmt) -> bool {
     }
 }
 
-/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value — a state assignment plus a `continue` into the dispatch loop; a shallow one must keep the `_br` branch register, measured cheaper than a dispatch at that depth.
+/// Codegen-shape checks for control flow: a *deep* multi-level `br` must be addressed by value (a state assignment plus a `continue` into the dispatch loop); a shallow one must keep the `_br` branch register, measured cheaper than a dispatch at that depth.
 #[cfg(test)]
 mod cascade {
     use super::*;
@@ -1825,7 +1825,7 @@ mod cascade {
         src
     }
 
-    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length — the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings.
+    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length: the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings.
     fn tower(depth: usize) -> String {
         let opens = (0..depth)
             .map(|i| format!("(block $l{i}"))
@@ -1871,7 +1871,8 @@ mod cascade {
 
     #[test]
     fn mixed_depths_stay_structured() {
-        // block $A { loop $B { block $C { br_table $C $B $A } ... } } — a single `br_table` whose targets span all three nesting depths. Every crossing is shallow, so the whole function keeps the register lowering and its structured loop.
+        // block $A { loop $B { block $C { br_table $C $B $A } ... } }
+        // A single `br_table` whose targets span all three nesting depths. Every crossing is shallow, so the whole function keeps the register lowering and its structured loop.
         let src = convert(
             r#"
               (module
@@ -1911,7 +1912,7 @@ mod units {
         for unit in bundler().units() {
             assert!(
                 !unit.body.contains("\"\"\"") && !unit.body.contains("'''"),
-                "{}: triple-quoted string — the rename lint cannot scan it",
+                "{}: triple-quoted string, which the rename lint cannot scan",
                 unit.id
             );
             for (n, line) in unit.body.lines().enumerate() {

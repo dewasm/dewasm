@@ -7,7 +7,7 @@
 // nes.wasm has zero imports (unlike DOOM's console/gameSaving/ui/loading host
 // interface): it exposes memory plus allocRom/initGame/setInput/tickGame and
 // the frame accessors directly, and never calls back into the host. So unlike
-// DoomEngine, NesEngine wires no imports map at all — it just drives the
+// DoomEngine, NesEngine wires no imports map at all: it just drives the
 // exports and composes the frame out of linear memory itself after every
 // tick, at a fixed 60 Hz pace the host is responsible for (tickGame renders
 // exactly one NES video frame per call, with no internal timing of its own).
@@ -79,13 +79,13 @@ public class Main {
     }
 
     // Headless self-test: init + a fixed number of ticks with no window, no
-    // KeyListener, no JFrame — only BufferedImage/ImageIO, which render in
+    // KeyListener, no JFrame, only BufferedImage/ImageIO, which render in
     // software and need no display. Alter Ego opens on a run of static
     // black-background credits screens; a handful of Start presses are
     // injected along the way (mirroring DOOM's smoke test injecting Enter to
     // clear its title/legal screens) to page through them into the animated
     // title screen, so the final frame has real varied pixel art rather than
-    // mostly-black credits text — that's what the distinct-color sanity check
+    // mostly-black credits text. That's what the distinct-color sanity check
     // below is actually probing for.
     private static void runSmoke(byte[] rom) throws IOException {
         NesEngine engine = new NesEngine(rom);
@@ -127,7 +127,7 @@ public class Main {
     // Interactive window: a JFrame whose panel blits the engine's current
     // BufferedImage scaled ~2x, plus a KeyListener that tracks which mapped
     // keys are held. NES ticks on its own thread, paced to 60 Hz (tickGame
-    // has no internal timing — one call renders exactly one video frame,
+    // has no internal timing: one call renders exactly one video frame,
     // however fast it's called), while Swing delivers input on the EDT; the
     // held-key set is read from the game thread each tick, guarded by a
     // simple lock since it's small and touched every ~16ms either way.
@@ -319,7 +319,7 @@ public class Main {
     // imports, so construction just needs the ROM bytes: allocate a guest
     // buffer with allocRom, copy the ROM in, and initGame it. Every tick()
     // sets the input mask, advances one video frame, and composes the guest's
-    // frame into the BufferedImage's backing int[] — the guest hands over one
+    // frame into the BufferedImage's backing int[]: the guest hands over one
     // palette *index* per pixel plus a fixed 64-entry palette, so the
     // palette is decoded once into the ARGB ints TYPE_INT_ARGB expects and
     // every pixel is one masked table lookup.
@@ -337,7 +337,7 @@ public class Main {
 
         NesEngine(byte[] rom) {
             // This module has zero wasm imports (verified by nes.sh with
-            // wasm-objdump) and no WASI imports either — null is tolerated
+            // wasm-objdump) and no WASI imports either: null is tolerated
             // for the imports map and for args/env/preopens.
             this.nes = new Nes(null, null, null, null);
             this.memory = (Nes.Memory) nes.Exports.get("memory");

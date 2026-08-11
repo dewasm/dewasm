@@ -1,4 +1,4 @@
-//! Shared test harness, case tables, and per-feature test macros for the dewasm backend crates. This crate depends only on `dewasm-core` and `dewasm-backend` — never on a concrete backend crate — and is taken as a dev-dependency by each backend crate, which supplies a [`BackendUnderTest`] (and, for the spec harness, a [`SpecBackend`]) and wires up the suites it participates in via the macros below.
+//! Shared test harness, case tables, and per-feature test macros for the dewasm backend crates. This crate depends only on `dewasm-core` and `dewasm-backend` (never on a concrete backend crate) and is taken as a dev-dependency by each backend crate, which supplies a [`BackendUnderTest`] (and, for the spec harness, a [`SpecBackend`]) and wires up the suites it participates in via the macros below.
 
 mod apps;
 mod apps_capi;
@@ -72,7 +72,7 @@ pub use wasi::{
 pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
 pub use wasmtime_backend::{wasi_runner_argv, wasi_runner_bin, Wasmtime};
 
-/// The `harness = false` `main` of a backend's spec integration test: builds one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and runs them with cargo's own test arguments (name filter, `--ignored`/`--include-ignored`, thread count). `$lang` must be a promotable-to-`'static` value — the backend `Spec` structs are unit structs, so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
+/// The `harness = false` `main` of a backend's spec integration test: builds one libtest-mimic trial per `.wast` file for `$lang` (a [`SpecBackend`]) and runs them with cargo's own test arguments (name filter, `--ignored`/`--include-ignored`, thread count). `$lang` must be a promotable-to-`'static` value: the backend `Spec` structs are unit structs, so `spec_suite!(RubySpec)` promotes `&RubySpec` to `&'static`.
 #[macro_export]
 macro_rules! spec_suite {
     ($lang:expr) => {
@@ -82,7 +82,7 @@ macro_rules! spec_suite {
     };
 }
 
-/// The `harness = false` `main` of a backend's whole-cache convert integration test: builds one libtest-mimic trial per cached app for `$backend` (a `Backend + Sync` value) and runs them with cargo's own test arguments. Unlike [`spec_suite!`] this takes the plain [`Backend`] — the convert suite only lowers, it never runs generated code, so it needs no interpreter or script-phrasing layer. `$backend` must be a promotable-to-`'static` value; the backend `Backend` structs are unit structs, so `apps_convert_suite!(RubyBackend)` promotes `&RubyBackend` to `&'static`. Heavy trials are `#[ignore]`d unless the expanding crate's `slow_test` feature is on.
+/// The `harness = false` `main` of a backend's whole-cache convert integration test: builds one libtest-mimic trial per cached app for `$backend` (a `Backend + Sync` value) and runs them with cargo's own test arguments. Unlike [`spec_suite!`] this takes the plain [`Backend`]: the convert suite only lowers, it never runs generated code, so it needs no interpreter or script-phrasing layer. `$backend` must be a promotable-to-`'static` value; the backend `Backend` structs are unit structs, so `apps_convert_suite!(RubyBackend)` promotes `&RubyBackend` to `&'static`. Heavy trials are `#[ignore]`d unless the expanding crate's `slow_test` feature is on.
 ///
 /// [`Backend`]: dewasm_backend::Backend
 #[macro_export]
@@ -108,7 +108,7 @@ macro_rules! wasi_testsuite_suite {
 
 /// The two halves of the module-name policy every backend states identically: a library name that does not fit the language's grammar is a conversion-time error naming the language, the offending value and the flag, and a standalone artifact ignores the requested name in favour of its fixed internal one. What differs is only which names a language rejects and what its standalone output is recognised by, so those are the arguments.
 ///
-/// Also expands to `fn convert(name, mode) -> anyhow::Result<String>`, the fixture-conversion helper — an ordinary item in the invoking file, so the per-language tests a backend keeps beside this invocation (Ruby's ancestor guards, Java's dotted names, Go's package layout) call it too.
+/// Also expands to `fn convert(name, mode) -> anyhow::Result<String>`, the fixture-conversion helper: an ordinary item in the invoking file, so the per-language tests a backend keeps beside this invocation (Ruby's ancestor guards, Java's dotted names, Go's package layout) call it too.
 ///
 /// `wat` (the fixture module) and the optional `default_wasi` are arguments because those neighbouring tests depend on them: Python needs a memory in the fixture to observe the `<Class>Rt` naming, Go converts with WASI on because it compiles its library artifact for real.
 #[macro_export]
@@ -185,10 +185,11 @@ macro_rules! module_name_policy_suite {
     };
 }
 
-/// Internal: wrap a generated `#[test]` item in the speed-category `#[ignore]` attribute. The per-case app macros below delegate here so a callsite can pick the category without duplicating the cfg_attr. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::test_speed!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364) — `#[doc(hidden)]` keeps it out of the public docs instead.
+/// Internal: wrap a generated `#[test]` item in the speed-category `#[ignore]` attribute. The per-case app macros below delegate here so a callsite can pick the category without duplicating the cfg_attr. `#[macro_export]` is load-bearing despite the macro being internal: the delegating macros expand inside the backend crates, where `$crate::test_speed!` resolves only to an exported macro (a plain `macro_rules!` cannot even be `pub use`d across crates, E0364).
+/// `#[doc(hidden)]` keeps it out of the public docs instead.
 ///
-/// * `slow` — conditional on the backend crate's `slow_test` feature (CI's main run category). This is the default for every slow-case macro.
-/// * `ultra` — conditional on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more locally. These are kept out of CI and run only under `--features ultra_slow_test`, in local pre-release verification.
+/// * `slow`: conditional on the backend crate's `slow_test` feature (CI's main run category). This is the default for every slow-case macro.
+/// * `ultra`: conditional on `ultra_slow_test` (which implies `slow_test`), for a case measured at roughly a minute or more locally. These are kept out of CI and run only under `--features ultra_slow_test`, in local pre-release verification.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! test_speed {
@@ -298,7 +299,7 @@ macro_rules! wasi_suite {
     };
 }
 
-/// One `#[test]` exercising the standalone `--dir` interface for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed. No glue — standalone needs none. Wired by every filesystem backend, and re-run under wasmtime as ground truth.
+/// One `#[test]` exercising the standalone `--dir` interface for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed. No glue: standalone needs none. Wired by every filesystem backend, and re-run under wasmtime as ground truth.
 #[macro_export]
 macro_rules! standalone_dir_e2e {
     ($lang:expr) => {
@@ -309,7 +310,7 @@ macro_rules! standalone_dir_e2e {
     };
 }
 
-/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame recursion) standalone, run it, and require the guest's `proc_exit(42)` as the exit code — see [`run_deep_recursion`](crate::run_deep_recursion). No glue — this exercises the emitted entrypoint itself. Wired by all six backends; each callsite notes whether its entrypoint needed a mitigation for this depth (Python's big-stack thread, issue #31; Java's equivalent, issue #137) or survives unmitigated (Ruby's host stack, Go's growable goroutine stacks, Bash's `ulimit -s` line, Perl's heap-allocated recursion).
+/// One `#[test]` requiring the standalone entrypoint to survive deep-but-valid guest recursion for `$lang`: convert `deep_recursion.wat` (5000-frame recursion) standalone, run it, and require the guest's `proc_exit(42)` as the exit code (see [`run_deep_recursion`](crate::run_deep_recursion)). No glue: this exercises the emitted entrypoint itself. Wired by all six backends; each callsite notes whether its entrypoint needed a mitigation for this depth (Python's big-stack thread, issue #31; Java's equivalent, issue #137) or survives unmitigated (Ruby's host stack, Go's growable goroutine stacks, Bash's `ulimit -s` line, Perl's heap-allocated recursion).
 #[macro_export]
 macro_rules! deep_recursion_e2e {
     ($lang:expr) => {
@@ -320,7 +321,7 @@ macro_rules! deep_recursion_e2e {
     };
 }
 
-/// One `#[test]` requiring `$lang`'s generated code to keep folded operands alive across temp-slot reuse: convert `folded_temp_reuse.wat` standalone, run it, and require the guest's `proc_exit(42)` — see [`run_folded_temp_reuse`](crate::run_folded_temp_reuse). No glue — the fixture checks its own arithmetic. Core folding is language-independent, so every backend wires this.
+/// One `#[test]` requiring `$lang`'s generated code to keep folded operands alive across temp-slot reuse: convert `folded_temp_reuse.wat` standalone, run it, and require the guest's `proc_exit(42)` (see [`run_folded_temp_reuse`](crate::run_folded_temp_reuse)). No glue: the fixture checks its own arithmetic. Core folding is language-independent, so every backend wires this.
 #[macro_export]
 macro_rules! folded_temp_reuse_e2e {
     ($lang:expr) => {
@@ -331,7 +332,7 @@ macro_rules! folded_temp_reuse_e2e {
     };
 }
 
-/// One `#[test]` running the root-preopen containment probe for `$lang` with `$glue` (a named `&str` const that drives the WASI resolver directly). Split out of `wasi_suite!(Fs)` because it does not fit the shared preopen-and-run template — see [`run_wasi_containment`](crate::run_wasi_containment).
+/// One `#[test]` running the root-preopen containment probe for `$lang` with `$glue` (a named `&str` const that drives the WASI resolver directly). Split out of `wasi_suite!(Fs)` because it does not fit the shared preopen-and-run template (see [`run_wasi_containment`](crate::run_wasi_containment)).
 #[macro_export]
 macro_rules! wasi_root_containment_e2e {
     ($lang:expr, $glue:expr) => {
@@ -342,7 +343,7 @@ macro_rules! wasi_root_containment_e2e {
     };
 }
 
-/// Per-case app macros: each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument — these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow — their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test`). A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`].
+/// Per-case app macros: each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]). No glue argument: these are standalone-mode stdin/args cases, so no host-language glue is needed. `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow: their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test`). A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`].
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -366,7 +367,7 @@ macro_rules! cowsay_stdin_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled — run it with `--features slow_test`. Pass a trailing `ultra` to promote it to the ultra-slow category ([`test_speed!`]).
+/// See [`cowsay_args_e2e!`]. Runs the slow [`QJS_EVAL`](crate::QJS_EVAL) case. Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run it with `--features slow_test`). Pass a trailing `ultra` to promote it to the ultra-slow category ([`test_speed!`]).
 #[macro_export]
 macro_rules! qjs_eval_e2e {
     ($lang:expr) => {
@@ -398,7 +399,7 @@ macro_rules! sqlite3_shell_e2e {
     };
 }
 
-/// See [`cowsay_args_e2e!`]. Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case — the wasi-vfs-packed CRuby, a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+/// See [`cowsay_args_e2e!`]. Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case: the wasi-vfs-packed CRuby, a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case. Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
 #[macro_export]
 macro_rules! cruby_packed_hello_e2e {
     ($lang:expr) => {
@@ -653,7 +654,7 @@ macro_rules! doom_frame_e2e {
     };
 }
 
-/// The NES framebuffer-snapshot case (issue #114, mirroring [`doom_frame_e2e!`]): expands to `#[test] fn nes_frame()` driving the converted `nes.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate — or, where the host language cannot open a host file from *library-mode* glue without an import the generated module doesn't itself pull in (Go), a function computing an equivalent `String` at test time) that loads the pinned ROM, ticks the deterministic no-input contract, and dumps the frame as a P6 PPM, then diffing stdout against `examples/apps/snapshots/nes_frame.ppm`. Speed assignment mirrors [`doom_frame_e2e!`]: `slow` by default, passed `ultra` for Bash.
+/// The NES framebuffer-snapshot case (issue #114, mirroring [`doom_frame_e2e!`]): expands to `#[test] fn nes_frame()` driving the converted `nes.wasm` for `$lang` with `$glue` (a named `&str` const in the backend crate, or, where the host language cannot open a host file from *library-mode* glue without an import the generated module doesn't itself pull in (Go), a function computing an equivalent `String` at test time) that loads the pinned ROM, ticks the deterministic no-input contract, and dumps the frame as a P6 PPM, then diffing stdout against `examples/apps/snapshots/nes_frame.ppm`. Speed assignment mirrors [`doom_frame_e2e!`]: `slow` by default, passed `ultra` for Bash.
 #[macro_export]
 macro_rules! nes_frame_e2e {
     ($lang:expr, $glue:expr) => {

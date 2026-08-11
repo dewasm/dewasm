@@ -1,9 +1,9 @@
-//! The `go build` step the Go crate's test binaries share: compile generated source to a content-addressed cache binary (so identical sources — e.g. cowsay's args and stdin cases — build once) and hand back the path. The cache is keyed on the source alone and shared by every suite in the crate (e2e, spec, wasi-testsuite, module-name), so a program two of them happen to agree on is built once.
+//! The `go build` step the Go crate's test binaries share: compile generated source to a content-addressed cache binary (so identical sources, e.g. cowsay's args and stdin cases, build once) and hand back the path. The cache is keyed on the source alone and shared by every suite in the crate (e2e, spec, wasi-testsuite, module-name), so a program two of them happen to agree on is built once.
 //!
-//! Two layouts, selected by the artifact's own `package` clause — the one fact that decides how Go can build it:
+//! Two layouts, selected by the artifact's own `package` clause, the one fact that decides how Go can build it:
 //!
 //! - `package main` (standalone output, and the spec-style multi-module compositions the test crate assembles itself): one file, `go build` it directly.
-//! - `package <name>` (library output): a Go *package*, which can only be built from a module. The source — the artifact plus whatever host glue the shared runner appended to it, both in that package — is written to `<pkg>/<pkg>.go` inside a temp module, next to a two-line `main.go` that imports it and calls the glue's `RunTest`. Glue that reaches into unexported internals (`inst.memory.data`, `*global[uint32]`) is why it is appended into the package rather than written beside `main.go`.
+//! - `package <name>` (library output): a Go *package*, which can only be built from a module. The source (the artifact plus whatever host glue the shared runner appended to it, both in that package) is written to `<pkg>/<pkg>.go` inside a temp module, next to a two-line `main.go` that imports it and calls the glue's `RunTest`. Glue that reaches into unexported internals (`inst.memory.data`, `*global[uint32]`) is why it is appended into the package rather than written beside `main.go`.
 
 // Shared by several test binaries, each of which uses a subset: a test module is compiled into every binary that declares it, so an item only one of them calls would otherwise warn as dead code.
 #![allow(dead_code)]
@@ -20,7 +20,7 @@ static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// Compile `source` to a content-addressed cache binary and return its path. `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it. A missing `go` toolchain is a loud failure.
 pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
 
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
@@ -78,10 +78,10 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-/// Build the Go module the caller has already laid out in `dir` — a `go.mod` at its root, `package main` files beside it, and whatever library packages it wrote into subdirectories — and return the resulting binary's path. The multi-module cases use this instead of [`build_go`]: their artifacts are several files by design (that is what the case is about), so there is no single source to key a cache on, and each case gets a fresh directory anyway.
+/// Build the Go module the caller has already laid out in `dir` (a `go.mod` at its root, `package main` files beside it, and whatever library packages it wrote into subdirectories) and return the resulting binary's path. The multi-module cases use this instead of [`build_go`]: their artifacts are several files by design (that is what the case is about), so there is no single source to key a cache on, and each case gets a fresh directory anyway.
 pub fn build_go_dir(dir: &std::path::Path) -> Result<PathBuf, Output> {
     let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
     let bin = dir.join("prog");
     let build = run_build(&go, &bin, std::path::Path::new("."), Some(dir));
     if !build.status.success() {

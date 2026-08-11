@@ -37,7 +37,7 @@ ROM_SHA256="c7dc651d06aa7aee830d7c1d4563c9347bd724ad9de44dde7f459090b466cdc8"
 ROM_MEMBER="alter_ego/Alter_Ego.nes"
 
 # The reactor export surface (src/nes_demo.c). Zero wasm imports is the goal, so
-# agnes/wasi-libc must pull nothing in — verified below with wasm-objdump.
+# agnes/wasi-libc must pull nothing in, verified below with wasm-objdump.
 NES_EXPORTS=(
   allocRom initGame setInput tickGame screenOffset paletteOffset
   frameWidth frameHeight

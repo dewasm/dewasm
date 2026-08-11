@@ -3,7 +3,7 @@
 # buffer and its parallel fd-table entries. fds are never reused. A
 # directory or stdio fd just leaves the table. A flush failure's errno (R0,
 # the only channel wasi_fd_flush reports through) is propagated so the guest
-# learns its writes were lost — but the fd state is released either way: the
+# learns its writes were lost, but the fd state is released either way: the
 # fd is gone after close, success or not.
 wasi_fd_close() {
   local __p=$1 __fd=$2

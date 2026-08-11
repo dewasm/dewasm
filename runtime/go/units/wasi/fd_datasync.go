@@ -1,5 +1,5 @@
 // Go's os package exposes no fdatasync (and it is absent on macOS anyway), so
-// fall back to a full fsync — a superset of the datasync guarantee (mirroring
+// fall back to a full fsync, a superset of the datasync guarantee (mirroring
 // the Python backend's fallback).
 func (w *WASI) wasi_fd_datasync(fd uint32) uint32 {
     f, ok := w.fds[fd].(*os.File)

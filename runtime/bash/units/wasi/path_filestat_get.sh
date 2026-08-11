@@ -3,7 +3,7 @@
 # straight through to wasi_resolve_path's <follow> so a not-followed final
 # symlink is stat'd as itself (filetype 7), mirroring
 # runtime/ruby/units/wasi/path_filestat_get.rb's stat/lstat split. A missing
-# target is ENOENT (44) — checked with `-e || -h` (so a dangling symlink, not
+# target is ENOENT (44), checked with `-e || -h` (so a dangling symlink, not
 # followed, still counts as present) *before* `wasi_filetype`, since that
 # helper always succeeds and reports "unknown" both for a genuinely missing
 # path and for a present-but-unrecognized one (a FIFO); Ruby gets this for
@@ -14,7 +14,7 @@
 # last-flush-wins rule for two fds on one file) so a write-then-stat on the
 # same path is coherent before the buffer is flushed; otherwise the on-disk
 # size (wasi_file_size) is used. Every other filetype (directory, symlink,
-# device, socket, fifo) reports size 0 — Bash cannot introspect a symlink's
+# device, socket, fifo) reports size 0: Bash cannot introspect a symlink's
 # target-string length or a device's size, and a directory's size isn't
 # tracked, so this is a documented approximation, not a real stat().
 wasi_path_filestat_get() {

@@ -47,12 +47,12 @@ public class Main {
     }
 
     // Headless self-test: init + a fixed number of ticks with no window, no
-    // KeyListener, no JFrame — only BufferedImage/ImageIO, which render in
+    // KeyListener, no JFrame, only BufferedImage/ImageIO, which render in
     // software and need no display. A handful of Enter presses are injected
     // along the way to drive DOOM from its title/legal screens through the
     // menu defaults into a loaded level, so the final frame is real 3D
     // gameplay (varied per-wall diminished lighting) rather than a flat,
-    // low-color title card — that's what the distinct-color sanity check
+    // low-color title card. That's what the distinct-color sanity check
     // below is actually probing for.
     private static void runSmoke() throws IOException {
         DoomEngine engine = new DoomEngine(null, null);
@@ -89,7 +89,7 @@ public class Main {
         // DOOM's renderer shades a 256-entry palette through a small number of
         // light-diminish levels, so even a busy 3D scene tops out at a few
         // hundred distinct colors per frame (measured ~150 for a first-level
-        // view with HUD, water, and a blood decal) — 1000 is unreachable by
+        // view with HUD, water, and a blood decal). 1000 is unreachable by
         // construction. 100 is comfortably above a blank/solid-color buffer
         // (which would mean the memory read wired up wrong) while staying
         // below what any real rendered frame produces.
@@ -197,7 +197,7 @@ public class Main {
 
     // Special keys route through the exported KEY_* globals; everything else
     // is the ASCII value of the unmodified lowercase character (letters,
-    // digits — DOOM reads those directly for menu text entry and weapon
+    // digits: DOOM reads those directly for menu text entry and weapon
     // selection). Returns null for keys with no DOOM mapping.
     private static Integer mapKey(DoomEngine engine, KeyEvent e) {
         switch (e.getKeyCode()) {
@@ -396,7 +396,7 @@ public class Main {
             imports.computeIfAbsent("loading", k -> new HashMap<>()).put("onGameInit", onGameInit);
 
             // This module has no WASI imports, and Doom's constructor never reads
-            // args/env/preopens (verified against the generated source) — null is
+            // args/env/preopens (verified against the generated source): null is
             // tolerated for all three.
             this.doom = new Doom(imports, null, null, null);
             holder[0] = doom;

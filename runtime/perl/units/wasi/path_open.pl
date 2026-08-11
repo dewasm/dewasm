@@ -52,7 +52,7 @@ sub wasi_path_open {
     } else {
         # Unbuffered by construction: every access goes through sysread/
         # syswrite/sysseek, so pread/pwrite emulation stays coherent with
-        # read/write/seek — sqlite mixes both on one fd.
+        # read/write/seek: sqlite mixes both on one fd.
         binmode($fh);
         $self->{fds}{$self->{next_fd}} = { fh => $fh, path => $host };
         $base = $fs_rights_base & $self->{meta}{$dirfd}[1] & FILE_RIGHTS_BASE;

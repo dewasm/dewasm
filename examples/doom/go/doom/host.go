@@ -6,7 +6,7 @@
 //
 // The frontend lives *inside* the generated package rather than beside it
 // because it reads the module's linear memory (doomInst.memory.data) and its
-// exported globals (*global[uint32]) directly — unexported identifiers only a
+// exported globals (*global[uint32]) directly, unexported identifiers only a
 // file in the same package can name. ../main.go is the command: it imports
 // this package and calls Run.
 //

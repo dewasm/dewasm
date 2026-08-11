@@ -1,6 +1,6 @@
 //! What gets benchmarked: the two workload kinds and how the suite finds them.
 //!
-//! **Microbenchmarks** live in two families — hand-written `benchmarks/wat/`, zig-cc-compiled `benchmarks/c/` — each built by its own `build.sh` into `benchmarks/cache/<family>/`. The contract: `<module> <iterations>` does that many units of work, prints exactly one decimal result line, exits 0; `<iterations> = 0` does no work but still prints, which is what lets [`crate::bench::measure`] separate startup + load from compute. Same `<iterations>` must give byte-identical stdout on every runtime — the wasmtime cross-check enforces it.
+//! **Microbenchmarks** live in two families (hand-written `benchmarks/wat/`, zig-cc-compiled `benchmarks/c/`), each built by its own `build.sh` into `benchmarks/cache/<family>/`. The contract: `<module> <iterations>` does that many units of work, prints exactly one decimal result line, exits 0; `<iterations> = 0` does no work but still prints, which is what lets [`crate::bench::measure`] separate startup + load from compute. Same `<iterations>` must give byte-identical stdout on every runtime: the wasmtime cross-check enforces it.
 //!
 //! The set is discovered from disk; the table below only adds per-workload iteration caps. **Apps** are real cached programs with fixed argv/stdin, wall time only, hand-declared.
 
@@ -8,13 +8,13 @@ use std::path::PathBuf;
 
 use crate::bench::{apps_cache_dir, bench_cache_dir, display_path};
 
-/// Cap for a microbenchmark absent from [`MICRO_ITER_CAPS`] — a ceiling on calibration, not a target.
+/// Cap for a microbenchmark absent from [`MICRO_ITER_CAPS`]: a ceiling on calibration, not a target.
 const DEFAULT_ITER_CAP: u64 = 100_000_000;
 
 /// The families; each prefix names the source directory, the cache subdirectory, and the build script.
 const MICRO_FAMILIES: &[&str] = &["wat", "c"];
 
-/// Per-workload calibration **ceilings**, not fixed counts — they bind only the fastest runners, and exist to stop a workload with non-constant per-iteration cost from being driven absurdly far. Set to roughly 3x what wasmtime needs for the default 300 ms target; retune when a body changes.
+/// Per-workload calibration **ceilings**, not fixed counts: they bind only the fastest runners, and exist to stop a workload with non-constant per-iteration cost from being driven absurdly far. Set to roughly 3x what wasmtime needs for the default 300 ms target; retune when a body changes.
 const MICRO_ITER_CAPS: &[(&str, u64)] = &[
     ("wat/i32_alu", 500_000_000),
     ("wat/i64_alu", 500_000_000),
@@ -27,7 +27,7 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
     ("c/wordcount", 500_000_000),
 ];
 
-/// The `sqlite3_query` script: a 100k-row table in one transaction (recursive CTE, so the work is the engine's), then an aggregate and a `LIKE` scan. 100k rows because at 20k wasmtime finished in ~30 ms — nearly all process startup — leaving the baseline unresolvable. The script is fixed rather than calibrated per runner (that is what makes it realistic), which is why the slowest runners are excluded instead of measured at their own size.
+/// The `sqlite3_query` script: a 100k-row table in one transaction (recursive CTE, so the work is the engine's), then an aggregate and a `LIKE` scan. 100k rows because at 20k wasmtime finished in ~30 ms (nearly all process startup), leaving the baseline unresolvable. The script is fixed rather than calibrated per runner (that is what makes it realistic), which is why the slowest runners are excluded instead of measured at their own size.
 const SQLITE_QUERY_SQL: &str = "\
 .bail on
 PRAGMA journal_mode = memory;
@@ -70,7 +70,7 @@ impl Workload {
             Kind::App { .. } => "examples/apps/setup.sh".to_string(),
         };
         Some(format!(
-            "{} not built — run {build}",
+            "{} not built: run {build}",
             display_path(&self.wasm)
         ))
     }
@@ -121,7 +121,7 @@ pub fn workloads() -> Vec<Workload> {
     out
 }
 
-/// The `<family>/<stem>` ids actually present under `benchmarks/cache/`, walking each family's own subdirectory. A missing directory is not an error here — it just means that family is not built yet, which `--list` and the per-workload `missing_reason` report with the build command.
+/// The `<family>/<stem>` ids actually present under `benchmarks/cache/`, walking each family's own subdirectory. A missing directory is not an error here: it just means that family is not built yet, which `--list` and the per-workload `missing_reason` report with the build command.
 fn discovered_micro_ids() -> Vec<String> {
     let cache = bench_cache_dir();
     MICRO_FAMILIES
@@ -142,7 +142,7 @@ fn discovered_micro_ids() -> Vec<String> {
         .collect()
 }
 
-/// The declared app cases: `cowsay`, a startup-dominated real program on a mid-sized module where every runner in the matrix competes, and `sqlite3_query` for sustained real work. Both are timed as whole wall time — an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
+/// The declared app cases: `cowsay`, a startup-dominated real program on a mid-sized module where every runner in the matrix competes, and `sqlite3_query` for sustained real work. Both are timed as whole wall time: an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
 fn app_workloads() -> Vec<Workload> {
     let cache = apps_cache_dir();
     vec![
@@ -160,7 +160,7 @@ fn app_workloads() -> Vec<Workload> {
             label: "app/sqlite3_query".to_string(),
             wasm: cache.join("sqlite3-shell.wasm"),
             kind: Kind::App {
-                // `-batch` pins the shell to non-interactive mode. Otherwise it decides from `isatty`, and a runtime that misreports the standard fds runs a different program — pywasm calls every fd a character device (`wasi.py:429`) and got a banner and box-drawing output.
+                // `-batch` pins the shell to non-interactive mode. Otherwise it decides from `isatty`, and a runtime that misreports the standard fds runs a different program: pywasm calls every fd a character device (`wasi.py:429`) and got a banner and box-drawing output.
                 args: ["-batch", ":memory:"].map(String::from).to_vec(),
                 stdin: SQLITE_QUERY_SQL.to_string(),
             },
@@ -169,7 +169,7 @@ fn app_workloads() -> Vec<Workload> {
     ]
 }
 
-/// Runners excluded from the SQL query case. Every reason below is measured, not guessed — an earlier draft guessed "do not finish in a practical time" for all four interpreter entries and was wrong on both counts (wardite fails outright; pywasm runs it fine, just slowly).
+/// Runners excluded from the SQL query case. Every reason below is measured, not guessed: an earlier draft guessed "do not finish in a practical time" for all four interpreter entries and was wrong on both counts (wardite fails outright; pywasm runs it fine, just slowly).
 const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
     (
         "dewasm-bash",
@@ -184,5 +184,5 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
 /// wardite loads the module and handles a bare `.quit`, but any actual query dies.
 const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads sqlite3-shell.wasm but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
 
-/// Cost, not capability: pywasm runs this correctly (byte-identical under `-batch`) at ~17.9 ms/row, so 100k rows is ~half an hour per sample. The row count cannot be lowered to meet it — below ~20k rows wasmtime's side is all process startup and the baseline dissolves.
+/// Cost, not capability: pywasm runs this correctly (byte-identical under `-batch`) at ~17.9 ms/row, so 100k rows is ~half an hour per sample. The row count cannot be lowered to meet it: below ~20k rows wasmtime's side is all process startup and the baseline dissolves.
 const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";

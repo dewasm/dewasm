@@ -12,7 +12,7 @@ sub wasi_path_rename {
     # The preserved slash lets the host rename(2) enforce the existing and
     # missing shapes; a *nonexistent* slash-suffixed destination is
     # stripped so the rename proceeds, as wasmtime does (issue #42). Probe
-    # the bare path — stat on "x/" fails ENOTDIR and reads as missing.
+    # the bare path: stat on "x/" fails ENOTDIR and reads as missing.
     if (substr($new_host, -1) eq '/' && !lstat(substr($new_host, 0, -1))) {
         $new_host = substr($new_host, 0, -1);
     }

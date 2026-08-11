@@ -1,5 +1,5 @@
 /*
- * treesitter_binding.c — our own committed C source (first-party source is
+ * treesitter_binding.c: our own committed C source (first-party source is
  * fine to commit; only third-party *artifacts* stay out of the tree).
  *
  * A reactor library that parses a source string with the tree-sitter runtime

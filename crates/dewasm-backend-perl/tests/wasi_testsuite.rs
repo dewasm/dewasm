@@ -6,12 +6,12 @@ use dewasm_backend::Backend;
 use dewasm_backend_perl::PerlBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution: `(trial, tag)` — the out-of-scope `sock_shutdown` syscall (docs/support.md), like Ruby/Python. Unlike the Ruby/Python hosts, perl injects no environ entries of its own, so the `environ_*` trials pass without host-scoped entries.
+/// Known trial failures with their attribution, `(trial, tag)`: the out-of-scope `sock_shutdown` syscall (docs/support.md), like Ruby/Python. Unlike the Ruby/Python hosts, perl injects no environ entries of its own, so the `environ_*` trials pass without host-scoped entries.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscall (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // Core perl's only sub-second file-time APIs (Time::HiRes utime/stat) pass NV seconds, whose resolution at the current epoch is ~400ns — the suite's set-then-get of `mtim - 100` nanoseconds cannot round-trip exactly (the runtime unit comments carry the same attribution).
+    // Core perl's only sub-second file-time APIs (Time::HiRes utime/stat) pass NV seconds, whose resolution at the current epoch is ~400ns, so the suite's set-then-get of `mtim - 100` nanoseconds cannot round-trip exactly (the runtime unit comments carry the same attribution).
     (
         "rust/fd_filestat_set",
         "filestat times: perl NV-seconds utime caps precision below ns",
@@ -40,7 +40,7 @@ impl BackendUnderTest for PerlWasi {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_perl::find_perl()
-            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
+            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md")
     }
 }
 

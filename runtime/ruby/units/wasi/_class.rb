@@ -37,14 +37,14 @@ def initialize(args: [], env: {}, preopens: {})
     2 => [Rt::M64, Rt::M64, 0],
   }
   # The stdio special-cases (SPIPE on seek/tell/pread/pwrite, no close)
-  # key on the objects captured here, in lockstep with the fd table —
+  # key on the objects captured here, in lockstep with the fd table,
   # not on whatever the globals point at when a syscall runs.
   @std_ios = [$stdin, $stdout, $stderr].freeze
   next_fd = 3
   preopens.each do |guest, host|
     # The host path must resolve, but need not be a directory: a
     # single-file preopen (e.g. "/dev/null" for the zeroperl reactor's
-    # init probe) is accepted — the guest resolves it as the preopen
+    # init probe) is accepted: the guest resolves it as the preopen
     # root itself.
     real = begin
       File.realpath(host)

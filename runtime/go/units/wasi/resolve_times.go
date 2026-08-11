@@ -1,7 +1,7 @@
 // requires: wasi/errno_fs
 // resolve_times turns fstflags + the two timestamps into the (atime, mtime)
 // pair os.Chtimes expects, where a zero time.Time leaves that field unchanged.
-// Setting both the explicit bit and the *_NOW bit for one field is EINVAL — the
+// Setting both the explicit bit and the *_NOW bit for one field is EINVAL, the
 // only validation the suite checks.
 func (w *WASI) resolve_times(atim, mtim uint64, fstflags uint32) (time.Time, time.Time, uint32) {
     const (

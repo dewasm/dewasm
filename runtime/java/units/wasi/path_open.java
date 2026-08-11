@@ -56,7 +56,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         return exists ? WASI_NOTDIR : WASI_NOENT;
     } else if (trailingSlash) {
         // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when
-        // missing — except O_CREAT, which must not create through the slash;
+        // missing, except O_CREAT, which must not create through the slash;
         // per wasmtime: EINVAL on macOS, EISDIR on Linux.
         if (exists) {
             return WASI_NOTDIR;

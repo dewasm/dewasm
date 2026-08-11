@@ -1,6 +1,6 @@
 // requires: wasi/errno_fs
 // within reports whether path is base itself or lies under it (component-wise
-// containment against the already-realpath'd base — Path.startsWith is safer
+// containment against the already-realpath'd base: Path.startsWith is safer
 // than a raw string prefix, so /base does not "contain" /baseball).
 private static boolean within(java.nio.file.Path base, java.nio.file.Path path) {
     return path.equals(base) || path.startsWith(base);
@@ -24,7 +24,7 @@ private static boolean within(java.nio.file.Path base, java.nio.file.Path path) 
 // full resolution.
 //
 // Known limitation: this is a check-then-open, not an atomic
-// openat(2)-beneath resolution — a TOCTOU race or a symlink planted inside the
+// openat(2)-beneath resolution: a TOCTOU race or a symlink planted inside the
 // sandbox between the check and the actual filesystem call could in principle
 // escape. Accepted for a single-process research/demo runtime.
 Resolved resolve_path(int dirfd, String rel, boolean followLast) {
@@ -48,14 +48,14 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     java.nio.file.Path joined = java.nio.file.Paths.get(base.toString() + "/" + rel).normalize();
     // Lexical containment check: enough ".." components can normalize to a path
     // above base even though every prefix exists, so reject it here (NOTCAPABLE)
-    // before the filesystem is consulted — otherwise a nonexistent escaped
+    // before the filesystem is consulted. Otherwise a nonexistent escaped
     // target would surface as NOENT rather than the capability error the guest
     // expects. The realpath + within() checks below still catch symlink escapes.
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
     // A slash-suffixed name may only resolve to a directory (issue #42):
-    // Paths.get has normalized the slash away, so enforce it here — the
+    // Paths.get has normalized the slash away, so enforce it here: the
     // probes follow symlinks as the slash requires; a missing target is each
     // syscall's case. The slash is also stripped from `last` below, which
     // would otherwise be "" and silently degrade followLast.

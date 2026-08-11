@@ -1,6 +1,6 @@
 //! The two outputs of `cargo xtask size`: the machine-readable record under `benchmarks/results/` and the generated `docs/sizes/results.md`.
 //!
-//! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file. The JSON is the record — host, every runtime's version string as captured by executing it, every counted file — and the markdown is a rendering of it: numbers, not prose. What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
+//! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file. The JSON is the record (host, every runtime's version string as captured by executing it, every counted file), and the markdown is a rendering of it: numbers, not prose. What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
 
 use std::fmt::Write as _;
 
@@ -70,7 +70,7 @@ pub enum Outcome {
     Skipped {
         reason: String,
     },
-    /// Attempted and broke — a conversion error lands here.
+    /// Attempted and broke: a conversion error lands here.
     Failed {
         reason: String,
     },
@@ -94,7 +94,7 @@ impl Report {
     }
 }
 
-/// Render `docs/sizes/results.md`: the layout of `docs/benchmarks/results.md` — the generated-file marker, two sentences pointing at the hand-written README, then the environment and the numbers. No explanatory prose: what the figures mean belongs in `docs/sizes/README.md`, which a person edits.
+/// Render `docs/sizes/results.md`: the layout of `docs/benchmarks/results.md`: the generated-file marker, two sentences pointing at the hand-written README, then the environment and the numbers. No explanatory prose: what the figures mean belongs in `docs/sizes/README.md`, which a person edits.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
     out.push_str("# Sizes\n\n");
@@ -176,7 +176,7 @@ fn render_apps(out: &mut String, report: &Report, charts: &[Chart]) {
             let size = match &cell.outcome {
                 Outcome::Ok { bytes } => fmt_bytes(*bytes),
                 Outcome::Skipped { .. } => "—".to_string(),
-                Outcome::Failed { reason } => format!("**FAILED** — {}", md_cell(reason)),
+                Outcome::Failed { reason } => format!("**FAILED**: {}", md_cell(reason)),
             };
             let _ = writeln!(out, "| `{}` | {size} |", cell.target);
         }
@@ -184,7 +184,7 @@ fn render_apps(out: &mut String, report: &Report, charts: &[Chart]) {
     }
 }
 
-/// Everything the command did not weigh, with the reason it gives — an uninstalled runtime, an app that is not in the cache. Stated here rather than left as a gap in the tables above.
+/// Everything the command did not weigh, with the reason it gives: an uninstalled runtime, an app that is not in the cache. Stated here rather than left as a gap in the tables above.
 fn render_gaps(out: &mut String, report: &Report) {
     let mut gaps: Vec<(String, &str)> = Vec::new();
     for runtime in &report.runtimes {
@@ -235,7 +235,7 @@ fn render_chart(out: &mut String, chart: &Chart) {
     out.push_str("</picture>\n\n");
 }
 
-/// A size at three significant figures with a decimal SI prefix — `214 kB`, `4.79 MB`. Decimal, not binary: a release artifact's size is quoted in MB by every distribution channel there is. Whole bytes below 1 kB, where a fraction would be a fiction.
+/// A size at three significant figures with a decimal SI prefix: `214 kB`, `4.79 MB`. Decimal, not binary: a release artifact's size is quoted in MB by every distribution channel there is. Whole bytes below 1 kB, where a fraction would be a fiction.
 pub fn fmt_bytes(bytes: u64) -> String {
     fmt_bytes_f(bytes as f64)
 }

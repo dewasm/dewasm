@@ -24,7 +24,7 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     if oflags&0x2 != 0 && fsRightsBase&rightFdWrite != 0 {
         return wasiIsdir
     }
-    // Without SYMLINK_FOLLOW, a final symlink component is ELOOP — resolve_path
+    // Without SYMLINK_FOLLOW, a final symlink component is ELOOP: resolve_path
     // left it unfollowed, so a plain Lstat detects it.
     if !symlinkFollow {
         if fi, e := os.Lstat(hostPath); e == nil && fi.Mode()&os.ModeSymlink != 0 {

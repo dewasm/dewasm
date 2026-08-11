@@ -1,4 +1,5 @@
-//! Ruby end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations — every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration — a non-invocation carries a REASON comment.
+//! Ruby end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Ruby backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations: every scenario's case content (fixtures, expectations, run logic) lives in a shared const, glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration.
+//! A non-invocation carries a REASON comment.
 
 use std::path::{Path, PathBuf};
 
@@ -18,10 +19,10 @@ impl BackendUnderTest for Ruby {
     }
 
     fn interpreter(&self) -> PathBuf {
-        find_ruby().expect("ruby not found on PATH (or $DEWASM_RUBY) — see docs/testing.md")
+        find_ruby().expect("ruby not found on PATH (or $DEWASM_RUBY): see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own `.rb` file and return the `require_relative` preamble that loads them. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) written to `rt.rb`, so an imported table crosses modules (as the spec harness's `register` path does) — each module file requires it first, since its class body resolves `::Rt` at load time. Otherwise each file is a self-contained Embedded conversion carrying its own nested `Rt`.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.rb` file and return the `require_relative` preamble that loads them. `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage) written to `rt.rb`, so an imported table crosses modules (as the spec harness's `register` path does): each module file requires it first, since its class body resolves `::Rt` at load time. Otherwise each file is a self-contained Embedded conversion carrying its own nested `Rt`.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -104,7 +105,7 @@ inst.invoke("_start") # random_get falls back to the bundled WASI
 print captured
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale — `import(name)` resolves functions, `attach(instance)` binds the memory — so the bundled WASI is never constructed (`@wasi` stays nil).
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale (`import(name)` resolves functions, `attach(instance)` binds the memory), so the bundled WASI is never constructed (`@wasi` stays nil).
 const RUBY_CUSTOM_PROVIDER_GLUE: &str = r#"
 class MyWasi
   attr_reader :out
@@ -217,7 +218,7 @@ rescue Cruby::Rt::Exit
 end
 "#;
 
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No wasmtime snapshot — the results live in guest memory — so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
+// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory. No wasmtime snapshot (the results live in guest memory), so each drive's output is pinned in the shared case const. Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Rt::Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
 const RUBY_LIBSQLITE3_MEM: &str = r##"
@@ -267,7 +268,8 @@ db_mod.invoke("sqlite3_close", db)
 puts "C-API-OK"
 "##;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select — the file lifecycle through the C API (same fs stack as the shell).
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select.
+/// The file lifecycle through the C API, on the same fs stack as the shell.
 const RUBY_LIBSQLITE3_FILE: &str = r##"
 DB_MOD = Libsqlite3.new({}, preopens: { "/db" => "{scratch}" })
 DB_MOD.invoke("_initialize")
@@ -420,7 +422,7 @@ puts "TS-OK"
 
 /// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
 /// zero-returning `env.call_host_function` import stub (only invoked when the
-/// guest registers host callbacks — this program registers none) and a
+/// guest registers host callbacks: this program registers none) and a
 /// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
 /// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
 /// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex capture
@@ -451,12 +453,12 @@ inst.invoke("zeroperl_flush")
 /// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
 /// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
 /// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree — so `use Image::ExifTool` resolves in-guest with no module
+/// module tree, so `use Image::ExifTool` resolves in-guest with no module
 /// preopen. Instantiated like [`RUBY_ZEROPERL_EVAL`] (the `call_host_function`
 /// stub + a `/dev/null` preopen), plus the staged image at `/img`. The Perl
 /// driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides
 /// `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back
-/// into `eval_pv` instead of tripping `proc_exit` — then `zeroperl_flush`
+/// into `eval_pv` instead of tripping `proc_exit`, and then `zeroperl_flush`
 /// pushes ExifTool's buffered stdout out through fd 1. Only deterministic tags
 /// are requested (`-S -Make -Model -DateTimeOriginal`), pinned in the case
 /// const and cross-checked against host exiftool.

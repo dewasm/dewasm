@@ -22,7 +22,7 @@ pub fn build_java(source: &str) -> Result<PathBuf, Output> {
     let classdir = cache.join(format!("cls-{hash:016x}"));
 
     if !classdir.join("Main.class").exists() {
-        // Compile into a per-attempt unique dir, then rename onto the cache key: two threads with the same hash may build concurrently, and only the final rename is shared — so no reader ever sees a half-written class dir.
+        // Compile into a per-attempt unique dir, then rename onto the cache key: two threads with the same hash may build concurrently, and only the final rename is shared, so no reader ever sees a half-written class dir.
         let tmp = cache.join(format!(
             "cls-{hash:016x}.{}.{}",
             std::process::id(),
@@ -40,7 +40,7 @@ pub fn build_java(source: &str) -> Result<PathBuf, Output> {
         if !build.status.success() {
             return Err(build);
         }
-        // A concurrent builder of the same source may have claimed the key first, in which case the rename fails and this attempt's dir is redundant — drop it rather than leave it in /tmp.
+        // A concurrent builder of the same source may have claimed the key first, in which case the rename fails and this attempt's dir is redundant: drop it rather than leave it in /tmp.
         if std::fs::rename(&tmp, &classdir).is_err() {
             let _ = std::fs::remove_dir_all(&tmp);
         }

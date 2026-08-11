@@ -4,7 +4,7 @@
 
 # minigzip: zlib's stdio (de)compression demo, built from the pinned zlib
 # source release with zig. Integer-only and tiny, with binary
-# stdin/stdout — the byte-exact-stdio stress that runs under BOTH backends.
+# stdin/stdout, the byte-exact-stdio stress that runs under BOTH backends.
 # No upstream distributes a wasm32-wasi minigzip, so it is compiled locally.
 # The gz stream zlib writes here is fully deterministic (mtime 0, OS byte 3),
 # so wasmtime's output and the converted backends' output are byte-identical.

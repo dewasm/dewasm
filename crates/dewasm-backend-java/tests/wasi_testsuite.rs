@@ -1,4 +1,4 @@
-//! Java side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Java backend's standalone interface. Java is compiled, so it overrides `pty_command` to `javac` the generated `Main.java` to a content-addressed class-dir cache — the launch recipe the shared `run_standalone_wasi` runs with the manifest's env/args/dirs applied. The generic harness lives in `dewasm-test-helper`.
+//! Java side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Java backend's standalone interface. Java is compiled, so it overrides `pty_command` to `javac` the generated `Main.java` to a content-addressed class-dir cache, the launch recipe the shared `run_standalone_wasi` runs with the manifest's env/args/dirs applied. The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
 use dewasm_backend_java::{find_java, JavaBackend};
@@ -51,7 +51,7 @@ impl BackendUnderTest for JavaWasi {
     /// Compile `source` (one `Main.java`) to the content-addressed class-dir cache and return the run recipe. A missing `javac`/`java` fails loud; a compile failure panics (generated code that does not compile is a bug, not a WASI gap).
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
-            find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+            find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
         let classdir = build_java(source).unwrap_or_else(|build| {
             panic!("javac failed:\n{}", String::from_utf8_lossy(&build.stderr))
         });

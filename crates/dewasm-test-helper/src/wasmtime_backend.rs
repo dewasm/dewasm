@@ -1,4 +1,4 @@
-//! wasmtime as a [`BackendUnderTest`]: the snapshot-vs-wasmtime freshness checks run through the *same* shared app/gzip runners every real backend uses, rather than a hand-written per-case loop. wasmtime does not generate source — it runs the cached `.wasm` binary directly — so its `convert_app` returns the path to the exact cache binary the snapshots were captured from, and its `run`/`run_bytes` spawn the `xtask` WASI runner on it.
+//! wasmtime as a [`BackendUnderTest`]: the snapshot-vs-wasmtime freshness checks run through the *same* shared app/gzip runners every real backend uses, rather than a hand-written per-case loop. wasmtime does not generate source (it runs the cached `.wasm` binary directly), so its `convert_app` returns the path to the exact cache binary the snapshots were captured from, and its `run`/`run_bytes` spawn the `xtask` WASI runner on it.
 //!
 //! That runner embeds the `wasmtime` crate pinned by `Cargo.lock` (`cargo xtask test-wasmtime-wasi`), so no `wasmtime` CLI has to be installed and the engine behind every snapshot is the same on every host.
 //! This crate keeps no `wasmtime` dependency of its own: it only spawns the binary, which the developer builds once with `cargo build -p xtask`.
@@ -36,7 +36,7 @@ impl Backend for NeverBackend {
 }
 
 /// The arguments `xtask test-wasmtime-wasi` takes for one run: the preopens, the environment, the wasm path, and the guest's `argv[1..]` (the runner sets `argv[0]` to the wasm file's base name itself).
-/// Every wasmtime-engine call site builds its command from this one function — the spawning [`Wasmtime`] here and the in-process engine `cargo xtask update-snapshots` drives — so the two cannot drift apart.
+/// Every wasmtime-engine call site builds its command from this one function (the spawning [`Wasmtime`] here and the in-process engine `cargo xtask update-snapshots` drives), so the two cannot drift apart.
 pub fn wasi_runner_argv(
     wasm: &str,
     args: &[&str],
@@ -70,7 +70,7 @@ pub fn wasi_runner_bin() -> PathBuf {
     let bin = profile_dir.join(format!("xtask{}", std::env::consts::EXE_SUFFIX));
     assert!(
         bin.is_file(),
-        "the wasmtime engine runs wasm through the xtask runner, and {} does not exist — \
+        "the wasmtime engine runs wasm through the xtask runner, and {} does not exist: \
          build it once with `cargo build -p xtask` (see docs/testing.md)",
         bin.display()
     );
@@ -114,7 +114,7 @@ impl BackendUnderTest for Wasmtime {
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         assert!(
             Path::new(source).exists(),
-            "{} not cached — run examples/apps/setup.sh (see docs/testing.md)",
+            "{} not cached: run examples/apps/setup.sh (see docs/testing.md)",
             source
         );
         run_command_bytes(
@@ -155,7 +155,7 @@ impl BackendUnderTest for Wasmtime {
         )
     }
 
-    /// Drive the cached wasm binary directly under a pty: the runner inherits the pty slave as its stdio, so the guest reads a character device — the ground-truth interactive session the backends must match.
+    /// Drive the cached wasm binary directly under a pty: the runner inherits the pty slave as its stdio, so the guest reads a character device: the ground-truth interactive session the backends must match.
     /// The runner supplies `argv[0]`, so a bare no-args call is the interactive REPL invocation.
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
         let mut argv = vec!["test-wasmtime-wasi".to_string()];

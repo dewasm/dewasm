@@ -12,7 +12,7 @@
 # non-tty stdin waits for one byte with `read -d '' -n 1`, while a tty stdin
 # waits for a whole canonical line with a plain `read` (`-n 1` toggles ICANON
 # per byte and each restore makes the pty line discipline re-echo the pending
-# line — see fd_read); a clock-only wait sleeps with a bash-only
+# line, see fd_read); a clock-only wait sleeps with a bash-only
 # coproc timer (a process substitution opened `<>` is rejected on some hosts, so
 # a coproc that blocks on its own pipe is the portable sleep). `now` comes from
 # EPOCHREALTIME, with monotonic falling back to realtime (a documented

@@ -3,8 +3,8 @@
 # shellcheck source=common.sh
 
 # ExifTool on zeroperl: 6over3/exiftool's build pipeline flattens ExifTool
-# 13.x's CLI driver into a single ~100 KB script — perltidy-minified, the two
-# $SIG{INT}/$SIG{CONT} handlers stripped — checked into 6over3/exiftool as
+# 13.x's CLI driver into a single ~100 KB script (perltidy-minified, the two
+# $SIG{INT}/$SIG{CONT} handlers stripped), checked into 6over3/exiftool as
 # src/exiftool (no extension). It is the driver only: its `use Image::ExifTool`
 # resolves in-guest from the module tree embedded in zeroperl.wasm's SFS blob
 # (Phil Harvey's pure-Perl Image::ExifTool from CPAN), so no module tree is
