@@ -1,10 +1,15 @@
-//! Snapshot freshness: re-validates the checked-in `examples/apps/snapshots/` against a live `wasmtime` through the same shared app/gzip/fs runners every backend uses; the per-backend `apps`/`gzip`/`fs_apps` suites cover the other half (generated output vs. snapshot).
+//! Snapshot freshness: re-validates the checked-in `examples/apps/snapshots/` against wasmtime through the same shared app/gzip/fs runners every backend uses; the per-backend `apps`/`gzip`/`fs_apps` suites cover the other half (generated output vs. snapshot).
 //!
-//! Named `apps_wasmtime` for the family: a future engine-under-test (wasmer, wasmedge) would join here the same way. Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise, because `wasmtime` is deliberately not one of the default suite's required tools — this suite exists to check the checker, not to run on every `cargo test`.
+//! Every case here runs wasm through the `xtask` binary, which embeds the `wasmtime` crate pinned by `Cargo.lock` (`cargo xtask test-wasmtime-wasi`, plus the `test-wasmtime-doom-frame`/`test-wasmtime-nes-frame` captures).
+//! Build it once with `cargo build -p xtask`; this suite never builds it and never skips when it is missing.
+//!
+//! Named `apps_wasmtime` for the family: a future engine-under-test (wasmer, wasmedge) would join here the same way.
+//! Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise — this suite exists to check the checker, not to run on every `cargo test`.
 //!
 //! Run it with:
 //!
 //! ```console
+//! $ cargo build -p xtask
 //! $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 //! ```
 
@@ -93,14 +98,68 @@ fn fs_apps() {
     );
 }
 
-// The standalone `--dir` interface run against wasmtime as ground truth: `run_standalone_dir`'s wasmtime path consumes `--dir` as a host flag (`wasmtime run --dir HOST::GUEST <wasm>`), the exact behavior the generated backends' own `--dir` parsing must reproduce. Uses no cached app, only the committed `wasi_standalone_dir.wat`, so it needs only wasmtime on PATH.
+// The standalone `--dir` interface run against wasmtime as ground truth: `run_standalone_dir`'s wasmtime path consumes `--dir` as a host flag, the exact behavior the generated backends' own `--dir` parsing must reproduce.
+// Uses no cached app, only the committed `wasi_standalone_dir.wat`.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn standalone_dir() {
     dewasm_test_helper::run_standalone_dir(&dewasm_test_helper::Wasmtime);
 }
 
-// Snapshot freshness for the interactive-REPL transcript: re-capture the bare qjs REPL under a real pty from a live wasmtime and require it to equal the checked-in `qjs_repl_interactive.transcript`. Compare-only; regenerate with `cargo xtask update-snapshots` when the pinned qjs binary or the scripted session changes.
+// The two framebuffer snapshots: neither module runs as a WASI command (each has its own export/import interface), so the runner exposes their capture as its own subcommand and the frame arrives on stdout.
+// Compare-only, like every other case here.
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn doom_frame() {
+    assert_frame_snapshot(
+        "test-wasmtime-doom-frame",
+        &dewasm_test_helper::doom_frame_snapshot_path(),
+    );
+}
+
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
+fn nes_frame() {
+    assert_frame_snapshot(
+        "test-wasmtime-nes-frame",
+        &dewasm_test_helper::nes_frame_snapshot_path(),
+    );
+}
+
+/// Run the runner's `subcommand` capture and require its stdout to equal the snapshot at `path`.
+fn assert_frame_snapshot(subcommand: &str, path: &std::path::Path) {
+    let output = std::process::Command::new(dewasm_test_helper::wasi_runner_bin())
+        .arg(subcommand)
+        .output()
+        .expect("spawn the xtask runner");
+    assert!(
+        output.status.success(),
+        "xtask {subcommand}: exit {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let snapshot = std::fs::read(path).unwrap_or_else(|e| {
+        panic!(
+            "{} not readable ({e}) — regenerate with `cargo xtask update-snapshots` \
+             (see docs/testing.md)",
+            path.display()
+        )
+    });
+    assert!(
+        output.stdout == snapshot,
+        "xtask {subcommand}: frame differs from {} ({} vs {} bytes)",
+        path.display(),
+        output.stdout.len(),
+        snapshot.len()
+    );
+    println!(
+        "{subcommand}: matches the snapshot ({} bytes)",
+        snapshot.len()
+    );
+}
+
+// Snapshot freshness for the interactive-REPL transcript: re-capture the bare qjs REPL under a real pty and require it to equal the checked-in `qjs_repl_interactive.transcript`.
+// Compare-only; regenerate with `cargo xtask update-snapshots` when the pinned qjs binary or the scripted session changes.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn qjs_repl_interactive_snapshot() {
@@ -113,7 +172,8 @@ fn qjs_repl_interactive_snapshot() {
             )
         });
     let got = dewasm_test_helper::capture_qjs_repl_transcript(&dewasm_test_helper::Wasmtime);
-    // Linux wasmtime emits one extra trailing CRLF on pty teardown that macOS wasmtime (which captured the snapshot) does not; the converted backends match the snapshot byte-for-byte on both hosts, so the difference is wasmtime's own exit behavior, outside the transcript's meaningful content (it ends at the `\q` echo). Compare modulo trailing CRLFs here only — the per-backend comparison stays exact (issue #33).
+    // Under Linux the engine leaves one extra trailing CRLF on pty teardown that macOS (where the snapshot was captured) does not; the converted backends match the snapshot byte-for-byte on both hosts, so the difference is in the engine's exit path, outside the transcript's meaningful content (it ends at the `\q` echo).
+    // Compare modulo trailing CRLFs here only — the per-backend comparison stays exact (issue #33).
     dewasm_test_helper::assert_transcript_eq(
         trim_trailing_crlfs(&got),
         trim_trailing_crlfs(&snapshot),
