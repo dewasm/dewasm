@@ -9,7 +9,7 @@
 //! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app, the title says which), never a ratio, so charts can be read against each other.
 //! The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
 //!
-//! [`lollipop`] and the theme around it are the drawing, with the unit left open; `cargo xtask size` draws its byte figures with the same function so the two records look like one family of charts.
+//! [`lollipop`] and the theme around it are the drawing, with the unit left open; the size record draws its byte figures with the same function so the two records look like one family of charts.
 
 use std::fmt::Write as _;
 

@@ -7,12 +7,9 @@
 //!
 //! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
 //!
-//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `records/` and regenerates `docs/benchmarks/results.md`.
-//! Unlike the two commands above, neither output is a compared snapshot: a timing is not reproducible byte-for-byte, so no freshness test guards it.
-//!
-//! `size` is its size counterpart: per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime.
-//! Its record joins the timing ones in `records/` and it renders `docs/sizes/results.md`.
-//! Also a measurement rather than a snapshot.
+//! The two measurements are `record-speed` (every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages) and `record-size` (per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime).
+//! Each writes a dated record under `records/` and renders nothing; `render-speed` and `render-size` turn a record into `docs/benchmarks/results.md` and `docs/sizes/results.md`.
+//! Unlike the commands above, none of those outputs is a compared snapshot: neither a timing nor an installed size is reproducible byte-for-byte, so no freshness test guards them.
 //!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
@@ -47,10 +44,14 @@ Commands:
         Write the captured DOOM framebuffer to stdout as a binary P6 PPM.
     test-wasmtime-nes-frame
         Write the captured NES framebuffer to stdout as a binary P6 PPM.
-    bench [filter] [--list] [--reps N] [--target-ms MS] [--timeout SECS] [--render FILE]
-        Run the cross-runtime benchmark suite and regenerate docs/benchmarks/results.md (see docs/benchmarks/README.md).
-    size [--render FILE]
-        Record the distribution sizes and regenerate docs/sizes/results.md (see docs/sizes/README.md).
+    record-speed [filter] [--list] [--reps N] [--target-ms MS] [--timeout SECS]
+        Run the cross-runtime benchmark suite and write a speed record to records/ (see docs/benchmarks/README.md).
+    record-size
+        Weigh the corpus and write a size record to records/ (see docs/sizes/README.md).
+    render-speed [record]
+        Regenerate docs/benchmarks/results.md and its charts from the named speed record, or from the newest one.
+    render-size [record]
+        Regenerate docs/sizes/results.md and its figures from the named size record, or from the newest one.
 ";
 
 fn main() -> Result<()> {
@@ -61,8 +62,10 @@ fn main() -> Result<()> {
         Some("test-wasmtime-wasi") => wasi_run::main(args),
         Some("test-wasmtime-doom-frame") => write_stdout(&capture_doom_frame()?.0),
         Some("test-wasmtime-nes-frame") => write_stdout(&capture_nes_frame()?.0),
-        Some("bench") => bench::main(args),
-        Some("size") => size::main(args),
+        Some("record-speed") => bench::record(args),
+        Some("record-size") => size::record(args),
+        Some("render-speed") => bench::render(args),
+        Some("render-size") => size::render(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())

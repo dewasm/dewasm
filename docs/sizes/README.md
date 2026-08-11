@@ -7,15 +7,17 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 
 ```console
 $ examples/apps/setup.sh             # the cached apps (cowsay, sqlite3-shell, qjs, ruby)
-$ cargo xtask size                   # the whole corpus, a few minutes
+$ cargo xtask record-size            # the whole corpus, a few minutes
+$ cargo xtask render-size            # results.md and its figures, from that record
 ```
 
-A run writes a dated record to `records/<timestamp>Z-size.json` and regenerates `docs/sizes/results.md` with its figures.
+Measuring and rendering are two commands, as on the speed side: a run writes a dated `<timestamp>Z-size.json` to [`records/`](../../records/README.md) and nothing else, and rendering turns a record into `docs/sizes/results.md` with its figures.
+`render-size` takes the newest size record by default.
 Useful options:
 
 | Command | Effect |
 | --- | --- |
-| `cargo xtask size --render <record-size.json>` | Regenerate the document and its figures from a stored record without measuring. |
+| `cargo xtask render-size <record>` | Render an older record instead of the newest one; a `-speed.json` path is refused. |
 
 The apps cache is required: an app that is not built is reported as not measured, with the script that would fix it.
 A wasm runtime is not: none has to be installed, and every one that is missing is reported with its reason while the run continues.

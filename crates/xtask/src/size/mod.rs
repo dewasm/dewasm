@@ -1,11 +1,11 @@
-//! `cargo xtask size`: the size record, sibling of the `bench` speed record.
+//! `cargo xtask record-size` and `cargo xtask render-size`: the size record, sibling of the speed record.
 //!
 //! It answers the distribution question with numbers: shipping a wasm program means shipping the binary *and* a runtime that can execute it, while shipping dewasm's output means shipping source to users who already have the interpreter.
 //! Which is smaller is a fact about a given app and a given backend, and this command measures it: per app, the wasm binary and every backend's converted standalone source, beside the installed size of every native runtime on the host.
 //!
-//! Two outputs from one command, like `bench`: a dated record under `records/` (`<timestamp>Z-size.json`, beside the speed records, one home for every measurement record) and a generated `docs/sizes/results.md` with its figures under `docs/sizes/figs/`.
+//! Measuring and rendering are separate commands, as on the speed side: `record-size` writes a dated record under `records/` (`<timestamp>Z-size.json`, beside the speed records, one home for every measurement record), `render-size` turns a record into `docs/sizes/results.md` with its figures under `docs/sizes/figs/`.
 //! The hand-written `docs/sizes/README.md` beside it says how to run this and how to read the numbers; nothing here writes it.
-//! Neither output is a compared snapshot (the sizes move with the host's runtime versions and with every codegen change), so no freshness test guards them, and `--render` regenerates the document from a stored record without measuring.
+//! Neither output is a compared snapshot (the sizes move with the host's runtime versions and with every codegen change), so no freshness test guards them.
 //!
 //! Raw bytes throughout, never compressed: a release artifact's weight is the honest distribution figure, and compression flattens exactly the differences the record exists to track.
 
@@ -19,8 +19,8 @@ use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 
 use crate::bench::runner::{runners, Kind};
 use crate::bench::{
-    apps_cache_dir, display_path, docs_dir, host_info, note_record, records_dir, utc_timestamp,
-    write_file,
+    apps_cache_dir, display_path, docs_dir, host_info, note_record, record_to_render, records_dir,
+    utc_timestamp, write_file, SIZE_SUFFIX,
 };
 use crate::size::report::{App, Cell, Component, Outcome};
 
@@ -28,40 +28,21 @@ use crate::size::report::{App, Cell, Component, Outcome};
 /// Fixed rather than "everything in the cache": these four span two orders of magnitude of wasm size, and a record whose contents depend on which apps happen to be built is not comparable with the next one.
 const CORPUS: [&str; 4] = ["cowsay.wasm", "sqlite3-shell.wasm", "qjs.wasm", "ruby.wasm"];
 
-struct Options {
-    /// Re-render `docs/sizes/results.md` and its figures from a stored record instead of measuring.
-    /// Converting the corpus with six backends takes minutes, so a wording fix must not require re-measuring: the JSON is the record, the markdown is a view of it.
-    render: Option<PathBuf>,
+/// Regenerate `docs/sizes/results.md` and its figures from a stored size record.
+/// Converting the corpus with six backends takes minutes, so a wording fix must not require re-measuring: the JSON is the record, the markdown is a view of it.
+pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
+    let path = record_to_render(args, SIZE_SUFFIX)?;
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", display_path(&path)))?;
+    let report: report::Report = serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a size record", display_path(&path)))?;
+    write_doc(&report)
 }
 
-impl Options {
-    fn parse(args: impl Iterator<Item = String>) -> Result<Self> {
-        let mut opts = Options { render: None };
-        let mut args = args.peekable();
-        while let Some(arg) = args.next() {
-            let mut value = |name: &str| -> Result<String> {
-                args.next().with_context(|| format!("{name} needs a value"))
-            };
-            match arg.as_str() {
-                "--render" => opts.render = Some(PathBuf::from(value("--render")?)),
-                other => bail!("unknown size option: {other}"),
-            }
-        }
-        Ok(opts)
+pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
+    if let Some(arg) = args.into_iter().next() {
+        bail!("record-size takes no arguments (got {arg})");
     }
-}
-
-pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
-    let opts = Options::parse(args)?;
-
-    if let Some(path) = &opts.render {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", display_path(path)))?;
-        let report: report::Report = serde_json::from_str(&text)
-            .with_context(|| format!("{} is not a size record", display_path(path)))?;
-        return write_doc(&report);
-    }
-
     run()
 }
 
@@ -91,12 +72,10 @@ fn run() -> Result<()> {
         apps,
     };
 
-    // Beside the speed records, in the same dated spelling, with `-size` naming the kind.
-    // `--render` on the other kind of file fails to deserialize, which is the check that matters.
-    let json_path = records_dir().join(format!("{}-size.json", generated_at.replace(':', "-")));
+    let json_path = records_dir().join(format!("{}{SIZE_SUFFIX}", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
     note_record(&json_path)?;
-    write_doc(&report)?;
+    println!("nothing was rendered: run `cargo xtask render-size` to regenerate docs/sizes/results.md from this record");
 
     let failures: Vec<String> = report
         .apps
@@ -125,8 +104,6 @@ fn run() -> Result<()> {
     );
 }
 
-/// Both the measuring run and `--render` go through here, so a stored record regenerates the figures as well as the prose.
-///
 /// Figures the record no longer covers are deleted: an orphan SVG looks current while nothing links it.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);

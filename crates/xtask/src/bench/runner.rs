@@ -166,7 +166,7 @@ impl Runner {
 
     /// The executable this runner launches, for the runners that *are* one executable: wasmtime and the other native runtimes.
     /// `None` for a dewasm backend or a driver, whose "runner" is a generated artifact plus a host interpreter.
-    /// `cargo xtask size` weighs what this returns.
+    /// The size record weighs what this returns.
     pub fn binary(&self) -> Option<PathBuf> {
         match &self.kind {
             Kind::Wasmtime => wasmtime_bin(),
