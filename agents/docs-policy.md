@@ -16,6 +16,7 @@ A document a user would never open, but an agent must consult before changing so
 | [README.md](../README.md) | Front door: what dewasm is, one showpiece, install, usage, scope | Users evaluating the project | By hand |
 | [AGENTS.md](../AGENTS.md) | The agent contract: the rules that bind every change | Agents, contributors | By hand |
 | [agents/decisions/](decisions/README.md) | Design decisions with rationale and rejected alternatives, numbered and cited as "decision N" | Agents, future maintainers | By hand (procedure and quality bar in its README) |
+| [agents/experiments.md](experiments.md) | Past experiments: the conclusion and its re-test condition, over the Issue/PR that holds the record | Agents | By hand |
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
 | [agents/test-authoring.md](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and contributors writing tests | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
@@ -53,6 +54,7 @@ A document a user would never open, but an agent must consult before changing so
 - A contributor-facing setup requirement, or how to run a suite → `docs/testing.md`.
 - A test-structure or test-authoring convention → `agents/test-authoring.md`.
 - A design decision → a new record (see [agents/decisions/README.md](decisions/README.md)).
+- An experiment's outcome with no decision attached → its Issue/PR, plus an entry in `agents/experiments.md` when it changes what a future agent would do.
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
 - A new real-world app target → an audited row in `docs/apps-audit.md`.
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask bench`.

@@ -86,6 +86,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 64 | [Record Distribution Size Beside Speed, in Raw Bytes](64-size-record.md) | Accepted |
 | 65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted |
 | 66 | [`agents/` for Agent-Facing Documents, `docs/` for Human-Facing Ones](66-agents-directory.md) | Accepted |
+| 67 | [An Experiments Index over Issues and PRs](67-experiments-index.md) | Accepted |
 
 ## Adding a new decision
 
@@ -96,7 +97,7 @@ If no alternatives were weighed, there is nothing to record:
 
 - A mechanical change with no live alternatives → the commit message is enough.
 - Behavior the spec harness already enforces → the harness binds (decision 3), and a decision records *why*, never a normative description the harness already carries.
-- A survey or a measurement with no decision attached → leave it in the issue or the pull request, and cite it from the decision that uses it.
+- A survey or a measurement with no decision attached → leave it in the issue or the pull request; when the outcome changes what a future agent would do, add an entry to [`agents/experiments.md`](../experiments.md).
 
 ### Procedure
 
