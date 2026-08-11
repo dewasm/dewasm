@@ -50,9 +50,7 @@ BIT_RIGHT = 128
 
 # A pressed key is held down-active until this many seconds pass without seeing it again.
 # Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
-# This backend's tick rate is close to
-# DOOM's Python frontend's (dewasm's Python backend cost is dominated by per-instruction interpretation overhead, not game complexity, as
-# README explains), so this reuses that frontend's RELEASE_TIMEOUT rather than the much shorter one the Ruby/Perl NES frontends use at their much higher tick rates: the window has to bridge the gap between ticks, not just a terminal's own autorepeat interval.
+# Ticks land ~90ms apart under PyPy and ~0.5s apart under CPython (README has the numbers), so this reuses the DOOM Python frontend's RELEASE_TIMEOUT rather than the much shorter one the Ruby/Perl NES frontends use at their much higher tick rates: the window has to bridge the gap between ticks, not just a terminal's own autorepeat interval.
 RELEASE_TIMEOUT = 0.4
 
 FRAME_W = 256

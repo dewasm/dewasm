@@ -5,7 +5,7 @@ One NES, six languages: [agnes](https://github.com/kgabis/agnes) (a dependency-f
 - [`go/`](go/): Go, rendering with [ebiten](https://github.com/hajimehoshi/ebiten)
 - [`java/`](java/): Java, rendering with Swing (plain JDK, zero dependencies)
 - [`ruby/`](ruby/): Ruby, rendering *into the terminal* as 24-bit-color ANSI half-blocks (stdlib only, run with `--yjit`)
-- [`python/`](python/): Python, the same terminal renderer (stdlib only, ~1.2 frames/sec)
+- [`python/`](python/): Python, the same terminal renderer (stdlib only, ~11 frames/sec under PyPy, ~2.2 under CPython)
 - [`perl/`](perl/): Perl, the same terminal renderer (core modules only, ~0.9 frames/sec)
 - [`bash/`](bash/): pure Bash, same terminal renderer; ~20-40 seconds per frame, an existence proof in the bash-DOOM tradition
 
