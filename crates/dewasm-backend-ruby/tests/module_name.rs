@@ -17,7 +17,8 @@ dewasm_test_helper::module_name_policy_suite!(
 
 /// Run `source` under ruby and return its stdout, failing loud on a nonzero exit.
 fn run(source: &str) -> String {
-    let ruby = find_ruby().expect("ruby >= 3.4 not found on PATH — see docs/testing.md");
+    let ruby =
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
     let out = dewasm_test_helper::run_script(&ruby, source, "rb", &[], "");
     assert!(
         out.status.success(),

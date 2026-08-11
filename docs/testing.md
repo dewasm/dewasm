@@ -10,7 +10,7 @@ Therefore, the following tools and setup steps are required to run all tests cor
 - **Rust toolchain**: `rustup` applies the pin in `rust-toolchain.toml` automatically; a non-rustup `cargo` ignores the pin.
 - **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states; a full `cargo test` needs all of them.
   * Each tool should be found under `PATH` (the `bash` lookup also tries the common Homebrew install paths).
-  * These environment variables override the lookup: `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`. `ruby` has no override.
+  * These environment variables override the lookup: `$DEWASM_RUBY`, `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`.
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
   * Cached `.wasm` files are located in `examples/apps/cache`.
@@ -38,7 +38,7 @@ Checked-in snapshots are code-derived, never hand-written; a stale one fails a c
 | Snapshot | Regenerate with |
 | --- | --- |
 | `docs/support.md` | `cargo xtask update-support-docs` |
-| every execution snapshot (`examples/apps/snapshots/*`, incl. the DOOM and NES frames) | `cargo xtask update-snapshots [filter]` |
+| every execution snapshot (`examples/apps/snapshots/*`) | `cargo xtask update-snapshots [filter]` |
 
 A snapshot claims "this is what `wasmtime run` produces", so it can go stale.
 The opt-in freshness check runs the cached binaries under a live `wasmtime` and compares against the checked-in files:

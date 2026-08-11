@@ -37,7 +37,7 @@ Real-world wasip1 binaries would otherwise be uniformly rejected, which would de
 
 ³ **QuickJS deepened.**
 Beyond the one-shot `-e` eval case, e2e cases exercise real WASI filesystem use against a preopened scratch dir and the interactive REPL under a real pty, both byte-identical to `wasmtime`.
-Every backend mirrors the file I/O case against the same fixtures and snapshots on the shared WASI filesystem model, conditional behind the `slow_test` cargo feature in each crate (`#[ignore]`d otherwise; run with `--features slow_test` or `-- --include-ignored`):
+Every backend mirrors the file I/O case against the same fixtures and snapshots on the shared WASI filesystem model, conditional behind the `slow_test` cargo feature in each crate (`#[ignore]`d otherwise; run with `--features slow_test`):
 
 - *File I/O* (`qjs_file_io`): the `qjs:std` module writes a file, reads it back, and prints it; the test asserts the guest stdout snapshot **and** the host-side file content.
   Fixture: `examples/apps/fixtures/qjs_file_io.js`.

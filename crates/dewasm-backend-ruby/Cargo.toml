@@ -15,6 +15,10 @@ workspace = true
 # `#[test]`s instead of `#[ignore]`d ones, and runs the full spec testsuite —
 # CI's main run. See docs/testing.md.
 slow_test = []
+# The ultra-slow category: cases measured at ~1 minute or more locally, kept
+# out of CI and run only in local pre-release verification. No Ruby case
+# sits in this category yet.
+ultra_slow_test = ["slow_test"]
 
 [dependencies]
 anyhow.workspace = true

@@ -698,7 +698,7 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Bash);
 
 dewasm_test_helper::cowsay_args_e2e!(Bash);
 dewasm_test_helper::cowsay_stdin_e2e!(Bash);
-// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but slow — Bash's softfloat makes QuickJS/SQLite take tens of seconds, so the generated tests are `#[ignore]`d by default; `--features slow_test` or `-- --include-ignored` runs them anyway (same as every other backend).
+// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but slow — Bash's softfloat makes QuickJS/SQLite take tens of seconds, so the generated tests are `#[ignore]`d by default; `--features slow_test` runs them anyway (same as every other backend).
 dewasm_test_helper::qjs_eval_e2e!(Bash);
 dewasm_test_helper::sqlite3_shell_e2e!(Bash);
 // minigzip is integer-only (no softfloat), so it runs under Bash by default, unlike the slow floating-point apps (QuickJS/SQLite).

@@ -1,6 +1,6 @@
 //! Bash side of the shared spec harness: converts modules with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn result globals and the status-134 trap protocol), and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
-//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list; the rest are `#[ignore]`d trials, so `cargo test -- --include-ignored` runs everything. The generic harness lives in `dewasm-test-helper`.
+//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list; the rest are `#[ignore]`d trials, unless the `slow_test` feature is on. The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -25,7 +25,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "multi-memory"),
 ];
 
-/// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial (`--include-ignored` or `slow_test` runs everything). Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat.
+/// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial (`slow_test` runs everything). Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat.
 const CURATED_FILES: &[&str] = &[
     "address",
     "address0",
