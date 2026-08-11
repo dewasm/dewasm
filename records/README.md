@@ -36,3 +36,15 @@ A run appends its own section with the occasion left as `TODO`, because that is 
 - **Taken**: 2026-08-06.
 - **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
 - **Occasion**: taken for the parenthesis elision in the Ruby backend (#168 for #163); only the Ruby figures move against the previous record.
+
+## 2026-08-11T18-25-24Z.json
+
+- **Taken**: 2026-08-11.
+- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
+- **Occasion**: re-baseline after the changes since the previous speed record: the pending-spill fix (#176), the generated-source shrink and Ruby parenthesis elision (#167, #168), and the unit-comment rewrites of the writing style pass (#195); taken together with the records/ move (#198).
+
+## 2026-08-11T18-27-09Z-size.json
+
+- **Taken**: 2026-08-11.
+- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
+- **Occasion**: re-baseline beside the speed record above; the converted sources carry the unit-comment rewrites of the writing style pass (#195) and the pending-spill fix (#176).

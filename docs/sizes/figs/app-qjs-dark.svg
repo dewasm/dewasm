@@ -15,8 +15,8 @@
 <circle cx="494.6" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">7.07 MB</text>
 <text x="152.0" y="138.0" text-anchor="end" font-size="12" fill="#ffffff">ruby</text>
-<line x1="168.0" y1="134.0" x2="495.1" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="495.1" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="134.0" x2="495.0" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="495.0" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">7.09 MB</text>
 <text x="152.0" y="162.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
 <line x1="168.0" y1="158.0" x2="560.2" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
