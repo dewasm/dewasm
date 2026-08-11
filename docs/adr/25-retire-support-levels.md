@@ -1,16 +1,24 @@
 # ADR-25 — Retire the Support Maturity Levels for Plain Capability Declarations
 
-Status: **Accepted, 2026-07-25.** The removal of the level type, its derivation functions, the per-backend target declaration, and level conditioning on the e2e case tables has landed; `docs/support.md` now renders a flat `## Features` table (the in-scope subset) plus the `## WASI preview 1` table. Supersedes [ADR-23](23-backend-support-levels.md).
+Status: **Accepted, 2026-07-25.**
+The removal of the level type, its derivation functions, the per-backend target declaration, and level conditioning on the e2e case tables has landed; `docs/support.md` now renders a flat `## Features` table (the in-scope subset) plus the `## WASI preview 1` table.
+Supersedes [ADR-23](23-backend-support-levels.md).
 
 ## Context
 
-ADR-23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before ADR-24 cut the input scope to exactly that surface and set the same bar — a passing spec harness + full WASI p1 — for every 0.1 backend. With the 2.0+/CM badges gone and all backends aiming at one bar, the scale degenerates: Levels 1–2 differ only by a list flag and twelve WASI functions, and Level 3 is just "filesystem not done yet".
+ADR-23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before ADR-24 cut the input scope to exactly that surface and set the same bar — a passing spec harness + full WASI p1 — for every 0.1 backend.
+With the 2.0+/CM badges gone and all backends aiming at one bar, the scale degenerates: Levels 1–2 differ only by a list flag and twelve WASI functions, and Level 3 is just "filesystem not done yet".
 
 ## Decision
 
-Retire the levels. Backends declare capabilities directly — feature support (`Backend::feature_status`) and per-function WASI p1 coverage (`Backend::has_wasi_p1`, derived from runtime units) — and `docs/support.md` renders those declarations flat (features table + WASI p1 table, keeping the in-scope/out-of-scope distinction for the socket surface). E2e coverage is expressed by which suites a backend crate wires up (ADR-27), not by comparing level numbers. The level type, the achieved/target computations, and the level conditioning in the e2e case tables are deleted.
+Retire the levels.
+Backends declare capabilities directly — feature support (`Backend::feature_status`) and per-function WASI p1 coverage (`Backend::has_wasi_p1`, derived from runtime units) — and `docs/support.md` renders those declarations flat (features table + WASI p1 table, keeping the in-scope/out-of-scope distinction for the socket surface).
+E2e coverage is expressed by which suites a backend crate wires up (ADR-27), not by comparing level numbers.
+The level type, the achieved/target computations, and the level conditioning in the e2e case tables are deleted.
 
-Criterion: **a ranking earns its keep only while it discriminates.** When every backend targets the same bar, "which capabilities are done" is the whole truth and a scalar summary of it is noise. Whether some summary scale is worth reintroducing is explicitly deferred until the Python/Go/Java backends exist and show what actually varies.
+Criterion: **a ranking earns its keep only while it discriminates.**
+When every backend targets the same bar, "which capabilities are done" is the whole truth and a scalar summary of it is noise.
+Whether some summary scale is worth reintroducing is explicitly deferred until the Python/Go/Java backends exist and show what actually varies.
 
 ## Rejected alternatives
 
