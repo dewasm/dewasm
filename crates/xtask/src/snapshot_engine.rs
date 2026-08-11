@@ -53,7 +53,7 @@ impl BackendUnderTest for EmbeddedWasmtime {
     }
 
     fn pty_command(&self, source: &str, args: &[&str]) -> PtyCommand {
-        let mut argv = vec!["run-wasi".to_string()];
+        let mut argv = vec!["test-wasmtime-wasi".to_string()];
         argv.extend(wasi_runner_argv(source, args, &[], &[]));
         PtyCommand {
             program: std::env::current_exe().expect("current_exe"),
@@ -63,7 +63,7 @@ impl BackendUnderTest for EmbeddedWasmtime {
     }
 }
 
-/// Run `argv` (as built for `xtask run-wasi`) in this process and shape the result like a child process's [`Output`], which is what the shared runners compare.
+/// Run `argv` (as built for `xtask test-wasmtime-wasi`) in this process and shape the result like a child process's [`Output`], which is what the shared runners compare.
 fn capture(argv: Vec<String>, stdin: &[u8]) -> Output {
     let run = WasiRun::parse(argv.into_iter()).expect("runner arguments");
     let captured = run

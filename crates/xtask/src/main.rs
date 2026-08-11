@@ -2,7 +2,7 @@
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine WASI-runner files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, whose custom export/import interfaces are driven directly instead (issue #114). All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`, so regeneration reproduces the same bytes on every host. `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
-//! `run-wasi`, `doom-frame` and `nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
+//! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
 //!
 //! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
@@ -31,88 +31,20 @@ const USAGE: &str = "\
 Usage: cargo xtask <command> [args]
 
 Commands:
-    update-support-docs        Regenerate docs/support.md from the backends' own
-                               capability declarations. Checked by
-                               `cargo test -p dewasm-cli --test support_docs`.
-    update-snapshots [filter]  Regenerate every checked-in execution snapshot
-                               from the embedded wasmtime: the app/gzip/filesystem
-                               stdout files and the interactive-REPL transcript
-                               under examples/apps/snapshots/, plus the DOOM
-                               and NES frames there (doom_frame.ppm and
-                               nes_frame.ppm, the compared oracles, and
-                               doom_frame.png/nes_frame.png renderings for
-                               human eyes). An optional substring `filter`
-                               limits it to matching snapshots (e.g.
-                               `update-snapshots doom`). Needs the apps cache
-                               populated (examples/apps/setup.sh; the DOOM
-                               frame needs examples/apps/scripts/doom.sh, the
-                               NES frame examples/apps/scripts/nes.sh).
-                               Checked by the compare-only freshness suite
-                               (`cargo test -p dewasm-test-helper --features
-                               wasmtime_test --test apps_wasmtime`) and the
-                               per-backend `doom_frame` and `nes_frame` cases.
-    run-wasi [opts] <wasm>     Run a WASI command on the embedded wasmtime,
-             [args...]         the `wasmtime run` subset the snapshot cases
-                               use: argv[0] is the wasm file's base name,
-                               stdin/stdout/stderr are inherited, and the
-                               guest's exit status becomes this process's.
-                               Options: --dir HOST::GUEST (preopen, repeatable),
-                               --env KEY=VALUE (repeatable; the guest sees
-                               nothing else of the host environment).
-    doom-frame                 Write the captured DOOM (or NES) framebuffer to
-    nes-frame                  stdout as a binary P6 PPM — the same bytes
-                               `update-snapshots` stores in
-                               examples/apps/snapshots/. Needs
-                               examples/apps/scripts/doom.sh (or nes.sh) run.
-    bench [filter] [options]   Run the cross-runtime benchmark suite: every
-                               workload in benchmarks/ (and the app cases) on
-                               every dewasm backend, on wasmtime and the other
-                               native runtimes (wasmer, wasmedge, wazero,
-                               wasm3), and on the pywasm/wardite interpreters.
-                               Writes a dated result file to benchmarks/results/
-                               and regenerates docs/benchmarks/results.md plus
-                               the SVG charts it embeds (docs/benchmarks/figs/, one per
-                               workload). An optional substring `filter` limits
-                               it to matching workload/runner labels (wasmtime
-                               always runs, as the baseline and the correctness
-                               reference); an unmatched filter is an error.
-                               Needs `wasmtime` on PATH, the microbenchmarks built
-                               (benchmarks/wat/build.sh, benchmarks/c/build.sh),
-                               the interpreter deps installed
-                               (benchmarks/setup.sh) and the apps cache
-                               populated; anything missing is reported as
-                               skipped-with-reason rather than dropped. Not a
-                               compared snapshot: no freshness test.
-                               Options: --list (print the matrix and each
-                               runner's availability, run nothing), --reps N
-                               (timed runs per measurement, default 5),
-                               --target-ms MS (compute time the iteration
-                               calibrator aims at, default 300),
-                               --timeout SECS (per-process ceiling, default
-                               900), --render FILE (re-render
-                               the results doc and its charts from a stored
-                               benchmarks/results/*.json without measuring
-                               anything, for when only the wording changed).
-    size [--render FILE]       Record how big the delivery is: per cached app
-                               (cowsay, sqlite3-shell, qjs, ruby) the wasm
-                               binary and every backend's converted standalone
-                               source, beside the installed size of each native
-                               runtime on the host (wasmtime, wasmer, wasmedge,
-                               wazero, wasm3). Raw bytes, never compressed.
-                               Writes a dated record to
-                               benchmarks/results/<timestamp>Z-size.json, beside
-                               the speed records, and regenerates
-                               docs/sizes/results.md plus the SVG figures it
-                               embeds (docs/sizes/figs/; figures the record no
-                               longer covers are pruned). Needs the apps cache
-                               populated (examples/apps/setup.sh); a missing app
-                               or runtime is reported as skipped-with-reason
-                               rather than dropped. Not a compared snapshot: no
-                               freshness test.
-                               Options: --render FILE (re-render the document
-                               and its figures from a stored
-                               benchmarks/results/*-size.json without measuring
-                               anything).
+    update-support-docs
+        Regenerate docs/support.md from the backends' capability declarations.
+    update-snapshots [filter]
+        Regenerate the checked-in execution snapshots under examples/apps/snapshots/ whose name contains the filter.
+    test-wasmtime-wasi [--dir HOST::GUEST]... [--env K=V]... <wasm> [args...]
+        Run a WASI command on the embedded wasmtime, for the snapshot freshness suite.
+    test-wasmtime-doom-frame
+        Write the captured DOOM framebuffer to stdout as a binary P6 PPM.
+    test-wasmtime-nes-frame
+        Write the captured NES framebuffer to stdout as a binary P6 PPM.
+    bench [filter] [--list] [--reps N] [--target-ms MS] [--timeout SECS] [--render FILE]
+        Run the cross-runtime benchmark suite and regenerate docs/benchmarks/results.md (see docs/benchmarks/README.md).
+    size [--render FILE]
+        Record the distribution sizes and regenerate docs/sizes/results.md (see docs/sizes/README.md).
 ";
 
 fn main() -> Result<()> {
@@ -120,9 +52,9 @@ fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
         Some("update-snapshots") => update_snapshots(args.next().as_deref()),
-        Some("run-wasi") => wasi_run::main(args),
-        Some("doom-frame") => write_stdout(&capture_doom_frame()?.0),
-        Some("nes-frame") => write_stdout(&capture_nes_frame()?.0),
+        Some("test-wasmtime-wasi") => wasi_run::main(args),
+        Some("test-wasmtime-doom-frame") => write_stdout(&capture_doom_frame()?.0),
+        Some("test-wasmtime-nes-frame") => write_stdout(&capture_nes_frame()?.0),
         Some("bench") => bench::main(args),
         Some("size") => size::main(args),
         Some("-h") | Some("--help") | Some("help") => {

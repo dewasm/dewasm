@@ -1,4 +1,4 @@
-//! The WASI command runner behind `cargo xtask run-wasi`, and the in-process entry point the snapshot capture uses.
+//! The WASI command runner behind `cargo xtask test-wasmtime-wasi`, and the in-process entry point the snapshot capture uses.
 //!
 //! The flags mirror the `wasmtime run` subset the snapshot cases were captured with, so the runner is a drop-in replacement for a `wasmtime` CLI on `PATH`:
 //!
@@ -37,19 +37,19 @@ pub struct Captured {
 }
 
 impl WasiRun {
-    /// Parse the `run-wasi` command line: option flags first, then the wasm path, then guest `argv[1..]` verbatim (a guest argument may repeat an option name).
+    /// Parse the `test-wasmtime-wasi` command line: option flags first, then the wasm path, then guest `argv[1..]` verbatim (a guest argument may repeat an option name).
     pub fn parse(mut argv: impl Iterator<Item = String>) -> Result<Self> {
         let mut env = Vec::new();
         let mut dirs = Vec::new();
         let wasm = loop {
             let Some(arg) = argv.next() else {
-                bail!("run-wasi: missing the wasm file to run");
+                bail!("test-wasmtime-wasi: missing the wasm file to run");
             };
             match arg.as_str() {
                 "--dir" => {
                     let spec = argv
                         .next()
-                        .context("run-wasi: --dir needs a HOST::GUEST argument")?;
+                        .context("test-wasmtime-wasi: --dir needs a HOST::GUEST argument")?;
                     let (host, guest) = match spec.split_once("::") {
                         Some((host, guest)) => (host.to_string(), guest.to_string()),
                         None => (spec.clone(), spec),
@@ -59,13 +59,15 @@ impl WasiRun {
                 "--env" => {
                     let spec = argv
                         .next()
-                        .context("run-wasi: --env needs a KEY=VALUE argument")?;
-                    let (key, value) = spec
-                        .split_once('=')
-                        .with_context(|| format!("run-wasi: --env {spec:?} is not KEY=VALUE"))?;
+                        .context("test-wasmtime-wasi: --env needs a KEY=VALUE argument")?;
+                    let (key, value) = spec.split_once('=').with_context(|| {
+                        format!("test-wasmtime-wasi: --env {spec:?} is not KEY=VALUE")
+                    })?;
                     env.push((key.to_string(), value.to_string()));
                 }
-                flag if flag.starts_with("--") => bail!("run-wasi: unknown option {flag}"),
+                flag if flag.starts_with("--") => {
+                    bail!("test-wasmtime-wasi: unknown option {flag}")
+                }
                 _ => break PathBuf::from(arg),
             }
         };
@@ -106,7 +108,12 @@ impl WasiRun {
         let argv0 = self
             .wasm
             .file_name()
-            .with_context(|| format!("run-wasi: {} has no file name", self.wasm.display()))?
+            .with_context(|| {
+                format!(
+                    "test-wasmtime-wasi: {} has no file name",
+                    self.wasm.display()
+                )
+            })?
             .to_string_lossy()
             .into_owned();
         let mut builder = WasiCtxBuilder::new();
@@ -118,7 +125,7 @@ impl WasiRun {
             builder
                 .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
                 .map_err(from_wasmtime)
-                .with_context(|| format!("run-wasi: preopen {}", host.display()))?;
+                .with_context(|| format!("test-wasmtime-wasi: preopen {}", host.display()))?;
         }
         builder.allow_blocking_current_thread(true);
         Ok(builder)
@@ -148,7 +155,7 @@ fn execute(ctx: WasiP1Ctx, wasm: &Path) -> wasmtime::Result<i32> {
     }
 }
 
-/// `cargo xtask run-wasi [--dir HOST::GUEST]... [--env K=V]... <wasm> [args...]`.
+/// `cargo xtask test-wasmtime-wasi [--dir HOST::GUEST]... [--env K=V]... <wasm> [args...]`.
 pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
     let code = WasiRun::parse(argv)?.run_inheriting_stdio()?;
     // Rust's stdout is line-buffered, so a guest's trailing partial line (a binary stream has none at all) would be lost across `exit`, which runs no destructors.

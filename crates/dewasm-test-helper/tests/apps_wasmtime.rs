@@ -1,6 +1,6 @@
 //! Snapshot freshness: re-validates the checked-in `examples/apps/snapshots/` against wasmtime through the same shared app/gzip/fs runners every backend uses; the per-backend `apps`/`gzip`/`fs_apps` suites cover the other half (generated output vs. snapshot).
 //!
-//! Every case here runs wasm through the `xtask` binary, which embeds the `wasmtime` crate pinned by `Cargo.lock` (`cargo xtask run-wasi`, plus the `doom-frame`/`nes-frame` captures). Build it once with `cargo build -p xtask`; this suite never builds it and never skips when it is missing.
+//! Every case here runs wasm through the `xtask` binary, which embeds the `wasmtime` crate pinned by `Cargo.lock` (`cargo xtask test-wasmtime-wasi`, plus the `test-wasmtime-doom-frame`/`test-wasmtime-nes-frame` captures). Build it once with `cargo build -p xtask`; this suite never builds it and never skips when it is missing.
 //!
 //! Named `apps_wasmtime` for the family: a future engine-under-test (wasmer, wasmedge) would join here the same way. Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise — this suite exists to check the checker, not to run on every `cargo test`.
 //!
@@ -108,7 +108,7 @@ fn standalone_dir() {
 #[test]
 fn doom_frame() {
     assert_frame_snapshot(
-        "doom-frame",
+        "test-wasmtime-doom-frame",
         &dewasm_test_helper::doom_frame_snapshot_path(),
     );
 }
@@ -116,7 +116,10 @@ fn doom_frame() {
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn nes_frame() {
-    assert_frame_snapshot("nes-frame", &dewasm_test_helper::nes_frame_snapshot_path());
+    assert_frame_snapshot(
+        "test-wasmtime-nes-frame",
+        &dewasm_test_helper::nes_frame_snapshot_path(),
+    );
 }
 
 /// Run the runner's `subcommand` capture and require its stdout to equal the snapshot at `path`.
