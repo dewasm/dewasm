@@ -39,6 +39,10 @@ serde_json.workspace = true
 # settings kept fixed so regeneration is byte-stable.
 png = "0.18.1"
 # std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our
-# anyhow flow); cranelift+runtime is the embedder. No wasi/component/gc: the
-# DOOM oracle only instantiates a baseline module and calls exports.
-wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "std"] }
+# anyhow flow); cranelift+runtime is the embedder. No gc: the snapshot oracles
+# instantiate baseline modules only.
+wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "std", "parallel-compilation"] }
+# WASI p1 for the `run-wasi` runner. The version tracks `wasmtime` exactly:
+# every snapshot is captured through this crate, so the pin is what makes
+# regeneration reproducible across hosts.
+wasmtime-wasi = { version = "47.0.2", default-features = false, features = ["p1"] }

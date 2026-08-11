@@ -2,6 +2,8 @@
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine wasmtime-CLI-driven files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, which stay on the embedded `wasmtime` crate because their custom export/import interfaces can't run through `wasmtime run` (issue #114). `update-support-docs` stays separate — `docs/support.md` is generated documentation, not an execution snapshot.
 //!
+//! `run-wasi`, `doom-frame` and `nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
+//!
 //! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`. Unlike the two commands above, neither output is a compared snapshot — a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
 //! `size` is its size counterpart: per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime. Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`. Also a measurement rather than a snapshot.
@@ -12,7 +14,9 @@ mod bench;
 mod doom_snapshot;
 mod nes_snapshot;
 mod size;
+mod wasi_run;
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
@@ -46,6 +50,19 @@ Commands:
                                test -p dewasm-test-helper --features
                                wasmtime_test --test apps_wasmtime`) and the
                                per-backend `doom_frame` and `nes_frame` cases.
+    run-wasi [opts] <wasm>     Run a WASI command on the embedded wasmtime,
+             [args...]         the `wasmtime run` subset the snapshot cases
+                               use: argv[0] is the wasm file's base name,
+                               stdin/stdout/stderr are inherited, and the
+                               guest's exit status becomes this process's.
+                               Options: --dir HOST::GUEST (preopen, repeatable),
+                               --env KEY=VALUE (repeatable; the guest sees
+                               nothing else of the host environment).
+    doom-frame                 Write the captured DOOM (or NES) framebuffer to
+    nes-frame                  stdout as a binary P6 PPM — the same bytes
+                               `update-snapshots` stores in
+                               examples/apps/snapshots/. Needs
+                               examples/apps/scripts/doom.sh (or nes.sh) run.
     bench [filter] [options]   Run the cross-runtime benchmark suite: every
                                workload in benchmarks/ (and the app cases) on
                                every dewasm backend, on wasmtime and the other
@@ -102,6 +119,9 @@ fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("update-support-docs") => update_support_docs(),
         Some("update-snapshots") => update_snapshots(args.next().as_deref()),
+        Some("run-wasi") => wasi_run::main(args),
+        Some("doom-frame") => write_stdout(&capture_doom_frame()?.0),
+        Some("nes-frame") => write_stdout(&capture_nes_frame()?.0),
         Some("bench") => bench::main(args),
         Some("size") => size::main(args),
         Some("-h") | Some("--help") | Some("help") => {
@@ -117,6 +137,14 @@ fn main() -> Result<()> {
             bail!("missing command");
         }
     }
+}
+
+/// Emit captured snapshot bytes on stdout, where the freshness suite reads them.
+fn write_stdout(bytes: &[u8]) -> Result<()> {
+    let mut out = std::io::stdout().lock();
+    out.write_all(bytes)?;
+    out.flush()?;
+    Ok(())
 }
 
 /// Render `docs/support.md` from the backends' own declarations and write it to disk. The corresponding test (`crates/dewasm-cli/tests/support_docs.rs`) is compare-only and names this command in its failure message.
