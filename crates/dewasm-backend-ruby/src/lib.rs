@@ -85,7 +85,9 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a ruby interpreter able to run generated scripts: at least 3.4, because the generated runtime's memory is `IO::Buffer`-backed. Honors `$DEWASM_RUBY`, then `ruby` on `PATH`. A missing or too-old interpreter fails loud with a setup instruction rather than silently skipping.
+/// Locate a ruby interpreter able to run generated scripts: at least 3.4, because the generated runtime's memory is `IO::Buffer`-backed.
+/// Honors `$DEWASM_RUBY`, then `ruby` on `PATH`.
+/// A missing or too-old interpreter fails loud with a setup instruction rather than silently skipping.
 pub fn find_ruby() -> Option<std::path::PathBuf> {
     static RUBY: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     RUBY.get_or_init(find_ruby_uncached).clone()
