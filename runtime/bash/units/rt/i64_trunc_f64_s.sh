@@ -1,6 +1,5 @@
 # requires: rt/trap
-# All range checks happen on the exponent BEFORE any shift: e-52 can
-# reach 971 and bash takes shift counts mod 64.
+# All range checks happen on the exponent BEFORE any shift: e-52 can reach 971 and bash takes shift counts mod 64.
 rt_i64_trunc_f64_s() {
   local a=$1 pa s e m t
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

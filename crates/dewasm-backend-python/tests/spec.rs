@@ -1,8 +1,10 @@
-//! Python side of the shared spec harness: converts modules with the Python backend, phrases assertions as Python (`check`/ `check_trap`/`check_exhaust`/`check_unlinkable` helpers, bit-exact float comparison via `Rt.f32_bits`/`Rt.f64_bits`), and runs the script with the `python3` on PATH. The generic harness lives in `dewasm-test-helper`.
+//! Python side of the shared spec harness: converts modules with the Python backend, phrases assertions as Python (`check`/ `check_trap`/`check_exhaust`/`check_unlinkable` helpers, bit-exact float comparison via `Rt.f32_bits`/`Rt.f64_bits`), and runs the script with the `python3` on PATH.
+//! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Python facts shape the phrasing:
 //! - Assertions are passed as zero-arg lambdas because Python has no statement blocks; the value under test is bound inside the lambda with an inner `(lambda __r: (<cmp>, __r))(<call>)`.
-//! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash, the guest-side analogue of the harness's `convert_on_big_stack`. `check_exhaust` lowers the limit around itself, because there the limit is not headroom but the entire cost of the check; see the comment on `_EXHAUST_RECURSION_LIMIT`.
+//! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash, the guest-side analogue of the harness's `convert_on_big_stack`.
+//!   `check_exhaust` lowers the limit around itself, because there the limit is not headroom but the entire cost of the check; see the comment on `_EXHAUST_RECURSION_LIMIT`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -15,7 +17,8 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby list: the only open gap is `import-limits`: `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Identical in shape to the Ruby list: the only open gap is `import-limits`: `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -80,7 +83,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             &RuntimeLinkage::Alias("Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global. The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name, so drop it and rely on the module global.
+        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global.
+        // The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name, so drop it and rely on the module global.
         let source = source
             .strip_prefix("Rt = Rt\n\n\n")
             .unwrap_or(&source)

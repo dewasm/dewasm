@@ -1,10 +1,6 @@
 // requires: wasi/wasi_filetype
-// Pack a host file's attributes into a WASI filestat (64 bytes): dev, ino,
-// filetype (+7 pad), nlink, size, atim/mtim/ctim (all u64, times in
-// nanoseconds). dev/ino/nlink come from the "unix:*" attribute view when the
-// platform supports it (macOS/Linux); the times all use the portable
-// lastModifiedTime (Java exposes no faithful atim/ctim), which suffices for the
-// guests we target. `follow` selects stat vs lstat.
+// Pack a host file's attributes into a WASI filestat (64 bytes): dev, ino, filetype (+7 pad), nlink, size, atim/mtim/ctim (all u64, times in nanoseconds). dev/ino/nlink come from the "unix:*" attribute view when the platform supports it (macOS/Linux); the times all use the portable lastModifiedTime (Java exposes no faithful atim/ctim), which suffices for the guests we target.
+// `follow` selects stat vs lstat.
 byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOException {
     java.nio.file.LinkOption[] opts = follow
         ? new java.nio.file.LinkOption[0]
@@ -22,11 +18,8 @@ byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOExce
     } catch (Exception e) {
         // Non-unix filesystem: leave dev/ino at 0 and nlink at 1.
     }
-    // Report the three timestamps separately (atim/mtim/ctim) rather than
-    // collapsing them to mtime, so a guest that sets one and checks the others
-    // stay put (fd_filestat_set_times) sees the distinction. Java exposes no
-    // faithful ctim, so the change-time slot reuses creationTime as a
-    // best-effort stand-in.
+    // Report the three timestamps separately (atim/mtim/ctim) rather than collapsing them to mtime, so a guest that sets one and checks the others stay put (fd_filestat_set_times) sees the distinction.
+    // Java exposes no faithful ctim, so the change-time slot reuses creationTime as a best-effort stand-in.
     long atime = a.lastAccessTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long mtime = a.lastModifiedTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long ctime = a.creationTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);

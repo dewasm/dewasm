@@ -1,23 +1,18 @@
 # frozen_string_literal: true
 
-# Run a benchmark module under wardite, the pure-Ruby wasm interpreter, with
-# the same command line every other runner in the suite gets:
+# Run a benchmark module under wardite, the pure-Ruby wasm interpreter, with the same command line every other runner in the suite gets:
 #
-#   ruby benchmarks/drivers/wardite.rb <module.wasm> [guest-args...]
+# ruby benchmarks/drivers/wardite.rb <module.wasm> [guest-args...]
 #
-# The guest sees argv = [basename(module), *guest-args], matching what wasmtime
-# passes, so the `<module> <iterations>` contract holds identically here.
-# (wardite's own CLI hardcodes argv[0] to "wardite"; we set argv ourselves
-# instead of shelling out to it.)
+# The guest sees argv = [basename(module), *guest-args], matching what wasmtime passes, so the `<module> <iterations>` contract holds identically here.
+# (wardite's own CLI hardcodes argv[0] to "wardite"; we set argv ourselves instead of shelling out to it.)
 #
-# stdout carries guest output and nothing else -- the harness compares it byte
-# for byte against the wasmtime oracle. Diagnostics, including the
+# stdout carries guest output and nothing else -- the harness compares it byte for byte against the wasmtime oracle.
+# Diagnostics, including the
 # `load_ms=<float>` line the harness records, go to stderr.
 #
-# Exit status: wardite implements proc_exit with Kernel#exit, so a guest that
-# calls it terminates this process with the guest's status directly and the
-# code below the run never executes. A guest that returns from _start normally
-# exits 0.
+# Exit status: wardite implements proc_exit with Kernel#exit, so a guest that calls it terminates this process with the guest's status directly and the code below the run never executes.
+# A guest that returns from _start normally exits 0.
 
 require "wardite"
 

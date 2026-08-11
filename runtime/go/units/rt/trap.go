@@ -1,5 +1,4 @@
-// A wasm trap: a runtime fault (out-of-bounds, integer overflow, ...) raised
-// with panic and recovered at the public boundary, mirroring Ruby/Python's
+// A wasm trap: a runtime fault (out-of-bounds, integer overflow, ...) raised with panic and recovered at the public boundary, mirroring Ruby/Python's
 // Rt.Trap.
 type rtTrap struct{ msg string }
 

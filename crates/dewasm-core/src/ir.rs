@@ -1,6 +1,7 @@
 //! Intermediate representation of a wasm module.
 //!
-//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is and flattens the value stack into "temps": one variable per (stack depth, type) pair, in the style of wasm2c. A value folds into its consumer where it can and takes a temp only where it must; `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
+//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is and flattens the value stack into "temps": one variable per (stack depth, type) pair, in the style of wasm2c.
+//! A value folds into its consumer where it can and takes a temp only where it must; `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ValType {
@@ -8,11 +9,13 @@ pub enum ValType {
     I64,
     F32,
     F64,
-    /// A nullable reference to a wasm function. Legal only as a table element type; reference types used as value types are rejected at conversion time.
+    /// A nullable reference to a wasm function.
+    /// Legal only as a table element type; reference types used as value types are rejected at conversion time.
     FuncRef,
 }
 
-/// A flattened stack slot. `depth` is the value-stack depth the value lives at; the same (depth, ty) pair always maps to the same target variable.
+/// A flattened stack slot.
+/// `depth` is the value-stack depth the value lives at; the same (depth, ty) pair always maps to the same target variable.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Temp {
     pub depth: u32,
@@ -29,21 +32,25 @@ pub struct FuncType {
 pub struct Module {
     pub types: Vec<FuncType>,
     pub imported_funcs: Vec<ImportedFunc>,
-    /// Defined functions. Function index space = imported_funcs ++ funcs.
+    /// Defined functions.
+    /// Function index space = imported_funcs ++ funcs.
     pub funcs: Vec<Func>,
     pub imported_tables: Vec<ImportedTable>,
-    /// Defined tables. Table index space = imported_tables ++ tables.
+    /// Defined tables.
+    /// Table index space = imported_tables ++ tables.
     pub tables: Vec<Table>,
     pub imported_memory: Option<ImportedMemory>,
     pub memory: Option<MemoryDef>,
     pub imported_globals: Vec<ImportedGlobal>,
-    /// Defined globals. Global index space = imported_globals ++ globals.
+    /// Defined globals.
+    /// Global index space = imported_globals ++ globals.
     pub globals: Vec<Global>,
     pub exports: Vec<Export>,
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
     pub start: Option<u32>,
-    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers, indexed by [`SourcePos::file`]. Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`).
+    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers, indexed by [`SourcePos::file`].
+    /// Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`).
     pub debug_files: Vec<String>,
 }
 
@@ -188,7 +195,8 @@ pub struct DataSegment {
 #[derive(Debug)]
 pub struct Func {
     pub type_idx: u32,
-    /// Declared locals (excluding params). Local index space = params ++ locals.
+    /// Declared locals (excluding params).
+    /// Local index space = params ++ locals.
     pub locals: Vec<ValType>,
     /// All temps used by the body, sorted and deduplicated.
     pub temps: Vec<Temp>,
@@ -198,7 +206,8 @@ pub struct Func {
 #[derive(Clone, Copy, Debug)]
 pub struct Label {
     pub id: u32,
-    /// Whether any `br` targets this label. Unreferenced labels need no branch machinery in backends.
+    /// Whether any `br` targets this label.
+    /// Unreferenced labels need no branch machinery in backends.
     pub referenced: bool,
 }
 
@@ -207,7 +216,8 @@ pub struct Label {
 pub enum BrTarget {
     /// Branch to the function's outermost frame == return.
     Return { values: Vec<Expr> },
-    /// Branch to a labelled frame. `assigns` moves the branch operands into the frame's result temps (or param temps for loops); self-assignments are already filtered out.
+    /// Branch to a labelled frame.
+    /// `assigns` moves the branch operands into the frame's result temps (or param temps for loops); self-assignments are already filtered out.
     Label {
         label: u32,
         /// true: continue the loop; false: exit the block/if.
@@ -216,7 +226,8 @@ pub enum BrTarget {
     },
 }
 
-/// A resolved source position, indexing [`Module::debug_files`]. Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping; a `col` of 0 means the column is unknown (DWARF's "left edge").
+/// A resolved source position, indexing [`Module::debug_files`].
+/// Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping; a `col` of 0 means the column is unknown (DWARF's "left edge").
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SourcePos {
     pub file: u32,
@@ -226,7 +237,8 @@ pub struct SourcePos {
 
 #[derive(Debug)]
 pub enum Stmt {
-    /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on. Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
+    /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on.
+    /// Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
     SourceLine(SourcePos),
     Assign {
         dst: Temp,

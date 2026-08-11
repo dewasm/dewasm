@@ -1,7 +1,7 @@
 # requires: rt/f32
-# Convert a (signed) Integer to f32 with correct rounding. Values beyond
-# 2**53 are pre-rounded to odd so that the double->single step cannot
-# double-round.
+# Convert a (signed) Integer to f32 with correct rounding.
+# Values beyond
+# 2**53 are pre-rounded to odd so that the double->single step cannot double-round.
 def cvt_f32_i(v)
   a = v.abs
   if a < (1 << 53)

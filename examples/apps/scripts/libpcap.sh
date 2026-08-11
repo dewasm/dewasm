@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
 
-# libpcap: BPF filter compiler, built from the pinned upstream source release
-# with zig as a reactor library. Only the platform-independent
-# filter-compilation TUs are built (no capture backend); src/pcap_config.h
-# stands in for ./configure's config.h (see its header comment), and our own
-# src/pcap_binding.c exports compile_filter(), which turns a textual filter
-# like "tcp port 80" into a serialized BPF program in guest memory. libpcap
-# 1.10.x no longer ships pre-generated grammar.c/scanner.c, so the parser is
-# regenerated here with bison + flex (matching the substitution ./configure
-# would apply for a bison >= 3 reentrant parser).
+# libpcap: BPF filter compiler, built from the pinned upstream source release with zig as a reactor library.
+# Only the platform-independent filter-compilation TUs are built (no capture backend); src/pcap_config.h stands in for ./configure's config.h (see its header comment), and our own src/pcap_binding.c exports compile_filter(), which turns a textual filter like "tcp port 80" into a serialized BPF program in guest memory. libpcap
+# 1.10.x no longer ships pre-generated grammar.c/scanner.c, so the parser is regenerated here with bison + flex (matching the substitution ./configure would apply for a bison >= 3 reentrant parser).
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -50,8 +43,7 @@ echo "libpcap: building libpcap.wasm (zig cc, reactor)"
 psrcs=()
 for s in "${PCAP_SRCS[@]}"; do psrcs+=("$pdir/$s"); done
 
-# pcap_compile_nopcap() is the documented filter-only entry point but is
-# marked deprecated (thread-safety of its error buffer); silence that here.
+# pcap_compile_nopcap() is the documented filter-only entry point but is marked deprecated (thread-safety of its error buffer); silence that here.
 # --strip-debug drops the DWARF wasm-opt cannot process.
 zig_cc_wasi -mexec-model=reactor -O2 \
   -DBUILDING_PCAP -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal \

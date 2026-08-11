@@ -1,6 +1,6 @@
 # requires: rt/s32, rt/trap
-# `use integer` % is C %: the result takes the dividend's sign, exactly
-# wasm's rem_s. INT_MIN % -1 would raise SIGFPE in C; its wasm result is 0.
+# `use integer` % is C %: the result takes the dividend's sign, exactly wasm's rem_s.
+# INT_MIN % -1 would raise SIGFPE in C; its wasm result is 0.
 sub i32_rem_s {
     my $sa = Rt::s32($_[0]);
     my $sb = Rt::s32($_[1]);

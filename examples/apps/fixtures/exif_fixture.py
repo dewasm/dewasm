@@ -3,24 +3,20 @@
 #
 # Hand-assembles a tiny (~200 byte) JPEG whose only real content is an EXIF
 # APP1 segment carrying three deterministic tags (Make, Model, and
-# DateTimeOriginal), so the exiftool-on-zeroperl case can pin an exact output
-# string. Everything is fixed, so the bytes are reproducible.
+# DateTimeOriginal), so the exiftool-on-zeroperl case can pin an exact output string.
+# Everything is fixed, so the bytes are reproducible.
 #
-# The scan payload is a single grey pixel's worth of placeholder marker
-# segments: ExifTool only needs SOI + the APP1 EXIF block + EOI to identify the
-# file and extract metadata, but a bare SOI/APP1/EOI trips its "looks like
-# trailer garbage" heuristics, so we include a minimal (empty) SOS run.
+# The scan payload is a single grey pixel's worth of placeholder marker segments: ExifTool only needs SOI + the APP1 EXIF block + EOI to identify the file and extract metadata, but a bare SOI/APP1/EOI trips its "looks like trailer garbage" heuristics, so we include a minimal (empty) SOS run.
 #
 # Regenerate (writes examples/apps/fixtures/exif_fixture.jpg) with:
-#   python3 examples/apps/fixtures/exif_fixture.py
-# Committing the resulting binary is intentional (the repo already commits
-# binary snapshots); the sha is stable across runs.
+# python3 examples/apps/fixtures/exif_fixture.py
+# Committing the resulting binary is intentional (the repo already commits binary snapshots); the sha is stable across runs.
 
 import struct
 from pathlib import Path
 
-# --- EXIF tags, little-endian ("II") TIFF. Values longer than 4 bytes live in
-# a data area after the IFD, referenced by a TIFF-relative offset.
+# --- EXIF tags, little-endian ("II") TIFF.
+# Values longer than 4 bytes live in a data area after the IFD, referenced by a TIFF-relative offset.
 MAKE = b"DewasmCam\x00"
 MODEL = b"Model-X\x00"
 DATETIME = b"2020:01:02 03:04:05\x00"

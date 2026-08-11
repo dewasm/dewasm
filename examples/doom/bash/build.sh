@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated DOOM library and syntax-check the
-# frontend. doom_gen.sh is ~19MB of generated code and is gitignored, so
-# this step has to run before main.sh can source it from a clean checkout.
+# Regenerate the dewasm-generated DOOM library and syntax-check the frontend. doom_gen.sh is ~19MB of generated code and is gitignored, so this step has to run before main.sh can source it from a clean checkout.
 # There's no compile step for bash; `bash -n` stands in for one.
 set -euo pipefail
 

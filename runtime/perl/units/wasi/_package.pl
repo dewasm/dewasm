@@ -1,12 +1,6 @@
-# WASI preview 1 runtime state (mirroring the Ruby/Python
-# runtimes): a fd table plus a parallel per-fd capability map, seeded from
-# the constructor's preopens. Per-fd rights are modelled after wasmtime's
-# wasi-common: a directory and a file each carry a different
-# default set, path_open narrows the requested rights against the parent's
-# inheriting set (then per-filetype), and fd_fdstat_set_rights can only
-# drop bits. Kept in the always-bundled prelude because new() seeds the
-# fd -> [base, inheriting, fdflags] meta map for every preopen and for
-# stdio, so the constants must exist whenever any WASI import is used.
+# WASI preview 1 runtime state (mirroring the Ruby/Python runtimes): a fd table plus a parallel per-fd capability map, seeded from the constructor's preopens.
+# Per-fd rights are modelled after wasmtime's wasi-common: a directory and a file each carry a different default set, path_open narrows the requested rights against the parent's inheriting set (then per-filetype), and fd_fdstat_set_rights can only drop bits.
+# Kept in the always-bundled prelude because new() seeds the fd -> [base, inheriting, fdflags] meta map for every preopen and for stdio, so the constants must exist whenever any WASI import is used.
 use Cwd ();
 
 use constant {
@@ -50,9 +44,8 @@ use constant {
     RIGHTS_POLL_FD_READWRITE => 1 << 27,
 };
 
-# The rights a directory descriptor carries (base) and the rights it may
-# pass to things opened beneath it (inheriting = directory rights plus
-# every file right). Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
+# The rights a directory descriptor carries (base) and the rights it may pass to things opened beneath it (inheriting = directory rights plus every file right).
+# Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
 use constant DIR_RIGHTS_BASE =>
     RIGHTS_FD_FDSTAT_SET_FLAGS | RIGHTS_FD_SYNC | RIGHTS_FD_ADVISE
     | RIGHTS_PATH_CREATE_DIRECTORY | RIGHTS_PATH_CREATE_FILE
@@ -73,14 +66,14 @@ use constant DIR_RIGHTS_INHERITING => DIR_RIGHTS_BASE | FILE_RIGHTS_BASE;
 
 # An fd-table entry is a plain hashref of one of three shapes:
 # * stdio:  { fh => glob ref, std => 0|1|2 } (SPIPE on seek/tell/pread/
-#   pwrite, never closed; keyed by the `std` field, in lockstep with the
-#   fd table, not by whatever the globals point at when a syscall runs);
+# pwrite, never closed; keyed by the `std` field, in lockstep with the
+# fd table, not by whatever the globals point at when a syscall runs);
 # * file:   { fh => handle, path => host path }, sysopen'd, unbuffered
-#   (sysread/syswrite/sysseek only), so pread/pwrite emulation and
-#   read/write/seek stay coherent on one fd (sqlite mixes both);
+# (sysread/syswrite/sysseek only), so pread/pwrite emulation and
+# read/write/seek stay coherent on one fd (sqlite mixes both);
 # * dir:    { dir => 1, path => realpath'd host path, preopen => guest
-#   name (undef when the guest opened it itself via path_open),
-#   entries => lazily built fd_readdir cache }.
+# name (undef when the guest opened it itself via path_open),
+# entries => lazily built fd_readdir cache }.
 sub new {
     my ($class, %opts) = @_;
     my $env = $opts{env} // {};
@@ -98,8 +91,7 @@ sub new {
         2 => { fh => \*STDERR, std => 2 },
     };
     # stdio gets the full file-right set (a stream can read/write/etc.);
-    # preopens get the directory base and the directory-plus-file
-    # inheriting set.
+    # preopens get the directory base and the directory-plus-file inheriting set.
     $self->{meta} = {
         0 => [FILE_RIGHTS_BASE, 0, 0],
         1 => [FILE_RIGHTS_BASE, 0, 0],
@@ -109,9 +101,7 @@ sub new {
     my $preopens = $opts{preopens} // {};
     for my $guest (sort keys %$preopens) {
         # The host path must resolve, but need not be a directory: like the
-        # Ruby runtime, a single-file preopen (e.g. '/dev/null' for the
-        # zeroperl reactor's init probe) is accepted: the guest resolves
-        # it as the preopen root itself.
+        # Ruby runtime, a single-file preopen (e.g. '/dev/null' for the zeroperl reactor's init probe) is accepted: the guest resolves it as the preopen root itself.
         my $real = Cwd::realpath($preopens->{$guest});
         die "preopen '$guest' => '$preopens->{$guest}': does not exist\n"
             unless defined $real;
@@ -123,8 +113,7 @@ sub new {
     return $self;
 }
 
-# Import-provider protocol: a custom WASI runtime can replace this
-# package wholesale by implementing wasm_import($name) and attach($instance).
+# Import-provider protocol: a custom WASI runtime can replace this package wholesale by implementing wasm_import($name) and attach($instance).
 sub wasm_import {
     my ($self, $name) = @_;
     my $method = "wasi_$name";

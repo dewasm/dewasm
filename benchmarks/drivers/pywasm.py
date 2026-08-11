@@ -22,9 +22,8 @@ import os
 import sys
 import time
 
-# This file is called pywasm.py by contract, and a script's own directory leads
-# sys.path -- so an unguarded `import pywasm` imports this file instead of the
-# package. Drop that entry (only that one) before importing.
+# This file is called pywasm.py by contract, and a script's own directory leads sys.path -- so an unguarded `import pywasm` imports this file instead of the package.
+# Drop that entry (only that one) before importing.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [p for p in sys.path
                if os.path.abspath(p or os.curdir) != _HERE]

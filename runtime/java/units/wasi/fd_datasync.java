@@ -1,5 +1,4 @@
-// force(false) flushes the file content without forcing metadata, the
-// datasync guarantee.
+// force(false) flushes the file content without forcing metadata, the datasync guarantee.
 int wasi_fd_datasync(int fd) {
     Object e = fds.get(fd);
     if (!(e instanceof Handle)) {

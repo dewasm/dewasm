@@ -1,4 +1,5 @@
-//! Ruby side of the shared spec harness: converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH. The generic harness lives in `dewasm-test-helper`.
+//! Ruby side of the shared spec harness: converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH.
+//! The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -13,8 +14,11 @@ use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type: a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds. Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap. The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
-/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type: a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds.
+///   Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap.
+///   The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
+/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
+///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),

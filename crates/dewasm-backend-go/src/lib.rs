@@ -1,11 +1,15 @@
 //! Go backend: translates dewasm IR into a single self-contained Go source file (a `package` clause plus a bundled runtime).
 //!
-//! The package clause follows the mode. Standalone output is `package main` with the fixed type `Program` and a `func main`, so a standalone artifact is byte-stable whatever it was named. Library output is `package <module name lowercased>` with the type `<module name, first letter uppercased>`: a Go artifact is a *package* an embedder imports, so the module name has to be a Go identifier and is rejected at conversion time when it is not (see [`validate_library_module_name`]).
+//! The package clause follows the mode.
+//! Standalone output is `package main` with the fixed type `Program` and a `func main`, so a standalone artifact is byte-stable whatever it was named.
+//! Library output is `package <module name lowercased>` with the type `<module name, first letter uppercased>`: a Go artifact is a *package* an embedder imports, so the module name has to be a Go identifier and is rejected at conversion time when it is not (see [`validate_library_module_name`]).
 //!
 //! Lowering conventions:
 //! - i32/i64 are native `uint32`/`uint64` (masking is free: arithmetic wraps); signed views are `int32(x)`/`int64(x)` casts. f32/f64 are native `float32`/`float64`, so f32 re-rounding and IEEE float division need no helper (Go floats trap-free, unlike Python/Ruby/Bash).
 //! - NaN bit paths go through `math.Float32bits`/`Float64bits`, which are bit-preserving on native floats; only demote/promote reconstruct NaN payloads explicitly.
-//! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`. Unreferenced structures are spliced inline. Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
+//! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`.
+//!   Unreferenced structures are spliced inline.
+//!   Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
 //!
 //! The runtime is composed from per-method units referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
 
@@ -26,7 +30,8 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Go (see runtime/go/units/). Every scope has empty wrappers: Go methods and types are package-level regardless of the struct they belong to, so the bundle is a flat list of declarations (unlike Python's nested classes).
+/// The runtime unit bundler for Go (see runtime/go/units/).
+/// Every scope has empty wrappers: Go methods and types are package-level regardless of the struct they belong to, so the bundle is a flat list of declarations (unlike Python's nested classes).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -144,7 +149,8 @@ impl Backend for GoBackend {
             name: format!("{}.go", opts.module_name),
             contents: contents.into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file. Only emitted when there is data to externalize.
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file.
+        // Only emitted when there is data to externalize.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -161,7 +167,8 @@ impl Backend for GoBackend {
     }
 }
 
-/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness: the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`. Returns the declarations and the runtime units they reference.
+/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness: the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`.
+/// Returns the declarations and the runtime units they reference.
 pub fn generate_program_with_units(
     module: &Module,
     type_name: &str,
@@ -184,7 +191,8 @@ pub fn generate_program_with_units(
 
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let standalone = opts.mode == Mode::Standalone;
-    // Standalone artifacts are `package main` with a fixed internal name: nothing outside the file can refer to them, so the module name has no work to do and the output stays byte-identical whatever it is. Library artifacts *are* named: the package an embedder imports and the type it instantiates both come from the module name, which therefore has to be a Go identifier.
+    // Standalone artifacts are `package main` with a fixed internal name: nothing outside the file can refer to them, so the module name has no work to do and the output stays byte-identical whatever it is.
+    // Library artifacts *are* named: the package an embedder imports and the type it instantiates both come from the module name, which therefore has to be a Go identifier.
     let (package, type_name) = if standalone {
         (STANDALONE_PACKAGE.to_string(), STANDALONE_TYPE.to_string())
     } else {
@@ -215,7 +223,8 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         gen.use_unit("rt/trap");
         gen.use_unit("rt/exit");
     } else if wasi {
-        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`; that glue needs to catch a `proc_exit` (rtExit) to read the exit code, exactly as the standalone main does. Seed rt/exit so the type is always defined even for a module that never imports proc_exit itself.
+        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`; that glue needs to catch a `proc_exit` (rtExit) to read the exit code, exactly as the standalone main does.
+        // Seed rt/exit so the type is always defined even for a module that never imports proc_exit itself.
         gen.use_unit("rt/exit");
     }
     let uses = gen.uses.borrow().clone();
@@ -227,7 +236,8 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         imports.push("strings".to_string());
         imports.sort();
     }
-    // Library mode admits host code written into the same package (a second file, or text appended to this one). Go requires all imports before other declarations, so glue appended to *this* file cannot carry its own `import`; the generated file imports `fmt` up front (marked used below) so such glue can print without one.
+    // Library mode admits host code written into the same package (a second file, or text appended to this one).
+    // Go requires all imports before other declarations, so glue appended to *this* file cannot carry its own `import`; the generated file imports `fmt` up front (marked used below) so such glue can print without one.
     if !standalone && !imports.iter().any(|i| i == "fmt") {
         imports.push("fmt".to_string());
         imports.sort();
@@ -237,7 +247,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     out.push_str(&format!("package {package}\n\n"));
     out.push_str(&import_block(&imports));
     out.push('\n');
-    // Data externalization: pull the segment bytes from a `//go:embed`ed sidecar. `embed` is a blank import (the package is used only through the directive, which, unlike a package-qualified selector, the import scanner cannot see), and the directive must sit immediately above its `var` with no intervening blank line. A separate `import` declaration is legal Go and keeps `import_block` untouched.
+    // Data externalization: pull the segment bytes from a `//go:embed`ed sidecar.
+    // `embed` is a blank import (the package is used only through the directive, which, unlike a package-qualified selector, the import scanner cannot see), and the directive must sit immediately above its `var` with no intervening blank line.
+    // A separate `import` declaration is legal Go and keeps `import_block` untouched.
     if let Some(cfg) = &opts.data_file {
         if !module.datas.is_empty() {
             out.push_str("import _ \"embed\"\n\n");
@@ -261,7 +273,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// The external packages a bundle references, plus `os` for a standalone main. Only the runtime bundle (controlled code) is scanned; generated program code emits no package-qualified selectors and data blobs are hex literals, so no user string can inject a false import. Line comments are stripped first: a prose "at instantiation time." must not pull in the `time` package (`//go:` directives survive in the emitted bundle regardless: this stripping only computes the import set).
+/// The external packages a bundle references, plus `os` for a standalone main.
+/// Only the runtime bundle (controlled code) is scanned; generated program code emits no package-qualified selectors and data blobs are hex literals, so no user string can inject a false import.
+/// Line comments are stripped first: a prose "at instantiation time." must not pull in the `time` package (`//go:` directives survive in the emitted bundle regardless: this stripping only computes the import set).
 fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     let candidates = [
         ("binary.", "encoding/binary"),
@@ -299,7 +313,9 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     set.into_iter().map(|s| s.to_string()).collect()
 }
 
-/// Whether `text` uses the package selector `sel` (`"time."`, `"os."`, ...), that is, whether it occurs at an identifier boundary. `runtime.GOOS` must not register a use of `time.`, and `p.os.x` must not register one of `os.`, so an occurrence preceded by an identifier character or a dot does not count. Public because the test crate's own scanners (the spec harness and the multi-module e2e composer assemble programs from several fragments and must compute the same import set) would otherwise re-derive this rule and drift from it.
+/// Whether `text` uses the package selector `sel` (`"time."`, `"os."`, ...), that is, whether it occurs at an identifier boundary.
+/// `runtime.GOOS` must not register a use of `time.`, and `p.os.x` must not register one of `os.`, so an occurrence preceded by an identifier character or a dot does not count.
+/// Public because the test crate's own scanners (the spec harness and the multi-module e2e composer assemble programs from several fragments and must compute the same import set) would otherwise re-derive this rule and drift from it.
 pub fn selector_used(text: &str, sel: &str) -> bool {
     let bytes = text.as_bytes();
     let mut start = 0;
@@ -330,7 +346,8 @@ fn import_block(imports: &[String]) -> String {
 }
 
 fn main_func(type_name: &str, wasi: bool) -> String {
-    // Standalone WASI parses the runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..], with argv[0] the program basename. Without WASI there is nothing to preopen and no argv to deliver.
+    // Standalone WASI parses the runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..], with argv[0] the program basename.
+    // Without WASI there is nothing to preopen and no argv to deliver.
     let (arg_setup, args_arg, env_arg, preopen_arg) = if wasi {
         (
             "\tpreopens := map[string]string{}\n\
@@ -399,7 +416,8 @@ fn main_func(type_name: &str, wasi: bool) -> String {
 const STANDALONE_PACKAGE: &str = "main";
 const STANDALONE_TYPE: &str = "Program";
 
-/// The grammar a library-mode module name must match: a Go identifier restricted to ASCII. Names are taken as written (there is no sanitization), so a name that cannot be a Go package/type name is a conversion-time error (fail at conversion, never at runtime), not something quietly rewritten into a name the embedder did not ask for.
+/// The grammar a library-mode module name must match: a Go identifier restricted to ASCII.
+/// Names are taken as written (there is no sanitization), so a name that cannot be a Go package/type name is a conversion-time error (fail at conversion, never at runtime), not something quietly rewritten into a name the embedder did not ask for.
 fn validate_library_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -416,12 +434,14 @@ fn validate_library_module_name(name: &str) -> Result<()> {
     }
 }
 
-/// The package clause of a library artifact. Total on a validated name.
+/// The package clause of a library artifact.
+/// Total on a validated name.
 fn package_name(module_name: &str) -> String {
     module_name.to_ascii_lowercase()
 }
 
-/// The exported Go type of a library artifact: the module name with its first letter uppercased, leaving the rest exactly as written (`ruby` → `Ruby`, `Rg` → `Rg`). Total on a validated name; a leading `_` stays unexported, which is the embedder's own choice to make.
+/// The exported Go type of a library artifact: the module name with its first letter uppercased, leaving the rest exactly as written (`ruby` → `Ruby`, `Rg` → `Rg`).
+/// Total on a validated name; a leading `_` stays unexported, which is the embedder's own choice to make.
 fn type_name(module_name: &str) -> String {
     let mut chars = module_name.chars();
     match chars.next() {
@@ -454,7 +474,8 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("Rt.unhex(\"{}\")", hex_string(data))
 }
 
-/// Prefix sums locating each data segment in the concatenated sidecar blob. Only consulted when `--data-file` externalizes the segments.
+/// Prefix sums locating each data segment in the concatenated sidecar blob.
+/// Only consulted when `--data-file` externalizes the segments.
 fn data_offsets(module: &Module) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
@@ -527,7 +548,9 @@ fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
     format!("func({}){}", ps, go_results(results))
 }
 
-/// The recursion-guard budget (spec-harness builds only): each generated function adds its frame's slot count (`1 + params + locals + temps`) to the global `rtStack` on entry and traps once the running total exceeds this. It bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts the process fatally) into a catchable "call stack exhausted" trap the spec harness can observe. Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
+/// The recursion-guard budget (spec-harness builds only): each generated function adds its frame's slot count (`1 + params + locals + temps`) to the global `rtStack` on entry and traps once the running total exceeds this.
+/// It bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts the process fatally) into a catchable "call stack exhausted" trap the spec harness can observe.
+/// Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
 const SPEC_STACK_LIMIT: usize = 1024;
 
 struct Gen<'a> {
@@ -537,7 +560,8 @@ struct Gen<'a> {
     uses: RefCell<BTreeSet<String>>,
     /// Param+local types of the function currently being emitted.
     cur_locals: RefCell<Vec<ValType>>,
-    /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard. Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
+    /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
+    /// Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
     /// When `Some`, data segments are externalized into a `//go:embed`ed binary sidecar of this filename instead of embedded as `Rt.unhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
@@ -589,7 +613,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any` asserts each arg to its wasm param type and boxes every result into `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static typing. The harness compares the boxed results bit-exactly.
+    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any` asserts each arg to its wasm param type and boxes every result into `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static typing.
+    /// The harness compares the boxed results bit-exactly.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         w.line(format!(
             "func (p *{}) invoke(name string, args ...any) []any {{",
@@ -770,7 +795,8 @@ impl<'a> Gen<'a> {
             self.emit_import(w, i, import);
         }
 
-        // Globals: imported first, then defined; every global is a boxed *global[T]. Defined globals' init exprs may read imported globals, so they must resolve after the imported ones.
+        // Globals: imported first, then defined; every global is a boxed *global[T].
+        // Defined globals' init exprs may read imported globals, so they must resolve after the imported ones.
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -835,7 +861,8 @@ impl<'a> Gen<'a> {
             }
         }
 
-        // Exports map holds every export kind as `any` so a generated instance doubles as another module's import provider (`imports["M"] = inst.Exports`), the mechanism the spec harness's `register` support uses. Globals export the shared box, not its value.
+        // Exports map holds every export kind as `any` so a generated instance doubles as another module's import provider (`imports["M"] = inst.Exports`), the mechanism the spec harness's `register` support uses.
+        // Globals export the shared box, not its value.
         let mut export_entries = Vec::new();
         for export in &m.exports {
             let val = match export.kind {
@@ -882,7 +909,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The bundled WASI, built on first use. Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all (which is exactly what `p.wasi == nil` says) while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
+    /// The bundled WASI, built on first use.
+    /// Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all (which is exactly what `p.wasi == nil` says) while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
     fn wasi_accessor(&self, w: &mut CodeWriter) {
         let m = self.module;
         w.line(format!(
@@ -956,7 +984,9 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Resolve a non-function import (memory/table/global) into `target`, asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`). A present wrong-kind (or wrong-type) value is a link error; a missing one is a link error too (there is no fallback for these, unlike WASI funcs). The Go type assertion performs the kind check (and, for globals, the value-type check) inherently; mutability and min/max limits stay unchecked (the import-limits gap).
+    /// Resolve a non-function import (memory/table/global) into `target`, asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`).
+    /// A present wrong-kind (or wrong-type) value is a link error; a missing one is a link error too (there is no fallback for these, unlike WASI funcs).
+    /// The Go type assertion performs the kind check (and, for globals, the value-type check) inherently; mutability and min/max limits stay unchecked (the import-limits gap).
     fn emit_typed_import(
         &self,
         w: &mut CodeWriter,
@@ -1094,7 +1124,8 @@ impl<'a> Gen<'a> {
         w.indent();
 
         if self.spec {
-            // Recursion guard (spec-harness only): bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap. The defer is registered before the check so the trapping frame's own cost is unwound too.
+            // Recursion guard (spec-harness only): bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap.
+            // The defer is registered before the check so the trapping frame's own cost is unwound too.
             let cost = 1 + local_types.len() + func.temps.len();
             w.line(format!("rtStack += {cost}"));
             w.line(format!("defer func() {{ rtStack -= {cost} }}()"));
@@ -1201,7 +1232,8 @@ impl<'a> Gen<'a> {
                 }
             }
             Stmt::SourceLine(pos) => {
-                // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw`. The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
+                // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw`.
+                // The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
                 let file = &self.module.debug_files[pos.file as usize];
                 if pos.col > 0 {
                     w.raw(format!("//line {file}:{}:{}\n", pos.line, pos.col));
@@ -1775,7 +1807,9 @@ fn collect_reads_expr(
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `// requires:` header. Mirrors the Python backend's units lint, adjusted for Go syntax: `Rt.<name>` helper calls, `.memory.<name>` memory-method calls, and per-scope sibling calls through the receiver letter (`m`/`t`/`w`). A second test compiles the full bundle with `go build`, so a syntax error in any unit (not just the subset any one module uses) is caught.
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `// requires:` header.
+/// Mirrors the Python backend's units lint, adjusted for Go syntax: `Rt.<name>` helper calls, `.memory.<name>` memory-method calls, and per-scope sibling calls through the receiver letter (`m`/`t`/`w`).
+/// A second test compiles the full bundle with `go build`, so a syntax error in any unit (not just the subset any one module uses) is caught.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1868,7 +1902,8 @@ mod units {
         );
     }
 
-    /// The whole runtime (every unit, not just the subset a given module uses) must be valid Go. Compile the full bundle with `go build` (a missing toolchain fails loud, it does not skip).
+    /// The whole runtime (every unit, not just the subset a given module uses) must be valid Go.
+    /// Compile the full bundle with `go build` (a missing toolchain fails loud, it does not skip).
     #[test]
     fn all_units_compile_as_go() {
         let go =

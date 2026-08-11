@@ -1,8 +1,7 @@
 module SQLite3
   module Constants
-    # SQLITE_OPEN_* flags. Rails only reads Open::SHAREDCACHE (to warn about
-    # shared-cache configs), but the full set keeps user `flags:` configs
-    # working.
+    # SQLITE_OPEN_* flags.
+    # Rails only reads Open::SHAREDCACHE (to warn about shared-cache configs), but the full set keeps user `flags:` configs working.
     module Open
       READONLY = 0x00000001
       READWRITE = 0x00000002

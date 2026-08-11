@@ -1,4 +1,5 @@
-//! The one compile-and-cache recipe shared by the Java suites (spec, e2e, wasi-testsuite, memory_grow). Java is the only compiled-to-a-class-dir backend, so every one of those suites needs the same step; keeping four copies of it also kept four cache namespaces, which made identical sources compile once per suite.
+//! The one compile-and-cache recipe shared by the Java suites (spec, e2e, wasi-testsuite, memory_grow).
+//! Java is the only compiled-to-a-class-dir backend, so every one of those suites needs the same step; keeping four copies of it also kept four cache namespaces, which made identical sources compile once per suite.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -9,7 +10,9 @@ use dewasm_backend_java::javac_command;
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Compile `source` (a single `Main.java`) into a content-addressed class-dir cache and return its path. `Err(Output)` carries the `javac` failure, so a caller that reports compile errors through a run's `status.success()` can hand it straight back while one that treats a compile failure as a bug panics on it. A missing `javac` is a loud failure (from `javac_command`).
+/// Compile `source` (a single `Main.java`) into a content-addressed class-dir cache and return its path.
+/// `Err(Output)` carries the `javac` failure, so a caller that reports compile errors through a run's `status.success()` can hand it straight back while one that treats a compile failure as a bug panics on it.
+/// A missing `javac` is a loud failure (from `javac_command`).
 ///
 /// The cache is keyed on the source alone and shared by every suite in the crate: the spec harness's `Main.java` for a `.wast` file, the e2e glue programs, and the wasi-testsuite drivers all land in the same namespace, so a source two suites happen to agree on is compiled once.
 pub fn build_java(source: &str) -> Result<PathBuf, Output> {

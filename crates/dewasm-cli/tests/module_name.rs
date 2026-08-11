@@ -14,7 +14,8 @@ fn run_dewasm(args: &[&str]) -> Output {
         .expect("spawn dewasm")
 }
 
-/// A fixture `.wat` named `stem.wat` in a fresh temp dir, so the default module name is exactly `stem`. The counter keeps parallel test threads (and concurrent `cargo test` processes) off each other's dirs.
+/// A fixture `.wat` named `stem.wat` in a fresh temp dir, so the default module name is exactly `stem`.
+/// The counter keeps parallel test threads (and concurrent `cargo test` processes) off each other's dirs.
 fn fixture(stem: &str) -> PathBuf {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(

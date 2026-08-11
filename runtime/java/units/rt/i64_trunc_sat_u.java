@@ -1,6 +1,5 @@
 // i64.trunc_sat_f32_u / i64.trunc_sat_f64_u: saturating unsigned truncation.
-// Result is a u64 value carried as a signed `long` bit pattern (see
-// i64_trunc_u); NaN->0, clamp to [0, 2^64).
+// Result is a u64 value carried as a signed `long` bit pattern (see i64_trunc_u); NaN->0, clamp to [0, 2^64).
 static long i64_trunc_sat_u(double x) {
     if (Double.isNaN(x)) {
         return 0L;

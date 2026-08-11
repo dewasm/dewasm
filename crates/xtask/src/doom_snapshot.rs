@@ -1,16 +1,12 @@
 //! The DOOM framebuffer-snapshot oracle: run the *original* `doom.wasm`
-//! under the wasmtime crate with the deterministic driving contract, and write
-//! the rendered frame to `examples/apps/snapshots/doom_frame.ppm`. wasmtime lives
-//! here, in dev tooling, not in `dewasm-test-helper`: the per-backend comparison
-//! never needs an embedder, only the committed snapshot this produces. A PNG
-//! rendering of the same frame is emitted alongside it for human inspection (the
+//! under the wasmtime crate with the deterministic driving contract, and write the rendered frame to `examples/apps/snapshots/doom_frame.ppm`. wasmtime lives here, in dev tooling, not in `dewasm-test-helper`: the per-backend comparison never needs an embedder, only the committed snapshot this produces.
+//! A PNG rendering of the same frame is emitted alongside it for human inspection (the
 //! DOOM README); only the PPM is the compared oracle.
 
 use anyhow::{ensure, Context, Result};
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
-/// Host state threaded through the imports: the synthetic clock, the last
-/// framebuffer offset `ui.drawFrame` delivered, and the dimensions
+/// Host state threaded through the imports: the synthetic clock, the last framebuffer offset `ui.drawFrame` delivered, and the dimensions
 /// `loading.onGameInit` reported.
 struct DoomState {
     ms: i64,
@@ -19,8 +15,8 @@ struct DoomState {
     frame_h: u32,
 }
 
-/// Instantiate and drive `doom.wasm` under the deterministic contract, returning
-/// the captured framebuffer bytes (`B,G,R,A`) and its dimensions. Kept in
+/// Instantiate and drive `doom.wasm` under the deterministic contract, returning the captured framebuffer bytes (`B,G,R,A`) and its dimensions.
+/// Kept in
 /// `wasmtime::Result` so wasmtime's `?` composes; the caller lifts it to anyhow.
 fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     let engine = Engine::default();
@@ -35,9 +31,7 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
         },
     );
 
-    // The ten host imports under the deterministic contract: no console output,
-    // no save state, a synthetic clock, the embedded WAD (wad imports are
-    // no-ops, leaving their out-params zero), and dims/offset recorded.
+    // The ten host imports under the deterministic contract: no console output, no save state, a synthetic clock, the embedded WAD (wad imports are no-ops, leaving their out-params zero), and dims/offset recorded.
     let mut linker = Linker::new(&engine);
     linker.func_wrap(
         "console",
@@ -107,8 +101,8 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
         .get_memory(&mut store, "memory")
         .expect("doom.wasm has no `memory` export");
 
-    // initGame (fires onGameInit), then N ticks: no key events. The clock
-    // self-advances on every read, so nothing is stepped here.
+    // initGame (fires onGameInit), then N ticks: no key events.
+    // The clock self-advances on every read, so nothing is stepped here.
     init.call(&mut store, ())?;
     for _ in 0..dewasm_test_helper::DOOM_TICKS {
         tick.call(&mut store, ())?;
@@ -143,8 +137,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         dewasm_test_helper::DOOM_FRAME_H
     );
 
-    // Guard against a degenerate (blank/near-blank) capture: DOOM's paletted
-    // renderer lands in the low hundreds of distinct colors on a real frame.
+    // Guard against a degenerate (blank/near-blank) capture: DOOM's paletted renderer lands in the low hundreds of distinct colors on a real frame.
     let distinct = frame
         .chunks_exact(4)
         .map(|px| [px[0], px[1], px[2]])
@@ -162,9 +155,9 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 }
 
 /// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit
-/// RGB PNG. Settings are the crate defaults, kept fixed so regeneration is
-/// byte-stable (verified by capturing twice and diffing). This PNG is a
-/// human-facing sidecar only: no test compares it.
+/// RGB PNG.
+/// Settings are the crate defaults, kept fixed so regeneration is byte-stable (verified by capturing twice and diffing).
+/// This PNG is a human-facing sidecar only: no test compares it.
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for px in frame.chunks_exact(4) {

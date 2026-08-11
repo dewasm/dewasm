@@ -1,8 +1,5 @@
 # requires: rt/f64_round_pack
-# Guard/round/sticky live in the low 3 bits (<<3); the alignment shift
-# jams shifted-out bits into bit 0, which is sound because a shift by
-# d >= 2 keeps the difference >= 2^53 (right-normalization only), and
-# d <= 1 loses no bits at all (mb<<3 has 3 trailing zeros).
+# Guard/round/sticky live in the low 3 bits (<<3); the alignment shift jams shifted-out bits into bit 0, which is sound because a shift by d >= 2 keeps the difference >= 2^53 (right-normalization only), and d <= 1 loses no bits at all (mb<<3 has 3 trailing zeros).
 rt_f64_add() {
   local a=$1 b=$2 pa pb sa sb ea eb ma mb d x y m t
   (( pa = a & 0x7fffffffffffffff, pb = b & 0x7fffffffffffffff ))

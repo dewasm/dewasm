@@ -1,4 +1,5 @@
-//! Generated-docs test for docs/support.md: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality. Compare-only; regenerate with:
+//! Generated-docs test for docs/support.md: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality.
+//! Compare-only; regenerate with:
 //!
 //! cargo xtask update-support-docs
 

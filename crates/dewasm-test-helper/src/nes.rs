@@ -1,19 +1,12 @@
 //! Shared constants and helpers for the NES framebuffer-snapshot test (issue
-//! #114), mirroring the DOOM one. The oracle (`cargo xtask
-//! update-snapshots`, whose NES target embeds the wasmtime crate, kept out of
-//! this crate's dependency tree) and the per-backend drivers (the language glue)
+//! #114), mirroring the DOOM one.
+//! The oracle (`cargo xtask update-snapshots`, whose NES target embeds the wasmtime crate, kept out of this crate's dependency tree) and the per-backend drivers (the language glue)
 //! must agree on one driving contract: load the pinned ROM, tick [`NES_FRAMES`]
-//! frames with **no input**, then dump the framebuffer. agnes's emulation is
-//! deterministic (fixed-point integer, no wall clock), so every backend and the
-//! wasmtime oracle produce byte-identical pixels: no synthetic clock is needed,
-//! unlike DOOM.
+//! frames with **no input**, then dump the framebuffer. agnes's emulation is deterministic (fixed-point integer, no wall clock), so every backend and the wasmtime oracle produce byte-identical pixels: no synthetic clock is needed, unlike DOOM.
 //!
-//! "Dump the framebuffer" means agnes's own representation, not a rendered
-//! image (issue #117): `screenOffset()` points at `frameWidth * frameHeight`
-//! palette *indices* (row-major, one byte per pixel) and `paletteOffset()` at
-//! the fixed [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette, so a host composes
-//! a pixel as `palette[screen[i] & 0x3f]` (see [`nes_frame_to_ppm`], which is
-//! both the oracle's encoder and the shape every backend's glue reproduces). The
+//! "Dump the framebuffer" means agnes's own representation, not a rendered image (issue #117): `screenOffset()` points at `frameWidth * frameHeight`
+//! palette *indices* (row-major, one byte per pixel) and `paletteOffset()` at the fixed [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette, so a host composes a pixel as `palette[screen[i] & 0x3f]` (see [`nes_frame_to_ppm`], which is both the oracle's encoder and the shape every backend's glue reproduces).
+//! The
 //! `& 0x3f` mask is load-bearing: indices above 63 occur.
 
 use std::path::PathBuf;
@@ -24,16 +17,16 @@ use crate::backend::BackendUnderTest;
 use crate::glue::fill;
 
 /// The framebuffer this NES emulator renders (agnes's fixed native resolution,
-/// `AGNES_SCREEN_WIDTH`×`AGNES_SCREEN_HEIGHT`); the snapshot is captured at these
-/// dimensions and `frameWidth`/`frameHeight` report them at run time.
+/// `AGNES_SCREEN_WIDTH`×`AGNES_SCREEN_HEIGHT`); the snapshot is captured at these dimensions and `frameWidth`/`frameHeight` report them at run time.
 pub const NES_FRAME_W: u32 = 256;
 pub const NES_FRAME_H: u32 = 240;
 
-/// The palette `paletteOffset` points at: 64 entries of 4 bytes (`R,G,B,A`),
-/// i.e. 256 bytes. Fixed data, so a host reads it once.
+/// The palette `paletteOffset` points at: 64 entries of 4 bytes (`R,G,B,A`), i.e. 256 bytes.
+/// Fixed data, so a host reads it once.
 pub const NES_PALETTE_ENTRIES: usize = 64;
 
-/// Number of `tickGame` calls (one emulated video frame each) before the frame is captured, with no controller input: the smallest count reaching a stable, non-degenerate screen: Alter Ego boots near-black (~15 ticks), settles into its final credits image by frame 37, identical through 180+, so 40 leaves a small margin. Every frame is real wall time under Bash, so smaller is better; pinned by the snapshot.
+/// Number of `tickGame` calls (one emulated video frame each) before the frame is captured, with no controller input: the smallest count reaching a stable, non-degenerate screen: Alter Ego boots near-black (~15 ticks), settles into its final credits image by frame 37, identical through 180+, so 40 leaves a small margin.
+/// Every frame is real wall time under Bash, so smaller is better; pinned by the snapshot.
 pub const NES_FRAMES: u32 = 40;
 
 /// The cached `nes.wasm` reactor library (populated by
@@ -54,9 +47,8 @@ pub fn nes_frame_snapshot_path() -> PathBuf {
 }
 
 /// Encode agnes's own frame representation (`w * h` palette indices plus the
-/// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette) as a binary P6 PPM. The
-/// exact byte layout the per-backend glue must reproduce on stdout for the
-/// snapshot comparison.
+/// [`NES_PALETTE_ENTRIES`]-entry `R,G,B,A` palette) as a binary P6 PPM.
+/// The exact byte layout the per-backend glue must reproduce on stdout for the snapshot comparison.
 pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8> {
     assert_eq!(
         screen.len(),
@@ -79,10 +71,9 @@ pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8
 }
 
 /// Convert `nes.wasm` to library mode with `lang`, append `glue` that loads the
-/// ROM, ticks the deterministic contract, and writes the frame as a P6 PPM to
-/// stdout, and require it byte-identical to the snapshot. The `{frames}`/`{rom}`
-/// placeholders in `glue` are filled from [`NES_FRAMES`] and the cached ROM path
-/// so the driving constants live in one place.
+/// ROM, ticks the deterministic contract, and writes the frame as a P6 PPM to stdout, and require it byte-identical to the snapshot.
+/// The `{frames}`/`{rom}`
+/// placeholders in `glue` are filled from [`NES_FRAMES`] and the cached ROM path so the driving constants live in one place.
 pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     let bytes = read_nes_wasm();
     let class = lang.convert_app(&bytes, Mode::Library, &lang.module_name("nes"));

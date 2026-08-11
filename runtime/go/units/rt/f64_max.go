@@ -1,6 +1,5 @@
 func (rt) f64_max(a, b float64) float64 {
-    // A NaN operand yields the wasm canonical NaN (see f64_min); Go's
-    // math.NaN() is not bit-canonical.
+    // A NaN operand yields the wasm canonical NaN (see f64_min); Go's math.NaN() is not bit-canonical.
     if math.IsNaN(a) || math.IsNaN(b) {
         return math.Float64frombits(0x7ff8000000000000)
     }

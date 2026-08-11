@@ -15,8 +15,7 @@ def wasi_fd_pwrite(self, fd, iovs_ptr, iovs_len, offset, nwritten_ptr):
             chunk = self.memory.read_string(ptr, length)
             n = os.pwrite(io.fileno(), chunk, offset + written)
             written += n
-            # A single pwrite(2) may write short; stop so the reported
-            # nwritten stays contiguous.
+            # A single pwrite(2) may write short; stop so the reported nwritten stays contiguous.
             if n < len(chunk):
                 break
     except OSError:

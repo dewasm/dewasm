@@ -1,7 +1,7 @@
 # requires: rt/f64_round_pack
-# Exact: every f32 value is representable in f64. NaN goes canonical
-# (arithmetic-op policy); subnormal f32 left-normalizes through
-# round_pack with zero sticky.
+# Exact: every f32 value is representable in f64.
+# NaN goes canonical
+# (arithmetic-op policy); subnormal f32 left-normalizes through round_pack with zero sticky.
 rt_f64_promote() {
   local b=$1 pb s
   (( pb = b & 0x7fffffff, s = (b >> 31) & 1 ))

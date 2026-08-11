@@ -9,7 +9,9 @@ use crate::ir::SourcePos;
 
 /// The wasm DWARF code-address convention.
 ///
-/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset. But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets. So to look a resolved operator up in the line table we subtract the code section's content start, and that is the address base.
+/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset.
+/// But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets.
+/// So to look a resolved operator up in the line table we subtract the code section's content start, and that is the address base.
 fn address_base(code_section_start: u64) -> u64 {
     code_section_start
 }
@@ -30,7 +32,9 @@ pub struct LineTable {
 }
 
 impl LineTable {
-    /// Parse the collected `.debug_*` section blobs (keyed by section name, e.g. `.debug_line`). `code_section_start` is the module file offset of the code section's contents, used only for address-base calibration. Returns `None` when there is no line program to speak of.
+    /// Parse the collected `.debug_*` section blobs (keyed by section name, e.g. `.debug_line`).
+    /// `code_section_start` is the module file offset of the code section's contents, used only for address-base calibration.
+    /// Returns `None` when there is no line program to speak of.
     pub fn parse(
         sections: &HashMap<String, Vec<u8>>,
         code_section_start: u64,
@@ -85,7 +89,8 @@ impl LineTable {
             }
         }
 
-        // Rows come per-sequence (already ascending) but sequences and units are not globally ordered, so sort. At an equal address, order a real row after an `end_sequence` boundary so a lookup landing exactly on a sequence start resolves the mapped row, not the preceding gap.
+        // Rows come per-sequence (already ascending) but sequences and units are not globally ordered, so sort.
+        // At an equal address, order a real row after an `end_sequence` boundary so a lookup landing exactly on a sequence start resolves the mapped row, not the preceding gap.
         rows.sort_by_key(|r| (r.address, r.pos.is_some()));
 
         Ok(Some(LineTable {

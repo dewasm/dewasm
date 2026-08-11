@@ -88,7 +88,8 @@ fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
     by_module
 }
 
-/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal. Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
+/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal.
+/// Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
 fn first_ref_types_construct(bytes: &[u8]) -> Option<String> {
     use wasmparser::{CompositeInnerType, Operator, ValType};
     let is_ref = |ty: &ValType| matches!(ty, ValType::Ref(_));

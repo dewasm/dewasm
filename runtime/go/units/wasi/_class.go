@@ -1,10 +1,9 @@
 // requires: memory/_class
-// The bundled WASI preview 1 runtime (filesystem model adopted one-for-one
-// from the Ruby/Python backends). Stdio and files are *os.File; a
-// directory (whether a preopen or one the guest opened via path_open) is a
-// *wasiDir. The fd table holds either, keyed by fd. Args/env are pre-encoded
-// byte strings; env is passed already-ordered ("K=V") and preopens are assigned
-// fds in sorted order, so there is no map-iteration nondeterminism.
+// The bundled WASI preview 1 runtime (filesystem model adopted one-for-one from the Ruby/Python backends).
+// Stdio and files are *os.File; a directory (whether a preopen or one the guest opened via path_open) is a
+// *wasiDir.
+// The fd table holds either, keyed by fd.
+// Args/env are pre-encoded byte strings; env is passed already-ordered ("K=V") and preopens are assigned fds in sorted order, so there is no map-iteration nondeterminism.
 const (
     wasiOk         uint32 = 0
     wasiBadf       uint32 = 8
@@ -15,11 +14,9 @@ const (
     wasiNotcapable uint32 = 76 // rights-narrowing violation
 )
 
-// WASI p1 rights bits (per-fd rights model adopted from the reference
-// runtime's per-filetype masks). A preopen/dir fd carries dirRightsBase; a file
-// fd carries whatever path_open requested intersected with the dir's inheriting
-// set. Enforced NOTCAPABLE=76 in the fd_read/fd_write/fd_seek/fd_readdir/
-// fd_filestat_set_size units and narrowed by fd_fdstat_set_rights.
+// WASI p1 rights bits (per-fd rights model adopted from the reference runtime's per-filetype masks).
+// A preopen/dir fd carries dirRightsBase; a file fd carries whatever path_open requested intersected with the dir's inheriting set.
+// Enforced NOTCAPABLE=76 in the fd_read/fd_write/fd_seek/fd_readdir/ fd_filestat_set_size units and narrowed by fd_fdstat_set_rights.
 const (
     rightFdDatasync          uint64 = 1 << 0
     rightFdRead              uint64 = 1 << 1
@@ -50,11 +47,8 @@ const (
     rightPathUnlinkFile      uint64 = 1 << 26
     rightPollFdReadwrite     uint64 = 1 << 27
 
-    // The reference runtime's directory masks (what wasi-libc and the
-    // conformance suite hard-code as the minimum for every directory). A dir
-    // base deliberately excludes FD_SEEK and FD_FILESTAT_SET_SIZE (the suite
-    // asserts their absence); inheriting adds the per-file fd_* rights a file
-    // opened underneath may request.
+    // The reference runtime's directory masks (what wasi-libc and the conformance suite hard-code as the minimum for every directory).
+    // A dir base deliberately excludes FD_SEEK and FD_FILESTAT_SET_SIZE (the suite asserts their absence); inheriting adds the per-file fd_* rights a file opened underneath may request.
     dirRightsBase uint64 = rightPathCreateDirectory | rightPathCreateFile |
         rightPathLinkSource | rightPathLinkTarget | rightPathOpen |
         rightFdReaddir | rightPathReadlink | rightPathRenameSource |
@@ -66,32 +60,29 @@ const (
         rightFdWrite | rightFdAdvise | rightFdAllocate | rightFdFilestatSetSize |
         rightPollFdReadwrite
 
-    // Stdio streams get a broad tty-shaped set so rights enforcement never
-    // blocks the inherited descriptors (seek still answers SPIPE first).
+    // Stdio streams get a broad tty-shaped set so rights enforcement never blocks the inherited descriptors (seek still answers SPIPE first).
     stdioRights uint64 = rightFdRead | rightFdWrite | rightFdSeek | rightFdTell |
         rightFdFdstatSetFlags | rightFdSync | rightFdDatasync | rightFdAdvise |
         rightFdAllocate | rightFdFilestatGet | rightFdFilestatSetSize |
         rightFdFilestatSetTimes | rightPollFdReadwrite
 )
 
-// fdflags bits (fs_flags). Only APPEND is acted on (fd_write seeks to end);
+// fdflags bits (fs_flags).
+// Only APPEND is acted on (fd_write seeks to end);
 // SYNC/DSYNC/RSYNC/NONBLOCK are stored and reported but treated as no-ops.
 const (
     fdflagAppend uint16 = 1 << 0
 )
 
-// Per-fd rights/flags carried alongside the fd-table entry. Every
-// live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
+// Per-fd rights/flags carried alongside the fd-table entry.
+// Every live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
 type wasiFdMeta struct {
     base       uint64
     inheriting uint64
     fdflags    uint16
 }
 
-// A directory descriptor: either a preopen (preopenName set to the
-// guest-visible path passed in preopens) or a directory the guest opened itself
-// via path_open (preopenName nil). entries is the fd_readdir listing cache,
-// filled lazily; loaded guards the one-shot snapshot.
+// A directory descriptor: either a preopen (preopenName set to the guest-visible path passed in preopens) or a directory the guest opened itself via path_open (preopenName nil). entries is the fd_readdir listing cache, filled lazily; loaded guards the one-shot snapshot.
 type wasiDir struct {
     hostPath    string
     preopenName []byte
@@ -144,9 +135,7 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
             real = resolved
         }
         // The host path must resolve, but need not be a directory: like the
-        // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the
-        // zeroperl reactor's init probe) is accepted: the guest resolves it
-        // as the preopen root itself.
+        // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the zeroperl reactor's init probe) is accepted: the guest resolves it as the preopen root itself.
         if _, err := os.Stat(real); err != nil {
             panic("preopen " + guest + " => " + preopens[guest] + ": does not exist")
         }
@@ -158,8 +147,8 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
     return w
 }
 
-// checkRight reports wasiOk if the fd holds `right`, else wasiNotcapable. An fd
-// with no tracked meta (should not happen for a live fd) is permitted.
+// checkRight reports wasiOk if the fd holds `right`, else wasiNotcapable.
+// An fd with no tracked meta (should not happen for a live fd) is permitted.
 func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
     if m, ok := w.meta[fd]; ok && m.base&right == 0 {
         return wasiNotcapable
@@ -167,8 +156,7 @@ func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
     return wasiOk
 }
 
-// isStdio reports whether f is one of the three inherited standard streams,
-// which take the SPIPE/no-close special cases (in lockstep with fds 0..2).
+// isStdio reports whether f is one of the three inherited standard streams, which take the SPIPE/no-close special cases (in lockstep with fds 0..2).
 func (w *WASI) isStdio(f *os.File) bool {
     return f == os.Stdin || f == os.Stdout || f == os.Stderr
 }

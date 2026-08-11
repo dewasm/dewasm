@@ -64,8 +64,7 @@ module SQLite3
         @done = true
         nil
       else
-        # Reset first (like the C gem) so the statement stays reusable, then
-        # raise with the message sqlite left on the connection.
+        # Reset first (like the C gem) so the statement stays reusable, then raise with the message sqlite left on the connection.
         @drv.call("sqlite3_reset", @stmt)
         raise @db.error_for(rc)
       end

@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 
-# Assemble the hand-written .wat microbenchmarks into benchmarks/cache/wat/<id>.wasm,
-# so that every runner in the suite consumes byte-identical modules.
+# Assemble the hand-written .wat microbenchmarks into benchmarks/cache/wat/<id>.wasm, so that every runner in the suite consumes byte-identical modules.
 #
-# The .wat sources are checked in; the built .wasm is not, like everything else
-# under cache/. Run this after editing one, or via `benchmarks/setup.sh`,
-# which calls it together with the C family's benchmarks/c/build.sh.
+# The .wat sources are checked in; the built .wasm is not, like everything else under cache/.
+# Run this after editing one, or via `benchmarks/setup.sh`, which calls it together with the C family's benchmarks/c/build.sh.
 #
 # Idempotent, and cheap enough that it just rebuilds unconditionally.
 

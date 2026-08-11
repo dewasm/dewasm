@@ -1,4 +1,5 @@
-//! Bash side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Bash backend's standalone interface (real WASI filesystem; status-cascade exit codes). The generic harness lives in `dewasm-test-helper`.
+//! Bash side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Bash backend's standalone interface (real WASI filesystem; status-cascade exit codes).
+//! The generic harness lives in `dewasm-test-helper`.
 
 use std::path::PathBuf;
 

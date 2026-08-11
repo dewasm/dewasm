@@ -1,4 +1,5 @@
-//! Fixture paths and the one conversion policy the e2e suites share. Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root.
+//! Fixture paths and the one conversion policy the e2e suites share.
+//! Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root.
 
 use std::path::{Path, PathBuf};
 

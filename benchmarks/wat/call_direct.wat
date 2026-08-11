@@ -1,38 +1,31 @@
 ;; call_direct -- many small direct calls.
 ;;
-;; One iteration makes four nested direct calls, four frames deep. This microbenchmark
-;; is the reason the suite exists in this shape: YJIT has no on-stack
-;; replacement, so a single long-running loop in generated Ruby is never JIT
-;; compiled, while the same arithmetic split across called methods is. Compare
-;; against i32_alu, which does comparable arithmetic inline.
+;; One iteration makes four nested direct calls, four frames deep.
+;; This microbenchmark is the reason the suite exists in this shape: YJIT has no on-stack replacement, so a single long-running loop in generated Ruby is never JIT compiled, while the same arithmetic split across called methods is.
+;; Compare against i32_alu, which does comparable arithmetic inline.
 ;;
 ;; ---------------------------------------------------------------------------
-;; Shared preamble. Duplicated verbatim in every hand-written microbenchmark so each
+;; Shared preamble.
+;; Duplicated verbatim in every hand-written microbenchmark so each
 ;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
 ;;
-;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`. It does
-;; <iterations> units of work, writes exactly one line -- the decimal result
-;; followed by a newline -- to stdout, and exits 0. <iterations> = 0 does no
-;; work but still prints, which is how the harness measures startup in
-;; isolation. Only args_sizes_get / args_get / fd_write / proc_exit are
-;; imported and the bodies stick to i32/i64/f64, because the pure-Ruby and
-;; pure-Python interpreters this suite compares cannot do more than that.
+;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
+;; It does
+;; <iterations> units of work, writes exactly one line -- the decimal result followed by a newline -- to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported and the bodies stick to i32/i64/f64, because the pure-Ruby and pure-Python interpreters this suite compares cannot do more than that.
 ;;
-;; Memory map, shared by every microbenchmark. It starts at 0x1000 rather than at 0
-;; because wasm3 traps with "out of bounds memory access" whenever a WASI out
-;; param is written to linear-memory address 0 -- address 0 is perfectly valid
-;; linear memory and every other runtime in the matrix accepts it, so the
-;; whole block is simply moved up out of wasm3's way:
+;; Memory map, shared by every microbenchmark.
+;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0 -- address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
 ;;
-;;   0x1000   4  argc                     (args_sizes_get out param)
-;;   0x1004   4  argv buffer size         (args_sizes_get out param)
-;;   0x1010      argv pointer array       (args_get out param)
-;;   0x1100      argv string buffer       (args_get out param)
-;;   0x1400   8  iovec { base, len }
-;;   0x1408   4  fd_write nwritten
-;;   0x1410  24  decimal scratch, filled backwards from 0x1428
-;;   0x1800  29  usage message
-;;   0x10000+    working set, for the microbenchmarks that have one
+;; 0x1000   4  argc                     (args_sizes_get out param)
+;; 0x1004   4  argv buffer size         (args_sizes_get out param)
+;; 0x1010      argv pointer array       (args_get out param)
+;; 0x1100      argv string buffer       (args_get out param)
+;; 0x1400   8  iovec { base, len }
+;; 0x1408   4  fd_write nwritten
+;; 0x1410  24  decimal scratch, filled backwards from 0x1428
+;; 0x1800  29  usage message
+;; 0x10000+    working set, for the microbenchmarks that have one
 ;; ---------------------------------------------------------------------------
 (module
   (import "wasi_snapshot_preview1" "args_sizes_get"
@@ -48,8 +41,8 @@
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
-  ;; Every argv problem lands here. The harness always passes exactly one
-  ;; argument, so anything else is a caller bug, not an input to guess at.
+  ;; Every argv problem lands here.
+  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
   (func $die
     (i32.store (i32.const 0x1400) (i32.const 0x1800))
     (i32.store (i32.const 0x1404) (i32.const 29))
@@ -58,8 +51,8 @@
     (call $proc_exit (i32.const 2))
     (unreachable))
 
-  ;; argv[1] as an unsigned decimal. Hand-rolled atoi: ask for the sizes, ask
-  ;; for the strings, then walk the bytes of argv[1].
+  ;; argv[1] as an unsigned decimal.
+  ;; Hand-rolled atoi: ask for the sizes, ask for the strings, then walk the bytes of argv[1].
   (func $iterations (result i32)
     (local $p i32) (local $start i32) (local $c i32) (local $n i32)
     (if (call $args_sizes_get (i32.const 0x1000) (i32.const 0x1004))
@@ -85,8 +78,8 @@
     (if (i32.eq (local.get $p) (local.get $start)) (then (call $die)))
     (local.get $n))
 
-  ;; Write `<v>\n` to stdout with v as an unsigned decimal. Digits come out
-  ;; least significant first, so the scratch area is filled backwards.
+  ;; Write `<v>\n` to stdout with v as an unsigned decimal.
+  ;; Digits come out least significant first, so the scratch area is filled backwards.
   (func $print (param $v i64)
     (local $p i32)
     (local.set $p (i32.const 0x1427))

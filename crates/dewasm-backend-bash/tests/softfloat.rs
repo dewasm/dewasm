@@ -1,4 +1,5 @@
-//! Softfloat oracle: drives the bash float units with edge and seeded-random vectors and compares every result bit-for-bit against Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical NaN results, wasm min/max, wasm's trunc trap table). The spec harness remains the bar; this is the fast development net that pinpoints the exact op and operands on a regression.
+//! Softfloat oracle: drives the bash float units with edge and seeded-random vectors and compares every result bit-for-bit against Rust's host IEEE-754 arithmetic adjusted to wasm semantics (canonical NaN results, wasm min/max, wasm's trunc trap table).
+//! The spec harness remains the bar; this is the fast development net that pinpoints the exact op and operands on a regression.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;

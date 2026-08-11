@@ -4,7 +4,8 @@
 //! - i32/i64 are unsigned (masked) Ruby Integers; signed views via `s32`/`s64` only where an instruction needs them.
 //! - f32/f64 are Ruby Floats; f32 results are re-rounded with `f32`.
 //! - `br` lowers to a method-local `__br` label-variable cascade: blocks and referenced ifs are `begin...end while false`, loops are `while true`, and a multi-level branch sets `__br` to the target label id and `break`s, each crossed frame's epilogue relaying it until the target lands.
-//! - A branch crossing 16 frames or more is addressed by value instead: the frames it crosses dissolve into a `case state` dispatch loop, so it costs one assignment at any depth (see [`flat`]). Shallower crossings keep the cascade and uncrossed frames stay structured, side by side in the same function.
+//! - A branch crossing 16 frames or more is addressed by value instead: the frames it crosses dissolve into a `case state` dispatch loop, so it costs one assignment at any depth (see [`flat`]).
+//!   Shallower crossings keep the cascade and uncrossed frames stay structured, side by side in the same function.
 //!
 //! The runtime is composed from per-method units and referenced by the relative name `Rt`, so linkage (embedded per class or shared) is the caller's choice.
 
@@ -12,7 +13,9 @@
 mod flat {
     pub use dewasm_backend::flat::*;
 
-    /// Crossing depth from which a branch is worth a dispatch. A relay costs one compare per crossed frame (measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32), while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80. So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked, since it puts the two measured workloads on the side each was measured to prefer: `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
+    /// Crossing depth from which a branch is worth a dispatch.
+    /// A relay costs one compare per crossed frame (measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32), while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80.
+    /// So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked, since it puts the two measured workloads on the side each was measured to prefer: `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
     pub const DEEP_CROSSING: usize = 16;
 }
 
@@ -126,7 +129,8 @@ fn find_ruby_uncached() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Generate one class for `module`. Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
+/// Generate one class for `module`.
+/// Returns the class source and the set of runtime units it needs (already bundled inside for `Embedded`).
 pub fn generate_class_with_units(
     module: &Module,
     class_name: &str,
@@ -152,7 +156,8 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
-    // A global needs a shared mutable cell (`Rt::Global`) only if it can cross an instantiation boundary: imported (came from another instance) or exported (another instance may import it later). Every other global is local to this class and never observed from outside it, so it can be a plain ivar holding the value directly.
+    // A global needs a shared mutable cell (`Rt::Global`) only if it can cross an instantiation boundary: imported (came from another instance) or exported (another instance may import it later).
+    // Every other global is local to this class and never observed from outside it, so it can be a plain ivar holding the value directly.
     let boxed_globals: BTreeSet<u32> = (0..module.imported_globals.len() as u32)
         .chain(module.exports.iter().filter_map(|e| match e.kind {
             ExportKind::Global(idx) => Some(idx),
@@ -184,7 +189,8 @@ fn generate_class_inner(
 
     let mut out = ancestor_guards(class_name);
     out.push_str(&format!("class {class_name}\n"));
-    // `include Rt` makes the runtime's `module_function` helpers private instance methods of the class, so generated code calls them by bare name (`m64(x)`) instead of naming the module at every site. Constants stay `Rt::`-qualified.
+    // `include Rt` makes the runtime's `module_function` helpers private instance methods of the class, so generated code calls them by bare name (`m64(x)`) instead of naming the module at every site.
+    // Constants stay `Rt::`-qualified.
     match linkage {
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
@@ -231,7 +237,8 @@ impl Backend for RubyBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its class name is fixed, not derived. Library output uses the requested name verbatim, after validating it.
+        // Standalone output is a self-contained program: its class name is fixed, not derived.
+        // Library output uses the requested name verbatim, after validating it.
         let class_name = if opts.mode == Mode::Standalone {
             STANDALONE_CLASS.to_string()
         } else {
@@ -323,7 +330,8 @@ impl Backend for RubyBackend {
             name: format!("{}.rb", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls.
+        // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -340,10 +348,12 @@ impl Backend for RubyBackend {
     }
 }
 
-/// The class a `--mode standalone` program defines. A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
+/// The class a `--mode standalone` program defines.
+/// A standalone artifact is a self-contained program whose internal name nothing outside it can observe, so it is fixed rather than derived from the input.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a Ruby constant path (`::`-separated segments, each `[A-Z][A-Za-z0-9_]*`) and is used verbatim. Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
+/// The library-mode module name must be a Ruby constant path (`::`-separated segments, each `[A-Z][A-Za-z0-9_]*`) and is used verbatim.
+/// Nothing is sanitized: a name that is not a legal constant path is a conversion-time error.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
         is_ident(
@@ -363,7 +373,8 @@ fn check_module_name(name: &str) -> Result<()> {
     }
 }
 
-/// `class A::B::C` needs `A` and `A::B` to exist, and the file must load both on its own and next to something that already defined them: each ancestor gets an unless-defined? guard, outermost first. An ancestor that already exists is left alone, whatever it is: bound to a non-module constant it fails loudly at load, which is the correct outcome.
+/// `class A::B::C` needs `A` and `A::B` to exist, and the file must load both on its own and next to something that already defined them: each ancestor gets an unless-defined? guard, outermost first.
+/// An ancestor that already exists is left alone, whatever it is: bound to a non-module constant it fails loudly at load, which is the correct outcome.
 fn ancestor_guards(class_name: &str) -> String {
     let segs: Vec<&str> = class_name.split("::").collect();
     let mut out = String::new();
@@ -398,7 +409,8 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("[\"{}\"].pack(\"H*\")", hex_string(data))
 }
 
-/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method; wider signatures fall back to the splat `call`. The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
+/// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method; wider signatures fall back to the splat `call`.
+/// The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
 const MAX_FIXED_ARITY: usize = 8;
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
@@ -408,19 +420,28 @@ pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 struct FrameSets {
     /// Capturing frames (`Block`, `Loop`, or referenced-`If`) that a `br` from strictly inside crosses, and so must carry a land-or-relay epilogue.
     crossed: HashSet<u32>,
-    /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`. Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
+    /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`.
+    /// Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
     wrapped: HashSet<u32>,
-    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands. A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve: the `while` compiles to a `while`.
+    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands.
+    /// A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve: the `while` compiles to a `while`.
     break_ok: HashSet<u32>,
-    /// One entry per outward `br`: the inclusive frame path it crosses, target first. `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing: dissolving any frame it crosses forces the rest.
+    /// One entry per outward `br`: the inclusive frame path it crosses, target first.
+    /// `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing: dissolving any frame it crosses forces the rest.
     paths: Vec<Vec<u32>>,
 }
 
 /// Compute the [`FrameSets`] for a function body.
 ///
-/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch (`pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing) or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent. Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`. A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack. `br_if`/`br_table` feed every target through the same routine.
+/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch (`pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing) or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent.
+/// Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`.
+/// A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack.
+/// `br_if`/`br_table` feed every target through the same routine.
 ///
-/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets. Ruby's `break` leaves that loop and lands at the block's end (the same place, in O(1)), so the frames stay structured. `sole` rather than `last` is a correctness requirement, not conservatism. It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
+/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets.
+/// Ruby's `break` leaves that loop and lands at the block's end (the same place, in O(1)), so the frames stay structured.
+/// `sole` rather than `last` is a correctness requirement, not conservatism.
+/// It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
 fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
     let mut sets = FrameSets::default();
     let mut stack: Vec<(u32, bool)> = Vec::new();
@@ -434,12 +455,9 @@ fn walk_frame_sets(
     stack: &mut Vec<(u32, bool)>,
     sets: &mut FrameSets,
 ) {
-    // "Sole statement", not merely "last": if the block held anything besides the
-    // loop, that other statement could dissolve, which dissolves the block by the
-    // ancestor rule while the loop itself stays a Ruby `while`, and then a
+    // "Sole statement", not merely "last": if the block held anything besides the loop, that other statement could dissolve, which dissolves the block by the ancestor rule while the loop itself stays a Ruby `while`, and then a
     // `state = N; next` aimed at the dispatch loop is captured by that `while`.
-    // Requiring the loop to be the whole body makes the block dissolvable only
-    // through the loop, so the two always dissolve together.
+    // Requiring the loop to be the whole body makes the block dissolvable only through the loop, so the two always dissolve together.
     let sole = direct
         && stmts
             .iter()
@@ -493,9 +511,8 @@ fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets)
         if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
             let outward = pos + 1 < stack.len();
             if outward {
-                // Unless it is Ruby's `break`: crossing exactly one loop that
-                // ends the block being targeted. That already lands where the
-                // branch wants to go, at O(1), so nothing on the path dissolves.
+                // Unless it is Ruby's `break`: crossing exactly one loop that ends the block being targeted.
+                // That already lands where the branch wants to go, at O(1), so nothing on the path dissolves.
                 if pos + 2 == stack.len() && sets.break_ok.contains(&stack[pos + 1].0) {
                     return;
                 }
@@ -516,13 +533,18 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// Per-function frame classification, set by `function()`: which frames carry a land-or-relay epilogue and which loops wrap their body. See `compute_frame_sets`.
+    /// Per-function frame classification, set by `function()`: which frames carry a land-or-relay epilogue and which loops wrap their body.
+    /// See `compute_frame_sets`.
     frames: RefCell<FrameSets>,
-    /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies. `branch()` compares its top against a `br`'s target; see the fast path there.
+    /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
+    /// `branch()` compares its top against a `br`'s target; see the fast path there.
     frame_stack: RefCell<Vec<u32>>,
-    /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]). `branch()` consults it to emit `state = N; next` instead of the cascade.
+    /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]).
+    /// `branch()` consults it to emit `state = N; next` instead of the cascade.
     flat: RefCell<Option<flat::Plan>>,
-    /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target. Computed once in `generate_class_inner`. See the boundary criterion in the comment there.
+    /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target.
+    /// Computed once in `generate_class_inner`.
+    /// See the boundary criterion in the comment there.
     boxed_globals: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
@@ -530,7 +552,8 @@ struct Gen<'a> {
 }
 
 impl<'a> Gen<'a> {
-    /// The Ruby expression yielding a data segment's bytes: a slice of the externalized blob when `--data-file` is on, else an inline packed-hex literal. Both yield an ASCII-8BIT (binary) string.
+    /// The Ruby expression yielding a data segment's bytes: a slice of the externalized blob when `--data-file` is on, else an inline packed-hex literal.
+    /// Both yield an ASCII-8BIT (binary) string.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             format!(
@@ -557,12 +580,14 @@ impl<'a> Gen<'a> {
         self.frames.borrow().wrapped.contains(&label_id)
     }
 
-    /// Whether the frame currently on top of `frame_stack` has an enclosing capturing frame, i.e. a `break` emitted in its epilogue has a loop to bind to. A bare `break` at method-body scope is a Ruby SyntaxError, so the outermost frame omits the relay arm (a pending branch can never target something outside it, so that arm is also dead).
+    /// Whether the frame currently on top of `frame_stack` has an enclosing capturing frame, i.e. a `break` emitted in its epilogue has a loop to bind to.
+    /// A bare `break` at method-body scope is a Ruby SyntaxError, so the outermost frame omits the relay arm (a pending branch can never target something outside it, so that arm is also dead).
     fn has_enclosing_frame(&self) -> bool {
         self.frame_stack.borrow().len() > 1
     }
 
-    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope, from a nested relay or a direct exit, skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward. Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
+    /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope, from a nested relay or a direct exit, skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward.
+    /// Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
     fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
         if self.has_enclosing_frame() {
             w.line(format!(
@@ -573,7 +598,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// An access expression for global `idx`, whichever representation it has: `@g{idx}.value` if it's boxed (crosses an instantiation boundary), plain `@g{idx}` otherwise. Valid on both sides of `=`.
+    /// An access expression for global `idx`, whichever representation it has: `@g{idx}.value` if it's boxed (crosses an instantiation boundary), plain `@g{idx}` otherwise.
+    /// Valid on both sides of `=`.
     fn global_ref(&self, idx: u32) -> String {
         if self.boxed_globals.contains(&idx) {
             format!("@g{idx}.value")
@@ -582,7 +608,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Reference a module-level runtime helper, recording its unit. The class includes `Rt`, so the helper is called by bare name.
+    /// Reference a module-level runtime helper, recording its unit.
+    /// The class includes `Rt`, so the helper is called by bare name.
     fn rt<'n>(&self, name: &'n str) -> &'n str {
         self.use_unit(&format!("rt/{name}"));
         name
@@ -876,7 +903,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_symbol, callable]` pair tables store. Element items and `call_indirect` agree on this shape.
+    /// A funcref value: the `[type_symbol, callable]` pair tables store.
+    /// Element items and `call_indirect` agree on this shape.
     fn func_pair(&self, func_idx: u32) -> String {
         format!(
             "[{}, {}]",
@@ -920,7 +948,8 @@ impl<'a> Gen<'a> {
                 w.line(format!("{names} = {default}"));
             }
             let plan = flat::plan(&func.body, &self.frames.borrow().paths, flat::DEEP_CROSSING);
-            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby. The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
+            // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby.
+            // The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
             depths.dedup();
             let mut decl = String::new();
@@ -947,8 +976,8 @@ impl<'a> Gen<'a> {
                     *self.flat.borrow_mut() = Some(plan);
                     let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("\t")).collect();
                     let last = self.flat_seq(&mut st, 0, &func.body);
-                    // Falling off the body ends the function; leave the dispatch
-                    // loop. A body that cannot fall off needs no such exit.
+                    // Falling off the body ends the function; leave the dispatch loop.
+                    // A body that cannot fall off needs no such exit.
                     if !terminates(&func.body) {
                         st[last].line(format!("state = {n}; next"));
                     }
@@ -1007,8 +1036,7 @@ impl<'a> Gen<'a> {
                     cur = after as usize;
                 }
                 Stmt::Loop { body, .. } => {
-                    // `target` is the head: entering the loop and taking its
-                    // back-edge are the same transition.
+                    // `target` is the head: entering the loop and taking its back-edge are the same transition.
                     st[cur].line(format!("state = {target}; next"));
                     cur = target as usize;
                     cur = self.flat_seq(st, cur, body);
@@ -1039,7 +1067,8 @@ impl<'a> Gen<'a> {
                         st[cur].dedent();
                     }
                     st[cur].line("end");
-                    // Reachable only through the condition-false fallthrough. With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
+                    // Reachable only through the condition-false fallthrough.
+                    // With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
                     if els.is_empty() {
                         st[cur].line(format!("state = {after}; next"));
                     }
@@ -1099,7 +1128,9 @@ impl<'a> Gen<'a> {
                 let wrapped = self.is_wrapped(label.id);
                 self.frame_stack.borrow_mut().push(label.id);
                 if wrapped {
-                    // A `br` targets this loop from a nested frame, arriving with `__br` set by `break`ing out of the inner `begin` (skipping any code left in the body). The decision then re-enters via `next`, or `break`s the `while` so the post-loop relay can pass `__br` further out. A plain fallthrough leaves `__br` nil and exits the loop.
+                    // A `br` targets this loop from a nested frame, arriving with `__br` set by `break`ing out of the inner `begin` (skipping any code left in the body).
+                    // The decision then re-enters via `next`, or `break`s the `while` so the post-loop relay can pass `__br` further out.
+                    // A plain fallthrough leaves `__br` nil and exits the loop.
                     w.block("while true", "end", |w| {
                         w.block("begin", "end while false", |w| self.stmts(w, body));
                         w.line(format!(
@@ -1328,10 +1359,8 @@ impl<'a> Gen<'a> {
                         return;
                     }
                 }
-                // `break_ok` (see `compute_frame_sets`): leaving the innermost
-                // loop lands at the end of the block enclosing it, which is
-                // where this branch is going. Neither frame dissolved, so the
-                // plain `break` is still available and still O(1).
+                // `break_ok` (see `compute_frame_sets`): leaving the innermost loop lands at the end of the block enclosing it, which is where this branch is going.
+                // Neither frame dissolved, so the plain `break` is still available and still O(1).
                 {
                     let fs = self.frame_stack.borrow();
                     if fs.len() >= 2
@@ -1342,7 +1371,8 @@ impl<'a> Gen<'a> {
                         return;
                     }
                 }
-                // Fast path (a br whose target is the innermost enclosing frame leaves it directly): `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge. Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
+                // Fast path (a br whose target is the innermost enclosing frame leaves it directly): `break` out of a block/if's `begin...end while false`, or `next` to take an unwrapped loop's back-edge.
+                // Everything else (a br to an outer frame, or a back-edge into a *wrapped* loop, whose body sits in an inner `begin`) sets the pending label variable and `break`s out of the innermost scope; each crossed frame's epilogue then relays `__br` outward until the target lands.
                 let innermost = self.frame_stack.borrow().last() == Some(label);
                 let via_var = !innermost || (*is_loop && self.is_wrapped(*label));
                 if via_var {
@@ -1420,7 +1450,9 @@ impl<'a> Gen<'a> {
 
     /// An expression in boolean context (an `if`/`br_if`/`select` test).
     ///
-    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a ternary only to undo it one operation later. Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `s32`/`s64`. Anything else keeps the `!= 0` test.
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a ternary only to undo it one operation later.
+    /// Emitting the comparison as a Ruby boolean drops both the ternary and the test; the operands are untouched, so a signed view still goes through `s32`/`s64`.
+    /// Anything else keeps the `!= 0` test.
     fn cond(&self, e: &Expr) -> Rendered {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
@@ -1433,7 +1465,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The negation of [`cond`]: `e` is zero. A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats (both `x < y` and `x >= y` are false when either is NaN).
+    /// The negation of [`cond`]: `e` is zero.
+    /// A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats (both `x < y` and `x >= y` are false when either is NaN).
     fn not_cond(&self, e: &Expr) -> Rendered {
         match e {
             // Two negations cancel.
@@ -1571,7 +1604,10 @@ impl<'a> Gen<'a> {
             F32Mul => self.call1("f32", infix(a, "*", b, MUL)),
             F32Div => self.call1("f32", infix(a, "/", b, MUL)),
             F64Add => infix(a, "+", b, ADD),
-            // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub. The host `-` therefore cannot be trusted to return an arithmetic NaN. Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free. See issue #11.
+            // GCC-built MRI (any arch; every version probed) leaves a signaling NaN unquieted when the RHS is +0.0: the flonum decode returns +0.0 as a literal, and GCC folds `a - 0.0` to `a`, skipping the FPU sub.
+            // The host `-` therefore cannot be trusted to return an arithmetic NaN.
+            // Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN, keeping the common finite path allocation- and call-free.
+            // See issue #11.
             F64Sub => {
                 let r = Rendered::atom("r".to_string());
                 // The assignment's parens are required: `=` binds looser than everything around it.
@@ -1610,7 +1646,8 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// Ruby's operator precedence over the subset the generated code emits, tightest first. Only the levels an emitted expression can sit at are named; `**`, `&&`, `||` and the rest are never built here.
+/// Ruby's operator precedence over the subset the generated code emits, tightest first.
+/// Only the levels an emitted expression can sit at are named; `**`, `&&`, `||` and the rest are never built here.
 ///
 /// Two of these differ from C and are the reason the table is written out rather than assumed: `&` binds *tighter* than `|` and `^`, and all three bind tighter than the comparisons.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1655,7 +1692,8 @@ impl Prec {
 struct Rendered {
     src: String,
     prec: Prec,
-    /// The top-level operator, for the one place equal precedence is not enough to decide: an associative operator may take an equal-precedence right operand only if it is the same operator. Empty for everything else.
+    /// The top-level operator, for the one place equal precedence is not enough to decide: an associative operator may take an equal-precedence right operand only if it is the same operator.
+    /// Empty for everything else.
     op: &'static str,
 }
 
@@ -1684,7 +1722,8 @@ impl Rendered {
     }
 }
 
-/// A numeric literal. A negative one carries a unary minus, so it binds like a unary expression and is parenthesized where an atom is required.
+/// A numeric literal.
+/// A negative one carries a unary minus, so it binds like a unary expression and is parenthesized where an atom is required.
 fn number(src: String) -> Rendered {
     let prec = if src.starts_with('-') {
         Prec::Unary
@@ -1694,7 +1733,8 @@ fn number(src: String) -> Rendered {
     Rendered { src, prec, op: "" }
 }
 
-/// `a OP b` for a left-associative operator. An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one: those are associative over the integers that are their only operands.
+/// `a OP b` for a left-associative operator.
+/// An equal-precedence *left* operand reparses the way it was built, so it needs no parens; an equal-precedence right operand does not, and is kept parenthesized unless the operator is the same bitwise one: those are associative over the integers that are their only operands.
 fn infix(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
     let associative = matches!(op, "&" | "|" | "^") && b.op == op;
     let right_limit = if associative { prec } else { prec.tighter() };
@@ -1714,7 +1754,8 @@ fn compare(a: Rendered, op: &'static str, b: Rendered, prec: Prec) -> Rendered {
     }
 }
 
-/// `c ? t : e`. The ternary is right-associative, so only the else-branch may hold another one unparenthesized.
+/// `c ? t : e`.
+/// The ternary is right-associative, so only the else-branch may hold another one unparenthesized.
 fn ternary(c: Rendered, t: Rendered, e: Rendered) -> Rendered {
     Rendered {
         src: format!(
@@ -1762,7 +1803,8 @@ fn default_value(ty: ValType) -> &'static str {
     }
 }
 
-/// How a value type is spelled inside a structural type key ([`type_key`]). Only this backend's own artifacts ever read these, so the spelling is free.
+/// How a value type is spelled inside a structural type key ([`type_key`]).
+/// Only this backend's own artifacts ever read these, so the spelling is free.
 fn val_name(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 => "i32",
@@ -1784,7 +1826,8 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles.
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header.
+/// This is the static half of the drift defence; the dynamic half is the spec harness running against minimal bundles.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1882,7 +1925,8 @@ mod units {
     }
 }
 
-/// Shape checks for precedence-aware parenthesization. The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish: that the parens a shape does not need are gone, and that the ones it does need are still there.
+/// Shape checks for precedence-aware parenthesization.
+/// The spec harness proves the generated code *runs* right; these pin the two halves the harness cannot distinguish: that the parens a shape does not need are gone, and that the ones it does need are still there.
 #[cfg(test)]
 mod parens {
     use super::*;
@@ -1984,7 +2028,9 @@ mod cascade {
     "#;
 
     // block $done { loop $l { br_if $done ...; br $l } }
-    // The standard compilation of a `while` with a conditional exit. The `br_if` crosses exactly one loop that is its block's sole statement, so the sole-statement exemption keeps both structured: a Ruby loop with a `break`, no dispatch. This is the shape most prone to silent regression: dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
+    // The standard compilation of a `while` with a conditional exit.
+    // The `br_if` crosses exactly one loop that is its block's sole statement, so the sole-statement exemption keeps both structured: a Ruby loop with a `break`, no dispatch.
+    // This is the shape most prone to silent regression: dropping the exemption keeps every spec trial passing and only costs tight-loop speed.
     const SOLE_LOOP_EXIT: &str = r#"
       (module
         (func (export "f") (param i32) (result i32)
@@ -2013,10 +2059,8 @@ mod cascade {
         assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
     }
 
-    /// A `br_table` tower `depth` blocks deep whose table names every level, so
-    /// the outermost target is crossed by a branch of exactly that path length:
-    /// the wasm compilation of a C `switch`, and the shape whose size decides
-    /// between the two lowerings.
+    /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length:
+    /// the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings.
     fn tower(depth: usize) -> String {
         let opens = (0..depth)
             .map(|i| format!("(block $l{i}"))
@@ -2053,8 +2097,7 @@ mod cascade {
 
     #[test]
     fn shallow_multi_level_br_keeps_the_relay() {
-        // The same tower, one level below the threshold: a relay of that depth
-        // is cheaper than a dispatch, so nothing dissolves.
+        // The same tower, one level below the threshold: a relay of that depth is cheaper than a dispatch, so nothing dissolves.
         let src = convert(&tower(flat::DEEP_CROSSING - 1));
         assert!(
             src.contains("elsif __br"),
@@ -2069,8 +2112,7 @@ mod cascade {
 
     #[test]
     fn mixed_depths_stay_structured() {
-        // The three-deep mixed-target shape: every crossing is shallow, so the
-        // whole function keeps the cascade's structured frames and its wrapped-loop back-edge.
+        // The three-deep mixed-target shape: every crossing is shallow, so the whole function keeps the cascade's structured frames and its wrapped-loop back-edge.
         let src = convert(MIXED_DEPTHS);
         assert!(src.contains("while true"), "no structured loop in:\n{src}");
         assert!(

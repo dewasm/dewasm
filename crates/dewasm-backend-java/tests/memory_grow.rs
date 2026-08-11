@@ -1,6 +1,8 @@
-//! Regression tests for issue #27's memory-size overflow: Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes, so a spec-legal size of 32768+ pages (2 GiB+) cannot be represented. `memory.grow` must answer -1 (never `NegativeArraySizeException` from the overflowing int multiply), and instantiating a module whose *initial* size already exceeds the cap must fail with a clear trap, not the raw exception.
+//! Regression tests for issue #27's memory-size overflow: Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes, so a spec-legal size of 32768+ pages (2 GiB+) cannot be represented.
+//! `memory.grow` must answer -1 (never `NegativeArraySizeException` from the overflowing int multiply), and instantiating a module whose *initial* size already exceeds the cap must fail with a clear trap, not the raw exception.
 //!
-//! These cases are Java-only (the cap is a JVM artifact: the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe. A missing `javac`/`java` fails loud.
+//! These cases are Java-only (the cap is a JVM artifact: the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe.
+//! A missing `javac`/`java` fails loud.
 
 use std::process::{Command, Output};
 
@@ -9,7 +11,8 @@ use dewasm_backend_java::{find_java, JavaBackend};
 
 mod common;
 
-/// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit, and run `java -cp <classdir> Main`. Generated code that does not compile is a bug here, not an observable, so a `javac` failure panics.
+/// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit, and run `java -cp <classdir> Main`.
+/// Generated code that does not compile is a bug here, not an observable, so a `javac` failure panics.
 fn convert_and_run(wat: &str, glue: &str) -> Output {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
 

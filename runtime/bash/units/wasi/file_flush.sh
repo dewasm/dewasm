@@ -1,7 +1,8 @@
 # wasi_file_flush <array-name> <path>: write the named byte-ordinal array to
-# <path>, replacing its contents (whole-file buffering). A single
-# `exec {fd}>` truncate-create opens the file; bytes are emitted through a
-# binary-safe '\xHH' printf format built in ~4 KiB batches. R0 is the errno.
+# <path>, replacing its contents (whole-file buffering).
+# A single
+# `exec {fd}>` truncate-create opens the file; bytes are emitted through a binary-safe '\xHH' printf format built in ~4 KiB batches.
+# R0 is the errno.
 wasi_file_flush() {
   local -n __buf=$1
   local __path=$2

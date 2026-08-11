@@ -1,11 +1,8 @@
-;; fd_readdir with a dircookie whose high bit is set: the u64 cookie is an
-;; unsigned position far past any snapshot's end, so each call must succeed
-;; with zero dirent bytes (matching wasmtime): never crash in a runtime that
-;; holds the cookie in a signed type, and never return entries. Two shapes:
+;; fd_readdir with a dircookie whose high bit is set: the u64 cookie is an unsigned position far past any snapshot's end, so each call must succeed with zero dirent bytes (matching wasmtime): never crash in a runtime that holds the cookie in a signed type, and never return entries.
+;; Two shapes:
 ;; 0x8000000000000000 truncates to index 0 (the silently-wrong-entries shape)
-;; and 0x8000000000000063's low bits land past the snapshot end (the
-;; out-of-bounds shape). A nonzero errno becomes the exit code; a nonzero
-;; bufused exits 200/201.
+;; and 0x8000000000000063's low bits land past the snapshot end (the out-of-bounds shape).
+;; A nonzero errno becomes the exit code; a nonzero bufused exits 200/201.
 (module
   (import "wasi_snapshot_preview1" "fd_readdir"
     (func $fd_readdir (param i32 i32 i32 i64 i32) (result i32)))

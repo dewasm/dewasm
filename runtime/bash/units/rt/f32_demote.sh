@@ -1,6 +1,6 @@
 # requires: rt/f32_round_pack
-# 53 -> 24 bit RNE. Ruby's 2^128 - 2^103 overflow boundary needs no code
-# here: it is exactly where round-to-nearest starts mapping to infinity.
+# 53 -> 24 bit RNE.
+# Ruby's 2^128 - 2^103 overflow boundary needs no code here: it is exactly where round-to-nearest starts mapping to infinity.
 # NaN keeps its sign and goes canonical (Ruby f32_demote parity).
 rt_f32_demote() {
   local a=$1 pa s ma ea

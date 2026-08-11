@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated DOOM package and build the ebiten
-# frontend. doom/doom_gen.go is ~10MB of generated code and is gitignored, so
-# this step has to run before `go build` can succeed from a clean checkout.
-# The binary goes to bin/doom: the package directory beside it is already
-# called doom.
+# Regenerate the dewasm-generated DOOM package and build the ebiten frontend. doom/doom_gen.go is ~10MB of generated code and is gitignored, so this step has to run before `go build` can succeed from a clean checkout.
+# The binary goes to bin/doom: the package directory beside it is already called doom.
 set -euo pipefail
 cd "$(dirname "$0")"
 

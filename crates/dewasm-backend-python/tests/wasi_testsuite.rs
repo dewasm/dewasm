@@ -1,4 +1,5 @@
-//! Python side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Python backend's standalone interface. The generic harness lives in `dewasm-test-helper`.
+//! Python side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Python backend's standalone interface.
+//! The generic harness lives in `dewasm-test-helper`.
 
 use std::path::PathBuf;
 

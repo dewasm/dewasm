@@ -7,9 +7,7 @@ func (w *WASI) wasi_fd_write(fd, iovsPtr, iovsLen, nwrittenPtr uint32) uint32 {
     if e := w.checkRight(fd, rightFdWrite); e != wasiOk {
         return e
     }
-    // APPEND is honored here rather than by opening the OS fd O_APPEND, so
-    // fd_fdstat_set_flags can turn it off at runtime: seek to end
-    // before writing.
+    // APPEND is honored here rather than by opening the OS fd O_APPEND, so fd_fdstat_set_flags can turn it off at runtime: seek to end before writing.
     if m, ok := w.meta[fd]; ok && m.fdflags&fdflagAppend != 0 && !w.isStdio(f) {
         f.Seek(0, 2) // whence 2 = io.SeekEnd
     }

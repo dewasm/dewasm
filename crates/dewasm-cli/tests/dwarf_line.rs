@@ -1,6 +1,7 @@
 //! End-to-end coverage for `--dwarf-line` source back-mapping.
 //!
-//! Semantics-neutrality is the whole contract: the flag adds source-position markers (Go `//line`, Ruby comments) and changes nothing else. Each case converts the cached DWARF fixture both with and without the flag, then asserts (a) the flagged output actually carries fixture markers, (b) it renders and runs to the same stdout/exit as the plain output, and (c) stripping the marker lines from the flagged source yields the plain source byte-for-byte.
+//! Semantics-neutrality is the whole contract: the flag adds source-position markers (Go `//line`, Ruby comments) and changes nothing else.
+//! Each case converts the cached DWARF fixture both with and without the flag, then asserts (a) the flagged output actually carries fixture markers, (b) it renders and runs to the same stdout/exit as the plain output, and (c) stripping the marker lines from the flagged source yields the plain source byte-for-byte.
 //!
 //! The Go case additionally pins the two `//line` gotchas: the directive is emitted at column 1 (Go honors it nowhere else) and never with a `line 0` (which `go build` rejects).
 
@@ -71,7 +72,8 @@ fn convert(target: &str, out: &Path, dwarf: bool) -> String {
     std::fs::read_to_string(out).unwrap()
 }
 
-/// `go build` a program in its own directory and run it, returning (stdout, exit code). A missing toolchain fails loud.
+/// `go build` a program in its own directory and run it, returning (stdout, exit code).
+/// A missing toolchain fails loud.
 fn run_go(prog: &Path) -> (String, i32) {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
@@ -114,7 +116,8 @@ fn run_ruby(prog: &Path) -> (String, i32) {
     )
 }
 
-/// Drop the source-line marker lines, so the remainder must equal the plain (no-flag) output. `is_marker` recognizes a backend's marker line.
+/// Drop the source-line marker lines, so the remainder must equal the plain (no-flag) output.
+/// `is_marker` recognizes a backend's marker line.
 fn strip_markers(src: &str, is_marker: impl Fn(&str) -> bool) -> String {
     src.lines()
         .filter(|l| !is_marker(l))

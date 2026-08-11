@@ -1,4 +1,5 @@
-//! The module-name policy for Bash: a library name is one identifier, lowercased into the global function/variable prefix, the single deliberate mapping the policy keeps, because bash has no case-carrying namespace. An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
+//! The module-name policy for Bash: a library name is one identifier, lowercased into the global function/variable prefix, the single deliberate mapping the policy keeps, because bash has no case-carrying namespace.
+//! An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_bash::{find_bash5, BashBackend};

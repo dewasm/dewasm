@@ -1,8 +1,6 @@
 # requires: rt/f64_round_pack
-# The 106-bit mantissa product uses a 26-bit split: every partial stays
-# below 2^55 (a 32-bit split would wrap at ~2^64). Operands are
-# pre-normalized to [2^52, 2^53) so P >= 2^104 and m = P>>51 >= 2^53,
-# keeping round_pack in its right-normalizing regime.
+# The 106-bit mantissa product uses a 26-bit split: every partial stays below 2^55 (a 32-bit split would wrap at ~2^64).
+# Operands are pre-normalized to [2^52, 2^53) so P >= 2^104 and m = P>>51 >= 2^53, keeping round_pack in its right-normalizing regime.
 rt_f64_mul() {
   local a=$1 b=$2 pa pb s ea eb ma mb a0 a1 b0 b1 p0 mid hi lo m sk
   (( pa = a & 0x7fffffffffffffff, pb = b & 0x7fffffffffffffff ))

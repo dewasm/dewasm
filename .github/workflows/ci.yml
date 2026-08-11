@@ -53,9 +53,8 @@ jobs:
           sudo unzip -o /tmp/wasi-vfs-cli.zip -d /usr/local/bin
           sudo chmod +x /usr/local/bin/wasi-vfs
       # The libpcap/tree-sitter/ripgrep stamps in setup.sh fold in
-      # `wasm-opt --version`, so the apps-cache key must too: a binaryen bump
-      # must yield a new key so the rebuilt artifacts get re-saved. Same for the
-      # ruby-packed stamp and `wasi-vfs --version`.
+      # `wasm-opt --version`, so the apps-cache key must too: a binaryen bump must yield a new key so the rebuilt artifacts get re-saved.
+      # Same for the ruby-packed stamp and `wasi-vfs --version`.
       - name: Compute apps cache key
         id: appskey
         run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-wasivfs$(wasi-vfs --version | awk '{print $2}')-${{ hashFiles('examples/apps/setup.sh', 'examples/apps/scripts/**', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
@@ -75,8 +74,7 @@ jobs:
       matrix:
         backend: [ruby, bash, python, go, java, perl]
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps) has
-    # unmeasured wall time; give it generous headroom and tighten later.
+    # The slow_test run (full spec suites + slow apps) has unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
       - uses: actions/checkout@v7
@@ -96,12 +94,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      # The runner's system perl satisfies the backend's floor (>= 5.26 with
-      # ivsize=8/nvsize=8); verify loudly up front instead of skipping.
+      # The runner's system perl satisfies the backend's floor (>= 5.26 with ivsize=8/nvsize=8); verify loudly up front instead of skipping.
       - if: matrix.backend == 'perl'
         run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
-      # ubuntu-24.04's system python 3.12.3 hits the static-block limit that
-      # breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
+      # ubuntu-24.04's system python 3.12.3 hits the static-block limit that breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
       - if: matrix.backend == 'python'
         uses: actions/setup-python@v7
         with:
@@ -109,8 +105,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}
-          # Only main writes the shared build cache; PRs restore it read-only
-          # to keep the repo under the 10 GB cache budget.
+          # Only main writes the shared build cache; PRs restore it read-only to keep the repo under the 10 GB cache budget.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/cache/restore@v6
         with:
@@ -120,10 +115,9 @@ jobs:
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
-      # Speed categories: the `slow_test` feature runs the full spec suite plus the
-      # slow per-case app cases (CI's main run). It deliberately excludes the
-      # `ultra_slow_test` cases, which run only locally: the ~1 min+ pty /
-      # giant-`go build` cases that timed out (#22) or exhausted runner memory (#23).
+      # Speed categories: the `slow_test` feature runs the full spec suite plus the slow per-case app cases (CI's main run).
+      # It deliberately excludes the
+      # `ultra_slow_test` cases, which run only locally: the ~1 min+ pty / giant-`go build` cases that timed out (#22) or exhausted runner memory (#23).
       - name: Test (slow)
         if: github.event_name != 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast --features dewasm-backend-${{ matrix.backend }}/slow_test
@@ -131,16 +125,13 @@ jobs:
   core:
     needs: apps-cache
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps) has
-    # unmeasured wall time; give it generous headroom and tighten later.
+    # The slow_test run (full spec suites + slow apps) has unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      # dewasm-cli holds the cross-backend tests, so this job needs every
-      # backend toolchain (bash ships with the runner; python is pinned below
-      # because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code, #21).
+      # dewasm-cli holds the cross-backend tests, so this job needs every backend toolchain (bash ships with the runner; python is pinned below because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code, #21).
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -158,8 +149,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: core
-          # Only main writes the shared build cache; PRs restore it read-only
-          # to keep the repo under the 10 GB cache budget.
+          # Only main writes the shared build cache; PRs restore it read-only to keep the repo under the 10 GB cache budget.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/cache/restore@v6
         with:

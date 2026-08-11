@@ -13,7 +13,9 @@
 //! $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 //! ```
 
-// Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros: those macros take a bare `$lang:expr` and forwarding an optional leading attribute onto the generated fn is a local macro-parsing ambiguity (`#` can begin an expr fragment). Calling the shared runners directly is the simplest honest way to attach the `wasmtime_test` `#[ignore]` attribute while still routing through the exact same runners the real backends use. The runners themselves run unconditionally (the slow per-case macros carry their own `slow_test`-feature `#[ignore]` instead), so `wasmtime_test` alone decides whether every test in this file runs.
+// Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros: those macros take a bare `$lang:expr` and forwarding an optional leading attribute onto the generated fn is a local macro-parsing ambiguity (`#` can begin an expr fragment).
+// Calling the shared runners directly is the simplest honest way to attach the `wasmtime_test` `#[ignore]` attribute while still routing through the exact same runners the real backends use.
+// The runners themselves run unconditionally (the slow per-case macros carry their own `slow_test`-feature `#[ignore]` instead), so `wasmtime_test` alone decides whether every test in this file runs.
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
@@ -67,7 +69,8 @@ fn gzip() {
     dewasm_test_helper::run_gzip_cases(&dewasm_test_helper::Wasmtime);
 }
 
-// The filesystem app cases: the `wasmtime_test` feature is already the opt-in, and `run_fs_app_case` runs unconditionally, so wasmtime runs the full set with no per-case exclusion; its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string. Hand-written rather than via the per-case `*_e2e!` macros because those cannot carry the `wasmtime_test` `#[ignore]` attribute (the same reason `apps`/`gzip` above are hand-written).
+// The filesystem app cases: the `wasmtime_test` feature is already the opt-in, and `run_fs_app_case` runs unconditionally, so wasmtime runs the full set with no per-case exclusion; its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string.
+// Hand-written rather than via the per-case `*_e2e!` macros because those cannot carry the `wasmtime_test` `#[ignore]` attribute (the same reason `apps`/`gzip` above are hand-written).
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn fs_apps() {

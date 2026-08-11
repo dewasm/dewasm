@@ -1,4 +1,5 @@
-//! Go side of the shared spec harness: converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it. The generic harness lives in `dewasm-test-helper`.
+//! Go side of the shared spec harness: converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it.
+//! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Three Go facts shape the phrasing:
 //! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module, and hence every export's signature, is known); the harness asserts the boxed `any` results to the expected type.
@@ -20,8 +21,11 @@ mod common;
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds. Every `assert_unlinkable` case testing one of those stays a known gap. The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state. Not a cross-module-linking gap itself.
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds.
+///   Every `assert_unlinkable` case testing one of those stays a known gap.
+///   The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
+/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
+///   Not a cross-module-linking gap itself.
 ///
 /// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
@@ -43,7 +47,8 @@ impl BackendUnderTest for GoSpec {
         &GoBackend
     }
 
-    /// Compile `source` to the crate's shared cache binary (identical programs build once) and run it. A build failure is surfaced as the `go build` `Output` so the harness reports the compile error where it would report the program's own.
+    /// Compile `source` to the crate's shared cache binary (identical programs build once) and run it.
+    /// A build failure is surfaced as the `go build` `Output` so the harness reports the compile error where it would report the program's own.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match common::build_go(source) {
             Err(build) => build,
@@ -238,7 +243,9 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     }
 }
 
-/// The external packages the assembled program references, by the backend's own boundary-matching rule ([`dewasm_backend_go::selector_used`]). Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import. The candidate list stays local: it is what *this* program can reference, and importing more than that is a Go compile error.
+/// The external packages the assembled program references, by the backend's own boundary-matching rule ([`dewasm_backend_go::selector_used`]).
+/// Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import.
+/// The candidate list stays local: it is what *this* program can reference, and importing more than that is a Go compile error.
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -340,7 +347,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
     }
 }
 
-/// Harness helpers + the `spectest` host fixture. `rtStack` is the recursion guard's shared counter (referenced only by spec-build generated functions).
+/// Harness helpers + the `spectest` host fixture.
+/// `rtStack` is the recursion guard's shared counter (referenced only by spec-build generated functions).
 const PREAMBLE: &str = r#"var rtStack int
 
 var _pass, _fail int
@@ -409,7 +417,8 @@ func check_exhaust(desc string, thunk func()) {
 	fmt.Printf("FAIL(want exhaustion, got %v): %s\n", r, desc)
 }
 
-// Upstream's assert_unlinkable message text never matches ours; a raised rtLinkError confirms the import was correctly rejected as unlinkable. Any other panic means the module linked and then crashed, which must not pass.
+// Upstream's assert_unlinkable message text never matches ours; a raised rtLinkError confirms the import was correctly rejected as unlinkable.
+// Any other panic means the module linked and then crashed, which must not pass.
 func check_unlinkable(desc string, thunk func()) {
 	var r any
 	func() {

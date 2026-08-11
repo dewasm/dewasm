@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=common.sh
+# shellcheck source-path=SCRIPTDIR shellcheck source=common.sh
 
 # sqlite3: built from the pinned amalgamation source with zig.
 #
 # One pinned source release yields three artifacts:
-#   cache/sqlite3-shell.wasm:   the CLI shell (standalone: _start, stdio)
-#   cache/libsqlite3.wasm:      a reactor library exporting the sqlite3 C
-#                               API, driven from Ruby in the apps e2e
-#   cache/sqlite3-binding.wasm: the same reactor library plus our own
-#                               src/sqlite3_binding.c (run_query), which
-#                               calls back into an imported env.host_row:
-#                               a guest->host callback round-trip proof
-# No upstream distributes a C-API-exporting wasm32-wasi build, which is
-# why these are compiled locally rather than downloaded.
+# cache/sqlite3-shell.wasm:   the CLI shell (standalone: _start, stdio)
+# cache/libsqlite3.wasm:      a reactor library exporting the sqlite3 C
+# API, driven from Ruby in the apps e2e
+# cache/sqlite3-binding.wasm: the same reactor library plus our own
+# src/sqlite3_binding.c (run_query), which
+# calls back into an imported env.host_row:
+# a guest->host callback round-trip proof
+# No upstream distributes a C-API-exporting wasm32-wasi build, which is why these are compiled locally rather than downloaded.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -26,8 +24,7 @@ SQLITE_CFLAGS=(
   -D_WASI_EMULATED_SIGNAL -lwasi-emulated-signal
   -DSQLITE_NOHAVE_SYSTEM
 )
-# The full statement/bind/column surface: enough to implement the sqlite3
-# gem API that Rails' SQLite3Adapter uses (examples/rails) on top of it.
+# The full statement/bind/column surface: enough to implement the sqlite3 gem API that Rails' SQLite3Adapter uses (examples/rails) on top of it.
 SQLITE_EXPORTS=(
   sqlite3_libversion sqlite3_libversion_number sqlite3_open sqlite3_open_v2
   sqlite3_close sqlite3_close_v2
@@ -51,8 +48,7 @@ BINDING_EXPORTS=(
   sqlite3_malloc sqlite3_free
 )
 
-# The stamp covers the source sha, the export lists, and the wasm-opt
-# version, so editing any of them retriggers the build.
+# The stamp covers the source sha, the export lists, and the wasm-opt version, so editing any of them retriggers the build.
 sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} wasm-opt:$(wasm_opt_version)"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if is_cached "$sqlite_stamp" "$sqlite_key" \
@@ -83,10 +79,8 @@ zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   "${exports[@]}" \
   -o cache/libsqlite3.wasm
 
-# The binding artifact: the reactor library plus our own run_query, which
-# forwards each result row to the imported env.host_row. Only the
-# symbols this callback flow needs are exported; the import lands via the
-# import_module/import_name attributes in src/sqlite3_binding.c.
+# The binding artifact: the reactor library plus our own run_query, which forwards each result row to the imported env.host_row.
+# Only the symbols this callback flow needs are exported; the import lands via the import_module/import_name attributes in src/sqlite3_binding.c.
 echo "sqlite3: building sqlite3-binding.wasm (zig cc, reactor + host callback)"
 mapfile -t binding_exports < <(wl_exports "${BINDING_EXPORTS[@]}")
 zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \

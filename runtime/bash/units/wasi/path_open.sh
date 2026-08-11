@@ -1,20 +1,18 @@
 # requires: mem/i32_store, wasi/read_path, wasi/resolve_path, wasi/file_slurp
-# WASI path_open, mirroring
-# runtime/ruby/units/wasi/path_open.rb. Resolves the guest path (lookupflags
-# bit 0 = follow symlinks), then opens a directory or a whole-file byte-buffer
-# fd. oflags: CREAT=0x1, DIRECTORY=0x2, EXCL=0x4, TRUNC=0x8; rights FD_READ=0x2
+# WASI path_open, mirroring runtime/ruby/units/wasi/path_open.rb.
+# Resolves the guest path (lookupflags bit 0 = follow symlinks), then opens a directory or a whole-file byte-buffer fd. oflags: CREAT=0x1, DIRECTORY=0x2, EXCL=0x4, TRUNC=0x8; rights FD_READ=0x2
 # / FD_WRITE=0x40 pick the open mode; fdflags APPEND=0x1.
 #
 # Rights model: the dirfd must hold PATH_OPEN (0x2000) or the open is
 # NOTCAPABLE (76); O_TRUNC additionally needs PATH_FILESTAT_SET_SIZE (0x80000)
-# on the dirfd. The opened fd's granted base = requested & dirfd-inheriting &
-# the per-filetype mask (directory 0x7BFFE98 / regular-file 0x8E001FF); its
-# inheriting = requested-inheriting & dirfd-inheriting & (directory 0xFFFFFFF /
-# empty for a file). Opening a directory with FD_WRITE requested is EISDIR (31).
+# on the dirfd.
+# The opened fd's granted base = requested & dirfd-inheriting & the per-filetype mask (directory 0x7BFFE98 / regular-file 0x8E001FF); its inheriting = requested-inheriting & dirfd-inheriting & (directory 0xFFFFFFF / empty for a file).
+# Opening a directory with FD_WRITE requested is EISDIR (31).
 # A missing directory with O_DIRECTORY is ENOENT (44), not ENOTDIR (54).
 # A symlink final component with NOFOLLOW (lookupflags bit 0 clear) is ELOOP
-# (32): you cannot open the link itself. The opened fd is written
-# to guest memory. R0 is the errno.
+# (32): you cannot open the link itself.
+# The opened fd is written to guest memory.
+# R0 is the errno.
 wasi_path_open() {
   local __p=$1 __dirfd=$2 __dirflags=$3 __path_ptr=$4 __path_len=$5
   local __oflags=$6 __rights=$7 __rights_inh=$8 __fdflags=$9 __opened_ptr=${10}
@@ -37,8 +35,7 @@ wasi_path_open() {
   if (( (__oflags & 0x8) && (__dir_base & 0x80000) == 0 )); then R0=76; return 0; fi # TRUNC needs PATH_FILESTAT_SET_SIZE
   # A symlink final component that was not followed cannot be opened.
   if (( (__dirflags & 1) == 0 )) && [[ -h $__host ]]; then R0=32; return 0; fi
-  # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in
-  # resolve_path): O_CREAT must not create through the slash (per wasmtime,
+  # Slash-suffixed and nonexistent (existing non-directories were ENOTDIR in resolve_path): O_CREAT must not create through the slash (per wasmtime,
   # EINVAL on macOS / EISDIR on Linux); a plain open is ENOENT.
   if [[ $__rel == */ && ! -e $__host && ! -h $__host ]]; then
     if (( __oflags & 0x1 )); then

@@ -1,7 +1,7 @@
 // requires: memory/i32_load, memory/i32_store, memory/read_string
 // Gather write to stdout/stderr (an OutputStream) or a guest-opened file (a
-// FileChannel). For an O_APPEND file the position is moved to end before the
-// write, reproducing append semantics without the FileChannel APPEND option
+// FileChannel).
+// For an O_APPEND file the position is moved to end before the write, reproducing append semantics without the FileChannel APPEND option
 // (which forbids combining with READ/TRUNCATE).
 int wasi_fd_write(int fd, int iovsPtr, int iovsLen, int nwrittenPtr) {
     Object e = fds.get(fd);

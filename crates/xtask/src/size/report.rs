@@ -1,6 +1,8 @@
 //! The two outputs of `cargo xtask size`: the machine-readable record under `benchmarks/results/` and the generated `docs/sizes/results.md`.
 //!
-//! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file. The JSON is the record (host, every runtime's version string as captured by executing it, every counted file), and the markdown is a rendering of it: numbers, not prose. What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
+//! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file.
+//! The JSON is the record (host, every runtime's version string as captured by executing it, every counted file), and the markdown is a rendering of it: numbers, not prose.
+//! What the numbers mean, how to run the command and what the measurement does not include are in the hand-written `docs/sizes/README.md`, which this module never touches.
 
 use std::fmt::Write as _;
 
@@ -10,7 +12,8 @@ use crate::bench::chart::round3;
 use crate::bench::report::Host;
 use crate::size::chart::Chart;
 
-/// The full size record. `schema` exists so a later reader can tell an old record from a new one.
+/// The full size record.
+/// `schema` exists so a later reader can tell an old record from a new one.
 #[derive(Serialize, Deserialize)]
 pub struct Report {
     pub schema: u32,
@@ -66,7 +69,8 @@ pub enum Outcome {
     Ok {
         bytes: u64,
     },
-    /// Deliberately not weighed (an uninstalled runtime, a cache file that is not there). Always reported, never silently dropped.
+    /// Deliberately not weighed (an uninstalled runtime, a cache file that is not there).
+    /// Always reported, never silently dropped.
     Skipped {
         reason: String,
     },
@@ -94,7 +98,8 @@ impl Report {
     }
 }
 
-/// Render `docs/sizes/results.md`: the layout of `docs/benchmarks/results.md`: the generated-file marker, two sentences pointing at the hand-written README, then the environment and the numbers. No explanatory prose: what the figures mean belongs in `docs/sizes/README.md`, which a person edits.
+/// Render `docs/sizes/results.md`: the layout of `docs/benchmarks/results.md`: the generated-file marker, two sentences pointing at the hand-written README, then the environment and the numbers.
+/// No explanatory prose: what the figures mean belongs in `docs/sizes/README.md`, which a person edits.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
     out.push_str("# Sizes\n\n");
@@ -184,7 +189,8 @@ fn render_apps(out: &mut String, report: &Report, charts: &[Chart]) {
     }
 }
 
-/// Everything the command did not weigh, with the reason it gives: an uninstalled runtime, an app that is not in the cache. Stated here rather than left as a gap in the tables above.
+/// Everything the command did not weigh, with the reason it gives: an uninstalled runtime, an app that is not in the cache.
+/// Stated here rather than left as a gap in the tables above.
 fn render_gaps(out: &mut String, report: &Report) {
     let mut gaps: Vec<(String, &str)> = Vec::new();
     for runtime in &report.runtimes {
@@ -218,7 +224,9 @@ fn render_gaps(out: &mut String, report: &Report) {
     out.push('\n');
 }
 
-/// A chart, above the table it summarizes. `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file. Paths are relative to `docs/sizes/results.md`, which sits beside the `figs/` directory the SVGs are written into.
+/// A chart, above the table it summarizes.
+/// `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file.
+/// Paths are relative to `docs/sizes/results.md`, which sits beside the `figs/` directory the SVGs are written into.
 fn render_chart(out: &mut String, chart: &Chart) {
     out.push_str("<picture>\n");
     let _ = writeln!(
@@ -235,7 +243,9 @@ fn render_chart(out: &mut String, chart: &Chart) {
     out.push_str("</picture>\n\n");
 }
 
-/// A size at three significant figures with a decimal SI prefix: `214 kB`, `4.79 MB`. Decimal, not binary: a release artifact's size is quoted in MB by every distribution channel there is. Whole bytes below 1 kB, where a fraction would be a fiction.
+/// A size at three significant figures with a decimal SI prefix: `214 kB`, `4.79 MB`.
+/// Decimal, not binary: a release artifact's size is quoted in MB by every distribution channel there is.
+/// Whole bytes below 1 kB, where a fraction would be a fiction.
 pub fn fmt_bytes(bytes: u64) -> String {
     fmt_bytes_f(bytes as f64)
 }
@@ -257,13 +267,15 @@ pub fn fmt_bytes_f(bytes: f64) -> String {
     format!("{mantissa:.decimals$} {unit}")
 }
 
-/// A power-of-ten gridline label: `1 kB`, `10 MB`. Bare mantissa and unit, no decimals.
+/// A power-of-ten gridline label: `1 kB`, `10 MB`.
+/// Bare mantissa and unit, no decimals.
 pub fn fmt_byte_tick(bytes: f64) -> String {
     let (scale, unit) = si_unit(bytes);
     format!("{:.0} {unit}", bytes / scale)
 }
 
-/// The SI prefix a size reads best in: the largest unit that still leaves a mantissa of at least 1. The slack absorbs the float error in a power of ten, so a tick one ULP low is not labelled `1000 kB`.
+/// The SI prefix a size reads best in: the largest unit that still leaves a mantissa of at least 1.
+/// The slack absorbs the float error in a power of ten, so a tick one ULP low is not labelled `1000 kB`.
 fn si_unit(bytes: f64) -> (f64, &'static str) {
     const UNITS: [(f64, &str); 4] = [(1e9, "GB"), (1e6, "MB"), (1e3, "kB"), (1.0, "B")];
     UNITS

@@ -2,11 +2,14 @@
 //!
 //! Lowering conventions:
 //! - i32/i64 are unsigned (masked) Python ints; signed views via `Rt.s32/s64` only where an instruction needs them.
-//! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`. Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
-//! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep. So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting.
+//! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`.
+//!   Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
+//! - Python has no goto and caps nested loops/`try` at ~20 ("too many statically nested blocks"), while `if` nests ~100 deep.
+//!   So only wasm loops become real `while True`; every forward branch (block/if exit) is lowered with a per-function branch register `_br` and guarded statements, and block bodies are spliced inline so block nesting adds no Python nesting.
 //! - A branch crossing many frames pays one test per crossed frame under that register, so a function holding a deep enough crossing has those frames dissolved into a state machine instead (see [`flat`]); shallower branches keep the register, in the same function.
 //!
-//! The runtime is composed from per-method units and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby). Under `Embedded` linkage that name is per-artifact (`<Class>Rt`), so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
+//! The runtime is composed from per-method units and referenced by a module-level class name (Python method scopes cannot see an enclosing class scope, so the runtime lives at module top level, not nested in the generated class as it is for Ruby).
+//! Under `Embedded` linkage that name is per-artifact (`<Class>Rt`), so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
 
 /// Flat dispatch, shared with the Ruby backend ([`dewasm_backend::flat`]); only the threshold below is this backend's own.
 mod flat {
@@ -14,7 +17,9 @@ mod flat {
 
     /// Crossing depth from which a branch is worth a dispatch.
     ///
-    /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces. Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s). A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition), which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
+    /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces.
+    /// Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s).
+    /// A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition), which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
     pub const DEEP_CROSSING: usize = 16;
 }
 
@@ -87,7 +92,8 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a python3 interpreter (>= 3.9) able to run generated scripts. Honors `$DEWASM_PYTHON`, then `python3`, then `python` (a missing or too-old interpreter is a loud failure at the call site, not here: this only reports what qualifies).
+/// Locate a python3 interpreter (>= 3.9) able to run generated scripts.
+/// Honors `$DEWASM_PYTHON`, then `python3`, then `python` (a missing or too-old interpreter is a loud failure at the call site, not here: this only reports what qualifies).
 pub fn find_python() -> Option<std::path::PathBuf> {
     static PYTHON: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     PYTHON.get_or_init(find_python_uncached).clone()
@@ -145,7 +151,8 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob. Only consulted when externalizing.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob.
+    // Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -219,7 +226,8 @@ impl Backend for PythonBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its class name is fixed, not derived. Library output uses the requested name verbatim, after validating it.
+        // Standalone output is a self-contained program: its class name is fixed, not derived.
+        // Library output uses the requested name verbatim, after validating it.
         let class_name = if opts.mode == Mode::Standalone {
             STANDALONE_CLASS.to_string()
         } else {
@@ -257,7 +265,8 @@ impl Backend for PythonBackend {
             w.line("import threading");
         }
         w.line("import time");
-        // Externalized data blob: read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // Externalized data blob: read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions.
+        // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 w.line("");
@@ -321,7 +330,9 @@ impl Backend for PythonBackend {
             } else {
                 w.line(format!("_inst = {class_name}()"));
             }
-            // Run the guest on a big-stack thread with a raised recursion limit. A standalone guest may recurse arbitrarily deep for real work, so the sizing is generous: 1e6 frames at the ~1 KiB of C stack CPython <= 3.10 spends per frame. The thread relays exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
+            // Run the guest on a big-stack thread with a raised recursion limit.
+            // A standalone guest may recurse arbitrarily deep for real work, so the sizing is generous: 1e6 frames at the ~1 KiB of C stack CPython <= 3.10 spends per frame.
+            // The thread relays exceptions back so proc_exit/traps still exit via the main thread; daemon so Ctrl-C during `join` still terminates.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");
@@ -372,7 +383,8 @@ impl Backend for PythonBackend {
             name: format!("{}.py", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices. Only emitted when there is data to externalize (otherwise the generated code never reads it).
+        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices.
+        // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -389,7 +401,8 @@ impl Backend for PythonBackend {
     }
 }
 
-/// The module-level name the generated class references its runtime by. `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt`; `Alias` output points at a runtime someone else emitted, which is always the shared `Rt`.
+/// The module-level name the generated class references its runtime by.
+/// `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt`; `Alias` output points at a runtime someone else emitted, which is always the shared `Rt`.
 fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     match linkage {
         RuntimeLinkage::Embedded => format!("{class_name}Rt"),
@@ -400,7 +413,8 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
 /// The class a `--mode standalone` program defines: fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a single Python identifier and is used verbatim. Everything the backend emits lives in one module (no package split is ever produced, so a dotted name would have nothing to mean), hence no separator.
+/// The library-mode module name must be a single Python identifier and is used verbatim.
+/// Everything the backend emits lives in one module (no package split is ever produced, so a dotted name would have nothing to mean), hence no separator.
 fn check_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -447,9 +461,12 @@ fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
-/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last. This is [`flat`]'s only input beyond the body: a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
+/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last.
+/// This is [`flat`]'s only input beyond the body: a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
 ///
-/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top, the branch leaves its own innermost frame and crosses nothing) or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in. A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name. A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
+/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top, the branch leaves its own innermost frame and crosses nothing) or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in.
+/// A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name.
+/// A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
 fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
     let mut paths = Vec::new();
     let mut stack: Vec<u32> = Vec::new();
@@ -509,7 +526,8 @@ fn default_value(ty: ValType) -> &'static str {
     }
 }
 
-/// How a value type is spelled inside a structural type key ([`type_key`]). Only this backend's own artifacts ever read these, so the spelling is free.
+/// How a value type is spelled inside a structural type key ([`type_key`]).
+/// Only this backend's own artifacts ever read these, so the spelling is free.
 fn val_name(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 => "i32",
@@ -525,7 +543,8 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
-    /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]). `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
+    /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]).
+    /// `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
     flat: RefCell<Option<flat::Plan>>,
     /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
@@ -535,7 +554,8 @@ struct Gen<'a> {
 }
 
 impl<'a> Gen<'a> {
-    /// The Python expression yielding a data segment's bytes: a slice of the externalized `DATA_BLOB` when `--data-file` is on, else an inline `bytes.fromhex` literal. Both yield a `bytes` object.
+    /// The Python expression yielding a data segment's bytes: a slice of the externalized `DATA_BLOB` when `--data-file` is on, else an inline `bytes.fromhex` literal.
+    /// Both yield a `bytes` object.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -981,7 +1001,8 @@ impl<'a> Gen<'a> {
                 // Every state body ends in a transition, a `return` or a trap (see `flat_seq`), so no arm falls through to the next round with the same state.
                 let mut st: Vec<CodeWriter> = (0..n).map(|_| CodeWriter::new("\t")).collect();
                 let last = self.flat_seq(&mut st, 0, &func.body);
-                // Falling off the body ends the function; leave the dispatch loop through its `else`. A body that cannot fall off needs no such exit.
+                // Falling off the body ends the function; leave the dispatch loop through its `else`.
+                // A body that cannot fall off needs no such exit.
                 if !terminates(&func.body) {
                     st[last].line(format!("_state = {n}; continue"));
                 }
@@ -997,7 +1018,9 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// Emit `stmts` into the state machine, splitting at each dissolved frame. Statements between the splits go through the ordinary [`Self::emit_seq`], so surviving frames keep their `_br` regions and landing markers. Returns the state control is in afterwards.
+    /// Emit `stmts` into the state machine, splitting at each dissolved frame.
+    /// Statements between the splits go through the ordinary [`Self::emit_seq`], so surviving frames keep their `_br` regions and landing markers.
+    /// Returns the state control is in afterwards.
     ///
     /// A run starts unguarded: every frame enclosing a sequence `flat_seq` walks is dissolved (dissolution is transitive up the spine), so every branch escaping the run is addressed by state and leaves `_br` alone.
     fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
@@ -1046,7 +1069,8 @@ impl<'a> Gen<'a> {
                 Stmt::If {
                     cond, then, els, ..
                 } => {
-                    // The arms stay inline: `if` is not a Python loop, so a `continue` inside one already reaches the dispatch loop. An arm that changes state carries on in the new state's writer, at its top level, which is reachable only through the transition emitted under this `if`.
+                    // The arms stay inline: `if` is not a Python loop, so a `continue` inside one already reaches the dispatch loop.
+                    // An arm that changes state carries on in the new state's writer, at its top level, which is reachable only through the transition emitted under this `if`.
                     st[cur].line(format!("if {}:", self.cond(cond)));
                     st[cur].indent();
                     let a = self.flat_seq(st, cur, then);
@@ -1063,7 +1087,8 @@ impl<'a> Gen<'a> {
                         }
                         st[cur].dedent();
                     }
-                    // Reachable only through the condition-false fallthrough. With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
+                    // Reachable only through the condition-false fallthrough.
+                    // With an `else` present both arms route themselves (a transition or a terminator), so nothing falls out of the `if` and a trailing transition would be dead text.
                     if els.is_empty() {
                         st[cur].line(format!("_state = {after}; continue"));
                     }
@@ -1079,13 +1104,18 @@ impl<'a> Gen<'a> {
         cur
     }
 
-    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`). Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while`.
+    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`).
+    /// Block/Loop bodies are spliced inline so block nesting adds no Python nesting; only real loops become `while`.
     ///
-    /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement (nested constructs included) is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that. Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it. A construct entered inside a region starts its own body unguarded for the same reason.
+    /// Guards are per *run*, not per statement: once `guarded`, a single `if _br == 0:` suite is opened lazily and every following statement (nested constructs included) is emitted inside it unguarded, because the region establishes `_br == 0` at entry and only a statement carrying a free branch can change that.
+    /// Such a statement ends its run (the suite closes; the next statement opens a fresh guard), so each statement still executes exactly when the old per-statement guard would have run it.
+    /// A construct entered inside a region starts its own body unguarded for the same reason.
     ///
-    /// `tail` says nothing runs after this sequence before the function falls off: no following statement in any enclosing sequence, and no enclosing loop back-edge (the flat dispatch passes `false` throughout). In that position a landing marker (`if _br == N: _br = 0`) writes a register nothing will read again, so it is skipped; a stale nonzero `_br` at fall-off is unobservable.
+    /// `tail` says nothing runs after this sequence before the function falls off: no following statement in any enclosing sequence, and no enclosing loop back-edge (the flat dispatch passes `false` throughout).
+    /// In that position a landing marker (`if _br == N: _br = 0`) writes a register nothing will read again, so it is skipped; a stale nonzero `_br` at fall-off is unobservable.
     ///
-    /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it. The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
+    /// Returns the sequence's *free* branch targets: the label ids it branches to that are not bound within it.
+    /// The caller unions that set upward (minus the label it binds itself), so the information is derived once bottom-up; re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
     fn emit_seq(
         &self,
         w: &mut CodeWriter,
@@ -1101,7 +1131,8 @@ impl<'a> Gen<'a> {
         let mut i = 0;
         while i < stmts.len() {
             let stmt = &stmts[i];
-            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python. Emitting it wherever the writer stands is safe: an open suite already holds a real statement, and nothing here can touch `_br`.
+            // A comment (or a construct that emits no code at all) must not open a region: a suite holding only comments is empty to Python.
+            // Emitting it wherever the writer stands is safe: an open suite already holds a real statement, and nothing here can touch `_br`.
             if !stmt_emits(stmt) {
                 self.simple_stmt_or_skip(w, stmt);
                 i += 1;
@@ -1148,7 +1179,8 @@ impl<'a> Gen<'a> {
                         free.extend(inner);
                         escapes
                     } else {
-                        // No br targets this loop, so it never repeats: the body is spliced inline. It opens its own regions, so it starts unguarded like any construct body.
+                        // No br targets this loop, so it never repeats: the body is spliced inline.
+                        // It opens its own regions, so it starts unguarded like any construct body.
                         let mut inner_guarded = false;
                         let mut inner = self.emit_seq(w, body, &mut inner_guarded, stmt_tail);
                         inner.remove(&label.id);
@@ -1201,7 +1233,9 @@ impl<'a> Gen<'a> {
         free
     }
 
-    /// Fuse a call-family producer with the adjacent statement that consumes its whole result: `s0 = self._f1(...)` + `l2 = s0` becomes `l2 = self._f1(...)`. Sound because temps are stack slots: a write at depth `d` immediately followed by a statement whose entire right-hand side is that slot is that value's one and only pop: a value with more readers (a block result, a branch operand) is never consumed adjacently in full. Only call-shaped producers are fused; pure-expression producers are already folded into their consumers by the IR builder.
+    /// Fuse a call-family producer with the adjacent statement that consumes its whole result: `s0 = self._f1(...)` + `l2 = s0` becomes `l2 = self._f1(...)`.
+    /// Sound because temps are stack slots: a write at depth `d` immediately followed by a statement whose entire right-hand side is that slot is that value's one and only pop: a value with more readers (a block result, a branch operand) is never consumed adjacently in full.
+    /// Only call-shaped producers are fused; pure-expression producers are already folded into their consumers by the IR builder.
     fn fused_call_line(&self, producer: &Stmt, consumer: Option<&Stmt>) -> Option<String> {
         let (produced, call) = match producer {
             Stmt::Call {
@@ -1266,7 +1300,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller). `tail` propagates into both arms: when the `if` is the function's last code and its own marker is elided, an arm's trailing marker is equally unread.
+    /// Emit an `if`, returning the free branch targets of both arms (the `if`'s own label is removed by the caller).
+    /// `tail` propagates into both arms: when the `if` is the function's last code and its own marker is elided, an arm's trailing marker is equally unread.
     fn emit_if(
         &self,
         w: &mut CodeWriter,
@@ -1478,7 +1513,8 @@ impl<'a> Gen<'a> {
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                // Addressed by value: one assignment and one jump, the same cost from any depth. The `continue` reaches the dispatch loop because every frame this branch escapes was dissolved with it (the path closure in [`flat::plan`]), so no surviving `while True:` sits in between.
+                // Addressed by value: one assignment and one jump, the same cost from any depth.
+                // The `continue` reaches the dispatch loop because every frame this branch escapes was dissolved with it (the path closure in [`flat::plan`]), so no surviving `while True:` sits in between.
                 if let Some(st) = self.state_of(*label) {
                     w.line(format!("_state = {st}; continue"));
                     return;
@@ -1497,7 +1533,8 @@ impl<'a> Gen<'a> {
             .and_then(|p| p.state_of.get(&label).copied())
     }
 
-    /// Whether `stmts` holds a branch that still travels through `_br`, i.e. whether the function needs the branch register at all. A label branch the plan addresses by state never touches it, and neither does a `return`.
+    /// Whether `stmts` holds a branch that still travels through `_br`, i.e. whether the function needs the branch register at all.
+    /// A label branch the plan addresses by state never touches it, and neither does a `return`.
     fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
         stmts.iter().any(|s| self.stmt_has_relay_branch(s))
     }
@@ -1520,7 +1557,9 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any. Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded. Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
+    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any.
+    /// Non-empty means the statement may leave `_br` set on fall-through, so following siblings must be guarded.
+    /// Structured statements get their free set from `emit_seq`, which builds it bottom-up as it emits.
     fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
         match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
@@ -1616,7 +1655,9 @@ impl<'a> Gen<'a> {
 
     /// An expression in boolean context (an `if`/`br_if` test).
     ///
-    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a conditional expression only to undo it one operation later. Emitting the comparison as a Python boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`. Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
+    /// A wasm comparison yields the i32 0 or 1, and every conditional context then compares that against 0, so the lowering built a conditional expression only to undo it one operation later.
+    /// Emitting the comparison as a Python boolean drops both the conditional and the test; the operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`.
+    /// Anything else keeps the `!= 0` test. (Ported from the Ruby backend, #122.)
     fn cond(&self, e: &Expr) -> String {
         match e {
             // `eqz` in boolean context is the negation of its operand's own test.
@@ -1629,7 +1670,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The negation of [`cond`]: `e` is zero. A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats (both `x < y` and `x >= y` are false when either is NaN).
+    /// The negation of [`cond`]: `e` is zero.
+    /// A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats (both `x < y` and `x >= y` are false when either is NaN).
     fn not_cond(&self, e: &Expr) -> String {
         match e {
             // Two negations cancel.
@@ -1758,7 +1800,8 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// A Python float literal that round-trips to the same double. `{:?}` on f64 gives the shortest round-tripping decimal, which Python's `float()` parses back exactly; only the spelling of infinities/`e` notation differs, and non-finite values never reach here.
+/// A Python float literal that round-trips to the same double.
+/// `{:?}` on f64 gives the shortest round-tripping decimal, which Python's `float()` parses back exactly; only the spelling of infinities/`e` notation differs, and non-finite values never reach here.
 fn py_float(v: f64) -> String {
     format!("{v:?}")
 }
@@ -1774,7 +1817,10 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-/// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits, leaves holding the state bodies, at O(log n) compares per transition. Ruby's `case/when` dispatch is a single hash probe, but CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares: on the packed-CRuby conversion the linear chain (largest machine 1,463 states) measured 1.22x *slower* than the relay cascade it replaced, and the tree is what makes the flat lowering pay for itself. `lo..=hi` is the id range this subtree serves; id `texts.len()` is the exit state, reachable only as a transition target, whose leaf is `break`. A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
+/// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits, leaves holding the state bodies, at O(log n) compares per transition.
+/// Ruby's `case/when` dispatch is a single hash probe, but CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares: on the packed-CRuby conversion the linear chain (largest machine 1,463 states) measured 1.22x *slower* than the relay cascade it replaced, and the tree is what makes the flat lowering pay for itself.
+/// `lo..=hi` is the id range this subtree serves; id `texts.len()` is the exit state, reachable only as a transition target, whose leaf is `break`.
+/// A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
 fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize) {
     if lo == hi {
         if lo == texts.len() {
@@ -1799,7 +1845,8 @@ fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize
     w.dedent();
 }
 
-/// Whether `stmt` emits at least one real Python statement. A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them: the suite could end up holding no statement, which Python rejects.
+/// Whether `stmt` emits at least one real Python statement.
+/// A comment and a construct whose body is only comments (or nothing) emit no code, so `emit_seq` must not open a region guard for them: the suite could end up holding no statement, which Python rejects.
 fn stmt_emits(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::SourceLine(_) => false,
@@ -1872,7 +1919,8 @@ mod cascade {
     #[test]
     fn mixed_depths_stay_structured() {
         // block $A { loop $B { block $C { br_table $C $B $A } ... } }
-        // A single `br_table` whose targets span all three nesting depths. Every crossing is shallow, so the whole function keeps the register lowering and its structured loop.
+        // A single `br_table` whose targets span all three nesting depths.
+        // Every crossing is shallow, so the whole function keeps the register lowering and its structured loop.
         let src = convert(
             r#"
               (module
@@ -1892,7 +1940,8 @@ mod cascade {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header. Mirrors the Ruby backend's units lint, adjusted for Python syntax (`Rt.<name>` staticmethod/const references, `self.memory.<name>` memory calls, and `self.<name>(...)` sibling calls within a scope's nested class).
+/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header.
+/// Mirrors the Ruby backend's units lint, adjusted for Python syntax (`Rt.<name>` staticmethod/const references, `self.memory.<name>` memory calls, and `self.<name>(...)` sibling calls within a scope's nested class).
 #[cfg(test)]
 mod units {
     use super::*;
@@ -1905,7 +1954,9 @@ mod units {
         bundler().bundle_all(0).expect("full bundle resolves");
     }
 
-    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text, which is sound only while every `Rt.` in a unit is code. A `Rt.` inside a string literal would be rewritten too, silently changing program-visible text (a trap message, an errno key); no unit has one today, and this keeps it that way. Triple-quoted strings are rejected outright, since the single-line scanner cannot see across them.
+    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text, which is sound only while every `Rt.` in a unit is code.
+    /// A `Rt.` inside a string literal would be rewritten too, silently changing program-visible text (a trap message, an errno key); no unit has one today, and this keeps it that way.
+    /// Triple-quoted strings are rejected outright, since the single-line scanner cannot see across them.
     #[test]
     fn no_rt_reference_inside_a_string_literal() {
         let mut problems = Vec::new();

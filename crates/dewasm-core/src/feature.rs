@@ -15,7 +15,8 @@ pub enum Feature {
     MultipleTables,
     /// The table half of bulk memory: passive/declared element segments, expression element items, table.init/copy, elem.drop. (The memory half is supported.)
     TableBulkOps,
-    /// f32/f64 values and operations. Core wasm 1.0, but a backend whose language has no usable floats must refuse float-using modules at conversion time until it has a softfloat (Bash already has one).
+    /// f32/f64 values and operations.
+    /// Core wasm 1.0, but a backend whose language has no usable floats must refuse float-using modules at conversion time until it has a softfloat (Bash already has one).
     Floats,
     // Post-1.0 proposals.
     ReferenceTypes,
@@ -114,7 +115,8 @@ impl Feature {
         }
     }
 
-    /// Validator feature bits that this proposal controls, for attributing validation failures. `None` for capabilities that validate fine under the base feature set and are rejected during IR building.
+    /// Validator feature bits that this proposal controls, for attributing validation failures.
+    /// `None` for capabilities that validate fine under the base feature set and are rejected during IR building.
     pub fn validator_bits(self) -> Option<WasmFeatures> {
         Some(match self {
             Feature::FunctionReferences => WasmFeatures::FUNCTION_REFERENCES,
@@ -141,7 +143,8 @@ impl fmt::Display for Feature {
     }
 }
 
-/// A conversion refusal attributed to declared-unsupported features. Anything the converter rejects *without* this attribution is treated as a bug by the spec harness.
+/// A conversion refusal attributed to declared-unsupported features.
+/// Anything the converter rejects *without* this attribution is treated as a bug by the spec harness.
 #[derive(Debug)]
 pub struct UnsupportedError {
     pub features: Vec<Feature>,

@@ -48,7 +48,8 @@ fn standalone_is_byte_stable() {
     assert_eq!(a, dashed);
 }
 
-/// The embedding shape a consumer actually uses: the artifact is imported as a package from another one, with no host code inside it. `common::build_go` is exactly that layout (temp module, `main.go` importing the package), so this drives it end to end.
+/// The embedding shape a consumer actually uses: the artifact is imported as a package from another one, with no host code inside it.
+/// `common::build_go` is exactly that layout (temp module, `main.go` importing the package), so this drives it end to end.
 #[test]
 fn library_artifact_is_importable_as_a_package() {
     let src = convert("adder", Mode::Library).expect("generate");

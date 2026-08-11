@@ -13,9 +13,8 @@ func (w *WASI) wasi_fd_fdstat_get(fd, outPtr uint32) uint32 {
         }
     }
     // fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base
-    // (u64) + fs_rights_inheriting (u64) = 24 bytes. Rights and fdflags come
-    // from the stored per-fd meta; a missing entry (should not happen
-    // for a live fd) reports the permissive all-ones.
+    // (u64) + fs_rights_inheriting (u64) = 24 bytes.
+    // Rights and fdflags come from the stored per-fd meta; a missing entry (should not happen for a live fd) reports the permissive all-ones.
     base, inheriting := ^uint64(0), ^uint64(0)
     var fdflags uint16
     if m, ok := w.meta[fd]; ok {

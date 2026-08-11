@@ -1,25 +1,27 @@
 //! Flat dispatch: give a branch an address instead of a lexical position.
 //!
 //! A structured lowering addresses a branch target by *position*: Ruby's cascade by scope (`break` leaves the innermost one), Python's register by label id (the branch only sets `_br`).
-//! Reaching the target is the job of every frame in between, each of which tests once. A branch crossing N frames costs O(N) tests: on `sqlite3-shell` that is 56 epilogue checks per branch in the VDBE loop, and about half of all CPU.
+//! Reaching the target is the job of every frame in between, each of which tests once.
+//! A branch crossing N frames costs O(N) tests: on `sqlite3-shell` that is 56 epilogue checks per branch in the VDBE loop, and about half of all CPU.
 //!
-//! w2c2 emits `goto label_N` and WasmKit emits `pc += offset`; both name the target as a *value*, so a branch costs the same at any depth. A dispatch loop over an integer state is the equivalent primitive here (Ruby's `case` over integer literals compiles to one `opt_case_dispatch` hash probe, Python's takes the binary-search tree its emitter builds):
+//! w2c2 emits `goto label_N` and WasmKit emits `pc += offset`; both name the target as a *value*, so a branch costs the same at any depth.
+//! A dispatch loop over an integer state is the equivalent primitive here (Ruby's `case` over integer literals compiles to one `opt_case_dispatch` hash probe, Python's takes the binary-search tree its emitter builds):
 //!
-//! ```text
-//! state = 0
-//! while true
-//!   case state
-//!   when 0 then …; state = 7; next     # a br, O(1) at any depth
-//!   when 7 then …
-//!   end
-//! end
+//! ```text state = 0 while true
+//! case state
+//! when 0 then …; state = 7; next     # a br, O(1) at any depth
+//! when 7 then …
+//! end end
 //! ```
 //!
-//! **Only crossed frames are dissolved.** A `next`/`continue` binds to the innermost enclosing native loop, so any frame a branch escapes that is one must stop being one: in Ruby both `begin … end while false` and `while true` count, in Python blocks are already spliced inline but dissolve with the rest of the path anyway, because the path closure below is what guarantees the jump reaches the dispatch. Frames no branch escapes are left exactly as they were, and `if` is never a loop so it never needs splitting.
+//! **Only crossed frames are dissolved.** A `next`/`continue` binds to the innermost enclosing native loop, so any frame a branch escapes that is one must stop being one: in Ruby both `begin … end while false` and `while true` count, in Python blocks are already spliced inline but dissolve with the rest of the path anyway, because the path closure below is what guarantees the jump reaches the dispatch.
+//! Frames no branch escapes are left exactly as they were, and `if` is never a loop so it never needs splitting.
 //!
-//! Keeping uncrossed loops structured is not just economy, it is required for performance: a back-edge turned into a state transition replaces one `next`/`continue` with an assignment, a jump and a dispatch probe, and measured against a tight Ruby inner loop it loses to the cascade outright once the loop runs ~100 trips per entry. Flatten branches, not loops.
+//! Keeping uncrossed loops structured is not just economy, it is required for performance: a back-edge turned into a state transition replaces one `next`/`continue` with an assignment, a jump and a dispatch probe, and measured against a tight Ruby inner loop it loses to the cascade outright once the loop runs ~100 trips per entry.
+//! Flatten branches, not loops.
 //!
-//! **Only *deep* branches pay for a dispatch.** The relay this replaces is linear in the frames a branch crosses and each level is cheap; the dispatch is a constant that is not. So a function is flattened only where some branch crosses at least [`plan`]'s `deep_crossing` frames (a threshold each backend calibrates for itself), and everything else keeps the structured lowering, in the same function, side by side.
+//! **Only *deep* branches pay for a dispatch.** The relay this replaces is linear in the frames a branch crosses and each level is cheap; the dispatch is a constant that is not.
+//! So a function is flattened only where some branch crosses at least [`plan`]'s `deep_crossing` frames (a threshold each backend calibrates for itself), and everything else keeps the structured lowering, in the same function, side by side.
 
 use std::collections::{HashMap, HashSet};
 
@@ -29,7 +31,8 @@ use dewasm_core::ir::Stmt;
 pub struct Plan {
     /// Frames that stop being emitted as native scopes, so a `next`/`continue` from inside them reaches the dispatch loop.
     pub dissolved: HashSet<u32>,
-    /// Where a branch to each dissolved label lands. For a block or `if` that is the state after it; for a loop it is the state at its head.
+    /// Where a branch to each dissolved label lands.
+    /// For a block or `if` that is the state after it; for a loop it is the state at its head.
     pub state_of: HashMap<u32, u32>,
     /// The state control continues in once a dissolved frame is finished.
     pub after: HashMap<u32, u32>,
@@ -44,7 +47,9 @@ impl Plan {
     }
 }
 
-/// Decide which frames to dissolve. `paths` holds one entry per outward branch: the inclusive frame path from its target down to its own innermost frame, which is exactly the set of frames that must stop existing if that branch is to become a state transition. `deep_crossing` is the crossing depth from which a branch is worth a dispatch: the backend's own calibration, since it weighs that backend's relay against that backend's dispatch shape.
+/// Decide which frames to dissolve.
+/// `paths` holds one entry per outward branch: the inclusive frame path from its target down to its own innermost frame, which is exactly the set of frames that must stop existing if that branch is to become a state transition.
+/// `deep_crossing` is the crossing depth from which a branch is worth a dispatch: the backend's own calibration, since it weighs that backend's relay against that backend's dispatch shape.
 ///
 /// Returns `None` when no branch is deep enough, so the function keeps its structured lowering untouched and pays nothing for the machinery.
 pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<Plan> {
@@ -85,7 +90,8 @@ pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<P
     Some(plan)
 }
 
-/// Add any frame that contains a dissolved frame. Returns whether `stmts` contains one.
+/// Add any frame that contains a dissolved frame.
+/// Returns whether `stmts` contains one.
 fn mark_ancestors(stmts: &[Stmt], dissolved: &mut HashSet<u32>) -> bool {
     let mut any = false;
     for stmt in stmts {
@@ -112,7 +118,8 @@ fn mark_ancestors(stmts: &[Stmt], dissolved: &mut HashSet<u32>) -> bool {
     any
 }
 
-/// Walk the body in the same order the emitter will, allocating each dissolved frame's landing state. Emission re-walks identically, so the numbering agrees without threading a counter through both.
+/// Walk the body in the same order the emitter will, allocating each dissolved frame's landing state.
+/// Emission re-walks identically, so the numbering agrees without threading a counter through both.
 fn assign(stmts: &[Stmt], plan: &mut Plan) {
     for stmt in stmts {
         match stmt {
