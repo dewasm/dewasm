@@ -26,7 +26,8 @@ use constant KEY_HOLD_SECONDS => 0.4;
 
 my $HALF_BLOCK = "\xE2\x96\x80";    # U+2580 upper half block, as raw UTF-8
 
-# Fixed status-line colors (white on black), independent of the game's own palette -- without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 my $STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m";
 
 sub monotonic { return clock_gettime(CLOCK_MONOTONIC); }

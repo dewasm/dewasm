@@ -682,7 +682,7 @@ impl<'a> FuncBuilder<'a> {
         }
 
         match op {
-            // -- control flow
+            // control flow
             Operator::Nop => {}
             Operator::Unreachable => {
                 // A pending OOB load must trap with its own message before the "unreachable" trap, so resolve trapping pendings first.
@@ -819,7 +819,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Select => self.select(),
 
-            // -- locals and globals
+            // locals and globals
             Operator::LocalGet { local_index } => {
                 let ty = self.all_locals[local_index as usize];
                 self.push_pending(
@@ -872,7 +872,7 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
 
-            // -- memory
+            // memory
             Operator::I32Load { memarg } => self.load(LoadOp::I32Load, I32, &memarg),
             Operator::I64Load { memarg } => self.load(LoadOp::I64Load, I64, &memarg),
             Operator::F32Load { memarg } => self.load(LoadOp::F32Load, F32, &memarg),
@@ -971,7 +971,7 @@ impl<'a> FuncBuilder<'a> {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
-            // -- reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
+            // reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
             Operator::RefNull { .. }
             | Operator::RefFunc { .. }
             | Operator::RefIsNull
@@ -986,7 +986,7 @@ impl<'a> FuncBuilder<'a> {
                 ));
             }
 
-            // -- constants
+            // constants
             Operator::I32Const { value } => {
                 self.push_pending(I32, Expr::I32Const(value as u32), Effects::default(), 1)
             }
@@ -1000,7 +1000,7 @@ impl<'a> FuncBuilder<'a> {
                 self.push_pending(F64, Expr::F64Const(value.bits()), Effects::default(), 1)
             }
 
-            // -- i32 unary/binary
+            // i32 unary/binary
             Operator::I32Eqz => self.un(UnOp::I32Eqz, I32),
             Operator::I32Clz => self.un(UnOp::I32Clz, I32),
             Operator::I32Ctz => self.un(UnOp::I32Ctz, I32),
@@ -1031,7 +1031,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::I32GeS => self.bin(BinOp::I32GeS, I32),
             Operator::I32GeU => self.bin(BinOp::I32GeU, I32),
 
-            // -- i64 unary/binary
+            // i64 unary/binary
             Operator::I64Eqz => self.un(UnOp::I64Eqz, I32),
             Operator::I64Clz => self.un(UnOp::I64Clz, I64),
             Operator::I64Ctz => self.un(UnOp::I64Ctz, I64),
@@ -1062,7 +1062,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::I64GeS => self.bin(BinOp::I64GeS, I32),
             Operator::I64GeU => self.bin(BinOp::I64GeU, I32),
 
-            // -- f32
+            // f32
             Operator::F32Abs => self.un(UnOp::F32Abs, F32),
             Operator::F32Neg => self.un(UnOp::F32Neg, F32),
             Operator::F32Ceil => self.un(UnOp::F32Ceil, F32),
@@ -1084,7 +1084,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::F32Le => self.bin(BinOp::F32Le, I32),
             Operator::F32Ge => self.bin(BinOp::F32Ge, I32),
 
-            // -- f64
+            // f64
             Operator::F64Abs => self.un(UnOp::F64Abs, F64),
             Operator::F64Neg => self.un(UnOp::F64Neg, F64),
             Operator::F64Ceil => self.un(UnOp::F64Ceil, F64),
@@ -1106,7 +1106,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::F64Le => self.bin(BinOp::F64Le, I32),
             Operator::F64Ge => self.bin(BinOp::F64Ge, I32),
 
-            // -- conversions
+            // conversions
             Operator::I32WrapI64 => self.un(UnOp::I32WrapI64, I32),
             Operator::I32TruncF32S => self.un(UnOp::I32TruncF32S, I32),
             Operator::I32TruncF32U => self.un(UnOp::I32TruncF32U, I32),

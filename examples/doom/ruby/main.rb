@@ -103,7 +103,8 @@ end
 # (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
 # SGR).
 # This is the performance-sensitive part of this frontend, not the wasm execution, so it diffs against the previous frame's cell contents and its own idea of where the terminal's cursor already sits, and only emits an SGR code when a cell's color actually differs from the one before it: DOOM's software renderer is paletted, so most cells repeat exactly from one frame to the next.
-# Fixed status-line colors (white on black), independent of the game's own palette -- without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
 
 class Renderer

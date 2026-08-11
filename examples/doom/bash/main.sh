@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # Interactive terminal frontend for the dewasm-generated DOOM library
 # (doom_gen.sh, produced from jacobenget/doom.wasm by build.sh).
-# Renders into any ANSI truecolor terminal with half-block characters, same trick as ../ruby and ../python -- there is no pixel-window option here because the point of this frontend is that it needs none: the bash backend runs
-# DOOM's initGame in ~103s and each tickGame in ~34s (measured on the reference machine, after the associative-memory and inline-load/store work; see ../README.md), so this is an existence-proof demo -- about two minutes to boot, one frame roughly every half a minute -- not a game anyone will speedrun.
+# Renders into any ANSI truecolor terminal with half-block characters, same trick as ../ruby and ../python.
+# There is no pixel-window option here because the point of this frontend is that it needs none: the bash backend runs
+# DOOM's initGame in ~103s and each tickGame in ~34s (measured on the reference machine, after the associative-memory and inline-load/store work; see ../README.md), so this is an existence-proof demo (about two minutes to boot, one frame roughly every half a minute), not a game anyone will speedrun.
 # See README.md for the honest framing.
 #
 # Run with --smoke for a headless self-check (no tty/alternate-screen needed): it inits the game, ticks it twice, renders one frame to a string
 # (verified, never drawn), sanity-checks it, and writes screenshot.ppm.
 #
-# doom_mem (the module's linear memory) is a global associative array, declared by doom_init; this script never uses `set -u` because sparse reads of it are meant to default to 0, matching the rest of the bash backend -- and never relies on `set -e` around any doom_* call either, because a generated function's internal arithmetic routinely computes an intermediate value of exactly 0, which bash treats as a "failed"
+# doom_mem (the module's linear memory) is a global associative array, declared by doom_init; this script never uses `set -u` because sparse reads of it are meant to default to 0, matching the rest of the bash backend, and never relies on `set -e` around any doom_* call either, because a generated function's internal arithmetic routinely computes an intermediate value of exactly 0, which bash treats as a "failed"
 # command; the backend's own status-cascade convention already has every generated function return its real status explicitly via
 # `return 0`/`return $?`, so this script checks *that* after every call instead of leaning on errexit.
 set -o pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then
-  echo "doom (bash): requires bash >= 5 (associative arrays, EPOCHREALTIME); found ${BASH_VERSION}. On macOS /bin/bash is 3.2 -- install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
+  echo "doom (bash): requires bash >= 5 (associative arrays, EPOCHREALTIME); found ${BASH_VERSION}. On macOS /bin/bash is 3.2. Install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
   exit 1
 fi
 
@@ -22,7 +23,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 readonly ESC=$'\e'
 
-# Fixed status-line colors (white on black), independent of the game's own palette -- without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
 
 MODE=interactive
@@ -121,7 +123,7 @@ declare -A IMPORTS=(
   ['loading.onGameInit']=imp_on_game_init
 )
 
-# ms-resolution monotonic-ish timestamp for phase/tick timing (not the game clock -- that's imp_time_ms above); no subshell, unlike `date`.
+# ms-resolution monotonic-ish timestamp for phase/tick timing (not the game clock: that's imp_time_ms above); no subshell, unlike `date`.
 epoch_ms() {
   local t=$EPOCHREALTIME
   local sec=${t%.*} frac=${t#*.}
@@ -133,7 +135,8 @@ fmt_secs() {
   printf '%d.%03d' $(( ms / 1000 )) $(( ms % 1000 ))
 }
 
-# Calls a doom_* export and exits (after restoring the terminal, a no-op outside interactive mode) on anything but success -- the status-cascade convention's TRAP_MSG is the only place the actual reason lives.
+# Calls a doom_* export and exits (after restoring the terminal, a no-op outside interactive mode) on anything but success.
+# The status-cascade convention's TRAP_MSG is the only place the actual reason lives.
 invoke_or_die() {
   local name=$1
   shift
@@ -155,7 +158,7 @@ epoch_ms; T_SOURCE_END=$EPOCH_MS_OUT
 echo "doom (bash): sourced in $(fmt_secs $((T_SOURCE_END - T_SOURCE_START)))s" >&2
 
 # Fits a render grid to a terminal (or a synthetic size for --smoke): one character cell shows two vertically-stacked source pixels, so cell rows are half of sampled logical-pixel rows.
-# Capped at 160 columns -- far short of DOOM's native 320-wide resolution, but 640x400 sampled at 320 would be 128000 byte reads/frame against a render budget this script wants to keep under a second of a 34-SECOND tick, and 160 columns is already wider than most terminals people actually run this in.
+# Capped at 160 columns, far short of DOOM's native 320-wide resolution, but 640x400 sampled at 320 would be 128000 byte reads/frame against a render budget this script wants to keep under a second of a 34-SECOND tick, and 160 columns is already wider than most terminals people actually run this in.
 compute_grid() {
   local term_rows=$1 term_cols=$2 w=$3 h=$4
   local avail_rows=$(( term_rows - 1 )) # one row reserved for the status line
@@ -180,7 +183,7 @@ compute_grid() {
 }
 
 # Builds one frame's worth of ANSI half-block cells into RENDER_OUT.
-# Deliberately flat (no helper-function calls, no command substitution, no per-cell printf) inside the nested loops -- string concatenation
+# Deliberately flat (no helper-function calls, no command substitution, no per-cell printf) inside the nested loops: string concatenation
 # (+=) and arithmetic ($(( ))) only, because either of the first two is the standard way to make a bash render loop slow.
 # There is no frame-to-frame diffing (compare ../ruby, which needs it): at ~34s/tick a full redraw every frame costs nothing next to the tick itself.
 # An SGR code is still skipped when it repeats the previous cell's, which is cheap and shrinks the string a lot on DOOM's large flat-color areas
@@ -200,7 +203,7 @@ render_frame() {
       bo=$(( off + (bot_base + src_x) * 4 ))
       # Memory byte order per pixel is B,G,R,A.
       # Associative-array subscripts are literal strings, not arithmetic expressions (unlike inside `$(( ))`), so every one of these needs an explicit `$`/
-      # `$(( ))` -- a bare `doom_mem[to]` would silently look up the key
+      # `$(( ))`: a bare `doom_mem[to]` would silently look up the key
       # "to" instead of the key named by the variable's value.
       tb=${doom_mem[$to]-0}; tg=${doom_mem[$((to + 1))]-0}; tr=${doom_mem[$((to + 2))]-0}
       bb=${doom_mem[$bo]-0}; bgc=${doom_mem[$((bo + 1))]-0}; br=${doom_mem[$((bo + 2))]-0}
@@ -220,7 +223,7 @@ render_frame() {
   printf -v RENDER_OUT '%s' "$buf"
 }
 
-# Dumps the same sampled grid render_frame uses (GRID_COLS x PIXEL_ROWS logical pixels, e.g. 160x100 -- not the full 640x400 framebuffer, which would take minutes at this array's access cost) as an ASCII PPM (P3):
+# Dumps the same sampled grid render_frame uses (GRID_COLS x PIXEL_ROWS logical pixels, e.g. 160x100, not the full 640x400 framebuffer, which would take minutes at this array's access cost) as an ASCII PPM (P3):
 # text, so there's no risk of a stray NUL confusing anything downstream, unlike a binary P6.
 write_ppm() {
   local path=$1
@@ -322,7 +325,7 @@ run_smoke() {
   epoch_ms; local t1=$EPOCH_MS_OUT
   echo "smoke: doom_init in $(fmt_secs $((t1 - t0)))s"
 
-  echo "smoke: initGame (measures ~103s / ~1.7min on the reference machine -- this is expected, not a hang)..."
+  echo "smoke: initGame (measures ~103s / ~1.7min on the reference machine: expected, not a hang)..."
   epoch_ms; t0=$EPOCH_MS_OUT
   invoke_or_die initGame
   epoch_ms; t1=$EPOCH_MS_OUT
@@ -343,13 +346,14 @@ run_smoke() {
     echo "smoke: tick $i in $(fmt_secs $((t1 - t0)))s"
   done
 
-  # A synthetic 160x51 terminal, matching the cap this frontend always applies (see compute_grid) -- runs the same whether or not stdout is a real tty, which is the point of a headless check.
+  # A synthetic 160x51 terminal, matching the cap this frontend always applies (see compute_grid).
+  # It runs the same whether or not stdout is a real tty, which is the point of a headless check.
   compute_grid 51 160 "$FRAME_W" "$FRAME_H"
 
   epoch_ms; t0=$EPOCH_MS_OUT
   render_frame
   epoch_ms; t1=$EPOCH_MS_OUT
-  echo "smoke: rendered one ${GRID_COLS}x${GRID_ROWS}-cell frame (sampled from a ${GRID_COLS}x${PIXEL_ROWS} logical-pixel grid, not the full ${FRAME_W}x${FRAME_H} framebuffer) in $(fmt_secs $((t1 - t0)))s -- rendered to a string only, never drawn to a screen"
+  echo "smoke: rendered one ${GRID_COLS}x${GRID_ROWS}-cell frame (sampled from a ${GRID_COLS}x${PIXEL_ROWS} logical-pixel grid, not the full ${FRAME_W}x${FRAME_H} framebuffer) in $(fmt_secs $((t1 - t0)))s (rendered to a string only, never drawn to a screen)"
 
   if [[ $RENDER_OUT != *"▀"* ]]; then
     echo "smoke: FAIL: rendered frame has no half-block glyphs" >&2
@@ -379,7 +383,7 @@ run_interactive() {
     exit 1
   fi
 
-  # The alternate screen is entered immediately, before doom_init/initGame even start, rather than only once the game loop is ready: boot alone is ~2 minutes (see README.md), and that's a much better two minutes to spend already inside the alternate screen -- printing plain scrolling progress lines onto it -- than leaving the real scrollback cluttered and then cutting over.
+  # The alternate screen is entered immediately, before doom_init/initGame even start, rather than only once the game loop is ready: boot alone is ~2 minutes (see README.md), and that's a much better two minutes to spend already inside the alternate screen (printing plain scrolling progress lines onto it) than leaving the real scrollback cluttered and then cutting over.
   # It also means Ctrl-C/kill during boot exercises the same restore path as quitting from the game loop, not a separate untested one.
   ORIG_STTY=$(stty -g)
   restore_terminal() {
@@ -388,7 +392,7 @@ run_interactive() {
     printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
   # Ctrl-C is handled explicitly as a byte in drain_input (once raw mode is active) because raw mode disables the terminal's own SIGINT generation; the INT/TERM traps are only a backstop for termination from outside (e.g. `kill`) or during boot before drain_input ever runs.
-  # Unlike EXIT, a custom INT/TERM trap does not itself end the process -- bash resumes whatever it was doing once the handler returns -- so these have to call exit explicitly (which then also fires the EXIT trap; restore_terminal is idempotent, so running it twice is harmless).
+  # Unlike EXIT, a custom INT/TERM trap does not itself end the process (bash resumes whatever it was doing once the handler returns), so these have to call exit explicitly (which then also fires the EXIT trap; restore_terminal is idempotent, so running it twice is harmless).
   trap restore_terminal EXIT
   trap 'restore_terminal; exit 130' INT
   trap 'restore_terminal; exit 143' TERM
@@ -397,7 +401,7 @@ run_interactive() {
   # -echo means a plain `printf`'d line won't start at column 1 of the next row on its own; \r\n (not bare \n) keeps boot progress readable.
   boot_msg() { printf '%s\r\n' "$1"; }
 
-  boot_msg "dewasm DOOM (bash) -- booting. This takes about two minutes total; none of this is a hang."
+  boot_msg "dewasm DOOM (bash): booting. This takes about two minutes total; none of this is a hang."
   boot_msg "instantiating module (data segments; measures ~25s on the reference machine)..."
   doom_init
   local status=$?
@@ -407,9 +411,9 @@ run_interactive() {
     exit 1
   fi
 
-  boot_msg "running initGame -- measures ~103s (~1.7min) on the reference machine..."
+  boot_msg "running initGame: measures ~103s (~1.7min) on the reference machine..."
   invoke_or_die initGame
-  boot_msg "initGame done, ${FRAME_W}x${FRAME_H} framebuffer. Each tick is ~34s -- press Enter a few times, then wait; that's what gets you past the title screen."
+  boot_msg "initGame done, ${FRAME_W}x${FRAME_H} framebuffer. Each tick is ~34s. Press Enter a few times, then wait; that's what gets you past the title screen."
 
   doom_global_get KEY_UPARROW; KEY_UP=$R0
   doom_global_get KEY_DOWNARROW; KEY_DOWN=$R0

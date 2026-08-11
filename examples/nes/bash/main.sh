@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Interactive terminal frontend for the dewasm-generated NES library
-# (nes_gen.sh, produced from examples/apps/cache/nes.wasm by build.sh -- our nes_demo.c wrapping the agnes emulator).
+# (nes_gen.sh, produced from examples/apps/cache/nes.wasm by build.sh: our nes_demo.c wrapping the agnes emulator).
 # Renders into any
 # ANSI truecolor terminal with half-block characters, the same trick as the
 # DOOM Bash frontend (../../doom/bash) and the other NES frontends.
 #
 # The whole point of this frontend, like DOOM's, is that it needs no pixel window: the bash backend interprets a full NES frame's worth of emulation
-# (CPU + PPU) per tickGame call with no JIT, so this is an existence-proof demo -- "it runs at all" -- not a game anyone will play at speed.
+# (CPU + PPU) per tickGame call with no JIT, so this is an existence-proof demo ("it runs at all"), not a game anyone will play at speed.
 # See
 # README.md for the measured, honest framing.
 #
@@ -14,13 +14,13 @@
 # ROM, inits the game, ticks it a few frames, renders one frame to a string
 # (verified, never drawn), sanity-checks it, and writes screenshot.ppm.
 #
-# nes_mem (the module's linear memory) is a global associative array, declared by nes_init; this script never uses `set -u` because sparse reads of it default to 0, matching the rest of the bash backend -- and never leans on `set -e` around a nes_* call either, because a generated function routinely computes an intermediate value of exactly 0, which bash treats as a "failed" command.
+# nes_mem (the module's linear memory) is a global associative array, declared by nes_init; this script never uses `set -u` because sparse reads of it default to 0, matching the rest of the bash backend, and never leans on `set -e` around a nes_* call either, because a generated function routinely computes an intermediate value of exactly 0, which bash treats as a "failed" command.
 # The backend's status-cascade convention has every generated function return its real status explicitly, so this script checks
 # *that* after each call.
 set -o pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then
-  echo "nes (bash): requires bash >= 5 (associative arrays, EPOCHREALTIME); found ${BASH_VERSION}. On macOS /bin/bash is 3.2 -- install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
+  echo "nes (bash): requires bash >= 5 (associative arrays, EPOCHREALTIME); found ${BASH_VERSION}. On macOS /bin/bash is 3.2. Install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
   exit 1
 fi
 
@@ -29,7 +29,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 readonly ESC=$'\e'
 readonly DEFAULT_ROM=../../apps/cache/alter_ego.nes
 
-# Fixed status-line colors (white on black), independent of the game's own palette -- without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
 
 # NES controller button bits, matching src/nes_demo.c's setInput().
@@ -87,7 +88,8 @@ invoke_or_die() {
 # --- ROM loading -----------------------------------------------------
 #
 # Unlike DOOM (whose WAD is embedded in its wasm module and delivered through a host import), the NES module has zero imports: the host allocates a buffer with allocRom(size), copies the iNES ROM bytes straight into the module's linear memory (nes_mem) at the returned guest pointer, then calls initGame(), which hands that buffer to agnes.
-# `od -An -v -tu1` decodes the file to one unsigned decimal byte per token in a single pass -- a ~42KB ROM is ~42K array assignments, a few seconds once at startup, irrelevant next to the per-frame emulation cost below.
+# `od -An -v -tu1` decodes the file to one unsigned decimal byte per token in a single pass.
+# A ~42KB ROM is ~42K array assignments, a few seconds once at startup, irrelevant next to the per-frame emulation cost below.
 load_rom() {
   local path=$1
   if [[ ! -r $path ]]; then
@@ -124,7 +126,7 @@ load_rom() {
 
   invoke_or_die initGame
   if (( R0 != 1 )); then
-    echo "nes (bash): initGame() returned $R0 (expected 1) -- ROM not accepted by agnes: $path" >&2
+    echo "nes (bash): initGame() returned $R0 (expected 1), so agnes did not accept the ROM: $path" >&2
     exit 1
   fi
 
@@ -147,7 +149,7 @@ load_rom() {
 # --- Rendering -------------------------------------------------------
 #
 # Fits a render grid to a terminal (or a synthetic size for --smoke): one character cell shows two vertically-stacked source pixels, so cell rows are half of sampled logical-pixel rows.
-# Capped at w/2 columns -- for the NES's native 256-wide frame that is 128 columns, already wider than most terminals people actually run this in, and the same shape as DOOM's cap.
+# Capped at w/2 columns: for the NES's native 256-wide frame that is 128 columns, already wider than most terminals people actually run this in, and the same shape as DOOM's cap.
 compute_grid() {
   local term_rows=$1 term_cols=$2 w=$3 h=$4
   local avail_rows=$(( term_rows - 1 )) # one row reserved for the status line
@@ -171,7 +173,7 @@ compute_grid() {
 }
 
 # Builds one frame's worth of ANSI half-block cells into RENDER_OUT.
-# Deliberately flat (no helper calls, no command substitution, no per-cell printf) inside the nested loops -- string concatenation and arithmetic only.
+# Deliberately flat (no helper calls, no command substitution, no per-cell printf) inside the nested loops: string concatenation and arithmetic only.
 # An SGR code is skipped when it repeats the previous cell's, which is cheap and shrinks the string a lot on the NES's large flat-color areas (its
 # PPU has a fixed 64-entry palette, <=25 colors on screen at once).
 render_frame() {
@@ -185,7 +187,7 @@ render_frame() {
     for (( cx = 0; cx < GRID_COLS; cx++ )); do
       src_x=$(( cx * w / GRID_COLS ))
       # One byte per pixel, a palette index; the & 0x3f mask is load-bearing.
-      # Associative-array subscripts are literal strings, not arithmetic expressions (unlike inside `$(( ))`), so every subscript needs an explicit `$`/`$(( ))` -- a bare `nes_mem[o]` would look up the key
+      # Associative-array subscripts are literal strings, not arithmetic expressions (unlike inside `$(( ))`), so every subscript needs an explicit `$`/`$(( ))`: a bare `nes_mem[o]` would look up the key
       # "o", not the address.
       ti=$(( ${nes_mem[$(( off + top_base + src_x ))]-0} & 0x3f ))
       bi=$(( ${nes_mem[$(( off + bot_base + src_x ))]-0} & 0x3f ))
@@ -227,7 +229,8 @@ write_ppm() {
 # --- Input (interactive mode only) -----------------------------------
 #
 # Terminals deliver key *presses* only, never releases.
-# There is no meaningful "held key" at this frame rate, so a press is held for exactly the tick it was seen before: setInput() gets the bitmask of everything seen since the previous tick just before tickGame, then the next frame's drain starts from an empty set again (setInput(0) unless re-pressed) -- one tick of "held down," as fine-grained as input can get here.
+# There is no meaningful "held key" at this frame rate, so a press is held for exactly the tick it was seen before: setInput() gets the bitmask of everything seen since the previous tick just before tickGame, then the next frame's drain starts from an empty set again (setInput(0) unless re-pressed).
+# That is one tick of "held down," as fine-grained as input can get here.
 DOWN_MASK=0
 QUIT=0
 
@@ -292,7 +295,8 @@ run_smoke() {
 
   # Tick to SMOKE_FRAMES with no input, the same driving contract as the cross-backend framebuffer snapshot (crates/dewasm-test-helper/src/nes.rs):
   # Alter Ego opens on a near-black boot frame (1 color at ~15 ticks) and only fades in its final, stable credits screen (7 distinct colors) by frame ~37, so a shorter run would only ever screenshot black.
-  # At tens of seconds per frame this is ~20 minutes -- a progress line per tick keeps the silence from ever looking like a hang.
+  # At tens of seconds per frame this is ~20 minutes.
+  # A progress line per tick keeps the silence from ever looking like a hang.
   # Set SMOKE_FRAMES=N for a shorter pipeline check (fewer than ~37 frames will legitimately be near-black).
   local frames=${SMOKE_FRAMES:-40}
   local total_ms=0 i
@@ -312,7 +316,7 @@ run_smoke() {
   epoch_ms; t0=$EPOCH_MS_OUT
   render_frame
   epoch_ms; t1=$EPOCH_MS_OUT
-  echo "smoke: rendered one ${GRID_COLS}x${GRID_ROWS}-cell frame (sampled from a ${GRID_COLS}x${PIXEL_ROWS} logical-pixel grid, not the full ${FRAME_W}x${FRAME_H} framebuffer) in $(fmt_secs $((t1 - t0)))s -- to a string only, never drawn"
+  echo "smoke: rendered one ${GRID_COLS}x${GRID_ROWS}-cell frame (sampled from a ${GRID_COLS}x${PIXEL_ROWS} logical-pixel grid, not the full ${FRAME_W}x${FRAME_H} framebuffer) in $(fmt_secs $((t1 - t0)))s (to a string only, never drawn)"
 
   if [[ $RENDER_OUT != *"▀"* ]]; then
     echo "smoke: FAIL: rendered frame has no half-block glyphs" >&2
@@ -367,9 +371,9 @@ run_interactive() {
   # (not bare \n) keeps boot progress readable.
   boot_msg() { printf '%s\r\n' "$1"; }
 
-  boot_msg "dewasm NES (bash) -- loading ROM $ROM_PATH and booting agnes; this is not instant."
+  boot_msg "dewasm NES (bash): loading ROM $ROM_PATH and booting agnes; this is not instant."
   load_rom "$ROM_PATH"
-  boot_msg "initGame done, ${FRAME_W}x${FRAME_H} framebuffer. Each frame is emulated by bash -- expect it slow. Press q to quit."
+  boot_msg "initGame done, ${FRAME_W}x${FRAME_H} framebuffer. Each frame is emulated by bash, so expect it slow. Press q to quit."
 
   local term_rows term_cols
   read -r term_rows term_cols < <(stty size 2>/dev/null) || { term_rows=${LINES:-24}; term_cols=${COLUMNS:-80}; }

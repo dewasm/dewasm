@@ -1,21 +1,21 @@
 /* Shared preamble for the C microbenchmarks.
  *
  * A microbenchmark is a WASI command module invoked as `<module> <iterations>`. It does
- * <iterations> units of work, writes exactly one line -- the decimal result
- * followed by a newline -- to stdout, and exits 0. <iterations> = 0 does no
+ * <iterations> units of work, writes exactly one line (the decimal result
+ * followed by a newline) to stdout, and exits 0. <iterations> = 0 does no
  * work but still prints, which is how the harness measures startup in
  * isolation.
  *
  * The suite compares wasmtime against pure-Ruby and pure-Python interpreters
  * that implement only part of WASI, so a microbenchmark may import nothing beyond
  * args_sizes_get / args_get / fd_write / proc_exit. That rules out libc stdio,
- * whose buffered streams import fd_seek and fd_close as well -- imports are
+ * whose buffered streams import fd_seek and fd_close as well: imports are
  * resolved at instantiation, so merely linking them in would make the module
  * unloadable under wardite even if it never called them.
  *
  * Hence: the microbenchmarks are built with -nostartfiles and define their own _start,
- * bypassing crt1 and libc entirely. Everything they need -- argv
- * parsing, decimal output -- is here, and it is deliberately small.
+ * bypassing crt1 and libc entirely. Everything they need (argv
+ * parsing, decimal output) is here, and it is deliberately small.
  *
  * The suite calibrates iterations per runner against a measured baseline and keeps every
  * workload inside what every runner supports; the flags enforcing that here are documented

@@ -1,4 +1,4 @@
-;; mem_rw -- i32 store/load over linear memory.
+;; mem_rw: i32 store/load over linear memory.
 ;;
 ;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
 ;; Against i32_alu this separates memory-access cost from arithmetic cost.
@@ -10,11 +10,11 @@
 ;;
 ;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
 ;; It does
-;; <iterations> units of work, writes exactly one line -- the decimal result followed by a newline -- to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
+;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
 ;; Only args_sizes_get / args_get / fd_write / proc_exit are imported and the bodies stick to i32/i64/f64, because the pure-Ruby and pure-Python interpreters this suite compares cannot do more than that.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0 -- address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
 ;;
 ;; 0x1000   4  argc                     (args_sizes_get out param)
 ;; 0x1004   4  argv buffer size         (args_sizes_get out param)

@@ -1,4 +1,4 @@
-/* sha256 -- an i32-heavy real algorithm.
+/* sha256: an i32-heavy real algorithm.
  *
  * One iteration compresses one 64-byte block, so this is the compression
  * function and nothing else: no padding, no length encoding, no allocation.

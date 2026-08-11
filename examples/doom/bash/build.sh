@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then
-  echo "doom (bash): requires bash >= 5; found ${BASH_VERSION}. On macOS /bin/bash is 3.2 -- install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
+  echo "doom (bash): requires bash >= 5; found ${BASH_VERSION}. On macOS /bin/bash is 3.2. Install a newer one (e.g. \`brew install bash\`) and run this script with it." >&2
   exit 1
 fi
 

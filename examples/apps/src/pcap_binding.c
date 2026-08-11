@@ -51,8 +51,8 @@ struct netent *getnetbyname(const char *name) {
  * BPF program into a freshly malloc'd buffer in guest memory. Layout (all
  * little-endian, tightly packed, no padding):
  *
- *   [u32 bf_len]                        -- number of BPF instructions
- *   bf_len x { u16 code; u8 jt; u8 jf; u32 k }   -- 8 bytes each
+ *   [u32 bf_len]:                                number of BPF instructions
+ *   bf_len x { u16 code; u8 jt; u8 jf; u32 k }:  8 bytes each
  *
  * Returns the guest pointer to that buffer, or 0 on any error (compile
  * failure or out-of-memory). The caller reads bf_len, then that many 8-byte

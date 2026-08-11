@@ -45,7 +45,8 @@ end
 # This diffing/escape-sequence bookkeeping is the performance-sensitive part of this frontend, not the wasm execution: it diffs against the previous frame's cell contents and the terminal's own cursor position, and only emits an SGR code when a cell's color actually changed.
 #
 # The guest hands over palette *indices*, not colors, which suits this renderer exactly: a terminal cell samples one pixel out of several, so the only palette lookups performed are the sampled ones, and since a color is a function of its index, the whole SGR string per index is precomputed once and the frame diff compares indices directly.
-# Fixed status-line colors (white on black), independent of the game's own palette -- without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
 
 class Renderer

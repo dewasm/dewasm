@@ -8,7 +8,7 @@ the same command line every other runner in the suite gets:
 The guest sees argv = [basename(module), *guest-args], matching what wasmtime
 passes, so the `<module> <iterations>` contract holds identically here.
 
-stdout carries guest output and nothing else -- the harness compares it byte
+stdout carries guest output and nothing else: the harness compares it byte
 for byte against the wasmtime oracle. Diagnostics, including the
 `load_ms=<float>` line the harness records, go to stderr.
 
@@ -22,7 +22,7 @@ import os
 import sys
 import time
 
-# This file is called pywasm.py by contract, and a script's own directory leads sys.path -- so an unguarded `import pywasm` imports this file instead of the package.
+# This file is called pywasm.py by contract, and a script's own directory leads sys.path, so an unguarded `import pywasm` imports this file instead of the package.
 # Drop that entry (only that one) before importing.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [p for p in sys.path

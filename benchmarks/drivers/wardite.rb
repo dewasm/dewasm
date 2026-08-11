@@ -7,7 +7,7 @@
 # The guest sees argv = [basename(module), *guest-args], matching what wasmtime passes, so the `<module> <iterations>` contract holds identically here.
 # (wardite's own CLI hardcodes argv[0] to "wardite"; we set argv ourselves instead of shelling out to it.)
 #
-# stdout carries guest output and nothing else -- the harness compares it byte for byte against the wasmtime oracle.
+# stdout carries guest output and nothing else: the harness compares it byte for byte against the wasmtime oracle.
 # Diagnostics, including the
 # `load_ms=<float>` line the harness records, go to stderr.
 #
