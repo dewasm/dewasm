@@ -1,5 +1,5 @@
 /*
- * pcap_config.h — first-party stand-in for libpcap's ./configure output
+ * pcap_config.h: first-party stand-in for libpcap's ./configure output
  * (first-party source is fine to commit). libpcap's build normally
  * generates config.h by probing the host; there is no wasm32-wasi host to
  * probe, so scripts/libpcap.sh copies this file in as <config.h> on the include path
@@ -10,12 +10,12 @@
  *   2. Placeholders for the interface-lookup path that wasip1 cannot provide
  *      (socket()/SIOCGIF*): pcap_lookupnet() is compiled but never reached in
  *      a reactor build that only exports compile_filter, so wasm-ld garbage-
- *      collects it — these just let it *compile*.
+ *      collects it: these just let it *compile*.
  *   3. A baseline-wasm setjmp/longjmp stand-in. libpcap reports filter syntax
  *      errors by longjmp()ing back to a setjmp() at the top of pcap_compile();
  *      wasip1's <setjmp.h> refuses to compile without the wasm exception-
  *      handling proposal (out of dewasm's 0.1 scope). Since a *valid*
- *      filter — the only kind this demo compiles — never takes the error path,
+ *      filter (the only kind this demo compiles) never takes the error path,
  *      setjmp() collapses to 0 (always the success arm) and longjmp() to a
  *      trap. Compiling an invalid filter would trap instead of returning an
  *      error; that limitation is documented in pcap_binding.c's compile_filter.

@@ -1,14 +1,14 @@
 # Rails on dewasm SQLite
 
-A full Rails 8 application whose database is **SQLite compiled to wasm32-wasi and converted to pure Ruby by dewasm** — no native sqlite3 library anywhere in the process.
+A full Rails 8 application whose database is **SQLite compiled to wasm32-wasi and converted to pure Ruby by dewasm**: no native sqlite3 library anywhere in the process.
 
 ```
 Rails 8 (unmodified)
   └─ ActiveRecord SQLite3Adapter (unmodified)
-       └─ sqlite3/           — shim gem: the sqlite3-ruby API the adapter uses
-            └─ sqlite3_wasm.rb  — libsqlite3.wasm converted by dewasm (~17 MB, generated)
-                 └─ Rt::WASI     — dewasm's WASI, preopening "/" so the .sqlite3
-                                   file lands on the real filesystem
+       └─ sqlite3/: shim gem, the sqlite3-ruby API the adapter uses
+            └─ sqlite3_wasm.rb: libsqlite3.wasm converted by dewasm (~17 MB, generated)
+                 └─ Rt::WASI: dewasm's WASI, preopening "/" so the .sqlite3
+                              file lands on the real filesystem
 ```
 
 ## Run it
@@ -22,14 +22,14 @@ It ends with `RAILS-ON-DEWASM-OK` after a POST/GET round-trip and a `/stats` req
 
 Pieces, individually:
 
-- `build.sh` — wasm build + conversion only.
-- `sqlite3/test_shim.rb` — the shim's own smoke (gem API surface: binds, column typing, error mapping, transactions, pragmas).
-- `ar_smoke/` — ActiveRecord without Rails: migration, CRUD, type round-trips (UTF-8, blob, i64 boundaries, datetime), constraint→exception mapping, joins, `insert_all`.
-- `setup-app.sh` — regenerates `app/` (`rails new --minimal` plus the files in `app-template/`).
+- `build.sh`: wasm build + conversion only.
+- `sqlite3/test_shim.rb`: the shim's own smoke (gem API surface: binds, column typing, error mapping, transactions, pragmas).
+- `ar_smoke/`: ActiveRecord without Rails: migration, CRUD, type round-trips (UTF-8, blob, i64 boundaries, datetime), constraint→exception mapping, joins, `insert_all`.
+- `setup-app.sh`: regenerates `app/` (`rails new --minimal` plus the files in `app-template/`).
 
 ## The shim gem (`sqlite3/`)
 
-A drop-in `sqlite3` gem (Bundler `path:` dependency) implementing the surface Rails 8.1 actually uses — verified against the real gem 2.9.5 and the adapter source:
+A drop-in `sqlite3` gem (Bundler `path:` dependency) implementing the surface Rails 8.1 actually uses, verified against the real gem 2.9.5 and the adapter source:
 
 - `Database`: `prepare`/`execute`/`execute_batch2`, `changes`/`total_changes`, `closed?`/`close`, `encoding`, `busy_handler_timeout=`, transactions.
 - `Statement`: `bind_params`, `step` (array rows typed INTEGER→Integer, FLOAT→Float, TEXT→UTF-8 String, BLOB→binary String, NULL→nil), `columns`, `types` (declared types feed AR's type map), `reset!`, `column_count`.
@@ -38,7 +38,7 @@ A drop-in `sqlite3` gem (Bundler `path:` dependency) implementing the surface Ra
 Each `Database` gets its own wasm instance (own linear memory and guest heap), so a Rails connection-pool entry is a fully isolated SQLite; a mutex serializes calls into each instance.
 Values cross the host/guest boundary through the generated module's `invoke` + `Rt::Memory`, with `sqlite3_malloc` for guest-side buffers and the masked-unsigned convention for i64.
 
-The C surface this needs is exported from `libsqlite3.wasm` — the `SQLITE_EXPORTS` list in `../apps/scripts/sqlite3.sh`.
+The C surface this needs is exported from `libsqlite3.wasm`: the `SQLITE_EXPORTS` list in `../apps/scripts/sqlite3.sh`.
 
 ## Deliberate gaps
 

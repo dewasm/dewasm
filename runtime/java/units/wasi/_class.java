@@ -1,31 +1,20 @@
 // requires: memory/_class
-// The bundled WASI preview 1 runtime (filesystem model adopted one-for-one
-// from the Go/Python/Ruby backends). The fd table holds one of:
-// an `java.io.InputStream`/`java.io.OutputStream` for the inherited standard
-// streams (fds 0/1/2), a `Handle` (a guest-opened regular file over a
-// seekable `FileChannel`), or a `Dir` (a preopen or a directory the guest
-// opened via path_open). Args/env are pre-encoded UTF-8 byte strings; env is
-// passed already-ordered ("K=V") and preopens are assigned fds in sorted
-// order, so there is no map-iteration nondeterminism. Stdio is
-// byte-wise (raw streams, not the text PrintStream) so output is
-// byte-identical.
+// The bundled WASI preview 1 runtime (filesystem model adopted one-for-one from the Go/Python/Ruby backends).
+// The fd table holds one of:
+// an `java.io.InputStream`/`java.io.OutputStream` for the inherited standard streams (fds 0/1/2), a `Handle` (a guest-opened regular file over a seekable `FileChannel`), or a `Dir` (a preopen or a directory the guest opened via path_open).
+// Args/env are pre-encoded UTF-8 byte strings; env is passed already-ordered ("K=V") and preopens are assigned fds in sorted order, so there is no map-iteration nondeterminism.
+// Stdio is byte-wise (raw streams, not the text PrintStream) so output is byte-identical.
 static final int WASI_OK = 0;
 static final int WASI_BADF = 8;
 static final int WASI_INVAL = 28;
 static final int WASI_IO = 29;
 static final int WASI_NOSYS = 52;
 static final int WASI_SPIPE = 70;
-// NOTCAPABLE lives in the always-bundled prelude (not errno_fs) because the
-// per-fd rights model enforces it from core fd_read/fd_write/fd_seek
-// too, not only from the path_* units that pull in errno_fs.
+// NOTCAPABLE lives in the always-bundled prelude (not errno_fs) because the per-fd rights model enforces it from core fd_read/fd_write/fd_seek too, not only from the path_* units that pull in errno_fs.
 static final int WASI_NOTCAPABLE = 76;
 
-// WASI p1 rights bits. Access in this runtime is "which directories
-// did the embedder preopen" plus a capability-narrowing rights model
-// on top: a path_open grants requested & dir.inheriting masked by the opened
-// fd's filetype, fd_fdstat_set_rights can only narrow further, and the
-// enforced syscalls (fd_read/write/seek/readdir, fd_filestat_set_size,
-// path_open) reject a missing right with NOTCAPABLE.
+// WASI p1 rights bits.
+// Access in this runtime is "which directories did the embedder preopen" plus a capability-narrowing rights model on top: a path_open grants requested & dir.inheriting masked by the opened fd's filetype, fd_fdstat_set_rights can only narrow further, and the enforced syscalls (fd_read/write/seek/readdir, fd_filestat_set_size, path_open) reject a missing right with NOTCAPABLE.
 static final long R_FD_DATASYNC = 1L << 0;
 static final long R_FD_READ = 1L << 1;
 static final long R_FD_SEEK = 1L << 2;
@@ -55,11 +44,7 @@ static final long R_PATH_REMOVE_DIRECTORY = 1L << 25;
 static final long R_PATH_UNLINK_FILE = 1L << 26;
 static final long R_POLL_FD_READWRITE = 1L << 27;
 
-// The rights a directory fd may hold (base) and the file/dir rights it may
-// hand down (inheriting), mirroring wasmtime's DIR_RIGHTS / FILE_RIGHTS masks
-// so the hard-coded expectations in the wasi-testsuite (path_open_preopen's
-// directory_base_rights / directory_inheriting_rights) are met and a directory
-// never reports file-only rights like FD_FILESTAT_SET_SIZE.
+// The rights a directory fd may hold (base) and the file/dir rights it may hand down (inheriting), mirroring wasmtime's DIR_RIGHTS / FILE_RIGHTS masks so the hard-coded expectations in the wasi-testsuite (path_open_preopen's directory_base_rights / directory_inheriting_rights) are met and a directory never reports file-only rights like FD_FILESTAT_SET_SIZE.
 static final long DIR_RIGHTS = R_FD_FDSTAT_SET_FLAGS | R_FD_SYNC | R_PATH_CREATE_DIRECTORY
     | R_PATH_CREATE_FILE | R_PATH_LINK_SOURCE | R_PATH_LINK_TARGET | R_PATH_OPEN | R_FD_READDIR
     | R_PATH_READLINK | R_PATH_RENAME_SOURCE | R_PATH_RENAME_TARGET | R_PATH_FILESTAT_GET
@@ -70,10 +55,7 @@ static final long FILE_RIGHTS = R_FD_DATASYNC | R_FD_READ | R_FD_SEEK | R_FD_FDS
     | R_FD_SYNC | R_FD_TELL | R_FD_WRITE | R_FD_ADVISE | R_FD_ALLOCATE | R_FD_FILESTAT_GET
     | R_FD_FILESTAT_SET_SIZE | R_FD_FILESTAT_SET_TIMES | R_POLL_FD_READWRITE;
 
-// A directory descriptor: either a preopen (preopenName set to the
-// guest-visible path passed in preopens) or a directory the guest opened
-// itself via path_open (preopenName null). entries is the fd_readdir listing
-// cache, filled lazily; loaded guards the one-shot snapshot.
+// A directory descriptor: either a preopen (preopenName set to the guest-visible path passed in preopens) or a directory the guest opened itself via path_open (preopenName null). entries is the fd_readdir listing cache, filled lazily; loaded guards the one-shot snapshot.
 static final class Dir {
     final java.nio.file.Path hostPath;
     final byte[] preopenName;
@@ -98,10 +80,8 @@ static final class Dirent {
     }
 }
 
-// A guest-opened regular file: one seekable FileChannel gives coherent
-// read/write/seek/tell plus positional pread/pwrite. `path` is kept
-// for fd_filestat_get; `append` reproduces O_APPEND by seeking to end before
-// each write.
+// A guest-opened regular file: one seekable FileChannel gives coherent read/write/seek/tell plus positional pread/pwrite.
+// `path` is kept for fd_filestat_get; `append` reproduces O_APPEND by seeking to end before each write.
 static final class Handle {
     final java.nio.channels.FileChannel ch;
     final java.nio.file.Path path;
@@ -115,10 +95,8 @@ static final class Handle {
     }
 }
 
-// The per-fd capability state parallel to the fds table: the granted
-// base/inheriting rights and the open fdflags. Stdio fds carry no FdMeta and
-// are treated as fully capable; every path_open'd fd and every preopen gets
-// one.
+// The per-fd capability state parallel to the fds table: the granted base/inheriting rights and the open fdflags.
+// Stdio fds carry no FdMeta and are treated as fully capable; every path_open'd fd and every preopen gets one.
 static final class FdMeta {
     long base;
     long inheriting;
@@ -131,9 +109,8 @@ static final class FdMeta {
     }
 }
 
-// A sandbox path resolution result: `path` (the confined host path) is valid
-// only when `errno == WASI_OK`. Java has no tuples, so resolve_path returns
-// this instead of Go's (string, errno) pair.
+// A sandbox path resolution result: `path` (the confined host path) is valid only when `errno == WASI_OK`.
+// Java has no tuples, so resolve_path returns this instead of Go's (string, errno) pair.
 static final class Resolved {
     final String path;
     final int errno;
@@ -171,21 +148,16 @@ WASI(String[] args, String[] env, java.util.Map<String, String> preopens) {
             try {
                 real = real.toRealPath();
             } catch (java.io.IOException e) {
-                // Leave `real` as the absolute path; the existence check below
-                // still rejects a missing preopen.
+                // Leave `real` as the absolute path; the existence check below still rejects a missing preopen.
             }
             // The host path must resolve, but need not be a directory: like the
-            // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for
-            // the zeroperl reactor's init probe) is accepted — the guest
-            // resolves it as the preopen root itself.
+            // Ruby/Perl runtimes, a single-file preopen (e.g. "/dev/null" for the zeroperl reactor's init probe) is accepted: the guest resolves it as the preopen root itself.
             if (!java.nio.file.Files.exists(real)) {
                 throw new RuntimeException(
                     "preopen " + guest + " => " + preopens.get(guest) + ": does not exist");
             }
             this.fds.put(next, new Dir(real, guest.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            // A preopen holds every directory right and hands down every file
-            // right: full authority within the embedder-authorized
-            // tree, narrowed only as the guest opens paths through it.
+            // A preopen holds every directory right and hands down every file right: full authority within the embedder-authorized tree, narrowed only as the guest opens paths through it.
             this.meta.put(next, new FdMeta(DIR_RIGHTS, DIR_RIGHTS | FILE_RIGHTS, 0));
             next++;
         }
@@ -204,15 +176,13 @@ private static byte[][] encode(String[] xs) {
     return out;
 }
 
-// Whether the fd table entry is one of the three inherited standard streams,
-// which take the SPIPE/no-close special cases (in lockstep with fds 0..2).
+// Whether the fd table entry is one of the three inherited standard streams, which take the SPIPE/no-close special cases (in lockstep with fds 0..2).
 private static boolean isStdio(Object entry) {
     return entry instanceof java.io.InputStream || entry instanceof java.io.OutputStream;
 }
 
-// True when fd carries a rights meta that does not grant `need`. An fd with no
-// meta (the inherited stdio streams) is treated as fully capable, so this
-// restricts only the path_open'd/preopen fds the rights model actually tracks.
+// True when fd carries a rights meta that does not grant `need`.
+// An fd with no meta (the inherited stdio streams) is treated as fully capable, so this restricts only the path_open'd/preopen fds the rights model actually tracks.
 boolean lacksRight(int fd, long need) {
     FdMeta m = meta.get(fd);
     return m != null && (m.base & need) == 0;

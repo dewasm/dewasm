@@ -42,7 +42,7 @@ Checked-in snapshots are code-derived, never hand-written; a stale one fails a c
 
 A snapshot claims "this is what wasmtime produces", so it can go stale.
 The opt-in freshness check reruns the cached binaries and compares against the checked-in files.
-Both it and the capture embed the `wasmtime` crate pinned by `Cargo.lock` — no `wasmtime` install is involved — and reach it through the `xtask` binary, which the suite never builds for you:
+Both it and the capture embed the `wasmtime` crate pinned by `Cargo.lock` (no `wasmtime` install is involved) and reach it through the `xtask` binary, which the suite never builds for you:
 
 ```console
 $ cargo build -p xtask

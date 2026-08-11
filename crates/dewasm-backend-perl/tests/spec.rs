@@ -1,8 +1,9 @@
-//! Perl side of the shared spec harness: converts modules with the Perl backend, phrases assertions as Perl (`check`/`check_trap`/`check_exhaust`/`check_unlinkable` subs, bit-exact float comparison via `Rt::f32_bits`/`Rt::f64_bits`), and runs the script with the `perl` on PATH. The generic harness lives in `dewasm-test-helper`.
+//! Perl side of the shared spec harness: converts modules with the Perl backend, phrases assertions as Perl (`check`/`check_trap`/`check_exhaust`/`check_unlinkable` subs, bit-exact float comparison via `Rt::f32_bits`/`Rt::f64_bits`), and runs the script with the `perl` on PATH.
+//! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Perl facts shape the phrasing:
 //! - Assertions are passed as zero-arg closures (`sub { ... }`); the value under test is captured in list context (`my @r = (<call>)`) so multi-value returns compare per slot.
-//! - Deep guest recursion is heap-allocated in perl and only stops at the OOM killer, so exhaustion is the generated code's own `$Rt::DEPTH` cutoff — `check_exhaust` matches the resulting `call stack exhausted` trap rather than any interpreter error.
+//! - Deep guest recursion is heap-allocated in perl and only stops at the OOM killer, so exhaustion is the generated code's own `$Rt::DEPTH` cutoff: `check_exhaust` matches the resulting `call stack exhausted` trap rather than any interpreter error.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -15,7 +16,8 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught. Identical in shape to the Ruby/Python lists: the only open gap is `import-limits` — `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Identical in shape to the Ruby/Python lists: the only open gap is `import-limits`: `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -37,7 +39,7 @@ impl BackendUnderTest for PerlSpec {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_perl::find_perl()
-            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md")
+            .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md")
     }
 }
 
@@ -46,7 +48,7 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
         EXPECTED_FAILURES
     }
 
-    /// Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so — like Python and Bash — a plain `cargo test` runs only the shared curated list.
+    /// Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so, like Python and Bash, a plain `cargo test` runs only the shared curated list.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::CURATED_SPEC_FILES)
     }
@@ -209,7 +211,7 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
     }
 }
 
-/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name — each instance doubles as an import provider (`wasm_import`).
+/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance doubles as an import provider (`wasm_import`).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "$spectest".to_string();
@@ -282,7 +284,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         // `(ref.extern)`: any non-null externref.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("defined({value})")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref — the `[type_string, coderef]` pair.
+        // `(ref.func)`: any non-null funcref, the `[type_string, coderef]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!("ref({value}) eq 'ARRAY'")),
         // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),

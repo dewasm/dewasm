@@ -1,13 +1,10 @@
-# The sqlite3 gem's exception hierarchy, mapped from SQLite primary result
-# codes. Rails rescues several of these by class (BusyException,
-# ConstraintException, ...), so the class-per-code shape must match the real
-# gem even though the messages come from our own sqlite3_errmsg round-trip.
+# The sqlite3 gem's exception hierarchy, mapped from SQLite primary result codes.
+# Rails rescues several of these by class (BusyException,
+# ConstraintException, ...), so the class-per-code shape must match the real gem even though the messages come from our own sqlite3_errmsg round-trip.
 module SQLite3
   class Exception < ::StandardError
     attr_reader :code
-    # The real gem exposes the SQL and error offset on newer versions; Rails
-    # feature-detects them, so plain readers returning nil-ish defaults are
-    # enough to keep it happy.
+    # The real gem exposes the SQL and error offset on newer versions; Rails feature-detects them, so plain readers returning nil-ish defaults are enough to keep it happy.
     attr_reader :sql, :sql_offset
 
     def initialize(message = nil, code: nil, sql: nil, sql_offset: nil)

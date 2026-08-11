@@ -1,6 +1,5 @@
 # requires: mem/check
-# The arithmetic right shift on negative patterns is harmless: & 0xff
-# masks the dragged-in sign bits per byte.
+# The arithmetic right shift on negative patterns is harmless: & 0xff masks the dragged-in sign bits per byte.
 mem_i64_store() {
   local -n __m=${1}mem
   local a=$2 v=$3

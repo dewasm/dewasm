@@ -17,7 +17,7 @@ dewasm_test_helper::module_name_policy_suite!(
 
 /// Run `source` under perl and return its stdout, failing loud on a nonzero exit.
 fn run(source: &str) -> String {
-    let perl = find_perl().expect("perl >= 5.26 not found on PATH — see docs/testing.md");
+    let perl = find_perl().expect("perl >= 5.26 not found on PATH: see docs/testing.md");
     let out = dewasm_test_helper::run_script(&perl, source, "pl", &[], "");
     assert!(
         out.status.success(),
@@ -28,7 +28,8 @@ fn run(source: &str) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-/// Perl package names are absolute, so the embedded runtime is prefixed with the *whole* name — the nested case is where a half-done prefixing would show up.
+/// Perl package names are absolute, so the embedded runtime is prefixed with the *whole* name.
+/// The nested case is where a half-done prefixing would show up.
 #[test]
 fn nested_name_runs_with_a_nested_runtime() {
     let source = convert("Dewasm::Nested::Add", Mode::Library).expect("convert");

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Interactive frontend for the dewasm-generated NES emulator (nes_gen.py,
 produced from examples/apps/src/nes_demo.c's agnes wrapper by build.sh).
-Unlike DOOM, nes.wasm has zero wasm imports -- no console/save-
-game/clock host surface to wire up, just `_initialize` plus the demo exports
+Unlike DOOM, nes.wasm has zero wasm imports (no console/save-
+game/clock host surface to wire up), just `_initialize` plus the demo exports
 (allocRom/initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
-frameHeight) -- so this script's whole job is to load a ROM into the
+frameHeight), so this script's whole job is to load a ROM into the
 module's linear memory and drive the game loop itself: pacing, input
 polling, and rendering are entirely the host's job (the module has no clock
 import of its own, unlike DOOM's internal 35Hz timer).
 
-The guest hands over agnes's own frame representation -- one palette *index*
-per pixel plus the fixed 64-entry palette -- rather than a rendered image, so
+The guest hands over agnes's own frame representation (one palette *index*
+per pixel plus the fixed 64-entry palette) rather than a rendered image, so
 composing pixels is the host's job too. That suits a terminal frontend: a
 cell samples one pixel out of several, so only the sampled indices are ever
 looked up (and the SGR escape per index is precomputed once).
@@ -48,15 +48,11 @@ BIT_DOWN = 32
 BIT_LEFT = 64
 BIT_RIGHT = 128
 
-# A pressed key is held down-active until this many seconds pass without
-# seeing it again -- terminals only deliver key-down events (no key-up), so
-# releases have to be synthesized. This backend's tick rate is close to
-# DOOM's Python frontend's (dewasm's Python backend cost is dominated by
-# per-instruction interpretation overhead, not game complexity -- see
-# README), so this reuses that frontend's RELEASE_TIMEOUT rather than the
-# much shorter one the Ruby/Perl NES frontends use at their much higher tick
-# rates: the window has to bridge the gap between ticks, not just a
-# terminal's own autorepeat interval.
+# A pressed key is held down-active until this many seconds pass without seeing it again.
+# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# This backend's tick rate is close to
+# DOOM's Python frontend's (dewasm's Python backend cost is dominated by per-instruction interpretation overhead, not game complexity, as
+# README explains), so this reuses that frontend's RELEASE_TIMEOUT rather than the much shorter one the Ruby/Perl NES frontends use at their much higher tick rates: the window has to bridge the gap between ticks, not just a terminal's own autorepeat interval.
 RELEASE_TIMEOUT = 0.4
 
 FRAME_W = 256
@@ -64,8 +60,7 @@ FRAME_H = 240
 
 nes = None
 screen_off = 0
-# The module's fixed palette, read once after initGame: 64 (r, g, b) entries,
-# plus the truecolor SGR escape each one renders as.
+# The module's fixed palette, read once after initGame: 64 (r, g, b) entries, plus the truecolor SGR escape each one renders as.
 palette = []
 fg_sgr = []
 bg_sgr = []
@@ -86,7 +81,7 @@ def load_rom(path):
 
 def load_palette():
     """Caches paletteOffset's 64 R,G,B,A entries (alpha is padding) and the
-    per-index SGR escapes. Fixed data -- reading it once is enough."""
+    per-index SGR escapes. Fixed data: reading it once is enough."""
     global palette, fg_sgr, bg_sgr
     off = nes.invoke("paletteOffset")
     mv = memoryview(nes.memory.data)
@@ -97,18 +92,15 @@ def load_palette():
 
 # --- Terminal rendering ------------------------------------------------
 #
-# Each character cell shows two vertically-stacked pixels via the upper-half
-# block character, foreground = top pixel, background = bottom pixel. Unlike
+# Each character cell shows two vertically-stacked pixels via the upper-half block character, foreground = top pixel, background = bottom pixel.
+# Unlike
 # DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200), agnes's
-# 256x240 framebuffer already is the native NES resolution, so pixels are
-# read 1:1 and nearest-neighbor sampled down to however many columns/rows
-# actually fit.
+# 256x240 framebuffer already is the native NES resolution, so pixels are read 1:1 and nearest-neighbor sampled down to however many columns/rows actually fit.
 
 UPPER_HALF_BLOCK = "▀"
 
-# Fixed status-line colors (white on black), independent of the game's own
-# palette -- without an explicit color the status line inherits whatever
-# fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
@@ -208,12 +200,8 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow
-# keys as 3-byte escape sequences, everything else as 1 byte. A lone ESC
-# keypress is indistinguishable from the first byte of an escape sequence
-# until either more bytes show up (they arrive together, already buffered,
-# for a real escape sequence) or a short timeout passes with nothing more
-# arriving (a real ESC keypress).
+# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow keys as 3-byte escape sequences, everything else as 1 byte.
+# A lone ESC keypress is indistinguishable from the first byte of an escape sequence until either more bytes show up (they arrive together, already buffered, for a real escape sequence) or a short timeout passes with nothing more arriving (a real ESC keypress).
 _ESC_TIMEOUT = 0.01
 
 _ARROW_BITS = {b"A": BIT_UP, b"B": BIT_DOWN, b"C": BIT_RIGHT, b"D": BIT_LEFT}
@@ -245,9 +233,8 @@ def read_key(fd):
     return None
 
 
-# The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no
-# separate calibration is needed (unlike DOOM's internal 35Hz pacing, which
-# the host has no say over at all -- here pacing is entirely the host's job).
+# The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no separate calibration is needed (unlike DOOM's internal 35Hz pacing, which the host has no say over at all).
+# Here pacing is entirely the host's job.
 TARGET_FPS = 60
 FRAME_SECONDS = 1.0 / TARGET_FPS
 
@@ -258,8 +245,7 @@ def run_interactive(rom_path):
     nes.invoke("_initialize")
     load_rom(rom_path)
     load_palette()
-    # Both offsets are stable for the emulator's lifetime, so they are read
-    # once rather than per frame.
+    # Both offsets are stable for the emulator's lifetime, so they are read once rather than per frame.
     screen_off = nes.invoke("screenOffset")
 
     fd = sys.stdin.fileno()
@@ -267,24 +253,19 @@ def run_interactive(rom_path):
 
     def restore():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        # SGR reset first: the fixed status-line colors otherwise persist
-        # past leaving the alternate screen and tint the shell prompt
-        # underneath.
+        # SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
         os.write(1, b"\x1b[0m\x1b[?25h\x1b[?1049l")
 
     renderer = Renderer()
     held = {}  # controller bit -> release deadline (time.monotonic() seconds)
     status_ticks = 0
     status_window_start = time.monotonic()
-    status = "dewasm NES (Python) -- starting... -- q: quit"
+    status = "dewasm NES (Python) | starting... | q: quit"
 
     tty.setraw(fd)
     os.write(1, b"\x1b[?1049h\x1b[?25l")
     try:
-        # Fixed-timestep pacing: sleep when running ahead of schedule; when
-        # the interpreter can't keep up, never sleep and just resync the
-        # schedule to "now" instead of trying to burn through a backlog of
-        # missed frames.
+        # Fixed-timestep pacing: sleep when running ahead of schedule; when the interpreter can't keep up, never sleep and just resync the schedule to "now" instead of trying to burn through a backlog of missed frames.
         next_frame_at = time.monotonic()
         while True:
             events = []
@@ -318,7 +299,7 @@ def run_interactive(rom_path):
             elapsed = now - status_window_start
             if elapsed >= 0.5:
                 rate = status_ticks / elapsed
-                status = f"dewasm NES (Python) -- {rate:.2f} frames/sec -- q: quit"
+                status = f"dewasm NES (Python) | {rate:.2f} frames/sec | q: quit"
                 status_ticks = 0
                 status_window_start = now
             renderer.render(status)
@@ -353,13 +334,9 @@ def write_ppm_and_count_colors(path, mv, off, w, h):
     return distinct
 
 
-# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs: the
-# smallest input-free tick count that clears Alter Ego's boot into its
-# stable credits screen, which also lets a smoke run's screenshot.ppm be
-# diffed directly against examples/apps/snapshots/nes_frame.ppm. Perl (the
-# other frontend slow enough to feel every extra tick) uses the same count;
-# Ruby/Go/Java run several hundred instead since their tick cost is
-# negligible.
+# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs: the smallest input-free tick count that clears Alter Ego's boot into its stable credits screen, which also lets a smoke run's screenshot.ppm be diffed directly against examples/apps/snapshots/nes_frame.ppm.
+# Perl (the other frontend slow enough to feel every extra tick) uses the same count;
+# Ruby/Go/Java run several hundred instead since their tick cost is negligible.
 SMOKE_FRAMES = 40
 
 
@@ -381,9 +358,7 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
 
     mv = memoryview(nes.memory.data)
 
-    # Measure render cost without a real terminal: build the escape string
-    # for a representative fixed size and throw it away instead of writing
-    # it to a screen.
+    # Measure render cost without a real terminal: build the escape string for a representative fixed size and throw it away instead of writing it to a screen.
     render_start = time.monotonic()
     cols, rows = 80, 24
     width, rows = _fit(FRAME_W, FRAME_H, cols, rows)
@@ -395,14 +370,9 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
     distinct = write_ppm_and_count_colors("screenshot.ppm", mv, screen_off, FRAME_W, FRAME_H)
     print(f"smoke: final frame is {FRAME_W}x{FRAME_H}, wrote screenshot.ppm ({len(distinct)} distinct colors)")
 
-    # The NES PPU palette tops out at 64 colors, and agnes's frame is a
-    # small, mostly-flat subset of it (Alter Ego's title screen settles at 7
-    # -- see NES_FRAMES's comment in
-    # crates/dewasm-test-helper/src/nes.rs), so a healthy frame is nowhere
-    # near the thousands of colors a truecolor renderer would produce; a
-    # degenerate (blank/solid) frame is the real signal to catch, and lands
-    # in the single digits. Mirrors the >4 threshold the snapshot oracle
-    # uses (crates/xtask/src/nes_snapshot.rs) and the Ruby/Perl frontends.
+    # The NES PPU palette tops out at 64 colors, and agnes's frame is a small, mostly-flat subset of it (Alter Ego's title screen settles at 7,
+    # per NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs), so a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce; a degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
+    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs) and the Ruby/Perl frontends.
     ok = True
     if len(distinct) <= 4:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)

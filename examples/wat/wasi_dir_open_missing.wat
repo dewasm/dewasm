@@ -1,6 +1,4 @@
-;; path_open with oflags::DIRECTORY on a path that does not exist must
-;; fail with ERRNO_NOENT (44), not ERRNO_NOTDIR (54); the errno becomes
-;; the exit code.
+;; path_open with oflags::DIRECTORY on a path that does not exist must fail with ERRNO_NOENT (44), not ERRNO_NOTDIR (54); the errno becomes the exit code.
 (module
   (import "wasi_snapshot_preview1" "path_open"
     (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))

@@ -1,8 +1,8 @@
-# Decision 55 — Perl Backend Lowering Conventions
+# Decision 55: Perl Backend Lowering Conventions
 
 Status: **Accepted, 2026-08-01.**
 First milestone (the spec harness passes, issue #68) implemented in `crates/dewasm-backend-perl/src/lib.rs` + `runtime/perl/units/` (the full-testsuite run passes with the same `import-limits`/`linking` list as Python's).
-Numeric conventions are [decision 2](2-numeric-semantics.md)'s; this decision covers where Perl forced (or spared) a different shape from Ruby ([decision 4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([decision 28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [decision 15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26 — the features used floor out at POSIX C99 math, 5.22, plus margin).
+Numeric conventions are [decision 2](2-numeric-semantics.md)'s; this decision covers where Perl forced (or spared) a different shape from Ruby ([decision 4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([decision 28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [decision 15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26: the features used floor out at POSIX C99 math, 5.22, plus margin).
 WASI preview 1 is follow-up work (issue #69).
 
 ## Context
@@ -19,8 +19,8 @@ Three measured behaviors shaped the numeric lowering:
 3. **Float edges die or lie.**
    `x / 0.0`, `x % 0`, and `sqrt(-1)` all die; `pack 'f'` clamps out-of-float-range values to infinity instead of IEEE-rounding (so the `2^128 - 2^103` boundary needs the same software handling as Ruby, decision 2) and canonicalizes NaN payloads, while `pack 'd'` is a bit-exact byte copy; `POSIX::nearbyint` is round-half-even and preserves `-0.0`.
 
-On control flow Perl is *stronger* than Ruby/Python: `last LABEL`/`next LABEL` exit or continue any enclosing labeled block or loop at arbitrary depth (they do not cross sub boundaries, or escape `do {}`/`eval {}` blocks — neither of which the lowering puts branch-crossing code inside).
-And Perl recursion is heap-allocated: it neither overflows a C stack nor raises anything catchable — a runaway recursion just eats memory.
+On control flow Perl is *stronger* than Ruby/Python: `last LABEL`/`next LABEL` exit or continue any enclosing labeled block or loop at arbitrary depth (they do not cross sub boundaries, or escape `do {}`/`eval {}` blocks, neither of which the lowering puts branch-crossing code inside).
+And Perl recursion is heap-allocated: it neither overflows a C stack nor raises anything catchable: a runaway recursion just eats memory.
 
 ## Decision
 
@@ -28,9 +28,9 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
   `Block` → `Ln: { ... }`, `Loop` → `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, so `br` to it is `next Ln`, and falling off the body must exit), referenced `If` → a labeled block around the `if/else`; every `br` is a direct `last Ln`/`next Ln`, `br_table` dispatches an `if/elsif` chain of them.
   Unreferenced labels emit no frame (bodies splice inline).
   The exact gap that forced Ruby's `__br` cascade (decision 42) and Python's `_br` register (decision 28) does not exist; a codegen-shape test (`mod branch_shape`) pins that no such scheme reappears.
-  Criterion: *when the target language's structured non-local exit covers wasm's label discipline exactly, use it directly — synthetic control state is only for languages that lack it.*
+  Criterion: *when the target language's structured non-local exit covers wasm's label discipline exactly, use it directly: synthetic control state is only for languages that lack it.*
 - **`use integer` only inside runtime helpers, never in generated function bodies.**
-  Ops that need C-style 64-bit semantics — i32 mul, all i64 add/sub/mul (behavior 1/2: plain arithmetic would round through NVs or overflow), signed div/rem, `shr_s`, `s64` — are `Rt::` helpers built on tightly-scoped `do { use integer; ... }` with the unsigned mask applied *outside* the pragma's scope.
+  Ops that need C-style 64-bit semantics are `Rt::` helpers built on tightly-scoped `do { use integer; ... }` with the unsigned mask applied *outside* the pragma's scope: i32 mul, all i64 add/sub/mul (behavior 1/2: plain arithmetic would round through NVs or overflow), signed div/rem, `shr_s`, `s64`.
   i32 add/sub and all shifts/bitops/unsigned compares stay inline plain expressions (exact per behavior 2).
   Unsigned division uses the exact idiom `($n - $n % $d) / $d`; signed division/remainder use C division under `use integer` with the `INT_MIN / -1` (SIGFPE) case trapped first.
 - **Float arithmetic goes through `Rt::fadd`/`fsub`/`fmul`/`fdiv`.**
@@ -39,14 +39,15 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
   `fceil`/`ffloor`/`ftrunc`/`fnearest` are `POSIX` C99 calls plus explicit NaN quieting; `int -> f64` conversion also takes the `pack 'd'` round-trip (`Rt::cvt_f64_i`).
 - **Exhaustion is an explicit frame-weighted depth counter.**
   Every generated function opens with `local $Rt::DEPTH = $Rt::DEPTH + <weight>;` and traps `call stack exhausted` past `$Rt::LIMIT` (100000; `local` restores the counter on every exit path including a trap's die-unwind).
-  The weight is the compile-time constant `1 + (params + locals + temps) / 8`, approximating the byte-bounded native stack rather than counting calls: a pure count lets a fat-frame runaway heap-allocate count × frame-size before tripping — measured on spec `skip-stack-guard-page` (1056 locals, unconditional recursion), the count-based scheme peaked at 10.6 GB / 59 s per assertion and OOM-killed 16 GB CI runners, where the weighted scheme (weight 133 → ~750 frames) traps in ~70 MB.
+  The weight is the compile-time constant `1 + (params + locals + temps) / 8`, approximating the byte-bounded native stack rather than counting calls: a pure count lets a fat-frame runaway heap-allocate count × frame-size before tripping.
+  Measured on spec `skip-stack-guard-page` (1056 locals, unconditional recursion), the count-based scheme peaked at 10.6 GB / 59 s per assertion and OOM-killed 16 GB CI runners, where the weighted scheme (weight 133 → ~750 frames) traps in ~70 MB.
   Small functions keep weight 1, so legitimate deep recursion is unchanged.
   Measured cost ~1.75x per call, accepted: without the counter, `assert_exhaustion` is an OOM kill.
 - **Module = one package of blessed-hashref instances; the embedded runtime is prefix-namespaced.**
   `Package->new(\%imports)` builds a blessed hashref (memory/table/global objects, import coderefs, an `exports` closure map; `invoke`/`global_get`/`wasm_import` mirror Python's [decision 7](7-import-providers.md) surface, so `register`ed instances serve as import providers and the harness runs with `supports_registered_imports`).
   Runtime units live in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`); since Perl package names are absolute (no lexical nesting), `Embedded` linkage rewrites the `Rt::` prefix to `<Package>::Rt::` at bundle time so two generated artifacts in one process keep independent runtimes (Ruby gets this from constant nesting; Perl gets it textually), while `Alias("Rt")` (the spec harness) keeps the shared top-level name.
 - **Linear memory is one byte string mutated in place**: 4-arg `substr` + `pack`/`unpack` (`V`/`v`/`Q<`/`d<`) for multibyte access, `vec` for single bytes.
-  Measured on a 2M-op loop: `vec` is fastest for bytes (0.07s vs 0.14s for `unpack`+`substr`), but `vec` is big-endian-only beyond 8 bits, so multibyte goes through `unpack` (0.14s/2M ≈ 70ns — acceptable).
+  Measured on a 2M-op loop: `vec` is fastest for bytes (0.07s vs 0.14s for `unpack`+`substr`), but `vec` is big-endian-only beyond 8 bits, so multibyte goes through `unpack` (0.14s/2M ≈ 70ns, acceptable).
   Traps (bounds, div-by-zero, overflow, invalid trunc) `die` a blessed `Rt::Trap` carrying the spec interpreter's message wording.
 
 ## Rejected alternatives
@@ -69,7 +70,7 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
 
 ## Consequences
 
-- Positive: the full spec testsuite run passes (257 files; list identical in shape to Python's `import-limits`/`linking` entries), with the branch lowering the simplest of any dewasm backend — no pre-pass, no epilogues, no guards.
+- Positive: the full spec testsuite run passes (257 files; list identical in shape to Python's `import-limits`/`linking` entries), with the branch lowering the simplest of any dewasm backend: no pre-pass, no epilogues, no guards.
   The whole-cache convert suite passes ([decision 54](54-apps-convert-suite.md)).
 - Negative: every f64 add/sub/mul is a sub call plus a `pack` round-trip, and every call pays the depth-counter `local`; Perl output will be slower than Ruby's on hot float/call paths.
   `$Rt::LIMIT` bounds legitimate deep recursion (raisable by the embedder).

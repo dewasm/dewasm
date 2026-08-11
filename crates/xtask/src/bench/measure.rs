@@ -1,6 +1,7 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
-//! * [`run_once`] times one whole process, spawn to exit, under a hard timeout. The timer starts *before* `spawn` — startup is deliberately inside, because the `<iterations> = 0` run subtracts it back out.
+//! * [`run_once`] times one whole process, spawn to exit, under a hard timeout.
+//!   The timer starts *before* `spawn`: startup is deliberately inside, because the `<iterations> = 0` run subtracts it back out.
 //! * [`calibrate`] ramps the iteration count per runner until the compute time reaches the target; a fixed count cannot serve runners thousands of times apart.
 //! * [`stats`] reports minimum *and* median, so noise is visible instead of hidden.
 
@@ -42,7 +43,8 @@ impl RunOutcome {
         Err(anyhow::anyhow!("{what}: exit {:?}: {tail}", self.code))
     }
 
-    /// The `load_ms=<float>` line the third-party drivers print on stderr for module load/instantiate time. The last occurrence wins, so a driver that logs progress before it can be silent.
+    /// The `load_ms=<float>` line the third-party drivers print on stderr for module load/instantiate time.
+    /// The last occurrence wins, so a driver that logs progress before it can be silent.
     pub fn load_ms(&self) -> Option<f64> {
         String::from_utf8_lossy(&self.stderr)
             .lines()
@@ -53,7 +55,8 @@ impl RunOutcome {
 
 /// Run `launch` with `args` appended and `stdin` fed, timing the whole process.
 ///
-/// stdout and stderr are drained on their own threads: a runner that writes more than a pipe buffer while we are blocked writing stdin would otherwise deadlock. The timeout is enforced by a watchdog that `kill -9`s the child, so a runner that turns out to be 10000x rather than 1000x slower costs one timeout instead of hanging the suite.
+/// stdout and stderr are drained on their own threads: a runner that writes more than a pipe buffer while we are blocked writing stdin would otherwise deadlock.
+/// The timeout is enforced by a watchdog that `kill -9`s the child, so a runner that turns out to be 10000x rather than 1000x slower costs one timeout instead of hanging the suite.
 pub fn run_once(
     launch: &Launch,
     args: &[String],
@@ -134,7 +137,9 @@ pub fn run_once(
     })
 }
 
-/// App sampling: one sample is the mean of `k` back-to-back executions, with `k` chosen from the warmup's wall time so a sample lasts roughly `target` — the iteration calibration applied at the process level, since an app has no `<iterations>` to scale. A run slower than the target keeps `k = 1`. Returns `(k, samples, last outcome)`; the measured quantity is still one whole execution, batching only steadies it.
+/// App sampling: one sample is the mean of `k` back-to-back executions, with `k` chosen from the warmup's wall time so a sample lasts roughly `target`: the iteration calibration applied at the process level, since an app has no `<iterations>` to scale.
+/// A run slower than the target keeps `k = 1`.
+/// Returns `(k, samples, last outcome)`; the measured quantity is still one whole execution, batching only steadies it.
 pub fn repeat_app(
     launch: &Launch,
     args: &[String],
@@ -163,7 +168,8 @@ pub fn repeat_app(
     Ok((k, samples, last))
 }
 
-/// One repetition series: a warmup run (discarded) followed by `reps` timed runs. Returns the samples in seconds together with the last run's output, which is what the correctness cross-check compares.
+/// One repetition series: a warmup run (discarded) followed by `reps` timed runs.
+/// Returns the samples in seconds together with the last run's output, which is what the correctness cross-check compares.
 pub fn repeat(
     launch: &Launch,
     args: &[String],
@@ -187,7 +193,8 @@ pub fn repeat(
 
 /// Pick the iteration count for one (workload, runner) pair: ramp from 1 until `t(N) - t_zero` reaches `target`, never exceeding `cap`.
 ///
-/// `t_zero` is the already-measured `<iterations> = 0` time, so the ramp reasons about compute alone and is not fooled by a runner whose startup dwarfs its work (loading the generated SQLite Ruby costs 0.7 s before anything runs). The growth factor is clamped to 256x per round so one noisy sample cannot overshoot into a multi-minute run; eight rounds is enough to cross the ~30 million iterations the fastest runner needs.
+/// `t_zero` is the already-measured `<iterations> = 0` time, so the ramp reasons about compute alone and is not fooled by a runner whose startup dwarfs its work (loading the generated SQLite Ruby costs 0.7 s before anything runs).
+/// The growth factor is clamped to 256x per round so one noisy sample cannot overshoot into a multi-minute run; eight rounds is enough to cross the ~30 million iterations the fastest runner needs.
 pub fn calibrate(
     mut run: impl FnMut(u64) -> Result<RunOutcome>,
     t_zero: f64,
@@ -216,7 +223,8 @@ pub fn calibrate(
     Ok(iters.min(cap))
 }
 
-/// The minimum and the median of `samples`, in seconds. Publishing both is the point: a large gap between them means the host was noisy and the numbers should not be read closely.
+/// The minimum and the median of `samples`, in seconds.
+/// Publishing both is the point: a large gap between them means the host was noisy and the numbers should not be read closely.
 pub fn stats(samples: &[f64]) -> (f64, f64) {
     let mut sorted = samples.to_vec();
     sorted.sort_by(f64::total_cmp);
@@ -229,7 +237,8 @@ pub fn stats(samples: &[f64]) -> (f64, f64) {
     (min, median)
 }
 
-/// A short description of how two stdout captures differ, for a cross-check failure message. Byte lengths plus the first differing line say enough to recognize a numeric-semantics bug (a float printed with the wrong rounding) without dumping megabytes into the report.
+/// A short description of how two stdout captures differ, for a cross-check failure message.
+/// Byte lengths plus the first differing line say enough to recognize a numeric-semantics bug (a float printed with the wrong rounding) without dumping megabytes into the report.
 pub fn describe_diff(expected: &[u8], actual: &[u8]) -> String {
     let (expected, actual) = (
         String::from_utf8_lossy(expected),

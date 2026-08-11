@@ -1,7 +1,5 @@
 // requires: wasi/resolve_times, wasi/errno_fs
-// Set the access/modification times of a file fd. fstflags is
-// validated first (so a bad combination is EINVAL even though nothing else
-// runs); os.Chtimes leaves a field whose zero time.Time was returned untouched.
+// Set the access/modification times of a file fd. fstflags is validated first (so a bad combination is EINVAL even though nothing else runs); os.Chtimes leaves a field whose zero time.Time was returned untouched.
 func (w *WASI) wasi_fd_filestat_set_times(fd uint32, atim, mtim uint64, fstflags uint32) uint32 {
     f, ok := w.fds[fd].(*os.File)
     if !ok {

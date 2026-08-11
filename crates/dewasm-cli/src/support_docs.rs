@@ -1,4 +1,5 @@
-//! Rendering for `docs/support.md`: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality. Shared by the compare-only `support_docs_in_sync` test (`tests/support_docs.rs`) and `cargo xtask update-support-docs`, which writes the rendered output to disk.
+//! Rendering for `docs/support.md`: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality.
+//! Shared by the compare-only `support_docs_in_sync` test (`tests/support_docs.rs`) and `cargo xtask update-support-docs`, which writes the rendered output to disk.
 
 use std::fmt::Write as _;
 
@@ -11,7 +12,8 @@ use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 use dewasm_core::feature::Feature;
 
-/// The features a backend can meaningfully differ on: everything the core IR accepts unconditionally and leaves to each backend to reject or implement. The remaining `Feature` variants (SIMD, reference types, the component model, ...) are rejected by the core for every backend, so a per-backend row for them would always read "unsupported" and says nothing.
+/// The features a backend can meaningfully differ on: everything the core IR accepts unconditionally and leaves to each backend to reject or implement.
+/// The remaining `Feature` variants (SIMD, reference types, the component model, ...) are rejected by the core for every backend, so a per-backend row for them would always read "unsupported" and says nothing.
 const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::ImportedGlobals,
     Feature::ImportedMemories,

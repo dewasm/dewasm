@@ -1,5 +1,6 @@
 # Standalone shim smoke: exercises the sqlite3-gem-shaped API surface the
-# Rails adapter depends on, without ActiveRecord. Run: ruby test_shim.rb
+# Rails adapter depends on, without ActiveRecord.
+# Run: ruby test_shim.rb
 require_relative "lib/sqlite3"
 require "tmpdir"
 

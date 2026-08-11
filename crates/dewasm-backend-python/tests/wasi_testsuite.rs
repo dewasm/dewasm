@@ -1,4 +1,5 @@
-//! Python side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Python backend's standalone interface. The generic harness lives in `dewasm-test-helper`.
+//! Python side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Python backend's standalone interface.
+//! The generic harness lives in `dewasm-test-helper`.
 
 use std::path::PathBuf;
 
@@ -6,7 +7,7 @@ use dewasm_backend::Backend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_test_helper::BackendUnderTest;
 
-/// Known trial failures with their attribution: `(trial, tag)` — the out-of-scope `sock_shutdown` syscall and the environ entries the CPython host injects itself, which count-exact `environ_*` assertions cannot absorb.
+/// Known trial failures with their attribution, `(trial, tag)`: the out-of-scope `sock_shutdown` syscall and the environ entries the CPython host injects itself, which count-exact `environ_*` assertions cannot absorb.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope syscall (docs/support.md).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -39,7 +40,7 @@ impl BackendUnderTest for PythonWasi {
 
     fn interpreter(&self) -> PathBuf {
         dewasm_backend_python::find_python()
-            .expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
+            .expect("python3 >= 3.9 not found on PATH: see docs/testing.md")
     }
 }
 

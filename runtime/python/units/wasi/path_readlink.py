@@ -9,8 +9,7 @@ def wasi_path_readlink(self, fd, path_ptr, path_len, buf_ptr, buf_len, bufused_p
     except OSError as e:
         return self.fs_errno(e)
     data = target.encode("utf-8", "surrogateescape")
-    # The content is truncated to buf_len (no NUL terminator); bufused reports
-    # how many bytes were written.
+    # The content is truncated to buf_len (no NUL terminator); bufused reports how many bytes were written.
     n = min(len(data), buf_len)
     self.memory.init(buf_ptr, data, 0, n)
     self.memory.i32_store(bufused_ptr, n)

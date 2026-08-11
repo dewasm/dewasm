@@ -1,5 +1,5 @@
-// Stdio and directory fds carry no OS handle to close. Fds are never reused
-// after close.
+// Stdio and directory fds carry no OS handle to close.
+// Fds are never reused after close.
 int wasi_fd_close(int fd) {
     if (!fds.containsKey(fd)) {
         return WASI_BADF;

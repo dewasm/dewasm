@@ -12,12 +12,11 @@ workspace = true
 
 [features]
 # Opt-in: expands the slow per-case macros (dewasm-test-helper) as active
-# `#[test]`s instead of `#[ignore]`d ones, and runs the full spec testsuite —
-# CI's main run. See docs/testing.md.
+# `#[test]`s instead of `#[ignore]`d ones, and runs the full spec testsuite.
+# CI's main run.
+# See docs/testing.md.
 slow_test = []
-# The ultra-slow category: cases measured at ~1 minute or more on a CI
-# runner (the CRuby-hello run, ~57s locally), kept out of CI and run only
-# in local pre-release verification.
+# The ultra-slow category: cases measured at ~1 minute or more on a CI runner (the CRuby-hello run, ~57s locally), kept out of CI and run only in local pre-release verification.
 ultra_slow_test = ["slow_test"]
 
 [dependencies]
@@ -37,15 +36,13 @@ dewasm-test-helper.workspace = true
 name = "spec"
 harness = false
 
-# The WASI-testsuite integration test is likewise a
-# libtest-mimic harness: one trial per prebuilt `.wasm`, `harness = false`,
+# The WASI-testsuite integration test is likewise a libtest-mimic harness: one trial per prebuilt `.wasm`, `harness = false`,
 # `main` from `wasi_testsuite_suite!`.
 [[test]]
 name = "wasi_testsuite"
 harness = false
 
-# The whole-cache convert suite is likewise a libtest-mimic
-# harness: one trial per cached app, `harness = false`, `main` from
+# The whole-cache convert suite is likewise a libtest-mimic harness: one trial per cached app, `harness = false`, `main` from
 # `apps_convert_suite!`.
 [[test]]
 name = "convert"

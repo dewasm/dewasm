@@ -2,13 +2,11 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# tree-sitter: the incremental-parsing runtime plus the tree-sitter-json
-# grammar, built from the pinned upstream releases with zig as a
-# reactor library. The runtime is a single-TU amalgamation (lib/src/lib.c);
-# tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen). Our
-# own src/treesitter_binding.c exports parse_source(), which parses a source
-# string and returns the parse tree's S-expression (ts_node_string). One
-# combined stamp covers both source checksums.
+# tree-sitter: the incremental-parsing runtime plus the tree-sitter-json grammar, built from the pinned upstream releases with zig as a reactor library.
+# The runtime is a single-TU amalgamation (lib/src/lib.c);
+# tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen).
+# Our own src/treesitter_binding.c exports parse_source(), which parses a source string and returns the parse tree's S-expression (ts_node_string).
+# One combined stamp covers both source checksums.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

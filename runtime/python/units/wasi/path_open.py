@@ -6,8 +6,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
     host_path, err = self.resolve_path(dirfd, rel, symlink_follow)
     if err is not None:
         return err
-    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir fd
-    # that dropped it can no longer open beneath itself.
+    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir fd that dropped it can no longer open beneath itself.
     if not (self.fd_meta[dirfd][0] & self.RIGHTS_PATH_OPEN):
         return self.ERRNO_NOTCAPABLE
     # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd.
@@ -21,8 +20,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
         flags = os.O_WRONLY
     else:
         flags = os.O_RDONLY
-    # Without SYMLINK_FOLLOW a final symlink must not be traversed: O_NOFOLLOW
-    # turns that into ELOOP, matching wasmtime's O_NOFOLLOW default.
+    # Without SYMLINK_FOLLOW a final symlink must not be traversed: O_NOFOLLOW turns that into ELOOP, matching wasmtime's O_NOFOLLOW default.
     if not symlink_follow:
         flags |= os.O_NOFOLLOW
     if oflags & 0x2 != 0:  # oflags::DIRECTORY
@@ -33,8 +31,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
         flags |= os.O_EXCL
     if oflags & 0x8 != 0:  # oflags::TRUNC
         flags |= os.O_TRUNC
-    # O_CREAT must not create through a trailing slash (issue #42); per
-    # wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+    # O_CREAT must not create through a trailing slash (issue #42); per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
     if host_path.endswith(os.sep) and not os.path.lexists(host_path[:-1]):
         if oflags & 0x1 == 0:  # no oflags::CREAT
             return self.ERRNO_NOENT
@@ -52,8 +49,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
             base = fs_rights_base & self.fd_meta[dirfd][1] & self.DIR_RIGHTS_BASE
             inheriting = fs_rights_inheriting & self.fd_meta[dirfd][1] & self.DIR_RIGHTS_INHERITING
         else:
-            # Unbuffered (raw) so os.pread/os.pwrite stay coherent with
-            # read/write/seek — sqlite mixes both on one fd.
+            # Unbuffered (raw) so os.pread/os.pwrite stay coherent with read/write/seek: sqlite mixes both on one fd.
             io_mode = "rb+" if (read and write) else ("wb" if write else "rb")
             self.fds[self.next_fd] = os.fdopen(fd, io_mode, buffering=0)
             base = fs_rights_base & self.fd_meta[dirfd][1] & self.FILE_RIGHTS_BASE

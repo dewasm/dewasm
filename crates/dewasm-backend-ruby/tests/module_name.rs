@@ -18,7 +18,7 @@ dewasm_test_helper::module_name_policy_suite!(
 /// Run `source` under ruby and return its stdout, failing loud on a nonzero exit.
 fn run(source: &str) -> String {
     let ruby =
-        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
     let out = dewasm_test_helper::run_script(&ruby, source, "rb", &[], "");
     assert!(
         out.status.success(),
@@ -39,7 +39,7 @@ fn nested_name_defines_its_ancestors_and_runs() {
     assert_eq!(run(&format!("{source}\n{glue}")), "5\n");
 }
 
-/// An ancestor that already exists — as a *class*, which `module Dewasm; end` could not reopen — is left alone by the guard, so the generated file loads next to it.
+/// An ancestor that already exists (as a *class*, which `module Dewasm; end` could not reopen) is left alone by the guard, so the generated file loads next to it.
 #[test]
 fn preexisting_class_ancestor_is_not_redefined() {
     let source = convert("Dewasm::Nested::Add", Mode::Library).expect("convert");

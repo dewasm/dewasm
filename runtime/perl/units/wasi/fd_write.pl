@@ -18,8 +18,7 @@ sub wasi_fd_write {
         my $n = syswrite($e->{fh}, $chunk);
         return ERRNO_IO unless defined $n;
         $written += $n;
-        # A single write(2) may write short; stop so the reported nwritten
-        # stays contiguous.
+        # A single write(2) may write short; stop so the reported nwritten stays contiguous.
         last if $n < $len;
     }
     $self->{memory}->i32_store($nwritten_ptr, $written);

@@ -5,10 +5,8 @@ sub wasi_path_unlink_file {
     # unlink(2) never follows a trailing symlink: it removes the link.
     my ($host, $err) = $self->resolve_path($dirfd, $rel, 0);
     return $err if defined $err;
-    # Perl's unlink refuses directories client-side (EISDIR) before the
-    # syscall reports its own flavor; wasmtime surfaces the host unlink(2)
-    # errno — EPERM on macOS, EISDIR elsewhere — so probe a
-    # directory target and answer it directly.
+    # Perl's unlink refuses directories client-side (EISDIR) before the syscall reports its own flavor; wasmtime surfaces the host unlink(2)
+    # errno (EPERM on macOS, EISDIR elsewhere), so probe a directory target and answer it directly.
     my $bare = substr($host, -1) eq '/' ? substr($host, 0, -1) : $host;
     my @st = lstat($bare);
     if (@st && ($st[2] & 0170000) == 0040000) {

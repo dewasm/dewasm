@@ -10,9 +10,7 @@ def validate_fstflags(fstflags)
 end
 private :validate_fstflags
 
-# The [atime, mtime] to apply: an explicit nanosecond value, the current
-# time (*_NOW), or the file's existing time when neither bit is set (so
-# utime leaves that field untouched).
+# The [atime, mtime] to apply: an explicit nanosecond value, the current time (*_NOW), or the file's existing time when neither bit is set (so utime leaves that field untouched).
 def resolve_times(stat, atim, mtim, fstflags)
   now = Time.now
   a = if fstflags & 0x1 != 0 then nanos_to_time(atim)

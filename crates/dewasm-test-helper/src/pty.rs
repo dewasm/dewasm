@@ -1,13 +1,18 @@
 //! Real-pty process driving for the interactive-REPL transcript tests.
 //!
-//! Some programs behave differently when their stdin is a terminal: the qjs REPL, for one, only enters its interactive line-editing path (banner, prompts, per-keystroke echo, result printing) when `fd_fdstat_get` on fd 0 reports a character device. Proving a converted backend byte-identical to wasmtime on that path therefore needs a genuine pty pair, not the pipes the rest of the suite uses.
+//! Some programs behave differently when their stdin is a terminal: the qjs REPL, for one, only enters its interactive line-editing path (banner, prompts, per-keystroke echo, result printing) when `fd_fdstat_get` on fd 0 reports a character device.
+//! Proving a converted backend byte-identical to wasmtime on that path therefore needs a genuine pty pair, not the pipes the rest of the suite uses.
 //!
-//! [`run_under_pty`] spawns a command on a fixed-size (80x24) pty, feeds it a scripted input, reads the whole transcript until the child exits, and returns the raw bytes (ANSI escapes and all). Two pacing strategies exist:
+//! [`run_under_pty`] spawns a command on a fixed-size (80x24) pty, feeds it a scripted input, reads the whole transcript until the child exits, and returns the raw bytes (ANSI escapes and all).
+//! Two pacing strategies exist:
 //!
-//! * *prompt-driven* (`prompt: Some(..)`) — before each input line, wait for the prompt marker to appear in the output, then send the line. This synchronizes input with the guest's readiness, so the transcript is identical no matter how long the guest takes to start (a Ruby backend parses a ~200 MB source before qjs even runs; a fixed time delay would let the tty buffer every line into one before the guest read any of it).
-//! * *time-paced* (`prompt: None`) — write each line with a small fixed delay. Simpler, but only stable for fast-starting programs.
+//! * *prompt-driven* (`prompt: Some(..)`): before each input line, wait for the prompt marker to appear in the output, then send the line.
+//!   This synchronizes input with the guest's readiness, so the transcript is identical no matter how long the guest takes to start (a Ruby backend parses a ~200 MB source before qjs even runs; a fixed time delay would let the tty buffer every line into one before the guest read any of it).
+//! * *time-paced* (`prompt: None`): write each line with a small fixed delay.
+//!   Simpler, but only stable for fast-starting programs.
 //!
-//! WASI p1 has no `winsize`/termios surface, so the guest cannot switch the pty out of canonical mode: input stays line-buffered and the driver echoes it. With the pty size fixed, `TERM` pinned, and prompt-driven pacing, the whole transcript is deterministic across engines — that is what makes the wasmtime-vs-backend byte comparison meaningful.
+//! WASI p1 has no `winsize`/termios surface, so the guest cannot switch the pty out of canonical mode: input stays line-buffered and the driver echoes it.
+//! With the pty size fixed, `TERM` pinned, and prompt-driven pacing, the whole transcript is deterministic across engines: that is what makes the wasmtime-vs-backend byte comparison meaningful.
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -16,7 +21,8 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
-/// A command to run under a pty: the program path, its arguments (argv[1..]), and an optional working directory. Mirrors the `std::process::Command` surface the rest of the helper builds, but is spawned onto a pty slave.
+/// A command to run under a pty: the program path, its arguments (argv[1..]), and an optional working directory.
+/// Mirrors the `std::process::Command` surface the rest of the helper builds, but is spawned onto a pty slave.
 pub struct PtyCommand {
     pub program: PathBuf,
     pub args: Vec<String>,
@@ -28,7 +34,8 @@ const LINE_PACING: Duration = Duration::from_millis(120);
 
 /// Spawn `cmd` on a fresh 80x24 pty, feed it `input` (see the module docs for the two pacing strategies selected by `prompt`), read the full transcript until the child exits, and return the raw bytes.
 ///
-/// The pty size is fixed and `TERM` is pinned to a constant so the transcript does not vary with the developer's terminal. A child that does not exit — or a prompt that never appears — within `timeout` is killed and the call panics (fail loud) rather than hanging the suite.
+/// The pty size is fixed and `TERM` is pinned to a constant so the transcript does not vary with the developer's terminal.
+/// A child that does not exit (or a prompt that never appears) within `timeout` is killed and the call panics (fail loud) rather than hanging the suite.
 pub fn run_under_pty(
     cmd: PtyCommand,
     input: &[u8],
@@ -181,7 +188,8 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-/// Split `input` into lines, keeping each line's terminating `\r` or `\n` (a bare CR is what a terminal sends on Enter). A trailing unterminated segment is yielded as its own line.
+/// Split `input` into lines, keeping each line's terminating `\r` or `\n` (a bare CR is what a terminal sends on Enter).
+/// A trailing unterminated segment is yielded as its own line.
 fn split_inclusive_newlines(input: &[u8]) -> Vec<&[u8]> {
     let mut lines = Vec::new();
     let mut start = 0;

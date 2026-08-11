@@ -1,6 +1,7 @@
 //! Core coverage for DWARF `.debug_line` source back-mapping: the `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers resolved through the interned [`ir::Module::debug_files`], and the default build stays byte-for-byte marker-free.
 //!
-//! The fixture (`examples/apps/src/dwarf_fixture.c`, built by setup.sh into the cache with `-g -O1`) pins the one calibration constant this feature has — the DWARF address base. `add_mul` is a folded, single-statement function whose only marker must land on the exact source line of its first statement; a wrong base shifts that line (or drops the marker entirely), so this test fails loudly for any miscalibration.
+//! The fixture (`examples/apps/src/dwarf_fixture.c`, built by setup.sh into the cache with `-g -O1`) pins the one calibration constant this feature has: the DWARF address base.
+//! `add_mul` is a folded, single-statement function whose only marker must land on the exact source line of its first statement; a wrong base shifts that line (or drops the marker entirely), so this test fails loudly for any miscalibration.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +14,7 @@ fn fixture_bytes() -> Vec<u8> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");
     std::fs::read(&path).unwrap_or_else(|e| {
         panic!(
-            "dwarf-fixture not cached ({}): run examples/apps/setup.sh (see docs/testing.md) — {e}",
+            "dwarf-fixture not cached ({}, {e}): run examples/apps/setup.sh (see docs/testing.md)",
             path.display()
         )
     })
@@ -91,7 +92,8 @@ fn debug_line_calibration_pins_add_mul_first_statement() {
     let bytes = fixture_bytes();
     let module = build_module_with_options(&bytes, &BuildOptions { debug_line: true }).unwrap();
 
-    // `add_mul` folds to a single `Return`, so its lone marker is the one the fallthrough-return path emits — and it must resolve to the exact source line of `int product = a * b;` (line 22 of dwarf_fixture.c). This is the address-base calibration: a wrong base moves this line or yields none.
+    // `add_mul` folds to a single `Return`, so its lone marker is the one the fallthrough-return path emits, and it must resolve to the exact source line of `int product = a * b;` (line 22 of dwarf_fixture.c).
+    // This is the address-base calibration: a wrong base moves this line or yields none.
     let positions = export_source_positions(&module, "add_mul");
     let (file, line, _col) = *positions
         .first()

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated DOOM library and byte-compile the terminal
-# frontend. doom_gen.py is ~11MB of generated code and is gitignored, so
-# this step has to run before main.py can import it from a clean checkout.
+# Regenerate the dewasm-generated DOOM library and byte-compile the terminal frontend. doom_gen.py is ~11MB of generated code and is gitignored, so this step has to run before main.py can import it from a clean checkout.
 set -euo pipefail
 cd "$(dirname "$0")"
 

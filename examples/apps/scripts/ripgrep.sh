@@ -3,9 +3,9 @@
 # shellcheck source=common.sh
 
 # ripgrep: built from the pinned source release with cargo for wasm32-wasip1.
-# Default features (which already exclude pcre2); no tweaks needed — ripgrep
-# 14.1.1 builds clean for wasip1 as-is. A Ruby-only filesystem demo (recursive
-# directory search over a preopened tree).
+# Default features (which already exclude pcre2); no tweaks needed: ripgrep
+# 14.1.1 builds clean for wasip1 as-is.
+# A Ruby-only filesystem demo (recursive directory search over a preopened tree).
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -23,7 +23,7 @@ fi
 require_tool rg cargo "install the Rust toolchain to build ripgrep"
 require_tool rg wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess ripgrep"
 rustup target list --installed 2>/dev/null | grep -qx wasm32-wasip1 || {
-  echo "rg: wasm32-wasip1 target not installed — run: rustup target add wasm32-wasip1" >&2
+  echo "rg: wasm32-wasip1 target not installed. Run: rustup target add wasm32-wasip1" >&2
   exit 1
 }
 

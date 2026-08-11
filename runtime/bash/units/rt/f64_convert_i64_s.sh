@@ -1,6 +1,5 @@
 # requires: rt/f64_round_pack
-# INT64_MIN must short-circuit: bash negation of 1<<63 is a wrapping
-# no-op, which would loop the normalizer forever.
+# INT64_MIN must short-circuit: bash negation of 1<<63 is a wrapping no-op, which would loop the normalizer forever.
 rt_f64_convert_i64_s() {
   local v=$1 s=0
   if (( v == 1 << 63 )); then

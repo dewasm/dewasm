@@ -13,12 +13,9 @@ def wasi_fd_read(self, fd, iovs_ptr, iovs_len, nread_ptr):
             length = self.memory.i32_load(iovs_ptr + i * 8 + 4)
             if length == 0:
                 continue
-            # stdin may be an interactive tty (the QuickJS REPL under a pty): a
-            # buffered read(length) blocks until length bytes arrive or EOF,
-            # deadlocking a line-buffered terminal that never sends EOF. A raw
-            # os.read returns as soon as any bytes are available — the WASI
-            # short-read semantics wasmtime uses — while poll_oneoff's select
-            # already did the waiting. Files keep the buffered read.
+            # stdin may be an interactive tty (the QuickJS REPL under a pty): a buffered read(length) blocks until length bytes arrive or EOF, deadlocking a line-buffered terminal that never sends EOF.
+            # A raw os.read returns as soon as any bytes are available (the WASI short-read semantics wasmtime uses), while poll_oneoff's select already did the waiting.
+            # Files keep the buffered read.
             if stdin:
                 chunk = os.read(io.fileno(), length)
             else:

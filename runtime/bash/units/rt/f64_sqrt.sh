@@ -1,8 +1,7 @@
 # requires: rt/f64_round_pack
 # Restoring digit-by-digit square root, 55 iterations, no 128-bit math:
-# the radicand's low half is all zeros, so feeding 2 bits per step keeps
-# the running remainder below 2^59. The 55-bit root plus remainder-sticky
-# through round_pack gives correct RNE (sqrt never lands on a midpoint).
+# the radicand's low half is all zeros, so feeding 2 bits per step keeps the running remainder below 2^59.
+# The 55-bit root plus remainder-sticky through round_pack gives correct RNE (sqrt never lands on a midpoint).
 rt_f64_sqrt() {
   local a=$1 pa ea ma h hi r rem k b2 t
   (( pa = a & 0x7fffffffffffffff ))

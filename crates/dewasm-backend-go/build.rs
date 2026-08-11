@@ -1,4 +1,5 @@
-//! Embeds the runtime units from runtime/go/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source). Mirrors the Python crate's build.rs; only the source directory and extension differ.
+//! Embeds the runtime units from runtime/go/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source).
+//! Mirrors the Python crate's build.rs; only the source directory and extension differ.
 
 use std::fmt::Write as _;
 use std::path::Path;

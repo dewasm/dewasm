@@ -1,13 +1,6 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_remove_directory: one of the four namespace-mutation
-# units licensed to shell out — a single `--`-guarded `rmdir` on the resolved
-# physical path. rmdir(2) never follows a trailing symlink, so resolution
-# uses follow_last=0, mirroring
-# runtime/ruby/units/wasi/path_remove_directory.rb. rmdir's own diagnostics
-# aren't parsed; the errno comes from post-hoc probes in a fixed order:
-# missing is ENOENT, existing-but-not-a-directory is ENOTDIR, an existing
-# non-empty directory is ENOTEMPTY (probed with the same dotglob+nullglob
-# snapshot-and-restore idiom fd_readdir uses), and anything else left over
+# WASI path_remove_directory: one of the four namespace-mutation units licensed to shell out, a single `--`-guarded `rmdir` on the resolved physical path. rmdir(2) never follows a trailing symlink, so resolution uses follow_last=0, mirroring runtime/ruby/units/wasi/path_remove_directory.rb. rmdir's own diagnostics aren't parsed; the errno comes from post-hoc probes in a fixed order:
+# missing is ENOENT, existing-but-not-a-directory is ENOTDIR, an existing non-empty directory is ENOTEMPTY (probed with the same dotglob+nullglob snapshot-and-restore idiom fd_readdir uses), and anything else left over
 # (e.g. a permission failure on an apparently-empty directory) defaults to
 # EIO.
 wasi_path_remove_directory() {
@@ -18,8 +11,7 @@ wasi_path_remove_directory() {
   wasi_resolve_path "$__p" "$__dirfd" "$__rel" 0 || return $?
   if (( R0 != 0 )); then return 0; fi
   local __host=$R1
-  # rmdir through a trailing slash on an existing directory is EINVAL per
-  # wasmtime; other shapes come from resolve_path or the probes.
+  # rmdir through a trailing slash on an existing directory is EINVAL per wasmtime; other shapes come from resolve_path or the probes.
   if [[ $__rel == */ && -d $__host ]]; then
     R0=28 # EINVAL
     return 0

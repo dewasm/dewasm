@@ -1,29 +1,15 @@
 #!/usr/bin/env perl
 # Interactive terminal frontend for the dewasm-generated NES library
-# (nes_gen.pl, produced from agnes-based nes.wasm by build.sh). Like the
-# DOOM Perl frontend (../../doom/perl) it renders into any ANSI truecolor
-# terminal with half-block characters instead of opening a pixel window: a
-# plain Perl interpreter is far too slow to hit the console's native 60Hz,
-# but fast enough to render real frames into a terminal, which has orders of
-# magnitude fewer cells to redraw than a window has pixels.
+# (nes_gen.pl, produced from agnes-based nes.wasm by build.sh).
+# Like the
+# DOOM Perl frontend (../../doom/perl) it renders into any ANSI truecolor terminal with half-block characters instead of opening a pixel window: a plain Perl interpreter is far too slow to hit the console's native 60Hz, but fast enough to render real frames into a terminal, which has orders of magnitude fewer cells to redraw than a window has pixels.
 #
-# Unlike DOOM's doom.wasm, nes.wasm has *zero* wasm imports (verified by
-# examples/apps/scripts/nes.sh): there is no console/save-game/clock host
-# surface to wire up, just `_initialize` plus the demo exports (allocRom/
-# initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
-# frameHeight). The guest hands over agnes's own frame representation -- one
-# palette *index* per pixel plus the fixed 64-entry palette -- rather than a
-# rendered image, which suits this renderer: a terminal cell samples one pixel
-# out of several, so only the sampled indices are ever looked up.
-# The controller is also level-triggered (one `setInput(bitmask)` call per
-# tick, not DOOM's edge-triggered reportKeyDown/reportKeyUp pair), so the
-# key-hold heuristic below just tracks which buttons are currently "down"
-# and recomputes the bitmask every tick instead of invoking anything on
-# press/release.
+# Unlike DOOM's doom.wasm, nes.wasm has *zero* wasm imports (verified by examples/apps/scripts/nes.sh): there is no console/save-game/clock host surface to wire up, just `_initialize` plus the demo exports (allocRom/ initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/ frameHeight).
+# The guest hands over agnes's own frame representation (one palette *index* per pixel plus the fixed 64-entry palette) rather than a rendered image, which suits this renderer: a terminal cell samples one pixel out of several, so only the sampled indices are ever looked up.
+# The controller is also level-triggered (one `setInput(bitmask)` call per tick, not DOOM's edge-triggered reportKeyDown/reportKeyUp pair), so the key-hold heuristic below just tracks which buttons are currently "down"
+# and recomputes the bitmask every tick instead of invoking anything on press/release.
 #
-# Run with --smoke for a headless self-check (no tty needed): it loads the
-# default ROM, inits the game, ticks it a fixed number of times, measures
-# tick rate and render cost, and writes the final frame to screenshot.ppm.
+# Run with --smoke for a headless self-check (no tty needed): it loads the default ROM, inits the game, ticks it a fixed number of times, measures tick rate and render cost, and writes the final frame to screenshot.ppm.
 # Core modules only; raw mode goes through stty (Term::ReadKey is not core).
 use strict;
 use warnings;
@@ -36,12 +22,8 @@ require "$FindBin::Bin/nes_gen.pl";
 
 use constant DEFAULT_ROM => "$FindBin::Bin/../../apps/cache/alter_ego.nes";
 
-# Terminals deliver only key *presses*, so a press keeps a button "down" for
-# this long after the last matching press/autorepeat before it's dropped
-# from the bitmask passed to setInput. See ../../doom/perl/main.pl for the
-# same heuristic under DOOM's edge-triggered import surface; here it just
-# controls membership in the level-triggered bitmask instead of synthesizing a
-# release call.
+# Terminals deliver only key *presses*, so a press keeps a button "down" for this long after the last matching press/autorepeat before it's dropped from the bitmask passed to setInput.
+# See ../../doom/perl/main.pl for the same heuristic under DOOM's edge-triggered import surface; here it just controls membership in the level-triggered bitmask instead of synthesizing a release call.
 use constant KEY_HOLD_SECONDS => 0.4;
 
 # Button bit assignment fixed by nes_demo.c's setInput contract.
@@ -58,9 +40,8 @@ use constant {
 
 my $HALF_BLOCK = "\xE2\x96\x80";    # U+2580 upper half block, as raw UTF-8
 
-# Fixed status-line colors (white on black), independent of the game's own
-# palette -- without an explicit color the status line inherits whatever
-# fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
 my $STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m";
 
 sub monotonic { return clock_gettime(CLOCK_MONOTONIC); }
@@ -73,8 +54,8 @@ sub load_rom {
     return $bytes;
 }
 
-# Allocates the module, loads the ROM at $rom_path into guest memory via
-# allocRom, and inits the emulator. Dies loudly if initGame rejects the ROM
+# Allocates the module, loads the ROM at $rom_path into guest memory via allocRom, and inits the emulator.
+# Dies loudly if initGame rejects the ROM
 # (bad iNES header, unsupported mapper, ...) rather than limping on.
 sub init_nes {
     my ($rom_path) = @_;
@@ -90,13 +71,9 @@ sub init_nes {
 
 # ---------------------------------------------------------------- Renderer
 #
-# Renders the frame into ANSI half-block terminal cells: each character cell
-# shows two vertically-stacked source pixels via "▀" (foreground = top pixel,
-# background = bottom pixel, both 24-bit truecolor SGR). Same diff strategy as
-# the DOOM frontend: track the previous frame's cell contents and the
-# cursor/SGR state, and only emit escape codes for cells that actually
-# changed. Since a color is a function of its palette index, the whole SGR
-# string per index is precomputed here and the diff compares indices.
+# Renders the frame into ANSI half-block terminal cells: each character cell shows two vertically-stacked source pixels via "▀" (foreground = top pixel, background = bottom pixel, both 24-bit truecolor SGR).
+# Same diff strategy as the DOOM frontend: track the previous frame's cell contents and the cursor/SGR state, and only emit escape codes for cells that actually changed.
+# Since a color is a function of its palette index, the whole SGR string per index is precomputed here and the diff compares indices.
 package Renderer;
 
 sub new {
@@ -104,9 +81,7 @@ sub new {
     my $status_rows = 1;
     my $avail_rows = $term_rows - $status_rows;
     $avail_rows = 1 if $avail_rows < 1;
-    # Unlike DOOM's 640x400 (a 2x upscale of its native 320x200), the NES
-    # framebuffer is already at its native 256x240 resolution, so the
-    # natural cap is the frame width itself, not half of it.
+    # Unlike DOOM's 640x400 (a 2x upscale of its native 320x200), the NES framebuffer is already at its native 256x240 resolution, so the natural cap is the frame width itself, not half of it.
     my $native_cols = $frame_w;
     my $pixel_cols = $term_cols < $native_cols ? $term_cols : $native_cols;
     my $pixel_rows = int($pixel_cols * $frame_h / $frame_w + 0.5);
@@ -136,9 +111,7 @@ sub new {
 sub cell_cols { return $_[0]->{cell_cols}; }
 sub cell_rows { return $_[0]->{cell_rows}; }
 
-# Builds one frame's worth of escape sequences/characters as a single
-# string; the caller is responsible for writing it (or, for --smoke, just
-# timing how long this took and discarding it).
+# Builds one frame's worth of escape sequences/characters as a single string; the caller is responsible for writing it (or, for --smoke, just timing how long this took and discarding it).
 sub render {
     my ($self, $screen, $frame_w, $frame_h, $status_text) = @_;
     my $buf = '';
@@ -148,8 +121,7 @@ sub render {
         my $prev_row = $self->{prev}[$cy];
         for my $cx (0 .. $self->{cell_cols} - 1) {
             my $src_x = int($cx * $frame_w / $self->{pixel_cols});
-            # One byte per pixel, a palette index; the & 0x3f mask is
-            # load-bearing (see nes_demo.c).
+            # One byte per pixel, a palette index; the & 0x3f mask is load-bearing (see nes_demo.c).
             my $top = ord(substr($screen, $top_row_base + $src_x, 1)) & 0x3f;
             my $bot = ord(substr($screen, $bot_row_base + $src_x, 1)) & 0x3f;
             my $key = ($top << 6) | $bot;
@@ -174,17 +146,12 @@ sub render {
         }
     }
     if (!defined($self->{last_status}) || $status_text ne $self->{last_status}) {
-        # Reset SGR first: otherwise the status line inherits whichever
-        # fg/bg the last-drawn pixel cell left active, making its background
-        # flicker with the game's own colors instead of staying the
-        # terminal default.
+        # Reset SGR first: otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active, making its background flicker with the game's own colors instead of staying the terminal default.
         $buf .= sprintf("\e[%d;1H\e[0m%s\e[K%s", $self->{cell_rows} + 1, $STATUS_SGR, $status_text);
         $self->{last_status} = $status_text;
-        # Force the next painted cell to reposition: the cursor is now on
-        # the status line.
+        # Force the next painted cell to reposition: the cursor is now on the status line.
         $self->{cursor_row} = -1;
-        # The reset above invalidated the SGR cache; force the next cell to
-        # re-emit its color.
+        # The reset above invalidated the SGR cache; force the next cell to re-emit its color.
         $self->{last_fg} = undef;
         $self->{last_bg} = undef;
     }
@@ -193,13 +160,9 @@ sub render {
 
 # ------------------------------------------------------------------ Input
 #
-# Terminals deliver only key *presses*, never releases. Unlike DOOM's
-# reportKeyDown/reportKeyUp exports, nes.wasm's setInput takes the whole
-# controller state as one bitmask per tick, so there is nothing to invoke on
-# press or release: a press just marks its button bit "held" until
-# KEY_HOLD_SECONDS pass with no matching repeat (terminal autorepeat just
-# resends the same bytes, which pushes the deadline back), and the caller
-# reads current_mask() once per tick to build the setInput argument.
+# Terminals deliver only key *presses*, never releases.
+# Unlike DOOM's reportKeyDown/reportKeyUp exports, nes.wasm's setInput takes the whole controller state as one bitmask per tick, so there is nothing to invoke on press or release: a press just marks its button bit "held" until
+# KEY_HOLD_SECONDS pass with no matching repeat (terminal autorepeat just resends the same bytes, which pushes the deadline back), and the caller reads current_mask() once per tick to build the setInput argument.
 package InputHandler;
 
 my %ESCAPE_SEQUENCES = (
@@ -260,9 +223,7 @@ sub process_pending {
     return;
 }
 
-# Returns true if it consumed (or decided to drop) something from pending,
-# false if it needs more bytes and the caller should stop polling for this
-# tick.
+# Returns true if it consumed (or decided to drop) something from pending, false if it needs more bytes and the caller should stop polling for this tick.
 sub process_escape {
     my ($self, $now) = @_;
     my $pending = $self->{pending};
@@ -273,8 +234,7 @@ sub process_escape {
             substr($self->{pending}, 0, length($seq)) = '';
         } else {
             # Not one of our known arrow sequences (e.g. an F-key or
-            # Home/End CSI sequence): drop just the ESC byte and reprocess
-            # the rest as ordinary bytes rather than losing them.
+            # Home/End CSI sequence): drop just the ESC byte and reprocess the rest as ordinary bytes rather than losing them.
             substr($self->{pending}, 0, 1) = '';
         }
         $self->{esc_seen_at} = undef;
@@ -288,9 +248,8 @@ sub process_escape {
     }
 
     if ($pending eq "\e" && defined($self->{esc_seen_at})) {
-        # Still a bare ESC on a second poll with no growth: a real Escape
-        # key press, not the start of a sequence still in flight. Nothing in
-        # this frontend's key map uses Escape, so it's just dropped.
+        # Still a bare ESC on a second poll with no growth: a real Escape key press, not the start of a sequence still in flight.
+        # Nothing in this frontend's key map uses Escape, so it's just dropped.
         $self->{pending} = '';
         $self->{esc_seen_at} = undef;
         return 1;
@@ -343,8 +302,8 @@ sub write_ppm {
     return Cwd::abs_path($path);
 }
 
-# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding),
-# read once -- unlike the index buffer, it never changes.
+# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding), read once.
+# Unlike the index buffer, it never changes.
 sub read_palette {
     my ($nes) = @_;
     my $bytes = substr($nes->{memory}{data}, $nes->invoke('paletteOffset'), 64 * 4);
@@ -388,9 +347,7 @@ sub run_smoke {
     $distinct{ join(',', @{ $palette->[$_ & 0x3f] }) } = 1 for unpack('C*', $screen);
     my $colors = scalar(keys %distinct);
     print "smoke: final frame is ${w}x${h} with $colors distinct colors\n";
-    # agnes's NES palette is tiny (the Alter Ego credits screen this settles
-    # on measures 7 distinct colors); a degenerate (blank/solid) frame lands
-    # at 1.
+    # agnes's NES palette is tiny (the Alter Ego credits screen this settles on measures 7 distinct colors); a degenerate (blank/solid) frame lands at 1.
     if ($colors <= 4) {
         print STDERR "smoke: FAIL: frame looks degenerate (too few distinct colors)\n";
         exit 1;
@@ -402,8 +359,7 @@ sub run_smoke {
 }
 
 use constant ENTER_ALT_SCREEN => "\e[?1049h\e[?25l\e[2J\e[H";
-# SGR reset first: the fixed status-line colors otherwise persist past
-# leaving the alternate screen and tint the shell prompt underneath.
+# SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
 use constant EXIT_ALT_SCREEN  => "\e[0m\e[?25h\e[?1049l";
 
 sub run_interactive {
@@ -435,9 +391,7 @@ sub run_interactive {
         system('stty', $orig_stty) if $orig_stty;
         print EXIT_ALT_SCREEN;
     };
-    # Ctrl-C is handled explicitly as a byte in InputHandler because raw
-    # mode disables the terminal's own SIGINT generation; these handlers
-    # are only a backstop for termination from outside (e.g. `kill`).
+    # Ctrl-C is handled explicitly as a byte in InputHandler because raw mode disables the terminal's own SIGINT generation; these handlers are only a backstop for termination from outside (e.g. `kill`).
     local $SIG{INT}  = sub { $restore->(); exit 0; };
     local $SIG{TERM} = sub { $restore->(); exit 0; };
 

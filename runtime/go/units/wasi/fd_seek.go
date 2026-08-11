@@ -16,8 +16,7 @@ func (w *WASI) wasi_fd_seek(fd uint32, offset uint64, whence, outPtr uint32) uin
     }
     pos, err := f.Seek(int64(offset), int(whence))
     if err != nil {
-        // A negative resulting offset is EINVAL, not an I/O error (the suite
-        // distinguishes them).
+        // A negative resulting offset is EINVAL, not an I/O error (the suite distinguishes them).
         return wasiInval
     }
     w.memory.i64_store(uint64(outPtr), uint64(pos))

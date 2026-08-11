@@ -29,11 +29,13 @@ struct Cli {
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Library-mode name of the generated class/module/package, used verbatim and rejected if it does not fit the target language's grammar. Required for --mode library; incompatible with --mode standalone, whose internal name is fixed.
+    /// Library-mode name of the generated class/module/package, used verbatim and rejected if it does not fit the target language's grammar.
+    /// Required for --mode library; incompatible with --mode standalone, whose internal name is fixed.
     #[arg(long)]
     module_name: Option<String>,
 
-    /// Do not bundle the built-in WASI implementation for wasi_snapshot_preview1 imports. Incompatible with --mode standalone.
+    /// Do not bundle the built-in WASI implementation for wasi_snapshot_preview1 imports.
+    /// Incompatible with --mode standalone.
     #[arg(long)]
     no_default_wasi: bool,
 
@@ -72,7 +74,8 @@ fn main() -> Result<()> {
         bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
-    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout). Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
+    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout).
+    // Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
@@ -108,7 +111,8 @@ fn main() -> Result<()> {
         None => None,
     };
 
-    // Library mode requires an explicit name: deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed. Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
+    // Library mode requires an explicit name: deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed.
+    // Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
     let module_name = match (mode, cli.module_name) {
         (Mode::Standalone, _) => "program".to_string(),
         (Mode::Library, Some(name)) => name,

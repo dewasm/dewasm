@@ -1,5 +1,5 @@
-# ActiveRecord on the dewasm sqlite3 shim, without Rails: migration, CRUD,
-# transactions, type round-trips, joins. Run: bundle exec ruby smoke.rb
+# ActiveRecord on the dewasm sqlite3 shim, without Rails: migration, CRUD, transactions, type round-trips, joins.
+# Run: bundle exec ruby smoke.rb
 require "active_record"
 require "fileutils"
 require "logger"

@@ -4,8 +4,7 @@ int wasi_path_rename(int oldDirfd, int oldPathPtr, int oldPathLen, int newDirfd,
     String oldRel = new String(
         memory.read_string(Integer.toUnsignedLong(oldPathPtr), Integer.toUnsignedLong(oldPathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    // rename(2) never follows trailing symlinks: it moves the link itself and
-    // replaces the destination link.
+    // rename(2) never follows trailing symlinks: it moves the link itself and replaces the destination link.
     Resolved oldR = resolve_path(oldDirfd, oldRel, false);
     if (oldR.errno != WASI_OK) {
         return oldR.errno;
@@ -20,13 +19,10 @@ int wasi_path_rename(int oldDirfd, int oldPathPtr, int oldPathLen, int newDirfd,
     java.nio.file.Path oldP = java.nio.file.Paths.get(oldR.path);
     java.nio.file.Path newP = java.nio.file.Paths.get(newR.path);
     // Trailing slashes (issue #42): existing non-directories were
-    // ENOTDIR in resolve_path; a nonexistent slash-suffixed destination is
-    // renamed bare, as wasmtime strips it — the normalized Path already is.
-    // rename(2) reports type mismatches between the endpoints with specific
-    // errnos that Java's generic FileSystemException flattens to EIO, so
-    // pre-check them: renaming a directory onto an existing non-directory is
-    // ENOTDIR, and a non-directory onto an existing directory is EISDIR. The
-    // matching directory-onto-nonempty-directory case surfaces as
+    // ENOTDIR in resolve_path; a nonexistent slash-suffixed destination is renamed bare, as wasmtime strips it: the normalized Path already is.
+    // rename(2) reports type mismatches between the endpoints with specific errnos that Java's generic FileSystemException flattens to EIO, so pre-check them: renaming a directory onto an existing non-directory is
+    // ENOTDIR, and a non-directory onto an existing directory is EISDIR.
+    // The matching directory-onto-nonempty-directory case surfaces as
     // DirectoryNotEmptyException -> ENOTEMPTY through fs_errno on its own.
     if (java.nio.file.Files.exists(newP, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         boolean oldIsDir = java.nio.file.Files.isDirectory(oldP, java.nio.file.LinkOption.NOFOLLOW_LINKS);

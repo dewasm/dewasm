@@ -1,8 +1,6 @@
 # requires: rt/f64_round_pack
-# Chunked long division, 9 bits per step: the running remainder stays
-# below 2^53, so r<<9 < 2^62 never overflows; 6 steps give a 55-bit
-# quotient with the final remainder as the sticky. Division only ever
-# sees non-negative operands (bash / truncates toward zero).
+# Chunked long division, 9 bits per step: the running remainder stays below 2^53, so r<<9 < 2^62 never overflows; 6 steps give a 55-bit quotient with the final remainder as the sticky.
+# Division only ever sees non-negative operands (bash / truncates toward zero).
 rt_f64_div() {
   local a=$1 b=$2 pa pb s ea eb ma mb q r i
   (( pa = a & 0x7fffffffffffffff, pb = b & 0x7fffffffffffffff ))

@@ -88,7 +88,8 @@ fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
     by_module
 }
 
-/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal. Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
+/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal.
+/// Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
 fn first_ref_types_construct(bytes: &[u8]) -> Option<String> {
     use wasmparser::{CompositeInnerType, Operator, ValType};
     let is_ref = |ty: &ValType| matches!(ty, ValType::Ref(_));
@@ -175,7 +176,7 @@ fn audit(path: &str) -> Result<bool, String> {
         .unwrap_or_else(|| path.to_string());
 
     if is_component(&bytes) {
-        println!("{name}: component-model binary (layer 1) — outside the 0.1 scope");
+        println!("{name}: component-model binary (layer 1), outside the 0.1 scope");
         return Ok(false);
     }
 
@@ -185,7 +186,7 @@ fn audit(path: &str) -> Result<bool, String> {
             false
         }
         Some(needed) if needed.is_empty() => {
-            println!("{name}: baseline only (wasm 1.0 + universal extensions) — in scope");
+            println!("{name}: baseline only (wasm 1.0 + universal extensions), in scope");
             true
         }
         Some(needed) => {
@@ -194,22 +195,19 @@ fn audit(path: &str) -> Result<bool, String> {
                     None => {
                         println!(
                             "{name}: baseline + reference-types bit for overlong \
-                             call_indirect immediates only (no construct used) — in scope"
+                             call_indirect immediates only (no construct used), in scope"
                         );
                         true
                     }
                     Some(construct) => {
                         println!(
-                            "{name}: needs reference-types ({construct}) — outside the 0.1 scope"
+                            "{name}: needs reference-types ({construct}), outside the 0.1 scope"
                         );
                         false
                     }
                 }
             } else {
-                println!(
-                    "{name}: needs {} — outside the 0.1 scope",
-                    needed.join(", ")
-                );
+                println!("{name}: needs {}, outside the 0.1 scope", needed.join(", "));
                 // Name the first offending construct so the audit record can say *why* the proposal is required, not just that it is.
                 if let Err(err) = Validator::new_with_features(baseline()).validate_all(&bytes) {
                     println!("  first offense under baseline: {err}");

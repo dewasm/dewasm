@@ -1,6 +1,6 @@
 @AGENTS.md
 
-<!-- The contract lives in AGENTS.md so every agent gets it; the `@AGENTS.md` import above is how Claude Code loads it (it reads CLAUDE.md, not AGENTS.md). Add only Claude-specific rules below — anything true for every agent belongs in AGENTS.md. -->
+<!-- The contract lives in AGENTS.md so every agent gets it; the `@AGENTS.md` import above is how Claude Code loads it (it reads CLAUDE.md, not AGENTS.md). Add only Claude-specific rules below; anything true for every agent belongs in AGENTS.md. -->
 
 ## Claude Code
 

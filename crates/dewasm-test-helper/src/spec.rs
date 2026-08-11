@@ -1,6 +1,9 @@
-//! Spec test harness: parses every .wast file of the testsuite submodule (tests/spec, tracking upstream latest), translates each module with a target-language backend, generates a script that runs all assertions, and executes it with the real interpreter for that language. The language-specific pieces live behind the `SpecBackend` trait (implemented in each backend crate); everything about directive iteration, skip attribution, and result accounting is shared here.
+//! Spec test harness: parses every .wast file of the testsuite submodule (tests/spec, tracking upstream latest), translates each module with a target-language backend, generates a script that runs all assertions, and executes it with the real interpreter for that language.
+//! The language-specific pieces live behind the `SpecBackend` trait (implemented in each backend crate); everything about directive iteration, skip attribution, and result accounting is shared here.
 //!
-//! Skips must be *attributable*: a module that fails to convert carries an `UnsupportedError` naming the declared-unsupported features, and every directive skipped because of it is counted under those feature ids. A conversion failure without attribution is a dewasm bug and fails the suite. Validation failures beyond every proposal this toolchain knows are reported as `unknown-proposal` but tolerated (the converter refused cleanly).
+//! Skips must be *attributable*: a module that fails to convert carries an `UnsupportedError` naming the declared-unsupported features, and every directive skipped because of it is counted under those feature ids.
+//! A conversion failure without attribution is a dewasm bug and fails the suite.
+//! Validation failures beyond every proposal this toolchain knows are reported as `unknown-proposal` but tolerated (the converter refused cleanly).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -15,21 +18,29 @@ use wast::{QuoteWat, Wast, WastArg, WastDirective, WastExecute, WastRet, Wat};
 
 use crate::backend::BackendUnderTest;
 
-/// The script-phrasing layer of a backend under test: how to convert a module, how to phrase each assertion in that language, and how to bundle the runtime. `name`/`backend`/`interpreter`/`run` come from the base [`BackendUnderTest`] trait. `emit_*` methods append to the script body; returning `Err(tag)` skips the directive under that attribution tag.
+/// The script-phrasing layer of a backend under test: how to convert a module, how to phrase each assertion in that language, and how to bundle the runtime.
+/// `name`/`backend`/`interpreter`/`run` come from the base [`BackendUnderTest`] trait.
+/// `emit_*` methods append to the script body; returning `Err(tag)` skips the directive under that attribution tag.
 pub trait SpecBackend: BackendUnderTest {
     /// Known assertion-level failures: (file, count, attribution tag).
     fn expected_failures(&self) -> &'static [(&'static str, u32, &'static str)];
-    /// The non-ignored set: files run by a plain `cargo test`. Every other `.wast` file still becomes a trial, but marked `#[ignore]`d. `None` marks nothing ignored — the whole testsuite runs by default (used by the fast interpreters).
+    /// The non-ignored set: files run by a plain `cargo test`.
+    /// Every other `.wast` file still becomes a trial, but marked `#[ignore]`d.
+    /// `None` marks nothing ignored: the whole testsuite runs by default (used by the fast interpreters).
     fn curated_files(&self) -> Option<&'static [&'static str]>;
     /// Units the harness helpers themselves use.
     fn seed_units(&self) -> &'static [&'static str];
-    /// Lower an IR module to source. Backend-level refusals (e.g. floats on an integer-only backend) carry `UnsupportedError` in the chain.
+    /// Lower an IR module to source.
+    /// Backend-level refusals (e.g. floats on an integer-only backend) carry `UnsupportedError` in the chain.
     fn generate(&self, module: &ir::Module, counter: u32) -> anyhow::Result<Converted>;
     /// Whether `register`-directive linking is wired up for this language: a `(register "Name" $id)`'d instance becomes resolvable as an import source for later modules (`registered` below), and `assert_unlinkable` is checked for real instead of always skipped.
     fn supports_registered_imports(&self) -> bool {
         false
     }
-    /// Emit the module source plus its instantiation; returns the variable (or prefix) later invocations use to reach the instance. `registered` is the (name, instance-expr) pairs of currently `register`ed modules with a live instance, for languages that support them. `decls` is the file-scoped declaration buffer: languages that must hoist a converted module's definitions to package/class scope (Go, Java) push `conv.source` there rather than into `script`. It is owned by the per-file harness state, so parallel trials never share it.
+    /// Emit the module source plus its instantiation; returns the variable (or prefix) later invocations use to reach the instance.
+    /// `registered` is the (name, instance-expr) pairs of currently `register`ed modules with a live instance, for languages that support them.
+    /// `decls` is the file-scoped declaration buffer: languages that must hoist a converted module's definitions to package/class scope (Go, Java) push `conv.source` there rather than into `script`.
+    /// It is owned by the per-file harness state, so parallel trials never share it.
     fn emit_instantiate(
         &self,
         script: &mut String,
@@ -38,7 +49,8 @@ pub trait SpecBackend: BackendUnderTest {
         var_id: u32,
         registered: &[(String, String)],
     ) -> String;
-    /// Emit the module source only, returning the call that performs the (possibly trapping) instantiation, for assert_trap on a module. See [`Self::emit_instantiate`] for `decls`.
+    /// Emit the module source only, returning the call that performs the (possibly trapping) instantiation, for assert_trap on a module.
+    /// See [`Self::emit_instantiate`] for `decls`.
     fn instantiate_call(
         &self,
         script: &mut String,
@@ -57,7 +69,8 @@ pub trait SpecBackend: BackendUnderTest {
     ) -> Result<(), String>;
     fn emit_check_trap(&self, script: &mut String, desc: &str, call: &str, message: &str);
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str);
-    /// Emit an `assert_exception` check: `call` must raise an (uncaught) wasm exception. The default keeps the directive an attributed skip for backends that don't declare exception handling supported.
+    /// Emit an `assert_exception` check: `call` must raise an (uncaught) wasm exception.
+    /// The default keeps the directive an attributed skip for backends that don't declare exception handling supported.
     fn emit_check_exception(
         &self,
         script: &mut String,
@@ -68,12 +81,14 @@ pub trait SpecBackend: BackendUnderTest {
         Err("exception-handling".to_string())
     }
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str);
-    /// Emit an `assert_unlinkable` check: `call` (the instantiation) must raise/fail. Only invoked when `supports_registered_imports()` is true.
+    /// Emit an `assert_unlinkable` check: `call` (the instantiation) must raise/fail.
+    /// Only invoked when `supports_registered_imports()` is true.
     fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
         let _ = (script, desc, call);
         unreachable!("only called when supports_registered_imports() is true")
     }
-    /// Wrap the accumulated body into a runnable script: shared runtime for `units`, harness helpers, hoisted `decls` (see [`Self::emit_instantiate`]), body, result-line footer. Backends that inline module definitions into `script` receive an empty `decls`.
+    /// Wrap the accumulated body into a runnable script: shared runtime for `units`, harness helpers, hoisted `decls` (see [`Self::emit_instantiate`]), body, result-line footer.
+    /// Backends that inline module definitions into `script` receive an empty `decls`.
     fn assemble(&self, units: &BTreeSet<String>, decls: &str, body: &str)
         -> anyhow::Result<String>;
 }
@@ -85,7 +100,9 @@ pub struct Converted {
     pub units: BTreeSet<String>,
 }
 
-/// The `.wast` files a plain `cargo test` runs for a backend whose per-file cost makes the whole 257-file testsuite too slow to be the default: one file per semantic area — integers, floats, control flow, memory/table, globals, linking, bulk ops. Every other file is still a trial, `#[ignore]`d, unless the backend crate's `slow_test` feature is on. The selection is a property of the testsuite rather than of a target language, so the backends that curate at all share it; one that needs more files adds them with [`curated_with`].
+/// The `.wast` files a plain `cargo test` runs for a backend whose per-file cost makes the whole 257-file testsuite too slow to be the default: one file per semantic area: integers, floats, control flow, memory/table, globals, linking, bulk ops.
+/// Every other file is still a trial, `#[ignore]`d, unless the backend crate's `slow_test` feature is on.
+/// The selection is a property of the testsuite rather than of a target language, so the backends that curate at all share it; one that needs more files adds them with [`curated_with`].
 pub const CURATED_SPEC_FILES: &[&str] = &[
     "address",
     "align",
@@ -167,14 +184,16 @@ pub const CURATED_SPEC_FILES: &[&str] = &[
     "utf8-invalid-encoding",
 ];
 
-/// [`CURATED_SPEC_FILES`] plus `extra`. Leaked because [`SpecBackend::curated_files`] hands back a `'static` slice and each backend calls this once per suite run, when its trials are built.
+/// [`CURATED_SPEC_FILES`] plus `extra`.
+/// Leaked because [`SpecBackend::curated_files`] hands back a `'static` slice and each backend calls this once per suite run, when its trials are built.
 pub fn curated_with(extra: &[&'static str]) -> &'static [&'static str] {
     let mut files = CURATED_SPEC_FILES.to_vec();
     files.extend_from_slice(extra);
     Vec::leak(files)
 }
 
-/// The attribution tag for a heap type no backend can express as a host value: the wasm proposal the type belongs to, so the skipped directive is counted against the *feature* rather than against the backend. Classifies the wast type only — no target language enters into it, which is why every backend shares one copy.
+/// The attribution tag for a heap type no backend can express as a host value: the wasm proposal the type belongs to, so the skipped directive is counted against the *feature* rather than against the backend.
+/// Classifies the wast type only: no target language enters into it, which is why every backend shares one copy.
 pub fn heap_type_tag(hty: &HeapType<'_>) -> String {
     match hty {
         HeapType::Abstract {
@@ -207,14 +226,17 @@ fn spec_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/spec")
 }
 
-/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point). The trial name is the file stem, so cargo's own name filter applies: `cargo test --test spec i32` runs the `i32`-named file(s). Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set. Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
+/// Build one libtest-mimic [`Trial`] per `.wast` file of the testsuite for `lang` (the `spec_suite!` macro's entry point).
+/// The trial name is the file stem, so cargo's own name filter applies: `cargo test --test spec i32` runs the `i32`-named file(s).
+/// Files outside the backend's [`SpecBackend::curated_files`] set become `#[ignore]`d trials, so a plain `cargo test` runs the curated set.
+/// Trials run on libtest-mimic's thread pool; each owns its per-file state, so the run parallelizes.
 ///
-/// `slow_test` mirrors the backend crate's feature of the same name (CI's main run): when on, nothing is marked ignored — the whole testsuite runs, the same set the old `--include-ignored` run covered.
+/// `slow_test` mirrors the backend crate's feature of the same name (CI's main run): when on, nothing is marked ignored: the whole testsuite runs, the same set the old `--include-ignored` run covered.
 pub fn spec_trials(lang: &'static dyn SpecBackend, slow_test: bool) -> Vec<Trial> {
     let dir = spec_dir();
     assert!(
         dir.exists(),
-        "tests/spec not found — run `git submodule update --init` (see docs/testing.md)"
+        "tests/spec not found: run `git submodule update --init` (see docs/testing.md)"
     );
 
     let mut names: Vec<String> = std::fs::read_dir(&dir)
@@ -255,7 +277,8 @@ pub fn spec_main(lang: &'static dyn SpecBackend, slow_test: bool) {
     libtest_mimic::run(&args, spec_trials(lang, slow_test)).exit();
 }
 
-/// Run one `.wast` file and apply the per-file checks: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression. A passing trial stays quiet; failures carry the per-file summary and detail.
+/// Run one `.wast` file and apply the per-file checks: (a) the assertion-failure count must equal the backend's `EXPECTED_FAILURES` list entry (0 if absent); (b) an unattributed conversion failure is a dewasm bug; (c) a skip attributed to a feature the backend declares `Supported` is a declaration regression.
+/// A passing trial stays quiet; failures carry the per-file summary and detail.
 fn run_trial(lang: &dyn SpecBackend, name: &str, path: &Path) -> Result<(), Failed> {
     let stats = run_file(lang, name, path).map_err(|err| format!("{name}: {err:#}"))?;
 
@@ -329,7 +352,8 @@ impl Stats {
 struct ScriptGen<'a> {
     lang: &'a dyn SpecBackend,
     script: String,
-    /// File-scoped declaration buffer hoisted ahead of `script` by `assemble` (see [`SpecBackend::emit_instantiate`]). Owned per file, so parallel trials never share it.
+    /// File-scoped declaration buffer hoisted ahead of `script` by `assemble` (see [`SpecBackend::emit_instantiate`]).
+    /// Owned per file, so parallel trials never share it.
     decls: String,
     source: &'a str,
     file: &'a str,
@@ -337,7 +361,7 @@ struct ScriptGen<'a> {
     current: Result<String, String>,
     /// Same, for named modules.
     named: std::collections::HashMap<String, Result<String, String>>,
-    /// Same, keyed by the *registered* name from `(register "Name" $id)` (a different namespace from `named`'s wast `$id`s) — what a later module's `(import "Name" ...)` actually resolves against.
+    /// Same, keyed by the *registered* name from `(register "Name" $id)` (a different namespace from `named`'s wast `$id`s): what a later module's `(import "Name" ...)` actually resolves against.
     registered: std::collections::HashMap<String, Result<String, String>>,
     counter: u32,
     converted: u32,
@@ -393,7 +417,8 @@ impl<'a> ScriptGen<'a> {
             .collect()
     }
 
-    /// Encode `qw` and convert it, with the bookkeeping every conversion site shares: the module counter, the converted count, the unit union, and attribution (unknown-proposal mapping, hard errors). `Err` carries the skip tag; emitting the instantiation is the caller's job.
+    /// Encode `qw` and convert it, with the bookkeeping every conversion site shares: the module counter, the converted count, the unit union, and attribution (unknown-proposal mapping, hard errors).
+    /// `Err` carries the skip tag; emitting the instantiation is the caller's job.
     fn convert_quote_wat(&mut self, mut qw: QuoteWat<'_>, desc: &str) -> Result<Converted, String> {
         let resolvable = self.resolvable_modules();
         self.counter += 1;

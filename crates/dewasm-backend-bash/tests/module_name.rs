@@ -1,4 +1,5 @@
-//! The module-name policy for Bash: a library name is one identifier, lowercased into the global function/variable prefix — the single deliberate mapping the policy keeps, because bash has no case-carrying namespace. An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
+//! The module-name policy for Bash: a library name is one identifier, lowercased into the global function/variable prefix, the single deliberate mapping the policy keeps, because bash has no case-carrying namespace.
+//! An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_bash::{find_bash5, BashBackend};
@@ -14,7 +15,7 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["program_init"],
 );
 
-/// The prefix is the name lowercased plus `_` — a total mapping, stated rather than guessed.
+/// The prefix is the name lowercased plus `_`: a total mapping, stated rather than guessed.
 #[test]
 fn prefix_is_the_lowercased_name_and_runs() {
     assert_eq!(
@@ -24,7 +25,7 @@ fn prefix_is_the_lowercased_name_and_runs() {
     let source = convert("Sqlite3Shell", Mode::Library).expect("convert");
     assert!(source.contains("sqlite3shell_init"));
 
-    let bash = find_bash5().expect("bash >= 5 not found — see docs/testing.md");
+    let bash = find_bash5().expect("bash >= 5 not found: see docs/testing.md");
     let glue = "sqlite3shell_init || exit 1\nsqlite3shell_invoke add 2 3\necho \"$R0\"\n";
     let out = dewasm_test_helper::run_script(&bash, &format!("{source}\n{glue}"), "sh", &[], "");
     assert!(

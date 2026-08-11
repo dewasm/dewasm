@@ -1,15 +1,13 @@
 // requires: rt/trap
-// Linear memory: a byte[] with a little-endian ByteBuffer view, plus a page
-// cap. Effective addresses are computed as unsigned longs by callers (guest
-// addr + offset can exceed 2^31), so every method takes a long address and the
-// bounds check is exact. The ByteBuffer is re-wrapped on grow.
+// Linear memory: a byte[] with a little-endian ByteBuffer view, plus a page cap.
+// Effective addresses are computed as unsigned longs by callers (guest addr + offset can exceed 2^31), so every method takes a long address and the bounds check is exact.
+// The ByteBuffer is re-wrapped on grow.
 byte[] d;
 java.nio.ByteBuffer bb;
 int maxPages;
 
 Memory(int minPages, int maxPages) {
-    // A spec-legal minimum of 32768+ pages (2 GiB+) exceeds what a Java
-    // byte[] can hold; fail instantiation with a clear trap instead of the
+    // A spec-legal minimum of 32768+ pages (2 GiB+) exceeds what a Java byte[] can hold; fail instantiation with a clear trap instead of the
     // NegativeArraySizeException the overflowing int multiply would throw.
     long bytes = (long) minPages * 65536;
     if (bytes > Integer.MAX_VALUE) {

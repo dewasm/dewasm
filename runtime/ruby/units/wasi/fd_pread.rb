@@ -9,8 +9,7 @@ def wasi_fd_pread(fd, iovs_ptr, iovs_len, offset, nread_ptr)
     ptr = @memory.i32_load(iovs_ptr + i * 8)
     len = @memory.i32_load(iovs_ptr + i * 8 + 4)
     next if len == 0
-    # IO#pread raises EOFError at end-of-file instead of returning a
-    # short/empty read like IO#read does.
+    # IO#pread raises EOFError at end-of-file instead of returning a short/empty read like IO#read does.
     chunk = begin
       io.pread(len, offset + nread)
     rescue EOFError

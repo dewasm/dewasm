@@ -1,4 +1,4 @@
-# Decision 26 — Rename the Project: dewasmify → dewasm
+# Decision 26: Rename the Project (dewasmify → dewasm)
 
 Status: **Accepted, 2026-07-25; fully landed 2026-07-28.**
 Landed 2026-07-26: crates are `dewasm-*`, the binary is `dewasm`, env vars are `DEWASM_*`, and docs are swept (superseded decision bodies keep the historical name).
@@ -22,11 +22,11 @@ Reserving the crates.io name with an early publish is recommended at release tim
 
 ## Rejected alternatives
 
-- **Keep `dewasmify`** — avoids one churn commit, but the friction is paid on every future mention of the project.
-- **Rename after 0.1** — strictly more expensive: released artifacts, tags, and external references would then also need aliases.
+- **Keep `dewasmify`**: avoids one churn commit, but the friction is paid on every future mention of the project.
+- **Rename after 0.1**: strictly more expensive: released artifacts, tags, and external references would then also need aliases.
 
 ## Consequences
 
 - Positive: shorter name, free on crates.io, single flag-day commit while there are no external users.
-- Negative: one wide, though purely mechanical, diff; historical decision prose refers to the old name until the rename commit runs it (superseded decisions keep reading coherently — same project).
+- Negative: one wide, though purely mechanical, diff; historical decision prose refers to the old name until the rename commit runs it (superseded decisions keep reading coherently: same project).
 - The rename commit must contain no behavior changes so it reviews as a pure diff of names.

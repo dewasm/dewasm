@@ -1,6 +1,11 @@
 //! Translate a wasm function body (stack machine) into structured IR with build-time expression folding.
 //!
-//! The operand stack is modeled as a stack of `Slot`s. Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately. A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when a temp slot it reads is about to be written (`spill_clobbered`), when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes. Single-use values thus fold directly into their consumer, cutting the statement count for every backend. Evaluation order and trap points are preserved by the spill discipline. Dead code after an unconditional branch is skipped while tracking block nesting only.
+//! The operand stack is modeled as a stack of `Slot`s.
+//! Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately.
+//! A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when a temp slot it reads is about to be written (`spill_clobbered`), when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes.
+//! Single-use values thus fold directly into their consumer, cutting the statement count for every backend.
+//! Evaluation order and trap points are preserved by the spill discipline.
+//! Dead code after an unconditional branch is skipped while tracking block nesting only.
 
 use std::collections::BTreeSet;
 
@@ -14,7 +19,9 @@ use crate::ir::{
 };
 use crate::module::{unsupported, val_type};
 
-/// Node-count cap for a folded expression tree. Once a consumer would build a tree larger than this, its operands are spilled to temps first. The cap keeps the generated expressions shallow enough not to blow the recursive descent parser of any target language (Ruby/Python and friends parse expressions recursively and have finite stack budgets), and bounds the worst-case textual blow-up of backends whose inline lowerings duplicate an operand.
+/// Node-count cap for a folded expression tree.
+/// Once a consumer would build a tree larger than this, its operands are spilled to temps first.
+/// The cap keeps the generated expressions shallow enough not to blow the recursive descent parser of any target language (Ruby/Python and friends parse expressions recursively and have finite stack budgets), and bounds the worst-case textual blow-up of backends whose inline lowerings duplicate an operand.
 const MAX_FOLD_SIZE: u32 = 32;
 
 /// Side effects a pending expression carries, used to decide when it must be spilled before a later statement so it cannot observe that statement's effect (or so its own trap fires at the right point).
@@ -30,7 +37,9 @@ struct Effects {
     memory: bool,
     /// May trap (a load, a divide/remainder, or a non-saturating float->int truncation).
     trap: bool,
-    /// Deepest temp slot the expression reads, if it reads any. Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand — so a pending at depth d legitimately keeps reading temps at depths above d. Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
+    /// Deepest temp slot the expression reads, if it reads any.
+    /// Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand, so a pending at depth d legitimately keeps reading temps at depths above d.
+    /// Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
     max_temp_read: Option<u32>,
 }
 
@@ -75,7 +84,8 @@ struct Pending {
     size: u32,
 }
 
-/// One operand-stack slot. `pending` is `None` once the value has been spilled to its temp.
+/// One operand-stack slot.
+/// `pending` is `None` once the value has been spilled to its temp.
 struct Slot {
     ty: ValType,
     pending: Option<Pending>,
@@ -94,9 +104,12 @@ pub struct FuncBuilder<'a> {
     temps: BTreeSet<Temp>,
     next_label: u32,
     result: Option<ir::Func>,
-    /// DWARF line table for source back-mapping, when `--dwarf-line` is on. `None` leaves the whole marker path inert.
+    /// DWARF line table for source back-mapping, when `--dwarf-line` is on.
+    /// `None` leaves the whole marker path inert.
     line_table: Option<&'a LineTable>,
-    /// The most recent source position resolved from an operator's offset while streaming this body. Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted. Tracking it as operators stream — rather than resolving only the emit-triggering operator — is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
+    /// The most recent source position resolved from an operator's offset while streaming this body.
+    /// Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted.
+    /// Tracking it as operators stream (rather than resolving only the emit-triggering operator) is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
     cur_pos: Option<SourcePos>,
     /// The last source position actually emitted as a marker in this function, so only change points produce one (per-function: reset for every body).
     last_pos: Option<SourcePos>,
@@ -149,7 +162,8 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Attach the DWARF line table so `emit` injects source-position markers. A no-op with `None` (the default), keeping non-`--dwarf-line` output byte-identical.
+    /// Attach the DWARF line table so `emit` injects source-position markers.
+    /// A no-op with `None` (the default), keeping non-`--dwarf-line` output byte-identical.
     pub fn with_line_table(mut self, line_table: Option<&'a LineTable>) -> Self {
         self.line_table = line_table;
         self
@@ -188,7 +202,9 @@ impl<'a> FuncBuilder<'a> {
         self.cur().stmts.push(stmt);
     }
 
-    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated. An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it. A no-op without a line table.
+    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated.
+    /// An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it.
+    /// A no-op without a line table.
     fn track_source_pos(&mut self, offset: usize) {
         let Some(table) = self.line_table else {
             return;
@@ -273,9 +289,11 @@ impl<'a> FuncBuilder<'a> {
         });
     }
 
-    /// A temp at depth `depth` (or above) is about to be written: spill every pending that still reads a temp that deep, so its operand is read before the write replaces it. Every temp write goes through `push_temp` (results of a call, `memory.grow`) or `spill` (the assignment it emits), so those two call this and nothing else has to.
+    /// A temp at depth `depth` (or above) is about to be written: spill every pending that still reads a temp that deep, so its operand is read before the write replaces it.
+    /// Every temp write goes through `push_temp` (results of a call, `memory.grow`) or `spill` (the assignment it emits), so those two call this and nothing else has to.
     ///
-    /// Only slots below `depth` can be at risk: a pending at depth d is built from slots at depths >= d, so it never reads a temp below its own slot. Spilling one of them writes its own, shallower temp, which is why `spill` re-enters here; the recursion walks strictly downwards and each level emits before its caller, keeping the assignments in ascending-depth (= wasm evaluation) order.
+    /// Only slots below `depth` can be at risk: a pending at depth d is built from slots at depths >= d, so it never reads a temp below its own slot.
+    /// Spilling one of them writes its own, shallower temp, which is why `spill` re-enters here; the recursion walks strictly downwards and each level emits before its caller, keeping the assignments in ascending-depth (= wasm evaluation) order.
     fn spill_clobbered(&mut self, depth: u32) {
         for idx in 0..self.stack.len().min(depth as usize) {
             let hit = self.stack[idx]
@@ -379,7 +397,9 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn select(&mut self) {
-        // Stack: [then, els, cond] with cond on top. The backends lower Select to a conditionally-evaluated ternary, so a trapping then/els arm (which wasm evaluates eagerly) must be spilled to keep its trap. The cond folds freely.
+        // Stack: [then, els, cond] with cond on top.
+        // The backends lower Select to a conditionally-evaluated ternary, so a trapping then/els arm (which wasm evaluates eagerly) must be spilled to keep its trap.
+        // The cond folds freely.
         let n = self.stack.len();
         let cond_i = n - 1;
         let els_i = n - 2;
@@ -454,7 +474,9 @@ impl<'a> FuncBuilder<'a> {
         &self.module.types[ty_idx as usize]
     }
 
-    /// Resolve a branch depth into a target, computing the moves from the current stack top into the target frame's result (or loop param) slots. Marks the target label as referenced. The caller must have spilled the stack first, so the sources read from materialized temps.
+    /// Resolve a branch depth into a target, computing the moves from the current stack top into the target frame's result (or loop param) slots.
+    /// Marks the target label as referenced.
+    /// The caller must have spilled the stack first, so the sources read from materialized temps.
     fn branch_target(&mut self, relative_depth: u32) -> BrTarget {
         let idx = self.frames.len() - 1 - relative_depth as usize;
         let (arity_tys, base, is_loop, is_func, label_id) = {
@@ -513,7 +535,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_else(&mut self) {
-        // Materialize the then-branch's fallthrough values (into the frame's result slots) before capturing its body. Skipped when the then branch ended unreachable (its stack shape is stale).
+        // Materialize the then-branch's fallthrough values (into the frame's result slots) before capturing its body.
+        // Skipped when the then branch ended unreachable (its stack shape is stale).
         if !self.cur().unreachable {
             self.spill_all();
         }
@@ -534,7 +557,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_end(&mut self) {
-        // Spill the frame's live values into its own body before it is popped (so control-boundary-crossing temps are materialized). The function frame folds its fallthrough return instead.
+        // Spill the frame's live values into its own body before it is popped (so control-boundary-crossing temps are materialized).
+        // The function frame folds its fallthrough return instead.
         let is_func = matches!(self.cur().kind, FrameKind::Func);
         if !self.cur().entered_dead && !self.cur().unreachable && !is_func {
             self.spill_all();
@@ -658,7 +682,7 @@ impl<'a> FuncBuilder<'a> {
         }
 
         match op {
-            // -- control flow
+            // control flow
             Operator::Nop => {}
             Operator::Unreachable => {
                 // A pending OOB load must trap with its own message before the "unreachable" trap, so resolve trapping pendings first.
@@ -711,7 +735,8 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::BrIf { relative_depth } => {
                 let (cond, _, _) = self.pop_expr();
-                // A not-taken br_if must leave the operands reusable, and branch_target reads them at canonical depths, so materialize the whole stack. Return values are not folded under br_if (the not-taken path would double-consume them).
+                // A not-taken br_if must leave the operands reusable, and branch_target reads them at canonical depths, so materialize the whole stack.
+                // Return values are not folded under br_if (the not-taken path would double-consume them).
                 self.spill_all();
                 let target = self.branch_target(relative_depth);
                 self.emit(Stmt::BrIf { cond, target });
@@ -743,7 +768,8 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Call { function_index } => {
                 let ty = self.func_type_of(function_index).clone();
-                // A call can read/write globals and memory and can trap; pending values that observe any of those must be spilled. Pure-local args survive and fold into the call.
+                // A call can read/write globals and memory and can trap; pending values that observe any of those must be spilled.
+                // Pure-local args survive and fold into the call.
                 self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
                 for i in (0..ty.params.len()).rev() {
@@ -793,7 +819,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Select => self.select(),
 
-            // -- locals and globals
+            // locals and globals
             Operator::LocalGet { local_index } => {
                 let ty = self.all_locals[local_index as usize];
                 self.push_pending(
@@ -846,7 +872,7 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
 
-            // -- memory
+            // memory
             Operator::I32Load { memarg } => self.load(LoadOp::I32Load, I32, &memarg),
             Operator::I64Load { memarg } => self.load(LoadOp::I64Load, I64, &memarg),
             Operator::F32Load { memarg } => self.load(LoadOp::F32Load, F32, &memarg),
@@ -945,7 +971,7 @@ impl<'a> FuncBuilder<'a> {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
-            // -- reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
+            // reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
             Operator::RefNull { .. }
             | Operator::RefFunc { .. }
             | Operator::RefIsNull
@@ -960,7 +986,7 @@ impl<'a> FuncBuilder<'a> {
                 ));
             }
 
-            // -- constants
+            // constants
             Operator::I32Const { value } => {
                 self.push_pending(I32, Expr::I32Const(value as u32), Effects::default(), 1)
             }
@@ -974,7 +1000,7 @@ impl<'a> FuncBuilder<'a> {
                 self.push_pending(F64, Expr::F64Const(value.bits()), Effects::default(), 1)
             }
 
-            // -- i32 unary/binary
+            // i32 unary/binary
             Operator::I32Eqz => self.un(UnOp::I32Eqz, I32),
             Operator::I32Clz => self.un(UnOp::I32Clz, I32),
             Operator::I32Ctz => self.un(UnOp::I32Ctz, I32),
@@ -1005,7 +1031,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::I32GeS => self.bin(BinOp::I32GeS, I32),
             Operator::I32GeU => self.bin(BinOp::I32GeU, I32),
 
-            // -- i64 unary/binary
+            // i64 unary/binary
             Operator::I64Eqz => self.un(UnOp::I64Eqz, I32),
             Operator::I64Clz => self.un(UnOp::I64Clz, I64),
             Operator::I64Ctz => self.un(UnOp::I64Ctz, I64),
@@ -1036,7 +1062,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::I64GeS => self.bin(BinOp::I64GeS, I32),
             Operator::I64GeU => self.bin(BinOp::I64GeU, I32),
 
-            // -- f32
+            // f32
             Operator::F32Abs => self.un(UnOp::F32Abs, F32),
             Operator::F32Neg => self.un(UnOp::F32Neg, F32),
             Operator::F32Ceil => self.un(UnOp::F32Ceil, F32),
@@ -1058,7 +1084,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::F32Le => self.bin(BinOp::F32Le, I32),
             Operator::F32Ge => self.bin(BinOp::F32Ge, I32),
 
-            // -- f64
+            // f64
             Operator::F64Abs => self.un(UnOp::F64Abs, F64),
             Operator::F64Neg => self.un(UnOp::F64Neg, F64),
             Operator::F64Ceil => self.un(UnOp::F64Ceil, F64),
@@ -1080,7 +1106,7 @@ impl<'a> FuncBuilder<'a> {
             Operator::F64Le => self.bin(BinOp::F64Le, I32),
             Operator::F64Ge => self.bin(BinOp::F64Ge, I32),
 
-            // -- conversions
+            // conversions
             Operator::I32WrapI64 => self.un(UnOp::I32WrapI64, I32),
             Operator::I32TruncF32S => self.un(UnOp::I32TruncF32S, I32),
             Operator::I32TruncF32U => self.un(UnOp::I32TruncF32U, I32),
@@ -1162,7 +1188,8 @@ fn un_traps(op: UnOp) -> bool {
     )
 }
 
-/// Attribute an untranslated operator to a feature. Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts — an unclassified operator here is a dewasm bug and the spec harness treats it as such.
+/// Attribute an untranslated operator to a feature.
+/// Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts: an unclassified operator here is a dewasm bug and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[

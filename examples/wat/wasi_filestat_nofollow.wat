@@ -1,6 +1,4 @@
-;; path_filestat_get without lookupflags::SYMLINK_FOLLOW on a symlink
-;; must report the link itself (filetype 7, exposed as the exit code),
-;; not its target.
+;; path_filestat_get without lookupflags::SYMLINK_FOLLOW on a symlink must report the link itself (filetype 7, exposed as the exit code), not its target.
 (module
   (import "wasi_snapshot_preview1" "path_filestat_get"
     (func $filestat (param i32 i32 i32 i32 i32) (result i32)))

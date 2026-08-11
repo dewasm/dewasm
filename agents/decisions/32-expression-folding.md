@@ -1,4 +1,4 @@
-# Decision 32 — Build-time Expression Folding
+# Decision 32: Build-time Expression Folding
 
 Status: **Accepted, 2026-07-28.**
 The func builder folds single-use stack values into their consumers at IR-build time, always on and identical for every backend, replacing the previous one-temp-per-instruction scheme.
@@ -9,7 +9,7 @@ Landed in `crates/dewasm-core/src/func.rs` behind no flag; the `Expr` tree and e
 The IR flattened the wasm value stack into "temps": one variable per (stack depth, type) pair, and *every* value-producing instruction emitted a `temp = <expr>` assignment (wasm2c style).
 That made evaluation order and trap points trivially correct, but it is one statement per instruction.
 Converting the 35 MB `ruby.wasm` produced a 335 MB, 6.5-million-line `.rb`: ~60 % of its statements were `sN = ...` assigns, and a third of *those* were trivial `sN = <const|local|temp>` copies.
-The cost is paid by every backend and at every stage — file size, the target's parse time, its compile/load time, and runtime (an extra variable write and read per instruction).
+The cost is paid by every backend and at every stage: file size, the target's parse time, its compile/load time, and runtime (an extra variable write and read per instruction).
 
 `Expr` was already a nested tree (`Un`/`Bin`/`Load`/`Select` hold `Box<Expr>`) and every backend's `expr()` already recursed.
 So the machinery to *emit* folded expressions existed on the backend side; only the builder materialized eagerly.
@@ -31,14 +31,14 @@ No IR types change; `Func.temps` ends up listing exactly the materialized temps,
 - `local.set{k}` / `local.tee{k}`: pendings that read local `k`.
 - `global.set`: `globals || trap` (post-trap global state is observable).
 - `store` / `memory.{grow,copy,fill,init}`: `memory || trap`.
-- `call` / `call_indirect`: `globals || memory || trap` — pure-local args survive and fold into the call (the main win, `_f5(l0, l1)`).
+- `call` / `call_indirect`: `globals || memory || trap`; pure-local args survive and fold into the call (the main win, `_f5(l0, l1)`).
   `call_indirect` spills effectful operands *before* popping so the index/arg fragments left inline are pure and cannot reorder an observable effect.
 - `unreachable`: `trap` (a pending OOB load must trap with its own "out of bounds" message, not be shadowed by "unreachable").
 - `br`/`br_if`/`br_table` to a label: spill everything (branch targets read temps at canonical depths, and a not-taken `br_if` must leave the operands reusable).
   `return` / `br` to the function frame / fall-through instead *fold* the return values, after spilling any deeper trapping pending.
 - block/loop/if entry, `else`, `end`: spill everything, so control-boundary-crossing values stay materialized.
   The `if` condition is folded into the frame first.
-- `select`: `cond` folds freely, but a trapping `then`/`els` arm is spilled — wasm evaluates both arms eagerly, whereas Ruby/Java/Python/Bash lower `select` to a conditionally-evaluated ternary, so only trap-free arms may be inlined.
+- `select`: `cond` folds freely, but a trapping `then`/`els` arm is spilled; wasm evaluates both arms eagerly, whereas Ruby/Java/Python/Bash lower `select` to a conditionally-evaluated ternary, so only trap-free arms may be inlined.
 - `drop`: a trapping pending is spilled (its trap must fire); a pure one is discarded.
 
 **Cap.**
@@ -49,7 +49,7 @@ The cap keeps expressions shallow enough not to blow a target language's recursi
 Two backend adjustments were needed because folded expressions now reach code that assumed bare-variable operands:
 
 - **Go** rejects a compile-time constant conversion outside the destination range (`int32(uint32(4294967231))`).
-  A folded i32/i64 constant can land directly inside a signed cast, so large constants are laundered through new `rt/i32c`/`rt/i64c` identity helpers — a call result is never a constant, so the conversion becomes a runtime one (as it was before folding, when every value passed through a variable).
+  A folded i32/i64 constant can land directly inside a signed cast, so large constants are laundered through new `rt/i32c`/`rt/i64c` identity helpers: a call result is never a constant, so the conversion becomes a runtime one (as it was before folding, when every value passed through a variable).
 - **Bash**: `memory.grow` evaluated its delta fragment three times (a folded `memory.size` delta would read the already-grown `pages`); it now snapshots the candidate page count once.
   And `value()`'s `Bin` arm snapshots non-trivial operands before inline lowerings that textually repeat them (`I64ShrU` names an operand four times).
 
@@ -82,4 +82,4 @@ Two backend adjustments were needed because folded expressions now reach code th
 - Correctness is bound by the spec harness, as always (decision 3): the full testsuite passes for every backend, plus targeted IR-shape unit tests in `crates/dewasm-core/tests/folding.rs`.
   Generated output was verified byte-identical to the previous scheme with folding disabled, de-risking the refactor before the fold was turned on.
 - New invariants a backend may rely on (documented in `ir.rs`): an `Expr` tree preserves wasm's left-to-right evaluation order and trap points; a `Select`'s `then`/`els` subexpressions are pure and non-trapping; `Func.temps` lists exactly the materialized temps.
-- The `Effects` local set is a 64-bit mask plus an `any_high_local` catch-all for indices ≥ 64 — conservative (a set of a high local spills all pendings reading any high local), which is rare and never wrong.
+- The `Effects` local set is a 64-bit mask plus an `any_high_local` catch-all for indices ≥ 64, conservative (a set of a high local spills all pendings reading any high local), which is rare and never wrong.

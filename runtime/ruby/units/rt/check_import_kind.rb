@@ -1,7 +1,5 @@
 # requires: rt/link_error
-# A present-but-wrong-kind import (e.g. a global where a func was
-# declared) is a link error, distinct from a missing one (which still
-# falls through to the caller's WASI/ENOSYS/raise fallback via `||`).
+# A present-but-wrong-kind import (e.g. a global where a func was declared) is a link error, distinct from a missing one (which still falls through to the caller's WASI/ENOSYS/raise fallback via `||`).
 # Function values are bare Method/Proc objects; the runtime's own
 # Global/Table/Memory wrappers self-report via `wasm_kind`.
 def check_import_kind(value, kind, mod, name)

@@ -1,9 +1,7 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
 # A file fd (kind 2) writes into its whole-file byte buffer at the current offset
-# (or the buffer end when opened with APPEND), zero-filling any gap and marking
-# the buffer dirty; it is flushed to disk on close/sync. stdout/stderr
-# (kind 1) emit bytes through an every-byte '\xHH' printf format, which is
-# binary-safe (NUL, %, backslash); the format must stay single-quoted.
+# (or the buffer end when opened with APPEND), zero-filling any gap and marking the buffer dirty; it is flushed to disk on close/sync. stdout/stderr
+# (kind 1) emit bytes through an every-byte '\xHH' printf format, which is binary-safe (NUL, %, backslash); the format must stay single-quoted.
 wasi_fd_write() {
   local __p=$1 __fd=$2 __iovs=$3 __iovs_len=$4 __nwritten_ptr=$5
   local -n __m=${__p}mem

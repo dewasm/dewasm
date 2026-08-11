@@ -1,11 +1,11 @@
-/* mandelbrot -- f64-heavy, with an integer result.
+/* mandelbrot: f64-heavy, with an integer result.
  *
  * One iteration samples one point of the complex plane and runs the escape
  * loop on it, up to MAX_ESCAPE steps. The inner loop is nothing but f64 mul,
  * add and compare, all of which are correctly rounded on every runtime in the
  * suite, so the escape counts are identical everywhere.
  *
- * The result is the total escape-iteration count -- an integer. Printing a
+ * The result is the total escape-iteration count: an integer. Printing a
  * double instead would compare Ruby/Python/Perl/Go/Java float formatting rather
  * than the arithmetic, and the harness compares stdout byte for byte.
  *

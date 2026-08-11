@@ -1,11 +1,9 @@
 # requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
-# poll_oneoff waits until at least one subscription is ready, then writes
-# one event per ready subscription (WASI p1 layout: 48-byte subscriptions
-# in, 32-byte events out). Only fd_read on stdin actually blocks (via
-# 4-arg select); regular files, stdout/stderr, and every fd_write are
-# treated as immediately ready, and unknown fds report EBADF. Clock
-# subscriptions set the wait deadline; if it elapses with no fd ready, the
-# due clock subs fire. Motivated by event-loop guests such as the QuickJS
+# poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in, 32-byte events out).
+# Only fd_read on stdin actually blocks (via
+# 4-arg select); regular files, stdout/stderr, and every fd_write are treated as immediately ready, and unknown fds report EBADF.
+# Clock subscriptions set the wait deadline; if it elapses with no fd ready, the due clock subs fire.
+# Motivated by event-loop guests such as the QuickJS
 # REPL, which blocks here on stdin between prompts.
 use Time::HiRes ();
 
@@ -13,7 +11,7 @@ sub wasi_poll_oneoff {
     my ($self, $in_ptr, $out_ptr, $nsubs, $nevents_ptr) = @_;
     return ERRNO_INVAL if $nsubs == 0;
     my @ready;    # [userdata, error, type, nbytes, flags] resolvable without waiting
-    my @waiters;  # [userdata, type, fh] fd_read on stdin — needs a host wait
+    my @waiters;  # [userdata, type, fh] fd_read on stdin: needs a host wait
     my @clocks;   # [userdata, rel_ns]
     for my $i (0 .. $nsubs - 1) {
         my $base = $in_ptr + $i * 48;

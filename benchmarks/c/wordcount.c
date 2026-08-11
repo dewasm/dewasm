@@ -1,9 +1,9 @@
-/* wordcount -- memory- and branch-heavy scanning over a generated buffer.
+/* wordcount: memory- and branch-heavy scanning over a generated buffer.
  *
  * One iteration consumes one byte of text: a load, a handful of unpredictable
  * branches, and a scattered histogram update. Where sha256 is a straight-line
  * arithmetic pipeline, this microbenchmark is what a backend's branch and array
- * lowering actually costs -- the buffer is pseudo-random, so no branch here
+ * lowering actually costs: the buffer is pseudo-random, so no branch here
  * predicts and no histogram slot stays hot.
  *
  * The text buffer is generated once at startup, before the iteration count is

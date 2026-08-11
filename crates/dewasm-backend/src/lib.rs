@@ -23,7 +23,8 @@ pub enum Mode {
     Standalone,
 }
 
-/// How generated code gets its runtime. Generated code always refers to the runtime by the relative name `Rt` (or the backend's equivalent); linkage only decides where that name is defined.
+/// How generated code gets its runtime.
+/// Generated code always refers to the runtime by the relative name `Rt` (or the backend's equivalent); linkage only decides where that name is defined.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeLinkage {
     /// Nest the needed runtime units inside the generated module itself (single self-contained file; multiple generated artifacts never collide).
@@ -35,18 +36,24 @@ pub enum RuntimeLinkage {
 #[derive(Clone, Debug)]
 pub struct GenOptions {
     pub mode: Mode,
-    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name. In `Library` mode the backend validates it against its own grammar and uses it verbatim — no sanitization. In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
+    /// Class/package/module name for the generated code, and the stem of the returned [`OutputFile`]'s name.
+    /// In `Library` mode the backend validates it against its own grammar and uses it verbatim, with no sanitization.
+    /// In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`) and this only names the output file.
     pub module_name: String,
     pub runtime: RuntimeLinkage,
-    /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide. Disable to keep generated libraries free of ambient authority.
+    /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide.
+    /// Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
-    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals. When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob. Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
+    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals.
+    /// When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob.
+    /// Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
     pub data_file: Option<DataFileConfig>,
 }
 
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
-    /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`). The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
+    /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`).
+    /// The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
     pub sidecar_name: String,
 }
 
@@ -60,20 +67,23 @@ pub trait Backend {
     fn file_extension(&self) -> &str;
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
 
-    /// Declared support per feature. The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
+    /// Declared support per feature.
+    /// The spec harness only tolerates skips attributable to features that are not `Supported`; flipping a feature to `Supported` makes its skips hard failures.
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
     }
 
-    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`). Feeds the generated support docs.
+    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`).
+    /// Feeds the generated support docs.
     fn has_wasi_p1(&self, name: &str) -> bool {
         let _ = name;
         false
     }
 }
 
-/// Reject, with the same `UnsupportedError` attribution the core converter uses, any construct the shared IR now represents but this specific `backend` has not declared `Supported`. The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct; a backend that hasn't implemented one of them yet must refuse it itself, at conversion time, rather than mis-lower it.
+/// Reject, with the same `UnsupportedError` attribution the core converter uses, any construct the shared IR now represents but this specific `backend` has not declared `Supported`.
+/// The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct; a backend that hasn't implemented one of them yet must refuse it itself, at conversion time, rather than mis-lower it.
 pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Result<()> {
     // `used` is a closure so the usage scan (an IR walk for TableBulkOps) only runs for features the backend has *not* declared Supported.
     let require = |feature: Feature, used: &dyn Fn() -> bool, detail: &str| -> Result<()> {
@@ -118,7 +128,8 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
     Ok(())
 }
 
-/// Reject a library-mode module name that does not fit `language`'s grammar. `grammar` is the prose form of the rule, quoted verbatim in the message: an invalid name is a conversion-time error, never a silent transformation, so the message must be enough to fix the invocation without reading the source.
+/// Reject a library-mode module name that does not fit `language`'s grammar.
+/// `grammar` is the prose form of the rule, quoted verbatim in the message: an invalid name is a conversion-time error, never a silent transformation, so the message must be enough to fix the invocation without reading the source.
 pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::Error {
     anyhow::anyhow!(
         "invalid {language} module name {name:?}: it must be {grammar}. \
@@ -127,7 +138,7 @@ pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::E
     )
 }
 
-/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest` — the shape every backend's module-name grammar is built out of.
+/// Whether `seg` is a non-empty identifier whose first character satisfies `first` and whose remaining ones satisfy `rest`: the shape every backend's module-name grammar is built out of.
 pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> bool {
     let mut chars = seg.chars();
     match chars.next() {
@@ -136,7 +147,8 @@ pub fn is_ident(seg: &str, first: fn(char) -> bool, rest: fn(char) -> bool) -> b
     }
 }
 
-/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does. Integer `eq`/`ne` and every float comparison impose none — equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included.
+/// The view a wasm comparison imposes on its operands: what the stored representation must be read as before the target language's own operator answers the way wasm does.
+/// Integer `eq`/`ne` and every float comparison impose none: equal bit patterns compare equal under either view, and the languages' float comparison already matches wasm, NaN included.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CompareOperands {
     Float,
@@ -147,7 +159,8 @@ pub enum CompareOperands {
     Unsigned64,
 }
 
-/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation. Backends keep only the half that differs between them — how to spell a view their representation does not already provide — instead of each restating which `BinOp`s are comparisons.
+/// The comparison `op` performs, as the operator spelling every target language shares and the view its operands need; `None` for any other binary operation.
+/// Backends keep only the half that differs between them (how to spell a view their representation does not already provide) instead of each restating which `BinOp`s are comparisons.
 pub fn comparison(op: ir::BinOp) -> Option<(&'static str, CompareOperands)> {
     use ir::BinOp::*;
     use CompareOperands::*;
@@ -193,7 +206,7 @@ pub fn signed_view_rel_op(op: ir::BinOp) -> Option<(&'static str, Option<&'stati
     ))
 }
 
-/// Whether `e` is a comparison or an `eqz` — the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
+/// Whether `e` is a comparison or an `eqz`: the wasm expressions a backend's `cond` renders as a native boolean rather than as a `!= 0` test of a materialized 0/1, so a consumer can take that boolean directly.
 pub fn is_boolean(e: &ir::Expr) -> bool {
     match e {
         ir::Expr::Un(ir::UnOp::I32Eqz | ir::UnOp::I64Eqz, _) => true,
@@ -202,7 +215,8 @@ pub fn is_boolean(e: &ir::Expr) -> bool {
     }
 }
 
-/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals` — the grouping behind initializing a run in one statement. What a run is worth sharing differs per language (a rendered default value, a type name), so the caller supplies `key` and renders each range itself.
+/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals`: the grouping behind initializing a run in one statement.
+/// What a run is worth sharing differs per language (a rendered default value, a type name), so the caller supplies `key` and renders each range itself.
 pub fn local_runs<K: PartialEq>(
     locals: &[ir::ValType],
     mut key: impl FnMut(ir::ValType) -> K,
@@ -221,7 +235,9 @@ pub fn local_runs<K: PartialEq>(
     runs
 }
 
-/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable. A flat lowering appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead. Deliberately conservative — answering `false` only re-emits the transition that used to be there unconditionally.
+/// Whether `stmts` unconditionally leaves the current dispatch state, so a transition appended after it would be unreachable.
+/// A flat lowering appends a frame's exit transition on the way out, and for a body already ending in a `br`, `return` or `unreachable` that copy is dead.
+/// Deliberately conservative: answering `false` only re-emits the transition that used to be there unconditionally.
 pub fn terminates(stmts: &[ir::Stmt]) -> bool {
     let Some(last) = stmts
         .iter()
@@ -238,7 +254,9 @@ pub fn terminates(stmts: &[ir::Stmt]) -> bool {
     }
 }
 
-/// The runtime-unit name for `op`'s memory read (`i32_load8_u`, …), as the runtime units spell it. Shared because the unit names are: a backend that renames one renames the unit, not this table. Bash keeps its own copy, which deliberately routes float loads to the integer units.
+/// The runtime-unit name for `op`'s memory read (`i32_load8_u`, …), as the runtime units spell it.
+/// Shared because the unit names are: a backend that renames one renames the unit, not this table.
+/// Bash keeps its own copy, which deliberately routes float loads to the integer units.
 pub fn load_method(op: ir::LoadOp) -> &'static str {
     use ir::LoadOp::*;
     match op {
@@ -275,7 +293,9 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
     }
 }
 
-/// A structural key for a function type — `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`. `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules. A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend — which is why `name_of` stays the caller's.
+/// A structural key for a function type: `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`.
+/// `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules.
+/// A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend, which is why `name_of` stays the caller's.
 pub fn type_key(ty: &ir::FuncType, name_of: fn(ir::ValType) -> &'static str) -> String {
     let names = |tys: &[ir::ValType]| {
         tys.iter()
@@ -286,7 +306,8 @@ pub fn type_key(ty: &ir::FuncType, name_of: fn(ir::ValType) -> &'static str) -> 
     format!("{}->{}", names(&ty.params), names(&ty.results))
 }
 
-/// `data` as lowercase two-digit-per-byte hex, the payload every backend's embedded data-segment literal wraps (`pack("H*")`, `bytes.fromhex`, `Rt.unhex`). Written without a per-byte `format!`: a real app's segments run to megabytes, and CPython's alone would cost tens of millions of allocations.
+/// `data` as lowercase two-digit-per-byte hex, the payload every backend's embedded data-segment literal wraps (`pack("H*")`, `bytes.fromhex`, `Rt.unhex`).
+/// Written without a per-byte `format!`: a real app's segments run to megabytes, and CPython's alone would cost tens of millions of allocations.
 pub fn hex_string(data: &[u8]) -> String {
     const DIGITS: [u8; 16] = *b"0123456789abcdef";
     let mut out = String::with_capacity(data.len() * 2);
@@ -297,14 +318,16 @@ pub fn hex_string(data: &[u8]) -> String {
     out
 }
 
-/// WASI import module names a bundled runtime answers for. `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding — a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
+/// WASI import module names a bundled runtime answers for.
+/// `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding: a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
 pub const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
 
 pub fn is_wasi_module(name: &str) -> bool {
     WASI_MODULES.contains(&name)
 }
 
-/// Whether the generated artifact carries the built-in WASI as an import fallback — and so takes the backend's args/env/preopens entry points, and its standalone main parses `--dir`. True when `default_wasi` is on and the module imports at least one WASI function `bundler` has a unit for.
+/// Whether the generated artifact carries the built-in WASI as an import fallback, and so takes the backend's args/env/preopens entry points, and its standalone main parses `--dir`.
+/// True when `default_wasi` is on and the module imports at least one WASI function `bundler` has a unit for.
 pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBundler) -> bool {
     default_wasi
         && module
@@ -343,7 +366,8 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     })
 }
 
-/// The full WASI preview 1 surface, for the generated support docs; which of these a backend implements is derived from its runtime units (`bundler().has_unit("wasi/<name>")`). The bool marks whether the function is in scope: `false` for the out-of-scope surface (sockets, `proc_raise`) that no toolchain output exercises and even wasmtime leaves unimplemented.
+/// The full WASI preview 1 surface, for the generated support docs; which of these a backend implements is derived from its runtime units (`bundler().has_unit("wasi/<name>")`).
+/// The bool marks whether the function is in scope: `false` for the out-of-scope surface (sockets, `proc_raise`) that no toolchain output exercises and even wasmtime leaves unimplemented.
 pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("args_get", true),
     ("args_sizes_get", true),
@@ -400,7 +424,8 @@ pub struct RuntimeUnit {
     pub body: String,
 }
 
-/// A named scope units can live in (e.g. a class nested in the runtime module). `prefix` is the unit-id path segment; `open`/`close` wrap the scope's units; the root scope uses empty wrappers.
+/// A named scope units can live in (e.g. a class nested in the runtime module).
+/// `prefix` is the unit-id path segment; `open`/`close` wrap the scope's units; the root scope uses empty wrappers.
 pub struct RuntimeScope {
     pub prefix: &'static str,
     pub open: &'static str,
@@ -409,7 +434,8 @@ pub struct RuntimeScope {
     pub prelude: Option<&'static str>,
 }
 
-/// Resolves `requires:` closures over runtime units and emits the bundle, grouped by scope in declaration order, deterministically sorted within a scope. Language-agnostic: syntax comes from the scopes and the caller-provided wrapper around the whole bundle.
+/// Resolves `requires:` closures over runtime units and emits the bundle, grouped by scope in declaration order, deterministically sorted within a scope.
+/// Language-agnostic: syntax comes from the scopes and the caller-provided wrapper around the whole bundle.
 pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
     units: BTreeMap<String, RuntimeUnit>,
@@ -520,7 +546,8 @@ impl RuntimeBundler {
         Ok(closure)
     }
 
-    /// Emit the bundle for `seeds`' closure. `base_indent` is the indent level of the bundle's root-scope members (the caller wraps the result in the runtime module/namespace itself).
+    /// Emit the bundle for `seeds`' closure.
+    /// `base_indent` is the indent level of the bundle's root-scope members (the caller wraps the result in the runtime module/namespace itself).
     pub fn bundle(&self, seeds: &BTreeSet<String>, base_indent: usize) -> Result<String> {
         let closure = self.closure(seeds)?;
         let mut out = String::new();
@@ -567,7 +594,9 @@ impl RuntimeBundler {
         self.bundle(&seeds, base_indent)
     }
 
-    /// Emit one line at `indent` levels. A unit source is written space-indented at `unit_indent` per level; each such leading run becomes one `indent_str` here, so the bundle carries the caller's indentation style throughout instead of mixing it with the sources'. Spaces beyond the last whole run (an indentation that is not a multiple of `unit_indent`, e.g. an aligned continuation) are kept as spaces.
+    /// Emit one line at `indent` levels.
+    /// A unit source is written space-indented at `unit_indent` per level; each such leading run becomes one `indent_str` here, so the bundle carries the caller's indentation style throughout instead of mixing it with the sources'.
+    /// Spaces beyond the last whole run (an indentation that is not a multiple of `unit_indent`, e.g. an aligned continuation) are kept as spaces.
     fn push_line(&self, out: &mut String, indent: usize, line: &str) {
         if line.trim().is_empty() {
             out.push('\n');

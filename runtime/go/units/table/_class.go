@@ -1,6 +1,4 @@
-// One table slot: a funcref (type key + the Go func value) or nil for a null
-// slot. call_indirect compares type keys, so a table shared across modules
-// stays consistent.
+// One table slot: a funcref (type key + the Go func value) or nil for a null slot. call_indirect compares type keys, so a table shared across modules stays consistent.
 type funcref struct {
     ty string
     fn any

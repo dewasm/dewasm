@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
 
-# Populate benchmarks/cache/ with everything the benchmark suite needs that is
-# not checked in: the two pure-source wasm interpreters we compare against, and
-# the built microbenchmark modules.
+# Populate benchmarks/cache/ with everything the benchmark suite needs that is not checked in: the two pure-source wasm interpreters we compare against, and the built microbenchmark modules.
 #
-#   cache/venv/    a Python venv with pywasm pinned to PYWASM_VERSION
-#   cache/gems/    a GEM_HOME with wardite pinned to WARDITE_VERSION
-#   cache/wat/*.wasm  the hand-written microbenchmarks, via wat/build.sh
-#   cache/c/*.wasm    the C microbenchmarks, via c/build.sh
+# cache/venv/    a Python venv with pywasm pinned to PYWASM_VERSION
+# cache/gems/    a GEM_HOME with wardite pinned to WARDITE_VERSION
+# cache/wat/*.wasm  the hand-written microbenchmarks, via wat/build.sh
+# cache/c/*.wasm    the C microbenchmarks, via c/build.sh
 #
 # Third-party artifacts are never committed, and the cache is gitignored.
-# Idempotent: re-running is a no-op beyond re-checking the pins and rebuilding
-# the microbenchmarks.
+# Idempotent: re-running is a no-op beyond re-checking the pins and rebuilding the microbenchmarks.
 #
-# PyPy is deliberately not set up here. The harness drives the host's own
-# pypy3 install; benchmarks/drivers/pywasm.py runs under it unmodified, but
-# pywasm has to be importable there, e.g.
+# PyPy is deliberately not set up here.
+# The harness drives the host's own pypy3 install; benchmarks/drivers/pywasm.py runs under it unmodified, but pywasm has to be importable there, e.g.
 #
-#   pypy3 -m pip install pywasm==2.2.3
+# pypy3 -m pip install pywasm==2.2.3
 #
 
 set -euo pipefail
@@ -31,7 +27,7 @@ WARDITE_VERSION=0.9.0
 # Fail loudly with an actionable message rather than half-installing.
 require_tool() {
   command -v "$1" >/dev/null && return
-  echo "benchmarks/setup.sh: $1 not found — $2" >&2
+  echo "benchmarks/setup.sh: $1 not found: $2" >&2
   exit 1
 }
 
@@ -47,7 +43,8 @@ gems=cache/gems
 "$venv/bin/pip" install --quiet --disable-pip-version-check \
   "pywasm==$PYWASM_VERSION"
 
-# --- wardite: pure Ruby. A private GEM_HOME keeps it out of the user's gems;
+# --- wardite: pure Ruby.
+# A private GEM_HOME keeps it out of the user's gems;
 # the drivers are run with GEM_HOME pointed here.
 GEM_HOME="$PWD/$gems" gem install wardite \
   --version "$WARDITE_VERSION" --no-document --silent --conservative

@@ -10,8 +10,7 @@ def wasi_fd_seek(fd, offset, whence, out_ptr)
   @memory.i64_store(out_ptr, Rt.m64(io.tell))
   ERRNO_SUCCESS
 rescue Errno::EINVAL
-  # Seeking before byte 0 raises EINVAL; surface it precisely rather than
-  # folding it into the generic ERRNO_IO.
+  # Seeking before byte 0 raises EINVAL; surface it precisely rather than folding it into the generic ERRNO_IO.
   ERRNO_INVAL
 rescue SystemCallError
   ERRNO_IO

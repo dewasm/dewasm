@@ -1,7 +1,6 @@
 # requires: mem/check, mem/i32_store
 # The args_get/environ_get ABI: a table of 4-byte LE pointers at list_ptr,
-# NUL-terminated strings packed contiguously from buf_ptr. $2 is the name
-# of the array holding the strings.
+# NUL-terminated strings packed contiguously from buf_ptr. $2 is the name of the array holding the strings.
 wasi_write_string_list() {
   local __p=$1 __list_ptr=$3 __buf_ptr=$4
   local -n __m=${__p}mem

@@ -1,4 +1,4 @@
-# Decision 44 — Ruby Backend: Fixed-Arity `call_indirect` Dispatch
+# Decision 44: Ruby Backend Fixed-Arity `call_indirect` Dispatch
 
 Status: **Accepted, 2026-07-28.**
 Implemented in `crates/dewasm-backend-ruby/src/lib.rs` + `runtime/ruby/units/table/call{0..8}.rb`.
@@ -10,7 +10,7 @@ Decision 4 renders `call_indirect` as `@tT.call(index, type_sym, *args)`, where 
 Both splats allocate a fresh `T_ARRAY` per indirect call.
 SQLite's VDBE and virtual-table dispatch route almost everything through `call_indirect`: profiling the converted `sqlite3-shell` on the benchmark workload put `Rt::Table#call` at 3.7% of CPU, and its `*args` array at ~0.4M `T_ARRAY` allocations per run (5.2% of the run's objects).
 
-The argument count is a static property of the call site's type signature, so the splat is avoidable — the arity is known at conversion time.
+The argument count is a static property of the call site's type signature, so the splat is avoidable: the arity is known at conversion time.
 Measuring the two `call_indirect`-heavy real-world apps confirms a small fixed ceiling covers every site (arity = signature parameter count):
 
 | arity | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | >8 |
@@ -24,9 +24,9 @@ A ceiling of 8 covers 100% of both.
 ## Decision
 
 - **A per-arity `Table#callN` for `0 ≤ N ≤ MAX_FIXED_ARITY` (= 8)**, one runtime unit each (`runtime/ruby/units/table/call0.rb` … `call8.rb`).
-  Each takes the index, the type symbol, and exactly `N` positional parameters — no `*args` on the caller side — and invokes the callee with a fixed argument list (`func.call(a0, a1)`), no splat on the callee side either.
+  Each takes the index, the type symbol, and exactly `N` positional parameters (no `*args` on the caller side), and invokes the callee with a fixed argument list (`func.call(a0, a1)`), no splat on the callee side either.
   The dispatch and trap contract is **identical** to `call`: `undefined element` (out of bounds), `uninitialized element` (null slot), `indirect call type mismatch` (structural symbol `!=`), then the call.
-- **The backend emits `@tT.callN(index, type_sym, a0, …)`** when the site's signature has `N ≤ MAX_FIXED_ARITY` args, and `use_unit`s only the `callN` actually referenced — so a module bundles just the arities it uses, matching the existing per-method unit granularity (decision 6).
+- **The backend emits `@tT.callN(index, type_sym, a0, …)`** when the site's signature has `N ≤ MAX_FIXED_ARITY` args, and `use_unit`s only the `callN` actually referenced, so a module bundles just the arities it uses, matching the existing per-method unit granularity (decision 6).
 - **The splat `call` stays as the fallback** for signatures wider than `MAX_FIXED_ARITY`.
   No such site appears in the measured apps, but general wasm permits any arity, so the path is kept for correctness.
 - **`MAX_FIXED_ARITY` is a single named constant** in the backend; the `call{0..N}.rb` units must exist for the value chosen.

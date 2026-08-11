@@ -1,7 +1,6 @@
 module SQLite3
   # Pragma accessors as *real* methods on a named module: Rails introspects
-  # `SQLite3::Pragmas.method_defined?("#{pragma}=")` before public_send-ing
-  # the setter, so method_missing tricks would not survive.
+  # `SQLite3::Pragmas.method_defined?("#{pragma}=")` before public_send-ing the setter, so method_missing tricks would not survive.
   module Pragmas
     NAMES = %w[
       analysis_limit application_id auto_vacuum automatic_index busy_timeout

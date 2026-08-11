@@ -1,5 +1,4 @@
-# The exact -2^63 case needs no special path: the negative clamp is the
-# same 1<<63 pattern.
+# The exact -2^63 case needs no special path: the negative clamp is the same 1<<63 pattern.
 rt_i64_trunc_sat_f64_s() {
   local a=$1 pa s e m t
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

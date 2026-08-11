@@ -23,8 +23,7 @@ func (w *WASI) wasi_fd_pread(fd, iovsPtr, iovsLen uint32, offset uint64, nreadPt
             w.memory.init(uint64(ptr), buf, 0, uint64(n))
             nread += uint32(n)
         }
-        // ReadAt returns io.EOF (a non-nil err) on a short read at end of
-        // file; either a short read or any error ends the scatter read.
+        // ReadAt returns io.EOF (a non-nil err) on a short read at end of file; either a short read or any error ends the scatter read.
         if err != nil || uint32(n) < length {
             break
         }

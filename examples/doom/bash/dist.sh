@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build doom.bash: the single-file distributable — the terminal frontend with the generated library inlined in place of its `source` line, behind a provenance/license header. The result embeds the GPL-2.0 DOOM engine and the shareware WAD, so it is published as a standalone artifact (a Gist linked from the READMEs) rather than committed to this repository.
+# Build doom.bash: the single-file distributable, the terminal frontend with the generated library inlined in place of its `source` line, behind a provenance/license header. The result embeds the GPL-2.0 DOOM engine and the shareware WAD, so it is published as a standalone artifact (a Gist linked from the READMEs) rather than committed to this repository.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -10,13 +10,13 @@ out=doom.bash
   echo '#!/usr/bin/env bash'
   cat <<'HDR'
 #
-# doom.bash — DOOM, running in pure GNU Bash. No compiled code, no dependencies.
+# doom.bash: DOOM, running in pure GNU Bash. No compiled code, no dependencies.
 #
 # This one file contains two things:
 #   1. The 1993 DOOM engine (via doomgeneric), compiled to a WebAssembly module
 #      by jacobenget/doom.wasm v0.1.0 with the DOOM shareware WAD embedded, then
 #      translated from WebAssembly into Bash source by dewasm
-#      (https://github.com/dewasm/dewasm — the same wasm binary also runs there
+#      (https://github.com/dewasm/dewasm, the same wasm binary also runs there
 #      as pure Go, Java, Ruby, and Python; see examples/doom).
 #   2. A terminal frontend: ANSI truecolor half-block rendering, raw-mode input.
 #

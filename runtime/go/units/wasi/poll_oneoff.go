@@ -1,12 +1,9 @@
 // requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
-// poll_oneoff waits until at least one subscription is ready, then writes one
-// event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
-// 32-byte events out). Only fd_read on stdin actually blocks (via
-// syscall.Select); regular files, stdout/stderr, and every fd_write are treated
-// as immediately ready, and unknown fds report EBADF. Clock subscriptions set
-// the wait deadline; if it elapses with no fd ready, the due clock subs fire.
-// Motivated by event-loop guests such as the QuickJS REPL, which blocks here on
-// stdin between prompts.
+// poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
+// 32-byte events out).
+// Only fd_read on stdin actually blocks (via syscall.Select); regular files, stdout/stderr, and every fd_write are treated as immediately ready, and unknown fds report EBADF.
+// Clock subscriptions set the wait deadline; if it elapses with no fd ready, the due clock subs fire.
+// Motivated by event-loop guests such as the QuickJS REPL, which blocks here on stdin between prompts.
 func (w *WASI) wasi_poll_oneoff(inPtr, outPtr, nsubs, neventsPtr uint32) uint32 {
     if nsubs == 0 {
         return wasiInval
@@ -72,9 +69,7 @@ func (w *WASI) wasi_poll_oneoff(inPtr, outPtr, nsubs, neventsPtr uint32) uint32 
     if len(events) == 0 {
         if len(waiters) > 0 {
             var rset syscall.FdSet
-            // FdSet is a bit array; on the little-endian targets we support bit
-            // n lives in byte n/8 regardless of the platform word width (int32
-            // on darwin, int64 on linux), so address it byte-wise.
+            // FdSet is a bit array; on the little-endian targets we support bit n lives in byte n/8 regardless of the platform word width (int32 on darwin, int64 on linux), so address it byte-wise.
             bits := (*[128]byte)(unsafe.Pointer(&rset))
             maxFd := 0
             for _, wt := range waiters {
@@ -89,9 +84,7 @@ func (w *WASI) wasi_poll_oneoff(inPtr, outPtr, nsubs, neventsPtr uint32) uint32 
                 tvp = &tv
             }
             // syscall.Select's return signature differs by platform (linux:
-            // (int, error); darwin: error), so call it as a statement and read
-            // readiness back from the set, which select clears for fds that did
-            // not fire.
+            // (int, error); darwin: error), so call it as a statement and read readiness back from the set, which select clears for fds that did not fire.
             syscall.Select(maxFd+1, &rset, nil, nil, tvp)
             for _, wt := range waiters {
                 if bits[wt.fd/8]&(1<<(uint(wt.fd)%8)) != 0 {

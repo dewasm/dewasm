@@ -1,4 +1,6 @@
-//! Python end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Python backend. This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations. Python covers full WASI preview 1 incl. the filesystem, so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
+//! Python end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Python backend.
+//! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations.
+//! Python covers full WASI preview 1 incl. the filesystem, so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
 
 use std::path::{Path, PathBuf};
 
@@ -18,10 +20,12 @@ impl BackendUnderTest for Python {
     }
 
     fn interpreter(&self) -> PathBuf {
-        find_python().expect("python3 >= 3.9 not found on PATH — see docs/testing.md")
+        find_python().expect("python3 >= 3.9 not found on PATH: see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them. `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports — its class body binds `Rt` at import time — so an imported table crosses modules. Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them.
+    /// `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports (its class body binds `Rt` at import time), so an imported table crosses modules.
+    /// Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -86,7 +90,8 @@ print(inst.invoke("add", 0xffffffff, 1))
 print(inst.invoke("fib", 10))
 "#;
 
-/// The override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI. Prints the actual bytes written.
+/// The override/fallback glue: fd_write intercepted, random_get falls back to the bundled WASI.
+/// Prints the actual bytes written.
 const PYTHON_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -140,7 +145,7 @@ sys.stdout.write(wasi.out.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back — so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
 const PYTHON_PARTIAL_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -162,7 +167,7 @@ sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout — the Python mirror of Ruby's StringIO idiom.
+/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout, the Python mirror of Ruby's StringIO idiom.
 const PYTHON_STDIO_CAPTURE_GLUE: &str = r#"import io
 import sys
 
@@ -235,7 +240,8 @@ except CrubyRt.Exit:
     pass
 "#;
 
-// C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's runtime Memory. Only the file-backed case uses {scratch}.
+// C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's runtime Memory.
+// Only the file-backed case uses {scratch}.
 
 const PYTHON_LIBSQLITE3_MEM: &str = r#"
 db_mod = Libsqlite3({})
@@ -435,14 +441,11 @@ inst.invoke("free", r)
 print("TS-OK")
 "#;
 
-/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a
-/// zero-returning `env.call_host_function` import stub (only invoked when the
-/// guest registers host callbacks — this program registers none) and a
+/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a zero-returning `env.call_host_function` import stub (only invoked when the guest registers host callbacks: this program registers none) and a
 /// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
-/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest
-/// memory → `zeroperl_eval` → `zeroperl_flush`. The program is a regex
-/// capture and a `printf`, so its stdout is deterministic. The Perl source is a raw byte
-/// literal: its backslash escapes belong to Perl, not to Python.
+/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`.
+/// The program is a regex capture and a `printf`, so its stdout is deterministic.
+/// The Perl source is a raw byte literal: its backslash escapes belong to Perl, not to Python.
 const PYTHON_ZEROPERL_EVAL: &str = r#"
 inst = Zeroperl(
     {"env": {"call_host_function": lambda a, b, c: 0}},
@@ -467,14 +470,14 @@ inst.invoke("zeroperl_flush")
 /// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
 /// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
 /// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree — so `use Image::ExifTool` resolves in-guest with no module
-/// preopen. Instantiated like [`PYTHON_ZEROPERL_EVAL`] (the
+/// module tree, so `use Image::ExifTool` resolves in-guest with no module preopen.
+/// Instantiated like [`PYTHON_ZEROPERL_EVAL`] (the
 /// `call_host_function` stub + a `/dev/null` preopen), plus the staged image at
-/// `/img`. The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it
-/// first overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal
-/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit` — then
-/// `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1. Only
-/// deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
+/// `/img`.
+/// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal
+/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`, and then
+/// `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1.
+/// Only deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
 const PYTHON_EXIFTOOL: &str = r#"
 inst = Zeroperl(
     {"env": {"call_host_function": lambda a, b, c: 0}},
@@ -506,7 +509,8 @@ b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module. Each carries its own runtime class (`AlphaRt`/`BetaRt`), so their trap types are distinct objects and Alpha's trap is catchable by name.
+/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module.
+/// Each carries its own runtime class (`AlphaRt`/`BetaRt`), so their trap types are distinct objects and Alpha's trap is catchable by name.
 const PYTHON_EMBEDDED_COEXIST_GLUE: &str = r#"a = Alpha()
 b = Beta()
 print(a.invoke("div", 7, 2))
@@ -518,7 +522,8 @@ except AlphaRt.Trap:
     print("trapped")
 "#;
 
-/// DOOM: drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot. `{ticks}`/`{clock_step}` are filled by the runner.
+/// DOOM: drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
 _frame = {"off": None, "w": 0, "h": 0}
@@ -568,11 +573,9 @@ out.flush()
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame
-/// from agnes's palette-index screen buffer and its palette (issue #117; the
-/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime
-/// snapshot. `{rom}` (the cached ROM's host path) and `{frames}` filled by the
-/// runner.
+/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame from agnes's palette-index screen buffer and its palette (issue #117; the
+/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime snapshot.
+/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 const PYTHON_NES_FRAME_GLUE: &str = r#"import sys
 
 nes = Nes()
@@ -633,11 +636,8 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-// Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the
-// e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on
-// concurrent threads — three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature),
-// where the pre-existing two fit. The packed case is the newcomer, so it leaves the CI run; it
-// still runs on Ruby and under wasmtime in CI, and still converts here.
+// Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on concurrent threads: three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature), where the pre-existing two fit.
+// The packed case is the newcomer, so it leaves the CI run; it still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Python);
 
@@ -647,10 +647,8 @@ dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBAC
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
 // Ultra-slow category (issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
-// Python module, and host CPython peaks at ~4.9 GB RSS compiling it — the memory criterion that put
-// the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
-// Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is
-// what puts the eval case here; the two share the one oversized module.
+// Python module, and host CPython peaks at ~4.9 GB RSS compiling it, the memory criterion that put the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
+// Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is what puts the eval case here; the two share the one oversized module.
 dewasm_test_helper::zeroperl_eval_e2e!(Python, PYTHON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Python, PYTHON_EXIFTOOL, ultra);
 

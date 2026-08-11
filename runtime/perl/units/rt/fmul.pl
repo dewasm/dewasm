@@ -1,6 +1,5 @@
 # requires: rt/f64_bits
-# See Rt::fadd; a zero product (including underflow) takes the XOR of the
-# operand signs.
+# See Rt::fadd; a zero product (including underflow) takes the XOR of the operand signs.
 sub fmul {
     my ($a, $b) = @_;
     my $r = unpack('d<', pack('d<', $a * $b));

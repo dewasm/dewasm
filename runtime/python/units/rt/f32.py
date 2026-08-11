@@ -1,7 +1,4 @@
-# Round a double to single precision. struct.pack("<f") raises OverflowError
-# for out-of-float-range doubles instead of returning infinity, and values
-# below the rounding boundary (2^128 - 2^103) must map back to the largest
-# finite f32.
+# Round a double to single precision. struct.pack("<f") raises OverflowError for out-of-float-range doubles instead of returning infinity, and values below the rounding boundary (2^128 - 2^103) must map back to the largest finite f32.
 F32_MAX = 3.4028234663852886e38
 F32_OVERFLOW = 2.0 ** 128 - 2.0 ** 103
 

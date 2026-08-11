@@ -9,8 +9,7 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
-    // A missing target is ENOENT before any shape check (Files.isDirectory is
-    // false for "missing" and "not a directory" alike).
+    // A missing target is ENOENT before any shape check (Files.isDirectory is false for "missing" and "not a directory" alike).
     if (!java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOENT;
     }
@@ -19,8 +18,7 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
     if (!java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOTDIR;
     }
-    // rmdir through a trailing slash on an existing directory is EINVAL per
-    // wasmtime.
+    // rmdir through a trailing slash on an existing directory is EINVAL per wasmtime.
     if (rel.endsWith("/")) {
         return WASI_INVAL;
     }

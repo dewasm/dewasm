@@ -1,6 +1,6 @@
 // requires: memory/i32_load, memory/i32_store, memory/read_string
-// Positional gather write: writes at an absolute file offset without moving the
-// channel's own position. Stdio is not seekable (SPIPE).
+// Positional gather write: writes at an absolute file offset without moving the channel's own position.
+// Stdio is not seekable (SPIPE).
 int wasi_fd_pwrite(int fd, int iovsPtr, int iovsLen, long offset, int nwrittenPtr) {
     Object e = fds.get(fd);
     if (isStdio(e)) {

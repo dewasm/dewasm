@@ -1,21 +1,16 @@
 //! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one:
-//! run the *original* `nes.wasm` under the wasmtime crate with the
-//! deterministic driving contract (load the pinned ROM, tick [`NES_FRAMES`]
+//! run the *original* `nes.wasm` under the wasmtime crate with the deterministic driving contract (load the pinned ROM, tick [`NES_FRAMES`]
 //! frames with no input) and write the rendered frame to
-//! `examples/apps/snapshots/nes_frame.ppm`. wasmtime lives here, in dev tooling,
-//! not in `dewasm-test-helper`. A PNG rendering is emitted alongside for human
-//! inspection; only the PPM is the compared oracle.
+//! `examples/apps/snapshots/nes_frame.ppm`. wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
+//! A PNG rendering is emitted alongside for human inspection; only the PPM is the compared oracle.
 //!
-//! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain
-//! reactor library, so the oracle only calls `_initialize` plus the demo
-//! exports. The ROM is copied into guest memory through `allocRom`.
+//! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain reactor library, so the oracle only calls `_initialize` plus the demo exports.
+//! The ROM is copied into guest memory through `allocRom`.
 
 use anyhow::{ensure, Context, Result};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
-/// Instantiate and drive `nes.wasm` under the deterministic contract, returning
-/// agnes's own frame representation — the palette-index screen buffer, the
-/// palette, and the frame dimensions.
+/// Instantiate and drive `nes.wasm` under the deterministic contract, returning agnes's own frame representation: the palette-index screen buffer, the palette, and the frame dimensions.
 fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>, u32, u32)> {
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
@@ -81,14 +76,14 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::nes_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
         format!(
-            "read {} — run examples/apps/scripts/nes.sh first",
+            "read {}: run examples/apps/scripts/nes.sh first",
             wasm_path.display()
         )
     })?;
     let rom_path = dewasm_test_helper::alter_ego_rom_path();
     let rom = std::fs::read(&rom_path).with_context(|| {
         format!(
-            "read {} — run examples/apps/scripts/nes.sh first",
+            "read {}: run examples/apps/scripts/nes.sh first",
             rom_path.display()
         )
     })?;
@@ -101,12 +96,10 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         dewasm_test_helper::NES_FRAME_H
     );
 
-    // Guard against a degenerate (blank/near-blank) capture. NES palettes are
-    // tiny, so the DOOM oracle's >50 threshold is wrong here — the Alter Ego
-    // credits screen this pins measures 7 distinct colors, while the near-black
-    // boot frame is a single color. A >4 threshold cleanly separates the two.
-    // Counted over colors, not raw indices: distinct indices can alias onto one
-    // palette entry (the mask, plus repeated black entries).
+    // Guard against a degenerate (blank/near-blank) capture.
+    // NES palettes are tiny, so the DOOM oracle's >50 threshold is wrong here: the Alter Ego credits screen this pins measures 7 distinct colors, while the near-black boot frame is a single color.
+    // A >4 threshold cleanly separates the two.
+    // Counted over colors, not raw indices: distinct indices can alias onto one palette entry (the mask, plus repeated black entries).
     let ppm = dewasm_test_helper::nes_frame_to_ppm(&screen, &palette, w, h);
     let distinct = screen
         .iter()
@@ -115,16 +108,15 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         .len();
     ensure!(
         distinct > 4,
-        "captured frame looks degenerate ({distinct} distinct colors) — check NES_FRAMES"
+        "captured frame looks degenerate ({distinct} distinct colors): check NES_FRAMES"
     );
 
     Ok((ppm, frame_to_png(&screen, &palette, w, h)?))
 }
 
-/// Encode the palette-index screen buffer as an 8-bit RGB PNG, composing pixels
-/// the same way [`nes_frame_to_ppm`] does. Settings are the crate defaults, kept
-/// fixed so regeneration is byte-stable. This PNG is a human-facing sidecar only
-/// — no test compares it.
+/// Encode the palette-index screen buffer as an 8-bit RGB PNG, composing pixels the same way [`nes_frame_to_ppm`] does.
+/// Settings are the crate defaults, kept fixed so regeneration is byte-stable.
+/// This PNG is a human-facing sidecar only: no test compares it.
 fn frame_to_png(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for &ix in screen {

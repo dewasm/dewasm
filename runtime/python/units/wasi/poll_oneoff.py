@@ -1,17 +1,14 @@
 # requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
-# poll_oneoff waits until at least one subscription is ready, then writes one
-# event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
-# 32-byte events out). Only fd_read on stdin actually blocks (via
-# select.select); regular files, stdout/stderr, and every fd_write are treated
-# as immediately ready, and unknown fds report EBADF. Clock subscriptions set
-# the wait deadline; if it elapses with no fd ready, the due clock subs fire.
-# Motivated by event-loop guests such as the QuickJS REPL, which blocks here on
-# stdin between prompts.
+# poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
+# 32-byte events out).
+# Only fd_read on stdin actually blocks (via select.select); regular files, stdout/stderr, and every fd_write are treated as immediately ready, and unknown fds report EBADF.
+# Clock subscriptions set the wait deadline; if it elapses with no fd ready, the due clock subs fire.
+# Motivated by event-loop guests such as the QuickJS REPL, which blocks here on stdin between prompts.
 def wasi_poll_oneoff(self, in_ptr, out_ptr, nsubs, nevents_ptr):
     if nsubs == 0:
         return self.ERRNO_INVAL
     ready = []    # (userdata, error, type, nbytes, flags) resolvable without waiting
-    waiters = []  # (userdata, type, io) fd_read on stdin — needs a host wait
+    waiters = []  # (userdata, type, io) fd_read on stdin: needs a host wait
     clocks = []   # (userdata, rel_ns)
     for i in range(nsubs):
         base = in_ptr + i * 48

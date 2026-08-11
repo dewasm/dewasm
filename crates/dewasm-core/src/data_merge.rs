@@ -1,19 +1,21 @@
 //! Adjacent active-data-segment merging.
 //!
-//! Toolchains split initialized data across thousands of tiny active segments (ruby.wasm ships 7871); merging runs of near-adjacent ones into a single zero-filled blob shrinks every backend's output. Runs at the end of module building.
+//! Toolchains split initialized data across thousands of tiny active segments (ruby.wasm ships 7871); merging runs of near-adjacent ones into a single zero-filled blob shrinks every backend's output.
+//! Runs at the end of module building.
 //!
 //! Four properties keep the rewrite sound. 1, 3 and 4 are checked up front and failing any bails the whole pass; 2 holds by construction, since the pass rebuilds the list in declaration order.
 //!
-//! 1. **No `memory.init`/`data.drop`** — they address segments by index.
-//! 2. **Declaration order is preserved** — segments apply in order, later writes win.
-//! 3. **Active `i32.const` segments are ascending and non-overlapping** — so no const-offset segment sits inside a zero-filled gap.
-//! 4. **No `global.get` offsets** — such a segment's runtime-unknown target could sit inside a gap and be clobbered by the blob's zeros (issue #28).
+//! 1. **No `memory.init`/`data.drop`**: they address segments by index.
+//! 2. **Declaration order is preserved**: segments apply in order, later writes win.
+//! 3. **Active `i32.const` segments are ascending and non-overlapping**, so no const-offset segment sits inside a zero-filled gap.
+//! 4. **No `global.get` offsets**: such a segment's runtime-unknown target could sit inside a gap and be clobbered by the blob's zeros (issue #28).
 //!
 //! Passive segments carry no memory effect once 1 holds and pass through without closing a run.
 
 use crate::ir::{DataSegment, Expr, Module, Stmt};
 
-/// Largest gap worth bridging with zero fill. Tuned to the always-on inline cost (the core cannot see `GenOptions`), not wasm2go's externalize-only 4096.
+/// Largest gap worth bridging with zero fill.
+/// Tuned to the always-on inline cost (the core cannot see `GenOptions`), not wasm2go's externalize-only 4096.
 const MAX_MERGE_GAP: u64 = 64;
 
 pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
@@ -82,7 +84,8 @@ pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
     module.datas = out;
 }
 
-/// A constant-offset active segment. `start` originated as a `u32` offset.
+/// A constant-offset active segment.
+/// `start` originated as a `u32` offset.
 fn active_segment(start: u64, data: Vec<u8>) -> DataSegment {
     DataSegment {
         offset: Some(Expr::I32Const(start as u32)),
@@ -100,7 +103,8 @@ fn body_refs_segment(stmts: &[Stmt]) -> bool {
     })
 }
 
-/// Whether every active `i32.const` segment starts at or after the running maximum end of all earlier such segments (globally ascending, non-overlapping in declaration order). `global.get`-offset and passive segments are ignored.
+/// Whether every active `i32.const` segment starts at or after the running maximum end of all earlier such segments (globally ascending, non-overlapping in declaration order).
+/// `global.get`-offset and passive segments are ignored.
 fn active_const_segments_ascending(datas: &[DataSegment]) -> bool {
     let mut max_end: u64 = 0;
     for seg in datas {

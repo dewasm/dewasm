@@ -11,10 +11,7 @@ sub wasi_path_filestat_set_times {
     return $self->fs_errno(0 + $!) unless @st;
     my ($a, $m, $terr) = $self->fst_times($st[8], $st[9], $atim, $mtim, $fst_flags);
     return $terr if defined $terr;
-    # Core perl exposes no lutimes/utimensat(AT_SYMLINK_NOFOLLOW), so a
-    # final-component symlink cannot carry its own times: the utime below
-    # follows it (the one NOFOLLOW gap in this backend's WASI surface; the
-    # wasi-testsuite expected-failures list carries the attribution).
+    # Core perl exposes no lutimes/utimensat(AT_SYMLINK_NOFOLLOW), so a final-component symlink cannot carry its own times: the utime below follows it (the one NOFOLLOW gap in this backend's WASI surface; the wasi-testsuite expected-failures list carries the attribution).
     Time::HiRes::utime($a, $m, $host) or return $self->fs_errno(0 + $!);
     return ERRNO_SUCCESS;
 }

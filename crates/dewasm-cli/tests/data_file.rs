@@ -1,6 +1,9 @@
-//! End-to-end coverage for `--data-file` data-segment externalization. For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file. Also pins the loud rejections (the bash target, `-o -`).
+//! End-to-end coverage for `--data-file` data-segment externalization.
+//! For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
+//! Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source. The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source.
+//! The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -15,7 +18,8 @@ fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
 
-/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized sidecar. `_start` prints `Active!\nPassive!\n`.
+/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized sidecar.
+/// `_start` prints `Active!\nPassive!\n`.
 fn fixture_wat() -> String {
     let bulk = "x".repeat(2000);
     format!(
@@ -72,7 +76,7 @@ fn write(path: &Path, contents: &str) {
 /// Run a Ruby program from its own directory (so `__dir__`-relative sidecar loads resolve), returning (stdout, exit code).
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby =
-        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY) — see docs/testing.md");
+        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .args(args)
@@ -85,7 +89,7 @@ fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 /// `go build` a program in its own directory (so `//go:embed` resolves) and run the resulting binary, returning (stdout, exit code).
 fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let go =
-        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO) — see docs/testing.md");
+        find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
     let dir = prog.parent().unwrap();
     let bin = dir.join("prog_bin");
     let build = Command::new(&go)
@@ -111,7 +115,7 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 
 /// Run a Python program from its own directory (so the sidecar, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
 fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
-    let python = find_python().expect("python3 not found on PATH — see docs/testing.md");
+    let python = find_python().expect("python3 not found on PATH: see docs/testing.md");
     let out = Command::new(python)
         .arg(prog)
         .args(args)
@@ -124,7 +128,7 @@ fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
 /// Run a Perl program from its own directory (so the sidecar, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
 fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let perl = find_perl()
-        .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH — see docs/testing.md");
+        .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md");
     let out = Command::new(perl)
         .arg(prog)
         .args(args)
@@ -152,7 +156,7 @@ fn compile_java(src: &Path, classdir: &Path) {
 
 /// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the sidecar sitting alongside `Main.class`), returning (stdout, exit code).
 fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
-    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA) — see docs/testing.md");
+    let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
     let out = Command::new(&java)
         .arg("-cp")
         .arg(classdir)
@@ -530,7 +534,8 @@ fn rejects_unsupported_targets_and_stdout() {
     );
 }
 
-/// A `--data-file` resolving to the same file as `-o` is rejected before anything is written: the blob would otherwise clobber the freshly written source (#30). Covers both the identical spelling and a `..`-hop alias of the same path.
+/// A `--data-file` resolving to the same file as `-o` is rejected before anything is written: the blob would otherwise clobber the freshly written source (#30).
+/// Covers both the identical spelling and a `..`-hop alias of the same path.
 #[test]
 fn rejects_data_file_colliding_with_output_path() {
     let dir = tempdir("collide-output");
@@ -578,7 +583,8 @@ fn rejects_data_file_colliding_with_output_path() {
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 }
 
-/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the sidecar path and clobbered by the blob (#30). Covered with data segments (source and sidecar share the name) and without (the lone source itself matches the sidecar name).
+/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the sidecar path and clobbered by the blob (#30).
+/// Covered with data segments (source and sidecar share the name) and without (the lone source itself matches the sidecar name).
 #[test]
 fn rejects_data_file_colliding_with_generated_name() {
     let dir = tempdir("collide-name");
@@ -649,7 +655,7 @@ fn ruby_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-ruby");
@@ -705,7 +711,7 @@ fn go_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-go");
@@ -765,7 +771,7 @@ fn python_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-python");
@@ -821,7 +827,7 @@ fn java_qjs_data_file_matches_embedded() {
     let wasm = qjs_wasm();
     assert!(
         wasm.exists(),
-        "qjs not cached — run examples/apps/setup.sh (see docs/testing.md)"
+        "qjs not cached: run examples/apps/setup.sh (see docs/testing.md)"
     );
     let wasm = wasm.to_str().unwrap();
     let dir = tempdir("qjs-java");

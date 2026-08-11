@@ -1,22 +1,11 @@
 # requires: mem/fill, mem/i32_load, mem/i32_load8_u, mem/i32_load16_u, mem/i64_load, mem/i32_store, mem/i32_store8, mem/i32_store16, mem/i64_store
-# poll_oneoff waits until at least one subscription is ready, then writes one
-# event per ready subscription (WASI p1: 48-byte subscriptions in, 32-byte
-# events out; mirrors the Ruby unit). fd_write on any writable fd, a
-# regular-file fd_read, and stdout/stderr reads are immediately ready; an
-# unknown or directory fd reports EBADF; only fd_read on stdin blocks. A clock
-# subscription sets the wait deadline; if it elapses with no fd ready the
-# soonest clock(s) fire, exactly as Ruby (ready fd events win outright, so a
-# clock is never consulted once any fd is ready). stdin blocks via `read -t
+# poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1: 48-byte subscriptions in, 32-byte events out; mirrors the Ruby unit). fd_write on any writable fd, a regular-file fd_read, and stdout/stderr reads are immediately ready; an unknown or directory fd reports EBADF; only fd_read on stdin blocks.
+# A clock subscription sets the wait deadline; if it elapses with no fd ready the soonest clock(s) fire, exactly as Ruby (ready fd events win outright, so a clock is never consulted once any fd is ready). stdin blocks via `read -t
 # <deadline>` and the bytes that arrive are held in the pushback buffer
-# (<p>wpush, a space-separated byte-ordinal list shared with fd_read); a
-# non-tty stdin waits for one byte with `read -d '' -n 1`, while a tty stdin
-# waits for a whole canonical line with a plain `read` (`-n 1` toggles ICANON
-# per byte and each restore makes the pty line discipline re-echo the pending
-# line — see fd_read); a clock-only wait sleeps with a bash-only
-# coproc timer (a process substitution opened `<>` is rejected on some hosts, so
-# a coproc that blocks on its own pipe is the portable sleep). `now` comes from
-# EPOCHREALTIME, with monotonic falling back to realtime (a documented
-# deviation). LC_ALL=C keeps the byte ordinal conversion byte-granular.
+# (<p>wpush, a space-separated byte-ordinal list shared with fd_read); a non-tty stdin waits for one byte with `read -d '' -n 1`, while a tty stdin waits for a whole canonical line with a plain `read` (`-n 1` toggles ICANON per byte and each restore makes the pty line discipline re-echo the pending line, see fd_read); a clock-only wait sleeps with a bash-only coproc timer (a process substitution opened `<>` is rejected on some hosts, so a coproc that blocks on its own pipe is the portable sleep).
+# `now` comes from
+# EPOCHREALTIME, with monotonic falling back to realtime (a documented deviation).
+# LC_ALL=C keeps the byte ordinal conversion byte-granular.
 wasi_poll_oneoff() {
   local __p=$1 __in=$2 __out=$3 __nsubs=$4 __nevents_ptr=$5
   if (( __nsubs == 0 )); then
@@ -115,8 +104,7 @@ wasi_poll_oneoff() {
         __line=''
       fi
       if [[ -n $__line ]] || { [[ -t 0 ]] && (( __rc == 0 )); }; then
-        # tty: buffer the whole line; the stripped newline is restored unless
-        # this was EOF (or timeout) without a delimiter.
+        # tty: buffer the whole line; the stripped newline is restored unless this was EOF (or timeout) without a delimiter.
         for (( __kk = 0; __kk < ${#__line}; __kk++ )); do
           printf -v __ord '%d' "'${__line:__kk:1}"
           __push+=${__push:+ }
@@ -136,8 +124,7 @@ wasi_poll_oneoff() {
       elif (( __rc > 128 )); then
         __fire_clocks=1
       else
-        # EOF: report each fd_read ready with 0 bytes so the guest's next read
-        # sees EOF (Ruby's IO.select reports the closed fd readable instead;
+        # EOF: report each fd_read ready with 0 bytes so the guest's next read sees EOF (Ruby's IO.select reports the closed fd readable instead;
         # either way the following fd_read returns 0).
         for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 0 0"); done
       fi

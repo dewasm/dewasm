@@ -1,17 +1,12 @@
 # requires: mem/check, mem/i32_store, wasi/filetype
-# WASI fd_readdir: the first call for a dir fd snapshots the listing
-# into <p>wdn<fd>/<p>wdt<fd> (names/filetypes) — glob the host directory once
-# with dotglob+nullglob (restored unconditionally right after, via the saved
+# WASI fd_readdir: the first call for a dir fd snapshots the listing into <p>wdn<fd>/<p>wdt<fd> (names/filetypes).
+# Glob the host directory once with dotglob+nullglob (restored unconditionally right after, via the saved
 # `shopt -p` string), strip to basenames, insertion-sort byte-wise
 # (`LC_ALL=C`; Bash has no builtin sort), then prepend "."/".." (type 3).
-# Later calls for the same fd reuse the cached snapshot, so the cookie is a
-# stable 1-based index into a point-in-time listing, not a live cursor under
-# concurrent mutation — mirrors runtime/ruby/units/wasi/fd_readdir.rb's
+# Later calls for the same fd reuse the cached snapshot, so the cookie is a stable 1-based index into a point-in-time listing, not a live cursor under concurrent mutation.
+# Mirrors runtime/ruby/units/wasi/fd_readdir.rb's
 # `WasiDir#entries` cache and Ruby's own `.sort` (byte order under LC_ALL=C).
-# Packs the 24-byte dirent (d_next u64 resume cookie, d_ino u64 = 0, d_namlen
-# u32, d_type u8 + 3 pad) followed by the unpadded name bytes; a dirent may be
-# legally truncated once buf_len runs out (bufused == buf_len signals more
-# entries remain), same contract as Ruby's byteslice truncation.
+# Packs the 24-byte dirent (d_next u64 resume cookie, d_ino u64 = 0, d_namlen u32, d_type u8 + 3 pad) followed by the unpadded name bytes; a dirent may be legally truncated once buf_len runs out (bufused == buf_len signals more entries remain), same contract as Ruby's byteslice truncation.
 wasi_fd_readdir() {
   local __p=$1 __fd=$2 __buf_ptr=$3 __buf_len=$4 __cookie=$5 __bufused_ptr=$6
   local -n __fds=${__p}wfds
@@ -63,10 +58,7 @@ wasi_fd_readdir() {
   local -n __m=${__p}mem
   local LC_ALL=C
   local __out=() __outlen=0 __ri=$__cookie __name __nlen __next __ck __b __mk
-  # The u64 cookie arrives as bash's signed-64 bit pattern: a
-  # negative value is a huge unsigned position past any snapshot's end, so
-  # report end-of-directory (an empty result, matching wasmtime) instead of
-  # letting the loop read negative subscripts.
+  # The u64 cookie arrives as bash's signed-64 bit pattern: a negative value is a huge unsigned position past any snapshot's end, so report end-of-directory (an empty result, matching wasmtime) instead of letting the loop read negative subscripts.
   if (( __ri < 0 )); then __ri=$__total; fi
   while (( __ri < __total && __outlen < __buf_len )); do
     __name=${__names[__ri]}

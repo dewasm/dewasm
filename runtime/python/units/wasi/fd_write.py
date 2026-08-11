@@ -7,8 +7,7 @@ def wasi_fd_write(self, fd, iovs_ptr, iovs_len, nwritten_ptr):
         return self.ERRNO_NOTCAPABLE
     written = 0
     try:
-        # fdflags::APPEND is honoured here (not via O_APPEND on the OS handle) so
-        # fd_fdstat_set_flags(0) can turn it back off.
+        # fdflags::APPEND is honoured here (not via O_APPEND on the OS handle) so fd_fdstat_set_flags(0) can turn it back off.
         if self.fd_meta[fd][2] & 0x1 and io not in self.std_ios:
             io.seek(0, os.SEEK_END)
         for i in range(iovs_len):

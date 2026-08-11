@@ -1,11 +1,11 @@
 # Decision 31: Standalone Runtime Interface (argv, --dir, env, exit)
 
-**Status:** Accepted — 2026-07-27.
-The runtime conventions of a `--mode standalone` program — how it receives argv and directory preopens, and how `proc_exit`/trap map to a process exit — are now one interface, uniform across all five backends and modelled on wasmtime's CLI.
+**Status:** Accepted, 2026-07-27.
+The runtime conventions of a `--mode standalone` program (how it receives argv and directory preopens, and how `proc_exit`/trap map to a process exit) are now one interface, uniform across all five backends and modelled on wasmtime's CLI.
 Landed: repeatable `--dir HOST::GUEST` flags parsed by the generated main; `DEWASM_PREOPEN` removed; argv[0], env, and the trap exit code unified; Bash rejects `--dir` loudly.
 The reference is [docs/standalone-interface.md](../../docs/standalone-interface.md).
 
-**Revision, 2026-07-27:** Bash's `--dir` rejection is superseded by [decision 34](34-bash-wasi-filesystem.md) — the Bash backend now honors `--dir` with real filesystem support.
+**Revision, 2026-07-27:** Bash's `--dir` rejection is superseded by [decision 34](34-bash-wasi-filesystem.md): the Bash backend now honors `--dir` with real filesystem support.
 
 ## Context
 
@@ -18,7 +18,7 @@ That wrapper is cross-backend product surface, but it grew backend-by-backend an
 - **env** passed through in Ruby/Python/Go/Bash, but Java handed the guest an empty environment.
 - The **trap** exit code (134) and the `proc_exit`/`_start`-return mapping were already uniform.
 
-wasmtime — the ground-truth engine the app snapshots are captured from (decision 9/15) — takes `wasmtime run [--dir HOST::GUEST]... <wasm> [args...]` and gives the guest `argv[0] = basename(wasm)`.
+wasmtime, the ground-truth engine the app snapshots are captured from (decision 9/15), takes `wasmtime run [--dir HOST::GUEST]... <wasm> [args...]` and gives the guest `argv[0] = basename(wasm)`.
 Aligning to it makes the generated programs behave like the binary they were converted from.
 
 ## Decision
@@ -29,9 +29,10 @@ Full reference: [docs/standalone-interface.md](../../docs/standalone-interface.m
 - **Invocation:** `<runner> <program> [--dir HOST::GUEST]... [--] [guest args...]`.
   The generated main consumes a leading run of `--dir` flags (both `--dir X` and `--dir=X`), stopping at `--` or the first non-`--dir` token; everything after is the guest's `argv[1..]`.
   `HOST::GUEST` mirrors wasmtime; a value without `::` mounts host==guest.
-  This is a *shim in the generated program*, not a host runtime flag — the criterion that shapes it: match wasmtime's user-facing CLI even though the layer that consumes it differs.
+  This is a *shim in the generated program*, not a host runtime flag.
+  The criterion that shapes it: match wasmtime's user-facing CLI even though the layer that consumes it differs.
 - **argv[0]** is the program name: the basename of the invoked program file (`hello.rb`, `hello`, `hello.sh`, ...), matching `basename(wasm)` under wasmtime.
-  Java is the one deviation — the JVM does not pass the launched file name to `main`, so it uses the module class name — documented, not hidden.
+  Java is the one deviation (the JVM does not pass the launched file name to `main`, so it uses the module class name), documented, not hidden.
 - **env:** the whole process environment passes through to the guest (Java fixed to `System.getenv()` from an empty array).
 - **exit:** `proc_exit(N)` → process exit `N`; `_start` returning → `0`; a trap → `trap: <message>` on stderr + exit **134**.
   Bash reaches the same surface via its status-cascade protocol (133 = proc_exit, 134 = trap; decision 11/12).

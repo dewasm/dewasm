@@ -1,4 +1,4 @@
-# Decision 27 — Shared Test-Helper Crate with Per-Feature Test Macros
+# Decision 27: Shared Test-Helper Crate with Per-Feature Test Macros
 
 Status: **Accepted, 2026-07-25.**
 `dewasm-test-helper` holds the two-layer `BackendUnderTest` / `SpecBackend` traits, the shared case data, and the per-case test macros; each backend crate owns its spec, WASI, and e2e suites; `dewasm-cli` keeps only the tests that need every backend; and wasmtime is itself wired as a `BackendUnderTest` (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) so the snapshot-freshness checks run through the same shared runners.
