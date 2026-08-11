@@ -1,7 +1,7 @@
 # Recording the sizes
 
 How to run the size record and how to read its numbers.
-The results are in [results.md](results.md) with its figures under `figs/`; the record itself is the dated `*-size.json` under [`benchmarks/results/`](../../benchmarks/results/), beside the timing records.
+The results are in [results.md](results.md) with its figures under `figs/`; the record itself is the dated `*-size.json` under [`records/`](../../records/README.md), beside the timing records.
 
 ## Running
 
@@ -10,7 +10,7 @@ $ examples/apps/setup.sh             # the cached apps (cowsay, sqlite3-shell, q
 $ cargo xtask size                   # the whole corpus, a few minutes
 ```
 
-A run writes a dated record to `benchmarks/results/<timestamp>Z-size.json` and regenerates `docs/sizes/results.md` with its figures.
+A run writes a dated record to `records/<timestamp>Z-size.json` and regenerates `docs/sizes/results.md` with its figures.
 Useful options:
 
 | Command | Effect |

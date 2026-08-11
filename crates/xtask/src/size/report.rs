@@ -1,4 +1,4 @@
-//! The two outputs of `cargo xtask size`: the machine-readable record under `benchmarks/results/` and the generated `docs/sizes/results.md`.
+//! The two outputs of `cargo xtask size`: the machine-readable record under `records/` and the generated `docs/sizes/results.md`.
 //!
 //! Same discipline as the benchmark record: a measurement, not a compared snapshot, so no freshness test guards either file.
 //! The JSON is the record (host, every runtime's version string as captured by executing it, every counted file), and the markdown is a rendering of it: numbers, not prose.

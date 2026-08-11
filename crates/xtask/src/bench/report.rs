@@ -1,4 +1,4 @@
-//! The two outputs of `cargo xtask bench`: the machine-readable result file under `benchmarks/results/` and the generated `docs/benchmarks/results.md`.
+//! The two outputs of `cargo xtask bench`: the machine-readable result file under `records/` and the generated `docs/benchmarks/results.md`.
 //!
 //! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them, unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots.
 //! The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample.

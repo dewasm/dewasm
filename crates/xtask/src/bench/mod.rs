@@ -1,7 +1,7 @@
 //! `cargo xtask bench`: the cross-runtime benchmark suite.
 //!
 //! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite).
-//! Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`.
+//! Two outputs come out of one command: a dated result file under `records/` and a generated `docs/benchmarks/results.md`.
 //! Neither is a compared snapshot: a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
 //!
 //! The modules:
@@ -276,8 +276,9 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
         generated_at: generated_at.clone(),
     };
 
-    let json_path = results_dir().join(format!("{}.json", generated_at.replace(':', "-")));
+    let json_path = records_dir().join(format!("{}.json", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
+    note_record(&json_path, &report.generated_at, &report.host)?;
     write_doc(&report)?;
 
     let failures: Vec<&Cell> = report
@@ -576,7 +577,7 @@ pub fn display_path(path: &Path) -> String {
         .to_string()
 }
 
-/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`, `results/`.
+/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`.
 fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
@@ -591,9 +592,55 @@ pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
 
-/// `benchmarks/results/` holds every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
-pub fn results_dir() -> PathBuf {
-    bench_root().join("results")
+/// `records/` holds every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
+pub fn records_dir() -> PathBuf {
+    repo_root().join("records")
+}
+
+/// `records/README.md`, which carries one section per record file.
+fn records_readme() -> PathBuf {
+    records_dir().join("README.md")
+}
+
+/// Give the record just written a section in `records/README.md`, unless it already has one.
+///
+/// The occasion is the one thing a measurement does not know about itself, so it is written as a TODO for whoever commits the record.
+/// Appending it here is what makes an undocumented record show up in the diff instead of accumulating unnoticed.
+pub fn note_record(json_path: &Path, generated_at: &str, host: &report::Host) -> Result<()> {
+    let name = json_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .with_context(|| format!("{} has no file name", json_path.display()))?;
+    let readme = records_readme();
+    let existing = std::fs::read_to_string(&readme)
+        .with_context(|| format!("failed to read {}", display_path(&readme)))?;
+    match with_placeholder_section(&existing, name, generated_at, host) {
+        None => Ok(()),
+        Some(updated) => write_file(&readme, &updated),
+    }
+}
+
+/// `existing` with a placeholder section for `name` appended, or `None` when it already has one.
+fn with_placeholder_section(
+    existing: &str,
+    name: &str,
+    generated_at: &str,
+    host: &report::Host,
+) -> Option<String> {
+    let heading = format!("## {name}");
+    if existing.lines().any(|line| line.trim_end() == heading) {
+        return None;
+    }
+    let taken = generated_at.split('T').next().unwrap_or(generated_at);
+    let mut updated = existing.to_string();
+    if !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    updated.push_str(&format!(
+        "\n{heading}\n\n- **Taken**: {taken}.\n- **Host**: {} ({}), {}, {}.\n- **Occasion**: TODO: describe the occasion.\n",
+        host.os, host.kernel, host.cpu, host.arch
+    ));
+    Some(updated)
 }
 
 pub fn docs_dir() -> PathBuf {
@@ -716,4 +763,64 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
         month_index - 9
     } as u32;
     (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn host() -> report::Host {
+        report::Host {
+            os: "macOS 26.5.2".to_string(),
+            arch: "aarch64".to_string(),
+            kernel: "Darwin 25.5.0".to_string(),
+            cpu: "Apple M1 Pro".to_string(),
+        }
+    }
+
+    #[test]
+    fn placeholder_section_is_appended_once() {
+        let existing = "# Measurement records\n\nProse.\n";
+        let appended = with_placeholder_section(
+            existing,
+            "2026-08-06T04-31-17Z-size.json",
+            "2026-08-06T04:31:17Z",
+            &host(),
+        )
+        .expect("a record with no section gets one");
+        assert_eq!(
+            appended,
+            "# Measurement records\n\nProse.\n\n## 2026-08-06T04-31-17Z-size.json\n\n\
+             - **Taken**: 2026-08-06.\n\
+             - **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.\n\
+             - **Occasion**: TODO: describe the occasion.\n"
+        );
+        assert!(with_placeholder_section(
+            &appended,
+            "2026-08-06T04-31-17Z-size.json",
+            "2026-08-06T04:31:17Z",
+            &host()
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn every_stored_record_is_documented() {
+        let readme = std::fs::read_to_string(records_readme()).expect("the records README exists");
+        for entry in std::fs::read_dir(records_dir())
+            .expect("records/ exists")
+            .flatten()
+        {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".json") {
+                continue;
+            }
+            assert!(
+                readme
+                    .lines()
+                    .any(|line| line.trim_end() == format!("## {name}")),
+                "{name} has no section in records/README.md"
+            );
+        }
+    }
 }

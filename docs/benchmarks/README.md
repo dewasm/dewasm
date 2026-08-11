@@ -11,7 +11,7 @@ $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm a
 $ cargo xtask bench                  # the full matrix, roughly an hour
 ```
 
-A full run writes a dated record to `benchmarks/results/` and regenerates `docs/benchmarks/results.md` with its charts.
+A full run writes a dated record to `records/` and regenerates `docs/benchmarks/results.md` with its charts.
 Useful options:
 
 | Command | Effect |

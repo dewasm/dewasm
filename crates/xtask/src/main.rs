@@ -7,11 +7,11 @@
 //!
 //! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
 //!
-//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `benchmarks/results/` and regenerates `docs/benchmarks/results.md`.
+//! `bench` is the cross-runtime benchmark suite: it measures every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages, then writes a dated result file under `records/` and regenerates `docs/benchmarks/results.md`.
 //! Unlike the two commands above, neither output is a compared snapshot: a timing is not reproducible byte-for-byte, so no freshness test guards it.
 //!
 //! `size` is its size counterpart: per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime.
-//! Its record joins the timing ones in `benchmarks/results/` and it renders `docs/sizes/results.md`.
+//! Its record joins the timing ones in `records/` and it renders `docs/sizes/results.md`.
 //! Also a measurement rather than a snapshot.
 //!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.

@@ -3,7 +3,7 @@
 //! It answers the distribution question with numbers: shipping a wasm program means shipping the binary *and* a runtime that can execute it, while shipping dewasm's output means shipping source to users who already have the interpreter.
 //! Which is smaller is a fact about a given app and a given backend, and this command measures it: per app, the wasm binary and every backend's converted standalone source, beside the installed size of every native runtime on the host.
 //!
-//! Two outputs from one command, like `bench`: a dated record under `benchmarks/results/` (`<timestamp>Z-size.json`, beside the speed records, one home for every measurement record) and a generated `docs/sizes/results.md` with its figures under `docs/sizes/figs/`.
+//! Two outputs from one command, like `bench`: a dated record under `records/` (`<timestamp>Z-size.json`, beside the speed records, one home for every measurement record) and a generated `docs/sizes/results.md` with its figures under `docs/sizes/figs/`.
 //! The hand-written `docs/sizes/README.md` beside it says how to run this and how to read the numbers; nothing here writes it.
 //! Neither output is a compared snapshot (the sizes move with the host's runtime versions and with every codegen change), so no freshness test guards them, and `--render` regenerates the document from a stored record without measuring.
 //!
@@ -19,7 +19,8 @@ use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 
 use crate::bench::runner::{runners, Kind};
 use crate::bench::{
-    apps_cache_dir, display_path, docs_dir, host_info, results_dir, utc_timestamp, write_file,
+    apps_cache_dir, display_path, docs_dir, host_info, note_record, records_dir, utc_timestamp,
+    write_file,
 };
 use crate::size::report::{App, Cell, Component, Outcome};
 
@@ -92,8 +93,9 @@ fn run() -> Result<()> {
 
     // Beside the speed records, in the same dated spelling, with `-size` naming the kind.
     // `--render` on the other kind of file fails to deserialize, which is the check that matters.
-    let json_path = results_dir().join(format!("{}-size.json", generated_at.replace(':', "-")));
+    let json_path = records_dir().join(format!("{}-size.json", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
+    note_record(&json_path, &report.generated_at, &report.host)?;
     write_doc(&report)?;
 
     let failures: Vec<String> = report
