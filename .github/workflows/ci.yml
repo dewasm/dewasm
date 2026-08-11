@@ -166,15 +166,15 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # Speed categories: the `slow_test` feature covers what `--include-ignored`
-      # used to un-ignore. `dewasm-test-helper/wasmtime_test` runs the
-      # apps_wasmtime snapshot-freshness suite (execs `wasmtime run`, installed
-      # below); `dewasm-cli/slow_test` runs the slow cross-backend
-      # `--data-file` real-app cases.
-      - uses: bytecodealliance/actions/wasmtime/setup@v1
+      # Speed categories: the `slow_test` feature covers the slow cases.
+      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime
+      # snapshot-freshness suite, which execs the xtask binary (it embeds the
+      # pinned wasmtime crate, so nothing is installed for it) and never builds
+      # it — hence the explicit build step below; `dewasm-cli/slow_test` runs
+      # the slow cross-backend `--data-file` real-app cases.
+      - name: Build the snapshot runner
         if: github.event_name != 'pull_request'
-        with:
-          version: '47.0.2'
+        run: cargo build -p xtask
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast

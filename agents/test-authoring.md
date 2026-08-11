@@ -18,7 +18,8 @@ The spec, convert, and WASI-testsuite suites are [libtest-mimic](https://crates.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units` unit tests at the bottom of each backend's `src/lib.rs`, run with `cargo test -p dewasm-backend-<lang> --lib`.
   **`softfloat.rs`** (bash) is the one backend-local integration oracle.
 - **`crates/dewasm-cli/tests/`**: only `support_docs.rs` (the freshness check that fails while the generated `docs/support.md` is stale, over all backends).
-- **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`**: wasmtime as a `BackendUnderTest`, running the `apps`/`gzip`/`fs_apps` snapshot-freshness checks through the shared runners, plus `qjs_repl_interactive_snapshot`, which re-captures the bare qjs REPL under a pty from a live wasmtime and compares it to the checked-in transcript (compare-only; regenerate with `cargo xtask update-snapshots`).
+- **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`**: wasmtime as a `BackendUnderTest`, running the `apps`/`gzip`/`fs_apps` snapshot-freshness checks through the shared runners, plus `qjs_repl_interactive_snapshot`, which re-captures the bare qjs REPL under a pty and compares it to the checked-in transcript, and `doom_frame`/`nes_frame` (compare-only; regenerate with `cargo xtask update-snapshots`).
+  Every case reaches wasmtime through the `xtask` binary, so build it first (`cargo build -p xtask`).
   All behind the `wasmtime_test` feature, named for a future engine such as wasmer/wasmedge joining it.
 
 ## The `e2e.rs` contract
@@ -58,7 +59,7 @@ Onboarding a new backend to the e2e suites is: implement `BackendUnderTest` (and
 ## Re-pinning an app
 
 After bumping a pin in `examples/apps/setup.sh`: re-run `setup.sh`, regenerate with `cargo xtask update-snapshots [filter]`, re-run the `wasmtime_test` freshness suite, and update the app's `expect_code` in `crates/dewasm-test-helper/src/apps.rs` if the exit status changed.
-The DOOM frame is the one snapshot not captured through the `wasmtime` CLI: `doom.wasm`'s custom-import interface does not run under `wasmtime run`, so `update-snapshots` drives it with the embedded `wasmtime` crate (an xtask-only dependency); after a doom pin bump, re-run the per-backend `doom_frame` cases.
+Every snapshot is captured through the `wasmtime` crate embedded in xtask (an xtask-only dependency); the DOOM and NES frames go through their own capture code rather than the WASI runner, because their custom-import interfaces are not WASI commands. After a doom pin bump, re-run the per-backend `doom_frame` cases.
 
 ## The `EXPECTED_FAILURES` lists
 
