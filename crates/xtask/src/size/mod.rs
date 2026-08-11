@@ -95,7 +95,7 @@ fn run() -> Result<()> {
     // `--render` on the other kind of file fails to deserialize, which is the check that matters.
     let json_path = records_dir().join(format!("{}-size.json", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
-    note_record(&json_path, &report.generated_at, &report.host)?;
+    note_record(&json_path)?;
     write_doc(&report)?;
 
     let failures: Vec<String> = report

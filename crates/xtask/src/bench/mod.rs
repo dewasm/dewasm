@@ -278,7 +278,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
 
     let json_path = records_dir().join(format!("{}.json", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
-    note_record(&json_path, &report.generated_at, &report.host)?;
+    note_record(&json_path)?;
     write_doc(&report)?;
 
     let failures: Vec<&Cell> = report
@@ -606,7 +606,7 @@ fn records_readme() -> PathBuf {
 ///
 /// The occasion is the one thing a measurement does not know about itself, so it is written as a TODO for whoever commits the record.
 /// Appending it here is what makes an undocumented record show up in the diff instead of accumulating unnoticed.
-pub fn note_record(json_path: &Path, generated_at: &str, host: &report::Host) -> Result<()> {
+pub fn note_record(json_path: &Path) -> Result<()> {
     let name = json_path
         .file_name()
         .and_then(|name| name.to_str())
@@ -614,33 +614,47 @@ pub fn note_record(json_path: &Path, generated_at: &str, host: &report::Host) ->
     let readme = records_readme();
     let existing = std::fs::read_to_string(&readme)
         .with_context(|| format!("failed to read {}", display_path(&readme)))?;
-    match with_placeholder_section(&existing, name, generated_at, host) {
+    match with_placeholder_line(&existing, name) {
         None => Ok(()),
         Some(updated) => write_file(&readme, &updated),
     }
 }
 
-/// `existing` with a placeholder section for `name` appended, or `None` when it already has one.
-fn with_placeholder_section(
-    existing: &str,
-    name: &str,
-    generated_at: &str,
-    host: &report::Host,
-) -> Option<String> {
-    let heading = format!("## {name}");
-    if existing.lines().any(|line| line.trim_end() == heading) {
+/// `existing` with a one-line `TODO` entry for `name` appended to its kind's list, or `None` when the file already mentions `name`.
+fn with_placeholder_line(existing: &str, name: &str) -> Option<String> {
+    if existing.contains(&format!("`{name}`")) {
         return None;
     }
-    let taken = generated_at.split('T').next().unwrap_or(generated_at);
-    let mut updated = existing.to_string();
-    if !updated.ends_with('\n') {
-        updated.push('\n');
+    let heading = if name.ends_with("-size.json") {
+        "## Size records"
+    } else {
+        "## Speed records"
+    };
+    let entry = format!("- `{name}`: TODO: describe the occasion.");
+    let mut lines: Vec<&str> = existing.lines().collect();
+    let start = match lines.iter().position(|line| line.trim_end() == heading) {
+        // A missing list heading still fails loud in the diff: the heading and the entry both appear.
+        None => {
+            let mut updated = existing.to_string();
+            if !updated.ends_with('\n') {
+                updated.push('\n');
+            }
+            updated.push_str(&format!("\n{heading}\n\n{entry}\n"));
+            return Some(updated);
+        }
+        Some(at) => at,
+    };
+    let mut insert_at = start + 1;
+    for (offset, line) in lines[start + 1..].iter().enumerate() {
+        if line.starts_with("## ") {
+            break;
+        }
+        if !line.trim().is_empty() {
+            insert_at = start + 1 + offset + 1;
+        }
     }
-    updated.push_str(&format!(
-        "\n{heading}\n\n- **Taken**: {taken}.\n- **Host**: {} ({}), {}, {}.\n- **Occasion**: TODO: describe the occasion.\n",
-        host.os, host.kernel, host.cpu, host.arch
-    ));
-    Some(updated)
+    lines.insert(insert_at, &entry);
+    Some(lines.join("\n") + "\n")
 }
 
 pub fn docs_dir() -> PathBuf {
@@ -769,39 +783,19 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
 
-    fn host() -> report::Host {
-        report::Host {
-            os: "macOS 26.5.2".to_string(),
-            arch: "aarch64".to_string(),
-            kernel: "Darwin 25.5.0".to_string(),
-            cpu: "Apple M1 Pro".to_string(),
-        }
-    }
-
     #[test]
-    fn placeholder_section_is_appended_once() {
-        let existing = "# Measurement records\n\nProse.\n";
-        let appended = with_placeholder_section(
-            existing,
-            "2026-08-06T04-31-17Z-size.json",
-            "2026-08-06T04:31:17Z",
-            &host(),
-        )
-        .expect("a record with no section gets one");
+    fn placeholder_line_is_appended_once_to_its_kind() {
+        let existing = "# Measurement records\n\nProse.\n\n## Speed records\n\n- `a.json`: first.\n\n## Size records\n\n- `b-size.json`: first.\n";
+        let appended =
+            with_placeholder_line(existing, "c-size.json").expect("a record with no line gets one");
         assert_eq!(
             appended,
-            "# Measurement records\n\nProse.\n\n## 2026-08-06T04-31-17Z-size.json\n\n\
-             - **Taken**: 2026-08-06.\n\
-             - **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.\n\
-             - **Occasion**: TODO: describe the occasion.\n"
+            "# Measurement records\n\nProse.\n\n## Speed records\n\n- `a.json`: first.\n\n## Size records\n\n- `b-size.json`: first.\n- `c-size.json`: TODO: describe the occasion.\n"
         );
-        assert!(with_placeholder_section(
-            &appended,
-            "2026-08-06T04-31-17Z-size.json",
-            "2026-08-06T04:31:17Z",
-            &host()
-        )
-        .is_none());
+        let speed = with_placeholder_line(&appended, "d.json").expect("speed record gets a line");
+        assert!(speed.contains("- `a.json`: first.\n- `d.json`: TODO: describe the occasion.\n"));
+        assert!(with_placeholder_line(&speed, "c-size.json").is_none());
+        assert!(with_placeholder_line(&speed, "d.json").is_none());
     }
 
     #[test]
@@ -816,10 +810,8 @@ mod tests {
                 continue;
             }
             assert!(
-                readme
-                    .lines()
-                    .any(|line| line.trim_end() == format!("## {name}")),
-                "{name} has no section in records/README.md"
+                readme.contains(&format!("`{name}`")),
+                "{name} has no line in records/README.md"
             );
         }
     }

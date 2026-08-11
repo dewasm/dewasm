@@ -1,50 +1,20 @@
 # Measurement records
 
 Every measurement dewasm keeps: the dated JSON records `cargo xtask bench` (speed) and `cargo xtask size` (distribution size) write, one file per run.
-The generated documents that present them, [docs/benchmarks/results.md](../docs/benchmarks/results.md) and [docs/sizes/results.md](../docs/sizes/results.md), are rendered from the most recent record of each kind; the older ones are kept as measurement history and can be re-rendered with `--render`.
+The generated documents, [docs/benchmarks/results.md](../docs/benchmarks/results.md) and [docs/sizes/results.md](../docs/sizes/results.md), are rendered from the most recent record of each kind; older records are measurement history, re-renderable with `--render`.
 
-Every record file has a section here saying when it was taken, on what host, and on what occasion.
-A run appends its own section with the occasion left as `TODO`, because that is the one thing the measurement does not know about itself: fill it in when committing the record.
+Every record file has one line here saying why it was taken.
+A run appends its line with a `TODO`; fill it in when committing the record.
 
-## 2026-08-02T02-41-22Z.json
+## Speed records
 
-- **Taken**: 2026-08-02.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: the first published speed record, taken with the benchmark suite that introduced it (#106), covering the full 18-runner by 11-workload matrix with no correctness failure.
+- `2026-08-02T02-41-22Z.json`: the first record, with the suite that introduced it (#106).
+- `2026-08-03T16-23-15Z.json`: value-addressed branches and the halved generated source (#113).
+- `2026-08-11T18-25-24Z.json`: re-baseline after #176, #167/#168, and #195's unit-comment rewrites.
 
-## 2026-08-03T16-23-15Z.json
+## Size records
 
-- **Taken**: 2026-08-03.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: a re-run of the same matrix on merged main to measure value-addressed branches and the halved generated source (#113, "Refresh the published benchmark record after #110").
-  The wasmtime baselines match the 2026-08-02 record to within 2%, which is what makes the two comparable.
-
-## 2026-08-06T02-31-05Z-size.json
-
-- **Taken**: 2026-08-06.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: the first size record, taken with the command that introduced it (#166 for #161), so the size-reduction work queued behind it had a starting point to be measured against.
-
-## 2026-08-06T03-52-05Z-size.json
-
-- **Taken**: 2026-08-06.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: taken for the generated-source shrink (#167, "Shrink generated source: tabs, chained init, boolean fusion, include Rt, @m"), which is what the drop against the previous record measures; every backend but Go moved.
-
-## 2026-08-06T04-31-17Z-size.json
-
-- **Taken**: 2026-08-06.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: taken for the parenthesis elision in the Ruby backend (#168 for #163); only the Ruby figures move against the previous record.
-
-## 2026-08-11T18-25-24Z.json
-
-- **Taken**: 2026-08-11.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: re-baseline after the changes since the previous speed record: the pending-spill fix (#176), the generated-source shrink and Ruby parenthesis elision (#167, #168), and the unit-comment rewrites of the writing style pass (#195); taken together with the records/ move (#198).
-
-## 2026-08-11T18-27-09Z-size.json
-
-- **Taken**: 2026-08-11.
-- **Host**: macOS 26.5.2 (Darwin 25.5.0), Apple M1 Pro, aarch64.
-- **Occasion**: re-baseline beside the speed record above; the converted sources carry the unit-comment rewrites of the writing style pass (#195) and the pending-spill fix (#176).
+- `2026-08-06T02-31-05Z-size.json`: the first size record (#166).
+- `2026-08-06T03-52-05Z-size.json`: the generated-source shrink (#167).
+- `2026-08-06T04-31-17Z-size.json`: Ruby parenthesis elision (#168).
+- `2026-08-11T18-27-09Z-size.json`: re-baseline beside the same day's speed record.
