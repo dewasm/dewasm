@@ -1,24 +1,13 @@
 # Real-world example apps
 
-Prebuilt wasm binaries of real applications, each fetched from its own
-upstream, for demos and end-to-end tests.
+Prebuilt wasm binaries of real applications, each fetched from its own upstream, for demos and end-to-end tests.
 
 **No third-party artifact is committed to this repository.**
-`./setup.sh` downloads version-pinned, sha256-verified files into
-`cache/` (gitignored); licensing of the binaries stays entirely with
-their upstream distribution. The `apps` cases
-(`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and
-`apps_fs.rs` for the C-API and filesystem shapes) convert each cached app
-and compare its output against the snapshot files in `snapshots/` (captured
-once from wasmtime; re-validated via `--features wasmtime_test`), run per
-backend as that backend's `e2e` test, e.g.
-`cargo test -p dewasm-backend-ruby --test e2e apps`. A missing cache or
-`ruby` fails the test loudly rather than skipping — run
-`./setup.sh` first.
+`./setup.sh` downloads version-pinned, sha256-verified files into `cache/` (gitignored); licensing of the binaries stays entirely with their upstream distribution.
+The `apps` cases (`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and `apps_fs.rs` for the C-API and filesystem shapes) convert each cached app and compare its output against the snapshot files in `snapshots/` (captured once from wasmtime; re-validated via `--features wasmtime_test`), run per backend as that backend's `e2e` test, e.g. `cargo test -p dewasm-backend-ruby --test e2e apps`.
+A missing cache or `ruby` fails the test loudly rather than skipping — run `./setup.sh` first.
 
-`setup.sh` just runs the per-app scripts in `scripts/` (shared
-boilerplate in `scripts/common.sh`); run one directly — e.g.
-`scripts/sqlite3.sh` — to rebuild a single app after bumping its pin.
+`setup.sh` just runs the per-app scripts in `scripts/` (shared boilerplate in `scripts/common.sh`); run one directly — e.g. `scripts/sqlite3.sh` — to rebuild a single app after bumping its pin.
 
 | App | Source | What it demonstrates |
 | --- | --- | --- |
@@ -41,7 +30,4 @@ $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42
 ```
 
-Candidates need only the implemented WASI surface (see
-[docs/support.md](../../docs/support.md)) — with WASI filesystem support
-now landed for Ruby, that includes real file-backed I/O, not
-just stdio/args/environ/clocks/random.
+Candidates need only the implemented WASI surface (see [docs/support.md](../../docs/support.md)) — with WASI filesystem support now landed for Ruby, that includes real file-backed I/O, not just stdio/args/environ/clocks/random.

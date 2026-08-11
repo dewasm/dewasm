@@ -1,6 +1,7 @@
 # Documentation policy
 
-The taxonomy of dewasm's docs, so new content lands in one obvious place and nothing is duplicated. All docs are written in English.
+The taxonomy of dewasm's docs, so new content lands in one obvious place and nothing is duplicated.
+All docs are written in English.
 
 | Doc | Role | Audience | Editable |
 | --- | --- | --- | --- |
@@ -20,9 +21,15 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 
 ## Rules
 
-- **`docs/support.md` is generated** from the backend declarations. Never edit it by hand; regenerate with `cargo xtask update-support-docs` (`cargo test -p dewasm-cli --test support_docs` fails while the file is stale). Everywhere else, **link** to it rather than copying the matrix.
-- **Decisions go in an ADR, not in prose docs.** Anything with real alternatives is recorded under `docs/adr/` (the `adr-author` skill carries the procedure). Code and user-facing docs do not reference ADRs: they state their constraint in place, and the decision record links outward to the code and docs it governs. The one exception is `AGENTS.md`, which is agent-facing memory like the ADRs themselves and cites the ADR that holds a rule's rationale.
-- **Tutorial commands must be verified by running them.** getting-started and the backend docs claim exact output; keep them true.
+- **`docs/support.md` is generated** from the backend declarations.
+  Never edit it by hand; regenerate with `cargo xtask update-support-docs` (`cargo test -p dewasm-cli --test support_docs` fails while the file is stale).
+  Everywhere else, **link** to it rather than copying the matrix.
+- **Decisions go in an ADR, not in prose docs.**
+  Anything with real alternatives is recorded under `docs/adr/` (the `adr-author` skill carries the procedure).
+  Code and user-facing docs do not reference ADRs: they state their constraint in place, and the decision record links outward to the code and docs it governs.
+  The one exception is `AGENTS.md`, which is agent-facing memory like the ADRs themselves and cites the ADR that holds a rule's rationale.
+- **Tutorial commands must be verified by running them.**
+  getting-started and the backend docs claim exact output; keep them true.
 
 ## Where new content goes
 
@@ -30,5 +37,6 @@ The taxonomy of dewasm's docs, so new content lands in one obvious place and not
 - A contributor-facing setup requirement → `docs/testing.md`.
 - A design decision → a new ADR (see [docs/adr/README.md](adr/README.md)).
 - A new real-world app target → an audited row in `docs/apps-audit.md`.
-- A performance number → a workload under `benchmarks/`, measured by `cargo xtask bench`. Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.
+- A performance number → a workload under `benchmarks/`, measured by `cargo xtask bench`.
+  Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.
 - A size number → the record `cargo xtask size` writes to `benchmarks/results/`, rendered into `docs/sizes/results.md`, for the same reason: a generated artifact's size changes with every codegen change.
