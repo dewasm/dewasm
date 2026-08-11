@@ -87,6 +87,9 @@ Each backend's spec integration test (`crates/dewasm-backend-<lang>/tests/spec.r
 
 A passing trial is quiet; a failing one carries that file's `pass/fail/skip` summary plus the failing assertion lines. Per-file failure counts are checked against each backend's `EXPECTED_FAILURES` list inside the trial.
 
+A failing trial means a semantics bug: fix the cause.
+Extending a backend's `EXPECTED_FAILURES` list (in its `tests/spec.rs`) is a last resort and requires an attribution tag plus a reason.
+
 The slow app cases (QuickJS, SQLite, the filesystem apps, the C-API cases, the interactive-REPL pty case) are divided into two speed categories controlled by cargo features rather than an environment variable:
 
 - **`slow_test`**: CI's main run. Each backend crate declares it; the per-case macros expand their generated `#[test]` as `#[ignore]`d unless it is enabled, and it also runs the full spec-testsuite run. Run one backend's slow category with `--features slow_test` (e.g. `cargo test -p dewasm-backend-bash --features slow_test --test e2e`).

@@ -86,7 +86,7 @@ When a decision with real alternatives is made:
 1. Take the next free number and create `docs/adr/<N>-<slug>.md`.
 2. Follow the structural contract: an opening **Status** paragraph (state, date, what landed / what remains), then **Context**, **Decision**, **Rejected alternatives**, **Consequences**.
 3. Add a row to the index table above, in ascending order.
-4. Cross-reference: link related ADRs, and link from the ADR out to the code and docs it governs. The reverse direction does not exist: docs and code comments state their constraints in place and never cite an ADR.
+4. Cross-reference: link related ADRs, and link from the ADR out to the code and docs it governs. Code and user-facing docs never cite an ADR; they state their constraints in place. The one inbound citer is `AGENTS.md`.
 
 Quality bar:
 
@@ -98,7 +98,7 @@ Quality bar:
 
 ## Relationship to other documents
 
-- **`AGENTS.md`**: the development contract for agents (and humans) working in this repository; it states each rule directly and cites no ADR.
+- **`AGENTS.md`**: the development contract for agents (and humans) working in this repository; it states each rule in full and cites the ADR that holds the rationale.
 - **`README.md`**: user-facing overview. It points onward to `docs/getting-started.md`, `docs/backends/`, and `docs/support.md`, not into this directory.
 - **`docs/getting-started.md`** and **`docs/backends/`**: the user tutorial and per-target reference. They state the lowering rules in place and name no ADR, per `docs/docs-policy.md`; the rationale behind those rules lives here (ADR-4, ADR-11 to ADR-13, ADR-28 to ADR-30, ADR-55).
 - **`docs/docs-policy.md`**: the doc taxonomy (which file each kind of content belongs in, and why `docs/support.md` is generated, never hand-edited).
