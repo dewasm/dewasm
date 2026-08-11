@@ -41,7 +41,7 @@ Future work recorded, deliberately out of 0.1 scope: restoring wasm 2.0+ support
 - **Keep Ruby's 2.0+ support as badges** — it is tested, working code, and removing it costs real churn.
   Lost to the criterion above: no pinned app needs it, no other 0.1 backend will implement it, and a five-backend project whose backends accept different inputs reintroduces exactly the asymmetry ADR-23 tried to manage.
 - **Spec-coverage goals** — coverage numbers do not answer "what can I convert?"; apps do, and each app pins an exact WASI surface to implement.
-  The spec suite stays as the test underneath.
+  The spec testsuite stays as the test underneath.
 
 ## Consequences
 

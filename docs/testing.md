@@ -81,7 +81,7 @@ After regenerating, update the matching `AppCase` in `crates/dewasm-test-helper/
 Tests live with the one backend they exercise; only a test that needs *every* backend lives centrally.
 The shared harness, case tables, and the per-feature test macros are in `crates/dewasm-test-helper`, which depends only on `dewasm-core` + `dewasm-backend` (never on a concrete backend).
 
-- **`crates/dewasm-backend-<lang>/tests/spec.rs`**: that backend's spec conformance suite, holding its `SpecBackend` impl and its `EXPECTED_FAILURES` list (and, for bash, the curated file list), wired up with `spec_suite!`.
+- **`crates/dewasm-backend-<lang>/tests/spec.rs`**: that backend's spec harness, holding its `SpecBackend` impl and its `EXPECTED_FAILURES` list (and, for bash, the curated file list), wired up with `spec_suite!`.
   Run it with `cargo test -p dewasm-backend-<lang> --test spec`.
 - **`crates/dewasm-backend-<lang>/tests/convert.rs`**: that backend's whole-cache convert suite, a one-line `apps_convert_suite!(<Backend>)` invocation (the manifest and harness are shared).
   Run it with `cargo test -p dewasm-backend-<lang> --test convert`.
@@ -125,7 +125,7 @@ After re-pinning an app in `setup.sh`, run `update-snapshots` (a targeted filter
 
 ## The spec harness (libtest-mimic)
 
-Each backend's spec integration test (`crates/dewasm-backend-<lang>/tests/spec.rs`) is a [libtest-mimic](https://crates.io/crates/libtest-mimic) harness (`harness = false`): every upstream `.wast` file becomes one named trial (the file stem is the trial name), enumerated at runtime from the `tests/spec` submodule.
+Each backend's spec harness (`crates/dewasm-backend-<lang>/tests/spec.rs`) is a [libtest-mimic](https://crates.io/crates/libtest-mimic) harness (`harness = false`): every upstream `.wast` file becomes one named trial (the file stem is the trial name), enumerated at runtime from the `tests/spec` submodule.
 This replaces the former `DEWASM_SPEC`/`DEWASM_SPEC_ALL` environment variables with cargo's own test UX:
 
 - **Select files by name** with cargo's built-in filter: `cargo test -p dewasm-backend-ruby --test spec i32` runs every trial whose name contains `i32` (add `-- --exact i32` for that one file).
