@@ -1,20 +1,20 @@
-# ADR-42 — Ruby Backend: Label-Variable Cascade for Multi-Level `br`
+# Decision 42 — Ruby Backend: Label-Variable Cascade for Multi-Level `br`
 
 Status: **Accepted, 2026-07-28.**
-Implemented in `crates/dewasm-backend-ruby/src/lib.rs`; supersedes the multi-level-`br` and loop-`catch`-value decisions of [ADR-4](4-ruby-backend-lowering.md) (its temps-hoisting and `call_indirect` decisions stand).
-The cross-frame relay protocol below — `__br`, the land-or-relay epilogue, the omitted outermost arm — is in turn superseded by [ADR-58](58-ruby-branch-by-value.md); the lean frame shapes and the depth-1 fast path stand, and remain the lowering for every function with no crossed frame.
-[ADR-60](60-ruby-flatten-only-deep-crossings.md) then narrowed ADR-58 to crossings of at least 16 frames, so the relay protocol still runs for every shallower branch.
+Implemented in `crates/dewasm-backend-ruby/src/lib.rs`; supersedes the multi-level-`br` and loop-`catch`-value decisions of [decision 4](4-ruby-backend-lowering.md) (its temps-hoisting and `call_indirect` decisions stand).
+The cross-frame relay protocol below — `__br`, the land-or-relay epilogue, the omitted outermost arm — is in turn superseded by [decision 58](58-ruby-branch-by-value.md); the lean frame shapes and the depth-1 fast path stand, and remain the lowering for every function with no crossed frame.
+[Decision 60](60-ruby-flatten-only-deep-crossings.md) then narrowed decision 58 to crossings of at least 16 frames, so the relay protocol still runs for every shallower branch.
 
 ## Context
 
-ADR-4 lowered a multi-level `br` to Ruby `catch`/`throw`: a referenced frame became `catch(:lN) do ... end` and the branch a `throw :lN`.
+Decision 4 lowered a multi-level `br` to Ruby `catch`/`throw`: a referenced frame became `catch(:lN) do ... end` and the branch a `throw :lN`.
 `catch`/`throw` is expensive in MRI.
 Profiling the converted `sqlite3-shell` (a workload that ran 24.0s) put `Kernel#catch` at 31.4% and `Kernel#throw` at 5.1% of CPU; each `throw` allocates one `T_IMEMO`, which accounted for 63–70% of the run's ~8M object allocations and drove GC to 16.5% of CPU.
 A label-variable cascade micro-benchmarked 2.8x faster at 4 levels deep and 4.3x at 16.
 
-ADR-4 explicitly rejected flag variables as obscuring the code and needing a state-machine dispatch.
-That rejection predated ADR-4's own decoupling of result values from control: branch result values already travel through slot-copy `assigns` and method-scope-hoisted temps, never through the branch itself.
-So a control flag now carries *only* control — one method-local variable plus structured `break`/`next` is enough, and the per-block dispatch loop ADR-4 feared is unnecessary.
+Decision 4 explicitly rejected flag variables as obscuring the code and needing a state-machine dispatch.
+That rejection predated decision 4's own decoupling of result values from control: branch result values already travel through slot-copy `assigns` and method-scope-hoisted temps, never through the branch itself.
+So a control flag now carries *only* control — one method-local variable plus structured `break`/`next` is enough, and the per-block dispatch loop decision 4 feared is unnecessary.
 
 ## Decision
 
@@ -33,7 +33,7 @@ So a control flag now carries *only* control — one method-local variable plus 
 
 ## Rejected alternatives
 
-- **Keep `catch`/`throw` (ADR-4).**
+- **Keep `catch`/`throw` (decision 4).**
   The `T_IMEMO` allocation and stack unwind dominate hot control flow — the 31%+5% CPU and 63–70% of allocations above are the direct cost.
 - **Epilogue *inside* the scope, innermost frame excluded** (the first cut of this design).
   Incorrect: a `break` out of a nested frame lands mid-body in its parent, so any intervening parent code runs before the epilogue is reached, and a bare inner `break` skips the epilogue that should have relayed `__br`.
@@ -48,4 +48,4 @@ So a control flag now carries *only* control — one method-local variable plus 
   `sqlite3-shell` on the benchmark workload dropped 24.0s → 6.95s (3.45x), byte-identical output; GC fell from 16.5% to 11%, and a CPU profile's top frames are now the work function and memory loads/stores, with no `Kernel#catch` or `Kernel#throw`.
 - Negative: a *wrapped* loop's back-edge takes a `__br` assignment and a compare instead of a plain `next`; the common loop+block idiom stays unwrapped and keeps `next`.
   A multi-level `br` emits one small epilogue per crossed frame — an output-size cost (epilogues sit at deep indents, so they are emitted as single lines; measured on `sqlite3-shell`, the multi-line first cut grew the output by 37%, mostly leading whitespace).
-- The spec harness (ADR-3) binds correctness: it passes for the Ruby backend under this lowering, including `br_table`, `unwind`, and `labels`.
+- The spec harness (decision 3) binds correctness: it passes for the Ruby backend under this lowering, including `br_table`, `unwind`, and `labels`.

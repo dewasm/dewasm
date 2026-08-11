@@ -1,4 +1,4 @@
-# ADR-51 — Bash Linear Memory as an Associative Array
+# Decision 51 — Bash Linear Memory as an Associative Array
 
 Status: **Accepted, 2026-07-30.**
 Linear memory in generated Bash is `declare -gA` (one byte per key) instead of an indexed array; all 23 `mem/` units and the 10 memory-touching WASI units use pre-expanded decimal keys.
@@ -23,8 +23,8 @@ Consequences of the representation, fixed here: assoc subscripts are literal str
 - **Keep indexed, shard into per-64KB-page arrays.**
   Bounds the list walk to a page but stays O(distance) within it and adds a nameref dispatch per access; the hash is both faster and simpler.
 - **Word-packed cells (8 bytes per element).**
-  Up to another ~4-8x on aligned traffic, but every unaligned or sub-word access becomes a two-cell splice, and the softfloat bit paths, byte-wise WASI stdio ([ADR-12](12-bash-wasi.md)) and data-segment init all operate on bytes.
-  Left as a possible later ADR on top of this one; the complexity is not needed to make real modules run.
+  Up to another ~4-8x on aligned traffic, but every unaligned or sub-word access becomes a two-cell splice, and the softfloat bit paths, byte-wise WASI stdio ([decision 12](12-bash-wasi.md)) and data-segment init all operate on bytes.
+  Left as a possible later decision on top of this one; the complexity is not needed to make real modules run.
 - **Inline the bounds check / load-store bodies into generated code.**
   Attacks function-call overhead (~4.8x available), not the access-complexity class that actually blocked DOOM; can still be done later, orthogonally.
 
@@ -33,4 +33,4 @@ Consequences of the representation, fixed here: assoc subscripts are literal str
 - Positive: random access is O(1); DOOM `initGame` 3+ CPU-hours (unfinished) → 198s, ticks ~87s; the phase that stalled minutes on message I/O clears in seconds.
   Every converted module with a non-trivial heap benefits.
 - Negative: instantiation pays hash-insert cost on data segments (DOOM's 4.5MB: 19s → 25s); RSS grows with hash overhead per populated byte; sequential microbenchmarks lose a little.
-- Carry-over: the pre-expanded-key idiom is now part of the Bash unit style ([ADR-11](11-bash-backend-lowering.md)'s lowering conventions otherwise unchanged); the e2e `wasi_import_override` glue duplicates fd_write's byte loop by hand and had to change in lockstep — a shared helper would remove that coupling.
+- Carry-over: the pre-expanded-key idiom is now part of the Bash unit style ([decision 11](11-bash-backend-lowering.md)'s lowering conventions otherwise unchanged); the e2e `wasi_import_override` glue duplicates fd_write's byte loop by hand and had to change in lockstep — a shared helper would remove that coupling.

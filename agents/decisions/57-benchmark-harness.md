@@ -1,4 +1,4 @@
-# ADR-57: Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline
+# Decision 57: Benchmark by Calibrated Per-Runner Iteration Counts, Net of a Measured Baseline
 
 **Status:** Accepted (2026-08-02).
 Landed: `cargo xtask bench`, the workloads under `benchmarks/`, and the generated `docs/benchmarks/results.md`.

@@ -1,4 +1,4 @@
-# ADR-37 — Opt-in Data-Segment Externalization (`--data-file`)
+# Decision 37 — Opt-in Data-Segment Externalization (`--data-file`)
 
 Status: **Accepted, 2026-07-28.**
 Implemented for the Ruby, Go, Python and Java backends behind the CLI's `--data-file` flag; Bash rejects it loudly at the CLI (its data lives in the runtime, not a standalone literal).
@@ -16,7 +16,7 @@ The open question was whether to do this always, and how to shape the sidecar.
 
 ## Decision
 
-Add an **opt-in** `--data-file <path>` CLI flag (ADR-0's "unsupported fails at conversion time" applies to the rejections below).
+Add an **opt-in** `--data-file <path>` CLI flag (decision 0's "unsupported fails at conversion time" applies to the rejections below).
 When set, the backend:
 
 - concatenates every segment's bytes into one blob, returned as a second `OutputFile` whose `name` is the sidecar filename; the CLI routes it to `--data-file`'s path and the primary source to `-o`;
@@ -30,13 +30,13 @@ The discriminating criterion is locating the sidecar by *where the program's own
 
 `OutputFile.contents` widened from `String` to `Vec<u8>` so a backend can return raw binary alongside UTF-8 source.
 
-**Discriminating rule:** externalization is a size/layout trade-off with no semantic content, so it is a per-invocation *flag*, never a default and never a backend capability flip — the generated program's behaviour is identical either way (the spec harness, which never sets the flag, still binds; ADR-3).
+**Discriminating rule:** externalization is a size/layout trade-off with no semantic content, so it is a per-invocation *flag*, never a default and never a backend capability flip — the generated program's behaviour is identical either way (the spec harness, which never sets the flag, still binds; decision 3).
 
 **Scope:** Ruby, Go, Python and Java.
 Bash embeds data in its runtime rather than as a standalone literal, so a sidecar would be a larger change; it alone *rejects* `--data-file` at the CLI with an attributed error rather than silently ignoring it.
 `--data-file` with `-o -` (stdout) is likewise rejected: the sidecar needs a real path next to the program.
 
-Go mechanics (ADR-29): `//go:embed` is a directive, not a package selector, so the import scanner cannot see it — `embed` is added as a blank `import _ "embed"` and the directive is emitted verbatim (the scanner's comment-stripping only computes the import *set*; it never rewrites the output).
+Go mechanics (decision 29): `//go:embed` is a directive, not a package selector, so the import scanner cannot see it — `embed` is added as a blank `import _ "embed"` and the directive is emitted verbatim (the scanner's comment-stripping only computes the import *set*; it never rewrites the output).
 The directive must sit immediately above its `var`.
 
 ## Rejected alternatives
@@ -73,8 +73,8 @@ Honest finding: these interpreters are **code-dominated**, so the source shrinks
 Parse and build time are governed by the code, so they barely move.
 The win scales with a module's data:code ratio and is largest for data-heavy modules; for the current app corpus it is a modest source-size reduction, not a parse-time one.
 
-Follow-ups: adjacent-segment merging to reduce the per-segment `memory.init` count landed as its own core pass (ADR-41).
+Follow-ups: adjacent-segment merging to reduce the per-segment `memory.init` count landed as its own core pass (decision 41).
 Python and Java support landed in this revision.
 Extending the test-helper `BackendUnderTest` with an aux-files channel — so the shared app/e2e suites (not just the CLI integration test) can exercise sidecar output — is again deliberately deferred: the CLI integration test (`crates/dewasm-cli/tests/data_file.rs`) covers all four backends end-to-end, so the harness extension buys coverage breadth, not a gap, and is not worth the test-helper churn yet.
 
-Cross-refs: ADR-29 (Go lowering / import scanning), ADR-30 (Java lowering), ADR-31 (standalone runtime interface — the generated main that loads the sidecar), ADR-41 (adjacent data-segment merging, the segment-count follow-up).
+Cross-refs: decision 29 (Go lowering / import scanning), decision 30 (Java lowering), decision 31 (standalone runtime interface — the generated main that loads the sidecar), decision 41 (adjacent data-segment merging, the segment-count follow-up).

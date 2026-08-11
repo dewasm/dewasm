@@ -1,13 +1,13 @@
-# ADR-35 — Bash Cross-Module Linking
+# Decision 35 — Bash Cross-Module Linking
 
 Status: **Accepted, 2026-07-27.**
 Implemented in `crates/dewasm-backend-bash/src/lib.rs` (`Gen::init`) + `runtime/bash/units/rt/resolve_import.sh` and `rt/link_err.sh`.
 Covers every wasm 1.0 import kind: imported functions (retained), imported globals (`Feature::ImportedGlobals` Supported), imported memories (`Feature::ImportedMemories` Supported), and imported tables (`Feature::ImportedTables` Supported) — plus the `shared_table_call_indirect` multi-module e2e case (`crates/dewasm-backend-bash/tests/e2e.rs`, `BackendUnderTest::compose_modules`).
-Extends [ADR-11](11-bash-backend-lowering.md).
+Extends [decision 11](11-bash-backend-lowering.md).
 
 ## Context
 
-The Ruby backend links across modules with a single `import(name)` provider protocol and a boxed `Rt::Global` cell that mutable imports share by reference ([ADR-16](16-ruby-wasm1-completion.md)).
+The Ruby backend links across modules with a single `import(name)` provider protocol and a boxed `Rt::Global` cell that mutable imports share by reference ([decision 16](16-ruby-wasm1-completion.md)).
 Bash has neither objects nor references: state lives in prefix-scoped variables and arrays (`<p>g<i>`, `<p>t<i>`, `<p>mem`), and until now the only import mechanism was the `IMPORTS[module.name]=command` associative array — functions only, no shared mutable state, no kind checking.
 
 Wasm imports need three things Bash did not have: a way to alias another module's global cell so reads *and* writes reach it; a provider protocol that spans every import kind, not just functions; and a link-error signal distinct from a trap.
@@ -50,4 +50,4 @@ This is an observable change: a missing import used to `echo ...; return 1`.
   A shared table crossing independently-generated modules now has an e2e case too (`shared_table_call_indirect`, `compose_modules` generating each module against one bundled runtime).
 - Negative: `rt_resolve_import` validates import *kind* but not the finer wasm type — a function's signature, a global's mutability, a table's min/max limits, or a memory's min/max limits — so a number of `assert_unlinkable` cases link instead of failing (the `import-limits` list cluster: `imports`/`imports2`/part of `linking`, the same accepted gap as Ruby, now at the same counts since Bash covers every import kind Ruby does).
   135 collides with the `128 + SIGBUS` signal convention; no generated module spawns a subprocess that can raise SIGBUS, so the collision is accepted.
-- Residual, unrelated to this ADR: `linking0` and `load1` still fail one assertion apiece downstream of a *different*, permanently out-of-scope gap — a module declaring two memories is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal, ADR-24), so data meant for a shared memory through that module never runs (the `multi-memory` list tag in `crates/dewasm-backend-bash/tests/spec.rs`).
+- Residual, unrelated to this decision: `linking0` and `load1` still fail one assertion apiece downstream of a *different*, permanently out-of-scope gap — a module declaring two memories is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal, decision 24), so data meant for a shared memory through that module never runs (the `multi-memory` list tag in `crates/dewasm-backend-bash/tests/spec.rs`).

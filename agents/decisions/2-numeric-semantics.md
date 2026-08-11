@@ -1,4 +1,4 @@
-# ADR-2 — Numeric Semantics Strategy for Dynamically-Typed Targets
+# Decision 2 — Numeric Semantics Strategy for Dynamically-Typed Targets
 
 Status: **Accepted, 2026-07-23.**
 Backfilled; implemented for Ruby in `runtime/ruby/runtime.rb`.
@@ -7,7 +7,7 @@ The conventions below bind every backend whose language lacks fixed-width/unsign
 ## Context
 
 Wasm requires bit-exact numerics: wrapping two's-complement i32/i64 with signed *and* unsigned views, IEEE 754 f32/f64 including NaN bit patterns, and precise trap conditions.
-Ruby/Python have arbitrary-precision integers and only doubles; the spec testsuite (ADR-3) checks all of it, including NaN payloads through `reinterpret` and memory.
+Ruby/Python have arbitrary-precision integers and only doubles; the spec testsuite (decision 3) checks all of it, including NaN payloads through `reinterpret` and memory.
 
 ## Decision
 

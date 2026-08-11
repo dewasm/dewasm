@@ -1,7 +1,7 @@
-# ADR-18 — Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split
+# Decision 18 — Tail Calls in the Ruby Backend: Flat Trampoline with a Body/Entry Split
 
-Status: **Superseded by [ADR-24](24-01-scope-reset.md), 2026-07-26.**
-Kept as a design record for a future restoration of this support; git history plus this ADR make the work cheap to revive.
+Status: **Superseded by [decision 24](24-01-scope-reset.md), 2026-07-26.**
+Kept as a design record for a future restoration of this support; git history plus this decision make the work cheap to revive.
 The original acceptance note and implementation pointers below are retained as history.
 
 Originally accepted 2026-07-24.
@@ -22,10 +22,10 @@ A trampoline, shaped so that no per-hop stack frame survives:
 - **Every `return_call` produces a thunk — never a plain call.**
   To a tail-calling callee the thunk targets the *body* (`method(:_fM_body)`), so mutual chains bounce in the one outermost trampoline with zero intermediate frames; to anything else (imports, plain functions) it targets the ordinary callable, costing one completing frame per such hop.
   **Criterion: the callee must run after the caller's frame — including its `rescue` blocks — is gone.**
-  A "plain call for non-tail-calling callees" shortcut passed every stack-depth test but was observably wrong under exception handling: `try_table.wast`'s `return-call-in-try-catch` requires an exception thrown by the tail-called function to *escape* the caller's `try_table`, and a direct call keeps that `rescue` wrapped around the callee (ADR-19).
+  A "plain call for non-tail-calling callees" shortcut passed every stack-depth test but was observably wrong under exception handling: `try_table.wast`'s `return-call-in-try-catch` requires an exception thrown by the tail-called function to *escape* the caller's `try_table`, and a direct call keeps that `rescue` wrapped around the callee (decision 19).
   The thunk is unwrapped outside the body's `begin/rescue`, giving the frame-replacement semantics for free.
 - `return_call_indirect` resolves through the table at the instruction's execution point: `Rt::TailCall.new(@tK.tail_ref(i, type_sym), [...])`.
-  ADR-17's slot pair carries an optional **third element** — the body method — added by `Gen::func_pair` for tail-calling functions; `tail_ref` performs `call`'s exact trap sequence (undefined element, uninitialized, type mismatch — raised inside the caller's body, i.e. at the right point in execution order) and returns `slot[2] || slot[1]`.
+  Decision 17's slot pair carries an optional **third element** — the body method — added by `Gen::func_pair` for tail-calling functions; `tail_ref` performs `call`'s exact trap sequence (undefined element, uninitialized, type mismatch — raised inside the caller's body, i.e. at the right point in execution order) and returns `slot[2] || slot[1]`.
   A pair from a non-tail-caller, or from another module instance, falls back to its public entry: that entry runs its *own* trampoline to completion, costing one frame per module switch, which the criterion permits.
 
 ## Rejected alternatives
@@ -45,4 +45,4 @@ A trampoline, shaped so that no per-hop stack frame survives:
   A host externref that is itself an `Rt::TailCall` instance would confuse a trampoline only if a wasm function could *return* it from a body — it cannot (bodies only produce thunks at `return_call` sites), so this is theoretical.
   `return_call_ref` stays rejected under `function-references`.
 
-See also: [ADR-17](17-ruby-reference-types.md) (the table slot format the third element extends), [ADR-4](4-ruby-backend-lowering.md) (lowering conventions), [ADR-16](16-ruby-wasm1-completion.md) (`check_module_support`).
+See also: [decision 17](17-ruby-reference-types.md) (the table slot format the third element extends), [decision 4](4-ruby-backend-lowering.md) (lowering conventions), [decision 16](16-ruby-wasm1-completion.md) (`check_module_support`).

@@ -1,8 +1,8 @@
-# ADR-27 — Shared Test-Helper Crate with Per-Feature Test Macros
+# Decision 27 — Shared Test-Helper Crate with Per-Feature Test Macros
 
 Status: **Accepted, 2026-07-25.**
 `dewasm-test-helper` holds the two-layer `BackendUnderTest` / `SpecBackend` traits, the shared case data, and the per-case test macros; each backend crate owns its spec, WASI, and e2e suites; `dewasm-cli` keeps only the tests that need every backend; and wasmtime is itself wired as a `BackendUnderTest` (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`) so the snapshot-freshness checks run through the same shared runners.
-Builds on [ADR-3](3-testing-strategy.md) (the spec harness binds), [ADR-8](8-latest-testsuite-support-matrix.md) (skip attribution, per-file expected-failure lists), and [ADR-15](15-tests-fail-not-skip.md).
+Builds on [decision 3](3-testing-strategy.md) (the spec harness binds), [decision 8](8-latest-testsuite-support-matrix.md) (skip attribution, per-file expected-failure lists), and [decision 15](15-tests-fail-not-skip.md).
 
 ## Context
 
@@ -17,7 +17,7 @@ With three more backends planned, the shape had to be fixed first.
   A test lives with the one backend it exercises; only a test that needs every backend lives centrally (the `docs/support.md` rendering check, the CLI-flag suites).
 - **Two layers.**
   `BackendUnderTest` is `name` / `backend` / `run(source, args, stdin)`, with `run` defaulting to "write a temp file, exec an interpreter" and overridden outright by compiled targets; `SpecBackend` adds the script-phrasing surface, the per-file failure list, and the curated-file list.
-  Criterion: **a backend must be able to run app/e2e suites before it can phrase spec assertions**, which is the "cowsay first" bring-up path of [ADR-24](24-01-scope-reset.md).
+  Criterion: **a backend must be able to run app/e2e suites before it can phrase spec assertions**, which is the "cowsay first" bring-up path of [decision 24](24-01-scope-reset.md).
 - **Case content is shared; glue is not.**
   Fixtures, expectations, and run/assert logic are `pub const` cases plus runners in the helper crate.
   WASI cases are grouped per feature unit (stdio, args/env, clock/random, filesystem), forming the project's own WASI p1 conformance suite, which matters because WASI has no official one.
@@ -29,15 +29,15 @@ With three more backends planned, the shape had to be fixed first.
 - **A backend's `tests/e2e.rs` holds only the impl, the glue constants, and macro invocations.**
   No backend-specific `#[test]` exists, so a scenario written for one backend is by construction offered to every backend.
   **Capability is declared by which macros a backend invokes**; a case it cannot run is simply not invoked, with the reason as a comment at the absent callsite and the measurements behind it in `docs/apps-audit.md`.
-  This replaces the retired support-level conditioning ([ADR-25](25-retire-support-levels.md)).
+  This replaces the retired support-level conditioning ([decision 25](25-retire-support-levels.md)).
 - **The spec harness is one [libtest-mimic](https://crates.io/crates/libtest-mimic) trial per `.wast` file**, so selection is cargo's own UX: the file stem names the trial (`cargo test --test spec i32`), and files outside `SpecBackend::curated_files` are `#[ignore]`d, so `cargo test` runs the curated set and `--include-ignored` the whole testsuite.
   Trials run in parallel, so per-file state belongs to the trial, not to the shared backend object.
-  ADR-8's expected-failure and skip-attribution checks run inside each trial, equivalent to the old global checks because the global set is the union of the per-file ones.
+  Decision 8's expected-failure and skip-attribution checks run inside each trial, equivalent to the old global checks because the global set is the union of the per-file ones.
 - **Speed conditioning is a cargo feature, not an environment variable.**
   A slow case's macro expands its `#[test]` with `#[cfg_attr(not(feature = "slow_test"), ignore = …)]` while the runner stays unconditional, so `cargo test` skips it visibly, `--features slow_test` runs one crate's cases, and `-- --include-ignored` runs everything, with no variable to keep in sync with the code it conditions.
-  The categories themselves are [ADR-48](48-slow-test-speeds.md).
+  The categories themselves are [decision 48](48-slow-test-speeds.md).
 - **Snapshot tests are compare-only.**
-  Regeneration is an explicit command (`cargo xtask update-support-docs`, `cargo xtask update-snapshots`, [ADR-56](56-unified-snapshot-regeneration.md)), so a wrong capture cannot overwrite the reference that was meant to catch it.
+  Regeneration is an explicit command (`cargo xtask update-support-docs`, `cargo xtask update-snapshots`, [decision 56](56-unified-snapshot-regeneration.md)), so a wrong capture cannot overwrite the reference that was meant to catch it.
 
 ## Rejected alternatives
 
@@ -57,5 +57,5 @@ With three more backends planned, the shape had to be fixed first.
 - Backend bring-up is "implement the base trait, write glue constants, invoke macros"; suites stay byte-identical across backends by construction.
 - Macro indirection costs greppability of the runner body, though each generated `#[test]` is named for its case.
   Fixture paths must resolve from each consuming crate; every consumer sits at `crates/<x>/`, which keeps `../../` valid.
-- ADR-8's expected-failure lists and attribution tags live with each backend's `SpecBackend` impl, their natural home.
-- `docs/support.md` carries no "spec testsuite list" section (it came from the retired [ADR-23](23-backend-support-levels.md)): every backend reported the same value, so it gave a reader nothing to act on.
+- Decision 8's expected-failure lists and attribution tags live with each backend's `SpecBackend` impl, their natural home.
+- `docs/support.md` carries no "spec testsuite list" section (it came from the retired [decision 23](23-backend-support-levels.md)): every backend reported the same value, so it gave a reader nothing to act on.

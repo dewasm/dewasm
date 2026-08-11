@@ -1,19 +1,19 @@
-# ADR-25 — Retire the Support Maturity Levels for Plain Capability Declarations
+# Decision 25 — Retire the Support Maturity Levels for Plain Capability Declarations
 
 Status: **Accepted, 2026-07-25.**
 The removal of the level type, its derivation functions, the per-backend target declaration, and level conditioning on the e2e case tables has landed; `docs/support.md` now renders a flat `## Features` table (the in-scope subset) plus the `## WASI preview 1` table.
-Supersedes [ADR-23](23-backend-support-levels.md).
+Supersedes [decision 23](23-backend-support-levels.md).
 
 ## Context
 
-ADR-23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before ADR-24 cut the input scope to exactly that surface and set the same bar — a passing spec harness + full WASI p1 — for every 0.1 backend.
+Decision 23 introduced a Zig-style four-level scale over wasm 1.0 + WASI p1, one day before decision 24 cut the input scope to exactly that surface and set the same bar — a passing spec harness + full WASI p1 — for every 0.1 backend.
 With the 2.0+/CM badges gone and all backends aiming at one bar, the scale degenerates: Levels 1–2 differ only by a list flag and twelve WASI functions, and Level 3 is just "filesystem not done yet".
 
 ## Decision
 
 Retire the levels.
 Backends declare capabilities directly — feature support (`Backend::feature_status`) and per-function WASI p1 coverage (`Backend::has_wasi_p1`, derived from runtime units) — and `docs/support.md` renders those declarations flat (features table + WASI p1 table, keeping the in-scope/out-of-scope distinction for the socket surface).
-E2e coverage is expressed by which suites a backend crate wires up (ADR-27), not by comparing level numbers.
+E2e coverage is expressed by which suites a backend crate wires up (decision 27), not by comparing level numbers.
 The level type, the achieved/target computations, and the level conditioning in the e2e case tables are deleted.
 
 Criterion: **a ranking earns its keep only while it discriminates.**
@@ -22,11 +22,11 @@ Whether some summary scale is worth reintroducing is explicitly deferred until t
 
 ## Rejected alternatives
 
-- **Keep the levels** — collapses as described; also forces every new test case to be level-classified, which ADR-23's own experience showed goes wrong when done by guesswork instead of execution.
+- **Keep the levels** — collapses as described; also forces every new test case to be level-classified, which decision 23's own experience showed goes wrong when done by guesswork instead of execution.
 - **A numeric coverage score** (e.g. "38/42 WASI functions") — false precision; the per-function table already says exactly this without pretending the functions are fungible.
 
 ## Consequences
 
 - Positive: one less taxonomy to keep truthful; new-backend authors read a checklist, not a ladder spec.
 - Negative: README/support.md lose a one-glance maturity summary; "production-ready?" now takes reading two tables.
-- Carry-over: the ADR-23 lesson that support claims must be verified by execution before being declared survives in the support.md snapshot test and the harness.
+- Carry-over: the decision 23 lesson that support claims must be verified by execution before being declared survives in the support.md snapshot test and the harness.

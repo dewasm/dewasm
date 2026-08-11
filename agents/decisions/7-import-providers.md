@@ -1,8 +1,8 @@
-# ADR-7 — Import Providers and the Default WASI Fallback
+# Decision 7 — Import Providers and the Default WASI Fallback
 
 Status: **Accepted, 2026-07-23.**
 Implemented for Ruby: the provider protocol and resolution order in generated `initialize` (`crates/dewasm-backend-ruby/src/lib.rs`), `Rt.resolve_import` (`runtime/ruby/units/rt/resolve_import.rb`), and `Rt::WASI` implementing the protocol itself (`runtime/ruby/units/wasi/_class.rb`).
-Generalized to non-function imports and to generated classes implementing the protocol themselves by [ADR-16](16-ruby-wasm1-completion.md).
+Generalized to non-function imports and to generated classes implementing the protocol themselves by [decision 16](16-ruby-wasm1-completion.md).
 
 ## Context
 
@@ -40,5 +40,5 @@ Survey of how real systems break the circularity:
 
 - Positive: `Hello.new` works out of the box for WASI programs in library mode; custom runtimes swap in wholesale; spec harness needed no changes (Hash path untouched).
 - Negative / caveat: with minimal Embedded bundles, `instance.memory` only carries the typed accessors the module itself uses; the stable surface a provider may rely on is `memory.bytes` (a mutable binary String).
-  A fuller guaranteed API is a carry-over for the shared/gem linkage (ADR-6).
+  A fuller guaranteed API is a carry-over for the shared/gem linkage (decision 6).
 - The provider protocol is intentionally not WASI-specific: any import namespace (e.g. an emscripten-style `env`) can be served by a provider with instance access.

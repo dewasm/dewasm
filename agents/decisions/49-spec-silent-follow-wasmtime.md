@@ -1,4 +1,4 @@
-# ADR-49 — Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite
+# Decision 49 — Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite
 
 Status: **Accepted, 2026-07-29.**
 Implemented in PR #43 (issue #42).

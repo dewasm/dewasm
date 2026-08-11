@@ -1,11 +1,11 @@
-# ADR-46 — Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness
+# Decision 46 — Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness
 
 Status: **Accepted, 2026-07-29.**
 Implemented in `crates/dewasm-test-helper/src/wasi_testsuite.rs` (the `expected_failures_macos`/`expected_failures_linux` trait methods) together with the first scoped entries (Java, Ruby); the Java `path_link` entry was fixed outright instead of scoped.
 
 ## Context
 
-The wasi-testsuite expected-failures lists ([ADR-8](8-latest-testsuite-support-matrix.md) discipline, [ADR-36](36-wasi-testsuite-conformance.md) harness) are checked both ways: a listed trial that *passes* is a hard failure.
+The wasi-testsuite expected-failures lists ([decision 8](8-latest-testsuite-support-matrix.md) discipline, [decision 36](36-wasi-testsuite-conformance.md) harness) are checked both ways: a listed trial that *passes* is a hard failure.
 Every entry was written against a macOS development host.
 The first Linux CI run (issue #7) broke that assumption in both directions:
 
@@ -37,4 +37,4 @@ An entry that fails identically on both hosts stays in the base list.
 - CI on ubuntu-latest and local macOS runs both pass against one list declaration, and each host still enforces the both-ways discipline for the entries that apply to it.
 - A scoped entry is only ever *verified* on its own host: macOS entries are exercised locally, Linux entries only by CI (and vice versa).
   A stale scoped entry therefore surfaces one environment later, not never.
-- New backends state host-dependent gaps where they belong instead of papering over them with the flat list; the spec harness list ([ADR-8](8-latest-testsuite-support-matrix.md)) stays flat until it meets the same problem.
+- New backends state host-dependent gaps where they belong instead of papering over them with the flat list; the spec harness list ([decision 8](8-latest-testsuite-support-matrix.md)) stays flat until it meets the same problem.

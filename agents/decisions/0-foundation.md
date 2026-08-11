@@ -1,9 +1,9 @@
-# ADR-0 — Foundation and Core Architecture
+# Decision 0 — Foundation and Core Architecture
 
 Status: **Accepted, 2026-07-23.**
 Backfilled; the decision was made during initial planning and implementation.
 The core pipeline, the Ruby backend, and the spec harness are implemented; other backends are planned.
-Amended by [ADR-10](10-csharp-target.md): C# joins the target list, paired with Java.
+Amended by [decision 10](10-csharp-target.md): C# joins the target list, paired with Java.
 
 ## Context
 
@@ -14,7 +14,7 @@ dewasmify's goal is to translate wasm binaries into source code of *many* langua
 ## Decision
 
 - **One shared IR, pluggable language backends.**
-  The core decodes, validates, and builds a language-neutral IR (ADR-1); each backend is a lowering of that IR plus an embedded lightweight runtime written in the target language (`runtime/<lang>/`).
+  The core decodes, validates, and builds a language-neutral IR (decision 1); each backend is a lowering of that IR plus an embedded lightweight runtime written in the target language (`runtime/<lang>/`).
   Adding a language must not require touching the core.
 - **Implementation language: Rust**, using the Bytecode Alliance crates (`wasmparser` for decoding/validation, `wast`/`wat` for the test pipeline).
   Rust also keeps the self-hosting demo possible: dewasmify itself compiled to wasm, then translated by itself.
@@ -26,7 +26,7 @@ dewasmify's goal is to translate wasm binaries into source code of *many* langua
   JavaScript is deliberately absent.
 - **Name: `dewasmify`** — the tool strips ("de-") the wasm out of a program.
   Crate, CLI, and repository share the name.
-  *Amended by [ADR-26](26-rename-dewasm.md) (2026-07-25): renamed to `dewasm`.*
+  *Amended by [decision 26](26-rename-dewasm.md) (2026-07-25): renamed to `dewasm`.*
 
 ## Rejected alternatives
 
@@ -37,6 +37,6 @@ dewasmify's goal is to translate wasm binaries into source code of *many* langua
 
 ## Consequences
 
-- Positive: each backend is "lowering table + runtime + pass the shared harness" (ADR-3); semantics knowledge concentrates in the IR and the per-language numeric strategy (ADR-2).
+- Positive: each backend is "lowering table + runtime + pass the shared harness" (decision 3); semantics knowledge concentrates in the IR and the per-language numeric strategy (decision 2).
 - Negative: unsupported-feature errors are part of the UX until Wasm 2.0+ features land; modules using them fail at conversion time, not runtime.
 - The milestone plan (M0 core → M1 Ruby → M2 WASI → M3 Bash → M4 Java/Go → M5 Python/PHP → M6 release/self-hosting) follows this priority order.

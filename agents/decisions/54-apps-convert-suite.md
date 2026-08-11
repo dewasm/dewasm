@@ -1,4 +1,4 @@
-# ADR-54 — Whole-Cache Per-Backend Conversion Suite
+# Decision 54 — Whole-Cache Per-Backend Conversion Suite
 
 Status: **Accepted, 2026-08-01.**
 Implemented: the shared harness (`crates/dewasm-test-helper/src/apps_convert.rs`, `apps_convert_suite!`), a `convert` integration test in each of the five backend crates, and a fixed 13-entry manifest covering every `.wasm` the fetch scripts produce.
@@ -7,7 +7,7 @@ Every app converts under every backend today; `ruby` and `cpython` are condition
 ## Context
 
 Conversion — wasm → backend source — is dewasm's core, but until now it was only ever exercised where an *execution* e2e case runs it.
-The execution suites (`apps`, `apps_fs`, `apps_capi`, `doom`) are wired per (backend × app) pair by capability (ADR-27): a backend invokes a case's macro only for a pair it can run end-to-end.
+The execution suites (`apps`, `apps_fs`, `apps_capi`, `doom`) are wired per (backend × app) pair by capability (decision 27): a backend invokes a case's macro only for a pair it can run end-to-end.
 That leaves conversion of many pairs completely untested — CRuby is converted only under Go, CPython only under Java, and the entire filesystem app family never reaches the Bash emitter at all.
 A codegen regression on one of those un-run pairs ships silently until someone happens to wire an execution case for it.
 The gap is real: the emitter path each pair would take (SQLite-class control-flow depth, a 30–35 MB interpreter's data segments and `call_indirect` tables) is exactly where a backend-specific lowering bug hides.
@@ -16,8 +16,8 @@ Conversion is also cheap and deterministic where running is not.
 Running CRuby under Bash is infeasible; *converting* it is a couple of CPU-bound seconds with no interpreter, toolchain, or snapshot needed.
 So the coverage a convert-only assertion buys is available for every pair, including the ones no execution case will ever cover.
 
-ADR-53 noted, for DOOM, that "a convert-only assertion would be an idiom no other suite uses" and so folded DOOM's convert coverage into its frame-snapshot run.
-That reasoning was local to a single module; generalized across the whole app cache the idiom pays for itself, and this ADR establishes it (see the note added to ADR-53).
+Decision 53 noted, for DOOM, that "a convert-only assertion would be an idiom no other suite uses" and so folded DOOM's convert coverage into its frame-snapshot run.
+That reasoning was local to a single module; generalized across the whole app cache the idiom pays for itself, and this decision establishes it (see the note added to decision 53).
 
 ## Decision
 
@@ -30,12 +30,12 @@ Add a **whole-cache per-backend conversion suite**: for every backend, convert e
 
 - **Fixed manifest, not directory discovery.**
   The manifest lists the 13 `.wasm` files the fetch scripts (`examples/apps/scripts/*.sh`) produce, each with its conversion `Mode` — `Standalone` for the command-shaped apps (a `_start`: cowsay, cpython, dwarf-fixture, minigzip, qjs, rg, ruby, sqlite3-shell), `Library` for the reactor/library artifacts (doom, libpcap, libsqlite3, sqlite3-binding, treesitter), the same mode each execution suite already uses.
-  A fixed list means a stale or missing cache entry is a *failure* (ADR-15), and the mode is chosen deliberately per artifact rather than guessed from the file.
+  A fixed list means a stale or missing cache entry is a *failure* (decision 15), and the mode is chosen deliberately per artifact rather than guessed from the file.
 
-- **Fail loud, never skip** (ADR-15).
+- **Fail loud, never skip** (decision 15).
   A missing cache file fails the trial with the standard `run examples/apps/setup.sh` message; it does not skip.
 
-- **Two-speed classification by measurement** (ADR-48).
+- **Two-speed classification by measurement** (decision 48).
   Heavy trials are `#[ignore]`d unless the backend crate's `slow_test` feature is on.
   "Heavy" is *measured*, not inferred from artifact size: every (backend × app) conversion was timed at the dev profile — the build the fast test pays.
   Only the two giant interpreter artifacts cross ~2 s on every backend (`ruby` ~7–13 s, `cpython` ~2.6–5 s); they are conditional.
@@ -54,7 +54,7 @@ What puts a convert trial behind `slow_test` is its measured dev-profile time ag
   A single whole-cache suite covers every pair uniformly and keeps the manifest in one place; #60 is closed as superseded by #65.
 
 - **Discover the cache directory at runtime instead of a fixed manifest.**
-  Would need no edit when an app is added, but it cannot tell a legitimately-absent entry (cache not fetched — must fail, ADR-15) from a genuinely-empty set, and it has no place to record each artifact's `Mode`.
+  Would need no edit when an app is added, but it cannot tell a legitimately-absent entry (cache not fetched — must fail, decision 15) from a genuinely-empty set, and it has no place to record each artifact's `Mode`.
   The fetch scripts are the source of truth for what exists; the manifest tracks them explicitly.
 
 - **Also assert the generated source compiles/runs.**

@@ -15,7 +15,7 @@ A document a user would never open, but an agent must consult before changing so
 | --- | --- | --- | --- |
 | [README.md](../README.md) | Front door: what dewasm is, one showpiece, install, usage, scope | Users evaluating the project | By hand |
 | [AGENTS.md](../AGENTS.md) | The agent contract: the rules that bind every change | Agents, contributors | By hand |
-| [agents/decisions/](decisions/README.md) | Design decisions with rationale and rejected alternatives, kept under their historical `ADR-N` identifiers | Agents, future maintainers | By hand (procedure and quality bar in its README) |
+| [agents/decisions/](decisions/README.md) | Design decisions with rationale and rejected alternatives, numbered and cited as "decision N" | Agents, future maintainers | By hand (procedure and quality bar in its README) |
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
@@ -41,6 +41,7 @@ A document a user would never open, but an agent must consult before changing so
 - **A skill under `.claude/skills/` is a router, not a store.**
   Claude Code auto-invokes a skill by its description, which is what a skill is for; the substance it routes to belongs under `agents/`.
   The test: if deleting `.claude/` would lose information rather than convenience, the file is holding content it should be pointing at.
+  A project-local skill is named with a `dewasm-` prefix, because the skill namespace is shared with the user's global skills.
 - **Tutorial commands must be verified by running them.**
   getting-started and the backend docs claim exact output; keep them true.
 

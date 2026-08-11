@@ -1,14 +1,14 @@
-# ADR-58 — Ruby Backend: Address a Branch by Value, Not by Lexical Scope
+# Decision 58 — Ruby Backend: Address a Branch by Value, Not by Lexical Scope
 
 Status: **Accepted, 2026-08-03.**
 Implemented in the `flat` module of [`crates/dewasm-backend-ruby/src/lib.rs`](../../crates/dewasm-backend-ruby/src/lib.rs).
-Supersedes [ADR-42](42-ruby-label-variable-cascade.md)'s cross-frame relay protocol, which no longer runs on any path; ADR-42's lean frame shapes and depth-1 fast path stand and remain the lowering for every function with no crossed frame — 45% of `sqlite3-shell`'s.
+Supersedes [decision 42](42-ruby-label-variable-cascade.md)'s cross-frame relay protocol, which no longer runs on any path; decision 42's lean frame shapes and depth-1 fast path stand and remain the lowering for every function with no crossed frame — 45% of `sqlite3-shell`'s.
 State merging is deliberately not included; see Consequences.
-**Refined by [ADR-60](60-ruby-flatten-only-deep-crossings.md) (2026-08-04):** the relay runs again for branches crossing fewer than 16 frames — only deep crossings are addressed by state, after the dispatch probe showed up as 11.8% of the NES workload's wall time.
+**Refined by [decision 60](60-ruby-flatten-only-deep-crossings.md) (2026-08-04):** the relay runs again for branches crossing fewer than 16 frames — only deep crossings are addressed by state, after the dispatch probe showed up as 11.8% of the NES workload's wall time.
 
 ## Context
 
-ADR-42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per level.
+Decision 42 addresses a branch target by its *scope*: `break` leaves the innermost one, so naming a target further out sets `__br` and relays through every frame in between, one epilogue compare per level.
 That is linear in nesting depth.
 On the converted `sqlite3-shell` it produced 33,219 `__br` references and roughly half of all CPU, concentrated in the VDBE interpreter loop where the towers are deepest.
 
@@ -41,7 +41,7 @@ Any scheme that moves work across a method boundary pays a call and gains no com
 
 ## Rejected alternatives
 
-- **Keep the ADR-42 cascade.**
+- **Keep the decision 42 cascade.**
   Linear in depth by construction; 33,219 `__br` references and ~half of CPU on the workload that motivated this.
 - **Flatten loops too, for uniformity.**
   Loses to the cascade outright past ~100 trips per entry — the back-edge is the one place the structured form is cheaper.
@@ -67,7 +67,7 @@ The `break` exemption also improves the cascade path — the shape it recognises
 
 **Negative.**
 Depth-1 branches get *more* expensive.
-They are the majority of all branches (20,588 vs 19,939 outward in `sqlite3-shell`), each a single `break` under ADR-42; 69% of those in flattened functions — 89% in `ruby.wasm` — now pay an assignment plus a hash dispatch instead, because their target frame was dissolved by some *other*, deeper branch.
+They are the majority of all branches (20,588 vs 19,939 outward in `sqlite3-shell`), each a single `break` under decision 42; 69% of those in flattened functions — 89% in `ruby.wasm` — now pay an assignment plus a hash dispatch instead, because their target frame was dissolved by some *other*, deeper branch.
 This is the trade the design makes: the deep case gets much cheaper, the shallow case somewhat dearer, and on real modules the deep case dominates.
 It is also why the criterion above matters — every frame kept structured is depth-1 branches kept cheap.
 

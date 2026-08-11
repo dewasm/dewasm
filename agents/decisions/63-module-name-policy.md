@@ -1,4 +1,4 @@
-# ADR-63 — `--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode
+# Decision 63 — `--module-name`: Fixed in Standalone, Validated Verbatim in Library Mode
 
 Status: **Accepted, 2026-08-05.**
 Landed for every backend and the CLI: the per-backend PascalCase sanitizers (and Bash's snake analogue) are deleted, a standalone artifact's internal name is fixed, and a library-mode name is used exactly as given or refused.
@@ -21,13 +21,13 @@ Passing `--module-name` together with `--mode standalone` is a conversion-time e
 The flag is mandatory in library mode: the input file's name on disk says nothing about what the caller wants the embedded API to be called, so there is no default to derive.
 The discriminating criterion, and the reusable rule: *a specification whose correct behaviour cannot be predicted from the input must not exist.*
 An implicit transformation is a permanent maintenance burden, preserved for compatibility long after anyone remembers why it maps what it maps.
-Validation is the opposite: the grammar is one line of documentation, and the failure is at conversion time with both the offending value and the grammar in the message (`dewasm_backend::check_module_name`, [ADR-0](0-foundation.md)).
+Validation is the opposite: the grammar is one line of documentation, and the failure is at conversion time with both the offending value and the grammar in the message (`dewasm_backend::check_module_name`, [decision 0](0-foundation.md)).
 
 | Backend | Library-mode grammar | Emitted as |
 | --- | --- | --- |
 | Ruby | `::`-separated segments, each `[A-Z][A-Za-z0-9_]*` | `class A::B::C`, preceded by guarded ancestor definitions |
 | Perl | `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*` | `package A::B::C`, runtime under `A::B::C::Rt` |
-| Python | one identifier `[A-Za-z_][A-Za-z0-9_]*` | `class Name`, runtime `class NameRt` ([ADR-62](62-embedded-runtime-isolation.md)) |
+| Python | one identifier `[A-Za-z_][A-Za-z0-9_]*` | `class Name`, runtime `class NameRt` ([decision 62](62-embedded-runtime-isolation.md)) |
 | Java | `.`-separated segments, each `[A-Za-z_$][A-Za-z0-9_$]*` | leading segments → `package a.b;` first line, last segment → the class name |
 | Bash | one identifier `[A-Za-z_][A-Za-z0-9_]*` | prefix = the name **lowercased** + `_` |
 | Go | one identifier `[A-Za-z_][A-Za-z0-9_]*` | `package <lowercased>`, type = first letter capitalized |
@@ -39,8 +39,8 @@ Four details the grammars imply:
   An existing ancestor is skipped by the guard and kept intact whatever it is; one bound to a non-module constant fails loudly at load with `TypeError`, the right outcome.
   A single-segment name emits no guards.
 - **Java's split rule.**
-  The last dot-separated segment is the class name and anything before it is the package declaration, emitted as the file's first statement ahead of the bundled runtime classes ([ADR-30](30-java-backend-lowering.md)), so `com.github.dewasm.Ruby` yields both a conventional package and a conventional class name (which is why the class segment is not forced to be capitalized).
-  The grammar is character-level only: a segment that happens to be a Java keyword (`int`) or a restricted type name (`var`, JLS 8.1) passes validation and fails in `javac`, because a maintained keyword list is exactly the continuously-updated language-specific table this ADR exists to avoid and the compiler already errors at the same stage of the workflow.
+  The last dot-separated segment is the class name and anything before it is the package declaration, emitted as the file's first statement ahead of the bundled runtime classes ([decision 30](30-java-backend-lowering.md)), so `com.github.dewasm.Ruby` yields both a conventional package and a conventional class name (which is why the class segment is not forced to be capitalized).
+  The grammar is character-level only: a segment that happens to be a Java keyword (`int`) or a restricted type name (`var`, JLS 8.1) passes validation and fails in `javac`, because a maintained keyword list is exactly the continuously-updated language-specific table this decision exists to avoid and the compiler already errors at the same stage of the workflow.
 - **Bash's lowercase exception.**
   Every generated Bash name is a global shell identifier, so the prefix is the name lowercased.
   This is the one deliberate mapping the policy keeps, admissible precisely because it is total and fully specified (`Sqlite3Shell` → `sqlite3shell_`, always) with no information the caller needs back.
@@ -63,7 +63,7 @@ It lives in the test helper on purpose: the product performs no name transformat
   It also blocks the namespacing the grammars now allow, since a sanitizer that deletes `:` and `.` can never grow a Ruby constant path or a Java package.
 - **Sanitize, but warn on stderr.**
   A warning is not an error: CI pipelines swallow it, and the artifact still has a name the caller did not ask for.
-  ADR-0's rule is that a request the converter cannot honour fails at conversion time.
+  Decision 0's rule is that a request the converter cannot honour fails at conversion time.
 - **Let `--module-name` work in standalone mode too** (naming the internal class).
   It answers a question no caller has, and it forced the Java dotted-name question, a `package` for a program launched as `Main`, into a decision with no good answer.
 - **Default the library-mode name from the input file stem.**

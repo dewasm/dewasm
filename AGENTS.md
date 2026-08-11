@@ -37,7 +37,7 @@ When support declarations or WASI units change, regenerate `docs/support.md` wit
 ## Decisions
 
 Significant decisions, anything with real alternatives, are recorded in [`agents/decisions/`](agents/decisions/README.md): its README holds the index, the authoring procedure, and the quality bar.
-The entries keep the historical `ADR-N` identifiers they were written under, so "ADR-58" still names one.
+An entry is `agents/decisions/<N>-<slug>.md`, cited as "decision N".
 Only files under `agents/` and this file cite a decision.
 Code and user-facing docs state their constraints in place, and the decision links out to the code it governs, never the reverse.
 `agents/` is for documents an agent reads while working; `docs/` is for documents a human reads ([`agents/docs-policy.md`](agents/docs-policy.md)).
@@ -66,15 +66,15 @@ Applies to all prose: docs, comments, PR text.
 
 ## Implementation guidelines
 
-Each rule is stated here in full; the cited ADR holds its rationale and rejected alternatives.
+Each rule is stated here in full; the cited decision holds its rationale and rejected alternatives.
 
-- The spec testsuite binds (ADR-3). Correctness of generated code outranks its readability; readability improvements go into optional passes, never into semantics-relevant lowering.
-- Where the WASI spec is silent, copy wasmtime's behavior as measured on both CI hosts (ADR-49).
-- Numeric representation conventions — masked-unsigned integers, f32 re-rounding, NaN bit paths — are shared across backends (ADR-2).
-- Each backend's lowering shapes are fixed; follow them rather than restructuring in passing. They are recorded per backend: Ruby ADR-4/42-44/58/60/65, Bash ADR-5/11-13/34/35/51/52, Python ADR-28, Go ADR-29, Java ADR-30, Perl ADR-55.
-- Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:` headers, referenced as `Rt` (ADR-6); keep the headers in sync when editing a unit (the units lint enforces most of it).
-- `Embedded` linkage isolates the runtime per artifact so two artifacts coexist in one namespace (ADR-62); `embedded_coexist_e2e!` is the check, and a backend that does not invoke it is unfinished, not incapable.
-- A new backend is done when the shared spec harness passes for it, not before. The standard goal is wasm 1.0 + full WASI p1 (ADR-24); wasm 2.0+ proposals and the component model are rejected outright, not per backend.
-- Backends declare their capabilities directly, `Backend::feature_status` and `Backend::has_wasi_p1`, rendered into `docs/support.md` (ADR-25); there is no per-backend support maturity level.
+- The spec testsuite binds (decision 3). Correctness of generated code outranks its readability; readability improvements go into optional passes, never into semantics-relevant lowering.
+- Where the WASI spec is silent, copy wasmtime's behavior as measured on both CI hosts (decision 49).
+- Numeric representation conventions — masked-unsigned integers, f32 re-rounding, NaN bit paths — are shared across backends (decision 2).
+- Each backend's lowering shapes are fixed; follow them rather than restructuring in passing. They are recorded per backend: Ruby decisions 4/42-44/58/60/65, Bash decisions 5/11-13/34/35/51/52, Python decision 28, Go decision 29, Java decision 30, Perl decision 55.
+- Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:` headers, referenced as `Rt` (decision 6); keep the headers in sync when editing a unit (the units lint enforces most of it).
+- `Embedded` linkage isolates the runtime per artifact so two artifacts coexist in one namespace (decision 62); `embedded_coexist_e2e!` is the check, and a backend that does not invoke it is unfinished, not incapable.
+- A new backend is done when the shared spec harness passes for it, not before. The standard goal is wasm 1.0 + full WASI p1 (decision 24); wasm 2.0+ proposals and the component model are rejected outright, not per backend.
+- Backends declare their capabilities directly, `Backend::feature_status` and `Backend::has_wasi_p1`, rendered into `docs/support.md` (decision 25); there is no per-backend support maturity level.
 - An unsupported wasm feature fails at conversion time with a clear error, never at runtime; a backend rejects what the core IR accepts but it has not implemented via `dewasm_backend::check_module_support`.
-- A library-mode `--module-name` is used verbatim or rejected with its grammar; a standalone artifact's internal name is fixed, and the option is refused there (ADR-63). Validate in `Backend::generate` only, never in the `*_with_units` APIs. Test tables carry kebab-case names, converted with `dewasm_test_helper::derive_module_name`; no name transformation belongs in the product.
+- A library-mode `--module-name` is used verbatim or rejected with its grammar; a standalone artifact's internal name is fixed, and the option is refused there (decision 63). Validate in `Backend::generate` only, never in the `*_with_units` APIs. Test tables carry kebab-case names, converted with `dewasm_test_helper::derive_module_name`; no name transformation belongs in the product.

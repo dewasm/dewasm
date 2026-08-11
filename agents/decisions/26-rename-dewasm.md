@@ -1,13 +1,13 @@
-# ADR-26 — Rename the Project: dewasmify → dewasm
+# Decision 26 — Rename the Project: dewasmify → dewasm
 
 Status: **Accepted, 2026-07-25; fully landed 2026-07-28.**
-Landed 2026-07-26: crates are `dewasm-*`, the binary is `dewasm`, env vars are `DEWASM_*`, and docs are swept (superseded ADR bodies keep the historical name).
+Landed 2026-07-26: crates are `dewasm-*`, the binary is `dewasm`, env vars are `DEWASM_*`, and docs are swept (superseded decision bodies keep the historical name).
 The GitHub repository itself now lives at `github.com/dewasm/dewasm` (commit ae2b430).
-Amends the naming note in [ADR-0](0-foundation.md).
+Amends the naming note in [decision 0](0-foundation.md).
 
 ## Context
 
-ADR-0 named the project `dewasmify` ("strips the wasm out").
+Decision 0 named the project `dewasmify` ("strips the wasm out").
 In use, the name is four syllables and awkward to say; the `-ify` suffix adds no meaning that `de-` doesn't already carry.
 A rename only gets more expensive: after 0.1 the name is in release artifacts, user scripts, and (potentially) crates.io.
 
@@ -28,5 +28,5 @@ Reserving the crates.io name with an early publish is recommended at release tim
 ## Consequences
 
 - Positive: shorter name, free on crates.io, single flag-day commit while there are no external users.
-- Negative: one wide, though purely mechanical, diff; historical ADR prose refers to the old name until the rename commit runs it (superseded ADRs keep reading coherently — same project).
+- Negative: one wide, though purely mechanical, diff; historical decision prose refers to the old name until the rename commit runs it (superseded decisions keep reading coherently — same project).
 - The rename commit must contain no behavior changes so it reviews as a pure diff of names.

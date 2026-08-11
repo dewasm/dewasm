@@ -1,19 +1,19 @@
-# ADR-53 — Test DOOM by a Deterministic Framebuffer Snapshot
+# Decision 53 — Test DOOM by a Deterministic Framebuffer Snapshot
 
 Status: **Accepted, 2026-07-31.**
-Extends the DOOM demo (ADR-50) into the test test: drive the converted `doom.wasm` with a self-advancing synthetic clock and a fixed, input-free tick count, then compare the raw framebuffer it renders — pixel for pixel — against a snapshot captured once from a wasmtime oracle.
+Extends the DOOM demo (decision 50) into the test test: drive the converted `doom.wasm` with a self-advancing synthetic clock and a fixed, input-free tick count, then compare the raw framebuffer it renders — pixel for pixel — against a snapshot captured once from a wasmtime oracle.
 Implemented: the oracle (`cargo xtask update-doom-snapshot`), the shared contract and runners (`crates/dewasm-test-helper/src/doom.rs`), the committed snapshot (`examples/doom/snapshot/frame.ppm`), and the frame case on Ruby/Python/Go/Java plus the frame case on all five backends (byte-identical) — Bash at the ultra_slow_test category, the others at slow.
 
 ## Context
 
-`examples/doom` converts the unmodified [jacobenget/doom.wasm](https://github.com/jacobenget/doom.wasm) v0.1.0 to every backend and runs it behind per-language frontends (ADR-50), but nothing in `cargo test` exercises it.
+`examples/doom` converts the unmodified [jacobenget/doom.wasm](https://github.com/jacobenget/doom.wasm) v0.1.0 to every backend and runs it behind per-language frontends (decision 50), but nothing in `cargo test` exercises it.
 DOOM is the largest real module we convert and the only one driven purely through **custom host imports** (ten functions across `console`/`gameSaving`/`runtimeControl`/`ui`/`loading`) with **no WASI surface at all** — a coverage shape none of the `apps`/`apps_capi` cases reach.
 A regression that only this module would surface (a data-segment, `call_indirect`-table, or accumulated-arithmetic bug in a 640×400 software renderer) currently ships unnoticed.
 
 Two facts make a snapshot possible where the module first looks untestable:
 
 - **The framebuffer is a deterministic function of the tick schedule.**
-  DOOM's software renderer is fixed-point integer — no floats — so the pixels are pure integer computation, identical across wasmtime and every backend regardless of the softfloat/NaN conventions (ADR-2/13).
+  DOOM's software renderer is fixed-point integer — no floats — so the pixels are pure integer computation, identical across wasmtime and every backend regardless of the softfloat/NaN conventions (decision 2/13).
   The only nondeterminism is the game clock: `runtimeControl.timeInMilliseconds` paces the tic loop, and all five frontends feed it a *wall* clock (`examples/doom/go/doom/host.go:100-105`, `examples/doom/ruby/main.rb:73`).
   Override that import with a synthetic counter that self-advances a fixed step on every read and drive `initGame` then N× `tickGame` with no key events, and the rendered frame is reproducible.
 - **`ui.drawFrame(bufOff)` hands the host an offset into linear memory** where `FRAME_W*FRAME_H*4` bytes live in `B,G,R,A` order, the alpha byte padding (`examples/doom/go/doom/host.go:107-122`).
@@ -45,14 +45,14 @@ The oracle is an independent embedder (wasmtime), not backend consensus, because
 **Speed assignment.**
 The frame-snapshot test runs on every backend, classified to match each backend's convention for a comparably heavy execution case.
 Ruby/Python/Go/Java use **slow_test** — CI's main run, like the qjs/sqlite e2e — so DOOM is actually exercised in CI.
-Bash uses **ultra_slow_test** (ADR-48), like its qjs-REPL pty case: its run is minutes (initGame ~2 min + ticks + serializing a 1 MB framebuffer out of the associative-array memory), so it stays out of CI and runs only in local pre-release.
+Bash uses **ultra_slow_test** (decision 48), like its qjs-REPL pty case: its run is minutes (initGame ~2 min + ticks + serializing a 1 MB framebuffer out of the associative-array memory), so it stays out of CI and runs only in local pre-release.
 There is no separate conversion smoke — the frame test already exercises the full convert-and-run path, and a convert-only assertion would be an idiom no other suite uses.
-*(Amended by [ADR-54](54-apps-convert-suite.md): the convert-only assertion is now the idiom of a whole-cache per-backend convert suite, which includes a fast `doom` convert trial on every backend — the frame-snapshot run above stays the convert-and-run test; the two are complementary.)*
+*(Amended by [decision 54](54-apps-convert-suite.md): the convert-only assertion is now the idiom of a whole-cache per-backend convert suite, which includes a fast `doom` convert trial on every backend — the frame-snapshot run above stays the convert-and-run test; the two are complementary.)*
 
 ## Rejected alternatives
 
 - **Backend-consensus snapshot (no external oracle).**
-  Cheaper — no `wasmtime` crate — but it only proves the backends *agree*, so a bug in the shared converter or the shared numeric conventions (ADR-2) passes.
+  Cheaper — no `wasmtime` crate — but it only proves the backends *agree*, so a bug in the shared converter or the shared numeric conventions (decision 2) passes.
   An independent embedder is the whole point of a snapshot; rejected.
 - **Sanity-only check (reuse the frontends' `--smoke`).**
   The frontends already assert "enough distinct colors / has glyphs" (`examples/doom/bash/main.sh:400-417`), which is cheap but catches only gross breakage and is non-deterministic (wall clock).
@@ -66,7 +66,7 @@ There is no separate conversion smoke — the frame test already exercises the f
 ## Consequences
 
 - Positive: the converter gains regression coverage on its largest, most import-heavy real module, pinned to a pixel-exact frame an independent runtime produced — the strongest oracle available for it.
-- Positive: `doom.wasm` becomes a checksum-pinned fixture like every other app (closing the ADR-9 gap the old `examples/doom/fetch.sh` left open).
+- Positive: `doom.wasm` becomes a checksum-pinned fixture like every other app (closing the decision 9 gap the old `examples/doom/fetch.sh` left open).
 - Negative: a new heavy `wasmtime`-crate dependency, quarantined to xtask; the snapshot must be regenerated (and reviewed) whenever the `doom.wasm` pin bumps.
 - Negative / carry-over: the frame test runs in CI for four backends but Bash's is ultra_slow (local pre-release only).
   The synthetic-clock tick count N is a magic constant the snapshot pins — documented at the glue, not derived.

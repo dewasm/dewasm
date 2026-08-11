@@ -1,11 +1,11 @@
-# ADR-16 — Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking
+# Decision 16 — Completing Wasm 1.0 for Ruby: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking
 
 Status: **Accepted, 2026-07-24.**
 Implemented: `crates/dewasm-core/src/{ir,module,func}.rs`, `crates/dewasm-backend/src/lib.rs`, `crates/dewasm-backend-ruby/src/lib.rs`, `runtime/ruby/units/{global,table,rt}/*.rb`, and the spec harness (`crates/dewasm-test-helper/src/spec.rs` plus the per-backend `crates/dewasm-backend-{ruby,bash}/tests/spec.rs`).
 
 ## Context
 
-`docs/support.md` listed five wasm-1.0-scoped gaps for every backend (ADR-8's "declared debt"): imported globals, imported memories, imported tables, multiple tables, and the table half of bulk memory (passive/declared element segments, `table.init`/`table.copy`/`elem.drop`).
+`docs/support.md` listed five wasm-1.0-scoped gaps for every backend (decision 8's "declared debt"): imported globals, imported memories, imported tables, multiple tables, and the table half of bulk memory (passive/declared element segments, `table.init`/`table.copy`/`elem.drop`).
 The core IR builder rejected all five universally, so no backend had ever needed to think about them.
 Closing them for Ruby only, while leaving Bash exactly as unsupported as before, required decisions about representation (globals, tables) and about a mechanism the core builder no longer provides for free (per-backend conditioning).
 
@@ -15,7 +15,7 @@ Closing them for Ruby only, while leaving Bash exactly as unsupported as before,
   `Expr::GlobalGet` lowers to `@g{idx}.value`, `Stmt::GlobalSet` to `@g{idx}.value = ...`, uniformly for local and imported globals.
   **Criterion:** a global that crosses an instantiation boundary (imported, or exported and later imported by another instance) must be a shared mutable cell, not a copied value — `Memory`/`Table` are already always objects for the same reason, so making `Global` follow suit keeps one representation instead of two paths through every place a global is read, written, or exported.
   **Superseded for performance:** only globals that actually cross a boundary (imported, or `ExportKind::Global`) are boxed now; the criterion above is unchanged; see the "Rejected alternatives" entry below, now adopted.
-- **Imports beyond functions reuse ADR-7's mechanism as-is.**
+- **Imports beyond functions reuse decision 7's mechanism as-is.**
   `Rt.resolve_import(imports, mod, name)` already returns whatever object the embedder supplied; nothing about it was function-specific.
   Imported memory/table/global codegen calls it exactly like imported functions do (`crates/dewasm-backend-ruby/src/lib.rs`'s `resolve_import_string`), just assigning into `@memory`, `@t{N}`, or `@g{N}` instead of `@if{N}`.
 - **A present-but-wrong-*kind* import is now a link error.**
@@ -32,14 +32,14 @@ Closing them for Ruby only, while leaving Bash exactly as unsupported as before,
   Cross-table `table.copy` needs another `Rt::Table`'s raw arrays, exposed via a small `slice(offset, len)` — `Array#[]` always returns a fresh array, so self-copy overlap is safe automatically, the same trick `memory/copy.rb` already plays with `String#byteslice`.
   `table.get`/`set`/`grow`/`size`/`fill` stay rejected under `Feature::ReferenceTypes`: confirmed these were never part of wasm 1.0's MVP instruction set — they, table.get/set in particular, shipped later alongside reference types — so this is scope, not a partial implementation.
 - **A shared `check_module_support(backend, module)`** (`crates/dewasm-backend/src/lib.rs`) replaces the conditioning the core builder used to do unconditionally.
-  Because the core IR is now backend-agnostic about all five constructs, each backend must refuse what it hasn't implemented itself, at conversion time (ADR-0's contract), with the same `UnsupportedError` attribution the core used to produce.
+  Because the core IR is now backend-agnostic about all five constructs, each backend must refuse what it hasn't implemented itself, at conversion time (decision 0's contract), with the same `UnsupportedError` attribution the core used to produce.
   Called first thing in both `dewasm-backend-ruby::generate_class_inner` and `dewasm-backend-bash::generate_module_inner` — this is the entire reason Bash's declared support didn't have to move.
-- **Generated classes are their own ADR-7 import providers.**
-  Every class gets a public `import(name)` (checks `@exports`, then `GLOBAL_EXPORTS`, `TABLE_EXPORTS`, `MEMORY_EXPORTS`) so one instance is directly usable as another's import source (`imports["M"] = other_instance`) — applying ADR-7 symmetrically, not a new mechanism.
+- **Generated classes are their own decision 7 import providers.**
+  Every class gets a public `import(name)` (checks `@exports`, then `GLOBAL_EXPORTS`, `TABLE_EXPORTS`, `MEMORY_EXPORTS`) so one instance is directly usable as another's import source (`imports["M"] = other_instance`) — applying decision 7 symmetrically, not a new mechanism.
   This is what let the spec harness implement the wast testsuite's `(register "Name" $id)` directive for real: `crates/dewasm-test-helper/src/spec.rs`'s `ScriptGen` tracks registered-name → live instance, `convert()` takes the set of module names it may treat as import sources, and `assert_unlinkable` is checked for real (any raised error during instantiation counts — upstream's exact wording never matches ours) instead of always skipped.
   `SpecLang::supports_registered_imports()` tests all of this per language (Ruby: true; Bash: false — its ambient global `IMPORTS` associative array has no per-instance import object to extend this way).
   **This is harness-only wiring using the pre-existing imports-Hash mechanism a real embedder would also use; dewasmify itself still converts exactly one wasm module into one class.
-  ADR-0's "cross-module linking is out of scope for the tool" is unchanged** — what changed is that the test harness can now exercise import resolution the same way a Ruby embedder linking two generated classes by hand already could.
+  Decision 0's "cross-module linking is out of scope for the tool" is unchanged** — what changed is that the test harness can now exercise import resolution the same way a Ruby embedder linking two generated classes by hand already could.
 
 ## Rejected alternatives
 
@@ -49,7 +49,7 @@ Closing them for Ruby only, while leaving Bash exactly as unsupported as before,
   The boundary criterion above (crosses an instantiation boundary ⇒ needs the box) is exactly what `boxed_globals` computes; only the plain-ivar-for-everything-else half of this alternative was actually implemented.
 - **Full wasm-type import validation (signatures, mutability, limits)** — real correctness value only for `assert_unlinkable` conformance; no embedder-visible behavior changes for a correctly-typed import, which is the only case that matters outside the spec harness.
   Deferred as documented debt (`import-limits` list entries) rather than implemented speculatively.
-- **Keep the core builder rejecting these constructs per-backend (a `Backend` parameter threaded into `build_module`)** — would leak backend concerns into the shared, backend-agnostic IR builder (ADR-0's "adding a language must not require touching the core").
+- **Keep the core builder rejecting these constructs per-backend (a `Backend` parameter threaded into `build_module`)** — would leak backend concerns into the shared, backend-agnostic IR builder (decision 0's "adding a language must not require touching the core").
   A post-hoc test in the shared backend-trait crate keeps `dewasm-core` untouched and gives every future backend the same free conditioning Bash uses here.
 
 ## Consequences
@@ -60,4 +60,4 @@ Closing them for Ruby only, while leaving Bash exactly as unsupported as before,
 - Negative / carry-over: `import-limits` stays open debt until (if ever) function/global/table/ memory type metadata is worth carrying at runtime purely for stricter unlinkable detection.
   Bash gaining any of these five features later is a separate, symmetric milestone — its own `check_module_support` call means it costs nothing until then.
 
-See also: [ADR-0](0-foundation.md) (scope, cross-module linking), [ADR-1](1-ir-design.md) (IR design), [ADR-4](4-ruby-backend-lowering.md) (Ruby lowering conventions this extends), [ADR-6](6-runtime-units.md) (runtime units), [ADR-7](7-import-providers.md) (the import provider protocol this generalizes), [ADR-8](8-latest-testsuite-support-matrix.md) (the support matrix and skip-attribution policy this fulfills).
+See also: [decision 0](0-foundation.md) (scope, cross-module linking), [decision 1](1-ir-design.md) (IR design), [decision 4](4-ruby-backend-lowering.md) (Ruby lowering conventions this extends), [decision 6](6-runtime-units.md) (runtime units), [decision 7](7-import-providers.md) (the import provider protocol this generalizes), [decision 8](8-latest-testsuite-support-matrix.md) (the support matrix and skip-attribution policy this fulfills).

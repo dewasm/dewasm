@@ -1,4 +1,4 @@
-# ADR-65: Precedence-Aware Parenthesis Emission in the Ruby Backend
+# Decision 65: Precedence-Aware Parenthesis Emission in the Ruby Backend
 
 **Status:** Accepted (2026-08-06).
 Landed: the `Prec`/`Rendered` pair in `crates/dewasm-backend-ruby/src/lib.rs`, through which every expression the Ruby backend emits now goes.
@@ -22,14 +22,14 @@ The parens are therefore emitted by the *consumer* of an expression, which is th
 **The precedence table covers only the subset the backend emits**, and is written out rather than assumed, because two of its facts differ from C: Ruby binds `&` tighter than `|` and `^`, and binds all three tighter than the comparisons.
 So `a + b & 0xffffffff` is the i32 wrap, correctly, and `a & b | c` is `(a & b) | c`.
 
-**The table is conservative wherever Ruby's grammar is not plainly on our side**, because [ADR-1](1-ir-design.md) puts correctness of generated code above its readability and this change buys only bytes:
+**The table is conservative wherever Ruby's grammar is not plainly on our side**, because [decision 1](1-ir-design.md) puts correctness of generated code above its readability and this change buys only bytes:
 
 - The comparison and equality families are non-associative — `a == b == c` is a syntax error in Ruby — so an equal-precedence operand is parenthesized on *both* sides.
 - A left operand at the operator's own precedence is left bare (left associativity reparses it as built); a right operand at the same precedence keeps its parens, except for `& | ^` with the identical operator, where integer associativity makes the flattening exact.
   `+` and `*` are excluded from that exemption on purpose: they carry floats here, and float addition is not associative.
 - A negative numeric literal binds like a unary expression, not like an atom, so it is parenthesized in receiver position.
 - The ternary is right-associative: only its else-branch may hold another one bare.
-- `!` keeps the parens around a comparison (`!(a < b)`), which the table requires anyway and which [ADR-2](2-numeric-semantics.md)'s NaN handling depends on — a comparison is negated whole, never by flipping the operator.
+- `!` keeps the parens around a comparison (`!(a < b)`), which the table requires anyway and which [decision 2](2-numeric-semantics.md)'s NaN handling depends on — a comparison is negated whole, never by flipping the operator.
 
 **The condition renderers go through the same mechanism.**
 `cond`/`not_cond` fuse a wasm comparison into a Ruby boolean, and previously emitted their operands with a different parenthesization discipline from the materialized `a < b ? 1 : 0` form — the same expression got parens in one path and not in the other.
@@ -52,6 +52,6 @@ Where the table has no clear answer, the parens stay.
 
 - Converted source shrinks 1.5–2.6%, the `(` count falls by a third to a half (cowsay 54.8k → 26.7k, sqlite3-shell 204k → 123k, ruby.wasm 1.60M → 1.05M), and `compile_file` gets 2–5% faster (cowsay 0.119s → 0.113s, qjs 0.434s → 0.413s, sqlite3-shell 0.526s → 0.508s, ruby.wasm 4.88s → 4.79s; medians of three).
 - Generated Ruby now relies on the reader knowing Ruby's precedence — `s32(a) >> (b & 31) & 0xffffffff` is a correct i32 arithmetic shift and does not look like one at a glance.
-  That is the readability-for-correctness trade [ADR-1](1-ir-design.md) already settled in this direction; the spec harness ([ADR-3](3-testing-strategy.md)) is what says the shapes are right.
+  That is the readability-for-correctness trade [decision 1](1-ir-design.md) already settled in this direction; the spec harness ([decision 3](3-testing-strategy.md)) is what says the shapes are right.
 - The other backends still emit full parens.
   Each follows in its own change, against its own language's table — the differences that matter here (`&` versus comparisons, non-associative equality) are exactly the ones that differ per language, so a shared framework would have to be parameterized by everything that makes it correct.

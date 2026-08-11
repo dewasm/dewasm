@@ -1,4 +1,4 @@
-# ADR-6 — Runtime as Per-Method Units with Selectable Linkage
+# Decision 6 — Runtime as Per-Method Units with Selectable Linkage
 
 Status: **Accepted, 2026-07-23.**
 Implemented for Ruby: the runtime lives in `runtime/ruby/units/` (118 units), the generic bundler in `crates/dewasm-backend/src/lib.rs` (`RuntimeBundler`), and generated code references the runtime via the relative name `Rt`.
@@ -7,7 +7,7 @@ The external/gem linkage is designed for but not shipped.
 ## Context
 
 The runtime was two monolithic files (`runtime.rb`, `wasi.rb`) embedded wholesale into every generated program.
-Three pressures broke that: the Bash backend's softfloat (ADR-5) will be ~1000 lines a float-free program must not carry (shells parse the whole file at startup); WASI keeps growing but a module's imports name exactly which syscalls it can ever call; and two generated files loaded into one Ruby process both reopened the global `Dewasmify` module — colliding constants and, worse, silently mixing runtimes from different dewasmify versions.
+Three pressures broke that: the Bash backend's softfloat (decision 5) will be ~1000 lines a float-free program must not carry (shells parse the whole file at startup); WASI keeps growing but a module's imports name exactly which syscalls it can ever call; and two generated files loaded into one Ruby process both reopened the global `Dewasmify` module — colliding constants and, worse, silently mixing runtimes from different dewasmify versions.
 
 ## Decision
 
@@ -29,16 +29,16 @@ The declared-dependency drift risk (edit the code, forget the header) is mitigat
 - **Keep the monolith** — unacceptable output cost once Bash softfloat exists, and no answer to multi-artifact collisions.
 - **Coarse feature groups** (memory / floats / wasi) — most of the machinery for a fraction of the precision; any float instruction would still drag the whole float group into Bash output.
 - **A fixed global namespace for the embedded runtime** — multi-module programs collide; version skew between artifacts goes undetected.
-- **Runtime `require` of shared files at run time** — breaks the single-file, no-dependency output contract (ADR-0); dependency-based distribution is instead the future gem linkage, chosen explicitly at build time.
+- **Runtime `require` of shared files at run time** — breaks the single-file, no-dependency output contract (decision 0); dependency-based distribution is instead the future gem linkage, chosen explicitly at build time.
 
 ## Consequences
 
 - Positive: float-free WASI programs shrank (hello: 430 → 160 lines); generated files coexist in one process; WASI syscalls are bundled by import name, so unimplemented ones cost a stub lambda, not code; the bundler and the unit convention are language-agnostic and ready for `runtime/bash/units/`.
 - Negative: 118 small files instead of two readable ones, and the `requires:` headers are hand-maintained (residual risk: a parenless bare call the lint cannot see — the harness net catches those).
-- Carry-over: gem packaging (`Alias` pointing at an installed runtime, version compatibility checking) is a future ADR once a second consumer of the shared linkage exists.
+- Carry-over: gem packaging (`Alias` pointing at an installed runtime, version compatibility checking) is a future decision once a second consumer of the shared linkage exists.
 
-## Relationship to other ADRs
+## Relationship to other decisions
 
-- ADR-4's lowering conventions now emit `Rt.*` instead of `Dewasmify.*`.
-- ADR-3's harness doubles as the dynamic dependency check here.
-- ADR-5's softfloat will land directly as `runtime/bash/units/`.
+- Decision 4's lowering conventions now emit `Rt.*` instead of `Dewasmify.*`.
+- Decision 3's harness doubles as the dynamic dependency check here.
+- Decision 5's softfloat will land directly as `runtime/bash/units/`.

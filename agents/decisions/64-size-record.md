@@ -1,12 +1,12 @@
-# ADR-64: Record Distribution Size Beside Speed, in Raw Bytes
+# Decision 64: Record Distribution Size Beside Speed, in Raw Bytes
 
 **Status:** Accepted (2026-08-06).
 Landed: `cargo xtask size` (`crates/xtask/src/size/`), the record under `benchmarks/results/` as `<timestamp>Z-size.json`, and the generated `docs/sizes/results.md` with its figures beside a hand-written `docs/sizes/README.md`.
-Not covered: any CI enforcement — like the benchmark record ([ADR-57](57-benchmark-harness.md)) this is a dated measurement, not a compared snapshot.
+Not covered: any CI enforcement — like the benchmark record ([decision 57](57-benchmark-harness.md)) this is a dated measurement, not a compared snapshot.
 
 ## Context
 
-[ADR-57](57-benchmark-harness.md) made speed measurable, and speed is the axis on which dewasm loses: converted source is orders of magnitude slower than an AOT runtime.
+[Decision 57](57-benchmark-harness.md) made speed measurable, and speed is the axis on which dewasm loses: converted source is orders of magnitude slower than an AOT runtime.
 Size is the axis on which it can win, and it was unmeasured — so the distribution argument ("ship source instead of a binary plus a runtime") was being made in prose with no numbers behind it.
 
 The claim is falsifiable and worth checking, because the answer is not obviously favourable.
@@ -19,7 +19,7 @@ Every change that shrinks generated code needs somewhere to show its effect, and
 
 ## Decision
 
-**A size record, `cargo xtask size`, built as the sibling of `cargo xtask bench`** — same shape, same conventions, deliberately: a fixed corpus, a dated JSON record, a generated document with SVG figures, a `--render` flag that rebuilds the document from a stored record without measuring, and skipped-with-reason for anything missing ([ADR-15](15-tests-fail-not-skip.md)).
+**A size record, `cargo xtask size`, built as the sibling of `cargo xtask bench`** — same shape, same conventions, deliberately: a fixed corpus, a dated JSON record, a generated document with SVG figures, a `--render` flag that rebuilds the document from a stored record without measuring, and skipped-with-reason for anything missing ([decision 15](15-tests-fail-not-skip.md)).
 It shares the benchmark's drawing code, so a size figure and a speed figure are the same picture in different units.
 
 **The records live in `benchmarks/results/`, beside the speed records** — the same dated filename with a `-size` suffix naming the kind.

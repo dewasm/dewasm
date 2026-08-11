@@ -1,4 +1,4 @@
-# ADR-1 — IR Design: Structured Control Flow + Stack-Slot Temps
+# Decision 1 — IR Design: Structured Control Flow + Stack-Slot Temps
 
 Status: **Accepted, 2026-07-23.**
 Backfilled; implemented in `crates/dewasm-core/src/ir.rs` and `func.rs`.
@@ -13,7 +13,7 @@ Wasm 1.0 bodies are stack-machine code, but their control flow is already struct
 
 - **Keep wasm's structured control flow as-is.**
   The IR statement tree mirrors block/loop/if with resolved branch targets; no CFG, no relooper.
-  Every structured target language can express "exit block N" / "continue loop N" one way or another (ADR-4 for Ruby's), so re-deriving structure from a CFG would be pure waste.
+  Every structured target language can express "exit block N" / "continue loop N" one way or another (decision 4 for Ruby's), so re-deriving structure from a CFG would be pure waste.
   Labels carry a `referenced` flag so backends emit no machinery for branch-free blocks.
 - **Flatten the value stack into temps keyed by (depth, type)**, the wasm2c approach, using the type information tracked during translation.
   The same slot is one target-language variable.
@@ -33,6 +33,6 @@ Wasm 1.0 bodies are stack-machine code, but their control flow is already struct
 
 ## Consequences
 
-- Positive: backends are lowering tables, not compilers; the spec harness (ADR-3) passed on the first backend with only lowering bugs, no IR redesign.
+- Positive: backends are lowering tables, not compilers; the spec harness (decision 3) passed on the first backend with only lowering bugs, no IR redesign.
 - Negative: generated code reads like register transfers (`s0 = l0`; `s0 = (s0 + s1) & 0xffffffff`) until the folding pass exists; output size is larger than hand-written style.
 - Multi-value blocks/returns are representable for free (result slots are just consecutive temps), so the multi-value feature costs backends almost nothing.

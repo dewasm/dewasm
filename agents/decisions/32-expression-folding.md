@@ -1,4 +1,4 @@
-# ADR-32 — Build-time Expression Folding
+# Decision 32 — Build-time Expression Folding
 
 Status: **Accepted, 2026-07-28.**
 The func builder folds single-use stack values into their consumers at IR-build time, always on and identical for every backend, replacing the previous one-temp-per-instruction scheme.
@@ -60,7 +60,7 @@ Two backend adjustments were needed because folded expressions now reach code th
 - **A post-build optimization pass over the IR.**
   Fold as a separate pass that rewrites `Assign`-heavy IR into nested expressions.
   It would need to re-derive the effect/aliasing information the builder already has as it walks the operand stack, re-doing the trap- and effect-ordering analysis on a form that has already lost the stack structure.
-  Building the folded form directly is less code and less duplicated reasoning; readability passes (ADR-1) can still layer on top.
+  Building the folded form directly is less code and less duplicated reasoning; readability passes (decision 1) can still layer on top.
 - **Per-backend folding.**
   Each backend folds during its own lowering.
   That multiplies the delicate trap/effect-ordering logic by the number of backends and invites divergence; doing it once in the shared builder keeps a single audited implementation and one spec-harness test.
@@ -79,7 +79,7 @@ Two backend adjustments were needed because folded expressions now reach code th
   | run (`--dir …::/usr -- -e 'puts "hello #{6*7}"'`) | 63 s | 37.9 s | 1.66× |
 
 - `Func.temps` now holds only materialized temps (spills, call results, branch-assign destinations); backends that iterate it to declare variables shrink automatically, with no backend change for declarations.
-- Correctness is bound by the spec harness, as always (ADR-3): the full testsuite passes for every backend, plus targeted IR-shape unit tests in `crates/dewasm-core/tests/folding.rs`.
+- Correctness is bound by the spec harness, as always (decision 3): the full testsuite passes for every backend, plus targeted IR-shape unit tests in `crates/dewasm-core/tests/folding.rs`.
   Generated output was verified byte-identical to the previous scheme with folding disabled, de-risking the refactor before the fold was turned on.
 - New invariants a backend may rely on (documented in `ir.rs`): an `Expr` tree preserves wasm's left-to-right evaluation order and trap points; a `Select`'s `then`/`els` subexpressions are pure and non-trapping; `Func.temps` lists exactly the materialized temps.
 - The `Effects` local set is a 64-bit mask plus an `any_high_local` catch-all for indices ≥ 64 — conservative (a set of a high local spills all pendings reading any high local), which is rare and never wrong.

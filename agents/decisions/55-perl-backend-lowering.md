@@ -1,8 +1,8 @@
-# ADR-55 — Perl Backend Lowering Conventions
+# Decision 55 — Perl Backend Lowering Conventions
 
 Status: **Accepted, 2026-08-01.**
 First milestone (the spec harness passes, issue #68) implemented in `crates/dewasm-backend-perl/src/lib.rs` + `runtime/perl/units/` (the full-testsuite run passes with the same `import-limits`/`linking` list as Python's).
-Numeric conventions are [ADR-2](2-numeric-semantics.md)'s; this ADR covers where Perl forced (or spared) a different shape from Ruby ([ADR-4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([ADR-28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [ADR-15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26 — the features used floor out at POSIX C99 math, 5.22, plus margin).
+Numeric conventions are [decision 2](2-numeric-semantics.md)'s; this decision covers where Perl forced (or spared) a different shape from Ruby ([decision 4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([decision 28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [decision 15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26 — the features used floor out at POSIX C99 math, 5.22, plus margin).
 WASI preview 1 is follow-up work (issue #69).
 
 ## Context
@@ -17,7 +17,7 @@ Three measured behaviors shaped the numeric lowering:
    Masking (`& 0xFFFFFFFFFFFFFFFF`) yields exact UVs including `-1` → `2^64-1`; comparison operators order two IV/UV operands exactly; `($n - $n % $d) / $d` divides exactly (perl's even-division integer path); UV `<<` wraps mod 2^64.
    But UV+UV overflow, and any op with an NV operand, silently fall to NV precision.
 3. **Float edges die or lie.**
-   `x / 0.0`, `x % 0`, and `sqrt(-1)` all die; `pack 'f'` clamps out-of-float-range values to infinity instead of IEEE-rounding (so the `2^128 - 2^103` boundary needs the same software handling as Ruby, ADR-2) and canonicalizes NaN payloads, while `pack 'd'` is a bit-exact byte copy; `POSIX::nearbyint` is round-half-even and preserves `-0.0`.
+   `x / 0.0`, `x % 0`, and `sqrt(-1)` all die; `pack 'f'` clamps out-of-float-range values to infinity instead of IEEE-rounding (so the `2^128 - 2^103` boundary needs the same software handling as Ruby, decision 2) and canonicalizes NaN payloads, while `pack 'd'` is a bit-exact byte copy; `POSIX::nearbyint` is round-half-even and preserves `-0.0`.
 
 On control flow Perl is *stronger* than Ruby/Python: `last LABEL`/`next LABEL` exit or continue any enclosing labeled block or loop at arbitrary depth (they do not cross sub boundaries, or escape `do {}`/`eval {}` blocks — neither of which the lowering puts branch-crossing code inside).
 And Perl recursion is heap-allocated: it neither overflows a C stack nor raises anything catchable — a runaway recursion just eats memory.
@@ -27,7 +27,7 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
 - **Branches lower to native labels; no flag machinery.**
   `Block` → `Ln: { ... }`, `Loop` → `Ln: while (1) { ...; last Ln; }` (a wasm loop label is a continue-target, so `br` to it is `next Ln`, and falling off the body must exit), referenced `If` → a labeled block around the `if/else`; every `br` is a direct `last Ln`/`next Ln`, `br_table` dispatches an `if/elsif` chain of them.
   Unreferenced labels emit no frame (bodies splice inline).
-  The exact gap that forced Ruby's `__br` cascade (ADR-42) and Python's `_br` register (ADR-28) does not exist; a codegen-shape test (`mod branch_shape`) pins that no such scheme reappears.
+  The exact gap that forced Ruby's `__br` cascade (decision 42) and Python's `_br` register (decision 28) does not exist; a codegen-shape test (`mod branch_shape`) pins that no such scheme reappears.
   Criterion: *when the target language's structured non-local exit covers wasm's label discipline exactly, use it directly — synthetic control state is only for languages that lack it.*
 - **`use integer` only inside runtime helpers, never in generated function bodies.**
   Ops that need C-style 64-bit semantics — i32 mul, all i64 add/sub/mul (behavior 1/2: plain arithmetic would round through NVs or overflow), signed div/rem, `shr_s`, `s64` — are `Rt::` helpers built on tightly-scoped `do { use integer; ... }` with the unsigned mask applied *outside* the pragma's scope.
@@ -35,7 +35,7 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
   Unsigned division uses the exact idiom `($n - $n % $d) / $d`; signed division/remainder use C division under `use integer` with the `INT_MIN / -1` (SIGFPE) case trapped first.
 - **Float arithmetic goes through `Rt::fadd`/`fsub`/`fmul`/`fdiv`.**
   Each does the native op, then a `pack 'd'` round-trip to restore IEEE rounding (undoing behavior 1's excess integer exactness), then re-signs an exact-zero result by the IEEE rule the integer path dropped (`-0` for `-0 + -0`, sign-XOR for products/quotients, `-0` for `(-0) - (+0)`).
-  `Rt::f32` re-rounds through `pack 'f'` with the overflow boundary mapped back to ±`FLT_MAX` in software; NaN bit paths go through `pack 'd'` software widening (`Rt::f32_bits`/`f32_from_bits`), mirroring ADR-2.
+  `Rt::f32` re-rounds through `pack 'f'` with the overflow boundary mapped back to ±`FLT_MAX` in software; NaN bit paths go through `pack 'd'` software widening (`Rt::f32_bits`/`f32_from_bits`), mirroring decision 2.
   `fceil`/`ffloor`/`ftrunc`/`fnearest` are `POSIX` C99 calls plus explicit NaN quieting; `int -> f64` conversion also takes the `pack 'd'` round-trip (`Rt::cvt_f64_i`).
 - **Exhaustion is an explicit frame-weighted depth counter.**
   Every generated function opens with `local $Rt::DEPTH = $Rt::DEPTH + <weight>;` and traps `call stack exhausted` past `$Rt::LIMIT` (100000; `local` restores the counter on every exit path including a trap's die-unwind).
@@ -43,7 +43,7 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
   Small functions keep weight 1, so legitimate deep recursion is unchanged.
   Measured cost ~1.75x per call, accepted: without the counter, `assert_exhaustion` is an OOM kill.
 - **Module = one package of blessed-hashref instances; the embedded runtime is prefix-namespaced.**
-  `Package->new(\%imports)` builds a blessed hashref (memory/table/global objects, import coderefs, an `exports` closure map; `invoke`/`global_get`/`wasm_import` mirror Python's [ADR-7](7-import-providers.md) surface, so `register`ed instances serve as import providers and the harness runs with `supports_registered_imports`).
+  `Package->new(\%imports)` builds a blessed hashref (memory/table/global objects, import coderefs, an `exports` closure map; `invoke`/`global_get`/`wasm_import` mirror Python's [decision 7](7-import-providers.md) surface, so `register`ed instances serve as import providers and the harness runs with `supports_registered_imports`).
   Runtime units live in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`); since Perl package names are absolute (no lexical nesting), `Embedded` linkage rewrites the `Rt::` prefix to `<Package>::Rt::` at bundle time so two generated artifacts in one process keep independent runtimes (Ruby gets this from constant nesting; Perl gets it textually), while `Alias("Rt")` (the spec harness) keeps the shared top-level name.
 - **Linear memory is one byte string mutated in place**: 4-arg `substr` + `pack`/`unpack` (`V`/`v`/`Q<`/`d<`) for multibyte access, `vec` for single bytes.
   Measured on a 2M-op loop: `vec` is fastest for bytes (0.07s vs 0.14s for `unpack`+`substr`), but `vec` is big-endian-only beyond 8 bits, so multibyte goes through `unpack` (0.14s/2M ≈ 70ns — acceptable).
@@ -51,7 +51,7 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
 
 ## Rejected alternatives
 
-- **A branch register / `catch`-`throw`-style cascade (Ruby ADR-42, Python ADR-28).**
+- **A branch register / `catch`-`throw`-style cascade (Ruby decision 42, Python decision 28).**
   Perl's labels already express arbitrary-depth exits directly; any synthetic scheme would add per-statement cost and code for nothing.
 - **`use integer` at function scope.**
   Its lexical scope changes `/`, `%`, `>>` and bitop signedness for *everything* including float code (silent truncation); tightly-scoped helper subs keep the audit surface to one file per op.
@@ -64,13 +64,13 @@ And Perl recursion is heap-allocated: it neither overflows a C stack nor raises 
   Perl offers nothing to rescue: recursion is heap-allocated and uncatchable at exhaustion (the "deep recursion" warning fires at 100 and is only a warning).
   A counter is the only deterministic trap.
 - **A single shared top-level `Rt` for embedded output (Python's shape).**
-  Python files are modules with separate namespaces; Perl `require`s share one global namespace, so two artifacts would collide on `Rt` exactly as [ADR-6](6-runtime-units.md) warns.
+  Python files are modules with separate namespaces; Perl `require`s share one global namespace, so two artifacts would collide on `Rt` exactly as [decision 6](6-runtime-units.md) warns.
   The textual prefix rewrite is one string replace at bundle time.
 
 ## Consequences
 
 - Positive: the full spec testsuite run passes (257 files; list identical in shape to Python's `import-limits`/`linking` entries), with the branch lowering the simplest of any dewasm backend — no pre-pass, no epilogues, no guards.
-  The whole-cache convert suite passes ([ADR-54](54-apps-convert-suite.md)).
+  The whole-cache convert suite passes ([decision 54](54-apps-convert-suite.md)).
 - Negative: every f64 add/sub/mul is a sub call plus a `pack` round-trip, and every call pays the depth-counter `local`; Perl output will be slower than Ruby's on hot float/call paths.
   `$Rt::LIMIT` bounds legitimate deep recursion (raisable by the embedder).
 - Carry-over: WASI preview 1 (`runtime/perl/units/wasi/`, the e2e/wasi_testsuite suites) is issue #69; `check_import_kind` shares Python's `import-limits` gap (kind checked, finer wasm type not).

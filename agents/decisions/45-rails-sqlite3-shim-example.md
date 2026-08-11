@@ -1,4 +1,4 @@
-# ADR-45 — Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3
+# Decision 45 — Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3
 
 Status: **Accepted, 2026-07-28.**
 `examples/rails` runs an unmodified Rails 8 app on `libsqlite3.wasm` converted to Ruby; the sqlite3-gem-compatible shim, the extended `SQLITE_EXPORTS` list in `examples/apps/setup.sh`, and the end-to-end `run.sh` all landed.
@@ -6,7 +6,7 @@ Status: **Accepted, 2026-07-28.**
 ## Context
 
 The Ruby backend's goal demo (`docs/backends/ruby.md`) is real software using converted SQLite.
-Rails is the strongest form of that claim, but something must bridge ActiveRecord's SQLite3Adapter to the converted module's `invoke`/`Rt::Memory` interface — and the converted library cannot call back into arbitrary host Ruby (a guest function pointer cannot be conjured for a host lambda; only declared imports can, per ADR-7's provider table).
+Rails is the strongest form of that claim, but something must bridge ActiveRecord's SQLite3Adapter to the converted module's `invoke`/`Rt::Memory` interface — and the converted library cannot call back into arbitrary host Ruby (a guest function pointer cannot be conjured for a host lambda; only declared imports can, per decision 7's provider table).
 
 ## Decision
 
@@ -21,13 +21,13 @@ The C surface this requires is exported by extending `SQLITE_EXPORTS` in `exampl
 - **Patch/replace the ActiveRecord adapter.**
   Chases Rails internals across releases and weakens the demo ("Rails, if you modify it").
   The gem API is the narrower, slower-moving seam.
-- **Host-callback binding shape (`sqlite3-binding.wasm`, ADR-22).**
+- **Host-callback binding shape (`sqlite3-binding.wasm`, decision 22).**
   Needs bespoke C per feature and still cannot register runtime-chosen callbacks (`busy_handler`, `create_function`); fine as a linking proof, wrong as a compatibility layer.
 - **One shared wasm instance for all connections.**
   Smaller footprint, but Ruby threads interleave at arbitrary points, so guest-global sqlite state would need one big lock — serializing the whole pool and losing isolation.
 
 ## Consequences
 
-- Positive: `examples/rails/run.sh` proves wasm 1.0 + WASI p1 (ADR-40) carries a real framework end-to-end; the shim doubles as a reference embedding of a converted reactor library (ADR-14 preopens, ADR-2 i64 masking at the boundary).
+- Positive: `examples/rails/run.sh` proves wasm 1.0 + WASI p1 (decision 40) carries a real framework end-to-end; the shim doubles as a reference embedding of a converted reactor library (decision 14 preopens, decision 2 i64 masking at the boundary).
 - Negative: the shim tracks the sqlite3 gem's Rails-facing surface and can drift with new Rails releases; `strict:`, extensions, custom functions and collations are unsupported (callback-free rule); WAL silently degrades to rollback journal (no WASI shared memory) and cross-process locking is absent — single-process embedding only.
-- Carry-over: performance work on converted SQLite (ADR-32/33/41–44) directly improves this demo; a future backend can reuse the same shim design against its own runtime.
+- Carry-over: performance work on converted SQLite (decision 32/33/41–44) directly improves this demo; a future backend can reuse the same shim design against its own runtime.
