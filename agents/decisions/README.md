@@ -87,6 +87,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 65 | [Precedence-Aware Parenthesis Emission in the Ruby Backend](65-ruby-paren-elision.md) | Accepted |
 | 66 | [`agents/` for Agent-Facing Documents, `docs/` for Human-Facing Ones](66-agents-directory.md) | Accepted |
 | 67 | [An Experiments Index over Issues and PRs](67-experiments-index.md) | Accepted |
+| 68 | [Measurement Records at the Top Level, Written and Rendered by Symmetric Commands](68-records-directory.md) | Accepted |
 
 ## Adding a new decision
 
