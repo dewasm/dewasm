@@ -1,7 +1,8 @@
-//! `cargo xtask bench`: the cross-runtime benchmark suite.
+//! `cargo xtask record-speed` and `cargo xtask render-speed`: the cross-runtime benchmark suite and the document it feeds.
 //!
 //! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite).
-//! Two outputs come out of one command: a dated result file under `benchmarks/results/` and a generated `docs/benchmarks/results.md`.
+//! Measuring and rendering are separate commands: `record-speed` writes a dated record under `records/`, `render-speed` turns a record into `docs/benchmarks/results.md` with its charts.
+//! A full run takes tens of minutes, so a wording fix in the renderer must not require re-measuring: the JSON is the record, the markdown is only a view of it.
 //! Neither is a compared snapshot: a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
 //!
 //! The modules:
@@ -16,7 +17,7 @@
 //! Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero: a wrong answer produced quickly is not a result.
 //! And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one.
 
-// `chart`, `report` and `runner` are also what `cargo xtask size` is built on: the same lollipop drawing, the same host block, the same runtime table.
+// `chart`, `report` and `runner` are also what the size record is built on: the same lollipop drawing, the same host block, the same runtime table.
 pub mod chart;
 mod measure;
 pub mod report;
@@ -48,9 +49,6 @@ struct Options {
     target: Duration,
     timeout: Duration,
     list: bool,
-    /// Re-render `docs/benchmarks/results.md` from a stored result file instead of measuring.
-    /// A full benchmark run takes tens of minutes, so a wording fix in the renderer must not require re-measuring: the JSON is the record, the markdown is only a view of it.
-    render: Option<PathBuf>,
 }
 
 impl Options {
@@ -61,7 +59,6 @@ impl Options {
             target: Duration::from_millis(DEFAULT_TARGET_MS),
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_S),
             list: false,
-            render: None,
         };
         let mut args = args.peekable();
         while let Some(arg) = args.next() {
@@ -70,7 +67,6 @@ impl Options {
             };
             match arg.as_str() {
                 "--list" => opts.list = true,
-                "--render" => opts.render = Some(PathBuf::from(value("--render")?)),
                 "--reps" => {
                     opts.reps = value("--reps")?
                         .parse()
@@ -93,27 +89,28 @@ impl Options {
                             .context("--timeout must be an integer number of seconds")?,
                     );
                 }
-                other if other.starts_with('-') => bail!("unknown bench option: {other}"),
+                other if other.starts_with('-') => bail!("unknown record-speed option: {other}"),
                 other if opts.filter.is_none() => opts.filter = Some(other.to_string()),
-                other => bail!("bench takes at most one filter (got a second: {other})"),
+                other => bail!("record-speed takes at most one filter (got a second: {other})"),
             }
         }
         Ok(opts)
     }
 }
 
-pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
-    let opts = Options::parse(args)?;
+/// Regenerate `docs/benchmarks/results.md` and its charts from a stored speed record.
+/// Rendering needs neither the runner probes nor the workloads on disk: everything it reports already lives in the record.
+pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
+    let path = record_to_render(args, SPEED_SUFFIX)?;
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("failed to read {}", display_path(&path)))?;
+    let report: report::Report = serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a speed record", display_path(&path)))?;
+    write_doc(&report)
+}
 
-    // Re-rendering needs neither the runner probes nor the workloads on disk: everything it reports already lives in the stored record.
-    if let Some(path) = &opts.render {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", display_path(path)))?;
-        let report: report::Report = serde_json::from_str(&text)
-            .with_context(|| format!("{} is not a bench result file", display_path(path)))?;
-        write_doc(&report)?;
-        return Ok(());
-    }
+pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
+    let opts = Options::parse(args)?;
 
     let runners = runner::runners();
     let workloads = workload::workloads();
@@ -276,9 +273,10 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
         generated_at: generated_at.clone(),
     };
 
-    let json_path = results_dir().join(format!("{}.json", generated_at.replace(':', "-")));
+    let json_path = records_dir().join(format!("{}{SPEED_SUFFIX}", generated_at.replace(':', "-")));
     write_file(&json_path, &report.to_json()?)?;
-    write_doc(&report)?;
+    note_record(&json_path)?;
+    println!("nothing was rendered: run `cargo xtask render-speed` to regenerate docs/benchmarks/results.md from this record");
 
     let failures: Vec<&Cell> = report
         .results
@@ -300,8 +298,6 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     );
 }
 
-/// Both the measuring run and `--render` go through here, so a stored record regenerates the charts as well as the prose.
-///
 /// Charts not covered by the record are deleted: an orphan SVG looks current while nothing links it.
 /// The doc and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
@@ -576,7 +572,7 @@ pub fn display_path(path: &Path) -> String {
         .to_string()
 }
 
-/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`, `results/`.
+/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`.
 fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
@@ -591,9 +587,135 @@ pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
 
-/// `benchmarks/results/` holds every measurement record, dated: the speed records this command writes and the `-size` ones `cargo xtask size` writes beside them.
-pub fn results_dir() -> PathBuf {
-    bench_root().join("results")
+/// The filename suffix that names a speed record's kind; a `.json` under `records/` without a kind suffix is an error wherever the kind is read.
+pub const SPEED_SUFFIX: &str = "-speed.json";
+/// The size counterpart of [`SPEED_SUFFIX`].
+pub const SIZE_SUFFIX: &str = "-size.json";
+
+/// `records/` holds every measurement record, dated, both kinds beside each other.
+pub fn records_dir() -> PathBuf {
+    repo_root().join("records")
+}
+
+/// `records/README.md`, which carries one line per record file.
+fn records_readme() -> PathBuf {
+    records_dir().join("README.md")
+}
+
+/// The record a render command works from: the path given on the command line, or the newest record of `suffix`'s kind.
+/// ISO timestamps sort lexicographically, so the newest record is the greatest filename.
+/// A path of the other kind is rejected here rather than deserialized into a confusing parse error.
+pub fn record_to_render(args: impl Iterator<Item = String>, suffix: &str) -> Result<PathBuf> {
+    let given: Vec<String> = args.collect();
+    let path = match given.as_slice() {
+        [] => newest_record(suffix)?,
+        [one] => PathBuf::from(one),
+        [_, extra, ..] => {
+            bail!("a render command takes at most one record (got a second: {extra})")
+        }
+    };
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .with_context(|| format!("{} has no file name", path.display()))?;
+    if !name.ends_with(suffix) {
+        bail!(
+            "{name} is not a `{suffix}` record: {}",
+            other_kind_hint(name)
+        );
+    }
+    Ok(path)
+}
+
+/// Which command does take `name`, for the message a wrong-kind path gets.
+fn other_kind_hint(name: &str) -> String {
+    match record_kind(name) {
+        Ok((kind, _)) => format!("render it with `cargo xtask render-{kind}`"),
+        Err(_) => format!("a record file ends in `{SPEED_SUFFIX}` or `{SIZE_SUFFIX}`"),
+    }
+}
+
+/// The newest record of one kind in `records/`.
+fn newest_record(suffix: &str) -> Result<PathBuf> {
+    let dir = records_dir();
+    let newest = std::fs::read_dir(&dir)
+        .with_context(|| format!("failed to read {}", display_path(&dir)))?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(suffix))
+        })
+        .max();
+    newest.with_context(|| {
+        format!(
+            "{} holds no `{suffix}` record to render",
+            display_path(&dir)
+        )
+    })
+}
+
+/// The kind a record filename declares: the name the `record-`/`render-` commands carry for it, and its heading in `records/README.md`.
+fn record_kind(name: &str) -> Result<(&'static str, &'static str)> {
+    if name.ends_with(SPEED_SUFFIX) {
+        Ok(("speed", "## Speed records"))
+    } else if name.ends_with(SIZE_SUFFIX) {
+        Ok(("size", "## Size records"))
+    } else {
+        bail!("{name} names no record kind: expected a `{SPEED_SUFFIX}` or `{SIZE_SUFFIX}` suffix")
+    }
+}
+
+/// Give the record just written a line in `records/README.md`, unless it already has one.
+///
+/// The occasion is the one thing a measurement does not know about itself, so it is written as a TODO for whoever commits the record.
+/// Appending it here is what makes an undocumented record show up in the diff instead of accumulating unnoticed.
+pub fn note_record(json_path: &Path) -> Result<()> {
+    let name = json_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .with_context(|| format!("{} has no file name", json_path.display()))?;
+    let readme = records_readme();
+    let existing = std::fs::read_to_string(&readme)
+        .with_context(|| format!("failed to read {}", display_path(&readme)))?;
+    match with_placeholder_line(&existing, name)? {
+        None => Ok(()),
+        Some(updated) => write_file(&readme, &updated),
+    }
+}
+
+/// `existing` with a one-line `TODO` entry for `name` appended to its kind's list, or `None` when the file already mentions `name`.
+fn with_placeholder_line(existing: &str, name: &str) -> Result<Option<String>> {
+    if existing.contains(&format!("`{name}`")) {
+        return Ok(None);
+    }
+    let (_, heading) = record_kind(name)?;
+    let entry = format!("- `{name}`: TODO: describe the occasion.");
+    let mut lines: Vec<&str> = existing.lines().collect();
+    let start = match lines.iter().position(|line| line.trim_end() == heading) {
+        // A missing list heading still fails loud in the diff: the heading and the entry both appear.
+        None => {
+            let mut updated = existing.to_string();
+            if !updated.ends_with('\n') {
+                updated.push('\n');
+            }
+            updated.push_str(&format!("\n{heading}\n\n{entry}\n"));
+            return Ok(Some(updated));
+        }
+        Some(at) => at,
+    };
+    let mut insert_at = start + 1;
+    for (offset, line) in lines[start + 1..].iter().enumerate() {
+        if line.starts_with("## ") {
+            break;
+        }
+        if !line.trim().is_empty() {
+            insert_at = start + 1 + offset + 1;
+        }
+    }
+    lines.insert(insert_at, &entry);
+    Ok(Some(lines.join("\n") + "\n"))
 }
 
 pub fn docs_dir() -> PathBuf {
@@ -716,4 +838,58 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
         month_index - 9
     } as u32;
     (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn placeholder_line_is_appended_once_to_its_kind() {
+        let existing = "# Measurement records\n\nProse.\n\n## Speed records\n\n- `a-speed.json`: first.\n\n## Size records\n\n- `b-size.json`: first.\n";
+        let appended = with_placeholder_line(existing, "c-size.json")
+            .expect("a size record names a kind")
+            .expect("a record with no line gets one");
+        assert_eq!(
+            appended,
+            "# Measurement records\n\nProse.\n\n## Speed records\n\n- `a-speed.json`: first.\n\n## Size records\n\n- `b-size.json`: first.\n- `c-size.json`: TODO: describe the occasion.\n"
+        );
+        let speed = with_placeholder_line(&appended, "d-speed.json")
+            .expect("a speed record names a kind")
+            .expect("speed record gets a line");
+        assert!(speed.contains(
+            "- `a-speed.json`: first.\n- `d-speed.json`: TODO: describe the occasion.\n"
+        ));
+        assert!(with_placeholder_line(&speed, "c-size.json")
+            .expect("a size record names a kind")
+            .is_none());
+        assert!(with_placeholder_line(&speed, "d-speed.json")
+            .expect("a speed record names a kind")
+            .is_none());
+    }
+
+    #[test]
+    fn a_record_name_without_a_kind_suffix_is_an_error() {
+        assert!(record_kind("2026-08-11T18-25-24Z.json").is_err());
+        assert!(with_placeholder_line("# Measurement records\n", "notes.json").is_err());
+    }
+
+    #[test]
+    fn every_stored_record_is_documented_under_its_kind() {
+        let readme = std::fs::read_to_string(records_readme()).expect("the records README exists");
+        for entry in std::fs::read_dir(records_dir())
+            .expect("records/ exists")
+            .flatten()
+        {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".json") {
+                continue;
+            }
+            record_kind(&name).expect("a stored record's name declares its kind");
+            assert!(
+                readme.contains(&format!("`{name}`")),
+                "{name} has no line in records/README.md"
+            );
+        }
+    }
 }

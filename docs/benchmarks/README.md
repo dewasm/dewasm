@@ -8,18 +8,20 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ```console
 $ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
-$ cargo xtask bench                  # the full matrix, roughly an hour
+$ cargo xtask record-speed           # the full matrix, roughly an hour
+$ cargo xtask render-speed           # results.md and its charts, from that record
 ```
 
-A full run writes a dated record to `benchmarks/results/` and regenerates `docs/benchmarks/results.md` with its charts.
+Measuring and rendering are two commands: a run writes a dated `<timestamp>Z-speed.json` to [`records/`](../../records/README.md) and nothing else, and rendering turns a record into `docs/benchmarks/results.md` with its charts.
+That way a wording fix in the document costs a second, not an hour.
 Useful options:
 
 | Command | Effect |
 | --- | --- |
-| `cargo xtask bench --list` | Show the matrix and each runner's availability without running anything. |
-| `cargo xtask bench <filter>` | Only pairs whose workload or runner label contains the substring, e.g. `dewasm-ruby` or `app/`. The generated doc then covers only those pairs, so publish from a full run. |
-| `cargo xtask bench --render <results.json>` | Regenerate the doc and charts from a stored record without measuring. |
+| `cargo xtask record-speed --list` | Show the matrix and each runner's availability without running anything. |
+| `cargo xtask record-speed <filter>` | Only pairs whose workload or runner label contains the substring, e.g. `dewasm-ruby` or `app/`. A record from a filtered run covers only those pairs, so publish from a full run. |
 | `--reps N`, `--target-ms MS`, `--timeout SECS` | Timed runs per measurement (default 5), calibration target per sample (default 300), per-process ceiling (default 900). |
+| `cargo xtask render-speed <record>` | Render an older record instead of the newest one; a `-size.json` path is refused. |
 
 `wasmtime` is required; any other missing runner is reported as skipped with the reason, and the run continues.
 
