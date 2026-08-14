@@ -893,6 +893,8 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Go);
 
 dewasm_test_helper::cowsay_args_e2e!(Go);
 dewasm_test_helper::cowsay_stdin_e2e!(Go);
+// Fast: cowsay-class (measured 7.6 s cold / 0.55 s warm against cowsay's own 4.2 s cold; the go build cache dominates both).
+dewasm_test_helper::mruby_eh_e2e!(Go);
 // The `ultra` cases are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23).
 // The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at `slow`.
 dewasm_test_helper::qjs_eval_e2e!(Go, ultra);

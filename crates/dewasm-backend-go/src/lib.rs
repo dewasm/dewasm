@@ -10,6 +10,8 @@
 //! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`.
 //!   Unreferenced structures are spliced inline.
 //!   Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
+//! - `try_table` is the one structure that cannot stay a labeled loop: `recover` works only inside a deferred function, and a labeled `break`/`continue` may not cross a function-literal boundary.
+//!   Its body becomes an immediately-invoked closure returning an outcome code, and the `switch` after it performs the branch that the body could not take from inside ([`TryFrame`]).
 //!
 //! The runtime is composed from per-method units referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
 
@@ -25,7 +27,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
+    UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -138,6 +141,8 @@ impl Backend for GoBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects, a thrown exception is a panic carrying the `*rtException` that doubles as the exnref, and traps stay uncatchable.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -180,6 +185,7 @@ pub fn generate_program_with_units(
         type_name: type_name.to_string(),
         uses: RefCell::new(BTreeSet::new()),
         cur_locals: RefCell::new(Vec::new()),
+        try_stack: RefCell::new(Vec::new()),
         spec: true,
         data_file: None,
         data_offsets: data_offsets(module),
@@ -208,6 +214,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         type_name: type_name.clone(),
         uses: RefCell::new(BTreeSet::new()),
         cur_locals: RefCell::new(Vec::new()),
+        try_stack: RefCell::new(Vec::new()),
         spec: false,
         data_file: opts.data_file.as_ref().map(|c| c.sidecar_name.clone()),
         data_offsets: data_offsets(module),
@@ -495,7 +502,7 @@ fn go_type(ty: ValType) -> &'static str {
         ValType::F32 => "float32",
         ValType::F64 => "float64",
         ValType::FuncRef => "*funcref",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => "*rtException",
     }
 }
 
@@ -511,13 +518,13 @@ fn ty_suffix(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "fr",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => "exnref",
     }
 }
 
 fn zero_value(ty: ValType) -> &'static str {
     match ty {
-        ValType::FuncRef => "nil",
+        ValType::FuncRef | ValType::ExnRef => "nil",
         _ => "0",
     }
 }
@@ -555,6 +562,20 @@ fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
 /// Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
 const SPEC_STACK_LIMIT: usize = 1024;
 
+/// The state of one `try_table` whose body is currently being emitted into a closure.
+///
+/// Go's `recover` works only inside a deferred function and Go forbids a labeled `break`/`continue` (or a `return` for the enclosing function) crossing a function-literal boundary, so the body becomes an immediately-invoked closure returning an outcome code that the following `switch` acts on.
+/// Code 0 is normal completion, `1..=catches` are the catch clauses, and the rest are allocated here, one per branch that has to leave the closure.
+struct TryFrame {
+    /// The try_table's own label: a branch to it lands exactly where falling off the end of the closure does, so it is outcome 0 rather than an escape.
+    label: u32,
+    /// Labels opened *inside* the closure; a branch to one of those stays a direct labeled break/continue.
+    inner_labels: Vec<u32>,
+    catches: usize,
+    /// The branch targets that leave the closure, in outcome-code order; the enclosing `switch` re-emits each one where the labels are in scope again.
+    escapes: Vec<BrTarget>,
+}
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
@@ -562,6 +583,8 @@ struct Gen<'a> {
     uses: RefCell<BTreeSet<String>>,
     /// Param+local types of the function currently being emitted.
     cur_locals: RefCell<Vec<ValType>>,
+    /// The `try_table` closures enclosing the statement being emitted, innermost last.
+    try_stack: RefCell<Vec<TryFrame>>,
     /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
     /// Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
@@ -583,6 +606,19 @@ impl<'a> Gen<'a> {
         } else {
             self.use_unit("rt/unhex");
             hex_bytes(data)
+        }
+    }
+
+    /// Record the runtime unit a value type's Go spelling needs: `exnref` is spelled as the runtime's own `*rtException`, which a module can name without ever throwing or catching (an imported signature, a local, a global).
+    fn note_type(&self, ty: ValType) {
+        if ty == ValType::ExnRef {
+            self.use_unit("rt/exception");
+        }
+    }
+
+    fn note_types<'t>(&self, tys: impl IntoIterator<Item = &'t ValType>) {
+        for ty in tys {
+            self.note_type(*ty);
         }
     }
 
@@ -701,18 +737,26 @@ impl<'a> Gen<'a> {
         }
         // Global index space = imported_globals ++ globals; every global is a boxed *global[T].
         for (i, imp) in m.imported_globals.iter().enumerate() {
+            self.note_type(imp.ty);
             w.line(format!("g{i} {}", global_field_type(imp.ty)));
         }
         let num_imported_globals = m.imported_globals.len();
         for (i, g) in m.globals.iter().enumerate() {
+            self.note_type(g.ty);
             w.line(format!(
                 "g{} {}",
                 num_imported_globals + i,
                 global_field_type(g.ty)
             ));
         }
+        // Tag index space = imported_tags ++ tags; a tag is an identity object, so the field holds the shared pointer whether the tag is defined here or imported.
+        for i in 0..m.imported_tags.len() + m.tags.len() {
+            self.use_unit("rt/tag");
+            w.line(format!("tag{i} *rtTag"));
+        }
         for (i, imp) in m.imported_funcs.iter().enumerate() {
             let ty = &m.types[imp.type_idx as usize];
+            self.note_types(ty.params.iter().chain(&ty.results));
             w.line(format!("if{i} {}", go_func_type(&ty.params, &ty.results)));
         }
         if wasi_bundled(m, self.default_wasi, bundler()) {
@@ -776,6 +820,7 @@ impl<'a> Gen<'a> {
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()
             || !m.imported_tables.is_empty()
+            || !m.imported_tags.is_empty()
             || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
@@ -816,6 +861,23 @@ impl<'a> Gen<'a> {
                 num_imported_globals + i,
                 self.expr(&global.init)
             ));
+        }
+
+        // Tags: imported first, then defined (index space is imported_tags ++ tags).
+        // A defined tag is a fresh identity object; nothing about it is derived from its type, since wasm tag equality is identity and never structure.
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            self.use_unit("rt/tag");
+            self.emit_typed_import(
+                w,
+                &format!("p.tag{i}"),
+                "*rtTag",
+                &import.module,
+                &import.name,
+            );
+        }
+        for i in 0..m.tags.len() {
+            self.use_unit("rt/tag");
+            w.line(format!("p.tag{} = &rtTag{{}}", m.imported_tags.len() + i));
         }
 
         for (i, elem) in m.elems.iter().enumerate() {
@@ -872,9 +934,7 @@ impl<'a> Gen<'a> {
                 ExportKind::Global(idx) => format!("p.g{idx}"),
                 ExportKind::Table(idx) => format!("p.t{idx}"),
                 ExportKind::Memory => "p.memory".to_string(),
-                ExportKind::Tag(_) => {
-                    unreachable!("exception handling is refused by check_module_support")
-                }
+                ExportKind::Tag(idx) => format!("p.tag{idx}"),
             };
             export_entries.push(format!("{}: {}", go_string(&export.name), val));
         }
@@ -1113,6 +1173,8 @@ impl<'a> Gen<'a> {
         let mut local_types = ty.params.clone();
         local_types.extend(func.locals.iter().copied());
         *self.cur_locals.borrow_mut() = local_types.clone();
+        self.note_types(local_types.iter().chain(&ty.results));
+        self.note_types(func.temps.iter().map(|t| &t.ty));
 
         let params_str = ty
             .params
@@ -1193,6 +1255,7 @@ impl<'a> Gen<'a> {
         match stmt {
             Stmt::Block { label, body } => {
                 if label.referenced {
+                    self.open_label(label.id);
                     w.line(format!("L{}:", label.id));
                     w.line("for {");
                     w.indent();
@@ -1200,12 +1263,14 @@ impl<'a> Gen<'a> {
                     w.line(format!("break L{}", label.id));
                     w.dedent();
                     w.line("}");
+                    self.close_label();
                 } else {
                     self.emit_seq(w, body);
                 }
             }
             Stmt::Loop { label, body } => {
                 if label.referenced {
+                    self.open_label(label.id);
                     w.line(format!("L{}:", label.id));
                     w.line("for {");
                     w.indent();
@@ -1213,6 +1278,7 @@ impl<'a> Gen<'a> {
                     w.line(format!("break L{}", label.id));
                     w.dedent();
                     w.line("}");
+                    self.close_label();
                 } else {
                     // No back-edge, so the loop body runs exactly once.
                     self.emit_seq(w, body);
@@ -1225,6 +1291,7 @@ impl<'a> Gen<'a> {
                 els,
             } => {
                 if label.referenced {
+                    self.open_label(label.id);
                     w.line(format!("L{}:", label.id));
                     w.line("for {");
                     w.indent();
@@ -1232,10 +1299,16 @@ impl<'a> Gen<'a> {
                     w.line(format!("break L{}", label.id));
                     w.dedent();
                     w.line("}");
+                    self.close_label();
                 } else {
                     self.emit_if(w, cond, then, els);
                 }
             }
+            Stmt::TryTable {
+                label,
+                catches,
+                body,
+            } => self.emit_try_table(w, label.id, catches, body),
             Stmt::SourceLine(pos) => {
                 // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw`.
                 // The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
@@ -1248,6 +1321,121 @@ impl<'a> Gen<'a> {
             }
             _ => self.simple_stmt(w, stmt),
         }
+    }
+
+    /// Record that `label` is in scope for the statements about to be emitted, so a branch to it stays a direct labeled break/continue rather than an escape out of the enclosing `try_table` closure.
+    fn open_label(&self, label: u32) {
+        if let Some(frame) = self.try_stack.borrow_mut().last_mut() {
+            frame.inner_labels.push(label);
+        }
+    }
+
+    fn close_label(&self) {
+        if let Some(frame) = self.try_stack.borrow_mut().last_mut() {
+            frame.inner_labels.pop();
+        }
+    }
+
+    /// `try_table`: the body as an immediately-invoked closure whose deferred handler dispatches the catch clauses, followed by a `switch` on the outcome code (see [`TryFrame`]).
+    /// The try_table's own label needs no Go label of its own: a branch to it is outcome 0, which lands where falling off the end of the closure does.
+    fn emit_try_table(
+        &self,
+        w: &mut CodeWriter,
+        label: u32,
+        catches: &[CatchClause],
+        body: &[Stmt],
+    ) {
+        self.use_unit("rt/exception");
+        self.try_stack.borrow_mut().push(TryFrame {
+            label,
+            inner_labels: Vec::new(),
+            catches: catches.len(),
+            escapes: Vec::new(),
+        });
+
+        w.line(format!("__o{label} := func() (__c{label} int) {{"));
+        w.indent();
+        self.emit_catch_handler(w, label, catches);
+        self.emit_seq(w, body);
+        w.line("return 0");
+        w.dedent();
+        w.line("}()");
+
+        let frame = self
+            .try_stack
+            .borrow_mut()
+            .pop()
+            .expect("the frame pushed above");
+        w.line(format!("switch __o{label} {{"));
+        for (i, clause) in catches.iter().enumerate() {
+            w.line(format!("case {}:", i + 1));
+            w.indent();
+            self.branch(w, &clause.target);
+            w.dedent();
+        }
+        for (i, target) in frame.escapes.iter().enumerate() {
+            w.line(format!("case {}:", catches.len() + i + 1));
+            w.indent();
+            self.branch(w, target);
+            w.dedent();
+        }
+        w.line("}");
+    }
+
+    /// The deferred handler: clauses are checked in order (first match wins), a matched one writes the payload into the target frame's slots and sets the outcome code, and anything else keeps unwinding.
+    /// Only `*rtException` is caught, so a trap, a `proc_exit`, and a Go runtime panic are structurally uncatchable.
+    fn emit_catch_handler(&self, w: &mut CodeWriter, label: u32, catches: &[CatchClause]) {
+        w.line("defer func() {");
+        w.indent();
+        w.line("__r := recover()");
+        w.line("if __r == nil {");
+        w.indent();
+        w.line("return");
+        w.dedent();
+        w.line("}");
+        w.line("__e, __ok := __r.(*rtException)");
+        w.line("if !__ok {");
+        w.indent();
+        w.line("panic(__r)");
+        w.dedent();
+        w.line("}");
+        if !catches
+            .iter()
+            .any(|c| c.tag.is_some() || !c.value_temps.is_empty())
+        {
+            w.line("_ = __e");
+        }
+        for (i, clause) in catches.iter().enumerate() {
+            let bind = |w: &mut CodeWriter| {
+                for (n, t) in clause.value_temps.iter().enumerate() {
+                    if Some(*t) == clause.exn_temp {
+                        w.line(format!("{} = __e", temp(*t)));
+                    } else {
+                        w.line(format!(
+                            "{} = __e.values[{n}].({})",
+                            temp(*t),
+                            go_type(t.ty)
+                        ));
+                    }
+                }
+                w.line(format!("__c{label} = {}", i + 1));
+                w.line("return");
+            };
+            match clause.tag {
+                // wasm tag equality is object identity, never structure.
+                Some(tag) => {
+                    w.line(format!("if __e.tag == p.tag{tag} {{"));
+                    w.indent();
+                    bind(w);
+                    w.dedent();
+                    w.line("}");
+                }
+                None => bind(w),
+            }
+        }
+        w.line("panic(__r)");
+        w.dedent();
+        w.line("}()");
     }
 
     fn emit_if(&self, w: &mut CodeWriter, cond: &Expr, then: &[Stmt], els: &[Stmt]) {
@@ -1338,6 +1526,7 @@ impl<'a> Gen<'a> {
             } => {
                 self.use_unit("table/call");
                 let ft = &self.module.types[*type_idx as usize];
+                self.note_types(ft.params.iter().chain(&ft.results));
                 let go_ft = go_func_type(&ft.params, &ft.results);
                 let call_args = args
                     .iter()
@@ -1392,9 +1581,16 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
-            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling is refused by check_module_support")
+            Stmt::Throw { tag, args } => {
+                self.use_unit("rt/exception");
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(format!(
+                    "panic(&rtException{{tag: p.tag{tag}, values: []any{{{}}}}})",
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
             }
             Stmt::TableInit {
                 seg,
@@ -1429,13 +1625,50 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("p.elem{seg} = nil"));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::SourceLine(_) => {
+            Stmt::Block { .. }
+            | Stmt::Loop { .. }
+            | Stmt::If { .. }
+            | Stmt::TryTable { .. }
+            | Stmt::SourceLine(_) => {
                 unreachable!("structured statement routed to simple_stmt")
             }
         }
     }
 
+    /// The outcome code a branch to `target` returns out of the innermost `try_table` closure, one per branch site, or `None` when the branch does not leave a closure.
+    /// A branch to a label opened inside the closure, and one to the try_table's own frame, both stay where they are.
+    fn escape_code(&self, target: &BrTarget) -> Option<usize> {
+        let mut stack = self.try_stack.borrow_mut();
+        let frame = stack.last_mut()?;
+        if let BrTarget::Label { label, .. } = target {
+            if *label == frame.label || frame.inner_labels.contains(label) {
+                return None;
+            }
+        }
+        frame.escapes.push(target.clone());
+        Some(frame.catches + frame.escapes.len())
+    }
+
+    /// The same for a `return`, which always leaves the closure (the closure's own `return` is the outcome code).
+    fn escape_return(&self, values: &[Expr]) -> Option<usize> {
+        let mut stack = self.try_stack.borrow_mut();
+        let frame = stack.last_mut()?;
+        frame.escapes.push(BrTarget::Return {
+            values: values.to_vec(),
+        });
+        Some(frame.catches + frame.escapes.len())
+    }
+
+    /// Whether `label` is the innermost enclosing `try_table`'s own frame, whose landing point is the closure's normal return.
+    fn is_enclosing_try(&self, label: u32) -> bool {
+        matches!(self.try_stack.borrow().last(), Some(f) if f.label == label)
+    }
+
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
+        if let Some(code) = self.escape_return(values) {
+            w.line(format!("return {code}"));
+            return;
+        }
         match values {
             [] => w.line("return"),
             vs => {
@@ -1457,10 +1690,16 @@ impl<'a> Gen<'a> {
                 is_loop,
                 assigns,
             } => {
+                if let Some(code) = self.escape_code(target) {
+                    w.line(format!("return {code}"));
+                    return;
+                }
                 for (dst, src) in assigns {
                     w.line(format!("{} = {}", temp(*dst), temp(*src)));
                 }
-                if *is_loop {
+                if self.is_enclosing_try(*label) {
+                    w.line("return 0");
+                } else if *is_loop {
                     w.line(format!("continue L{label}"));
                 } else {
                     w.line(format!("break L{label}"));
@@ -1757,10 +1996,19 @@ fn collect_reads_stmt(
             e(src, read_locals, used_locals, read_temps);
             e(len, read_locals, used_locals, read_temps);
         }
-        // Refused at conversion time (see `check_module_support`).
-        Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-            unreachable!("exception handling is refused by check_module_support")
+        Stmt::TryTable { catches, body, .. } => {
+            collect_reads_seq(body, read_locals, used_locals, read_temps);
+            // A catch clause's payload temps are written by the handler, never read by it; the clause's target may read them back.
+            for clause in catches {
+                collect_reads_target(&clause.target, read_locals, used_locals, read_temps);
+            }
         }
+        Stmt::Throw { args, .. } => {
+            for a in args {
+                e(a, read_locals, used_locals, read_temps);
+            }
+        }
+        Stmt::ThrowRef { exn } => e(exn, read_locals, used_locals, read_temps),
         Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable | Stmt::SourceLine(_) => {
         }
     }

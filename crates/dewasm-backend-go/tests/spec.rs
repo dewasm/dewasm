@@ -14,22 +14,22 @@ use dewasm_backend::Backend;
 use dewasm_backend_go::{go_string, GoBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{NanPattern, WastArgCore, WastRetCore};
+use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 mod common;
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, against the import site's declared bounds.
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory/tag) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, nor a tag's parameter types (a tag is an identity object carrying no type at all), against the import site's declared bounds.
 ///   Every `assert_unlinkable` case testing one of those stays a known gap.
-///   The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit cases remain (the two `linking` failures are both global-mutability mismatches).
+///   The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit/tag-type cases remain (the two `linking` failures are both global-mutability mismatches).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 ///
 /// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 34, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 2, "import-limits"),
     ("linking0", 1, "linking"),
@@ -64,7 +64,13 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
 
     /// Go compiles each `.wast` file to one program (a few seconds each, dominated by compile latency), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(dewasm_test_helper::curated_with(&["skip-stack-guard-page"]))
+        Some(dewasm_test_helper::curated_with(&[
+            "skip-stack-guard-page",
+            "tag",
+            "throw",
+            "throw_ref",
+            "try_table",
+        ]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -72,6 +78,8 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
             // check_trap / check_exhaust / check_unlinkable match these types.
             "rt/trap",
             "rt/link_error",
+            // Same for check_exception and rtException.
+            "rt/exception",
             // float args are reconstructed bit-exactly; this also pulls in the `math` import the float result comparisons rely on.
             "rt/f32_from_bits",
             "rt/f64_from_bits",
@@ -192,6 +200,20 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         );
     }
 
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = writeln!(
+            script,
+            "check_exception({}, func() {{ {call} }})",
+            go_string(desc)
+        );
+        Ok(())
+    }
+
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
         let _ = writeln!(
             script,
@@ -292,10 +314,24 @@ fn arg_go(arg: &WastArg<'_>) -> Result<String, String> {
         WastArg::Core(WastArgCore::F32(f)) => Ok(format!("Rt.f32_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::F64(f)) => Ok(format!("Rt.f64_from_bits(0x{:x})", f.bits)),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(WastArgCore::RefNull(hty)) => Err(dewasm_test_helper::heap_type_tag(hty)),
+        WastArg::Core(WastArgCore::RefNull(hty)) => {
+            go_null_ref(hty).ok_or_else(|| dewasm_test_helper::heap_type_tag(hty))
+        }
         WastArg::Core(WastArgCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastArg::Core(WastArgCore::RefHost(_)) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
+    }
+}
+
+/// The Go value of `ref.null <hty>`, or `None` for a heap type this backend has no host value for (skipped under [`dewasm_test_helper::heap_type_tag`]).
+/// `exnref` is the only reference type the Go backend takes as a *value* type, and its null has to be a typed one: a bare `nil` boxes into a nil interface, which the reflective `invoke`'s type assertion rejects.
+fn go_null_ref(hty: &HeapType<'_>) -> Option<String> {
+    match hty {
+        HeapType::Abstract {
+            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
+            ..
+        } if dewasm_test_helper::nullable_heap_type(hty) => Some("(*rtException)(nil)".to_string()),
+        _ => None,
     }
 }
 
@@ -331,7 +367,14 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        WastRet::Core(WastRetCore::RefNull(_)) => Err("reference-types".to_string()),
+        // A typeless `(ref.null)` result cannot pick a Go static type to assert against; every typed one this backend can express is an exnref.
+        WastRet::Core(WastRetCore::RefNull(Some(hty))) if go_null_ref(hty).is_some() => {
+            Ok(format!("{value}.(*rtException) == nil"))
+        }
+        WastRet::Core(WastRetCore::RefNull(Some(hty))) => {
+            Err(dewasm_test_helper::heap_type_tag(hty))
+        }
+        WastRet::Core(WastRetCore::RefNull(None)) => Err("reference-types".to_string()),
         WastRet::Core(WastRetCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastRet::Core(WastRetCore::RefHost(_)) => Err("reference-types".to_string()),
         WastRet::Core(WastRetCore::RefFunc(_)) => Err("reference-types".to_string()),
@@ -415,6 +458,25 @@ func check_exhaust(desc string, thunk func()) {
 	}
 	_fail++
 	fmt.Printf("FAIL(want exhaustion, got %v): %s\n", r, desc)
+}
+
+func check_exception(desc string, thunk func()) {
+	var r any
+	func() {
+		defer func() { r = recover() }()
+		thunk()
+	}()
+	if r == nil {
+		_fail++
+		fmt.Printf("FAIL(no exception): %s\n", desc)
+		return
+	}
+	if _, ok := r.(*rtException); ok {
+		_pass++
+		return
+	}
+	_fail++
+	fmt.Printf("FAIL(panic %v, want a wasm exception): %s\n", r, desc)
 }
 
 // Upstream's assert_unlinkable message text never matches ours; a raised rtLinkError confirms the import was correctly rejected as unlinkable.
