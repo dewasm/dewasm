@@ -65,11 +65,8 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     /// Go compiles each `.wast` file to one program (a few seconds each, dominated by compile latency), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
-            "skip-stack-guard-page",
-            "tag",
-            "throw",
-            "throw_ref",
-            "try_table",
+            &["skip-stack-guard-page"],
+            dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
         ]))
     }
 

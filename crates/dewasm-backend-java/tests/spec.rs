@@ -77,11 +77,8 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
     /// Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page` for its deep-frame exhaustion cases and the four exception-handling files.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
-            "skip-stack-guard-page",
-            "try_table",
-            "throw",
-            "throw_ref",
-            "tag",
+            &["skip-stack-guard-page"],
+            dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
         ]))
     }
 

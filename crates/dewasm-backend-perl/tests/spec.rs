@@ -52,10 +52,7 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
     /// Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so, like Python and Bash, a plain `cargo test` runs only the shared curated list, plus the exception-handling files (small, and otherwise only covered under `slow_test`).
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
-            "try_table",
-            "throw",
-            "throw_ref",
-            "tag",
+            dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
         ]))
     }
 

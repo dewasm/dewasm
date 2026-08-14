@@ -184,11 +184,17 @@ pub const CURATED_SPEC_FILES: &[&str] = &[
     "utf8-invalid-encoding",
 ];
 
-/// [`CURATED_SPEC_FILES`] plus `extra`.
+/// The exception-handling testsuite files, the shared `extra` for every backend that declares the feature and curates at all.
+/// One list rather than four copies so the set cannot drift per backend.
+pub const EXCEPTION_HANDLING_SPEC_FILES: &[&str] = &["try_table", "throw", "throw_ref", "tag"];
+
+/// [`CURATED_SPEC_FILES`] plus every slice in `extras`, so a backend composes the shared lists ([`EXCEPTION_HANDLING_SPEC_FILES`]) with its own additions without copying either.
 /// Leaked because [`SpecBackend::curated_files`] hands back a `'static` slice and each backend calls this once per suite run, when its trials are built.
-pub fn curated_with(extra: &[&'static str]) -> &'static [&'static str] {
+pub fn curated_with(extras: &[&[&'static str]]) -> &'static [&'static str] {
     let mut files = CURATED_SPEC_FILES.to_vec();
-    files.extend_from_slice(extra);
+    for extra in extras {
+        files.extend_from_slice(extra);
+    }
     Vec::leak(files)
 }
 

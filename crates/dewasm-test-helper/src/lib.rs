@@ -64,7 +64,7 @@ pub use qjs_repl::{
 pub use snapshots::{wasmtime_snapshots, WasmtimeSnapshot};
 pub use spec::{
     curated_with, heap_type_tag, nullable_heap_type, spec_main, spec_trials, Converted,
-    SpecBackend, CURATED_SPEC_FILES,
+    SpecBackend, CURATED_SPEC_FILES, EXCEPTION_HANDLING_SPEC_FILES,
 };
 pub use wasi::{
     run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,
