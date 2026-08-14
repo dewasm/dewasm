@@ -89,6 +89,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 67 | [An Experiments Index over Issues and PRs](67-experiments-index.md) | Accepted |
 | 68 | [Measurement Records at the Top Level, Written and Rendered by Symmetric Commands](68-records-directory.md) | Accepted |
 | 69 | [Exception Handling Joins the Accepted Input, Declared Per Backend](69-exception-handling-accepted-input.md) | Accepted |
+| 70 | [Shared Statement Traversal for IR Analyses](70-shared-statement-traversal.md) | Accepted |
 
 ## Adding a new decision
 
