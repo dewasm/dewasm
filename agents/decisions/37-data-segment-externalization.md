@@ -69,7 +69,7 @@ Measured (release CLI; `ruby.wasm` = CRuby, 35 MB wasm; `qjs.wasm`, 1.5 MB):
 The Python and Java `qjs.wasm` deltas (measured after this revision, release CLI) match the Ruby/Go pattern exactly: the source shrinks by roughly the eliminated inline encoding (`bytes.fromhex` / chunked Base64) minus the shared 0.13 MB sidecar, a ~2-3 % code-dominated reduction, confirming the win is a source-size one, not a parse-time one.
 
 Ruby `compile_file` parse of `ruby.wasm`: 6.15 s → 5.97 s.
-Go `build` of `qjs.wasm`: 10.8 s → 11.1 s (within noise; `ruby.wasm`/Go build is impractical at either setting: CRuby exceeds the practicality bar, see docs/apps-audit.md).
+Go `build` of `qjs.wasm`: 10.8 s → 11.1 s (within noise; `ruby.wasm`/Go build is impractical at either setting: CRuby exceeds the practicality bar, see agents/apps-audit.md).
 
 Honest finding: these interpreters are **code-dominated**, so the source shrinks by roughly `2 × data_bytes − blob` (the eliminated hex), which is ~8 MB / 5 % for `ruby.wasm`, not the "dominated by data" the motivating framing assumed.
 Parse and build time are governed by the code, so they barely move.

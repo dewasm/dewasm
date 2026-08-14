@@ -1,14 +1,12 @@
 //! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate, plus its WASI preview 1 import surface.
 //!
-//! This is the app audit test: before an app is pinned as a conversion target, run this tool on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `docs/apps-audit.md`.
+//! This is the app audit test: before an app is pinned as a conversion target, run this command on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `agents/apps-audit.md`.
 //!
-//! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than the crate's `Feature` enum, so it keeps naming proposals the converter itself no longer models.
-//!
-//! Usage: cargo run -p dewasm-core --bin feature-audit -- <file.wasm>...
+//! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than `dewasm-core`'s `Feature` enum, so it keeps naming proposals the converter itself no longer models.
 
 use std::collections::BTreeMap;
-use std::process::ExitCode;
 
+use anyhow::{bail, Context, Result};
 use wasmparser::{Parser, Payload, TypeRef, Validator, WasmFeatures};
 
 /// The 0.1 input scope: wasm 1.0 plus the baseline extensions every current toolchain emits.
@@ -49,7 +47,7 @@ fn validates(bytes: &[u8], extra: &[(&str, WasmFeatures)]) -> bool {
         .is_ok()
 }
 
-/// Greedy minimization, same shape as `classify_validation_failure` in `module.rs`: start from all known proposals, drop any whose absence still validates.
+/// Greedy minimization, same shape as `classify_validation_failure` in `dewasm-core`'s `module.rs`: start from all known proposals, drop any whose absence still validates.
 fn minimal_proposals(bytes: &[u8]) -> Option<Vec<&'static str>> {
     let mut active = proposals();
     if !validates(bytes, &active) {
@@ -168,8 +166,8 @@ fn is_component(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && bytes[0..4] == *b"\0asm" && bytes[6..8] == [0x01, 0x00]
 }
 
-fn audit(path: &str) -> Result<bool, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+fn audit(path: &str) -> Result<bool> {
+    let bytes = std::fs::read(path).with_context(|| path.to_string())?;
     let name = std::path::Path::new(path)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -227,26 +225,19 @@ fn audit(path: &str) -> Result<bool, String> {
     Ok(clean)
 }
 
-fn main() -> ExitCode {
-    let paths: Vec<String> = std::env::args().skip(1).collect();
+pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
+    let paths: Vec<String> = argv.collect();
     if paths.is_empty() {
-        eprintln!("usage: feature-audit <file.wasm>...");
-        return ExitCode::from(2);
+        bail!("usage: cargo xtask feature-audit <file.wasm>...");
     }
     let mut all_clean = true;
     for path in &paths {
-        match audit(path) {
-            Ok(clean) => all_clean &= clean,
-            Err(err) => {
-                eprintln!("{err}");
-                return ExitCode::from(2);
-            }
-        }
+        all_clean &= audit(path)?;
     }
-    // Nonzero when any binary needs out-of-scope features, so scripts can branch on the verdict; the human decision (defer vs. rethink) is recorded in docs/apps-audit.md.
+    // Failing when any binary needs out-of-scope features lets scripts branch on the verdict; the human decision (defer vs. rethink) is recorded in agents/apps-audit.md.
     if all_clean {
-        ExitCode::SUCCESS
+        Ok(())
     } else {
-        ExitCode::FAILURE
+        bail!("a binary needs features outside the 0.1 scope");
     }
 }

@@ -28,7 +28,7 @@ With three more backends planned, the shape had to be fixed first.
   Aggregate macros survive only where there is no per-case glue to show (`spec_suite!`, `wasi_suite!`, `gzip_e2e!`, `apps_convert_suite!`, `wasi_testsuite_suite!`).
 - **A backend's `tests/e2e.rs` holds only the impl, the glue constants, and macro invocations.**
   No backend-specific `#[test]` exists, so a scenario written for one backend is by construction offered to every backend.
-  **Capability is declared by which macros a backend invokes**; a case it cannot run is simply not invoked, with the reason as a comment at the absent callsite and the measurements behind it in `docs/apps-audit.md`.
+  **Capability is declared by which macros a backend invokes**; a case it cannot run is simply not invoked, with the reason as a comment at the absent callsite and the measurements behind it in `agents/apps-audit.md`.
   This replaces the retired support-level conditioning ([decision 25](25-retire-support-levels.md)).
 - **The spec harness is one [libtest-mimic](https://crates.io/crates/libtest-mimic) trial per `.wast` file**, so selection is cargo's own UX: the file stem names the trial (`cargo test --test spec i32`), and files outside `SpecBackend::curated_files` are `#[ignore]`d, so `cargo test` runs the curated set and `--include-ignored` the whole testsuite.
   Trials run in parallel, so per-file state belongs to the trial, not to the shared backend object.

@@ -19,11 +19,11 @@ A document a user would never open, but an agent must consult before changing so
 | [agents/experiments.md](experiments.md) | Past experiments: the conclusion and its re-test condition, over the Issue/PR that holds the record | Agents | By hand |
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
 | [agents/test-authoring.md](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and contributors writing tests | By hand |
+| [agents/apps-audit.md](apps-audit.md) | The real-world app test record and feature verdicts | Agents and contributors adding an app target | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
 | [docs/standalone-interface.md](../docs/standalone-interface.md) | The standalone runtime interface (argv, `--dir`, env, exit/trap), uniform across backends | Users running standalone output | By hand |
 | [docs/support.md](../docs/support.md) | The feature / WASI matrix per backend | Everyone | **Generated: never hand-edit** |
-| [docs/apps-audit.md](../docs/apps-audit.md) | The real-world app test record and feature verdicts | Contributors, evaluators | By hand |
 | [docs/testing.md](../docs/testing.md) | How to run the test suites: what each one needs installed, and why it fails loud | Contributors | By hand |
 | [docs/related-work.md](../docs/related-work.md) | Comparison with prior art | Evaluators | By hand |
 | [docs/benchmarks/](../docs/benchmarks/README.md) | How to run the benchmark suite and read its numbers | Contributors | By hand |
@@ -42,6 +42,7 @@ A document a user would never open, but an agent must consult before changing so
 - **Nothing outside `agents/` references anything under it.**
   `AGENTS.md`, `CLAUDE.md`, and `.claude/` are the exceptions.
   Code and user-facing docs state their constraint in place; an `agents/` document links outward to the code and docs it concerns, never the reverse.
+  The app audit tooling (the `feature-audit` xtask command and the `examples/apps` fetch scripts) is a further exception: it cites `agents/apps-audit.md` because that record is where its verdicts land.
 - **A skill under `.claude/skills/` is a router, not a store.**
   Claude Code auto-invokes a skill by its description, which is what a skill is for; the substance it routes to belongs under `agents/`.
   The test: if deleting `.claude/` would lose information rather than convenience, the file is holding content it should be pointing at.
@@ -57,7 +58,7 @@ A document a user would never open, but an agent must consult before changing so
 - A design decision → a new record (see [agents/decisions/README.md](decisions/README.md)).
 - An experiment's outcome with no decision attached → its Issue/PR, plus an entry in `agents/experiments.md` when it changes what a future agent would do.
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
-- A new real-world app target → an audited row in `docs/apps-audit.md`.
+- A new real-world app target → an audited row in `agents/apps-audit.md`.
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask record-speed`.
   Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.
 - A size number → the record `cargo xtask record-size` writes to `records/`, rendered into `docs/sizes/results.md`, for the same reason: a generated artifact's size changes with every codegen change.
