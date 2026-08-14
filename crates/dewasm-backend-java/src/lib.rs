@@ -5,6 +5,8 @@
 //!   NaN bit paths go through `Float.floatToRawIntBits`/`intBitsToFloat` etc.
 //! - Control flow uses the per-function branch register `_br` (mirroring Python's model, depth-insensitive and, crucially, splittable across methods): block/if exits and the function return set `_br`; following siblings are guarded by `if (_br == 0)`; only real loops become `while (true)`.
 //!   This avoids Java's "unreachable statement" error entirely (no bare mid-sequence `return`/`break`), and makes the split below mechanical.
+//! - Exception handling is native: a tag is an identity object (`Rt.Tag`), a thrown exception is an `Rt.WasmException` that doubles as the exnref value, and `try_table` is a Java `try`/`catch` whose clauses bind the payload and then set `_br` like any other branch.
+//!   Only `Rt.WasmException` is caught, never `Throwable`, so traps and the exit path structurally cannot be caught by `catch_all`.
 //! - The JVM caps a method at 64KB of bytecode.
 //!   A function whose estimated size crosses a threshold is emitted with its locals/temps/`br`/`ret` hoisted to a per-call **frame object** and its body split into numbered `part` methods sharing that frame; because control flow is data (`_br`), the parts are just called in order.
 //!   Data segments that exceed the 64KB string-literal limit are emitted as chunked Base64 (`Rt.data_from_b64`).
@@ -24,8 +26,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Label, Module, Stmt, Temp, UnOp,
-    ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Label, Module, Stmt,
+    Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -212,6 +214,8 @@ impl Backend for JavaBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects, a thrown exception is a native Java exception that doubles as the exnref, and traps stay uncatchable.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -552,7 +556,8 @@ fn jtype(ty: ValType) -> &'static str {
         ValType::F32 => "float",
         ValType::F64 => "double",
         ValType::FuncRef => "Rt.Funcref",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        // A caught exception is its own exnref value, so the reference type is the exception class itself and a null exnref is Java's null.
+        ValType::ExnRef => "Rt.WasmException",
     }
 }
 
@@ -562,8 +567,7 @@ fn zero_value(ty: ValType) -> &'static str {
         ValType::I64 => "0L",
         ValType::F32 => "0.0f",
         ValType::F64 => "0.0",
-        ValType::FuncRef => "null",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::FuncRef | ValType::ExnRef => "null",
     }
 }
 
@@ -574,7 +578,7 @@ fn ty_suffix(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "fr",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => "exn",
     }
 }
 
@@ -895,6 +899,24 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        // Tags: imported first, then defined (index space is imported_tags ++ tags).
+        // A defined tag is a fresh identity object; an imported one must be the very object its origin defined, which is what makes `catch` match across instances.
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            self.emit_typed_import(
+                w,
+                &format!("this.tag{i}"),
+                "Rt.Tag",
+                &import.module,
+                &import.name,
+            );
+        }
+        for i in 0..m.tags.len() {
+            w.line(format!(
+                "this.tag{} = new Rt.Tag();",
+                m.imported_tags.len() + i
+            ));
+        }
+
         // Element segments.
         // A segment over ELEM_SPLIT is built by the nested `Elem` helper class (its own constant pool, chunked part methods), else inline.
         let mut split_elems: Vec<usize> = Vec::new();
@@ -949,9 +971,7 @@ impl<'a> Gen<'a> {
                 ExportKind::Global(idx) => format!("g{idx}"),
                 ExportKind::Table(idx) => format!("t{idx}"),
                 ExportKind::Memory => "memory".to_string(),
-                ExportKind::Tag(_) => {
-                    unreachable!("exception handling is refused by check_module_support")
-                }
+                ExportKind::Tag(idx) => format!("tag{idx}"),
             };
             w.line(format!(
                 "this.Exports.put({}, {val});",
@@ -963,6 +983,7 @@ impl<'a> Gen<'a> {
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()
             || !m.imported_tables.is_empty()
+            || !m.imported_tags.is_empty()
             || m.imported_memory.is_some();
         if has_imports {
             w.line("if (imports != null) {");
@@ -1163,6 +1184,13 @@ impl<'a> Gen<'a> {
         }
         for i in 0..m.imported_funcs.len() {
             w.line(format!("Rt.Fn if{i};"));
+        }
+        // Tag index space = imported_tags ++ tags.
+        if !m.imported_tags.is_empty() || !m.tags.is_empty() {
+            self.use_unit("rt/tag");
+        }
+        for i in 0..(m.imported_tags.len() + m.tags.len()) {
+            w.line(format!("Rt.Tag tag{i};"));
         }
         if wasi_bundled(m, self.default_wasi, bundler()) {
             // The bundled WASI is built on first fallback, not in the ctor, so the ctor arguments are kept for `wasiInstance()` to use.
@@ -1693,6 +1721,17 @@ impl<'a> Gen<'a> {
                 *guarded = *guarded || !inner.is_empty();
                 free.extend(inner);
             }
+            Stmt::TryTable {
+                label,
+                catches,
+                body,
+            } => {
+                let mut inner = self.emit_try_table(w, *guarded, catches, body);
+                self.reset_marker(w, label);
+                inner.remove(&label.id);
+                *guarded = *guarded || !inner.is_empty();
+                free.extend(inner);
+            }
             // REASON: Java has no line-directive to render source-line markers into.
             // Drop them here (not via the `_br` guard) so the guard state and emitted output stay byte-identical to a non-`--dwarf-line` build.
             Stmt::SourceLine(_) => {}
@@ -1758,6 +1797,90 @@ impl<'a> Gen<'a> {
             w.line("}");
         }
         free
+    }
+
+    /// Emit a `try_table` as a Java `try`/`catch` around the body, returning the free branch targets of the body and of the reachable catch clauses (the frame's own label is removed by the caller).
+    /// A clause writes the payload into the target frame's slots and then sets the branch register exactly as a branch out of the body would, so the handler needs no exit of its own: `_br` skips the rest of the enclosing sequence either way.
+    /// Only `Rt.WasmException` is caught, so a trap, exhaustion, or the exit path structurally cannot be caught by `catch_all`.
+    /// The body may still be split into `part` methods: every slot lives in the frame object and an exception unwinding out of a part reaches this `catch` up the JVM stack, so the try region stays in one method without pinning the body to it.
+    fn emit_try_table(
+        &self,
+        w: &mut CodeWriter,
+        guarded: bool,
+        catches: &[CatchClause],
+        body: &[Stmt],
+    ) -> BTreeSet<u32> {
+        self.use_unit("rt/wasm_exception");
+        w.line("try {");
+        w.indent();
+        let mut free = self.emit_body(w, body, guarded);
+        w.dedent();
+        w.line("} catch (Rt.WasmException __e) {");
+        w.indent();
+        let mut chained = false;
+        let mut exhaustive = false;
+        for clause in catches {
+            match clause.tag {
+                // wasm tag equality is object identity, never structure.
+                Some(tag) => {
+                    let cond = format!("__e.tag == {}", self.iref(&format!("tag{tag}")));
+                    if chained {
+                        w.line(format!("}} else if ({cond}) {{"));
+                    } else {
+                        w.line(format!("if ({cond}) {{"));
+                        chained = true;
+                    }
+                    w.indent();
+                    self.catch_clause(w, clause, &mut free);
+                    w.dedent();
+                }
+                // A catch-all matches unconditionally, so it closes the chain and every clause after it is dead.
+                None => {
+                    if chained {
+                        w.line("} else {");
+                        w.indent();
+                        self.catch_clause(w, clause, &mut free);
+                        w.dedent();
+                    } else {
+                        self.catch_clause(w, clause, &mut free);
+                    }
+                    exhaustive = true;
+                    break;
+                }
+            }
+        }
+        if !exhaustive {
+            // No clause matched: the exception keeps unwinding.
+            if chained {
+                w.line("} else {");
+                w.indent();
+                w.line("throw __e;");
+                w.dedent();
+                w.line("}");
+            } else {
+                w.line("throw __e;");
+            }
+        } else if chained {
+            w.line("}");
+        }
+        w.dedent();
+        w.line("}");
+        free
+    }
+
+    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
+    /// The payload arrives boxed (the same convention every dynamic boundary uses), so each value is unboxed to its slot's type; the `_ref` kinds bind the exception object itself, which *is* the exnref value.
+    fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause, free: &mut BTreeSet<u32>) {
+        for (i, t) in clause.value_temps.iter().enumerate() {
+            let src = if Some(*t) == clause.exn_temp {
+                "__e".to_string()
+            } else {
+                unbox(t.ty, &format!("__e.values[{i}]"))
+            };
+            w.line(format!("{} = {src};", self.temp_ref(*t)));
+        }
+        self.branch(w, &clause.target);
+        collect_target_free(&clause.target, free);
     }
 
     fn simple_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
@@ -1919,9 +2042,18 @@ impl<'a> Gen<'a> {
                 // Void method that throws: emitting it as a statement (not a `throw`) avoids an "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
             }
-            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling is refused by check_module_support")
+            // Void helpers that throw: emitting them as statements (not a Java `throw`) avoids an "unreachable statement" error on the dead code wasm allows after them.
+            Stmt::Throw { tag, args } => {
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(format!(
+                    "{}({}, new Object[]{{{}}});",
+                    self.rt("wasm_exception"),
+                    self.iref(&format!("tag{tag}")),
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({});", self.rt("throw_ref"), self.expr(exn)));
             }
             // REASON: Java has no line-directive to render source-line markers into; `emit_stmt` drops them before routing here, so this is unreachable but kept for the exhaustive match.
             Stmt::SourceLine(_) => {}
@@ -1965,7 +2097,7 @@ impl<'a> Gen<'a> {
                     self.iref(&format!("elem{seg}"))
                 ));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::TryTable { .. } => {
                 unreachable!("structured statement routed to simple_stmt");
             }
         }
@@ -2292,7 +2424,7 @@ fn unbox(ty: ValType, expr: &str) -> String {
         ValType::F32 => format!("(float)(Float) {expr}"),
         ValType::F64 => format!("(double)(Double) {expr}"),
         ValType::FuncRef => format!("(Rt.Funcref) {expr}"),
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => format!("(Rt.WasmException) {expr}"),
     }
 }
 
@@ -2311,8 +2443,7 @@ fn boxed_zero(ty: ValType) -> &'static str {
         ValType::I64 => "0L",
         ValType::F32 => "0.0f",
         ValType::F64 => "0.0",
-        ValType::FuncRef => "null",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::FuncRef | ValType::ExnRef => "null",
     }
 }
 
@@ -2417,7 +2548,7 @@ impl CostMemo {
 
     fn stmt(&self, stmt: &Stmt) -> usize {
         match stmt {
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::TryTable { .. } => {
                 let key = stmt as *const Stmt as usize;
                 // Copy the hit out and drop the borrow before recursing: `compute` re-enters and takes the table mutably.
                 let hit = self.0.borrow().get(&key).copied();
@@ -2469,10 +2600,16 @@ impl CostMemo {
             Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
                 expr_cost(dst) + expr_cost(src) + expr_cost(len)
             }
-            // Refused at conversion time (see `check_module_support`).
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling is refused by check_module_support")
+            // Each catch clause expands to a guarded arm binding its payload slots, on top of the body.
+            Stmt::TryTable { body, catches, .. } => {
+                self.seq(body)
+                    + catches
+                        .iter()
+                        .map(|c| 1 + c.value_temps.len() + target_cost(&c.target))
+                        .sum::<usize>()
             }
+            Stmt::Throw { args, .. } => args.iter().map(expr_cost).sum(),
+            Stmt::ThrowRef { exn } => expr_cost(exn),
             Stmt::DataDrop { .. }
             | Stmt::ElemDrop { .. }
             | Stmt::Unreachable

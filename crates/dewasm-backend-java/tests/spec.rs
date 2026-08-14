@@ -19,13 +19,14 @@ use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory is checked only for its *kind* via `instanceof`, not a func's param/result types, a global's value type or mutability, nor a table/memory's min/max limits.
+/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary (no signature is checked at all), and an imported global/table/ memory/tag is checked only for its *kind* via `instanceof`, not a func's param/result types, a global's value type or mutability, a tag's parameter types, nor a table/memory's min/max limits.
 ///   Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap.
 ///   Java's counts match Ruby's, not Go's lower ones: Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type, so the func-signature and global-value-type mismatches Go's typed assertion rejects are not caught here.
+///   imports.wast contributes 59 of them: its fixture module exports tags, so it converts only now that tags are represented, and every type-mismatch check downstream of it became reachable at once (28 before).
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
@@ -73,16 +74,23 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         EXPECTED_FAILURES
     }
 
-    /// Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page` for its deep-frame exhaustion cases.
+    /// Java compiles each `.wast` file to one `Main.java` (one `javac` per file), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page` for its deep-frame exhaustion cases and the four exception-handling files.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(dewasm_test_helper::curated_with(&["skip-stack-guard-page"]))
+        Some(dewasm_test_helper::curated_with(&[
+            "skip-stack-guard-page",
+            "try_table",
+            "throw",
+            "throw_ref",
+            "tag",
+        ]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
         &[
-            // check_trap / check_unlinkable match these exception types.
+            // check_trap / check_unlinkable / check_exception match these exception types.
             "rt/trap",
             "rt/link_error",
+            "rt/wasm_exception",
             // The _spectest fixture (PREAMBLE) constructs these directly.
             "global/_class",
             "table/_class",
@@ -202,6 +210,20 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         );
     }
 
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = writeln!(
+            script,
+            "check_exception({}, () -> {{ {call}; }});",
+            java_string(desc)
+        );
+        Ok(())
+    }
+
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
         let _ = writeln!(
             script,
@@ -265,7 +287,13 @@ fn arg_java(arg: &WastArg<'_>) -> Result<String, String> {
             Ok(format!("Double.longBitsToDouble(0x{:x}L)", f.bits))
         }
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(WastArgCore::RefNull(hty)) => Err(dewasm_test_helper::heap_type_tag(hty)),
+        WastArg::Core(WastArgCore::RefNull(hty)) => {
+            if dewasm_test_helper::nullable_heap_type(hty) {
+                Ok("null".to_string())
+            } else {
+                Err(dewasm_test_helper::heap_type_tag(hty))
+            }
+        }
         WastArg::Core(WastArgCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastArg::Core(WastArgCore::RefHost(_)) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
@@ -306,7 +334,13 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        WastRet::Core(WastRetCore::RefNull(_)) => Err("reference-types".to_string()),
+        WastRet::Core(WastRetCore::RefNull(hty)) => match hty {
+            None => Ok(format!("{value} == null")),
+            Some(hty) if dewasm_test_helper::nullable_heap_type(hty) => {
+                Ok(format!("{value} == null"))
+            }
+            Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
+        },
         WastRet::Core(WastRetCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastRet::Core(WastRetCore::RefHost(_)) => Err("reference-types".to_string()),
         WastRet::Core(WastRetCore::RefFunc(_)) => Err("reference-types".to_string()),
@@ -384,6 +418,20 @@ const PREAMBLE: &str = r#"public class Main {
         } catch (Throwable e) {
             _fail++;
             System.out.println("FAIL(want exhaustion, got " + e + "): " + desc);
+        }
+    }
+
+    // A wasm exception must reach the host uncaught. Rt.Trap is an unrelated class on purpose, so a trap here is a failure, not a pass.
+    static void check_exception(String desc, Runnable thunk) {
+        try {
+            thunk.run();
+            _fail++;
+            System.out.println("FAIL(no exception): " + desc);
+        } catch (Rt.WasmException e) {
+            _pass++;
+        } catch (Throwable e) {
+            _fail++;
+            System.out.println("FAIL(want a wasm exception, got " + e + "): " + desc);
         }
     }
 

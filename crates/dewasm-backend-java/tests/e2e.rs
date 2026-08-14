@@ -863,6 +863,8 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Java);
 
 dewasm_test_helper::cowsay_args_e2e!(Java);
 dewasm_test_helper::cowsay_stdin_e2e!(Java);
+// Slow: measured 5.6 s end to end (javac on the generated interpreter dominates; cowsay is 0.4 s in this suite).
+dewasm_test_helper::mruby_eh_e2e!(Java, slow);
 dewasm_test_helper::qjs_eval_e2e!(Java);
 dewasm_test_helper::sqlite3_shell_e2e!(Java);
 dewasm_test_helper::gzip_e2e!(Java);
