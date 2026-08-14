@@ -16,8 +16,10 @@ In **standalone** mode the class is always `Program` and `--module-name` is reje
 `python3` **3.9 or newer** on `PATH`.
 No third-party packages: the output uses only the standard library.
 
-**Avoid CPython 3.12.0 through 3.12.3.**
-A static-block limit in those releases breaks large generated modules with deeply nested loops (issue #21); 3.12.4 and newer are unaffected.
+> [!WARNING]
+> Avoid CPython 3.12.0 through 3.12.3.
+> A static-block limit in those releases breaks large generated modules with deeply nested loops (issue #21).
+> 3.12.4 and newer are unaffected.
 
 ## Running it
 

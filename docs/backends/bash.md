@@ -17,7 +17,11 @@ In **standalone** mode the prefix is always `program_` and `--module-name` is re
 
 ## Requirements
 
-`bash` **5 or newer** (associative arrays and namerefs; macOS's system `/bin/bash` is 3.2 and does **not** qualify, so `brew install bash`).
+`bash` **5 or newer** (associative arrays and namerefs).
+
+> [!IMPORTANT]
+> macOS ships bash 3.2 as `/bin/bash`, which cannot run the generated script.
+> Install bash 5 or newer (`brew install bash`) and invoke that one.
 No other external commands: floats run on a pure-Bash IEEE-754 softfloat, so there is no dependency on `bc`, `awk`, `python`, etc.
 
 ```console
