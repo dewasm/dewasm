@@ -257,20 +257,12 @@ pub enum BrTarget {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CatchKind {
-    Catch,
-    CatchRef,
-    CatchAll,
-    CatchAllRef,
-}
-
 /// One `try_table` catch clause.
+/// The four catch kinds are fully encoded by two fields: `tag` (`Some` for `catch`/`catch_ref`, `None` for the catch-all kinds) and `exn_temp` (`Some` for the `_ref` kinds, which capture the exception as an exnref); no backend needs the kind spelled a second way.
 /// The exception's payload lands directly in the *target frame's* slots (`value_temps`, whose last entry is `exn_temp` for the `_ref` kinds): the same arithmetic a branch's moves use, sourced from the exception instead of the stack, which is why `target` carries no assigns.
 #[derive(Debug)]
 pub struct CatchClause {
-    pub kind: CatchKind,
-    /// Tag index for `Catch`/`CatchRef`; `None` for the catch-all kinds.
+    /// Tag index for `catch`/`catch_ref`; `None` for the catch-all kinds.
     pub tag: Option<u32>,
     pub value_temps: Vec<Temp>,
     pub exn_temp: Option<Temp>,

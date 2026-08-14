@@ -484,14 +484,14 @@ impl<'a> FuncBuilder<'a> {
     /// Called before the `try_table` frame is pushed, because the spec validates catch labels against the enclosing context.
     fn catch_clause(
         &mut self,
-        kind: ir::CatchKind,
+        captures_exnref: bool,
         tag: Option<u32>,
         relative_depth: u32,
     ) -> ir::CatchClause {
         let mut payload: Vec<ValType> = tag
             .map(|t| self.module.tag_params(t).to_vec())
             .unwrap_or_default();
-        if matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef) {
+        if captures_exnref {
             payload.push(ValType::ExnRef);
         }
         let idx = self.frames.len() - 1 - relative_depth as usize;
@@ -514,12 +514,11 @@ impl<'a> FuncBuilder<'a> {
         for t in &value_temps {
             self.temps.insert(*t);
         }
-        let exn_temp =
-            matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef).then(|| {
-                *value_temps
-                    .last()
-                    .expect("a _ref payload ends in the exnref")
-            });
+        let exn_temp = captures_exnref.then(|| {
+            *value_temps
+                .last()
+                .expect("a _ref payload ends in the exnref")
+        });
         let target = if is_func {
             BrTarget::Return {
                 values: value_temps.iter().map(|t| Expr::Temp(*t)).collect(),
@@ -533,7 +532,6 @@ impl<'a> FuncBuilder<'a> {
             }
         };
         ir::CatchClause {
-            kind,
             tag,
             value_temps,
             exn_temp,
@@ -808,16 +806,16 @@ impl<'a> FuncBuilder<'a> {
                         .iter()
                         .map(|c| match *c {
                             wasmparser::Catch::One { tag, label } => {
-                                self.catch_clause(ir::CatchKind::Catch, Some(tag), label)
+                                self.catch_clause(false, Some(tag), label)
                             }
                             wasmparser::Catch::OneRef { tag, label } => {
-                                self.catch_clause(ir::CatchKind::CatchRef, Some(tag), label)
+                                self.catch_clause(true, Some(tag), label)
                             }
                             wasmparser::Catch::All { label } => {
-                                self.catch_clause(ir::CatchKind::CatchAll, None, label)
+                                self.catch_clause(false, None, label)
                             }
                             wasmparser::Catch::AllRef { label } => {
-                                self.catch_clause(ir::CatchKind::CatchAllRef, None, label)
+                                self.catch_clause(true, None, label)
                             }
                         })
                         .collect();
