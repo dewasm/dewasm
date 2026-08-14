@@ -1,9 +1,10 @@
 # Decision 24: 0.1 Scope Reset (Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals)
 
-Status: **Accepted, 2026-07-25.**
+Status: **Accepted, 2026-07-25; amended by [decision 69](69-exception-handling-accepted-input.md), 2026-08-14.**
 The feature-audit tool (`crates/dewasm-core/src/bin/feature-audit.rs`) and the excision have landed: reference types, tail calls, exception handling, the component model, and WASI preview 2 are removed from the IR, backends, runtime units, harness, and docs, and their inputs are rejected at conversion time with attributed errors.
 The support maturity levels' retirement and the rename land next ([decision 25](25-retire-support-levels.md)).
 Supersedes [decision 17](17-ruby-reference-types.md), [decision 18](18-ruby-tail-calls.md), [decision 19](19-ruby-exception-handling.md), [decision 20](20-component-model-core-ir-adapters.md), [decision 21](21-ruby-wasi-preview2.md); revises the target-language plan of [decision 10](10-csharp-target.md).
+The retention criterion below is unchanged, and its first disjunct is what later re-admitted exception handling when mruby became a pinned app (decision 69); the "everything else stays out" list no longer includes exception handling.
 
 ## Context
 

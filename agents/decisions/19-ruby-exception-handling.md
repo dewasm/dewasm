@@ -1,7 +1,7 @@
 # Decision 19: Exception Handling in the Ruby Backend (Tags as Identity Objects, Exceptions as Native Exceptions)
 
-Status: **Superseded by [decision 24](24-01-scope-reset.md), 2026-07-26.**
-Kept as a design record for a future restoration of this support; git history plus this decision make the work cheap to revive.
+Status: **Accepted again via [decision 69](69-exception-handling-accepted-input.md), 2026-08-14.**
+The design below is implemented once more, adapted to the current Ruby lowering (the `__br` cascade instead of `catch`/`throw`); it was superseded by [decision 24](24-01-scope-reset.md) between 2026-07-26 and 2026-08-14 and kept as the design record that made the restoration cheap.
 The original acceptance note and implementation pointers below are retained as history.
 
 Originally accepted 2026-07-24.

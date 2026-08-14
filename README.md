@@ -49,7 +49,7 @@ Beyond simple examples, `dewasm` scales to *real libraries and applications* too
 
 Here is a quick summary of what `dewasm` can do:
 
-- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs to convert existing WebAssembly binaries.
+- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs to convert existing WebAssembly binaries, plus the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends (which is what setjmp/longjmp-based C programs such as mruby compile to).
 - **Target multiple languages**: Translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
 - **Adapt to your needs**: Generates either standalone scripts or importable library source code.
 - **Keep it minimal**: Bundles only the specific runtime code that the WebAssembly binary actually requires.

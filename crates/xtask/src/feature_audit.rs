@@ -1,6 +1,7 @@
 //! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate, plus its WASI preview 1 import surface.
 //!
-//! This is the app audit test: before an app is pinned as a conversion target, run this command on its binary; an app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universally-emitted baseline) is deferred and documented in `agents/apps-audit.md`.
+//! This is the app audit test: before an app is pinned as a conversion target, run this command on its binary; an app that needs a proposal outside the accepted input (wasm 1.0 + the universally-emitted baseline + the final exception-handling proposal) is deferred and documented in `agents/apps-audit.md`.
+//! Exception handling never defers an app by itself: it is accepted input that each backend declares individually, and a backend without the lowering rejects at conversion time.
 //!
 //! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than `dewasm-core`'s `Feature` enum, so it keeps naming proposals the converter itself no longer models.
 
@@ -9,7 +10,8 @@ use std::collections::BTreeMap;
 use anyhow::{bail, Context, Result};
 use wasmparser::{Parser, Payload, TypeRef, Validator, WasmFeatures};
 
-/// The 0.1 input scope: wasm 1.0 plus the baseline extensions every current toolchain emits.
+/// The universal baseline: wasm 1.0 plus the extensions every current toolchain emits.
+/// Exception handling sits on top as accepted input with per-backend lowering, handled separately in the verdict.
 fn baseline() -> WasmFeatures {
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION
@@ -89,8 +91,18 @@ fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
 /// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal.
 /// Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
 fn first_ref_types_construct(bytes: &[u8]) -> Option<String> {
-    use wasmparser::{CompositeInnerType, Operator, ValType};
-    let is_ref = |ty: &ValType| matches!(ty, ValType::Ref(_));
+    use wasmparser::{AbstractHeapType, CompositeInnerType, HeapType, Operator, ValType};
+    // exnref (and its non-null form) belongs to the exception-handling proposal; this scan must not claim it for reference-types.
+    let is_ref = |ty: &ValType| match ty {
+        ValType::Ref(r) => !matches!(
+            r.heap_type(),
+            HeapType::Abstract {
+                ty: AbstractHeapType::Exn,
+                ..
+            }
+        ),
+        _ => false,
+    };
     let mut tables = 0u32;
     for payload in Parser::new(0).parse_all(bytes) {
         match payload.ok()? {
@@ -174,7 +186,7 @@ fn audit(path: &str) -> Result<bool> {
         .unwrap_or_else(|| path.to_string());
 
     if is_component(&bytes) {
-        println!("{name}: component-model binary (layer 1), outside the 0.1 scope");
+        println!("{name}: component-model binary (layer 1), outside the accepted input");
         return Ok(false);
     }
 
@@ -188,27 +200,47 @@ fn audit(path: &str) -> Result<bool> {
             true
         }
         Some(needed) => {
-            if needed == ["reference-types"] {
+            // Exception handling is accepted input, lowered per backend; only the remaining proposals can push an app out of scope.
+            let blocking: Vec<&str> = needed
+                .iter()
+                .copied()
+                .filter(|n| *n != "exception-handling")
+                .collect();
+            let eh_note = if needed.contains(&"exception-handling") {
+                " + exception-handling (accepted input, lowered per backend)"
+            } else {
+                ""
+            };
+            if blocking.is_empty() {
+                println!("{name}: baseline{eh_note}, in scope");
+                true
+            } else if blocking == ["reference-types"] {
                 match first_ref_types_construct(&bytes) {
                     None => {
                         println!(
-                            "{name}: baseline + reference-types bit for overlong \
+                            "{name}: baseline{eh_note} + reference-types bit for overlong \
                              call_indirect immediates only (no construct used), in scope"
                         );
                         true
                     }
                     Some(construct) => {
                         println!(
-                            "{name}: needs reference-types ({construct}), outside the 0.1 scope"
+                            "{name}: needs reference-types ({construct}), outside the accepted input"
                         );
                         false
                     }
                 }
             } else {
-                println!("{name}: needs {}, outside the 0.1 scope", needed.join(", "));
+                println!(
+                    "{name}: needs {}, outside the accepted input",
+                    blocking.join(", ")
+                );
                 // Name the first offending construct so the audit record can say *why* the proposal is required, not just that it is.
-                if let Err(err) = Validator::new_with_features(baseline()).validate_all(&bytes) {
-                    println!("  first offense under baseline: {err}");
+                if let Err(err) =
+                    Validator::new_with_features(baseline() | WasmFeatures::EXCEPTIONS)
+                        .validate_all(&bytes)
+                {
+                    println!("  first offense under the accepted input: {err}");
                 }
                 false
             }
@@ -238,6 +270,6 @@ pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
     if all_clean {
         Ok(())
     } else {
-        bail!("a binary needs features outside the 0.1 scope");
+        bail!("a binary needs features outside the accepted input");
     }
 }

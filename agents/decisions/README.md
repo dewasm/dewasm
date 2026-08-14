@@ -38,7 +38,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 16 | [Completing Wasm 1.0 for Ruby (Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking)](16-ruby-wasm1-completion.md) | Accepted |
 | 17 | [Reference Types in the Ruby Backend (funcref = the Table Pair, externref = a Raw Host Value)](17-ruby-reference-types.md) | Superseded (decision 24) |
 | 18 | [Tail Calls in the Ruby Backend (Flat Trampoline with a Body/Entry Split)](18-ruby-tail-calls.md) | Superseded (decision 24) |
-| 19 | [Exception Handling in the Ruby Backend (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Superseded (decision 24) |
+| 19 | [Exception Handling in the Ruby Backend (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Accepted again (decision 69) |
 | 20 | [Component Model (Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary)](20-component-model-core-ir-adapters.md) | Superseded (decision 24) |
 | 21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (decision 24) |
 | 22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
@@ -88,6 +88,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 66 | [`agents/` for Agent-Facing Documents, `docs/` for Human-Facing Ones](66-agents-directory.md) | Accepted |
 | 67 | [An Experiments Index over Issues and PRs](67-experiments-index.md) | Accepted |
 | 68 | [Measurement Records at the Top Level, Written and Rendered by Symmetric Commands](68-records-directory.md) | Accepted |
+| 69 | [Exception Handling Joins the Accepted Input, Declared Per Backend](69-exception-handling-accepted-input.md) | Accepted |
 
 ## Adding a new decision
 

@@ -7,7 +7,7 @@ cargo xtask feature-audit examples/apps/cache/*.wasm
 ```
 
 and record the verdict here.
-An app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universal baseline: sign extension, saturating float-to-int, multi-value, bulk memory, mutable globals) is **deferred**, not worked around; the entry stays here so it is revisited if the feature returns.
+An app that needs a proposal outside the accepted input (wasm 1.0 + the universal baseline: sign extension, saturating float-to-int, multi-value, bulk memory, mutable globals; plus the final exception-handling proposal, lowered per backend) is **deferred**, not worked around; the entry stays here so it is revisited if the feature returns.
 
 ## Verdicts
 
@@ -19,6 +19,7 @@ An app that needs a proposal outside the 0.1 scope (wasm 1.0 + the universal bas
 | CPython 3.14.6 | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 wasi-vfs-packed | derived in-cache by `setup.sh`¹³ | none (audited 2026-08-04) | ✅ in scope (shipping, **executes on every backend**¹³) |
+| mruby 3.4.0 | pinned-source zig build in `setup.sh` | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
 | pandoc | see below | **simd** | ⛔ deferred |
 | zeroperl (Perl 5.42) | [6over3/zeroperl](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` npm pin in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on every backend**¹²) |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
@@ -135,6 +136,11 @@ ruby.wasm's intended deployment shape: `setup.sh` packs the two already-pinned C
 The official build links `libwasi_vfs.a`, and `wasi-vfs pack` embeds the tree via wizer pre-initialization as ordinary data segments, so the audit is baseline-only with the same 37-function import list as the unpacked CRuby.
 Needing **no preopens at all**, the case (`CRUBY_PACKED_HELLO`, `cruby_packed_hello_e2e!`) is a plain `AppCase`, a stdlib `require "json"` one-liner proving the embedded VFS serves the tree, ground-truthed by the `wasmtime_test` suite with zero `--dir` flags.
 Every backend runs it; it is faster than the unpacked case wherever both are measured, because the stdlib loads from guest memory instead of host I/O, but the speed categories still vary by backend, and on Python the constraint is host memory rather than the clock.
+
+¹⁴ **mruby (audited 2026-08-14).**
+mruby 3.4.0 built from the pinned source tarball with `zig cc` for wasm32-wasi; setjmp/longjmp lowers onto the final exception-handling proposal (`-mllvm -wasm-enable-sjlj`), so this is the app that exercises `try_table`/`throw` end to end.
+Exception handling is accepted input lowered per backend: the convert manifest asserts each declaring backend converts the module and each non-declaring backend rejects it with the attributed error, and Bash (no exception mechanism) stays on the rejection side.
+The execution case (`MRUBY_EH`, `mruby_eh_e2e!`) drives raise, rescue, ensure, a custom exception class, and retry through the converted interpreter on every declaring backend; the wasi build excludes mruby-io, mruby-dir, and mruby-socket, and a first-party `mruby-wasi-puts` gem restores `Kernel#puts`.
 
 ## Deferred: pandoc
 

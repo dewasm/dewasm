@@ -3,6 +3,7 @@
 Status: **Accepted, 2026-07-25.**
 The removal of the level type, its derivation functions, the per-backend target declaration, and level conditioning on the e2e case tables has landed; `docs/support.md` now renders a flat `## Features` table (the in-scope subset) plus the `## WASI preview 1` table.
 Supersedes [decision 23](23-backend-support-levels.md).
+Since [decision 69](69-exception-handling-accepted-input.md) the features table has a row that differs per backend (exception handling); the per-feature declarations this decision kept are what express it, and the maturity levels stay retired.
 
 ## Context
 
