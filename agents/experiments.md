@@ -63,3 +63,17 @@ Each entry is one section in this shape:
 - **Verdict**: low ceiling; of 131.6k masks only ~12% are droppable at the expression site, the rest need per-local dataflow, and masks are ~6% of all instructions, so the ISeq ceiling is about -5 to -6%.
 - **Invalidated when**: an IR-level range analysis lands (it would also serve Perl and Python), or the always-masked invariant is relaxed to observation-point masking.
 - **Details**: #202.
+
+## spinel-aot: bigint-typed i64 and compile-time scaling defeat Spinel today (2026-08-13)
+
+- **Tried**: compiling the Ruby backend's output with Spinel (matz's AOT Ruby-to-C compiler), probing its subset and scaling with generated-code shapes.
+- **Verdict**: premature; any value or literal at or above 2^63 (the M64 mask constant included) types as bigint and erases the win (a masked u64 loop measured 1.0x vs CRuby, signed int64 under `--int-overflow=wrap` is effectively free), and the front end scales worse than quadratically (391 KB of Ruby: 12 s front end, 113 s total at `-O2`), putting sqlite3-shell's 7.9 MB out of reach.
+- **Invalidated when**: Spinel's compile-time scaling improves (it is pre-0.1 and moving fast) and a Spinel output profile exists: signed i64 (the `i64-signed` branch) plus an `IO::Buffer` replacement.
+- **Details**: #205.
+
+## jvm-ruby-runtimes: generated methods exceed method-granularity JIT limits (2026-08-13)
+
+- **Tried**: running the Ruby backend's output on TruffleRuby 33.0.1 (pure-Ruby `IO::Buffer` polyfill) and JRuby 10.0.3.0 (an `IO::Buffer` arity shim), microbenchmarks and apps.
+- **Verdict**: rejected as suite runners; both beat YJIT on microbenchmarks (TruffleRuby's f64_alu at 4x wasmtime vs YJIT's 78x) yet lose on real apps (sqlite3_query: JRuby 58-70 s vs YJIT 9.4 s; TruffleRuby unfinished after 48 min), because the largest generated methods (~13k lines) exceed the JVM's 64 KB per-method bytecode limit (JRuby raises MethodTooLargeException once `-Xjit.maxsize` allows the attempt), so the hottest functions stay interpreted.
+- **Invalidated when**: a pass caps generated method size by splitting functions (also relevant to the Java backend's 64 KB constraint), or JRuby's `IO::Buffer` gains the four-argument `copy`/`set_string` forms and TruffleRuby gains `IO::Buffer` at all.
+- **Details**: #206.
