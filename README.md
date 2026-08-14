@@ -90,7 +90,7 @@ $ dewasm input.<wasm|wat>
 
 Please see `dewasm --help` for the full list of options.
 
-Next: [getting started](docs/getting-started.md), the [per-target reference](docs/backends/), and [what each backend supports](docs/support.md).
+Next: [getting started](docs/getting-started.md), the [per-target reference](docs/backends/), [what each backend supports](docs/support.md), and [projects built on dewasm](docs/users.md).
 
 ## Copyright
 

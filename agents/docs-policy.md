@@ -30,6 +30,7 @@ A document a user would never open, but an agent must consult before changing so
 | [docs/benchmarks/results.md](../docs/benchmarks/results.md) | Measured performance, with figures under `figs/` | Evaluators | **Generated: never hand-edit** |
 | [docs/sizes/](../docs/sizes/README.md) | How to run the size record and read its numbers | Contributors | By hand |
 | [docs/sizes/results.md](../docs/sizes/results.md) | Measured distribution sizes (wasm binary, converted source, runtimes) with figures under `figs/` | Evaluators | **Generated: never hand-edit** |
+| [docs/users.md](../docs/users.md) | Downstream projects that ship dewasm-converted code | Users, evaluators | By hand |
 | [records/README.md](../records/README.md) | When, on what host, and on what occasion each stored measurement record was taken | Contributors, evaluators | By hand (`cargo xtask record-speed` and `cargo xtask record-size` append a placeholder line per record they write) |
 
 ## Rules
@@ -59,6 +60,7 @@ A document a user would never open, but an agent must consult before changing so
 - An experiment's outcome with no decision attached → its Issue/PR, plus an entry in `agents/experiments.md` when it changes what a future agent would do.
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
 - A new real-world app target → an audited row in `agents/apps-audit.md`.
+- A downstream project shipping dewasm output → an entry in [docs/users.md](../docs/users.md).
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask record-speed`.
   Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.
 - A size number → the record `cargo xtask record-size` writes to `records/`, rendered into `docs/sizes/results.md`, for the same reason: a generated artifact's size changes with every codegen change.
