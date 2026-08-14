@@ -6,7 +6,7 @@ The spec harness only tolerates test skips attributable to a feature that is not
 
 ## Features
 
-The wasm 1.0 features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.
+The features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.
 
 | Feature | ruby | bash | python | perl | go | java |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ The wasm 1.0 features a backend can meaningfully differ on; every other `Feature
 | Multiple tables | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bulk table ops / passive element segments | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Floating-point (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Exception handling | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 
 ## WASI preview 1
 

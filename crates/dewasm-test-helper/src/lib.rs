@@ -23,7 +23,7 @@ mod wasmtime_backend;
 
 pub use apps::{
     run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN,
-    CRUBY_PACKED_HELLO, QJS_EVAL, SQLITE3_SHELL,
+    CRUBY_PACKED_HELLO, MRUBY_EH, QJS_EVAL, SQLITE3_SHELL,
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, EXIFTOOL_EXTRACT, LIBSQLITE3_C_API, PCAP_COMPILE,
@@ -64,7 +64,7 @@ pub use qjs_repl::{
 pub use snapshots::{wasmtime_snapshots, WasmtimeSnapshot};
 pub use spec::{
     curated_with, heap_type_tag, nullable_heap_type, spec_main, spec_trials, Converted,
-    SpecBackend, CURATED_SPEC_FILES,
+    SpecBackend, CURATED_SPEC_FILES, EXCEPTION_HANDLING_SPEC_FILES,
 };
 pub use wasi::{
     run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,
@@ -427,6 +427,27 @@ macro_rules! sqlite3_shell_e2e {
             #[test]
             fn sqlite3_shell() {
                 $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
+            }
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`].
+/// Runs [`MRUBY_EH`](crate::MRUBY_EH): raise/rescue/ensure/retry through the converted mruby interpreter, the execution proof for the exception-handling lowering beyond the spec harness.
+/// Fast by default (the module is 735 kB and the program is tiny); a backend whose measured run crosses the slow line passes a trailing `slow`/`ultra` speed token, pinned at the callsite like every other case.
+#[macro_export]
+macro_rules! mruby_eh_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn mruby_eh() {
+            $crate::run_app_case(&$lang, &$crate::MRUBY_EH);
+        }
+    };
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn mruby_eh() {
+                $crate::run_app_case(&$lang, &$crate::MRUBY_EH);
             }
         }
     };

@@ -35,6 +35,7 @@ Standalone programs follow the shared runtime interface (argv, `--dir` preopens,
 
 Full wasm core 1.0 plus the universal baseline, with f32/f64 on the pure-Bash softfloat, and **full WASI preview 1 including the filesystem**; `fd_filestat_set_times` and `path_filestat_set_times` are the exception and return ENOSYS.
 Non-function imports, multiple tables, and table bulk ops are supported.
+The exception-handling proposal is not lowered here (Bash has no exception mechanism); a module using it is rejected at conversion time with an attributed error.
 Authoritative matrix: [docs/support.md](../support.md).
 
 `proc_exit` propagates as status 133; traps set `TRAP_MSG` and propagate status 134 through `|| return $?` chains.

@@ -75,6 +75,7 @@ Such a file cannot be *appended* to the generated file itself, because Go requir
 
 Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 including the filesystem**.
 Non-function imports, multiple tables, and table bulk ops are supported.
+The final exception-handling proposal is supported: a thrown wasm exception is a native exception carrying its tag, catch_all cannot observe traps, and setjmp/longjmp-based C programs (mruby is the covered app case) convert and run.
 Authoritative matrix: [docs/support.md](../support.md).
 
 ## Providers and library usage

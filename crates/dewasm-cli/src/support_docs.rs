@@ -21,6 +21,7 @@ const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::MultipleTables,
     Feature::TableBulkOps,
     Feature::Floats,
+    Feature::ExceptionHandling,
 ];
 
 pub fn render_support_docs() -> String {
@@ -51,7 +52,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("## Features\n\n");
     out.push_str(
-        "The wasm 1.0 features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.\n\n",
+        "The features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.\n\n",
     );
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");

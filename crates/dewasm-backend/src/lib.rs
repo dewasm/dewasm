@@ -125,7 +125,63 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         },
         "passive/declared element segment, ref.null element item, or table.init/copy/elem.drop",
     )?;
+    require(
+        Feature::ExceptionHandling,
+        &|| module_uses_exception_handling(module),
+        "tag, exnref value, or try_table/throw/throw_ref instruction",
+    )?;
     Ok(())
+}
+
+/// Whether the module contains any exception-handling construct: a tag (defined or imported, which every tag export implies), an exnref-typed value anywhere, or one of the proposal's instructions.
+/// Same exhaustiveness contract as [`stmts_use_table_bulk_ops`].
+fn module_uses_exception_handling(module: &ir::Module) -> bool {
+    let exn = |ty: &ir::ValType| *ty == ir::ValType::ExnRef;
+    !module.imported_tags.is_empty()
+        || !module.tags.is_empty()
+        || module
+            .types
+            .iter()
+            .any(|t| t.params.iter().any(exn) || t.results.iter().any(exn))
+        || module.imported_globals.iter().any(|g| exn(&g.ty))
+        || module.globals.iter().any(|g| exn(&g.ty))
+        || module.imported_tables.iter().any(|t| exn(&t.ty))
+        || module.tables.iter().any(|t| exn(&t.ty))
+        || module.funcs.iter().any(|f| {
+            f.locals.iter().any(exn)
+                || f.temps.iter().any(|t| exn(&t.ty))
+                || stmts_use_exception_handling(&f.body)
+        })
+}
+
+fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    ir::Stmt::any(stmts, &mut |stmt| match stmt {
+        ir::Stmt::TryTable { .. } | ir::Stmt::Throw { .. } | ir::Stmt::ThrowRef { .. } => true,
+        ir::Stmt::SourceLine(_)
+        | ir::Stmt::Assign { .. }
+        | ir::Stmt::LocalSet { .. }
+        | ir::Stmt::GlobalSet { .. }
+        | ir::Stmt::Store { .. }
+        | ir::Stmt::Block { .. }
+        | ir::Stmt::Loop { .. }
+        | ir::Stmt::If { .. }
+        | ir::Stmt::Br(_)
+        | ir::Stmt::BrIf { .. }
+        | ir::Stmt::BrTable { .. }
+        | ir::Stmt::Return { .. }
+        | ir::Stmt::Call { .. }
+        | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::MemoryGrow { .. }
+        | ir::Stmt::MemoryCopy { .. }
+        | ir::Stmt::MemoryFill { .. }
+        | ir::Stmt::MemoryInit { .. }
+        | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableInit { .. }
+        | ir::Stmt::TableCopy { .. }
+        | ir::Stmt::ElemDrop { .. }
+        | ir::Stmt::Unreachable => false,
+    })
 }
 
 /// Reject a library-mode module name that does not fit `language`'s grammar.
@@ -293,6 +349,29 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
     }
 }
 
+/// The wasm spelling of a value type, for the backends whose type keys and diagnostics use it verbatim (Ruby, Python, Perl; the identifier-named backends keep their own tables, and Bash keeps a local copy so its exception-handling arm can stay a loud refusal).
+/// Only the backend's own artifacts ever read these, so the spelling is free; sharing it keeps the three copies from drifting.
+pub fn val_name(ty: ir::ValType) -> &'static str {
+    match ty {
+        ir::ValType::I32 => "i32",
+        ir::ValType::I64 => "i64",
+        ir::ValType::F32 => "f32",
+        ir::ValType::F64 => "f64",
+        ir::ValType::FuncRef => "funcref",
+        ir::ValType::ExnRef => "exnref",
+    }
+}
+
+/// The default (zero) value of a value type, with the language's own null literal for the reference types.
+/// The numeric spellings are shared by every dynamically-typed backend; only the null differs.
+pub fn default_value(ty: ir::ValType, null: &'static str) -> &'static str {
+    match ty {
+        ir::ValType::I32 | ir::ValType::I64 => "0",
+        ir::ValType::F32 | ir::ValType::F64 => "0.0",
+        ir::ValType::FuncRef | ir::ValType::ExnRef => null,
+    }
+}
+
 /// A structural key for a function type: `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`.
 /// `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules.
 /// A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend, which is why `name_of` stays the caller's.
@@ -337,20 +416,18 @@ pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBu
 }
 
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
-    // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
-    stmts.iter().any(|stmt| match stmt {
+    // Exhaustive on purpose: a future Stmt variant must be classified here as a compile error, not default to "no bulk table op" (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
+    ir::Stmt::any(stmts, &mut |stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
-        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
-            stmts_use_table_bulk_ops(body)
-        }
-        ir::Stmt::If { then, els, .. } => {
-            stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
-        }
         ir::Stmt::SourceLine(_)
         | ir::Stmt::Assign { .. }
         | ir::Stmt::LocalSet { .. }
         | ir::Stmt::GlobalSet { .. }
         | ir::Stmt::Store { .. }
+        | ir::Stmt::Block { .. }
+        | ir::Stmt::Loop { .. }
+        | ir::Stmt::If { .. }
+        | ir::Stmt::TryTable { .. }
         | ir::Stmt::Br(_)
         | ir::Stmt::BrIf { .. }
         | ir::Stmt::BrTable { .. }
@@ -362,6 +439,8 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
         | ir::Stmt::MemoryFill { .. }
         | ir::Stmt::MemoryInit { .. }
         | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::Throw { .. }
+        | ir::Stmt::ThrowRef { .. }
         | ir::Stmt::Unreachable => false,
     })
 }

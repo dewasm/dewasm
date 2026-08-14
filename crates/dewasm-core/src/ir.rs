@@ -12,6 +12,9 @@ pub enum ValType {
     /// A nullable reference to a wasm function.
     /// Legal only as a table element type; reference types used as value types are rejected at conversion time.
     FuncRef,
+    /// A nullable reference to a caught exception (exception handling).
+    /// Unlike the other reference types this one *is* legal as a value type: `catch_ref` produces it in locals, temps, and block types.
+    ExnRef,
 }
 
 /// A flattened stack slot.
@@ -45,6 +48,10 @@ pub struct Module {
     /// Defined globals.
     /// Global index space = imported_globals ++ globals.
     pub globals: Vec<Global>,
+    pub imported_tags: Vec<ImportedTag>,
+    /// Defined tags.
+    /// Tag index space = imported_tags ++ tags.
+    pub tags: Vec<Tag>,
     pub exports: Vec<Export>,
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
@@ -89,6 +96,17 @@ impl Module {
         } else {
             self.tables[idx - self.imported_tables.len()].ty
         }
+    }
+
+    /// The parameter types a tag's exceptions carry; validation keeps a tag's results empty.
+    pub fn tag_params(&self, tag_idx: u32) -> &[ValType] {
+        let idx = tag_idx as usize;
+        let type_idx = if idx < self.imported_tags.len() {
+            self.imported_tags[idx].type_idx
+        } else {
+            self.tags[idx - self.imported_tags.len()].type_idx
+        };
+        &self.types[type_idx as usize].params
     }
 }
 
@@ -145,11 +163,24 @@ pub struct Global {
 }
 
 #[derive(Debug)]
+pub struct ImportedTag {
+    pub module: String,
+    pub name: String,
+    pub type_idx: u32,
+}
+
+#[derive(Debug)]
+pub struct Tag {
+    pub type_idx: u32,
+}
+
+#[derive(Debug)]
 pub enum ExportKind {
     Func(u32),
     Table(u32),
     Memory,
     Global(u32),
+    Tag(u32),
 }
 
 #[derive(Debug)]
@@ -224,6 +255,18 @@ pub enum BrTarget {
         is_loop: bool,
         assigns: Vec<(Temp, Temp)>,
     },
+}
+
+/// One `try_table` catch clause.
+/// The four catch kinds are fully encoded by two fields: `tag` (`Some` for `catch`/`catch_ref`, `None` for the catch-all kinds) and `exn_temp` (`Some` for the `_ref` kinds, which capture the exception as an exnref); no backend needs the kind spelled a second way.
+/// The exception's payload lands directly in the *target frame's* slots (`value_temps`, whose last entry is `exn_temp` for the `_ref` kinds): the same arithmetic a branch's moves use, sourced from the exception instead of the stack, which is why `target` carries no assigns.
+#[derive(Debug)]
+pub struct CatchClause {
+    /// Tag index for `catch`/`catch_ref`; `None` for the catch-all kinds.
+    pub tag: Option<u32>,
+    pub value_temps: Vec<Temp>,
+    pub exn_temp: Option<Temp>,
+    pub target: BrTarget,
 }
 
 /// A resolved source position, indexing [`Module::debug_files`].
@@ -337,7 +380,65 @@ pub enum Stmt {
     ElemDrop {
         seg: u32,
     },
+    /// `try_table`: a block whose body's exceptions are dispatched to the catch clauses, first match wins; an unmatched exception (and every trap) keeps unwinding.
+    /// A catchless `try_table` is a plain [`Stmt::Block`] and never reaches here.
+    TryTable {
+        label: Label,
+        catches: Vec<CatchClause>,
+        body: Vec<Stmt>,
+    },
+    Throw {
+        tag: u32,
+        args: Vec<Expr>,
+    },
+    ThrowRef {
+        exn: Expr,
+    },
     Unreachable,
+}
+
+impl Stmt {
+    /// The statement sequences nested directly in this statement, in emission order; a statement holding none yields nothing.
+    /// Exhaustive on purpose: a new variant that carries statements must declare them here or fail to compile, which is what keeps every traversal built on [`Stmt::any`] reaching the whole tree.
+    pub fn child_seqs(&self) -> impl Iterator<Item = &[Stmt]> {
+        let seqs: [&[Stmt]; 2] = match self {
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {
+                [body, &[]]
+            }
+            Stmt::If { then, els, .. } => [then, els],
+            Stmt::SourceLine(_)
+            | Stmt::Assign { .. }
+            | Stmt::LocalSet { .. }
+            | Stmt::GlobalSet { .. }
+            | Stmt::Store { .. }
+            | Stmt::Br(_)
+            | Stmt::BrIf { .. }
+            | Stmt::BrTable { .. }
+            | Stmt::Return { .. }
+            | Stmt::Call { .. }
+            | Stmt::CallIndirect { .. }
+            | Stmt::MemoryGrow { .. }
+            | Stmt::MemoryCopy { .. }
+            | Stmt::MemoryFill { .. }
+            | Stmt::MemoryInit { .. }
+            | Stmt::DataDrop { .. }
+            | Stmt::TableInit { .. }
+            | Stmt::TableCopy { .. }
+            | Stmt::ElemDrop { .. }
+            | Stmt::Throw { .. }
+            | Stmt::ThrowRef { .. }
+            | Stmt::Unreachable => [&[], &[]],
+        };
+        seqs.into_iter().filter(|seq| !seq.is_empty())
+    }
+
+    /// Whether `pred` holds for any statement in `stmts` or in the sequences nested below them.
+    /// A caller classifies one statement and leaves reaching the rest to [`Stmt::child_seqs`].
+    pub fn any(stmts: &[Stmt], pred: &mut impl FnMut(&Stmt) -> bool) -> bool {
+        stmts
+            .iter()
+            .any(|stmt| pred(stmt) || stmt.child_seqs().any(|seq| Stmt::any(seq, pred)))
+    }
 }
 
 #[derive(Clone, Debug)]

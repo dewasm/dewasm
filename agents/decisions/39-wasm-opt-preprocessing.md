@@ -17,7 +17,7 @@ Only modules we build qualify: a downloaded upstream artifact is pinned by its p
 
 Run `wasm-opt -O2` in-place over each locally-built module immediately after it is compiled, before it lands in the cache.
 The discriminating rule: **preprocess a module only if `setup.sh` builds it from source (and can therefore re-verify it); never a downloaded artifact.**
-Concretely this is every built-from-source module (the three sqlite3 shapes, minigzip, libpcap, tree-sitter, and ripgrep), with one exception: the DWARF fixture (`dwarf-fixture.sh`) is skipped because its `-g` debug info is the whole point of the case (decision 38), which wasm-opt would strip.
+Concretely this is every built-from-source module (the three sqlite3 shapes, minigzip, libpcap, tree-sitter, and ripgrep), with two exceptions: the DWARF fixture (`dwarf-fixture.sh`) is skipped because its `-g` debug info is the whole point of the case (decision 38), which wasm-opt would strip, and mruby (`mruby.sh`) is skipped because the pinned baseline flag set below cannot parse its exception-handling instructions ([decision 69](69-exception-handling-accepted-input.md)), so that build strips debug info at link time with `-Wl,--strip-debug` instead.
 
 Three constraints on how:
 

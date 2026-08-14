@@ -62,6 +62,25 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
 /// Needs no preopens (a `require` from the stdlib proves the embedded VFS serves it), so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`.
 /// Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine).
 /// Slow, same as the unpacked case.
+/// mruby `-e` eval driving raise, rescue, ensure, a custom exception class, and retry.
+/// The cached mruby is built with LLVM's setjmp/longjmp lowering onto the exception-handling proposal, so this is the execution case for `try_table`/`throw` in a real interpreter, not just the spec harness.
+/// Expected stdout is inline like the other interpreter hellos (deterministic; the wasmtime suite revalidates it against a live engine).
+pub const MRUBY_EH: AppCase = AppCase {
+    name: "mruby",
+    args: &[
+        "-e",
+        "class RetryableError < StandardError; end\n\
+         begin\n  raise \"boom\"\nrescue => e\n  puts \"rescued:#{e.message}\"\nend\n\
+         begin\n  begin\n    raise \"boom2\"\n  ensure\n    puts \"ensured\"\n  end\nrescue => e\n  puts \"rescued2:#{e.message}\"\nend\n\
+         attempts = 0\n\
+         begin\n  attempts += 1\n  raise RetryableError, \"custom\" if attempts == 1\n  puts \"retried:#{attempts}\"\nrescue RetryableError => e\n  puts \"caught:#{e.class}:#{e.message}\"\n  retry\nend\n\
+         puts \"mruby eh e2e: ok\"",
+    ],
+    stdin: "",
+    expect_stdout: "rescued:boom\nensured\nrescued2:boom2\ncaught:RetryableError:custom\nretried:2\nmruby eh e2e: ok\n",
+    expect_code: 0,
+};
+
 pub const CRUBY_PACKED_HELLO: AppCase = AppCase {
     name: "ruby-packed",
     args: &[

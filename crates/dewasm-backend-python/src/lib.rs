@@ -36,7 +36,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
+    UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -221,6 +222,8 @@ impl Backend for PythonBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects (fresh instances, compared with `is`), a thrown exception is a native Python exception that doubles as the exnref, and traps stay uncatchable: the same model as Ruby's.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -461,81 +464,13 @@ fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
-/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last.
-/// This is [`flat`]'s only input beyond the body: a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
-///
-/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top, the branch leaves its own innermost frame and crosses nothing) or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in.
-/// A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name.
-/// A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
-fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
-    let mut paths = Vec::new();
-    let mut stack: Vec<u32> = Vec::new();
-    walk_frame_paths(body, &mut stack, &mut paths);
-    paths
-}
-
-fn walk_frame_paths(stmts: &[Stmt], stack: &mut Vec<u32>, paths: &mut Vec<Vec<u32>>) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Block { label, body } | Stmt::Loop { label, body } => {
-                stack.push(label.id);
-                walk_frame_paths(body, stack, paths);
-                stack.pop();
-            }
-            Stmt::If {
-                label, then, els, ..
-            } => {
-                if label.referenced {
-                    stack.push(label.id);
-                }
-                walk_frame_paths(then, stack, paths);
-                walk_frame_paths(els, stack, paths);
-                if label.referenced {
-                    stack.pop();
-                }
-            }
-            Stmt::Br(target) | Stmt::BrIf { target, .. } => record_path(target, stack, paths),
-            Stmt::BrTable {
-                targets, default, ..
-            } => {
-                for target in targets {
-                    record_path(target, stack, paths);
-                }
-                record_path(default, stack, paths);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn record_path(target: &BrTarget, stack: &[u32], paths: &mut Vec<Vec<u32>>) {
-    if let BrTarget::Label { label, .. } = target {
-        if let Some(pos) = stack.iter().position(|id| id == label) {
-            if pos + 1 < stack.len() {
-                paths.push(stack[pos..].to_vec());
-            }
-        }
-    }
-}
-
 fn default_value(ty: ValType) -> &'static str {
-    match ty {
-        ValType::I32 | ValType::I64 => "0",
-        ValType::F32 | ValType::F64 => "0.0",
-        ValType::FuncRef => "None",
-    }
+    dewasm_backend::default_value(ty, "None")
 }
 
-/// How a value type is spelled inside a structural type key ([`type_key`]).
-/// Only this backend's own artifacts ever read these, so the spelling is free.
+/// How a value type is spelled inside a structural type key ([`type_key`]): the shared wasm spelling.
 fn val_name(ty: ValType) -> &'static str {
-    match ty {
-        ValType::I32 => "i32",
-        ValType::I64 => "i64",
-        ValType::F32 => "f32",
-        ValType::F64 => "f64",
-        ValType::FuncRef => "funcref",
-    }
+    dewasm_backend::val_name(ty)
 }
 
 struct Gen<'a> {
@@ -609,11 +544,13 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let mut global_exports: Vec<(String, u32)> = Vec::new();
         let mut table_exports: Vec<(String, u32)> = Vec::new();
+        let mut tag_exports: Vec<(String, u32)> = Vec::new();
         let mut memory_export_names: Vec<String> = Vec::new();
         for export in &m.exports {
             match export.kind {
                 ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
                 ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
+                ExportKind::Tag(idx) => tag_exports.push((export.name.clone(), idx)),
                 ExportKind::Memory => memory_export_names.push(export.name.clone()),
                 ExportKind::Func(_) => {}
             }
@@ -638,6 +575,10 @@ impl<'a> Gen<'a> {
         w.line(format!(
             "TABLE_EXPORTS = {{{}}}",
             entries(&table_exports, "t")
+        ));
+        w.line(format!(
+            "TAG_EXPORTS = {{{}}}",
+            entries(&tag_exports, "tag")
         ));
         let mem_set = memory_export_names
             .iter()
@@ -760,6 +701,23 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            w.line(format!(
+                "self.tag{i} = {} or self._missing({}, {})",
+                self.resolve_import_string("tag", &import.module, &import.name),
+                py_string(&import.module),
+                py_string(&import.name),
+            ));
+        }
+        for i in 0..m.tags.len() {
+            self.use_unit("rt/tag");
+            w.line(format!(
+                "self.tag{} = {}.Tag()",
+                m.imported_tags.len() + i,
+                self.rt_name
+            ));
+        }
+
         for (i, elem) in m.elems.iter().enumerate() {
             let items = || {
                 elem.items
@@ -873,6 +831,11 @@ impl<'a> Gen<'a> {
         w.line("return getattr(self, self.TABLE_EXPORTS[name])");
         w.dedent();
         w.line("");
+        w.line("def tag_export(self, name):");
+        w.indent();
+        w.line("return getattr(self, self.TAG_EXPORTS[name])");
+        w.dedent();
+        w.line("");
         // Provider protocol: an instance is itself a valid import value.
         w.line("def wasm_import(self, name):");
         w.indent();
@@ -887,6 +850,10 @@ impl<'a> Gen<'a> {
         w.line("if name in self.TABLE_EXPORTS:");
         w.indent();
         w.line("return getattr(self, self.TABLE_EXPORTS[name])");
+        w.dedent();
+        w.line("if name in self.TAG_EXPORTS:");
+        w.indent();
+        w.line("return getattr(self, self.TAG_EXPORTS[name])");
         w.dedent();
         w.line("if name in self.MEMORY_EXPORTS:");
         w.indent();
@@ -984,7 +951,7 @@ impl<'a> Gen<'a> {
         }
         *self.flat.borrow_mut() = flat::plan(
             &func.body,
-            &compute_frame_paths(&func.body),
+            &flat::frames(&func.body, flat::BreakToBlockEnd::Unavailable).paths,
             flat::DEEP_CROSSING,
         );
         // The branch register is declared only when the cascade can actually use it: a branch to a frame that survives the plan still relays through `_br`, one addressed by state never does, and a function with no label branch at all never reads it either.
@@ -1207,7 +1174,51 @@ impl<'a> Gen<'a> {
                     free.extend(inner);
                     escapes
                 }
+                Stmt::TryTable {
+                    label,
+                    catches,
+                    body,
+                } => {
+                    // Unlike Block/If, the body needs a real Python scope: catching an exception raised anywhere inside it (including a callee) is not expressible through the `_br` register alone.
+                    // The wrapping `while True:` gives every catch clause's own branch (see `catch_clause`) somewhere to `break` to, exactly as Ruby's `begin ... end while false` gives its `rescue` a scope to `break`/`next` out of; body itself keeps using `_br` for any branch it contains, same as a Block's.
+                    self.use_unit("rt/wasm_exception");
+                    w.line("while True:");
+                    w.indent();
+                    w.line("try:");
+                    w.indent();
+                    let mut inner = if body.is_empty() {
+                        w.line("pass");
+                        BTreeSet::new()
+                    } else {
+                        let mut inner_guarded = false;
+                        self.emit_seq(w, body, &mut inner_guarded, false)
+                    };
+                    w.dedent();
+                    w.line(format!("except {}.WasmException as e:", self.rt_name));
+                    w.indent();
+                    for clause in catches {
+                        self.catch_clause(w, clause);
+                        self.collect_target_free(&clause.target, &mut inner);
+                    }
+                    // No clause matched: the exception keeps unwinding.
+                    w.line("raise");
+                    w.dedent();
+                    // Reached only when the body ran to completion without an exception; an exception either lands in a clause (which breaks the loop itself) or re-raises past this statement entirely.
+                    w.line("break");
+                    w.dedent();
+                    if label.referenced && !stmt_tail {
+                        w.line(format!("if _br == {}:", label.id));
+                        w.indent();
+                        w.line("_br = 0");
+                        w.dedent();
+                    }
+                    inner.remove(&label.id);
+                    let escapes = !inner.is_empty();
+                    free.extend(inner);
+                    escapes
+                }
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
+                // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
                 _ => {
                     if let Some(line) = self.fused_call_line(stmt, stmts.get(i + 1)) {
                         w.line(line);
@@ -1448,6 +1459,18 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
+            Stmt::Throw { tag, args } => {
+                self.use_unit("rt/wasm_exception");
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(format!(
+                    "raise {}.WasmException(self.tag{tag}, [{}])",
+                    self.rt_name,
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
+            }
             Stmt::SourceLine(pos) => {
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
@@ -1485,9 +1508,35 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("self.elem{seg} = []"));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::TryTable { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
+        }
+    }
+
+    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
+    /// A tagged clause guards that with `is`, wasm tag equality being object identity; a catch-all runs unconditionally, so any clause after it is dead (still emitted, never reached).
+    /// `branch()` alone never leaves the `except` suite: it is shared with ordinary branches, which rely on later code testing `_br` instead, so this appends the `break` that exits the `try_table`'s wrapping `while True:` itself (dead, but harmless, right after a `return`).
+    fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause) {
+        let bind_and_branch = |w: &mut CodeWriter| {
+            for (i, t) in clause.value_temps.iter().enumerate() {
+                if Some(*t) == clause.exn_temp {
+                    w.line(format!("{} = e", temp(*t)));
+                } else {
+                    w.line(format!("{} = e.values[{i}]", temp(*t)));
+                }
+            }
+            self.branch(w, &clause.target);
+            w.line("break");
+        };
+        match clause.tag {
+            Some(tag) => {
+                w.line(format!("if e.tag is self.tag{tag}:"));
+                w.indent();
+                bind_and_branch(w);
+                w.dedent();
+            }
+            None => bind_and_branch(w),
         }
     }
 
@@ -1535,26 +1584,21 @@ impl<'a> Gen<'a> {
 
     /// Whether `stmts` holds a branch that still travels through `_br`, i.e. whether the function needs the branch register at all.
     /// A label branch the plan addresses by state never touches it, and neither does a `return`.
+    /// Only a statement that names a branch target needs an arm below; the traversal reaches the rest.
     fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
-        stmts.iter().any(|s| self.stmt_has_relay_branch(s))
-    }
-
-    fn stmt_has_relay_branch(&self, stmt: &Stmt) -> bool {
         let relays = |t: &BrTarget| match t {
             BrTarget::Return { .. } => false,
             BrTarget::Label { label, .. } => self.state_of(*label).is_none(),
         };
-        match stmt {
+        Stmt::any(stmts, &mut |stmt| match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => relays(t),
             Stmt::BrTable {
                 targets, default, ..
             } => relays(default) || targets.iter().any(relays),
-            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => self.seq_has_relay_branch(body),
-            Stmt::If { then, els, .. } => {
-                self.seq_has_relay_branch(then) || self.seq_has_relay_branch(els)
-            }
+            // A catch clause's own branch relays through `_br` too (`catch_clause` calls the same `branch()`), even when the body underneath never does.
+            Stmt::TryTable { catches, .. } => catches.iter().any(|c| relays(&c.target)),
             _ => false,
-        }
+        })
     }
 
     /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any.
@@ -1854,7 +1898,7 @@ fn stmt_emits(stmt: &Stmt) -> bool {
         Stmt::Block { label, body } | Stmt::Loop { label, body } => {
             label.referenced || body.iter().any(stmt_emits)
         }
-        // An `if` always emits its header (an empty `then` arm becomes `pass`).
+        // Everything else emits unconditionally (an `if` emits its header, with an empty `then` arm becoming `pass`), so only a construct that can lower to nothing needs an arm above.
         _ => true,
     }
 }

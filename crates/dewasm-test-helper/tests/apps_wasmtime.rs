@@ -37,6 +37,12 @@ fn cowsay_stdin() {
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
+fn mruby_eh() {
+    dewasm_test_helper::run_app_case(&dewasm_test_helper::Wasmtime, &dewasm_test_helper::MRUBY_EH);
+}
+
+#[cfg_attr(not(feature = "wasmtime_test"), ignore)]
+#[test]
 fn qjs_eval() {
     dewasm_test_helper::run_slow_app_case(
         &dewasm_test_helper::Wasmtime,

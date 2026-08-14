@@ -50,6 +50,7 @@ An explicit WASI import overrides the bundled runtime per function; unhandled on
 ## Capabilities
 
 Full wasm core 1.0 plus the universal baseline: non-function imports, multiple tables, and table bulk ops are supported.
+The final exception-handling proposal is supported: a thrown wasm exception is a native exception carrying its tag, catch_all cannot observe traps, and setjmp/longjmp-based C programs (mruby is the covered app case) convert and run.
 Full WASI preview 1 (`sock_*` out of scope), verified against the official wasi-testsuite.
 Authoritative matrix: [docs/support.md](../support.md).
 

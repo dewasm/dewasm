@@ -17,6 +17,7 @@ The following tools and setup steps are required to run all tests correctly:
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
   * Cached `.wasm` files are located in `examples/apps/cache`.
+  * Building some apps from source needs more: `zig` (sqlite3 and others), a host Ruby with `rake` (mruby); each `scripts/*.sh` fails loudly naming what it is missing.
 
 ## Commands
 

@@ -587,6 +587,8 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Ruby);
 
 dewasm_test_helper::cowsay_args_e2e!(Ruby);
 dewasm_test_helper::cowsay_stdin_e2e!(Ruby);
+// Fast: measured 0.4 s end to end (the 735 kB mruby converts and runs well under the cowsay-class budget).
+dewasm_test_helper::mruby_eh_e2e!(Ruby);
 dewasm_test_helper::qjs_eval_e2e!(Ruby);
 dewasm_test_helper::sqlite3_shell_e2e!(Ruby);
 dewasm_test_helper::gzip_e2e!(Ruby);

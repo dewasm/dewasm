@@ -572,6 +572,7 @@ dewasm_test_helper::standalone_dir_e2e!(Perl);
 dewasm_test_helper::deep_recursion_e2e!(Perl);
 dewasm_test_helper::folded_temp_reuse_e2e!(Perl);
 
+dewasm_test_helper::mruby_eh_e2e!(Perl);
 dewasm_test_helper::cowsay_args_e2e!(Perl);
 dewasm_test_helper::cowsay_stdin_e2e!(Perl);
 dewasm_test_helper::qjs_eval_e2e!(Perl);
