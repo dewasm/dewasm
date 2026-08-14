@@ -352,6 +352,29 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
     }
 }
 
+/// The wasm spelling of a value type, for the backends whose type keys and diagnostics use it verbatim (Ruby, Python, Perl; the identifier-named backends keep their own tables, and Bash keeps a local copy so its exception-handling arm can stay a loud refusal).
+/// Only the backend's own artifacts ever read these, so the spelling is free; sharing it keeps the three copies from drifting.
+pub fn val_name(ty: ir::ValType) -> &'static str {
+    match ty {
+        ir::ValType::I32 => "i32",
+        ir::ValType::I64 => "i64",
+        ir::ValType::F32 => "f32",
+        ir::ValType::F64 => "f64",
+        ir::ValType::FuncRef => "funcref",
+        ir::ValType::ExnRef => "exnref",
+    }
+}
+
+/// The default (zero) value of a value type, with the language's own null literal for the reference types.
+/// The numeric spellings are shared by every dynamically-typed backend; only the null differs.
+pub fn default_value(ty: ir::ValType, null: &'static str) -> &'static str {
+    match ty {
+        ir::ValType::I32 | ir::ValType::I64 => "0",
+        ir::ValType::F32 | ir::ValType::F64 => "0.0",
+        ir::ValType::FuncRef | ir::ValType::ExnRef => null,
+    }
+}
+
 /// A structural key for a function type: `params->results`, each value type spelled by `name_of`, e.g. `i32,i64->f32`.
 /// `call_indirect` compares types structurally and a table can be shared between separately generated artifacts, so the runtime type tag must not be a module-local index: those disagree across modules.
 /// A table is only ever shared between artifacts of *one* backend, so the spelling only has to be self-consistent per backend, which is why `name_of` stays the caller's.

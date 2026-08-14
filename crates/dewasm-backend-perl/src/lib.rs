@@ -402,25 +402,12 @@ fn temp(t: Temp) -> String {
 }
 
 fn default_value(ty: ValType) -> &'static str {
-    match ty {
-        ValType::I32 | ValType::I64 => "0",
-        ValType::F32 | ValType::F64 => "0.0",
-        // A null reference, funcref or exnref alike, is perl's own `undef`.
-        ValType::FuncRef | ValType::ExnRef => "undef",
-    }
+    dewasm_backend::default_value(ty, "undef")
 }
 
-/// How a value type is spelled inside a structural type key ([`type_key`]).
-/// Only this backend's own artifacts ever read these, so the spelling is free.
+/// How a value type is spelled inside a structural type key ([`type_key`]): the shared wasm spelling.
 fn val_name(ty: ValType) -> &'static str {
-    match ty {
-        ValType::I32 => "i32",
-        ValType::I64 => "i64",
-        ValType::F32 => "f32",
-        ValType::F64 => "f64",
-        ValType::FuncRef => "funcref",
-        ValType::ExnRef => "exnref",
-    }
+    dewasm_backend::val_name(ty)
 }
 
 /// What a `try_table`'s outer dispatch (`emit_try_table`) does for one outcome: a pure control transfer, never an expression render.
