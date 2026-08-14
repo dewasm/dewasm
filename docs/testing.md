@@ -4,8 +4,11 @@ What the tests need and how to run them.
 
 ## Required environment
 
-A test whose required tool or setup step is missing **fails**; it never silently skips.
-Therefore, the following tools and setup steps are required to run all tests correctly:
+> [!IMPORTANT]
+> A test whose required tool or setup step is missing **fails**; it never silently skips.
+> Run `git submodule update --init` and `examples/apps/setup.sh` before the first `cargo test`, or a fresh checkout reports failures that look like broken code.
+
+The following tools and setup steps are required to run all tests correctly:
 
 - **Rust toolchain**: `rustup` applies the pin in `rust-toolchain.toml` automatically; a non-rustup `cargo` ignores the pin.
 - **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states; a full `cargo test` needs all of them.
