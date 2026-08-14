@@ -49,12 +49,7 @@ fn export_source_positions<'m>(
 
 /// Any `SourceLine` marker anywhere in the module (nested statements included).
 fn has_any_source_line(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(|s| match s {
-        Stmt::SourceLine(_) => true,
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => has_any_source_line(body),
-        Stmt::If { then, els, .. } => has_any_source_line(then) || has_any_source_line(els),
-        _ => false,
-    })
+    Stmt::any(stmts, &mut |s| matches!(s, Stmt::SourceLine(_)))
 }
 
 #[test]

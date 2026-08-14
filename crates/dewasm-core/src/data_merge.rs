@@ -95,11 +95,8 @@ fn active_segment(start: u64, data: Vec<u8>) -> DataSegment {
 
 /// Whether any statement (recursing into nested control flow) references a data segment by index via `memory.init` or `data.drop`.
 fn body_refs_segment(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(|s| match s {
-        Stmt::MemoryInit { .. } | Stmt::DataDrop { .. } => true,
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => body_refs_segment(body),
-        Stmt::If { then, els, .. } => body_refs_segment(then) || body_refs_segment(els),
-        _ => false,
+    Stmt::any(stmts, &mut |s| {
+        matches!(s, Stmt::MemoryInit { .. } | Stmt::DataDrop { .. })
     })
 }
 

@@ -1319,6 +1319,7 @@ impl<'a> Gen<'a> {
                     w.raw(format!("//line {file}:{}\n", pos.line));
                 }
             }
+            // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
             _ => self.simple_stmt(w, stmt),
         }
     }

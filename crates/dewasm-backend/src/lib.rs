@@ -156,19 +156,16 @@ fn module_uses_exception_handling(module: &ir::Module) -> bool {
 
 fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
     // Exhaustive on purpose (see stmts_use_table_bulk_ops).
-    stmts.iter().any(|stmt| match stmt {
+    ir::Stmt::any(stmts, &mut |stmt| match stmt {
         ir::Stmt::TryTable { .. } | ir::Stmt::Throw { .. } | ir::Stmt::ThrowRef { .. } => true,
-        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
-            stmts_use_exception_handling(body)
-        }
-        ir::Stmt::If { then, els, .. } => {
-            stmts_use_exception_handling(then) || stmts_use_exception_handling(els)
-        }
         ir::Stmt::SourceLine(_)
         | ir::Stmt::Assign { .. }
         | ir::Stmt::LocalSet { .. }
         | ir::Stmt::GlobalSet { .. }
         | ir::Stmt::Store { .. }
+        | ir::Stmt::Block { .. }
+        | ir::Stmt::Loop { .. }
+        | ir::Stmt::If { .. }
         | ir::Stmt::Br(_)
         | ir::Stmt::BrIf { .. }
         | ir::Stmt::BrTable { .. }
@@ -419,20 +416,18 @@ pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBu
 }
 
 fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
-    // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
-    stmts.iter().any(|stmt| match stmt {
+    // Exhaustive on purpose: a future Stmt variant must be classified here as a compile error, not default to "no bulk table op" (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
+    ir::Stmt::any(stmts, &mut |stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
-        ir::Stmt::Block { body, .. }
-        | ir::Stmt::Loop { body, .. }
-        | ir::Stmt::TryTable { body, .. } => stmts_use_table_bulk_ops(body),
-        ir::Stmt::If { then, els, .. } => {
-            stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
-        }
         ir::Stmt::SourceLine(_)
         | ir::Stmt::Assign { .. }
         | ir::Stmt::LocalSet { .. }
         | ir::Stmt::GlobalSet { .. }
         | ir::Stmt::Store { .. }
+        | ir::Stmt::Block { .. }
+        | ir::Stmt::Loop { .. }
+        | ir::Stmt::If { .. }
+        | ir::Stmt::TryTable { .. }
         | ir::Stmt::Br(_)
         | ir::Stmt::BrIf { .. }
         | ir::Stmt::BrTable { .. }

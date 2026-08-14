@@ -1735,6 +1735,7 @@ impl<'a> Gen<'a> {
             // REASON: Java has no line-directive to render source-line markers into.
             // Drop them here (not via the `_br` guard) so the guard state and emitted output stay byte-identical to a non-`--dwarf-line` build.
             Stmt::SourceLine(_) => {}
+            // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
             _ => {
                 if *guarded {
                     w.line(format!("if ({} == 0) {{", self.br()));
@@ -2559,6 +2560,7 @@ impl CostMemo {
                 self.0.borrow_mut().insert(key, c);
                 c
             }
+            // Only a statement holding a body is worth a memo entry; every other one is computed directly, and `compute` matches them exhaustively.
             _ => self.compute(stmt),
         }
     }

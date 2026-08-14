@@ -20,7 +20,7 @@ mod flat {
 }
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -175,7 +175,7 @@ fn generate_class_inner(
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
-        frames: RefCell::new(FrameSets::default()),
+        frames: RefCell::new(flat::Frames::default()),
         frame_stack: RefCell::new(Vec::new()),
         flat: RefCell::new(None),
         boxed_globals,
@@ -418,140 +418,14 @@ const MAX_FIXED_ARITY: usize = 8;
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
-/// Per-function frame classification for the label-variable cascade.
-#[derive(Default)]
-struct FrameSets {
-    /// Capturing frames (`Block`, `Loop`, or referenced-`If`) that a `br` from strictly inside crosses, and so must carry a land-or-relay epilogue.
-    crossed: HashSet<u32>,
-    /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by a `break` out of an inner scope rather than a direct `next`.
-    /// Such a loop wraps its body in an inner `begin ... end while false` (the break target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
-    wrapped: HashSet<u32>,
-    /// Loops that are the last statement in an enclosing *block*'s direct body, so a Ruby `break` out of the loop lands exactly where a `br` to that block lands.
-    /// A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve: the `while` compiles to a `while`.
-    break_ok: HashSet<u32>,
-    /// One entry per outward `br`: the inclusive frame path it crosses, target first.
-    /// `crossed` is the union of these; the paths themselves are kept because [`flat`] needs the individual branch to weigh its relay against a dispatch, and because a branch is all-or-nothing: dissolving any frame it crosses forces the rest.
-    paths: Vec<Vec<u32>>,
-}
-
-/// Compute the [`FrameSets`] for a function body.
-///
-/// Walking with a stack of the open capturing frames (label id + is-loop), a `br` to target `T` at stack position `pos` (the innermost open frame is the top) is either a self-branch (`pos == top`, a plain `break`/`next` that leaves the innermost frame directly, marking nothing) or an outward branch, `pos < top`, which must traverse `stack[pos..=top]`: the target frame, all pass-through frames, *and* the innermost frame whose own `break` otherwise lands mid-body in its parent.
-/// Every frame on that inclusive path needs the epilogue, so all of `stack[pos..]` is `crossed`; and if `T` itself is a loop reached this way (from a nested frame), it is `wrapped`.
-/// A plain `if`, `br_if`'s wrapper `if`, and `br_table`'s `case` never capture, so they are not on the stack.
-/// `br_if`/`br_table` feed every target through the same routine.
-///
-/// The one outward shape that marks nothing is `break_ok`: a branch crossing a single loop that is the **sole** statement of the block it targets.
-/// Ruby's `break` leaves that loop and lands at the block's end (the same place, in O(1)), so the frames stay structured.
-/// `sole` rather than `last` is a correctness requirement, not conservatism.
-/// It is also not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than this rule needs to claim.
-fn compute_frame_sets(body: &[Stmt]) -> FrameSets {
-    let mut sets = FrameSets::default();
-    let mut stack: Vec<(u32, bool)> = Vec::new();
-    walk_frame_sets(body, true, &mut stack, &mut sets);
-    sets
-}
-
-fn walk_frame_sets(
-    stmts: &[Stmt],
-    direct: bool,
-    stack: &mut Vec<(u32, bool)>,
-    sets: &mut FrameSets,
-) {
-    // "Sole statement", not merely "last": if the block held anything besides the loop, that other statement could dissolve, which dissolves the block by the ancestor rule while the loop itself stays a Ruby `while`, and then a
-    // `state = N; next` aimed at the dispatch loop is captured by that `while`.
-    // Requiring the loop to be the whole body makes the block dissolvable only through the loop, so the two always dissolve together.
-    let sole = direct
-        && stmts
-            .iter()
-            .filter(|s| !matches!(s, Stmt::SourceLine(_)))
-            .count()
-            == 1;
-    for stmt in stmts.iter() {
-        match stmt {
-            Stmt::Block { label, body } => {
-                stack.push((label.id, false));
-                walk_frame_sets(body, true, stack, sets);
-                stack.pop();
-            }
-            Stmt::Loop { label, body } => {
-                if sole && matches!(stack.last(), Some((_, is_loop)) if !is_loop) {
-                    sets.break_ok.insert(label.id);
-                }
-                stack.push((label.id, true));
-                walk_frame_sets(body, true, stack, sets);
-                stack.pop();
-            }
-            Stmt::If {
-                label, then, els, ..
-            } => {
-                if label.referenced {
-                    stack.push((label.id, false));
-                }
-                walk_frame_sets(then, false, stack, sets);
-                walk_frame_sets(els, false, stack, sets);
-                if label.referenced {
-                    stack.pop();
-                }
-            }
-            Stmt::TryTable {
-                label,
-                catches,
-                body,
-            } => {
-                stack.push((label.id, false));
-                walk_frame_sets(body, true, stack, sets);
-                // A catch clause's branch is emitted in the handler, inside the try_table's own scope, so it crosses that frame like a branch from the body would.
-                for clause in catches {
-                    record_target(&clause.target, stack, sets);
-                }
-                stack.pop();
-            }
-            Stmt::Br(target) => record_target(target, stack, sets),
-            Stmt::BrIf { target, .. } => record_target(target, stack, sets),
-            Stmt::BrTable {
-                targets, default, ..
-            } => {
-                for target in targets {
-                    record_target(target, stack, sets);
-                }
-                record_target(default, stack, sets);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn record_target(target: &BrTarget, stack: &[(u32, bool)], sets: &mut FrameSets) {
-    if let BrTarget::Label { label, .. } = target {
-        if let Some(pos) = stack.iter().position(|(id, _)| id == label) {
-            let outward = pos + 1 < stack.len();
-            if outward {
-                // Unless it is Ruby's `break`: crossing exactly one loop that ends the block being targeted.
-                // That already lands where the branch wants to go, at O(1), so nothing on the path dissolves.
-                if pos + 2 == stack.len() && sets.break_ok.contains(&stack[pos + 1].0) {
-                    return;
-                }
-                let path: Vec<u32> = stack[pos..].iter().map(|(id, _)| *id).collect();
-                sets.crossed.extend(path.iter().copied());
-                sets.paths.push(path);
-                // A loop targeted from a nested frame needs its body-scope wrapper so the relayed `break` re-enters via `next`.
-                if stack[pos].1 {
-                    sets.wrapped.insert(*label);
-                }
-            }
-        }
-    }
-}
-
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// Per-function frame classification, set by `function()`: which frames carry a land-or-relay epilogue and which loops wrap their body.
-    /// See `compute_frame_sets`.
-    frames: RefCell<FrameSets>,
+    /// See [`flat::frames`].
+    frames: RefCell<flat::Frames>,
     /// Emission-time stack of capturing frames currently open (label ids), pushed/popped around `Block`/`Loop`/referenced-`If` bodies.
     /// `branch()` compares its top against a `br`'s target; see the fast path there.
     frame_stack: RefCell<Vec<u32>>,
@@ -586,12 +460,13 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// Whether `label_id`'s capturing frame is crossed by some `br` (see `compute_frame_sets`), populated per-function by `function()`.
+    /// Whether `label_id`'s capturing frame is crossed by some `br` (see [`flat::frames`]), populated per-function by `function()`.
     fn is_crossed(&self, label_id: u32) -> bool {
         self.frames.borrow().crossed.contains(&label_id)
     }
 
-    /// Whether `label_id`'s loop wraps its body in an inner scope because a `br` targets it from a strictly nested frame (see `compute_frame_sets`).
+    /// Whether `label_id`'s loop wraps its body in an inner scope because a `br` targets it from a strictly nested frame (see [`flat::frames`]).
+    /// Such a loop wraps its body in an inner `begin ... end while false` (the `break` target) and takes its back-edge through `__br`; every other loop keeps the lean `while true` with a plain `next` back-edge.
     fn is_wrapped(&self, label_id: u32) -> bool {
         self.frames.borrow().wrapped.contains(&label_id)
     }
@@ -965,7 +840,7 @@ impl<'a> Gen<'a> {
     }
 
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
-        *self.frames.borrow_mut() = compute_frame_sets(&func.body);
+        *self.frames.borrow_mut() = flat::frames(&func.body, flat::BreakToBlockEnd::Available);
         self.frame_stack.borrow_mut().clear();
         let ty = &self.module.types[func.type_idx as usize];
         let params = (0..ty.params.len())
@@ -1114,7 +989,7 @@ impl<'a> Gen<'a> {
                     }
                     cur = after as usize;
                 }
-                _ => unreachable!(),
+                _ => unreachable!("only frames are dissolved"),
             }
         }
         cur
@@ -1464,7 +1339,7 @@ impl<'a> Gen<'a> {
                         return;
                     }
                 }
-                // `break_ok` (see `compute_frame_sets`): leaving the innermost loop lands at the end of the block enclosing it, which is where this branch is going.
+                // `break_ok` (see [`flat::Frames`]): leaving the innermost loop lands at the end of the block enclosing it, which is where this branch is going.
                 // Neither frame dissolved, so the plain `break` is still available and still O(1).
                 {
                     let fs = self.frame_stack.borrow();

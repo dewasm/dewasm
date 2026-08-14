@@ -1026,6 +1026,7 @@ impl<'a> Gen<'a> {
                         w.line("}");
                     }
                 }
+                // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
                 _ => self.simple_stmt(w, stmt),
             }
         }
@@ -1654,23 +1655,12 @@ fn assign_results(results: &[Temp], call: String) -> String {
 
 /// Whether `stmts` contains a `br_table` (which needs the per-function `$_bt` selector variable declared).
 fn seq_has_br_table(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(|stmt| match stmt {
-        Stmt::BrTable { .. } => true,
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_has_br_table(body),
-        Stmt::If { then, els, .. } => seq_has_br_table(then) || seq_has_br_table(els),
-        Stmt::TryTable { body, .. } => seq_has_br_table(body),
-        _ => false,
-    })
+    Stmt::any(stmts, &mut |stmt| matches!(stmt, Stmt::BrTable { .. }))
 }
 
 /// Whether `stmts` contains a `try_table` (which needs the function-scoped `$__tt_retN` escape lexicals declared: see `Escape::Return` and `materialize_escape`).
 fn seq_has_try_table(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(|stmt| match stmt {
-        Stmt::TryTable { .. } => true,
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_has_try_table(body),
-        Stmt::If { then, els, .. } => seq_has_try_table(then) || seq_has_try_table(els),
-        _ => false,
-    })
+    Stmt::any(stmts, &mut |stmt| matches!(stmt, Stmt::TryTable { .. }))
 }
 
 /// Codegen-shape test for the label lowering: multi-level branches must come out as direct `last`/`next` on perl labels, with no flag-variable cascade (Ruby's `__br`) sneaking back in.

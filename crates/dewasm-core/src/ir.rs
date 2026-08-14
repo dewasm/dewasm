@@ -397,6 +397,50 @@ pub enum Stmt {
     Unreachable,
 }
 
+impl Stmt {
+    /// The statement sequences nested directly in this statement, in emission order; a statement holding none yields nothing.
+    /// Exhaustive on purpose: a new variant that carries statements must declare them here or fail to compile, which is what keeps every traversal built on [`Stmt::any`] reaching the whole tree.
+    pub fn child_seqs(&self) -> impl Iterator<Item = &[Stmt]> {
+        let seqs: [&[Stmt]; 2] = match self {
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {
+                [body, &[]]
+            }
+            Stmt::If { then, els, .. } => [then, els],
+            Stmt::SourceLine(_)
+            | Stmt::Assign { .. }
+            | Stmt::LocalSet { .. }
+            | Stmt::GlobalSet { .. }
+            | Stmt::Store { .. }
+            | Stmt::Br(_)
+            | Stmt::BrIf { .. }
+            | Stmt::BrTable { .. }
+            | Stmt::Return { .. }
+            | Stmt::Call { .. }
+            | Stmt::CallIndirect { .. }
+            | Stmt::MemoryGrow { .. }
+            | Stmt::MemoryCopy { .. }
+            | Stmt::MemoryFill { .. }
+            | Stmt::MemoryInit { .. }
+            | Stmt::DataDrop { .. }
+            | Stmt::TableInit { .. }
+            | Stmt::TableCopy { .. }
+            | Stmt::ElemDrop { .. }
+            | Stmt::Throw { .. }
+            | Stmt::ThrowRef { .. }
+            | Stmt::Unreachable => [&[], &[]],
+        };
+        seqs.into_iter().filter(|seq| !seq.is_empty())
+    }
+
+    /// Whether `pred` holds for any statement in `stmts` or in the sequences nested below them.
+    /// A caller classifies one statement and leaves reaching the rest to [`Stmt::child_seqs`].
+    pub fn any(stmts: &[Stmt], pred: &mut impl FnMut(&Stmt) -> bool) -> bool {
+        stmts
+            .iter()
+            .any(|stmt| pred(stmt) || stmt.child_seqs().any(|seq| Stmt::any(seq, pred)))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Expr {
     /// i32 constant, stored as the unsigned (masked) value.

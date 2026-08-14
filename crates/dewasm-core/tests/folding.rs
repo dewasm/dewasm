@@ -56,15 +56,11 @@ fn walk_exprs(stmts: &[Stmt], f: &mut impl FnMut(&Expr)) {
                 expr(index, f);
                 args.iter().for_each(|e| expr(e, f));
             }
-            Stmt::If {
-                cond, then, els, ..
-            } => {
-                expr(cond, f);
-                walk_exprs(then, f);
-                walk_exprs(els, f);
-            }
-            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => walk_exprs(body, f),
+            Stmt::If { cond, .. } => expr(cond, f),
             _ => {}
+        }
+        for seq in s.child_seqs() {
+            walk_exprs(seq, f);
         }
     }
 }

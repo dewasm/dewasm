@@ -25,7 +25,157 @@
 
 use std::collections::{HashMap, HashSet};
 
-use dewasm_core::ir::Stmt;
+use dewasm_core::ir::{BrTarget, Stmt};
+
+/// Whether a native `break` out of a loop lands exactly where a branch to the block enclosing that loop lands.
+/// The one place a backend's own scope semantics enter [`frames`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BreakToBlockEnd {
+    /// Ruby: leaving the loop continues after the enclosing `begin ... end while false`, which is where such a branch was going, so the shape costs nothing and neither frame has to dissolve.
+    Available,
+    /// Python: a block exit is driven by the branch register instead, so a `break` carries no branch and every outward branch crosses its frames like any other.
+    Unavailable,
+}
+
+/// How a function body's capturing frames relate to the branches inside it.
+/// `paths` is [`plan`]'s input; the other three classify the frames a structured lowering keeps.
+#[derive(Default)]
+pub struct Frames {
+    /// Capturing frames (`Block`, `Loop`, `TryTable`, or referenced-`If`) that a `br` from strictly inside crosses, and so must carry a land-or-relay epilogue.
+    pub crossed: HashSet<u32>,
+    /// Loops that a `br` targets from a *strictly nested* capturing frame, so the branch reaches the loop head by leaving an inner scope rather than by a direct back-edge.
+    pub wrapped: HashSet<u32>,
+    /// Loops that are the sole statement in an enclosing *block*'s direct body, so a `break` out of the loop lands exactly where a `br` to that block lands.
+    /// A branch of that shape needs neither a relay nor a state transition, so neither frame has to dissolve.
+    /// Empty unless the backend declares [`BreakToBlockEnd::Available`].
+    pub break_ok: HashSet<u32>,
+    /// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last.
+    /// `crossed` is the union of these; the paths themselves are kept because [`plan`] weighs the individual branch, and because a branch is all-or-nothing: dissolving any frame it crosses forces the rest.
+    pub paths: Vec<Vec<u32>>,
+}
+
+/// Classify `body`'s frames and the branches crossing them.
+///
+/// Walking with a stack of the open capturing frames (label id + is-loop, innermost last), a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top: a plain exit from the innermost frame, crossing nothing) or an outward branch, `pos < top`, which must traverse `stack[pos..]`: the target frame, all pass-through frames, *and* the innermost frame whose own exit otherwise lands mid-body in its parent.
+/// Every frame on that inclusive path is `crossed`; and if `T` is a loop reached this way, it is `wrapped`.
+/// A `Block`, a `Loop` and a `TryTable` always capture, an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name; a plain `if`, `br_if`'s wrapper and `br_table`'s dispatch never capture, so they are not on the stack.
+/// `br_if`/`br_table` feed every target through the same routine.
+///
+/// The one outward shape that marks nothing is `break_ok` under [`BreakToBlockEnd::Available`]: a branch crossing a single loop that is the **sole** statement of the block it targets.
+pub fn frames(body: &[Stmt], break_to_block_end: BreakToBlockEnd) -> Frames {
+    let mut walk = Walk {
+        break_to_block_end,
+        stack: Vec::new(),
+        frames: Frames::default(),
+    };
+    walk.seq(body, true);
+    walk.frames
+}
+
+struct Walk {
+    break_to_block_end: BreakToBlockEnd,
+    /// The open capturing frames, innermost last: (label id, is-loop).
+    stack: Vec<(u32, bool)>,
+    frames: Frames,
+}
+
+impl Walk {
+    /// `direct` marks a sequence that is a frame's own body rather than an `if` arm.
+    /// `break_ok` is not propagated through `if` arms: a `break` from inside an `if` lands after the `if`, and proving that is still the block's end is more than the rule needs to claim.
+    fn seq(&mut self, stmts: &[Stmt], direct: bool) {
+        // "Sole statement", not merely "last": if the block held anything besides the loop, that other statement could dissolve, which dissolves the block by the ancestor rule while the loop itself stays a native loop, and then a transition aimed at the dispatch loop is captured by that loop.
+        // Requiring the loop to be the whole body makes the block dissolvable only through the loop, so the two always dissolve together.
+        let sole = self.break_to_block_end == BreakToBlockEnd::Available
+            && direct
+            && stmts
+                .iter()
+                .filter(|s| !matches!(s, Stmt::SourceLine(_)))
+                .count()
+                == 1;
+        for stmt in stmts {
+            match stmt {
+                Stmt::Block { label, body } => {
+                    self.stack.push((label.id, false));
+                    self.seq(body, true);
+                    self.stack.pop();
+                }
+                Stmt::Loop { label, body } => {
+                    if sole && matches!(self.stack.last(), Some((_, is_loop)) if !is_loop) {
+                        self.frames.break_ok.insert(label.id);
+                    }
+                    self.stack.push((label.id, true));
+                    self.seq(body, true);
+                    self.stack.pop();
+                }
+                Stmt::If {
+                    label, then, els, ..
+                } => {
+                    if label.referenced {
+                        self.stack.push((label.id, false));
+                    }
+                    self.seq(then, false);
+                    self.seq(els, false);
+                    if label.referenced {
+                        self.stack.pop();
+                    }
+                }
+                Stmt::TryTable {
+                    label,
+                    catches,
+                    body,
+                } => {
+                    self.stack.push((label.id, false));
+                    self.seq(body, true);
+                    // A catch clause's branch is emitted in the handler, inside the try_table's own scope, so it crosses that frame like a branch from the body would.
+                    // [`plan`] never dissolves a function holding a try_table, so this is inert for the flat lowering; it is kept so the walk stays a faithful description of every frame a branch can cross, which the structured lowering does consult.
+                    for clause in catches {
+                        self.target(&clause.target);
+                    }
+                    self.stack.pop();
+                }
+                Stmt::Br(target) | Stmt::BrIf { target, .. } => self.target(target),
+                Stmt::BrTable {
+                    targets, default, ..
+                } => {
+                    for target in targets {
+                        self.target(target);
+                    }
+                    self.target(default);
+                }
+                // Every other statement carries no frame and no branch, so `Stmt::child_seqs` yields nothing for it today.
+                // A future variant that does carry a body is still walked, in the enclosing frame's context and with `direct` off, which can only over-report crossings: it never claims a branch stays structured when it does not.
+                other => {
+                    for seq in other.child_seqs() {
+                        self.seq(seq, false);
+                    }
+                }
+            }
+        }
+    }
+
+    fn target(&mut self, target: &BrTarget) {
+        let BrTarget::Label { label, .. } = target else {
+            return;
+        };
+        let Some(pos) = self.stack.iter().position(|(id, _)| id == label) else {
+            return;
+        };
+        if pos + 1 == self.stack.len() {
+            return;
+        }
+        // Unless the branch is the `break_ok` shape: crossing exactly one loop that ends the block being targeted.
+        // That already lands where the branch wants to go, at O(1), so nothing on the path dissolves.
+        if pos + 2 == self.stack.len() && self.frames.break_ok.contains(&self.stack[pos + 1].0) {
+            return;
+        }
+        let path: Vec<u32> = self.stack[pos..].iter().map(|(id, _)| *id).collect();
+        self.frames.crossed.extend(path.iter().copied());
+        self.frames.paths.push(path);
+        if self.stack[pos].1 {
+            self.frames.wrapped.insert(*label);
+        }
+    }
+}
 
 /// State numbering for one function's flattened control flow.
 pub struct Plan {
@@ -54,6 +204,7 @@ impl Plan {
 /// Returns `None` when no branch is deep enough, so the function keeps its structured lowering untouched and pays nothing for the machinery.
 /// Also `None` for a function containing a `try_table`: its body must stay lexically inside the handler that guards it, so it cannot be split across states.
 pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<Plan> {
+    // `mark_ancestors` and `assign` below never look inside a `try_table`, which is sound only because this bail comes first.
     if contains_try_table(body) {
         return None;
     }
@@ -94,35 +245,8 @@ pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<P
     Some(plan)
 }
 
-/// Exhaustive on purpose: a future body-carrying `Stmt` variant must show up here as a compile error rather than silently stop the recursion, which would flatten a function whose `try_table` then captures a transition aimed at the dispatch loop.
 fn contains_try_table(stmts: &[Stmt]) -> bool {
-    stmts.iter().any(|stmt| match stmt {
-        Stmt::TryTable { .. } => true,
-        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => contains_try_table(body),
-        Stmt::If { then, els, .. } => contains_try_table(then) || contains_try_table(els),
-        Stmt::SourceLine(_)
-        | Stmt::Assign { .. }
-        | Stmt::LocalSet { .. }
-        | Stmt::GlobalSet { .. }
-        | Stmt::Store { .. }
-        | Stmt::Br(_)
-        | Stmt::BrIf { .. }
-        | Stmt::BrTable { .. }
-        | Stmt::Return { .. }
-        | Stmt::Call { .. }
-        | Stmt::CallIndirect { .. }
-        | Stmt::MemoryGrow { .. }
-        | Stmt::MemoryCopy { .. }
-        | Stmt::MemoryFill { .. }
-        | Stmt::MemoryInit { .. }
-        | Stmt::DataDrop { .. }
-        | Stmt::TableInit { .. }
-        | Stmt::TableCopy { .. }
-        | Stmt::ElemDrop { .. }
-        | Stmt::Throw { .. }
-        | Stmt::ThrowRef { .. }
-        | Stmt::Unreachable => false,
-    })
+    Stmt::any(stmts, &mut |stmt| matches!(stmt, Stmt::TryTable { .. }))
 }
 
 /// Add any frame that contains a dissolved frame.

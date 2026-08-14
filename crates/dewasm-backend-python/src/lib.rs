@@ -464,76 +464,6 @@ fn temp(t: Temp) -> String {
     format!("s{}", t.depth)
 }
 
-/// One entry per outward `br`: the inclusive frame path it crosses, target first, its own innermost frame last.
-/// This is [`flat`]'s only input beyond the body: a branch is weighed by how many frames it crosses, and dissolving any of them forces the rest.
-///
-/// Walking with a stack of the open capturing frames, a `br` to target `T` at stack position `pos` is either a self-branch (`pos` is the top, the branch leaves its own innermost frame and crosses nothing) or an outward branch, which traverses `stack[pos..]`: the target, every pass-through frame, and the innermost frame it starts in.
-/// A `Block` and a `Loop` always capture; an `If` only when `referenced`, since an unreferenced one emits no landing marker and is not a frame anything can name.
-/// A plain `if`, `br_if`'s wrapper `if` and `br_table`'s `if`/`elif` chain never capture, so they are not on the stack.
-fn compute_frame_paths(body: &[Stmt]) -> Vec<Vec<u32>> {
-    let mut paths = Vec::new();
-    let mut stack: Vec<u32> = Vec::new();
-    walk_frame_paths(body, &mut stack, &mut paths);
-    paths
-}
-
-fn walk_frame_paths(stmts: &[Stmt], stack: &mut Vec<u32>, paths: &mut Vec<Vec<u32>>) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Block { label, body } | Stmt::Loop { label, body } => {
-                stack.push(label.id);
-                walk_frame_paths(body, stack, paths);
-                stack.pop();
-            }
-            Stmt::If {
-                label, then, els, ..
-            } => {
-                if label.referenced {
-                    stack.push(label.id);
-                }
-                walk_frame_paths(then, stack, paths);
-                walk_frame_paths(els, stack, paths);
-                if label.referenced {
-                    stack.pop();
-                }
-            }
-            // A catch clause's branch is emitted in the handler, inside the try_table's own scope, so it crosses that frame like a branch from the body would; `flat::plan` never dissolves a function holding one, so this is inert today, kept only so the walk stays a faithful description of every frame a branch can cross.
-            Stmt::TryTable {
-                label,
-                catches,
-                body,
-            } => {
-                stack.push(label.id);
-                walk_frame_paths(body, stack, paths);
-                for clause in catches {
-                    record_path(&clause.target, stack, paths);
-                }
-                stack.pop();
-            }
-            Stmt::Br(target) | Stmt::BrIf { target, .. } => record_path(target, stack, paths),
-            Stmt::BrTable {
-                targets, default, ..
-            } => {
-                for target in targets {
-                    record_path(target, stack, paths);
-                }
-                record_path(default, stack, paths);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn record_path(target: &BrTarget, stack: &[u32], paths: &mut Vec<Vec<u32>>) {
-    if let BrTarget::Label { label, .. } = target {
-        if let Some(pos) = stack.iter().position(|id| id == label) {
-            if pos + 1 < stack.len() {
-                paths.push(stack[pos..].to_vec());
-            }
-        }
-    }
-}
-
 fn default_value(ty: ValType) -> &'static str {
     dewasm_backend::default_value(ty, "None")
 }
@@ -1021,7 +951,7 @@ impl<'a> Gen<'a> {
         }
         *self.flat.borrow_mut() = flat::plan(
             &func.body,
-            &compute_frame_paths(&func.body),
+            &flat::frames(&func.body, flat::BreakToBlockEnd::Unavailable).paths,
             flat::DEEP_CROSSING,
         );
         // The branch register is declared only when the cascade can actually use it: a branch to a frame that survives the plan still relays through `_br`, one addressed by state never does, and a function with no label branch at all never reads it either.
@@ -1288,6 +1218,7 @@ impl<'a> Gen<'a> {
                     escapes
                 }
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
+                // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
                 _ => {
                     if let Some(line) = self.fused_call_line(stmt, stmts.get(i + 1)) {
                         w.line(line);
@@ -1653,30 +1584,21 @@ impl<'a> Gen<'a> {
 
     /// Whether `stmts` holds a branch that still travels through `_br`, i.e. whether the function needs the branch register at all.
     /// A label branch the plan addresses by state never touches it, and neither does a `return`.
+    /// Only a statement that names a branch target needs an arm below; the traversal reaches the rest.
     fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
-        stmts.iter().any(|s| self.stmt_has_relay_branch(s))
-    }
-
-    fn stmt_has_relay_branch(&self, stmt: &Stmt) -> bool {
         let relays = |t: &BrTarget| match t {
             BrTarget::Return { .. } => false,
             BrTarget::Label { label, .. } => self.state_of(*label).is_none(),
         };
-        match stmt {
+        Stmt::any(stmts, &mut |stmt| match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => relays(t),
             Stmt::BrTable {
                 targets, default, ..
             } => relays(default) || targets.iter().any(relays),
-            Stmt::Block { body, .. } | Stmt::Loop { body, .. } => self.seq_has_relay_branch(body),
-            Stmt::If { then, els, .. } => {
-                self.seq_has_relay_branch(then) || self.seq_has_relay_branch(els)
-            }
             // A catch clause's own branch relays through `_br` too (`catch_clause` calls the same `branch()`), even when the body underneath never does.
-            Stmt::TryTable { catches, body, .. } => {
-                self.seq_has_relay_branch(body) || catches.iter().any(|c| relays(&c.target))
-            }
+            Stmt::TryTable { catches, .. } => catches.iter().any(|c| relays(&c.target)),
             _ => false,
-        }
+        })
     }
 
     /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any.
@@ -1976,7 +1898,7 @@ fn stmt_emits(stmt: &Stmt) -> bool {
         Stmt::Block { label, body } | Stmt::Loop { label, body } => {
             label.referenced || body.iter().any(stmt_emits)
         }
-        // An `if` always emits its header (an empty `then` arm becomes `pass`).
+        // Everything else emits unconditionally (an `if` emits its header, with an empty `then` arm becoming `pass`), so only a construct that can lower to nothing needs an arm above.
         _ => true,
     }
 }
