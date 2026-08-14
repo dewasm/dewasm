@@ -17,9 +17,10 @@ use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
-/// Identical in shape to the Ruby/Python lists: the only open gap is `import-limits`: `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// Identical in shape to the Ruby/Python lists: the only open gap is `import-limits`: `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature, a tag's parameter types), so the `assert_unlinkable` cases that test those, plus the `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
+/// `imports.wast` contributes 59 of them (28 before tags were represented): its fixture module exports tags, so it only converts now, and every type-mismatch check downstream of it became reachable at once; same mechanism as Ruby's, no new gap.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
@@ -48,9 +49,14 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
         EXPECTED_FAILURES
     }
 
-    /// Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so, like Python and Bash, a plain `cargo test` runs only the shared curated list.
+    /// Perl executes wasm in the same interpreter-speed class as Python (per-file `perl` startup plus a pure-perl numeric runtime), so, like Python and Bash, a plain `cargo test` runs only the shared curated list, plus the exception-handling files (small, and otherwise only covered under `slow_test`).
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(dewasm_test_helper::CURATED_SPEC_FILES)
+        Some(dewasm_test_helper::curated_with(&[
+            "try_table",
+            "throw",
+            "throw_ref",
+            "tag",
+        ]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -58,6 +64,8 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
             "rt/trap",
             // check_unlinkable references Rt::LinkError even when the converted modules themselves don't.
             "rt/link_error",
+            // Same for check_exception and Rt::WasmException.
+            "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
@@ -176,6 +184,20 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
             "check_exhaust({}, sub {{ {call}; }});",
             perl_string(desc)
         );
+    }
+
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = writeln!(
+            script,
+            "check_exception({}, sub {{ {call}; }});",
+            perl_string(desc)
+        );
+        Ok(())
     }
 
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
@@ -354,6 +376,27 @@ sub check_exhaust {
     }
     $fail++;
     print "FAIL(no exhaustion): $desc\n";
+}
+
+# A wasm exception must reach the host uncaught. Rt::Trap is a separate
+# class on purpose, so a trap here is a failure, not a pass.
+sub check_exception {
+    my ($desc, $thunk) = @_;
+    my $done = eval { $thunk->(); 1 };
+    if ($done) {
+        $fail++;
+        print "FAIL(no exception): $desc\n";
+        return;
+    }
+    my $e = $@;
+    if (ref($e) && $e->isa('Rt::WasmException')) {
+        $pass++;
+    }
+    else {
+        $e =~ s/\n+$// unless ref($e);
+        $fail++;
+        print "FAIL(error '$e', want a wasm exception): $desc\n";
+    }
 }
 
 # Upstream's assert_unlinkable message text never matches ours; a raised

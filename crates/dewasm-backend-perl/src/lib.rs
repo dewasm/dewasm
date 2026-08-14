@@ -23,7 +23,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
+    UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -158,6 +159,7 @@ fn generate_package_inner(
         data_file: data_file.map(str::to_string),
         data_offsets,
         rt_name,
+        eval_barriers: RefCell::new(Vec::new()),
     };
     let mut wb = CodeWriter::new("\t");
     gen.package(&mut wb, package_name);
@@ -213,6 +215,8 @@ impl Backend for PerlBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects (reference equality via `==` on a blessed hashref), a thrown exception is a blessed `WasmException` that doubles as the exnref, and traps stay uncatchable: see `emit_try_table`.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -401,8 +405,8 @@ fn default_value(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 | ValType::I64 => "0",
         ValType::F32 | ValType::F64 => "0.0",
-        ValType::FuncRef => "undef",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        // A null reference, funcref or exnref alike, is perl's own `undef`.
+        ValType::FuncRef | ValType::ExnRef => "undef",
     }
 }
 
@@ -415,7 +419,39 @@ fn val_name(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "funcref",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => "exnref",
+    }
+}
+
+/// What a `try_table`'s outer dispatch (`emit_try_table`) does for one outcome: a pure control transfer, never an expression render.
+/// A deferred escape's operands (a `Label`'s `assigns`, a `Return`'s values) are always written at the point it originates, before it ever crosses an `eval` (`materialize_escape`, called from `branch` and from `emit_classify`); by the time an `Escape` is sitting in a `try_table`'s outcome table, there is nothing left to compute, only somewhere left to go.
+#[derive(Clone, Copy)]
+enum Escape {
+    /// `last`/`next` on `label`'s own frame; its `assigns` (if any) are already applied.
+    Label { label: u32, is_loop: bool },
+    /// `return` of the function's own result arity; the values are already sitting in `$__tt_ret0..$__tt_ret{count - 1}`.
+    Return { count: usize },
+}
+
+impl Escape {
+    fn of(target: &BrTarget) -> Self {
+        match target {
+            BrTarget::Return { values } => Escape::Return {
+                count: values.len(),
+            },
+            BrTarget::Label { label, is_loop, .. } => Escape::Label {
+                label: *label,
+                is_loop: *is_loop,
+            },
+        }
+    }
+
+    /// The label a `cross_eval_barrier` check compares against: `None` for `Return`, which always leaves every open `try_table` no matter which frame emitted it.
+    fn target_label(&self) -> Option<u32> {
+        match self {
+            Escape::Return { .. } => None,
+            Escape::Label { label, .. } => Some(*label),
+        }
     }
 }
 
@@ -429,6 +465,8 @@ struct Gen<'a> {
     data_offsets: Vec<usize>,
     /// The runtime's package name as generated code spells it: `Rt` under `Alias` linkage, `<Package>::Rt` under `Embedded`.
     rt_name: String,
+    /// Stack of currently open `try_table` `eval` barriers, innermost last: see `branch`, `cross_eval_barrier`, and `emit_try_table`.
+    eval_barriers: RefCell<Vec<(u32, RefCell<Vec<Escape>>)>>,
 }
 
 impl<'a> Gen<'a> {
@@ -493,15 +531,14 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let mut global_exports: Vec<(String, u32)> = Vec::new();
         let mut table_exports: Vec<(String, u32)> = Vec::new();
+        let mut tag_exports: Vec<(String, u32)> = Vec::new();
         let mut memory_export_names: Vec<String> = Vec::new();
         for export in &m.exports {
             match export.kind {
                 ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
                 ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
+                ExportKind::Tag(idx) => tag_exports.push((export.name.clone(), idx)),
                 ExportKind::Memory => memory_export_names.push(export.name.clone()),
-                ExportKind::Tag(_) => {
-                    unreachable!("exception handling is refused by check_module_support")
-                }
                 ExportKind::Func(_) => {}
             }
         }
@@ -525,6 +562,10 @@ impl<'a> Gen<'a> {
         w.line(format!(
             "our %TABLE_EXPORTS = ({});",
             entries(&table_exports, "t")
+        ));
+        w.line(format!(
+            "our %TAG_EXPORTS = ({});",
+            entries(&tag_exports, "tag")
         ));
         let mem_set = memory_export_names
             .iter()
@@ -637,6 +678,22 @@ impl<'a> Gen<'a> {
                 "$self->{{g{idx}}} = {}->new({});",
                 self.rt_class("global", "Global"),
                 self.expr(&global.init)
+            ));
+        }
+
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            w.line(format!(
+                "$self->{{tag{i}}} = {} // $self->_missing({}, {});",
+                self.resolve_import_string("tag", &import.module, &import.name),
+                perl_string(&import.module),
+                perl_string(&import.name),
+            ));
+        }
+        for i in 0..m.tags.len() {
+            w.line(format!(
+                "$self->{{tag{}}} = {}();",
+                m.imported_tags.len() + i,
+                self.rt("tag")
             ));
         }
 
@@ -758,6 +815,13 @@ impl<'a> Gen<'a> {
         w.dedent();
         w.line("}");
         w.line("");
+        w.line("sub tag_export {");
+        w.indent();
+        w.line("my ($self, $name) = @_;");
+        w.line("return $self->{$TAG_EXPORTS{$name}};");
+        w.dedent();
+        w.line("}");
+        w.line("");
         // Provider protocol: an instance is itself a valid import value.
         w.line("sub wasm_import {");
         w.indent();
@@ -765,6 +829,7 @@ impl<'a> Gen<'a> {
         w.line("return $self->{exports}{$name} if exists $self->{exports}{$name};");
         w.line("return $self->{$GLOBAL_EXPORTS{$name}} if exists $GLOBAL_EXPORTS{$name};");
         w.line("return $self->{$TABLE_EXPORTS{$name}} if exists $TABLE_EXPORTS{$name};");
+        w.line("return $self->{$TAG_EXPORTS{$name}} if exists $TAG_EXPORTS{$name};");
         w.line("return $self->{memory} if exists $MEMORY_EXPORTS{$name};");
         w.line("return undef;");
         w.dedent();
@@ -883,6 +948,17 @@ impl<'a> Gen<'a> {
         if seq_has_br_table(&func.body) {
             w.line("my $_bt = 0;");
         }
+        // A `return` (or a branch to the function frame) that must cross a try_table's `eval` writes its values here first (`materialize_escape`), one set shared by every try_table in the function: at most one escape is ever in flight, and it only ever heads to this same final `return`, however many `eval`s it has to leave along the way.
+        if !ty.results.is_empty() && seq_has_try_table(&func.body) {
+            let names: Vec<String> = (0..ty.results.len())
+                .map(|i| format!("$__tt_ret{i}"))
+                .collect();
+            let decl = match names.as_slice() {
+                [one] => one.clone(),
+                many => format!("({})", many.join(", ")),
+            };
+            w.line(format!("my {decl};"));
+        }
         self.emit_seq(w, &func.body);
         w.line("return;");
         w.dedent();
@@ -942,6 +1018,22 @@ impl<'a> Gen<'a> {
                         w.dedent();
                         w.line("}");
                     }
+                    if label.referenced {
+                        w.dedent();
+                        w.line("}");
+                    }
+                }
+                Stmt::TryTable {
+                    label,
+                    catches,
+                    body,
+                } => {
+                    // Labeled only when something inside `body` targets the try_table's own frame directly (a `br`/`br_if`/`br_table` at relative depth 0, legal wasm, landing exactly where the try_table's own fallthrough would): everything else reaches "just past the try_table" through the outcome dispatch in `emit_try_table` without ever needing this label.
+                    if label.referenced {
+                        w.line(format!("L{}: {{", label.id));
+                        w.indent();
+                    }
+                    self.emit_try_table(w, label.id, catches, body);
                     if label.referenced {
                         w.dedent();
                         w.line("}");
@@ -1007,7 +1099,13 @@ impl<'a> Gen<'a> {
                 w.dedent();
                 w.line("}");
             }
-            Stmt::Return { values } => self.return_stmt(w, values),
+            // Routed through `branch`, not emitted as a bare `return` here: wasm's `return` and the function's own trailing fallthrough are both, semantically, "branch to the function frame", and a bare perl `return` only exits an enclosing `eval`, not the sub, so one written directly here would silently misbehave inside a try_table's body.
+            Stmt::Return { values } => self.branch(
+                w,
+                &BrTarget::Return {
+                    values: values.clone(),
+                },
+            ),
             Stmt::Call {
                 func,
                 args,
@@ -1071,9 +1169,16 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
             }
-            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling is refused by check_module_support")
+            Stmt::Throw { tag, args } => {
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(format!(
+                    "{}($self->{{tag{tag}}}, [{}]);",
+                    self.rt("wasm_exception"),
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({});", self.rt("throw_ref"), self.expr(exn)));
             }
             Stmt::SourceLine(pos) => {
                 let file = &self.module.debug_files[pos.file as usize];
@@ -1112,7 +1217,7 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("$self->{{elem{seg}}} = [];"));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::TryTable { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
         }
@@ -1135,7 +1240,18 @@ impl<'a> Gen<'a> {
 
     /// A branch is a direct `last`/`next` on the target frame's label: `last Ln` exits a block/if frame, `next Ln` re-enters a loop head.
     /// Branch operands travel through the frame's result temps via `assigns` first (self-assignments already filtered by the IR builder).
+    ///
+    /// The one case that is not a direct `last`/`next`: a target that lies on the far side of an open `try_table`'s `eval` (see `cross_eval_barrier`).
+    /// perl's `last`/`next` cannot reliably cross an `eval BLOCK` (the "Exiting eval via last" behavior is deprecated), and neither can a bare `return` (it returns from the `eval` alone, silently, leaving the enclosing sub still running), so such a branch instead writes its own operands right here (`materialize_escape`, still inside the `eval`) and sets an outcome variable; `emit_try_table`'s own dispatch, emitted one syntactic level further out, is what eventually performs the control transfer, one barrier at a time.
     fn branch(&self, w: &mut CodeWriter, target: &BrTarget) {
+        let escape = Escape::of(target);
+        if let Some((barrier_id, code)) = self.cross_eval_barrier(&escape) {
+            self.materialize_escape(w, target);
+            w.line(format!(
+                "$__tt_out{barrier_id} = {code}; last TTBODY{barrier_id};"
+            ));
+            return;
+        }
         match target {
             BrTarget::Return { values } => self.return_stmt(w, values),
             BrTarget::Label {
@@ -1150,6 +1266,174 @@ impl<'a> Gen<'a> {
                 w.line(format!("{kw} L{label};"));
             }
         }
+    }
+
+    /// Write a deferred escape's operands before it crosses its first `eval` boundary: a `Label` target's `assigns` (already-materialized temps, so this is the same write `branch`'s direct case makes, only timed earlier), or a `Return` target's values into the function-scoped `$__tt_retN` lexicals (`function`'s declaration, `Escape::Return`).
+    /// This runs exactly once per escape, at the point it originates (`branch`, or `emit_classify` for a matched catch clause): everywhere an `Escape` travels afterwards, crossing further barriers on its way out, is a plain control transfer over these already-written lexicals, never a second render of the original expression.
+    fn materialize_escape(&self, w: &mut CodeWriter, target: &BrTarget) {
+        match target {
+            BrTarget::Label { assigns, .. } => {
+                for (dst, src) in assigns {
+                    w.line(format!("{} = {};", temp(*dst), temp(*src)));
+                }
+            }
+            BrTarget::Return { values } => {
+                for (i, v) in values.iter().enumerate() {
+                    w.line(format!("$__tt_ret{i} = {};", self.expr(v)));
+                }
+            }
+        }
+    }
+
+    /// Perform an already-materialized `Escape`: either the control transfer itself, or (if yet another `try_table` still encloses this point) one more deferral, exactly like `branch`'s but with nothing left to write.
+    fn perform_escape(&self, w: &mut CodeWriter, escape: &Escape) {
+        if let Some((barrier_id, code)) = self.cross_eval_barrier(escape) {
+            w.line(format!(
+                "$__tt_out{barrier_id} = {code}; last TTBODY{barrier_id};"
+            ));
+            return;
+        }
+        match escape {
+            Escape::Return { count } => {
+                let names: Vec<String> = (0..*count).map(|i| format!("$__tt_ret{i}")).collect();
+                match names.as_slice() {
+                    [] => w.line("return;"),
+                    [one] => w.line(format!("return {one};")),
+                    many => w.line(format!("return ({});", many.join(", "))),
+                }
+            }
+            Escape::Label { label, is_loop } => {
+                let kw = if *is_loop { "next" } else { "last" };
+                w.line(format!("{kw} L{label};"));
+            }
+        }
+    }
+
+    /// Whether reaching `escape` requires leaving the innermost currently open `try_table`'s `eval`; if so, register it in that try_table's outcome table and return its (barrier label id, 1-based outcome code).
+    ///
+    /// A branch's target is always either the frame it is emitted in or one of its ancestors (wasm's structured control flow admits nothing else), and frame label ids are assigned in strictly increasing frame-opening order, so a target opened no later than the barrier (its label id `<= barrier_id`) is the barrier's own frame or an ancestor of it: outside the `eval`.
+    /// A target opened after the barrier is inside its body: still reachable directly.
+    /// A `Return` (`Escape::target_label` is `None`) always crosses: the function frame is beyond every possible barrier.
+    fn cross_eval_barrier(&self, escape: &Escape) -> Option<(u32, usize)> {
+        let barriers = self.eval_barriers.borrow();
+        let (barrier_id, outcomes) = barriers.last()?;
+        let crosses = match escape.target_label() {
+            None => true,
+            Some(l) => l <= *barrier_id,
+        };
+        if !crosses {
+            return None;
+        }
+        let barrier_id = *barrier_id;
+        let code = {
+            let mut o = outcomes.borrow_mut();
+            o.push(*escape);
+            o.len()
+        };
+        Some((barrier_id, code))
+    }
+
+    /// Lower a `try_table`.
+    /// The body runs inside `eval`, wrapped once more in the labeled `TTBODY` block the outcome template names: a branch that must leave the body (`cross_eval_barrier`, reached through `branch`) sets the outcome variable and `last`s *that* label, never the `eval` itself, landing right before the reset to outcome 0 that marks ordinary completion.
+    /// `$@` is read into a lexical the instant `eval` fails, before anything else can clobber it, and classified by `emit_classify`; what happens for each possible outcome (falling off the body, a matched catch, or a branch that had to leave) is decided once, afterwards, by dispatching on that outcome.
+    fn emit_try_table(&self, w: &mut CodeWriter, id: u32, catches: &[CatchClause], body: &[Stmt]) {
+        // catch_ref/catch's classification needs the exception class regardless of whether this try_table's own body ever constructs one itself (its tags may be caught from a throw anywhere the shared runtime reaches).
+        self.use_unit("rt/wasm_exception");
+
+        assert!(
+            !catches.is_empty(),
+            "a catchless try_table is folded to a Block by the IR builder"
+        );
+        // Catch targets are pre-seeded (codes 1..=catches.len(), in clause order) so a crossing branch found while emitting `body` continues the same table, numbered from catches.len() + 1.
+        let outcomes = RefCell::new(
+            catches
+                .iter()
+                .map(|c| Escape::of(&c.target))
+                .collect::<Vec<_>>(),
+        );
+        self.eval_barriers.borrow_mut().push((id, outcomes));
+
+        w.line(format!("my $__tt_out{id} = 0;"));
+        w.line("eval {");
+        w.indent();
+        w.line(format!("TTBODY{id}: {{"));
+        w.indent();
+        self.emit_seq(w, body);
+        w.line(format!("$__tt_out{id} = 0;"));
+        w.dedent();
+        w.line("}");
+        w.line("1;");
+        w.dedent();
+        w.line("} or do {");
+        w.indent();
+        w.line("my $__tt_e = $@;");
+        self.emit_classify(w, id, catches);
+        w.dedent();
+        w.line("};");
+
+        let (_, outcomes) = self
+            .eval_barriers
+            .borrow_mut()
+            .pop()
+            .expect("this try_table's own barrier, pushed above");
+        for (i, escape) in outcomes.into_inner().iter().enumerate() {
+            w.line(format!(
+                "{} ($__tt_out{id} == {}) {{",
+                if i == 0 { "if" } else { "} elsif" },
+                i + 1
+            ));
+            w.indent();
+            self.perform_escape(w, escape);
+            w.dedent();
+        }
+        w.line("}");
+    }
+
+    /// The `or do { ... }` classification step, run once `eval` has failed: `$__tt_e` is a lexical copy of `$@`, taken as the very first thing so nothing has a chance to clobber it first.
+    ///
+    /// A wasm exception is exactly a blessed `WasmException`; anything else (a trap, the exit object, or a native perl error) is re-`die`n so it keeps unwinding, which is what makes traps and the exit path structurally uncatchable here (`try_table` never tests for those classes at all).
+    /// Catch clauses are tried in order, first match wins: `Catch`/`CatchRef` compare the tag by reference identity (perl's `==` on a blessed hashref compares addresses), `CatchAll`/`CatchAllRef` match unconditionally.
+    /// A match writes its payload temps (the tag's values for a plain catch, the exception object itself for the trailing `_ref` slot) and the matching outcome code, but never branches directly: `emit_try_table`'s own dispatch does that uniformly for every outcome, catches and crossing branches alike, once this function returns.
+    /// A wasm exception that no clause here claims is re-`die`n too, exactly like a trap: it keeps unwinding.
+    fn emit_classify(&self, w: &mut CodeWriter, id: u32, catches: &[CatchClause]) {
+        w.line(format!(
+            "if (ref($__tt_e) && $__tt_e->isa('{}::WasmException')) {{",
+            self.rt_name
+        ));
+        w.indent();
+        for (i, clause) in catches.iter().enumerate() {
+            let cond = match clause.tag {
+                Some(tag) => format!("$__tt_e->{{tag}} == $self->{{tag{tag}}}"),
+                None => "1".to_string(),
+            };
+            w.line(format!(
+                "{} ({cond}) {{",
+                if i == 0 { "if" } else { "} elsif" }
+            ));
+            w.indent();
+            for (vi, t) in clause.value_temps.iter().enumerate() {
+                if Some(*t) == clause.exn_temp {
+                    w.line(format!("{} = $__tt_e;", temp(*t)));
+                } else {
+                    w.line(format!("{} = $__tt_e->{{values}}[{vi}];", temp(*t)));
+                }
+            }
+            // A catch clause's target never carries `assigns` (the payload already landed directly above), so this only ever does real work for a `catch $tag 0`-style clause whose target is the function frame: it copies the just-written value_temps into `$__tt_retN`.
+            self.materialize_escape(w, &clause.target);
+            w.line(format!("$__tt_out{id} = {};", i + 1));
+            w.dedent();
+        }
+        w.line("} else {");
+        w.indent();
+        w.line("die $__tt_e;");
+        w.dedent();
+        w.line("}");
+        w.dedent();
+        w.line("} else {");
+        w.indent();
+        w.line("die $__tt_e;");
+        w.dedent();
+        w.line("}");
     }
 
     /// Reference a Memory method, recording its unit.
@@ -1387,6 +1671,17 @@ fn seq_has_br_table(stmts: &[Stmt]) -> bool {
         Stmt::BrTable { .. } => true,
         Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_has_br_table(body),
         Stmt::If { then, els, .. } => seq_has_br_table(then) || seq_has_br_table(els),
+        Stmt::TryTable { body, .. } => seq_has_br_table(body),
+        _ => false,
+    })
+}
+
+/// Whether `stmts` contains a `try_table` (which needs the function-scoped `$__tt_retN` escape lexicals declared: see `Escape::Return` and `materialize_escape`).
+fn seq_has_try_table(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(|stmt| match stmt {
+        Stmt::TryTable { .. } => true,
+        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => seq_has_try_table(body),
+        Stmt::If { then, els, .. } => seq_has_try_table(then) || seq_has_try_table(els),
         _ => false,
     })
 }
@@ -1567,6 +1862,8 @@ mod units {
                         "Trap" => "rt/trap".to_string(),
                         "Exit" => "rt/exit".to_string(),
                         "LinkError" => "rt/link_error".to_string(),
+                        "Tag" => "rt/tag".to_string(),
+                        "WasmException" => "rt/wasm_exception".to_string(),
                         "Memory" => "memory/_package".to_string(),
                         "Table" => "table/_package".to_string(),
                         "Global" => "global/_package".to_string(),
