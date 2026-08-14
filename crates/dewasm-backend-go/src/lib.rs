@@ -495,6 +495,7 @@ fn go_type(ty: ValType) -> &'static str {
         ValType::F32 => "float32",
         ValType::F64 => "float64",
         ValType::FuncRef => "*funcref",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -510,6 +511,7 @@ fn ty_suffix(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "fr",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -870,6 +872,9 @@ impl<'a> Gen<'a> {
                 ExportKind::Global(idx) => format!("p.g{idx}"),
                 ExportKind::Table(idx) => format!("p.t{idx}"),
                 ExportKind::Memory => "p.memory".to_string(),
+                ExportKind::Tag(_) => {
+                    unreachable!("exception handling is refused by check_module_support")
+                }
             };
             export_entries.push(format!("{}: {}", go_string(&export.name), val));
         }
@@ -1387,6 +1392,10 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
+            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
+            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+                unreachable!("exception handling is refused by check_module_support")
+            }
             Stmt::TableInit {
                 seg,
                 table_index,
@@ -1747,6 +1756,10 @@ fn collect_reads_stmt(
             e(dst, read_locals, used_locals, read_temps);
             e(src, read_locals, used_locals, read_temps);
             e(len, read_locals, used_locals, read_temps);
+        }
+        // Refused at conversion time (see `check_module_support`).
+        Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+            unreachable!("exception handling is refused by check_module_support")
         }
         Stmt::DataDrop { .. } | Stmt::ElemDrop { .. } | Stmt::Unreachable | Stmt::SourceLine(_) => {
         }

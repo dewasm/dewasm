@@ -347,6 +347,7 @@ fn val_name(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "funcref",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -1068,6 +1069,10 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 self.use_unit("rt/trap");
                 w.line(format!("{} 'unreachable' || return $?", self.rt("rt_trap")));
+            }
+            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
+            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+                unreachable!("exception handling is refused by check_module_support")
             }
             // REASON: DWARF source-line back-mapping is out of scope for Bash; the marker renders nothing, keeping output identical to a non-`--dwarf-line` build.
             Stmt::SourceLine(_) => {}

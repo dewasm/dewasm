@@ -32,7 +32,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp,
+    ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -232,6 +233,8 @@ impl Backend for RubyBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects, a thrown exception is a native Ruby exception that doubles as the exnref, and traps stay uncatchable.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -491,6 +494,19 @@ fn walk_frame_sets(
                     stack.pop();
                 }
             }
+            Stmt::TryTable {
+                label,
+                catches,
+                body,
+            } => {
+                stack.push((label.id, false));
+                walk_frame_sets(body, true, stack, sets);
+                // A catch clause's branch is emitted in the handler, inside the try_table's own scope, so it crosses that frame like a branch from the body would.
+                for clause in catches {
+                    record_target(&clause.target, stack, sets);
+                }
+                stack.pop();
+            }
             Stmt::Br(target) => record_target(target, stack, sets),
             Stmt::BrIf { target, .. } => record_target(target, stack, sets),
             Stmt::BrTable {
@@ -669,11 +685,16 @@ impl<'a> Gen<'a> {
             w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
         });
         w.line("");
+        w.block("def tag_export(name)", "end", |w| {
+            w.line("instance_variable_get(TAG_EXPORTS.fetch(name))");
+        });
+        w.line("");
         // Provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace, the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
         w.block("def import(name)", "end", |w| {
             w.line("return @exports[name] if @exports.key?(name)");
             w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
             w.line("return table_export(name) if TABLE_EXPORTS.key?(name)");
+            w.line("return tag_export(name) if TAG_EXPORTS.key?(name)");
             w.line("return @m if MEMORY_EXPORTS.include?(name)");
             w.line("nil");
         });
@@ -691,11 +712,13 @@ impl<'a> Gen<'a> {
 
         let mut global_exports: Vec<(String, u32)> = Vec::new();
         let mut table_exports: Vec<(String, u32)> = Vec::new();
+        let mut tag_exports: Vec<(String, u32)> = Vec::new();
         let mut memory_export_names: Vec<String> = Vec::new();
         for export in &m.exports {
             match export.kind {
                 ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
                 ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
+                ExportKind::Tag(idx) => tag_exports.push((export.name.clone(), idx)),
                 ExportKind::Memory => memory_export_names.push(export.name.clone()),
                 ExportKind::Func(_) => {}
             }
@@ -712,6 +735,12 @@ impl<'a> Gen<'a> {
             .collect::<Vec<_>>()
             .join(", ");
         w.line(format!("TABLE_EXPORTS = {{ {table_entries} }}.freeze"));
+        let tag_entries = tag_exports
+            .iter()
+            .map(|(name, idx)| format!("{} => :@tag{}", ruby_string(name), idx))
+            .collect::<Vec<_>>()
+            .join(", ");
+        w.line(format!("TAG_EXPORTS = {{ {tag_entries} }}.freeze"));
         let memory_entries = memory_export_names
             .iter()
             .map(|name| ruby_string(name))
@@ -809,6 +838,17 @@ impl<'a> Gen<'a> {
                 } else {
                     w.line(format!("@g{idx} = {init}"));
                 }
+            }
+            for (i, import) in m.imported_tags.iter().enumerate() {
+                w.line(format!(
+                    "@tag{i} = {} || {}",
+                    self.resolve_import_string("tag", &import.module, &import.name),
+                    self.missing_import_string(&import.module, &import.name),
+                ));
+            }
+            for i in 0..m.tags.len() {
+                self.use_unit("rt/tag");
+                w.line(format!("@tag{} = Rt::Tag.new", m.imported_tags.len() + i));
             }
             for (i, elem) in m.elems.iter().enumerate() {
                 // Built lazily: Declared segments emit an empty array and never need the rendered items.
@@ -1316,6 +1356,48 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("@elem{seg} = []"));
             }
+            Stmt::TryTable {
+                label,
+                catches,
+                body,
+            } => {
+                self.use_unit("rt/wasm_exception");
+                let crossed = self.is_crossed(label.id);
+                self.frame_stack.borrow_mut().push(label.id);
+                // The same `begin ... end while false` frame a `Stmt::Block` gets, so a branch out of it is the same `break`; only the handler is added.
+                w.line("begin");
+                w.indent();
+                if body.is_empty() {
+                    w.line("nil");
+                } else {
+                    self.stmts(w, body);
+                }
+                w.dedent();
+                w.line("rescue Rt::WasmException => __e");
+                w.indent();
+                for clause in catches {
+                    self.catch_clause(w, clause);
+                }
+                // No clause matched: the exception keeps unwinding.
+                w.line("raise");
+                w.dedent();
+                w.line("end while false");
+                if crossed {
+                    self.emit_land_or_relay(w, label.id);
+                }
+                self.frame_stack.borrow_mut().pop();
+            }
+            Stmt::Throw { tag, args } => {
+                self.use_unit("rt/wasm_exception");
+                let args: Vec<String> = args.iter().map(|a| self.expr_text(a)).collect();
+                w.line(format!(
+                    "raise Rt::WasmException.new(@tag{tag}, [{}])",
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({})", self.rt("throw_ref"), self.expr_text(exn)));
+            }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
@@ -1323,6 +1405,29 @@ impl<'a> Gen<'a> {
                 let file = &self.module.debug_files[pos.file as usize];
                 w.line(format!("# {file}:{}", pos.line));
             }
+        }
+    }
+
+    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
+    /// A tagged clause guards that with `equal?`, wasm tag equality being object identity; a catch-all runs unconditionally, so any clause after it is dead.
+    fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause) {
+        let bind_and_branch = |w: &mut CodeWriter| {
+            for (i, t) in clause.value_temps.iter().enumerate() {
+                if Some(*t) == clause.exn_temp {
+                    w.line(format!("{} = __e", temp(*t)));
+                } else {
+                    w.line(format!("{} = __e.values[{i}]", temp(*t)));
+                }
+            }
+            self.branch(w, &clause.target);
+        };
+        match clause.tag {
+            Some(tag) => w.block(
+                format!("if __e.tag.equal?(@tag{tag})"),
+                "end",
+                bind_and_branch,
+            ),
+            None => bind_and_branch(w),
         }
     }
 
@@ -1799,7 +1904,7 @@ fn default_value(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 | ValType::I64 => "0",
         ValType::F32 | ValType::F64 => "0.0",
-        ValType::FuncRef => "nil",
+        ValType::FuncRef | ValType::ExnRef => "nil",
     }
 }
 
@@ -1812,6 +1917,7 @@ fn val_name(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "funcref",
+        ValType::ExnRef => "exnref",
     }
 }
 

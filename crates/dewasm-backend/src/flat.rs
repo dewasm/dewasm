@@ -52,7 +52,11 @@ impl Plan {
 /// `deep_crossing` is the crossing depth from which a branch is worth a dispatch: the backend's own calibration, since it weighs that backend's relay against that backend's dispatch shape.
 ///
 /// Returns `None` when no branch is deep enough, so the function keeps its structured lowering untouched and pays nothing for the machinery.
+/// Also `None` for a function containing a `try_table`: its body must stay lexically inside the handler that guards it, so it cannot be split across states.
 pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<Plan> {
+    if contains_try_table(body) {
+        return None;
+    }
     let mut dissolved: HashSet<u32> = paths
         .iter()
         .filter(|p| p.len() >= deep_crossing)
@@ -88,6 +92,37 @@ pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<P
     };
     assign(body, &mut plan);
     Some(plan)
+}
+
+/// Exhaustive on purpose: a future body-carrying `Stmt` variant must show up here as a compile error rather than silently stop the recursion, which would flatten a function whose `try_table` then captures a transition aimed at the dispatch loop.
+fn contains_try_table(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(|stmt| match stmt {
+        Stmt::TryTable { .. } => true,
+        Stmt::Block { body, .. } | Stmt::Loop { body, .. } => contains_try_table(body),
+        Stmt::If { then, els, .. } => contains_try_table(then) || contains_try_table(els),
+        Stmt::SourceLine(_)
+        | Stmt::Assign { .. }
+        | Stmt::LocalSet { .. }
+        | Stmt::GlobalSet { .. }
+        | Stmt::Store { .. }
+        | Stmt::Br(_)
+        | Stmt::BrIf { .. }
+        | Stmt::BrTable { .. }
+        | Stmt::Return { .. }
+        | Stmt::Call { .. }
+        | Stmt::CallIndirect { .. }
+        | Stmt::MemoryGrow { .. }
+        | Stmt::MemoryCopy { .. }
+        | Stmt::MemoryFill { .. }
+        | Stmt::MemoryInit { .. }
+        | Stmt::DataDrop { .. }
+        | Stmt::TableInit { .. }
+        | Stmt::TableCopy { .. }
+        | Stmt::ElemDrop { .. }
+        | Stmt::Throw { .. }
+        | Stmt::ThrowRef { .. }
+        | Stmt::Unreachable => false,
+    })
 }
 
 /// Add any frame that contains a dissolved frame.

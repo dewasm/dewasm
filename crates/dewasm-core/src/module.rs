@@ -26,8 +26,9 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory).
+/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory) plus exception handling.
 /// The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit, but every actual reference-types construct is rejected during IR building.
+/// `LEGACY_EXCEPTIONS` stays off: the retired `try`/`catch`/`rethrow`/`delegate` encoding is refused at validation, so only the `try_table` design reaches the IR.
 /// Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
 pub fn features() -> WasmFeatures {
     WasmFeatures::WASM1
@@ -36,6 +37,7 @@ pub fn features() -> WasmFeatures {
         | WasmFeatures::MULTI_VALUE
         | WasmFeatures::BULK_MEMORY
         | WasmFeatures::REFERENCE_TYPES
+        | WasmFeatures::EXCEPTIONS
 }
 
 /// Whether `bytes` is a component-model binary (layer 1) rather than a core module (layer 0).
@@ -93,6 +95,8 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
         memory: None,
         imported_globals: Vec::new(),
         globals: Vec::new(),
+        imported_tags: Vec::new(),
+        tags: Vec::new(),
         exports: Vec::new(),
         elems: Vec::new(),
         datas: Vec::new(),
@@ -181,8 +185,12 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
                                     .context("table too large")?,
                             });
                         }
-                        TypeRef::Tag(_) => {
-                            return Err(unsupported(Feature::ExceptionHandling, detail))
+                        TypeRef::Tag(ty) => {
+                            module.imported_tags.push(ir::ImportedTag {
+                                module: import.module.to_string(),
+                                name: import.name.to_string(),
+                                type_idx: ty.func_type_idx,
+                            });
                         }
                         TypeRef::FuncExact(_) => {
                             return Err(unsupported(Feature::FunctionReferences, detail))
@@ -238,6 +246,13 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
                     });
                 }
             }
+            Payload::TagSection(reader) => {
+                for tag in reader {
+                    module.tags.push(ir::Tag {
+                        type_idx: tag?.func_type_idx,
+                    });
+                }
+            }
             Payload::ExportSection(reader) => {
                 for export in reader {
                     let export = export?;
@@ -246,12 +261,7 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
                         ExternalKind::Table => ir::ExportKind::Table(export.index),
                         ExternalKind::Memory => ir::ExportKind::Memory,
                         ExternalKind::Global => ir::ExportKind::Global(export.index),
-                        ExternalKind::Tag => {
-                            return Err(unsupported(
-                                Feature::ExceptionHandling,
-                                format!("tag export for {:?}", export.name),
-                            ))
-                        }
+                        ExternalKind::Tag => ir::ExportKind::Tag(export.index),
                         _ => {
                             return Err(unsupported(
                                 Feature::FunctionReferences,
@@ -375,7 +385,8 @@ fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
 }
 
 /// Map a wasm value type (as it appears in signatures, locals, globals, and block types) to the IR.
-/// Reference types are never legal as *value* types: funcref stays representable only via `table_elem_type` for a table's element typing; any reference type here is rejected.
+/// `exnref` is the one reference type legal here: `catch_ref` hands a caught exception to ordinary locals, temps, and block types.
+/// The reference-types hierarchies are not: funcref stays representable only via `table_elem_type` for a table's element typing.
 pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     Ok(match ty {
         wasmparser::ValType::I32 => ir::ValType::I32,
@@ -383,12 +394,11 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
         wasmparser::ValType::F32 => ir::ValType::F32,
         wasmparser::ValType::F64 => ir::ValType::F64,
         wasmparser::ValType::V128 => return Err(unsupported(Feature::Simd, "value type v128")),
+        wasmparser::ValType::Ref(r) if r == wasmparser::RefType::EXNREF => ir::ValType::ExnRef,
         wasmparser::ValType::Ref(r) => {
             let feature =
                 if r == wasmparser::RefType::FUNCREF || r == wasmparser::RefType::EXTERNREF {
                     Feature::ReferenceTypes
-                } else if r == wasmparser::RefType::EXNREF {
-                    Feature::ExceptionHandling
                 } else {
                     heap_type_feature(&r.heap_type())
                 };

@@ -125,7 +125,66 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         },
         "passive/declared element segment, ref.null element item, or table.init/copy/elem.drop",
     )?;
+    require(
+        Feature::ExceptionHandling,
+        &|| module_uses_exception_handling(module),
+        "tag, exnref value, or try_table/throw/throw_ref instruction",
+    )?;
     Ok(())
+}
+
+/// Whether the module contains any exception-handling construct: a tag (defined or imported, which every tag export implies), an exnref-typed value anywhere, or one of the proposal's instructions.
+/// Same exhaustiveness contract as [`stmts_use_table_bulk_ops`].
+fn module_uses_exception_handling(module: &ir::Module) -> bool {
+    let exn = |ty: &ir::ValType| *ty == ir::ValType::ExnRef;
+    !module.imported_tags.is_empty()
+        || !module.tags.is_empty()
+        || module
+            .types
+            .iter()
+            .any(|t| t.params.iter().any(exn) || t.results.iter().any(exn))
+        || module.imported_globals.iter().any(|g| exn(&g.ty))
+        || module.globals.iter().any(|g| exn(&g.ty))
+        || module.imported_tables.iter().any(|t| exn(&t.ty))
+        || module.tables.iter().any(|t| exn(&t.ty))
+        || module.funcs.iter().any(|f| {
+            f.locals.iter().any(exn)
+                || f.temps.iter().any(|t| exn(&t.ty))
+                || stmts_use_exception_handling(&f.body)
+        })
+}
+
+fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
+    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    stmts.iter().any(|stmt| match stmt {
+        ir::Stmt::TryTable { .. } | ir::Stmt::Throw { .. } | ir::Stmt::ThrowRef { .. } => true,
+        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
+            stmts_use_exception_handling(body)
+        }
+        ir::Stmt::If { then, els, .. } => {
+            stmts_use_exception_handling(then) || stmts_use_exception_handling(els)
+        }
+        ir::Stmt::SourceLine(_)
+        | ir::Stmt::Assign { .. }
+        | ir::Stmt::LocalSet { .. }
+        | ir::Stmt::GlobalSet { .. }
+        | ir::Stmt::Store { .. }
+        | ir::Stmt::Br(_)
+        | ir::Stmt::BrIf { .. }
+        | ir::Stmt::BrTable { .. }
+        | ir::Stmt::Return { .. }
+        | ir::Stmt::Call { .. }
+        | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::MemoryGrow { .. }
+        | ir::Stmt::MemoryCopy { .. }
+        | ir::Stmt::MemoryFill { .. }
+        | ir::Stmt::MemoryInit { .. }
+        | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableInit { .. }
+        | ir::Stmt::TableCopy { .. }
+        | ir::Stmt::ElemDrop { .. }
+        | ir::Stmt::Unreachable => false,
+    })
 }
 
 /// Reject a library-mode module name that does not fit `language`'s grammar.
@@ -340,9 +399,9 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     // Exhaustive on purpose: a future body-carrying Stmt variant must show up here as a compile error, not silently stop the recursion (which would let an Unsupported backend mis-lower instead of rejecting at conversion time).
     stmts.iter().any(|stmt| match stmt {
         ir::Stmt::TableInit { .. } | ir::Stmt::TableCopy { .. } | ir::Stmt::ElemDrop { .. } => true,
-        ir::Stmt::Block { body, .. } | ir::Stmt::Loop { body, .. } => {
-            stmts_use_table_bulk_ops(body)
-        }
+        ir::Stmt::Block { body, .. }
+        | ir::Stmt::Loop { body, .. }
+        | ir::Stmt::TryTable { body, .. } => stmts_use_table_bulk_ops(body),
         ir::Stmt::If { then, els, .. } => {
             stmts_use_table_bulk_ops(then) || stmts_use_table_bulk_ops(els)
         }
@@ -362,6 +421,8 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
         | ir::Stmt::MemoryFill { .. }
         | ir::Stmt::MemoryInit { .. }
         | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::Throw { .. }
+        | ir::Stmt::ThrowRef { .. }
         | ir::Stmt::Unreachable => false,
     })
 }

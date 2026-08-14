@@ -16,11 +16,11 @@ use wast::{WastArg, WastRet};
 ///
 /// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type: a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds.
 ///   Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap.
-///   The imports.wast count is 28 rather than 59 because that file's tag-exporting fixture module no longer converts (exception-handling tags are out of scope), so the type-mismatch checks downstream of it are never reached.
+///   imports.wast contributes 59 of them: its fixture module exports tags, so it converts only now that tags are represented, and every type-mismatch check downstream of it became reachable at once (28 before).
 /// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 4, "import-limits"),
     ("linking0", 1, "linking"),
@@ -59,6 +59,8 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
             "rt/trap",
             // check_unlinkable's rescue clause references Rt::LinkError even when the converted modules themselves don't.
             "rt/link_error",
+            // Same for check_exception and Rt::WasmException.
+            "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
@@ -177,6 +179,20 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
             "check_exhaust({}) do\n  {call}\nend",
             ruby_string(desc)
         );
+    }
+
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let _ = writeln!(
+            script,
+            "check_exception({}) do\n  {call}\nend",
+            ruby_string(desc)
+        );
+        Ok(())
     }
 
     fn emit_bare_invoke(&self, script: &mut String, desc: &str, call: &str) {
@@ -338,6 +354,19 @@ def check_exhaust(desc)
   puts "FAIL(no exhaustion): #{desc}"
 rescue SystemStackError
   $pass += 1
+end
+
+# A wasm exception must reach the host uncaught. Rt::Trap is a separate
+# class on purpose, so a trap here is a failure, not a pass.
+def check_exception(desc)
+  yield
+  $fail += 1
+  puts "FAIL(no exception): #{desc}"
+rescue Rt::WasmException
+  $pass += 1
+rescue => e
+  $fail += 1
+  puts "FAIL(#{e.class}: #{e.message}, want a wasm exception): #{desc}"
 end
 
 # Upstream's assert_unlinkable message text never matches ours (we don't

@@ -124,6 +124,11 @@ enum FrameKind {
         /// Set when the `else` keyword is reached.
         then_body: Option<Vec<Stmt>>,
     },
+    /// `try_table` with at least one catch clause (a catchless one is a plain block).
+    /// Clauses are resolved before the frame is pushed: their labels are relative to the enclosing context.
+    TryTable {
+        catches: Vec<ir::CatchClause>,
+    },
 }
 
 struct Frame {
@@ -474,6 +479,68 @@ impl<'a> FuncBuilder<'a> {
         &self.module.types[ty_idx as usize]
     }
 
+    /// Resolve one `try_table` catch clause.
+    /// The exception payload (the tag's parameters, plus the exnref for the `_ref` kinds) is written into the target frame's slots directly: the same arithmetic as [`Self::branch_target`], but sourced from the exception instead of the stack, so the branch itself carries no assigns.
+    /// Called before the `try_table` frame is pushed, because the spec validates catch labels against the enclosing context.
+    fn catch_clause(
+        &mut self,
+        kind: ir::CatchKind,
+        tag: Option<u32>,
+        relative_depth: u32,
+    ) -> ir::CatchClause {
+        let mut payload: Vec<ValType> = tag
+            .map(|t| self.module.tag_params(t).to_vec())
+            .unwrap_or_default();
+        if matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef) {
+            payload.push(ValType::ExnRef);
+        }
+        let idx = self.frames.len() - 1 - relative_depth as usize;
+        let (base, is_loop, is_func, label_id) = {
+            let frame = &self.frames[idx];
+            match frame.kind {
+                FrameKind::Func => (0, false, true, 0),
+                FrameKind::Loop => (frame.base, true, false, frame.label_id),
+                _ => (frame.base, false, false, frame.label_id),
+            }
+        };
+        let value_temps: Vec<Temp> = payload
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| Temp {
+                depth: (base + i) as u32,
+                ty: *ty,
+            })
+            .collect();
+        for t in &value_temps {
+            self.temps.insert(*t);
+        }
+        let exn_temp =
+            matches!(kind, ir::CatchKind::CatchRef | ir::CatchKind::CatchAllRef).then(|| {
+                *value_temps
+                    .last()
+                    .expect("a _ref payload ends in the exnref")
+            });
+        let target = if is_func {
+            BrTarget::Return {
+                values: value_temps.iter().map(|t| Expr::Temp(*t)).collect(),
+            }
+        } else {
+            self.frames[idx].referenced = true;
+            BrTarget::Label {
+                label: label_id,
+                is_loop,
+                assigns: Vec::new(),
+            }
+        };
+        ir::CatchClause {
+            kind,
+            tag,
+            value_temps,
+            exn_temp,
+            target,
+        }
+    }
+
     /// Resolve a branch depth into a target, computing the moves from the current stack top into the target frame's result (or loop param) slots.
     /// Marks the target label as referenced.
     /// The caller must have spilled the stack first, so the sources read from materialized temps.
@@ -647,6 +714,17 @@ impl<'a> FuncBuilder<'a> {
                             els,
                         });
                     }
+                    FrameKind::TryTable { catches } => {
+                        // Always emitted, never spliced: the catch clauses matter even when nothing branches to the try_table's own label.
+                        self.emit(Stmt::TryTable {
+                            label: Label {
+                                id: frame.label_id,
+                                referenced: frame.referenced,
+                            },
+                            catches,
+                            body: frame.stmts,
+                        });
+                    }
                     FrameKind::Func => unreachable!("func frame handled above"),
                 }
             }
@@ -659,7 +737,10 @@ impl<'a> FuncBuilder<'a> {
         // Skip dead code, only tracking block structure.
         if self.cur().unreachable {
             match op {
-                Operator::Block { .. } | Operator::Loop { .. } | Operator::If { .. } => {
+                Operator::Block { .. }
+                | Operator::Loop { .. }
+                | Operator::If { .. }
+                | Operator::TryTable { .. } => {
                     self.push_frame(FrameKind::Block, Vec::new(), Vec::new());
                     let frame = self.cur();
                     frame.entered_dead = true;
@@ -715,6 +796,54 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Else => self.handle_else(),
             Operator::End => self.handle_end(),
+            Operator::TryTable { try_table } => {
+                let (params, results) = self.block_type(try_table.ty)?;
+                self.spill_all();
+                if try_table.catches.is_empty() {
+                    // A catchless try_table is exactly a block.
+                    self.push_frame(FrameKind::Block, params, results);
+                } else {
+                    let catches = try_table
+                        .catches
+                        .iter()
+                        .map(|c| match *c {
+                            wasmparser::Catch::One { tag, label } => {
+                                self.catch_clause(ir::CatchKind::Catch, Some(tag), label)
+                            }
+                            wasmparser::Catch::OneRef { tag, label } => {
+                                self.catch_clause(ir::CatchKind::CatchRef, Some(tag), label)
+                            }
+                            wasmparser::Catch::All { label } => {
+                                self.catch_clause(ir::CatchKind::CatchAll, None, label)
+                            }
+                            wasmparser::Catch::AllRef { label } => {
+                                self.catch_clause(ir::CatchKind::CatchAllRef, None, label)
+                            }
+                        })
+                        .collect();
+                    self.push_frame(FrameKind::TryTable { catches }, params, results);
+                }
+            }
+            Operator::Throw { tag_index } => {
+                let arity = self.module.tag_params(tag_index).len();
+                let mut args = vec![Expr::I32Const(0); arity];
+                for i in (0..arity).rev() {
+                    args[i] = self.pop_expr().0;
+                }
+                // A deeper pending that traps is evaluated before the throw in wasm, and the throw discards it, so flush it first.
+                self.spill_if(|fx| fx.trap);
+                self.emit(Stmt::Throw {
+                    tag: tag_index,
+                    args,
+                });
+                self.cur().unreachable = true;
+            }
+            Operator::ThrowRef => {
+                let (exn, _, _) = self.pop_expr();
+                self.spill_if(|fx| fx.trap);
+                self.emit(Stmt::ThrowRef { exn });
+                self.cur().unreachable = true;
+            }
             Operator::Br { relative_depth } => {
                 let idx = self.frames.len() - 1 - relative_depth as usize;
                 if matches!(self.frames[idx].kind, FrameKind::Func) {
@@ -1221,6 +1350,9 @@ fn classify_op(name: &str) -> Option<Feature> {
         "BrOnCast",
     ]) {
         Some(Feature::Gc)
+    } else if starts(&["Try", "Catch", "Delegate", "Rethrow", "Throw"]) {
+        // The retired `try`/`catch`/`rethrow`/`delegate` encoding: refused at validation (`LEGACY_EXCEPTIONS` is off), so this only attributes a form that reaches the builder some other way.
+        Some(Feature::ExceptionHandling)
     } else if name.contains("Atomic") {
         Some(Feature::Threads)
     } else if name.contains("128") || name.contains("MulWide") {

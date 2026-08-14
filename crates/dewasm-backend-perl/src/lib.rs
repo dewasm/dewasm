@@ -402,6 +402,7 @@ fn default_value(ty: ValType) -> &'static str {
         ValType::I32 | ValType::I64 => "0",
         ValType::F32 | ValType::F64 => "0.0",
         ValType::FuncRef => "undef",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -414,6 +415,7 @@ fn val_name(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "funcref",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -497,6 +499,9 @@ impl<'a> Gen<'a> {
                 ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
                 ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
                 ExportKind::Memory => memory_export_names.push(export.name.clone()),
+                ExportKind::Tag(_) => {
+                    unreachable!("exception handling is refused by check_module_support")
+                }
                 ExportKind::Func(_) => {}
             }
         }
@@ -1065,6 +1070,10 @@ impl<'a> Gen<'a> {
             }
             Stmt::Unreachable => {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
+            }
+            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
+            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+                unreachable!("exception handling is refused by check_module_support")
             }
             Stmt::SourceLine(pos) => {
                 let file = &self.module.debug_files[pos.file as usize];

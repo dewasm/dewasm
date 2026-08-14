@@ -552,6 +552,7 @@ fn jtype(ty: ValType) -> &'static str {
         ValType::F32 => "float",
         ValType::F64 => "double",
         ValType::FuncRef => "Rt.Funcref",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -562,6 +563,7 @@ fn zero_value(ty: ValType) -> &'static str {
         ValType::F32 => "0.0f",
         ValType::F64 => "0.0",
         ValType::FuncRef => "null",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -572,6 +574,7 @@ fn ty_suffix(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "fr",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -946,6 +949,9 @@ impl<'a> Gen<'a> {
                 ExportKind::Global(idx) => format!("g{idx}"),
                 ExportKind::Table(idx) => format!("t{idx}"),
                 ExportKind::Memory => "memory".to_string(),
+                ExportKind::Tag(_) => {
+                    unreachable!("exception handling is refused by check_module_support")
+                }
             };
             w.line(format!(
                 "this.Exports.put({}, {val});",
@@ -1913,6 +1919,10 @@ impl<'a> Gen<'a> {
                 // Void method that throws: emitting it as a statement (not a `throw`) avoids an "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
             }
+            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
+            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+                unreachable!("exception handling is refused by check_module_support")
+            }
             // REASON: Java has no line-directive to render source-line markers into; `emit_stmt` drops them before routing here, so this is unreachable but kept for the exhaustive match.
             Stmt::SourceLine(_) => {}
             Stmt::TableInit {
@@ -2282,6 +2292,7 @@ fn unbox(ty: ValType, expr: &str) -> String {
         ValType::F32 => format!("(float)(Float) {expr}"),
         ValType::F64 => format!("(double)(Double) {expr}"),
         ValType::FuncRef => format!("(Rt.Funcref) {expr}"),
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -2301,6 +2312,7 @@ fn boxed_zero(ty: ValType) -> &'static str {
         ValType::F32 => "0.0f",
         ValType::F64 => "0.0",
         ValType::FuncRef => "null",
+        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
     }
 }
 
@@ -2456,6 +2468,10 @@ impl CostMemo {
             }
             Stmt::TableInit { dst, src, len, .. } | Stmt::TableCopy { dst, src, len, .. } => {
                 expr_cost(dst) + expr_cost(src) + expr_cost(len)
+            }
+            // Refused at conversion time (see `check_module_support`).
+            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
+                unreachable!("exception handling is refused by check_module_support")
             }
             Stmt::DataDrop { .. }
             | Stmt::ElemDrop { .. }
