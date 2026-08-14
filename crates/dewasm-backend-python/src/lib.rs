@@ -36,7 +36,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
+    UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -221,6 +222,8 @@ impl Backend for PythonBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
+            // Tags are identity objects (fresh instances, compared with `is`), a thrown exception is a native Python exception that doubles as the exnref, and traps stay uncatchable: the same model as Ruby's.
+            Feature::ExceptionHandling => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -494,6 +497,19 @@ fn walk_frame_paths(stmts: &[Stmt], stack: &mut Vec<u32>, paths: &mut Vec<Vec<u3
                     stack.pop();
                 }
             }
+            // A catch clause's branch is emitted in the handler, inside the try_table's own scope, so it crosses that frame like a branch from the body would; `flat::plan` never dissolves a function holding one, so this is inert today, kept only so the walk stays a faithful description of every frame a branch can cross.
+            Stmt::TryTable {
+                label,
+                catches,
+                body,
+            } => {
+                stack.push(label.id);
+                walk_frame_paths(body, stack, paths);
+                for clause in catches {
+                    record_path(&clause.target, stack, paths);
+                }
+                stack.pop();
+            }
             Stmt::Br(target) | Stmt::BrIf { target, .. } => record_path(target, stack, paths),
             Stmt::BrTable {
                 targets, default, ..
@@ -522,8 +538,7 @@ fn default_value(ty: ValType) -> &'static str {
     match ty {
         ValType::I32 | ValType::I64 => "0",
         ValType::F32 | ValType::F64 => "0.0",
-        ValType::FuncRef => "None",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::FuncRef | ValType::ExnRef => "None",
     }
 }
 
@@ -536,7 +551,7 @@ fn val_name(ty: ValType) -> &'static str {
         ValType::F32 => "f32",
         ValType::F64 => "f64",
         ValType::FuncRef => "funcref",
-        ValType::ExnRef => unreachable!("exception handling is refused by check_module_support"),
+        ValType::ExnRef => "exnref",
     }
 }
 
@@ -611,15 +626,14 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let mut global_exports: Vec<(String, u32)> = Vec::new();
         let mut table_exports: Vec<(String, u32)> = Vec::new();
+        let mut tag_exports: Vec<(String, u32)> = Vec::new();
         let mut memory_export_names: Vec<String> = Vec::new();
         for export in &m.exports {
             match export.kind {
                 ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
                 ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
+                ExportKind::Tag(idx) => tag_exports.push((export.name.clone(), idx)),
                 ExportKind::Memory => memory_export_names.push(export.name.clone()),
-                ExportKind::Tag(_) => {
-                    unreachable!("exception handling is refused by check_module_support")
-                }
                 ExportKind::Func(_) => {}
             }
         }
@@ -643,6 +657,10 @@ impl<'a> Gen<'a> {
         w.line(format!(
             "TABLE_EXPORTS = {{{}}}",
             entries(&table_exports, "t")
+        ));
+        w.line(format!(
+            "TAG_EXPORTS = {{{}}}",
+            entries(&tag_exports, "tag")
         ));
         let mem_set = memory_export_names
             .iter()
@@ -765,6 +783,23 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            w.line(format!(
+                "self.tag{i} = {} or self._missing({}, {})",
+                self.resolve_import_string("tag", &import.module, &import.name),
+                py_string(&import.module),
+                py_string(&import.name),
+            ));
+        }
+        for i in 0..m.tags.len() {
+            self.use_unit("rt/tag");
+            w.line(format!(
+                "self.tag{} = {}.Tag()",
+                m.imported_tags.len() + i,
+                self.rt_name
+            ));
+        }
+
         for (i, elem) in m.elems.iter().enumerate() {
             let items = || {
                 elem.items
@@ -878,6 +913,11 @@ impl<'a> Gen<'a> {
         w.line("return getattr(self, self.TABLE_EXPORTS[name])");
         w.dedent();
         w.line("");
+        w.line("def tag_export(self, name):");
+        w.indent();
+        w.line("return getattr(self, self.TAG_EXPORTS[name])");
+        w.dedent();
+        w.line("");
         // Provider protocol: an instance is itself a valid import value.
         w.line("def wasm_import(self, name):");
         w.indent();
@@ -892,6 +932,10 @@ impl<'a> Gen<'a> {
         w.line("if name in self.TABLE_EXPORTS:");
         w.indent();
         w.line("return getattr(self, self.TABLE_EXPORTS[name])");
+        w.dedent();
+        w.line("if name in self.TAG_EXPORTS:");
+        w.indent();
+        w.line("return getattr(self, self.TAG_EXPORTS[name])");
         w.dedent();
         w.line("if name in self.MEMORY_EXPORTS:");
         w.indent();
@@ -1212,6 +1256,49 @@ impl<'a> Gen<'a> {
                     free.extend(inner);
                     escapes
                 }
+                Stmt::TryTable {
+                    label,
+                    catches,
+                    body,
+                } => {
+                    // Unlike Block/If, the body needs a real Python scope: catching an exception raised anywhere inside it (including a callee) is not expressible through the `_br` register alone.
+                    // The wrapping `while True:` gives every catch clause's own branch (see `catch_clause`) somewhere to `break` to, exactly as Ruby's `begin ... end while false` gives its `rescue` a scope to `break`/`next` out of; body itself keeps using `_br` for any branch it contains, same as a Block's.
+                    self.use_unit("rt/wasm_exception");
+                    w.line("while True:");
+                    w.indent();
+                    w.line("try:");
+                    w.indent();
+                    let mut inner = if body.is_empty() {
+                        w.line("pass");
+                        BTreeSet::new()
+                    } else {
+                        let mut inner_guarded = false;
+                        self.emit_seq(w, body, &mut inner_guarded, false)
+                    };
+                    w.dedent();
+                    w.line(format!("except {}.WasmException as e:", self.rt_name));
+                    w.indent();
+                    for clause in catches {
+                        self.catch_clause(w, clause);
+                        self.collect_target_free(&clause.target, &mut inner);
+                    }
+                    // No clause matched: the exception keeps unwinding.
+                    w.line("raise");
+                    w.dedent();
+                    // Reached only when the body ran to completion without an exception; an exception either lands in a clause (which breaks the loop itself) or re-raises past this statement entirely.
+                    w.line("break");
+                    w.dedent();
+                    if label.referenced && !stmt_tail {
+                        w.line(format!("if _br == {}:", label.id));
+                        w.indent();
+                        w.line("_br = 0");
+                        w.dedent();
+                    }
+                    inner.remove(&label.id);
+                    let escapes = !inner.is_empty();
+                    free.extend(inner);
+                    escapes
+                }
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
                 _ => {
                     if let Some(line) = self.fused_call_line(stmt, stmts.get(i + 1)) {
@@ -1453,9 +1540,17 @@ impl<'a> Gen<'a> {
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
-            // Refused at conversion time: this backend does not declare exception handling supported, so `check_module_support` rejects the module before lowering.
-            Stmt::TryTable { .. } | Stmt::Throw { .. } | Stmt::ThrowRef { .. } => {
-                unreachable!("exception handling is refused by check_module_support")
+            Stmt::Throw { tag, args } => {
+                self.use_unit("rt/wasm_exception");
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                w.line(format!(
+                    "raise {}.WasmException(self.tag{tag}, [{}])",
+                    self.rt_name,
+                    args.join(", ")
+                ));
+            }
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
             }
             Stmt::SourceLine(pos) => {
                 let file = &self.module.debug_files[pos.file as usize];
@@ -1494,9 +1589,35 @@ impl<'a> Gen<'a> {
             Stmt::ElemDrop { seg } => {
                 w.line(format!("self.elem{seg} = []"));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } | Stmt::TryTable { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
+        }
+    }
+
+    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
+    /// A tagged clause guards that with `is`, wasm tag equality being object identity; a catch-all runs unconditionally, so any clause after it is dead (still emitted, never reached).
+    /// `branch()` alone never leaves the `except` suite: it is shared with ordinary branches, which rely on later code testing `_br` instead, so this appends the `break` that exits the `try_table`'s wrapping `while True:` itself (dead, but harmless, right after a `return`).
+    fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause) {
+        let bind_and_branch = |w: &mut CodeWriter| {
+            for (i, t) in clause.value_temps.iter().enumerate() {
+                if Some(*t) == clause.exn_temp {
+                    w.line(format!("{} = e", temp(*t)));
+                } else {
+                    w.line(format!("{} = e.values[{i}]", temp(*t)));
+                }
+            }
+            self.branch(w, &clause.target);
+            w.line("break");
+        };
+        match clause.tag {
+            Some(tag) => {
+                w.line(format!("if e.tag is self.tag{tag}:"));
+                w.indent();
+                bind_and_branch(w);
+                w.dedent();
+            }
+            None => bind_and_branch(w),
         }
     }
 
@@ -1561,6 +1682,10 @@ impl<'a> Gen<'a> {
             Stmt::Block { body, .. } | Stmt::Loop { body, .. } => self.seq_has_relay_branch(body),
             Stmt::If { then, els, .. } => {
                 self.seq_has_relay_branch(then) || self.seq_has_relay_branch(els)
+            }
+            // A catch clause's own branch relays through `_br` too (`catch_clause` calls the same `branch()`), even when the body underneath never does.
+            Stmt::TryTable { catches, body, .. } => {
+                self.seq_has_relay_branch(body) || catches.iter().any(|c| relays(&c.target))
             }
             _ => false,
         }
