@@ -142,7 +142,10 @@ fn from_wasmtime(err: wasmtime::Error) -> anyhow::Error {
 /// Instantiate `wasm` against WASI p1 and call `_start`, returning the guest's exit status (a `proc_exit` unwinds as [`I32Exit`]; a normal return is 0).
 /// Kept in `wasmtime::Result` so wasmtime's `?` composes; the callers lift it to anyhow.
 fn execute(ctx: WasiP1Ctx, wasm: &Path) -> wasmtime::Result<i32> {
-    let engine = Engine::default();
+    // The exception-handling proposal is off by default in the wasmtime crate (unlike the CLI); mruby's setjmp/longjmp lowering needs it.
+    let mut config = wasmtime::Config::new();
+    config.wasm_exceptions(true);
+    let engine = Engine::new(&config)?;
     let module = Module::from_file(&engine, wasm)?;
     let mut linker: Linker<WasiP1Ctx> = Linker::new(&engine);
     p1::add_to_linker_sync(&mut linker, |ctx| ctx)?;

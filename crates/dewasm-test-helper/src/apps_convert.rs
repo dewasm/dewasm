@@ -12,7 +12,8 @@
 //! `slow_test` mirrors the backend crate's feature of the same name: heavy trials (the ones whose dev-profile conversion measurably hurts the fast test) are `#[ignore]`d unless it is on.
 //! Which trials are heavy comes from measurement, not the artifact size alone.
 
-use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
+use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage, SupportStatus};
+use dewasm_core::feature::Feature;
 use libtest_mimic::{Failed, Trial};
 
 use crate::backend::{derive_module_name, module_name_style};
@@ -27,6 +28,10 @@ struct AppConvert {
     /// Heavy: dev-profile conversion exceeds ~2 s on every backend, measurably slowing the fast test, so the trial is `#[ignore]`d unless the backend crate's `slow_test` feature is on.
     /// Measured, not guessed: only the three giant artifacts cross the line: `ruby` (~7-13 s), `cpython` (~2.6-5 s), and the 25 MB `zeroperl` (Perl 5.42, ~4-5 s on Ruby and Python); the next-slowest, `rg`, stays ~1.1-2.1 s in the same cluster as the sqlite cases and is left in the fast test.
     heavy: bool,
+    /// A wasm proposal beyond the wasm 1.0 baseline that this app's module uses.
+    /// The expectation flips per backend on [`Backend::feature_status`]: a backend declaring the feature `Supported` must convert the app, any other backend must reject it with the attributed `check_module_support` error.
+    /// Both directions are asserted, so a backend gaining the feature without flipping its declaration (or the reverse) fails this suite.
+    requires: Option<Feature>,
 }
 
 /// Every `.wasm` the fetch scripts (`examples/apps/scripts/*.sh`) drop into
@@ -39,76 +44,97 @@ const MANIFEST: &[AppConvert] = &[
         stem: "cowsay",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "cpython",
         mode: Mode::Standalone,
         heavy: true,
+        requires: None,
     },
     AppConvert {
         stem: "dwarf-fixture",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "minigzip",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
+    },
+    AppConvert {
+        stem: "mruby",
+        mode: Mode::Standalone,
+        heavy: false,
+        requires: Some(Feature::ExceptionHandling),
     },
     AppConvert {
         stem: "qjs",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "rg",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "ruby",
         mode: Mode::Standalone,
         heavy: true,
+        requires: None,
     },
     AppConvert {
         stem: "ruby-packed",
         mode: Mode::Standalone,
         heavy: true,
+        requires: None,
     },
     AppConvert {
         stem: "sqlite3-shell",
         mode: Mode::Standalone,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "doom",
         mode: Mode::Library,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "libpcap",
         mode: Mode::Library,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "libsqlite3",
         mode: Mode::Library,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "sqlite3-binding",
         mode: Mode::Library,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "treesitter",
         mode: Mode::Library,
         heavy: false,
+        requires: None,
     },
     AppConvert {
         stem: "zeroperl",
         mode: Mode::Library,
         heavy: true,
+        requires: None,
     },
 ];
 
@@ -147,6 +173,24 @@ fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Re
     // Cache stems are kebab-case (`sqlite3-shell`); the backends take a module name in their own grammar and refuse to guess, so convert it here.
     // Standalone entries do not use the name internally, but deriving uniformly keeps one rule.
     let module_name = derive_module_name(module_name_style(backend.name()), entry.stem);
+    if let Some(feature) = entry.requires {
+        if backend.feature_status(feature) != SupportStatus::Supported {
+            return match convert_source(backend, &bytes, entry.mode, &module_name) {
+                Ok(_) => Err(Failed::from(format!(
+                    "{} converted, but {} declares {} unsupported: flip feature_status or fix check_module_support",
+                    entry.stem,
+                    backend.name(),
+                    feature.id(),
+                ))),
+                Err(e) if format!("{e:#}").contains(feature.id()) => Ok(()),
+                Err(e) => Err(Failed::from(format!(
+                    "{} was rejected, but not attributed to {}: {e:#}",
+                    entry.stem,
+                    feature.id(),
+                ))),
+            };
+        }
+    }
     let source = convert_source(backend, &bytes, entry.mode, &module_name)
         .map_err(|e| format!("{} convert failed: {e:#}", entry.stem))?;
     if source.is_empty() {
