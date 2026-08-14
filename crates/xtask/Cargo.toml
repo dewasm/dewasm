@@ -35,6 +35,8 @@ dewasm-backend-java.workspace = true
 # Timings are not reproducible byte-for-byte, so this is a data drop, not a compared snapshot.
 serde.workspace = true
 serde_json.workspace = true
+# `feature-audit` validates candidate app binaries against raw feature bits, so it can name proposals the converter itself no longer models.
+wasmparser.workspace = true
 # Encodes the human-facing PNG sidecar of the DOOM frame snapshot; default settings kept fixed so regeneration is byte-stable.
 png = "0.18.1"
 # std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our anyhow flow); cranelift+runtime is the embedder.

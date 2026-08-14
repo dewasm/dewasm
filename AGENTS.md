@@ -40,7 +40,7 @@ When support declarations or WASI units change, regenerate `docs/support.md` wit
 
 Significant decisions, anything with real alternatives, are recorded in [`agents/decisions/`](agents/decisions/README.md): its README holds the index, the authoring procedure, and the quality bar.
 An entry is `agents/decisions/<N>-<slug>.md`, cited as "decision N".
-Nothing outside `agents/` references anything under it (no decision citation, no link); this file, `CLAUDE.md`, and `.claude/` are the exceptions.
+Nothing outside `agents/` references anything under it (no decision citation, no link); this file, `CLAUDE.md`, `.claude/`, and the app audit tooling's citations of `agents/apps-audit.md` (the record its verdicts land in) are the exceptions.
 Code and user-facing docs state their constraints in place, and the decision links out to the code it governs, never the reverse.
 `agents/` is for documents an agent reads while working; `docs/` is for documents a human reads ([`agents/docs-policy.md`](agents/docs-policy.md)).
 

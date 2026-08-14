@@ -11,10 +11,13 @@
 //! Each writes a dated record under `records/` and renders nothing; `render-speed` and `render-size` turn a record into `docs/benchmarks/results.md` and `docs/sizes/results.md`.
 //! Unlike the commands above, none of those outputs is a compared snapshot: neither a timing nor an installed size is reproducible byte-for-byte, so no freshness test guards them.
 //!
+//! `feature-audit` is the app audit test: it reports each candidate app binary's post-baseline feature needs and WASI p1 import surface, with the verdicts recorded in `agents/apps-audit.md`.
+//!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
 mod bench;
 mod doom_snapshot;
+mod feature_audit;
 mod nes_snapshot;
 mod size;
 mod snapshot_engine;
@@ -52,6 +55,8 @@ Commands:
         Regenerate docs/benchmarks/results.md and its charts from the named speed record, or from the newest one.
     render-size [record]
         Regenerate docs/sizes/results.md and its figures from the named size record, or from the newest one.
+    feature-audit <file.wasm>...
+        Report each binary's post-baseline feature needs and WASI p1 import surface; fails when one needs a proposal outside the 0.1 scope (verdicts are recorded in agents/apps-audit.md).
 ";
 
 fn main() -> Result<()> {
@@ -66,6 +71,7 @@ fn main() -> Result<()> {
         Some("record-size") => size::record(args),
         Some("render-speed") => bench::render(args),
         Some("render-size") => size::render(args),
+        Some("feature-audit") => feature_audit::main(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())

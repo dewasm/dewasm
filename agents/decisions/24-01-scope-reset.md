@@ -17,7 +17,7 @@ For the 0.1 release, the accepted input is **wasm 1.0 + WASI preview 1**, where 
 Everything else (reference types, tail calls, exception handling, the component model, WASI preview 2, and all unimplemented proposals) is **removed from the code**, not frozen: IR variants, lowering, feature tests, runtime units, harness support, and docs rows all go.
 Unsupported input keeps failing at conversion time with a clear error (decision 0).
 
-One validator-level nuance, found by the app audit (`docs/apps-audit.md`): LLVM-based toolchains encode `call_indirect` immediates as overlong LEBs when the reference-types *target feature* is on (their default), so real wasip1 binaries (including the already shipping qjs and sqlite3) only validate with the reference-types feature bit enabled.
+One validator-level nuance, found by the app audit (`agents/apps-audit.md`): LLVM-based toolchains encode `call_indirect` immediates as overlong LEBs when the reference-types *target feature* is on (their default), so real wasip1 binaries (including the already shipping qjs and sqlite3) only validate with the reference-types feature bit enabled.
 The bit therefore stays on in `dewasm-core::module::features()` as a pure **encoding relaxation**; every actual reference-types construct (externref, table instructions, `ref.*`, non-zero table indices) is rejected during IR building with the usual attributed error.
 
 The discriminating criterion: **a feature stays only if a pinned target app needs it or every 0.1 backend is expected to implement it.**
@@ -25,7 +25,7 @@ Code kept "just in case" is code paid for in every exhaustive match, every new b
 
 Goals are stated app-first; the spec testsuite remains the correctness test (decision 3), not the goal.
 0.1 targets: cowsay (backend bring-up), quickjs-ng (one-shot, script with file I/O, REPL), sqlite3 (shell and C-API library, DB files on disk, callback binding), ripgrep, a CPython or CRuby runtime binary, and a compression CLI.
-A **feature audit** (conversion-time feature report over each pinned binary) runs before the excision; an app that needs a dropped feature is deferred with a written note in `docs/apps-audit.md`: it does not block the excision.
+A **feature audit** (conversion-time feature report over each pinned binary) runs before the excision; an app that needs a dropped feature is deferred with a written note in `agents/apps-audit.md`: it does not block the excision.
 pandoc.wasm is the expected first deferral (GHC's wasm backend is believed to emit tail calls; to be confirmed by the audit).
 
 0.1 backends: Ruby and Bash (existing) plus **Python, Go, Java**.

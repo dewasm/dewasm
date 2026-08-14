@@ -3,7 +3,7 @@
 The scope test: before an app binary becomes a conversion target, run
 
 ```sh
-cargo run -p dewasm-core --bin feature-audit -- examples/apps/cache/*.wasm
+cargo xtask feature-audit examples/apps/cache/*.wasm
 ```
 
 and record the verdict here.

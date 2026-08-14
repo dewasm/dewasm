@@ -2425,6 +2425,7 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
+ "wasmparser 0.254.0",
  "wasmtime",
  "wasmtime-wasi",
 ]

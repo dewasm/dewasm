@@ -6,8 +6,7 @@
 # (brettcannon/cpython-wasi-build: the PSF distributes no WASI binaries; this is a CPython core dev's build).
 # Beyond python.wasm we also extract the stdlib tree (lib/python3.14) the interpreter reads at startup from a preopened directory: the e2e case preopens cache/cpython-lib/lib at guest
 # /lib (PYTHONHOME=/, PYTHONPATH=/lib/python3.14).
-# Ruby-only, heavy:
-# execution behind the `heavy_test` cargo feature (docs/apps-audit.md).
+# Every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` cargo features (the speed category varies by backend); the audit record is agents/apps-audit.md.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

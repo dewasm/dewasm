@@ -5,10 +5,7 @@
 # CRuby 3.4 (ruby.wasm 2.9.4): the official ruby.wasm wasm32-wasip1 full build.
 # Beyond ruby.wasm we extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at startup; the multi-hundred-MB libruby-static.a and the rest of the tree are not needed at run time and are left out (the extract helpers unpack only the two named members).
 # The e2e case preopens cache/ruby-lib/usr at guest /usr.
-# Ruby-only, heavy: execution behind the
-# `heavy_test` cargo feature.
-# The "Ruby on Ruby" goal demo
-# (docs/apps-audit.md).
+# The "Ruby on Ruby" goal demo: every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` cargo features (the speed category varies by backend); the audit record is agents/apps-audit.md.
 #
 # A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended deployment shape: the same module with the stdlib embedded by
 # `wasi-vfs pack` (wizer pre-initialization), self-contained: no preopens.
