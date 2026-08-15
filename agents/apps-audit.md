@@ -30,6 +30,8 @@ The same verdict covers an app with no artifact to run the audit tool on at all:
 | tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
 | Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes wasm-ld, prebuilts broken) | ⛔ deferred |
 | PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
+| toywasm 76.0.0 | pinned in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
+| wasm3 0.5.0 | see below | **tail-call** in the stock build | ⛔ deferred |
 
 ¹ **Reference-types encoding tolerance.**
 LLVM-based toolchains (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index immediates as padded, overlong LEBs when the `reference-types` target feature is enabled, the default since LLVM 19.
@@ -145,6 +147,15 @@ mruby 3.4.0 built from the pinned source tarball with `zig cc` for wasm32-wasi; 
 Exception handling is accepted input lowered per backend: the convert manifest asserts each declaring backend converts the module and each non-declaring backend rejects it with the attributed error, and Bash (no exception mechanism) stays on the rejection side.
 The execution case (`MRUBY_EH`, `mruby_eh_e2e!`) drives raise, rescue, ensure, a custom exception class, and retry through the converted interpreter on every declaring backend; the wasi build excludes mruby-io, mruby-dir, and mruby-socket, and a first-party `mruby-wasi-puts` gem restores `Kernel#puts`.
 
+¹⁵ **toywasm (audited 2026-08-15).**
+The official `wasm32-wasi` release asset of [yamt/toywasm](https://github.com/yamt/toywasm) v76.0.0 (`bin/toywasm` out of `toywasm-v76.0.0-wasm32-wasi.tgz`, 909,932 bytes), in the default build configuration: `--print-build-options` reports tail-call, threads, multi-memory, extended-const, custom-page-sizes and exception handling all off, and the audit confirms the binary itself is baseline wasm with the reference-types encoding bit only¹.
+The case (`TOYWASM_COWSAY`, `toywasm_cowsay_e2e!`) has the converted interpreter run a *second* wasm binary: the already-cached `cowsay.wasm`, loaded from the app cache preopened at `/apps`, with `--wasi` giving that inner guest its own WASI.
+Its expected stdout is the `cowsay_args` snapshot, so the case asserts that cowsay through the converted interpreter is byte-identical to cowsay run directly under wasmtime.
+
+That indirect ground truth is the only one available.
+wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with EBADF (it accepts the call on regular files only), and toywasm's WASI setup treats the failure as fatal, so the pinned binary does not run under wasmtime at all; dewasm's runtimes accept the call on any open fd and record the flags, which is why the converted interpreter runs.
+The case therefore has no wasmtime freshness run and adds no snapshot file.
+
 ## Deferred: pandoc
 
 - Source: https://haskell-wasm.github.io/pandoc-wasm/pandoc.wasm (gh-pages of `haskell-wasm/pandoc-wasm`, unversioned, so record the serving commit when pinning; audited copy: commit `ed18ae6e337d`, sha256 `48d9ceed3ef805f6acc28e6f58c2439cdeb1f71864244fffcc155e2c045aa7fc`, 53 MB).
@@ -183,6 +194,16 @@ The execution case (`MRUBY_EH`, `mruby_eh_e2e!`) drives raise, rescue, ensure, a
   The only prebuilt strips exactly that machinery; a from-source build would be a multi-week port, not a build-flag fix like mruby's¹⁴.
 - Revisit only if upstream `php-src` ships a maintained wasm32-wasi target with working exception handling.
 
+## Deferred: wasm3
+
+- Source: [wasm3/wasm3](https://github.com/wasm3/wasm3), last release v0.5.0 (2021-06), upstream in a self-declared minimal maintenance phase.
+- Audit: the stock build needs **tail-call**.
+  Its whole dispatch is `M3_MUSTTAIL return nextOpImpl()` (`source/m3_exec_defs.h`), so `zig cc -target wasm32-wasi` refuses it with "WebAssembly 'tail-call' feature not enabled".
+- A `-DM3_HAS_TAIL_CALL=0` build does audit in scope (154,289 bytes, converts to 1.3 MB of Ruby and runs cowsay end to end in 0.70 s), but without tail calls the C stack grows once per *executed* opcode: the converted interpreter dies around 7,000 frames and only completes under `RUBY_THREAD_VM_STACK_SIZE=1000000000 RUBY_THREAD_MACHINE_STACK_SIZE=1000000000`, a setting no user supplies and the standalone runtime interface does not carry.
+- Superseded by toywasm, which ships a pinnable wasm32-wasi release asset that needs no such setting (issue #101).
+  Revisit only if tail calls enter scope.
+
+>>>>>>> 7e3caa1 (Pin toywasm as an example app and record the wasm3 verdict)
 ## WASI p1 import surfaces
 
 The audit also prints each binary's imported WASI functions; the widest candidates are:
