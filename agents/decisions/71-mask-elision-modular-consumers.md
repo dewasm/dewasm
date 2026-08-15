@@ -3,7 +3,8 @@
 Status: **Accepted, 2026-08-15.**
 Landed as the shared analysis in `crates/dewasm-backend/src/masking.rs` and its application in the Ruby backend's expression rendering (`crates/dewasm-backend-ruby/src/lib.rs`).
 The other masked-unsigned backends (Python, Perl, Bash) still mask every site; each can adopt the same analysis against its own unboxed-integer limit.
-This is stage 1 of issue #164: elision within one expression tree only, no cross-statement analysis.
+This is stage 1 of issue #164: elision within one expression tree only.
+[Decision 73](73-mask-elision-variable-dataflow.md) extends it across statements, letting a local or temp store unmasked when a per-function dataflow proves every read modular.
 
 ## Context
 
