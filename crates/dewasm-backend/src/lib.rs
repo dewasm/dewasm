@@ -1,6 +1,7 @@
 //! Backend trait and code emission utilities shared by all language backends.
 
 pub mod flat;
+pub mod masking;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 

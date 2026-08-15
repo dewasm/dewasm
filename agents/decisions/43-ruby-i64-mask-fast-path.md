@@ -3,6 +3,7 @@
 Status: **Accepted, 2026-07-28.**
 Implemented in `crates/dewasm-backend-ruby/src/lib.rs` and `runtime/ruby/units/rt/m64.rb`.
 Refines the masked-unsigned i64 lowering; the numeric conventions of [decision 2](2-numeric-semantics.md) are unchanged.
+Under [decision 71](71-mask-elision-modular-consumers.md), an `m64` site whose consumer is modular and whose bound guard holds is skipped entirely.
 
 ## Context
 
