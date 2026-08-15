@@ -80,7 +80,7 @@ $ dewasm input.<wasm|wat>
 
 - `input` is a WebAssembly binary to be translated.
   * `dewasm` accepts a WebAssembly text (WAT) file too.
-- `--target` (or `-t`) selects the target language (default: `ruby`).
+- `--target` (or `-t`) selects the target language (required).
 - `--mode` (or `-m`) specifies the translation mode (default: `library`).
   * `--mode standalone` wires up WASI and runs the module's `_start`.
   * `--mode library` exposes the module's exports to the target language.

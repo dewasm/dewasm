@@ -17,8 +17,8 @@ struct Cli {
     /// Input file (.wasm or .wat)
     input: PathBuf,
 
-    /// Target language
-    #[arg(short, long, default_value = "ruby")]
+    /// Target language: ruby, bash, python, perl, go, or java.
+    #[arg(short, long)]
     target: String,
 
     /// Output mode: "library" exposes exports to the host language, "standalone" wires up WASI and runs _start.
