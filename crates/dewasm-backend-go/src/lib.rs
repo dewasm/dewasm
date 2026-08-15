@@ -12,6 +12,7 @@
 //!   Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
 //! - `try_table` is the one structure that cannot stay a labeled loop: `recover` works only inside a deferred function, and a labeled `break`/`continue` may not cross a function-literal boundary.
 //!   Its body becomes an immediately-invoked closure returning an outcome code, and the `switch` after it performs the branch that the body could not take from inside ([`TryFrame`]).
+//! - An artifact carries its consumer's `go vet` run, which rejects unreachable code and self-assignment, so a statement the emitter can already see is dead is not emitted: [`prune`] drops it, together with the frame labels and locals that only it reached.
 //!
 //! The runtime is composed from per-method units referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
 
@@ -27,8 +28,8 @@ use dewasm_backend::{
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
-    UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Label, Module, Stmt,
+    Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -1202,15 +1203,12 @@ impl<'a> Gen<'a> {
             ));
         }
 
+        let body = prune(&func.body);
+
         let mut read_locals = BTreeSet::new();
         let mut used_locals = BTreeSet::new();
         let mut read_temps = BTreeSet::new();
-        collect_reads_seq(
-            &func.body,
-            &mut read_locals,
-            &mut used_locals,
-            &mut read_temps,
-        );
+        collect_reads_seq(&body, &mut read_locals, &mut used_locals, &mut read_temps);
 
         for (i, ty) in local_types.iter().enumerate().skip(nparams) {
             let idx = i as u32;
@@ -1229,10 +1227,10 @@ impl<'a> Gen<'a> {
             }
         }
 
-        self.emit_seq(w, &func.body);
+        self.emit_seq(w, &body);
 
-        if !ty.results.is_empty() {
-            // A trailing terminator so Go's "missing return" is satisfied even when the body's own terminator is not the syntactic last stmt (unreachable code is not a Go error).
+        if !ty.results.is_empty() && !ends_unreachable(&body) {
+            // Go's missing-return rule is syntactic: a body whose last statement is a call that only panics inside the runtime (`Rt.trap`) still needs this.
             let zeros = ty
                 .results
                 .iter()
@@ -1260,7 +1258,9 @@ impl<'a> Gen<'a> {
                     w.line("for {");
                     w.indent();
                     self.emit_seq(w, body);
-                    w.line(format!("break L{}", label.id));
+                    if !ends_unreachable(body) {
+                        w.line(format!("break L{}", label.id));
+                    }
                     w.dedent();
                     w.line("}");
                     self.close_label();
@@ -1275,7 +1275,9 @@ impl<'a> Gen<'a> {
                     w.line("for {");
                     w.indent();
                     self.emit_seq(w, body);
-                    w.line(format!("break L{}", label.id));
+                    if !ends_unreachable(body) {
+                        w.line(format!("break L{}", label.id));
+                    }
                     w.dedent();
                     w.line("}");
                     self.close_label();
@@ -1296,7 +1298,9 @@ impl<'a> Gen<'a> {
                     w.line("for {");
                     w.indent();
                     self.emit_if(w, cond, then, els);
-                    w.line(format!("break L{}", label.id));
+                    if !if_ends_unreachable(then, els) {
+                        w.line(format!("break L{}", label.id));
+                    }
                     w.dedent();
                     w.line("}");
                     self.close_label();
@@ -1358,7 +1362,9 @@ impl<'a> Gen<'a> {
         w.indent();
         self.emit_catch_handler(w, label, catches);
         self.emit_seq(w, body);
-        w.line("return 0");
+        if !ends_unreachable(body) {
+            w.line("return 0");
+        }
         w.dedent();
         w.line("}()");
 
@@ -1434,7 +1440,10 @@ impl<'a> Gen<'a> {
                 None => bind(w),
             }
         }
-        w.line("panic(__r)");
+        // A tag-less clause matched and returned, so nothing reaches the rethrow behind it.
+        if !catches.last().is_some_and(|c| c.tag.is_none()) {
+            w.line("panic(__r)");
+        }
         w.dedent();
         w.line("}()");
     }
@@ -1896,6 +1905,128 @@ fn assign_results(results: &[Temp], call: String) -> String {
             format!("{names} = {call}")
         }
     }
+}
+
+/// `stmts` as the emitter is to see them: statements Go would report as unreachable code are dropped, catch clauses that can never match go with them, and a frame whose surviving body no longer branches to its label loses the label.
+/// Runs before the read/use pre-pass and before emission so both see the same statements: a local whose only read was dropped must not be declared, and a Go label nothing jumps to does not compile.
+fn prune(stmts: &[Stmt]) -> Vec<Stmt> {
+    let mut out: Vec<Stmt> = Vec::with_capacity(stmts.len());
+    for stmt in stmts {
+        // `local.get $x; local.set $x` renders as `lx = lx`, which `go vet` reports as a self-assignment; the wasm pair is a no-op, so dropping it is the whole fix.
+        if matches!(stmt, Stmt::LocalSet { idx, expr: Expr::LocalGet(src) } if idx == src) {
+            continue;
+        }
+        out.push(prune_stmt(stmt));
+        if ends_unreachable(&out) {
+            break;
+        }
+    }
+    out
+}
+
+fn prune_stmt(stmt: &Stmt) -> Stmt {
+    match stmt {
+        Stmt::Block { label, body } => {
+            let body = prune(body);
+            let label = frame_label(*label, &[&body]);
+            Stmt::Block { label, body }
+        }
+        Stmt::Loop { label, body } => {
+            let body = prune(body);
+            let label = frame_label(*label, &[&body]);
+            Stmt::Loop { label, body }
+        }
+        Stmt::If {
+            label,
+            cond,
+            then,
+            els,
+        } => {
+            let then = prune(then);
+            let els = prune(els);
+            let label = frame_label(*label, &[&then, &els]);
+            Stmt::If {
+                label,
+                cond: cond.clone(),
+                then,
+                els,
+            }
+        }
+        Stmt::TryTable {
+            label,
+            catches,
+            body,
+        } => Stmt::TryTable {
+            // A try_table's label names its outcome variables rather than a Go label, so there is nothing to demote.
+            label: *label,
+            catches: live_catches(catches).to_vec(),
+            body: prune(body),
+        },
+        stmt => stmt.clone(),
+    }
+}
+
+/// `label` with `referenced` recomputed over the pruned `bodies`: Go rejects a label nothing jumps to, so a frame all of whose branches were pruned away loses its label with them.
+fn frame_label(label: Label, bodies: &[&[Stmt]]) -> Label {
+    Label {
+        id: label.id,
+        referenced: label.referenced && bodies.iter().any(|b| branches_to(b, label.id)),
+    }
+}
+
+/// The catch clauses that can still run: clauses are matched in order and a tag-less one matches every exception, so it is the last that can.
+fn live_catches(catches: &[CatchClause]) -> &[CatchClause] {
+    let live = catches
+        .iter()
+        .position(|c| c.tag.is_none())
+        .map_or(catches.len(), |i| i + 1);
+    &catches[..live]
+}
+
+/// Whether any statement in `stmts` branches to `label`, that is, whether the emitted frame still needs its Go label.
+fn branches_to(stmts: &[Stmt], label: u32) -> bool {
+    let hits = |t: &BrTarget| matches!(t, BrTarget::Label { label: l, .. } if *l == label);
+    Stmt::any(stmts, &mut |stmt| match stmt {
+        Stmt::Br(t) | Stmt::BrIf { target: t, .. } => hits(t),
+        Stmt::BrTable {
+            targets, default, ..
+        } => targets.iter().chain([default]).any(hits),
+        // A matched clause branches from the outcome switch, which sits inside the frame like any other branch.
+        Stmt::TryTable { catches, .. } => catches.iter().any(|c| hits(&c.target)),
+        // No other statement carries a branch target, and the sequences nested in them are reached by `Stmt::any`.
+        _ => false,
+    })
+}
+
+/// Whether a statement emitted after `stmts` would be unreachable code: the Go rendering of the last one transfers control away unconditionally (a `break`, a `continue`, a `return`, or a `panic`).
+/// `Stmt::Unreachable` and `Stmt::ThrowRef` are not among them: they render as a call that panics inside the runtime, which Go's reachability rule does not look through.
+/// At the top level of a function body or of a `try_table` closure the same statements are Go *terminating* statements too (a `break` there would need an enclosing labeled `for`, which the top level has none of), so the trailing `return` Go's missing-return rule would otherwise demand is dead as well.
+fn ends_unreachable(stmts: &[Stmt]) -> bool {
+    let Some(last) = stmts
+        .iter()
+        .rev()
+        .find(|s| !matches!(s, Stmt::SourceLine(_)))
+    else {
+        return false;
+    };
+    match last {
+        // The `switch` a `br_table` renders as branches out of itself in every case, its default included.
+        Stmt::Br(_) | Stmt::BrTable { .. } | Stmt::Return { .. } | Stmt::Throw { .. } => true,
+        // A referenced block or if frame keeps a `break L` inside it, so its `for` is one Go can leave.
+        Stmt::Block { label, body } => !label.referenced && ends_unreachable(body),
+        Stmt::If {
+            label, then, els, ..
+        } => !label.referenced && if_ends_unreachable(then, els),
+        // A branch to a loop label is a `continue`, never a `break`, so a loop body that cannot fall out of itself leaves the `for` with no exit at all.
+        Stmt::Loop { body, .. } => ends_unreachable(body),
+        // Every other statement can fall through to the next one; answering `false` only keeps the exit that used to be emitted unconditionally.
+        _ => false,
+    }
+}
+
+/// Whether neither arm of an `if` can fall out of it.
+fn if_ends_unreachable(then: &[Stmt], els: &[Stmt]) -> bool {
+    !els.is_empty() && ends_unreachable(then) && ends_unreachable(els)
 }
 
 /// Read/use pre-pass: collect which locals and temps a statement sequence reads, so emission can satisfy Go's unused-variable discipline.

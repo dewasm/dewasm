@@ -260,7 +260,7 @@ pub enum BrTarget {
 /// One `try_table` catch clause.
 /// The four catch kinds are fully encoded by two fields: `tag` (`Some` for `catch`/`catch_ref`, `None` for the catch-all kinds) and `exn_temp` (`Some` for the `_ref` kinds, which capture the exception as an exnref); no backend needs the kind spelled a second way.
 /// The exception's payload lands directly in the *target frame's* slots (`value_temps`, whose last entry is `exn_temp` for the `_ref` kinds): the same arithmetic a branch's moves use, sourced from the exception instead of the stack, which is why `target` carries no assigns.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CatchClause {
     /// Tag index for `catch`/`catch_ref`; `None` for the catch-all kinds.
     pub tag: Option<u32>,
@@ -278,7 +278,8 @@ pub struct SourcePos {
     pub col: u32,
 }
 
-#[derive(Debug)]
+/// Clonable so a backend can hand its emitter a rewritten body (the Go backend drops the statements Go would report as unreachable before emitting).
+#[derive(Clone, Debug)]
 pub enum Stmt {
     /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on.
     /// Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
