@@ -24,7 +24,7 @@ Everything else the test suite needs (interpreters, submodules, the apps cache) 
 | `cargo clippy --all-targets -- -D warnings` | Run the linter on all targets, failing on any warning. |
 | `cargo test -p dewasm-backend-ruby --test spec i32` | Spec harness on `.wast` files whose name contains the filter; swap the crate to switch backend. |
 | `cargo test -p dewasm-backend-ruby --test convert` | Convert every cached app with that backend, without running the output. |
-| `cargo run -p dewasm-cli -- input.wasm --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
+| `cargo run -p dewasm-cli -- input.wasm --target ruby --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `cargo xtask record-speed [filter]` | Measure the cross-runtime benchmark suite into a record under `records/`; see [`docs/benchmarks/README.md`](docs/benchmarks/README.md). |
 | `cargo xtask record-size` | Measure the distribution sizes into a record under `records/`; see [`docs/sizes/README.md`](docs/sizes/README.md). |
 | `examples/apps/setup.sh` | Fetch/build the pinned real-world apps into the gitignored cache; tool requirements are in docs/testing.md. |

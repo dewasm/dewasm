@@ -10,6 +10,6 @@ cd "$(dirname "$0")"
 echo "rails example: converting libsqlite3.wasm -> sqlite3/lib/sqlite3/sqlite3_wasm.rb"
 cargo run --release -q -p dewasm-cli -- \
   ../apps/cache/libsqlite3.wasm \
-  --mode library --module-name Sqlite3Wasm \
+  --target ruby --mode library --module-name Sqlite3Wasm \
   -o sqlite3/lib/sqlite3/sqlite3_wasm.rb
 echo "rails example: done"

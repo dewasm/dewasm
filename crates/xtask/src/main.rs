@@ -21,13 +21,13 @@ mod feature_audit;
 mod nes_snapshot;
 mod size;
 mod snapshot_engine;
+mod support_docs;
 mod wasi_run;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
-use dewasm_cli::support_docs::render_support_docs;
 
 use crate::doom_snapshot::capture_doom_frame;
 use crate::nes_snapshot::capture_nes_frame;
@@ -96,10 +96,10 @@ fn write_stdout(bytes: &[u8]) -> Result<()> {
 }
 
 /// Render `docs/support.md` from the backends' own declarations and write it to disk.
-/// The corresponding test (`crates/dewasm-cli/tests/support_docs.rs`) is compare-only and names this command in its failure message.
+/// The corresponding `support_docs_in_sync` unit test (`src/support_docs.rs`) is compare-only and names this command in its failure message.
 fn update_support_docs() -> Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
-    let rendered = render_support_docs();
+    let rendered = support_docs::render_support_docs();
     std::fs::write(&path, &rendered)?;
     println!("wrote {} ({} bytes)", path.display(), rendered.len());
     Ok(())

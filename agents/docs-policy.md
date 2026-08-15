@@ -36,7 +36,7 @@ A document a user would never open, but an agent must consult before changing so
 ## Rules
 
 - **`docs/support.md` is generated** from the backend declarations.
-  Never edit it by hand; regenerate with `cargo xtask update-support-docs` (`cargo test -p dewasm-cli --test support_docs` fails while the file is stale).
+  Never edit it by hand; regenerate with `cargo xtask update-support-docs` (`cargo test -p xtask support_docs_in_sync` fails while the file is stale).
   Everywhere else, **link** to it rather than copying the matrix.
 - **Decisions go in a decision record, not in prose docs.**
   Anything with real alternatives is recorded under `agents/decisions/`.

@@ -1,5 +1,5 @@
 //! Rendering for `docs/support.md`: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality.
-//! Shared by the compare-only `support_docs_in_sync` test (`tests/support_docs.rs`) and `cargo xtask update-support-docs`, which writes the rendered output to disk.
+//! `cargo xtask update-support-docs` writes the rendered output to disk; the compare-only `support_docs_in_sync` unit test below fails while the checked-in file is stale.
 
 use std::fmt::Write as _;
 
@@ -102,4 +102,23 @@ pub fn render_support_docs() -> String {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::render_support_docs;
+
+    #[test]
+    fn support_docs_in_sync() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
+        let rendered = render_support_docs();
+        let current = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            current == rendered,
+            "docs/support.md is out of sync with the code's support declarations.\n\
+             Regenerate with: cargo xtask update-support-docs"
+        );
+    }
 }

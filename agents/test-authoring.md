@@ -17,7 +17,8 @@ The spec, convert, and WASI-testsuite suites are [libtest-mimic](https://crates.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`**: that backend's suites, declared by invoking the shared macros; see the contract below.
 - The units lint (`declared_requires_cover_references`, `all_units_bundle`, and the go/java whole-bundle compile checks) lives as `#[cfg(test)] mod units` unit tests at the bottom of each backend's `src/lib.rs`, run with `cargo test -p dewasm-backend-<lang> --lib`.
   **`softfloat.rs`** (bash) is the one backend-local integration oracle.
-- **`crates/dewasm-cli/tests/`**: only `support_docs.rs` (the freshness check that fails while the generated `docs/support.md` is stale, over all backends).
+- **`crates/dewasm-cli/tests/`**: black-box tests of the `dewasm` binary's option handling (`module_name.rs`, `data_file.rs`, `dwarf_line.rs`), spawning it via `CARGO_BIN_EXE_dewasm`.
+- The `docs/support.md` freshness check (fails while the generated file is stale, over all backends) is the `support_docs_in_sync` unit test in `crates/xtask/src/support_docs.rs`, next to the `update-support-docs` command that regenerates it.
 - **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`**: wasmtime as a `BackendUnderTest`, running the `apps`/`gzip`/`fs_apps` snapshot-freshness checks through the shared runners, plus `qjs_repl_interactive_snapshot`, which re-captures the bare qjs REPL under a pty and compares it to the checked-in transcript, and `doom_frame`/`nes_frame` (compare-only; regenerate with `cargo xtask update-snapshots`).
   Every case reaches wasmtime through the `xtask` binary, so build it first (`cargo build -p xtask`).
   All behind the `wasmtime_test` feature, named for a future engine such as wasmer/wasmedge joining it.
