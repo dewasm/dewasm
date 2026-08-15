@@ -1,4 +1,5 @@
 # requires:
+# Any open fd is accepted, stdio included: toywasm's WASI setup sets NONBLOCK on stdin and treats failure as fatal, so wasmtime's regular-files-only EBADF answer is not copied.
 sub wasi_fd_fdstat_set_flags {
     my ($self, $fd, $flags) = @_;
     my $e = $self->{fds}{$fd};

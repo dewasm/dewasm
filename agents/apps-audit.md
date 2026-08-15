@@ -203,7 +203,6 @@ The case therefore has no wasmtime freshness run and adds no snapshot file.
 - Superseded by toywasm, which ships a pinnable wasm32-wasi release asset that needs no such setting (issue #101).
   Revisit only if tail calls enter scope.
 
->>>>>>> 7e3caa1 (Pin toywasm as an example app and record the wasm3 verdict)
 ## WASI p1 import surfaces
 
 The audit also prints each binary's imported WASI functions; the widest candidates are:
