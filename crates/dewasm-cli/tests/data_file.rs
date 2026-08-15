@@ -1,8 +1,8 @@
 //! End-to-end coverage for `--data-file` data-segment externalization.
-//! For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a sidecar, run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
+//! For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a data file, run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
 //! Also pins the loud rejections (the bash target, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the sidecar form provably shrinks the source.
+//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the data-file form provably shrinks the source.
 //! The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
 
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
 
-/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized sidecar.
+/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized data file.
 /// `_start` prints `Active!\nPassive!\n`.
 fn fixture_wat() -> String {
     let bulk = "x".repeat(2000);
@@ -73,7 +73,7 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// Run a Ruby program from its own directory (so `__dir__`-relative sidecar loads resolve), returning (stdout, exit code).
+/// Run a Ruby program from its own directory (so `__dir__`-relative data file loads resolve), returning (stdout, exit code).
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby =
         find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
@@ -113,7 +113,7 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// Run a Python program from its own directory (so the sidecar, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
+/// Run a Python program from its own directory (so the data file, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
 fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let python = find_python().expect("python3 not found on PATH: see docs/testing.md");
     let out = Command::new(python)
@@ -125,7 +125,7 @@ fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// Run a Perl program from its own directory (so the sidecar, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
+/// Run a Perl program from its own directory (so the data file, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
 fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let perl = find_perl()
         .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md");
@@ -154,7 +154,7 @@ fn compile_java(src: &Path, classdir: &Path) {
     );
 }
 
-/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the sidecar sitting alongside `Main.class`), returning (stdout, exit code).
+/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the data file sitting alongside `Main.class`), returning (stdout, exit code).
 fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
     let out = Command::new(&java)
@@ -176,7 +176,7 @@ fn ruby_data_file_matches_embedded() {
 
     let embedded = dir.join("embedded.rb");
     let ext = dir.join("ext.rb");
-    let sidecar = dir.join("ext.bin");
+    let data_file = dir.join("ext.bin");
 
     let e = run_dewasm(&[
         watp,
@@ -201,7 +201,7 @@ fn ruby_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         x.status.success(),
@@ -209,7 +209,10 @@ fn ruby_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    assert_eq!(
+        std::fs::metadata(&data_file).unwrap().len(),
+        FIXTURE_DATA_LEN
+    );
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -242,7 +245,7 @@ fn go_data_file_matches_embedded() {
     std::fs::create_dir_all(&xdir).unwrap();
     let embedded = edir.join("prog.go");
     let ext = xdir.join("prog.go");
-    let sidecar = xdir.join("data.bin");
+    let data_file = xdir.join("data.bin");
 
     let e = run_dewasm(&[
         watp,
@@ -267,7 +270,7 @@ fn go_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         x.status.success(),
@@ -275,7 +278,10 @@ fn go_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    assert_eq!(
+        std::fs::metadata(&data_file).unwrap().len(),
+        FIXTURE_DATA_LEN
+    );
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -303,7 +309,7 @@ fn python_data_file_matches_embedded() {
 
     let embedded = dir.join("embedded.py");
     let ext = dir.join("ext.py");
-    let sidecar = dir.join("ext.bin");
+    let data_file = dir.join("ext.bin");
 
     let e = run_dewasm(&[
         watp,
@@ -328,7 +334,7 @@ fn python_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         x.status.success(),
@@ -336,7 +342,10 @@ fn python_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    assert_eq!(
+        std::fs::metadata(&data_file).unwrap().len(),
+        FIXTURE_DATA_LEN
+    );
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -364,7 +373,7 @@ fn perl_data_file_matches_embedded() {
 
     let embedded = dir.join("embedded.pl");
     let ext = dir.join("ext.pl");
-    let sidecar = dir.join("ext.bin");
+    let data_file = dir.join("ext.bin");
 
     let e = run_dewasm(&[
         watp,
@@ -389,7 +398,7 @@ fn perl_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         x.status.success(),
@@ -397,7 +406,10 @@ fn perl_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    assert_eq!(
+        std::fs::metadata(&data_file).unwrap().len(),
+        FIXTURE_DATA_LEN
+    );
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -426,12 +438,12 @@ fn java_data_file_matches_embedded() {
     let embedded = dir.join("embedded").join("Main.java");
     let ecls = dir.join("embedded-cls");
     std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
-    // Externalized: the sidecar lands directly in the run-time class dir so the `DATA_BLOB` code-source loader finds it next to `Main.class`.
+    // Externalized: the data file lands directly in the run-time class dir so the `DATA_BLOB` code-source loader finds it next to `Main.class`.
     let ext = dir.join("ext").join("Main.java");
     let xcls = dir.join("ext-cls");
     std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
     std::fs::create_dir_all(&xcls).unwrap();
-    let sidecar = xcls.join("data.bin");
+    let data_file = xcls.join("data.bin");
 
     let e = run_dewasm(&[
         watp,
@@ -456,7 +468,7 @@ fn java_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         x.status.success(),
@@ -464,7 +476,10 @@ fn java_data_file_matches_embedded() {
         String::from_utf8_lossy(&x.stderr)
     );
 
-    assert_eq!(std::fs::metadata(&sidecar).unwrap().len(), FIXTURE_DATA_LEN);
+    assert_eq!(
+        std::fs::metadata(&data_file).unwrap().len(),
+        FIXTURE_DATA_LEN
+    );
     let src_embedded = std::fs::metadata(&embedded).unwrap().len();
     let src_ext = std::fs::metadata(&ext).unwrap().len();
     assert!(
@@ -492,8 +507,8 @@ fn rejects_unsupported_targets_and_stdout() {
     let wat = dir.join("mod.wat");
     write(&wat, &fixture_wat());
     let watp = wat.to_str().unwrap();
-    let sidecar = dir.join("d.bin");
-    let sc = sidecar.to_str().unwrap();
+    let data_file = dir.join("d.bin");
+    let df = data_file.to_str().unwrap();
 
     // Bash is the sole target that rejects `--data-file` (its data lives in the runtime); the error names the target.
     let out = dir.join("out.bash");
@@ -506,7 +521,7 @@ fn rejects_unsupported_targets_and_stdout() {
         "-o",
         out.to_str().unwrap(),
         "--data-file",
-        sc,
+        df,
     ]);
     assert!(!r.status.success(), "bash: expected rejection");
     assert!(
@@ -525,7 +540,7 @@ fn rejects_unsupported_targets_and_stdout() {
         "-o",
         "-",
         "--data-file",
-        sc,
+        df,
     ]);
     assert!(!r.status.success(), "expected -o - rejection");
     assert!(
@@ -583,8 +598,8 @@ fn rejects_data_file_colliding_with_output_path() {
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 }
 
-/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the sidecar path and clobbered by the blob (#30).
-/// Covered with data segments (source and sidecar share the name) and without (the lone source itself matches the sidecar name).
+/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the data-file path and clobbered by the blob (#30).
+/// Covered with data segments (source and data file share the name) and without (the lone source itself matches the data-file name).
 #[test]
 fn rejects_data_file_colliding_with_generated_name() {
     let dir = tempdir("collide-name");
@@ -593,8 +608,8 @@ fn rejects_data_file_colliding_with_generated_name() {
 
     let out = dir.join("out").join("Main.java");
     std::fs::create_dir_all(out.parent().unwrap()).unwrap();
-    let sidecar = dir.join("sidecar").join("Main.java");
-    std::fs::create_dir_all(sidecar.parent().unwrap()).unwrap();
+    let data_file = dir.join("data").join("Main.java");
+    std::fs::create_dir_all(data_file.parent().unwrap()).unwrap();
 
     let r = run_dewasm(&[
         wat.to_str().unwrap(),
@@ -605,7 +620,7 @@ fn rejects_data_file_colliding_with_generated_name() {
         "-o",
         out.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(!r.status.success(), "expected name-collision rejection");
     assert!(
@@ -614,9 +629,12 @@ fn rejects_data_file_colliding_with_generated_name() {
         String::from_utf8_lossy(&r.stderr)
     );
     assert!(!out.exists(), "no source may be written on rejection");
-    assert!(!sidecar.exists(), "no sidecar may be written on rejection");
+    assert!(
+        !data_file.exists(),
+        "no data file may be written on rejection"
+    );
 
-    // Same collision with a data-less module: the backend emits no sidecar, so the lone `Main.java` source itself matches the sidecar name and would be misrouted; it must be rejected identically.
+    // Same collision with a data-less module: the backend emits no data file, so the lone `Main.java` source itself matches the data-file name and would be misrouted; it must be rejected identically.
     let nodata = dir.join("nodata.wat");
     write(&nodata, "(module (func (export \"_start\")))\n");
     let r = run_dewasm(&[
@@ -628,14 +646,17 @@ fn rejects_data_file_colliding_with_generated_name() {
         "-o",
         out.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap(),
+        data_file.to_str().unwrap(),
     ]);
     assert!(
         !r.status.success(),
         "expected name-collision rejection (no data segments)"
     );
     assert!(!out.exists(), "no source may be written on rejection");
-    assert!(!sidecar.exists(), "no sidecar may be written on rejection");
+    assert!(
+        !data_file.exists(),
+        "no data file may be written on rejection"
+    );
 }
 
 fn qjs_wasm() -> PathBuf {
@@ -661,7 +682,7 @@ fn ruby_qjs_data_file_matches_embedded() {
     let dir = tempdir("qjs-ruby");
     let embedded = dir.join("embedded.rb");
     let ext = dir.join("qjs.rb");
-    let sidecar = dir.join("qjs.bin");
+    let data_file = dir.join("qjs.bin");
 
     assert!(run_dewasm(&[
         wasm,
@@ -683,7 +704,7 @@ fn ruby_qjs_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap()
+        data_file.to_str().unwrap()
     ])
     .status
     .success());
@@ -721,7 +742,7 @@ fn go_qjs_data_file_matches_embedded() {
     std::fs::create_dir_all(&xdir).unwrap();
     let embedded = edir.join("prog.go");
     let ext = xdir.join("prog.go");
-    let sidecar = xdir.join("qjs.bin");
+    let data_file = xdir.join("qjs.bin");
 
     assert!(run_dewasm(&[
         wasm,
@@ -743,7 +764,7 @@ fn go_qjs_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap()
+        data_file.to_str().unwrap()
     ])
     .status
     .success());
@@ -777,7 +798,7 @@ fn python_qjs_data_file_matches_embedded() {
     let dir = tempdir("qjs-python");
     let embedded = dir.join("embedded.py");
     let ext = dir.join("qjs.py");
-    let sidecar = dir.join("qjs.bin");
+    let data_file = dir.join("qjs.bin");
 
     assert!(run_dewasm(&[
         wasm,
@@ -799,7 +820,7 @@ fn python_qjs_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap()
+        data_file.to_str().unwrap()
     ])
     .status
     .success());
@@ -838,7 +859,7 @@ fn java_qjs_data_file_matches_embedded() {
     let xcls = dir.join("ext-cls");
     std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
     std::fs::create_dir_all(&xcls).unwrap();
-    let sidecar = xcls.join("qjs.bin");
+    let data_file = xcls.join("qjs.bin");
 
     assert!(run_dewasm(&[
         wasm,
@@ -860,7 +881,7 @@ fn java_qjs_data_file_matches_embedded() {
         "-o",
         ext.to_str().unwrap(),
         "--data-file",
-        sidecar.to_str().unwrap()
+        data_file.to_str().unwrap()
     ])
     .status
     .success());

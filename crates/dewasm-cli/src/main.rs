@@ -39,7 +39,7 @@ struct Cli {
     #[arg(long)]
     no_default_wasi: bool,
 
-    /// Externalize data-segment bytes into a binary sidecar written to this path instead of embedding them as literals in the source.
+    /// Externalize data-segment bytes into a binary data file written to this path instead of embedding them as literals in the source.
     #[arg(long)]
     data_file: Option<PathBuf>,
 
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
-    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real sidecar path (not stdout).
+    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real data-file path (not stdout).
     // Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
@@ -82,13 +82,13 @@ fn main() -> Result<()> {
                 "ruby" | "go" | "python" | "java" | "perl" => {}
                 "bash" => bail!(
                     "--data-file is not supported for the bash target: the bash \
-                     backend embeds data segments in its runtime, not as a sidecar"
+                     backend embeds data segments in its runtime, not as a data file"
                 ),
                 other => bail!("--data-file is not supported for target {other}"),
             }
             if cli.output == Path::new("-") {
                 bail!(
-                    "--data-file cannot be combined with -o - (stdout): the sidecar \
+                    "--data-file cannot be combined with -o - (stdout): the data file \
                      must be written to a real path next to the generated program"
                 );
             }
@@ -96,17 +96,17 @@ fn main() -> Result<()> {
             if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
                 bail!(
                     "--data-file {} resolves to the same file as the output path {}: \
-                     the data sidecar would overwrite the generated source \
+                     the data file would overwrite the generated source \
                      (choose a different --data-file path)",
                     path.display(),
                     cli.output.display()
                 );
             }
-            let sidecar_name = path
+            let data_file_name = path
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .with_context(|| format!("--data-file path has no filename: {}", path.display()))?;
-            Some(DataFileConfig { sidecar_name })
+            Some(DataFileConfig { data_file_name })
         }
         None => None,
     };
@@ -149,25 +149,25 @@ fn main() -> Result<()> {
     )?;
     let files = backend.generate(&module, &opts)?;
 
-    // Route by name: the data sidecar (its `name` is the configured `sidecar_name`) goes to `--data-file`'s path, the primary source to `-o`.
-    let sidecar_name = opts.data_file.as_ref().map(|c| c.sidecar_name.as_str());
-    // A generated source sharing `sidecar_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and sidecar collide, `matching == files.len()` = no sidecar emitted and the match is the source itself.
-    if let Some(name) = sidecar_name {
+    // Route by name: the data file (its `name` is the configured `data_file_name`) goes to `--data-file`'s path, the primary source to `-o`.
+    let data_file_name = opts.data_file.as_ref().map(|c| c.data_file_name.as_str());
+    // A generated source sharing `data_file_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and data file collide, `matching == files.len()` = no data file emitted and the match is the source itself.
+    if let Some(name) = data_file_name {
         let matching = files.iter().filter(|f| f.name == name).count();
         if matching > 1 || matching == files.len() {
             bail!(
                 "--data-file name {name:?} collides with a generated output file \
-                 of the {} backend; choose a different sidecar filename",
+                 of the {} backend; choose a different data-file name",
                 backend.name()
             );
         }
     }
     for file in files {
-        if Some(file.name.as_str()) == sidecar_name {
+        if Some(file.name.as_str()) == data_file_name {
             let path = cli
                 .data_file
                 .as_ref()
-                .expect("sidecar requires --data-file");
+                .expect("a data-file output requires --data-file");
             std::fs::write(path, &file.contents)
                 .with_context(|| format!("failed to write {}", path.display()))?;
         } else if cli.output == Path::new("-") {

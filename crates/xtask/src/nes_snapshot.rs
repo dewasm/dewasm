@@ -116,7 +116,7 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 
 /// Encode the palette-index screen buffer as an 8-bit RGB PNG, composing pixels the same way [`nes_frame_to_ppm`] does.
 /// Settings are the crate defaults, kept fixed so regeneration is byte-stable.
-/// This PNG is a human-facing sidecar only: no test compares it.
+/// This PNG exists only for humans to view: no test compares it.
 fn frame_to_png(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for &ix in screen {

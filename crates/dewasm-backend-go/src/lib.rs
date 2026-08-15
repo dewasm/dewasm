@@ -155,7 +155,7 @@ impl Backend for GoBackend {
             name: format!("{}.go", opts.module_name),
             contents: contents.into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file.
+        // The data file: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file.
         // Only emitted when there is data to externalize.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -164,7 +164,7 @@ impl Backend for GoBackend {
                     blob.extend_from_slice(&data.data);
                 }
                 files.push(OutputFile {
-                    name: cfg.sidecar_name.clone(),
+                    name: cfg.data_file_name.clone(),
                     contents: blob,
                 });
             }
@@ -217,7 +217,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         cur_locals: RefCell::new(Vec::new()),
         try_stack: RefCell::new(Vec::new()),
         spec: false,
-        data_file: opts.data_file.as_ref().map(|c| c.sidecar_name.clone()),
+        data_file: opts.data_file.as_ref().map(|c| c.data_file_name.clone()),
         data_offsets: data_offsets(module),
     };
 
@@ -255,7 +255,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     out.push_str(&format!("package {package}\n\n"));
     out.push_str(&import_block(&imports));
     out.push('\n');
-    // Data externalization: pull the segment bytes from a `//go:embed`ed sidecar.
+    // Data externalization: pull the segment bytes from a `//go:embed`ed data file.
     // `embed` is a blank import (the package is used only through the directive, which, unlike a package-qualified selector, the import scanner cannot see), and the directive must sit immediately above its `var` with no intervening blank line.
     // A separate `import` declaration is legal Go and keeps `import_block` untouched.
     if let Some(cfg) = &opts.data_file {
@@ -263,7 +263,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
             out.push_str("import _ \"embed\"\n\n");
             out.push_str(&format!(
                 "//go:embed {}\nvar dataBlob []byte\n\n",
-                cfg.sidecar_name
+                cfg.data_file_name
             ));
         }
     }
@@ -482,7 +482,7 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("Rt.unhex(\"{}\")", hex_string(data))
 }
 
-/// Prefix sums locating each data segment in the concatenated sidecar blob.
+/// Prefix sums locating each data segment in the concatenated data-file blob.
 /// Only consulted when `--data-file` externalizes the segments.
 fn data_offsets(module: &Module) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(module.datas.len());
@@ -589,7 +589,7 @@ struct Gen<'a> {
     /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
     /// Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
-    /// When `Some`, data segments are externalized into a `//go:embed`ed binary sidecar of this filename instead of embedded as `Rt.unhex` literals; `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a `//go:embed`ed binary data file of this filename instead of embedded as `Rt.unhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }

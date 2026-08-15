@@ -37,7 +37,7 @@ serde.workspace = true
 serde_json.workspace = true
 # `feature-audit` validates candidate app binaries against raw feature bits, so it can name proposals the converter itself no longer models.
 wasmparser.workspace = true
-# Encodes the human-facing PNG sidecar of the DOOM frame snapshot; default settings kept fixed so regeneration is byte-stable.
+# Encodes the human-facing PNG of the DOOM frame snapshot; default settings kept fixed so regeneration is byte-stable.
 png = "0.18.1"
 # std makes `wasmtime::Error` an `anyhow::Error` (so `?` composes with our anyhow flow); cranelift+runtime is the embedder.
 # gc is what compiles in the exception-handling proposal (wasmtime implements exnref on its GC machinery); gc-drc is the collector wasmtime defaults to. mruby's snapshots need both, and without gc `Config::wasm_exceptions` does not exist.

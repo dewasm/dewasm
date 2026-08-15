@@ -308,7 +308,7 @@ fn convert_standalone(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<St
             },
         )
         .map_err(|e| attribute(&e))?;
-    // The primary source is always UTF-8 (generated code); only the optional data sidecar is raw bytes, and this runner never requests one.
+    // The primary source is always UTF-8 (generated code); only the optional data file is raw bytes, and this runner never requests one.
     Ok(String::from_utf8(units.remove(0).contents).expect("generated source is valid UTF-8"))
 }
 

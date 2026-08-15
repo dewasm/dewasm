@@ -44,8 +44,8 @@ pub struct GenOptions {
     /// Bundle the built-in WASI implementation as a fallback for `wasi_snapshot_preview1` imports the embedder does not provide.
     /// Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
-    /// Externalize data-segment bytes into a binary sidecar instead of embedding them as hex literals.
-    /// When `Some`, the backend emits load-from-sidecar code and returns a second `OutputFile` carrying the blob.
+    /// Externalize data-segment bytes into a binary data file instead of embedding them as hex literals.
+    /// When `Some`, the backend emits code that loads the data file and returns a second `OutputFile` carrying the blob.
     /// Only backends that declare support honor it (the CLI rejects it for the rest); a backend that ignores it keeps embedding.
     pub data_file: Option<DataFileConfig>,
 }
@@ -53,8 +53,8 @@ pub struct GenOptions {
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
     /// The filename the generated program references relative to itself (e.g. via `__dir__`/`//go:embed`).
-    /// The matching sidecar `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
-    pub sidecar_name: String,
+    /// The matching data-file `OutputFile` carries this exact `name`; the CLI routes it to the requested path.
+    pub data_file_name: String,
 }
 
 pub struct OutputFile {
