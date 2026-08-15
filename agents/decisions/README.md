@@ -92,6 +92,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 70 | [Shared Statement Traversal for IR Analyses](70-shared-statement-traversal.md) | Accepted |
 | 71 | [Mask Elision Inside One Expression Tree Under a Modular Consumer](71-mask-elision-modular-consumers.md) | Accepted |
 | 72 | [Ruby Backend Omits Dead Method-Level `__br` Clears](72-ruby-dead-br-clear-elision.md) | Accepted |
+| 74 | [Shift-Count Reduction Folded for Constants, Dropped Only on an Exact-Value Proof](74-shift-count-reduction-elision.md) | Accepted |
 | 75 | [Pass the Static Load/Store Offset as a Second Argument](75-memory-offset-argument.md) | Accepted |
 | 76 | [Memory Units Reduce Their Address and Stored-Value Operands](76-memory-unit-operand-reduction.md) | Accepted |
 | 77 | [Constant AND Operands, Identity Masks, and Pinned Constant Equalities Extend Mask Elision](77-mask-constant-folds.md) | Accepted |

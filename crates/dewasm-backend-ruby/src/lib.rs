@@ -25,8 +25,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::masking::{
-    bin_operand_context, elides_mask, eq_const_rewrite, fold_and_chain, un_operand_context,
-    MaskContext,
+    bin_operand_context, elides_mask, eq_const_rewrite, fold_and_chain, shift_count_mode,
+    shift_width, un_operand_context, MaskContext, ShiftCountMode,
 };
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
@@ -1542,7 +1542,10 @@ impl<'a> Gen<'a> {
                     return self.bin(*op, ra, rb, false);
                 }
                 let ra = self.expr(a, bin_operand_context(*op, 0, b, ctx));
-                let rb = self.expr(b, bin_operand_context(*op, 1, a, ctx));
+                let rb = match shift_width(*op) {
+                    Some(bits) => self.shift_count(b, bits),
+                    None => self.expr(b, bin_operand_context(*op, 1, a, ctx)),
+                };
                 self.bin(*op, ra, rb, elide(ctx, expr))
             }
             Expr::Load { op, addr, offset } => {
@@ -1556,6 +1559,20 @@ impl<'a> Gen<'a> {
                 self.use_unit("memory/size");
                 Rendered::atom("@m.size".to_string())
             }
+        }
+    }
+
+    /// A shift count, reduced modulo the width as wasm requires ([`shift_count_mode`]): a constant folds at conversion time, a provably in-range count is emitted bare from its `Masked` rendering, anything else under `& (bits - 1)`.
+    fn shift_count(&self, b: &Expr, bits: u32) -> Rendered {
+        match shift_count_mode(b, bits, FIXNUM_LIMIT) {
+            ShiftCountMode::Constant(c) => Rendered::atom(c.to_string()),
+            ShiftCountMode::InRange => self.expr(b, MaskContext::Masked),
+            ShiftCountMode::Masked => infix(
+                self.expr(b, MaskContext::Modular),
+                "&",
+                Rendered::atom((bits - 1).to_string()),
+                BIT_AND,
+            ),
         }
     }
 
@@ -1731,17 +1748,15 @@ impl<'a> Gen<'a> {
             I32And | I64And => infix(a, "&", b, BIT_AND),
             I32Or | I64Or => infix(a, "|", b, BIT_OR),
             I32Xor | I64Xor => infix(a, "^", b, BIT_OR),
-            I32Shl => mask32_unless(elide_mask, infix(a, "<<", shift_count(b, 31), SHIFT)),
-            I32ShrU => infix(a, ">>", shift_count(b, 31), SHIFT),
-            I32ShrS => mask32_unless(
-                elide_mask,
-                infix(self.call1("s32", a), ">>", shift_count(b, 31), SHIFT),
-            ),
-            I64Shl => self.m64_unless(elide_mask, infix(a, "<<", shift_count(b, 63), SHIFT)),
-            I64ShrU => infix(a, ">>", shift_count(b, 63), SHIFT),
+            // A shift's `b` arrives from `shift_count`, already reduced modulo the width.
+            I32Shl => mask32_unless(elide_mask, infix(a, "<<", b, SHIFT)),
+            I32ShrU => infix(a, ">>", b, SHIFT),
+            I32ShrS => mask32_unless(elide_mask, infix(self.call1("s32", a), ">>", b, SHIFT)),
+            I64Shl => self.m64_unless(elide_mask, infix(a, "<<", b, SHIFT)),
+            I64ShrU => infix(a, ">>", b, SHIFT),
             I64ShrS => {
                 let s = self.call1("s64", a);
-                self.m64_unless(elide_mask, infix(s, ">>", shift_count(b, 63), SHIFT))
+                self.m64_unless(elide_mask, infix(s, ">>", b, SHIFT))
             }
             I32Rotl => self.call2("i32_rotl", a, b),
             I32Rotr => self.call2("i32_rotr", a, b),
@@ -1944,11 +1959,6 @@ const FIXNUM_LIMIT: i128 = 1 << 62;
 /// Whether `e`'s own result mask may be skipped here, per the shared context and bound analysis.
 fn elide(ctx: MaskContext, e: &Expr) -> bool {
     elides_mask(e, ctx, FIXNUM_LIMIT)
-}
-
-/// A shift count, masked to the width wasm defines it modulo.
-fn shift_count(b: Rendered, mask: u32) -> Rendered {
-    infix(b, "&", Rendered::atom(mask.to_string()), BIT_AND)
 }
 
 /// A receiver binds as tightly as a call, so anything looser is parenthesized.
@@ -2212,7 +2222,7 @@ mod masks {
                 "(module (func (export \"f\") (param i64) (result i32) (local i32) \
                  (local.set 1 (i32.add (i32.wrap_i64 (i64.shr_u (local.get 0) (i64.const 32))) (i32.const 7))) (local.get 1)))",
             ),
-            "l1 = (l0 >> (32 & 63)) + 7 & 0xffffffff",
+            "l1 = (l0 >> 32) + 7 & 0xffffffff",
         );
     }
 
@@ -2260,6 +2270,30 @@ mod masks {
     }
 
     #[test]
+    fn shift_count_reductions_fold_and_elide() {
+        // A constant count folds at conversion time.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (i32.const 2))"),
+            "l0 = l0 << 2 & 0xffffffff",
+        );
+        // The width reduces to 0; the shift stays, and the unmoved value makes the result mask the identity, so it drops too.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (i32.const 32))"),
+            "l0 = l0 << 0",
+        );
+        // A variable count keeps the reduction.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (local.get 1))"),
+            "l0 = l0 << (l1 & 31) & 0xffffffff",
+        );
+        // A count wasm code already reduced is provably in range: no second `& 63`.
+        assert_line(
+            &i64_expr("(i64.shl (local.get 0) (i64.and (local.get 1) (i64.const 63)))"),
+            "l0 = m64(l0 << (l1 & 63))",
+        );
+    }
+
+    #[test]
     fn i64_elides_only_under_the_same_fixnum_bound() {
         // Two full-range i64 values sum past the Fixnum limit: `Rt.m64` stays even under the modular sub.
         assert_line(
@@ -2271,7 +2305,7 @@ mod masks {
             &i64_expr(
                 "(i64.sub (local.get 1) (i64.add (i64.shr_u (local.get 0) (i64.const 32)) (i64.const 5)))",
             ),
-            "l0 = m64(l1 - ((l0 >> (32 & 63)) + 5))",
+            "l0 = m64(l1 - ((l0 >> 32) + 5))",
         );
     }
 
@@ -2317,7 +2351,7 @@ mod masks {
                 "(module (func (export \"f\") (param i64) (result i32) (local i32) \
                  (local.set 1 (i32.wrap_i64 (i64.shr_u (local.get 0) (i64.const 32)))) (local.get 1)))",
             ),
-            "l1 = l0 >> (32 & 63)",
+            "l1 = l0 >> 32",
         );
     }
 

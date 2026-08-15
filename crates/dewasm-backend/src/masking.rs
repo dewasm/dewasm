@@ -4,6 +4,7 @@
 //! Inside a single [`Expr`] tree that is often double work: a consumer that reads its operand only modulo 2^32 or 2^64 (a wrapping add's operand, a shift count) cannot observe the high bits its own mask throws away.
 //! [`MaskContext`] names the consumption contexts, [`bin_operand_context`] and [`un_operand_context`] are the table of which operands an operation reads modularly, and [`elides_mask`] is the guard: a backend may skip a site's own result mask exactly when the consumer's context and the interval bound allow it.
 //! [`fold_and_chain`] folds the constants of an AND chain at conversion time, and [`eq_const_rewrite`] drops the mask of a site compared for equality against a constant when the interval pins a unique raw preimage.
+//! [`shift_count_mode`] is the count-position counterpart: the `& (width - 1)` a backend emits on a shift count implements wasm's semantic reduction, and it folds for a constant count and drops when the count's exact rendering provably sits in range.
 //!
 //! Soundness rests on the targets' integers being arbitrary-precision two's complement (Ruby, Python, Perl): an unmasked intermediate is congruent to the masked value modulo 2^w, every modular consumer preserves that congruence (a bitwise operator reads a negative operand as its infinite two's-complement form, so `(x - y) & 0xffffffff` is the correct wrap of a negative difference), and the first non-modular consumer sits behind a kept mask, which reduces the value back to the stored representation.
 //! A mask whose raw interval already sits inside `[0, 2^w)` is the identity on the exact value, so it drops in every context.
@@ -21,7 +22,7 @@ pub enum MaskContext {
 /// The context in which `op` consumes its operand `k` (0-based), whose sibling operand is `sibling`, given that `op`'s own result is consumed in `ctx`.
 ///
 /// An operation with its own result mask (wrapping add/sub/mul, `shl`, the wrap) reads its operands modularly regardless of `ctx`: the site's mask restores the invariant even when its own elision guard fails.
-/// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift.
+/// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift; a backend that renders counts through [`shift_count_mode`] consults that instead, because a skipped count reduction demands the `Masked` context.
 /// An AND with a constant sibling reduces its other operand into `[0, constant]` itself (every IR constant sits inside its width), at least as strong a reduction as the operand's own mask, in every `ctx`.
 /// The other maskless bitwise operators pass `ctx` through, except that a reducing consumer weakens to `Modular`: it reduces the operator's result, which needs only congruent operands, and the raw operands feed the operator itself, so the bound guard must still hold for them.
 /// Everything else (comparisons, division, signed and unsigned views, addresses, helper calls) observes the exact value.
@@ -76,6 +77,44 @@ fn may_skip_mask(raw: Bound, bits: u32, ctx: MaskContext, limit: i128) -> bool {
             MaskContext::Modular => raw.within(limit),
             MaskContext::Reducing => true,
         }
+}
+
+/// How a backend renders a shift count.
+/// wasm reduces the count modulo the shift width; the `& (bits - 1)` a backend emits implements that reduction and is dropped exactly when the reduction is provably the identity on the rendered value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShiftCountMode {
+    /// A constant count, already reduced modulo the width: emit the value bare.
+    Constant(u32),
+    /// The count's `Masked` rendering provably sits in `0..bits`: emit that rendering bare.
+    InRange,
+    /// Emit the count's `Modular` rendering under `& (bits - 1)`.
+    Masked,
+}
+
+/// [`ShiftCountMode`] for the count `e` of a `bits`-wide shift, under the elision policy of [`elides_mask`] with the same `limit`.
+///
+/// The emitted `& (bits - 1)` is congruence-preserving, so a kept reduction takes the count's `Modular` rendering.
+/// Skipping it hands the rendered value straight to the target's shift operator, which observes the exact count (a negative or oversized count would shift the wrong way or too far), so the in-range proof is judged on the `Masked` rendering, and an `InRange` site must emit that rendering.
+pub fn shift_count_mode(e: &Expr, bits: u32, limit: i128) -> ShiftCountMode {
+    if matches!(e, Expr::I32Const(_) | Expr::I64Const(_)) {
+        return ShiftCountMode::Constant(count_bound(e, bits).0);
+    }
+    let b = bound(e, bits, MaskContext::Masked, limit);
+    if b.lo >= 0 && b.hi < i128::from(bits) {
+        ShiftCountMode::InRange
+    } else {
+        ShiftCountMode::Masked
+    }
+}
+
+/// The width `op` reduces its shift count modulo, for the shifts whose count reduction sits at the call site (`rotl`/`rotr` reduce inside their runtime helpers).
+pub fn shift_width(op: BinOp) -> Option<u32> {
+    use BinOp::*;
+    match op {
+        I32Shl | I32ShrS | I32ShrU => Some(32),
+        I64Shl | I64ShrS | I64ShrU => Some(64),
+        _ => None,
+    }
 }
 
 /// Everything the interval analysis tracks is clamped to this magnitude: far beyond any elision limit, and small enough that saturating i128 arithmetic on two clamped bounds cannot wrap.
@@ -500,6 +539,53 @@ mod tests {
         // ((l0 + l1) * l2) unmasked reaches 2^65: the mul keeps its mask even though its operand elides.
         let inner = bin(BinOp::I32Add, local(0), local(1));
         assert!(!elides_modular(&bin(BinOp::I32Mul, inner, local(2))));
+    }
+
+    #[test]
+    fn shift_count_folds_a_constant_reduced_modulo_the_width() {
+        use ShiftCountMode::Constant;
+        assert_eq!(shift_count_mode(&Expr::I32Const(2), 32, LIMIT), Constant(2));
+        // The width itself reduces to 0; the shift still happens, by nothing.
+        assert_eq!(
+            shift_count_mode(&Expr::I32Const(32), 32, LIMIT),
+            Constant(0)
+        );
+        // 32 and 63 are valid i64 counts and stay themselves.
+        assert_eq!(
+            shift_count_mode(&Expr::I64Const(32), 64, LIMIT),
+            Constant(32)
+        );
+        assert_eq!(
+            shift_count_mode(&Expr::I64Const(63), 64, LIMIT),
+            Constant(63)
+        );
+        // A wrapped negative reduces like any other bit pattern.
+        assert_eq!(
+            shift_count_mode(&Expr::I32Const(-3i32 as u32), 32, LIMIT),
+            Constant(29)
+        );
+    }
+
+    #[test]
+    fn shift_count_drops_the_reduction_only_for_a_provably_in_range_count() {
+        use ShiftCountMode::{InRange, Masked};
+        // The doubled reduction wasm code produces: the count `l0 & 63` already sits in 0..64.
+        assert_eq!(
+            shift_count_mode(&bin(BinOp::I64And, local(0), Expr::I64Const(63)), 64, LIMIT),
+            InRange
+        );
+        // A full-range count keeps the reduction.
+        assert_eq!(shift_count_mode(&local(0), 64, LIMIT), Masked);
+        // `clz` reaches the width itself (32 on an i32 zero), one past the last valid count.
+        assert_eq!(
+            shift_count_mode(&Expr::Un(UnOp::I32Clz, Box::new(local(0))), 32, LIMIT),
+            Masked
+        );
+        // A sub elides its mask under a modular consumer, but its exact rendering can be negative: the in-range proof binds the Masked rendering, so the reduction stays.
+        assert_eq!(
+            shift_count_mode(&bin(BinOp::I32Sub, local(0), local(1)), 32, LIMIT),
+            Masked
+        );
     }
 
     #[test]
