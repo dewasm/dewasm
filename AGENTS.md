@@ -74,7 +74,7 @@ Each rule is stated here in full; the cited decision holds its rationale and rej
 - The spec testsuite binds (decision 3). Correctness of generated code outranks its readability; readability improvements go into optional passes, never into semantics-relevant lowering.
 - Where the WASI spec is silent, copy wasmtime's behavior as measured on both CI hosts (decision 49).
 - Numeric representation conventions (masked-unsigned integers, f32 re-rounding, NaN bit paths) are shared across backends (decision 2).
-  A backend skips a result mask only inside one expression tree, through the shared consumption-context and bound analysis in `dewasm_backend::masking`, never by its own reasoning (decision 71).
+  A backend skips a result mask only inside one expression tree, through the shared consumption-context and bound analysis in `dewasm_backend::masking`, never by its own reasoning (decision 71); a shift-count reduction folds or drops only through the same module's `shift_count_mode` (decision 74).
 - Each backend's lowering shapes are fixed; follow them rather than restructuring in passing. They are recorded per backend: Ruby decisions 4/42-44/58/60/65/72, Bash decisions 5/11-13/34/35/51/52, Python decision 28, Go decision 29, Java decision 30, Perl decision 55.
 - Runtime code lives as per-method units under `runtime/<lang>/units/` with `# requires:` headers, referenced as `Rt` (decision 6); keep the headers in sync when editing a unit (the units lint enforces most of it).
 - `Embedded` linkage isolates the runtime per artifact so two artifacts coexist in one namespace (decision 62); `embedded_coexist_e2e!` is the check, and a backend that does not invoke it is unfinished, not incapable.
