@@ -207,6 +207,12 @@ eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Rg::Rt::Exit'));
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const PERL_TOYWASM_GLUE: &str = r#"my $inst = Toywasm->new({}, args => ['toywasm', '--wasi', '/apps/cowsay.wasm', 'Hello', 'from', 'dewasm!'], env => {}, preopens => { '/apps' => '{cache}' });
+eval { $inst->invoke('_start'); };
+die $@ if $@ && !(ref($@) && $@->isa('Toywasm::Rt::Exit'));
+"#;
+
 const PERL_CPYTHON_GLUE: &str = r#"my $inst = Cpython->new({}, args => ['python', '-c', "print('hello from cpython', 6 * 7)"], env => { 'PYTHONHOME' => '/', 'PYTHONPATH' => '/lib/python3.14' }, preopens => { '/lib' => '{cache}/cpython-lib/lib' });
 eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Cpython::Rt::Exit'));
@@ -587,6 +593,8 @@ dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
 // The packed variant is the same interpreter plus the wizer-embedded stdlib, so it inherits the category.
 dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
+// Slow, like the other filesystem app cases: measured 8.8 s (convert the interpreter, then interpret the cowsay guest).
+dewasm_test_helper::toywasm_cowsay_e2e!(Perl, PERL_TOYWASM_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Perl);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Perl, PERL_LIBSQLITE3_MEM);
