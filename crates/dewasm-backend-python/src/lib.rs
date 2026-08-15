@@ -1360,10 +1360,9 @@ impl<'a> Gen<'a> {
                 value,
                 offset,
             } => {
+                let (method, addr_args) = self.mem_call(store_method(*op), addr, *offset);
                 w.line(format!(
-                    "self.m.{}({}, {})",
-                    self.mem(store_method(*op)),
-                    self.addr(addr, *offset),
+                    "self.m.{method}({addr_args}, {})",
                     self.masked(value)
                 ));
             }
@@ -1639,12 +1638,23 @@ impl<'a> Gen<'a> {
         name
     }
 
-    fn addr(&self, addr: &Expr, offset: u64) -> String {
+    /// The method name and address arguments for a load/store site.
+    /// A nonzero static offset rides as a second argument to the `o`-suffixed unit, so the per-site addition disappears from the caller; an offset-zero site keeps the one-argument unit, whose call must not pay for an argument it never passes.
+    /// A constant base folds with the offset at conversion time (wasm's effective address does not wrap, so the folded literal may exceed 32 bits and the unit's bounds check still applies unchanged).
+    fn mem_call(&self, method: &str, addr: &Expr, offset: u64) -> (String, String) {
         if offset == 0 {
-            self.masked(addr)
-        } else {
-            format!("{} + {offset}", self.masked(addr))
+            return (self.mem(method).to_string(), self.masked(addr));
         }
+        if let Expr::I32Const(base) = addr {
+            return (
+                self.mem(method).to_string(),
+                (u64::from(*base) + offset).to_string(),
+            );
+        }
+        let method = format!("{method}o");
+        self.use_unit(&format!("memory/{method}"));
+        let args = format!("{}, {offset}", self.masked(addr));
+        (method, args)
     }
 
     /// An expression whose exact stored value is observed (a store, an argument, an address, a comparison operand): every result mask is kept.
@@ -1690,11 +1700,8 @@ impl<'a> Gen<'a> {
                 self.bin(*op, &ra, &rb, elide(ctx, expr))
             }
             Expr::Load { op, addr, offset } => {
-                format!(
-                    "self.m.{}({})",
-                    self.mem(load_method(*op)),
-                    self.addr(addr, *offset)
-                )
+                let (method, addr_args) = self.mem_call(load_method(*op), addr, *offset);
+                format!("self.m.{method}({addr_args})")
             }
             Expr::Select { cond, then, els } => {
                 format!(
@@ -2065,6 +2072,70 @@ mod masks {
                 "(i64.sub (local.get 1) (i64.add (i64.shr_u (local.get 0) (i64.const 32)) (i64.const 5)))",
             ),
             "l0 = ((l1 - ((l0 >> (32 & 63)) + 5)) & 0xFFFFFFFFFFFFFFFF)",
+        );
+    }
+}
+
+/// Codegen-shape checks for the static load/store offset: a nonzero offset rides as a second argument to the `o`-suffixed unit, an offset-zero site keeps the one-argument unit, and a constant base folds with the offset at conversion time.
+#[cfg(test)]
+mod memory_offsets {
+    use super::*;
+
+    fn body(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// One function of an i32 address and an i32 value whose body is `stmt`.
+    fn mem_stmt(stmt: &str) -> String {
+        body(&format!(
+            "(module (memory 1) (func (export \"f\") (param i32 i32) {stmt}))"
+        ))
+    }
+
+    fn assert_line(src: &str, want: &str) {
+        assert!(
+            src.lines().any(|l| l.trim() == want),
+            "expected line `{want}` in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn nonzero_offset_rides_as_a_second_argument() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load offset=12 (local.get 0)))"),
+            "l1 = self.m.i32_loado(l0, 12)",
+        );
+        assert_line(
+            &mem_stmt("(i32.store offset=8 (local.get 0) (local.get 1))"),
+            "self.m.i32_storeo(l0, 8, l1)",
+        );
+    }
+
+    #[test]
+    fn offset_zero_keeps_the_one_argument_unit() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load (local.get 0)))"),
+            "l1 = self.m.i32_load(l0)",
+        );
+        assert_line(
+            &mem_stmt("(i32.store (local.get 0) (local.get 1))"),
+            "self.m.i32_store(l0, l1)",
+        );
+    }
+
+    #[test]
+    fn constant_base_folds_with_the_offset() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load offset=12 (i32.const 4)))"),
+            "l1 = self.m.i32_load(16)",
+        );
+        assert_line(
+            &mem_stmt("(i32.store offset=8 (i32.const 4) (local.get 1))"),
+            "self.m.i32_store(12, l1)",
         );
     }
 }
