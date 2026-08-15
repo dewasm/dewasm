@@ -152,7 +152,7 @@ fn generate_class_inner(
     data_file: Option<&str>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated data-file blob.
     // Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
@@ -252,7 +252,7 @@ impl Backend for PythonBackend {
             &opts.runtime,
             opts.default_wasi,
             &extra_seeds,
-            opts.data_file.as_ref().map(|c| c.sidecar_name.as_str()),
+            opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -268,14 +268,14 @@ impl Backend for PythonBackend {
             w.line("import threading");
         }
         w.line("import time");
-        // Externalized data blob: read once at import time from the sidecar next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions.
+        // Externalized data blob: read once at import time from the data file next to this module, then sliced by the generated `DATA_BLOB[o:o+len]` expressions.
         // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 w.line("");
                 w.line(format!(
                     "DATA_BLOB = open(os.path.join(os.path.dirname(__file__), {}), \"rb\").read()",
-                    py_string(&cfg.sidecar_name)
+                    py_string(&cfg.data_file_name)
                 ));
             }
         }
@@ -386,7 +386,7 @@ impl Backend for PythonBackend {
             name: format!("{}.py", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices.
+        // The data file: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB[o:o+len]` slices.
         // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -395,7 +395,7 @@ impl Backend for PythonBackend {
                     blob.extend_from_slice(&data.data);
                 }
                 files.push(OutputFile {
-                    name: cfg.sidecar_name.clone(),
+                    name: cfg.data_file_name.clone(),
                     contents: blob,
                 });
             }
@@ -481,7 +481,7 @@ struct Gen<'a> {
     /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]).
     /// `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
     flat: RefCell<Option<flat::Plan>>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals; `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary data file of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).

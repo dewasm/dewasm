@@ -106,7 +106,7 @@ fn update_support_docs() -> Result<()> {
 }
 
 /// A capture closure's output: the `(path, bytes)` files to write for one target.
-/// Most targets yield one file; the DOOM and NES frames yield two (the compared PPM plus a human-facing PNG sidecar).
+/// Most targets yield one file; the DOOM and NES frames yield two (the compared PPM plus a human-facing PNG of the same frame).
 type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
 
 /// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write.

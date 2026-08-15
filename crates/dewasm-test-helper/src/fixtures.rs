@@ -49,7 +49,7 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
         .expect("generate")
         .remove(0)
         .contents;
-    // The primary source is always UTF-8 (generated code); only the optional data sidecar is raw bytes, and this helper only ever asks for the primary file (`data_file: None`).
+    // The primary source is always UTF-8 (generated code); only the optional data file is raw bytes, and this helper only ever asks for the primary file (`data_file: None`).
     String::from_utf8(source).expect("generated source is valid UTF-8")
 }
 

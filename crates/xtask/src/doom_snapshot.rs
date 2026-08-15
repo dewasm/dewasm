@@ -157,7 +157,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 /// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit
 /// RGB PNG.
 /// Settings are the crate defaults, kept fixed so regeneration is byte-stable (verified by capturing twice and diffing).
-/// This PNG is a human-facing sidecar only: no test compares it.
+/// This PNG exists only for humans to view: no test compares it.
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for px in frame.chunks_exact(4) {

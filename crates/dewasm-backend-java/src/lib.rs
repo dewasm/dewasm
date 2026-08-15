@@ -227,7 +227,7 @@ impl Backend for JavaBackend {
             name: "Main.java".to_string(),
             contents: contents.into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `Arrays.copyOfRange(DATA_BLOB, …)` slices.
+        // The data file: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `Arrays.copyOfRange(DATA_BLOB, …)` slices.
         // Only emitted when there is data to externalize (otherwise nothing reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -236,7 +236,7 @@ impl Backend for JavaBackend {
                     blob.extend_from_slice(&data.data);
                 }
                 files.push(OutputFile {
-                    name: cfg.sidecar_name.clone(),
+                    name: cfg.data_file_name.clone(),
                     contents: blob,
                 });
             }
@@ -279,7 +279,7 @@ fn new_gen(
     default_wasi: bool,
     data_file: Option<String>,
 ) -> Gen<'_> {
-    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated sidecar blob.
+    // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated data-file blob.
     // Only consulted when externalizing.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
@@ -319,7 +319,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         module,
         type_name.clone(),
         opts.default_wasi,
-        opts.data_file.as_ref().map(|c| c.sidecar_name.clone()),
+        opts.data_file.as_ref().map(|c| c.data_file_name.clone()),
     );
     // A module whose function count crosses the threshold is split across nested `P{k}` classes, each with its own constant pool.
     // Set before the constructor: its exports/start emit function calls through `defined_call`, which qualifies them by partition.
@@ -329,12 +329,12 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     // Into its own writer: `uses` must be complete before the runtime bundle is assembled.
     let mut body = CodeWriter::new("\t");
     gen.constructor(&mut body);
-    // Externalized data blob: a static field loaded once from the sidecar next to this program, sliced by the generated `Arrays.copyOfRange(DATA_BLOB, …)` calls.
+    // Externalized data blob: a static field loaded once from the data file next to this program, sliced by the generated `Arrays.copyOfRange(DATA_BLOB, …)` calls.
     // Only emitted when there is data to externalize (otherwise the generated code never reads it).
-    if let Some(sidecar) = &gen.data_file {
+    if let Some(data_file_name) = &gen.data_file {
         if !module.datas.is_empty() {
             body.line("");
-            gen.emit_data_blob(&mut body, sidecar);
+            gen.emit_data_blob(&mut body, data_file_name);
         }
     }
     let num_imported = module.num_imported_funcs() as usize;
@@ -632,7 +632,7 @@ struct Gen<'a> {
     partitioned: Cell<bool>,
     /// True while emitting a function body inside a `P{k}` partition class, so instance references resolve through the passed `inst` parameter.
     in_partition: Cell<bool>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (loaded once into the static `DATA_BLOB`) instead of embedded as chunked Base64; `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary data file of this filename (loaded once into the static `DATA_BLOB`) instead of embedded as chunked Base64; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
@@ -658,9 +658,9 @@ impl<'a> Gen<'a> {
     }
 
     /// Emit the static `DATA_BLOB` field and its loader.
-    /// The sidecar is resolved relative to this program's own code source: the jar's directory (regular file) or the class directory itself, so `java -cp <dir> Main` finds the sidecar alongside the class.
+    /// The data file is resolved relative to this program's own code source: the jar's directory (regular file) or the class directory itself, so `java -cp <dir> Main` finds the data file alongside the class.
     /// Only called when externalizing and the module has data.
-    fn emit_data_blob(&self, w: &mut CodeWriter, sidecar: &str) {
+    fn emit_data_blob(&self, w: &mut CodeWriter, data_file_name: &str) {
         w.line("static final byte[] DATA_BLOB = loadDataBlob();");
         w.line("");
         w.line("private static byte[] loadDataBlob() {");
@@ -677,12 +677,12 @@ impl<'a> Gen<'a> {
         );
         w.line(format!(
             "return java.nio.file.Files.readAllBytes(__dir.resolve({}));",
-            java_string(sidecar)
+            java_string(data_file_name)
         ));
         w.dedent();
         w.line("} catch (Exception __e) {");
         w.indent();
-        w.line("throw new RuntimeException(\"failed to load data sidecar\", __e);");
+        w.line("throw new RuntimeException(\"failed to load data file\", __e);");
         w.dedent();
         w.line("}");
         w.dedent();

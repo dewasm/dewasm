@@ -262,7 +262,7 @@ impl Backend for RubyBackend {
             &opts.runtime,
             opts.default_wasi,
             &extra_seeds,
-            opts.data_file.as_ref().map(|c| c.sidecar_name.as_str()),
+            opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -333,7 +333,7 @@ impl Backend for RubyBackend {
             name: format!("{}.rb", opts.module_name),
             contents: w.finish().into_bytes(),
         }];
-        // The data sidecar: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls.
+        // The data file: every segment's bytes concatenated in segment order, matching the `data_offsets` prefix sums baked into the generated `DATA_BLOB.byteslice` calls.
         // Only emitted when there is data to externalize (otherwise the generated code never reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -342,7 +342,7 @@ impl Backend for RubyBackend {
                     blob.extend_from_slice(&data.data);
                 }
                 files.push(OutputFile {
-                    name: cfg.sidecar_name.clone(),
+                    name: cfg.data_file_name.clone(),
                     contents: blob,
                 });
             }
@@ -436,7 +436,7 @@ struct Gen<'a> {
     /// Computed once in `generate_class_inner`.
     /// See the boundary criterion in the comment there.
     boxed_globals: BTreeSet<u32>,
-    /// When `Some`, data segments are externalized into a binary sidecar of this filename (referenced via `__dir__`) instead of embedded as hex literals; `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary data file of this filename (referenced via `__dir__`) instead of embedded as hex literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
