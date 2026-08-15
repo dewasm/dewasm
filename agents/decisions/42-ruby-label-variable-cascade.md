@@ -4,6 +4,7 @@ Status: **Accepted, 2026-07-28.**
 Implemented in `crates/dewasm-backend-ruby/src/lib.rs`; supersedes the multi-level-`br` and loop-`catch`-value decisions of [decision 4](4-ruby-backend-lowering.md) (its temps-hoisting and `call_indirect` decisions stand).
 The cross-frame relay protocol below (`__br`, the land-or-relay epilogue, the omitted outermost arm) is in turn superseded by [decision 58](58-ruby-branch-by-value.md); the lean frame shapes and the depth-1 fast path stand, and remain the lowering for every function with no crossed frame.
 [Decision 60](60-ruby-flatten-only-deep-crossings.md) then narrowed decision 58 to crossings of at least 16 frames, so the relay protocol still runs for every shallower branch.
+[Decision 72](72-ruby-dead-br-clear-elision.md) drops the epilogue's method-body-level clear where nothing later reads `__br`.
 
 ## Context
 
