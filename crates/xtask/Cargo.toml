@@ -17,12 +17,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-dewasm-cli = { path = "../dewasm-cli" }
 dewasm-test-helper.workspace = true
-# `bench` drives every backend directly through the `Backend` trait (never by shelling out to the `dewasm` binary) and reuses each backend crate's own
+# `bench` and `support_docs` drive every backend directly through the `Backend` trait (never by shelling out to the `dewasm` binary); `bench` also reuses each backend crate's own
 # `find_*` toolchain locator for the runner-availability probes.
-# `dewasm-cli`
-# already pulls all of them in, so this adds no workspace member.
 dewasm-core.workspace = true
 dewasm-backend.workspace = true
 dewasm-backend-ruby.workspace = true

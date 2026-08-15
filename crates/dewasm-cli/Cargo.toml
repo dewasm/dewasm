@@ -15,10 +15,6 @@ workspace = true
 # CI's main run; see docs/testing.md.
 slow_test = []
 
-[lib]
-name = "dewasm_cli"
-path = "src/lib.rs"
-
 [[bin]]
 name = "dewasm"
 path = "src/main.rs"

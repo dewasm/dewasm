@@ -2419,7 +2419,6 @@ dependencies = [
  "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
- "dewasm-cli",
  "dewasm-core",
  "dewasm-test-helper",
  "png",
