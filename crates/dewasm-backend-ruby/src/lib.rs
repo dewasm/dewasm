@@ -1111,7 +1111,7 @@ impl<'a> Gen<'a> {
                 let (method, addr_args) = self.mem_call(store_method(*op), addr, *offset);
                 w.line(format!(
                     "@m.{method}({addr_args}, {})",
-                    self.expr_text(value)
+                    self.modular(value).free()
                 ));
             }
             Stmt::Block { label, body } => {
@@ -1451,20 +1451,21 @@ impl<'a> Gen<'a> {
 
     /// The method name and address arguments for a load/store site.
     /// A nonzero static offset rides as a second argument to the `o`-suffixed unit, so the per-site addition and its call data disappear from the caller; an offset-zero site keeps the one-argument unit, whose call must not pay for an argument it never passes.
-    /// A constant base folds with the offset at conversion time (wasm's effective address does not wrap, so the folded literal may exceed 32 bits and the unit's bounds check still applies unchanged).
+    /// The unit reduces the base address modulo 2^32 itself, so the base renders in `Modular` context and needs no call-site mask.
+    /// A constant base folds with the offset at conversion time while the sum stays below 2^32 (where the unit's reduction is the identity); a larger sum can never be in bounds and rides as base plus offset so the unit's exact addition reaches the bounds check.
     fn mem_call(&self, method: &str, addr: &Expr, offset: u64) -> (String, String) {
         if offset == 0 {
-            return (self.mem(method).to_string(), self.masked(addr).free());
+            return (self.mem(method).to_string(), self.modular(addr).free());
         }
         if let Expr::I32Const(base) = addr {
-            return (
-                self.mem(method).to_string(),
-                (u64::from(*base) + offset).to_string(),
-            );
+            let sum = u64::from(*base) + offset;
+            if sum <= u64::from(u32::MAX) {
+                return (self.mem(method).to_string(), sum.to_string());
+            }
         }
         let method = format!("{method}o");
         self.use_unit(&format!("memory/{method}"));
-        let args = format!("{}, {offset}", self.masked(addr).free());
+        let args = format!("{}, {offset}", self.modular(addr).free());
         (method, args)
     }
 
@@ -1473,9 +1474,14 @@ impl<'a> Gen<'a> {
         self.masked(expr).free()
     }
 
-    /// An expression whose exact stored value is observed (a store, an argument, an address, a comparison operand): every result mask is kept.
+    /// An expression whose exact stored value is observed (an argument, a comparison operand): every result mask is kept.
     fn masked(&self, expr: &Expr) -> Rendered {
         self.expr(expr, MaskContext::Masked)
+    }
+
+    /// An expression a memory unit consumes: the unit reduces its address and stored-value arguments itself, so a congruent value suffices and the site's own mask may go.
+    fn modular(&self, expr: &Expr) -> Rendered {
+        self.expr(expr, MaskContext::Modular)
     }
 
     /// `ctx` is the consumer's view of the value: under a `Modular` consumer a site's own result mask is skipped when the shared bound guard allows it (see [`FIXNUM_LIMIT`]).
@@ -2283,6 +2289,79 @@ mod memory_offsets {
         assert_line(
             &mem_stmt("(i32.store offset=8 (i32.const 4) (local.get 1))"),
             "@m.i32_store(12, l1)",
+        );
+    }
+}
+
+/// Codegen-shape checks for the memory unit contract: the unit reduces its address and stored-value arguments modulo the width itself, so both render in `Modular` context and carry no call-site mask.
+#[cfg(test)]
+mod memory_operand_reduction {
+    use super::*;
+
+    fn body(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// One function of an i32 address and an i32 value whose body is `stmt`.
+    fn mem_stmt(stmt: &str) -> String {
+        body(&format!(
+            "(module (memory 1) (func (export \"f\") (param i32 i32) {stmt}))"
+        ))
+    }
+
+    fn assert_line(src: &str, want: &str) {
+        assert!(
+            src.lines().any(|l| l.trim() == want),
+            "expected line `{want}` in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn address_renders_bare() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load (i32.add (local.get 0) (i32.const 4))))"),
+            "l1 = @m.i32_load(l0 + 4)",
+        );
+        assert_line(
+            &mem_stmt("(i32.store (i32.add (local.get 0) (i32.const 4)) (local.get 1))"),
+            "@m.i32_store(l0 + 4, l1)",
+        );
+    }
+
+    #[test]
+    fn two_argument_base_renders_bare() {
+        assert_line(
+            &mem_stmt("(i32.store offset=8 (i32.add (local.get 0) (i32.const 4)) (local.get 1))"),
+            "@m.i32_storeo(l0 + 4, 8, l1)",
+        );
+    }
+
+    #[test]
+    fn store_value_renders_bare() {
+        assert_line(
+            &mem_stmt("(i32.store (local.get 0) (i32.add (local.get 1) (i32.const 1)))"),
+            "@m.i32_store(l0, l1 + 1)",
+        );
+    }
+
+    #[test]
+    fn narrow_store_value_renders_bare() {
+        assert_line(
+            &mem_stmt("(i32.store8 (local.get 0) (i32.add (local.get 1) (i32.const 1)))"),
+            "@m.i32_store8(l0, l1 + 1)",
+        );
+    }
+
+    #[test]
+    fn constant_base_past_the_address_space_keeps_the_exact_addition() {
+        // The folded sum would be reduced by the unit into a bounds success; base plus offset reaches the bounds check unreduced and traps.
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load offset=4294967295 (i32.const 1)))"),
+            "l1 = @m.i32_loado(1, 4294967295)",
         );
     }
 }
