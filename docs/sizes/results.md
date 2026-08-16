@@ -7,7 +7,7 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-08-11T18:27:09Z.
+Measured 2026-08-16T09:23:36Z.
 
 | | |
 | --- | --- |
@@ -51,68 +51,68 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 772 kB, then python at 2.03 MB; bash is largest at 7.73 MB, a span of 10x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 772 kB, then python at 1.83 MB; bash is largest at 7.73 MB, a span of 10x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 772 kB |
-| `ruby` | 2.11 MB |
-| `python` | 2.03 MB |
+| `ruby` | 1.91 MB |
+| `python` | 1.83 MB |
 | `perl` | 2.55 MB |
 | `bash` | 7.73 MB |
-| `go` | 2.43 MB |
+| `go` | 2.38 MB |
 | `java` | 3.05 MB |
 
 ### `sqlite3-shell.wasm`
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-shell-dark.svg">
-  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 7.94 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
+  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 7.24 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.31 MB |
-| `ruby` | 7.94 MB |
-| `python` | 8.40 MB |
+| `ruby` | 7.24 MB |
+| `python` | 7.70 MB |
 | `perl` | 12.9 MB |
 | `bash` | 37.6 MB |
-| `go` | 12.8 MB |
+| `go` | 12.6 MB |
 | `java` | 13.5 MB |
 
 ### `qjs.wasm`
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-qjs-dark.svg">
-  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.54 MB, then python at 7.07 MB; bash is largest at 27.0 MB, a span of 18x. The table below carries every number." src="figs/app-qjs.svg">
+  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.54 MB, then python at 6.56 MB; bash is largest at 27.0 MB, a span of 18x. The table below carries every number." src="figs/app-qjs.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.54 MB |
-| `ruby` | 7.09 MB |
-| `python` | 7.07 MB |
+| `ruby` | 6.58 MB |
+| `python` | 6.56 MB |
 | `perl` | 10.5 MB |
 | `bash` | 27.0 MB |
-| `go` | 10.6 MB |
+| `go` | 10.3 MB |
 | `java` | 10.7 MB |
 
 ### `ruby.wasm`
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-ruby-dark.svg">
-  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 72.0 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number." src="figs/app-ruby.svg">
+  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 66.9 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number." src="figs/app-ruby.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 35.0 MB |
-| `ruby` | 72.0 MB |
-| `python` | 82.2 MB |
+| `ruby` | 66.9 MB |
+| `python` | 77.1 MB |
 | `perl` | 135 MB |
 | `bash` | 311 MB |
-| `go` | 131 MB |
+| `go` | 130 MB |
 | `java` | 143 MB |
 
 ## Not measured

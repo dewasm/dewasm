@@ -12,6 +12,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-02T02-41-22Z-speed.json`: the first record, with the suite that introduced it (#106).
 - `2026-08-03T16-23-15Z-speed.json`: value-addressed branches and the halved generated source (#113).
 - `2026-08-11T18-25-24Z-speed.json`: re-baseline after #176, #167/#168, and #195's unit-comment rewrites.
+- `2026-08-16T09-22-02Z-speed.json`: re-baseline after the issue #164 mask elision and memory-unit rework (#224 to #245).
 
 ## Size records
 
@@ -19,3 +20,4 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-06T03-52-05Z-size.json`: the generated-source shrink (#167).
 - `2026-08-06T04-31-17Z-size.json`: Ruby parenthesis elision (#168).
 - `2026-08-11T18-27-09Z-size.json`: re-baseline beside the same day's speed record.
+- `2026-08-16T09-23-36Z-size.json`: the issue #164 reductions measured: every Ruby and Python output shrinks (sqlite3-shell 7.94 to 7.24 MB).
