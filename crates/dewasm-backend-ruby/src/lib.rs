@@ -25,8 +25,8 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::masking::{
-    bin_operand_context, elides_mask, eq_const_rewrite, fold_and_chain, shift_count_mode,
-    shift_width, un_operand_context, MaskContext, ShiftCountMode,
+    bin_operand_context, fold_and_chain, shift_count_mode, shift_width, un_operand_context,
+    Elision, MaskContext, ShiftCountMode,
 };
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
@@ -183,6 +183,7 @@ fn generate_class_inner(
         frame_stack: RefCell::new(Vec::new()),
         flat: RefCell::new(None),
         dead_clears: RefCell::new(HashSet::new()),
+        elision: RefCell::new(Elision::none(FIXNUM_LIMIT)),
         boxed_globals,
         data_file: data_file.map(str::to_string),
         data_offsets,
@@ -517,6 +518,8 @@ struct Gen<'a> {
     flat: RefCell<Option<flat::Plan>>,
     /// Per-function labels whose method-body-level clear is dead, set by `function()`; see [`dead_clears`].
     dead_clears: RefCell<HashSet<u32>>,
+    /// Mask-elision dataflow for the function being emitted, set by `function()`: which locals and temps store unmasked, and the variable intervals the elision guard reads.
+    elision: RefCell<Elision>,
     /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target.
     /// Computed once in `generate_class_inner`.
     /// See the boundary criterion in the comment there.
@@ -930,6 +933,7 @@ impl<'a> Gen<'a> {
         *self.frames.borrow_mut() = flat::frames(&func.body, flat::BreakToBlockEnd::Available);
         self.frame_stack.borrow_mut().clear();
         let ty = &self.module.types[func.type_idx as usize];
+        *self.elision.borrow_mut() = Elision::analyze(&ty.params, func, FIXNUM_LIMIT);
         let params = (0..ty.params.len())
             .map(|i| format!("l{i}"))
             .collect::<Vec<_>>()
@@ -1007,6 +1011,7 @@ impl<'a> Gen<'a> {
                 }
             }
         });
+        *self.elision.borrow_mut() = Elision::none(FIXNUM_LIMIT);
     }
 
     /// Emit `stmts` into a state machine, splitting at each dissolved frame.
@@ -1093,10 +1098,16 @@ impl<'a> Gen<'a> {
     fn stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::Assign { dst, expr } => {
-                w.line(format!("{} = {}", temp(*dst), self.expr_text(expr)));
+                let unmasked = self.elision.borrow().unmasked_temp(*dst);
+                w.line(format!(
+                    "{} = {}",
+                    temp(*dst),
+                    self.store_text(unmasked, expr)
+                ));
             }
             Stmt::LocalSet { idx, expr } => {
-                w.line(format!("l{idx} = {}", self.expr_text(expr)));
+                let unmasked = self.elision.borrow().unmasked_local(*idx);
+                w.line(format!("l{idx} = {}", self.store_text(unmasked, expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
                 w.line(format!(
@@ -1487,7 +1498,17 @@ impl<'a> Gen<'a> {
         self.masked(expr).free()
     }
 
-    /// An expression whose exact stored value is observed (an argument, a comparison operand): a result mask stays unless it is provably the identity on the exact value.
+    /// The right-hand side of a local or temp store: rendered modular when the dataflow proved every read of the destination modular, so the store needs no mask of its own.
+    fn store_text(&self, unmasked: bool, expr: &Expr) -> String {
+        let ctx = if unmasked {
+            MaskContext::Modular
+        } else {
+            MaskContext::Masked
+        };
+        self.expr(expr, ctx).free()
+    }
+
+    /// An expression whose exact stored value is observed (a local or temp store the dataflow did not clear, an argument, a comparison operand): a result mask stays unless it is provably the identity on the exact value.
     fn masked(&self, expr: &Expr) -> Rendered {
         self.expr(expr, MaskContext::Masked)
     }
@@ -1495,6 +1516,11 @@ impl<'a> Gen<'a> {
     /// An expression a memory unit consumes: the unit reduces its address and stored-value arguments itself, so a congruent value suffices and the site's own mask may go.
     fn modular(&self, expr: &Expr) -> Rendered {
         self.expr(expr, MaskContext::Modular)
+    }
+
+    /// Whether `e`'s own result mask may be skipped when its consumer reads it in `ctx`, per the shared guard with the current function's variable intervals supplied (see [`FIXNUM_LIMIT`]).
+    fn elide(&self, ctx: MaskContext, e: &Expr) -> bool {
+        self.elision.borrow().elides_mask(e, ctx)
     }
 
     /// `ctx` is the consumer's view of the value: under a `Modular` consumer a site's own result mask is skipped when the shared bound guard allows it (see [`FIXNUM_LIMIT`]).
@@ -1529,7 +1555,7 @@ impl<'a> Gen<'a> {
             ),
             Expr::Un(op, a) => {
                 let a = self.expr(a, un_operand_context(*op));
-                self.un(*op, a, elide(ctx, expr))
+                self.un(*op, a, self.elide(ctx, expr))
             }
             Expr::Bin(op, a, b) => {
                 if matches!(op, BinOp::I32And | BinOp::I64And) {
@@ -1546,7 +1572,7 @@ impl<'a> Gen<'a> {
                     Some(bits) => self.shift_count(b, bits),
                     None => self.expr(b, bin_operand_context(*op, 1, a, ctx)),
                 };
-                self.bin(*op, ra, rb, elide(ctx, expr))
+                self.bin(*op, ra, rb, self.elide(ctx, expr))
             }
             Expr::Load { op, addr, offset } => {
                 let (method, addr_args) = self.mem_call(load_code(*op), addr, *offset);
@@ -1610,16 +1636,17 @@ impl<'a> Gen<'a> {
     }
 
     /// `e == 0` / `e != 0`: the fallback test for a value that is not already a Ruby boolean.
-    /// A mask site whose raw interval pins a unique preimage of 0 compares unmasked against it (see [`eq_const_rewrite`]).
+    /// A mask site whose raw interval pins a unique preimage of 0 compares unmasked against it (see [`Elision::eq_const_rewrite`]; the per-function analysis both pins and renders, so the two agree on which masks drop).
     fn zero_test(&self, op: &'static str, e: &Expr) -> Rendered {
-        let (lhs, rhs) = match eq_const_rewrite(e, 0, FIXNUM_LIMIT) {
+        let rewrite = self.elision.borrow().eq_const_rewrite(e, 0);
+        let (lhs, rhs) = match rewrite {
             Some((x, ctx, t)) => (self.expr(x, ctx), number(t.to_string())),
             None => (self.masked(e), Rendered::atom("0".to_string())),
         };
         compare(lhs, op, rhs, EQ)
     }
 
-    /// The rendered operands of an integer equality whose one side is a constant, when the shared analysis pins the other side's mask to a unique raw preimage (see [`eq_const_rewrite`]); `None` renders both sides exact.
+    /// The rendered operands of an integer equality whose one side is a constant, when the shared analysis pins the other side's mask to a unique raw preimage (see [`Elision::eq_const_rewrite`]); `None` renders both sides exact.
     fn eq_rewrite_operands(&self, op: BinOp, a: &Expr, b: &Expr) -> Option<(Rendered, Rendered)> {
         use BinOp::*;
         if !matches!(op, I32Eq | I32Ne | I64Eq | I64Ne) {
@@ -1630,7 +1657,7 @@ impl<'a> Gen<'a> {
             (Expr::I64Const(c), e) | (e, Expr::I64Const(c)) => (e, *c),
             _ => return None,
         };
-        let (x, ctx, t) = eq_const_rewrite(e, c, FIXNUM_LIMIT)?;
+        let (x, ctx, t) = self.elision.borrow().eq_const_rewrite(e, c)?;
         Some((self.expr(x, ctx), number(t.to_string())))
     }
 
@@ -1956,11 +1983,6 @@ fn mask32_unless(elide: bool, a: Rendered) -> Rendered {
 /// 64-bit MRI keeps integers in `-2**62 .. 2**62 - 1` unboxed; a skipped mask must never expose an intermediate outside that range, or the elision would trade a cheap mask for bignum arithmetic.
 const FIXNUM_LIMIT: i128 = 1 << 62;
 
-/// Whether `e`'s own result mask may be skipped here, per the shared context and bound analysis.
-fn elide(ctx: MaskContext, e: &Expr) -> bool {
-    elides_mask(e, ctx, FIXNUM_LIMIT)
-}
-
 /// A receiver binds as tightly as a call, so anything looser is parenthesized.
 fn to_f(a: Rendered) -> Rendered {
     Rendered::atom(format!("{}.to_f", a.at(Prec::Atom)))
@@ -2238,7 +2260,7 @@ mod masks {
             &i32_expr("(i32.lt_u (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
             "l0 = l0 + l1 & 0xffffffff < l1 ? 1 : 0",
         );
-        // And storage: the statement position itself is an observation point, so the outer mask always stays.
+        // And a store to a local the dataflow cannot clear (the helper returns it directly): the outer mask stays.
         assert_line(
             &i32_expr("(i32.add (local.get 0) (local.get 1))"),
             "l0 = l0 + l1 & 0xffffffff",
@@ -2291,6 +2313,55 @@ mod masks {
             &i64_expr("(i64.shl (local.get 0) (i64.and (local.get 1) (i64.const 63)))"),
             "l0 = m64(l0 << (l1 & 63))",
         );
+    }
+
+    #[test]
+    fn dataflow_cleared_local_stores_unmasked() {
+        // Every read of l2 is a modular operand, so its store renders in modular context and the store mask disappears; the read sites are unchanged text.
+        let src = body(
+            "(module (func (export \"f\") (param i32 i32) (result i32) (local i32) \
+             (local.set 2 (i32.add (local.get 0) (i32.const 5))) \
+             (i32.add (local.get 2) (local.get 1))))",
+        );
+        assert_line(&src, "l2 = l0 + 5");
+        assert_line(&src, "return l2 + l1 & 0xffffffff");
+    }
+
+    #[test]
+    fn observed_local_keeps_the_store_mask() {
+        // l2 is returned directly, an exact observation, so its store keeps the mask.
+        let src = body(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             (local.set 1 (i32.add (local.get 0) (i32.const 5))) \
+             (local.get 1)))",
+        );
+        assert_line(&src, "l1 = l0 + 5 & 0xffffffff");
+    }
+
+    #[test]
+    fn compounding_loop_carried_local_keeps_the_store_mask() {
+        // l1 = l1 + 1 every iteration: unmasked, the interval would grow past the Fixnum limit, so the dataflow demotes it.
+        let src = body(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             (loop $l \
+               (local.set 1 (i32.add (local.get 1) (i32.const 1))) \
+               (br_if $l (local.get 0))) \
+             (i32.add (local.get 1) (local.get 0))))",
+        );
+        assert_line(&src, "l1 = l1 + 1 & 0xffffffff");
+    }
+
+    #[test]
+    fn converging_loop_carried_local_stores_unmasked() {
+        // The `& 255` re-narrows every iteration, so the interval settles and both the store mask and the add's own mask go.
+        let src = body(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             (loop $l \
+               (local.set 1 (i32.and (i32.add (local.get 1) (i32.const 1)) (i32.const 255))) \
+               (br_if $l (local.get 0))) \
+             (i32.add (local.get 1) (local.get 0))))",
+        );
+        assert_line(&src, "l1 = l1 + 1 & 255");
     }
 
     #[test]
