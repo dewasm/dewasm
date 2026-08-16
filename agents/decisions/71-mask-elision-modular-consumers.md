@@ -2,7 +2,8 @@
 
 Status: **Accepted, 2026-08-15.**
 Landed as the shared analysis in `crates/dewasm-backend/src/masking.rs` and its application in the Ruby backend's expression rendering (`crates/dewasm-backend-ruby/src/lib.rs`).
-The other masked-unsigned backends (Python, Perl, Bash) still mask every site; each can adopt the same analysis against its own unboxed-integer limit.
+The other masked-unsigned backends (Perl, Bash) still mask every site; each can adopt the same analysis against its own unboxed-integer limit.
+The Python backend adopted the analysis with the same 2^62 limit, 2026-08-15 (issue #221); the limit judgement and the measurements are in the consequences below.
 This is stage 1 of issue #164: elision within one expression tree only, no cross-statement analysis.
 
 ## Context
@@ -53,6 +54,9 @@ Operands of a site that keeps its own mask are still rendered in modular context
 
 - On the converted `sqlite3-shell` (standalone Ruby): file size 7,937,554 to 7,868,630 bytes (0.87% smaller), ISeq instructions 1,370,047 to 1,360,259 (0.71% fewer), ISeq memsize 47,605,992 to 47,212,640 bytes (0.83% smaller; `RubyVM::InstructionSequence.compile_file` on MRI 4.0.4, children included).
   4,822 of 36,622 `& 0xffffffff` sites (13.2%) and 72 of 2,443 `m64` calls (2.9%) are elided: above the rough 4% ceiling issue #219 estimated for this stage, and small in absolute terms as expected.
+- The Python backend (issue #221) uses the same 2^62 limit.
+  CPython integers are heap-allocated 30-bit-digit bignums at every size, so no unboxed range makes elision allocation-free as Fixnum does for Ruby; under the shared limit every exposed intermediate still fits in three digits, at most one more than the masked value it replaces, and the guard states the same claim on every backend.
+  On the converted `sqlite3-shell` (standalone Python): file size 8,403,153 to 8,329,167 bytes (0.88% smaller), 4,822 of 36,624 i32 and 72 of 2,440 i64 inline mask sites elided (the same sites as Ruby, analysis and limit being shared); a sqlite workload timing measured no change, and the Python backend's `mod masks` tests pin the same three shape directions.
 - The spec harness (decision 3) binds as always and passes for the Ruby backend under this lowering; codegen-shape tests (`mod masks` in the Ruby backend, plus unit tests in `masking.rs`) pin both directions: an elided site, a site kept by a non-modular consumer, and a site kept by the bound guard.
 - Decision 2's storage representation is unchanged; only the point at which the mask is applied moved from every producer to every observation point.
 - A module whose only `m64` references were elided arithmetic sites no longer bundles the `rt/m64` unit (other runtime units can still require it).

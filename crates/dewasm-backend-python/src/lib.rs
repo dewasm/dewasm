@@ -28,6 +28,7 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use dewasm_backend::masking::{bin_operand_context, elides_mask, un_operand_context, MaskContext};
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
     local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
@@ -697,7 +698,7 @@ impl<'a> Gen<'a> {
             w.line(format!(
                 "self.g{idx} = {}.Global({})",
                 self.rt_name,
-                self.expr(&global.init)
+                self.masked(&global.init)
             ));
         }
 
@@ -739,7 +740,7 @@ impl<'a> Gen<'a> {
                 } => {
                     self.use_unit("table/init");
                     w.line(format!("self.elem{i} = [{}]", items()));
-                    let offset = self.expr(offset);
+                    let offset = self.masked(offset);
                     w.line(format!(
                         "self.t{table_index}.init({offset}, self.elem{i}, 0, {})",
                         elem.items.len()
@@ -755,7 +756,7 @@ impl<'a> Gen<'a> {
                     self.use_unit("memory/init");
                     w.line(format!(
                         "self.m.init({}, {}, 0, {})",
-                        self.expr(offset),
+                        self.masked(offset),
                         self.data_expr(i, &data.data),
                         data.data.len()
                     ));
@@ -1255,7 +1256,7 @@ impl<'a> Gen<'a> {
                 results,
             } => {
                 let &[t] = &results[..] else { return None };
-                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
                 (t, self.call_string(*func, &args))
             }
             Stmt::CallIndirect {
@@ -1267,8 +1268,8 @@ impl<'a> Gen<'a> {
             } => {
                 let &[t] = &results[..] else { return None };
                 self.use_unit("table/call");
-                let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
-                call_args.extend(args.iter().map(|a| self.expr(a)));
+                let mut call_args = vec![self.masked(index), self.type_symbol(*type_idx)];
+                call_args.extend(args.iter().map(|a| self.masked(a)));
                 (
                     t,
                     format!("self.t{table_index}.call({})", call_args.join(", ")),
@@ -1276,7 +1277,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::MemoryGrow { dst, delta } => {
                 self.use_unit("memory/grow");
-                (*dst, format!("self.m.grow({})", self.expr(delta)))
+                (*dst, format!("self.m.grow({})", self.masked(delta)))
             }
             _ => return None,
         };
@@ -1345,13 +1346,13 @@ impl<'a> Gen<'a> {
     fn simple_stmt(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::Assign { dst, expr } => {
-                w.line(format!("{} = {}", temp(*dst), self.expr(expr)));
+                w.line(format!("{} = {}", temp(*dst), self.masked(expr)));
             }
             Stmt::LocalSet { idx, expr } => {
-                w.line(format!("l{idx} = {}", self.expr(expr)));
+                w.line(format!("l{idx} = {}", self.masked(expr)));
             }
             Stmt::GlobalSet { idx, expr } => {
-                w.line(format!("self.g{idx}.value = {}", self.expr(expr)));
+                w.line(format!("self.g{idx}.value = {}", self.masked(expr)));
             }
             Stmt::Store {
                 op,
@@ -1363,7 +1364,7 @@ impl<'a> Gen<'a> {
                     "self.m.{}({}, {})",
                     self.mem(store_method(*op)),
                     self.addr(addr, *offset),
-                    self.expr(value)
+                    self.masked(value)
                 ));
             }
             Stmt::Br(target) => self.branch(w, target),
@@ -1382,7 +1383,7 @@ impl<'a> Gen<'a> {
                     self.branch(w, default);
                     return;
                 }
-                w.line(format!("_i = {}", self.expr(index)));
+                w.line(format!("_i = {}", self.masked(index)));
                 for (n, target) in targets.iter().enumerate() {
                     let kw = if n == 0 { "if" } else { "elif" };
                     w.line(format!("{kw} _i == {n}:"));
@@ -1401,7 +1402,7 @@ impl<'a> Gen<'a> {
                 args,
                 results,
             } => {
-                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
                 let call = self.call_string(*func, &args);
                 w.line(assign_results(results, call));
             }
@@ -1413,8 +1414,8 @@ impl<'a> Gen<'a> {
                 results,
             } => {
                 self.use_unit("table/call");
-                let mut call_args = vec![self.expr(index), self.type_symbol(*type_idx)];
-                call_args.extend(args.iter().map(|a| self.expr(a)));
+                let mut call_args = vec![self.masked(index), self.type_symbol(*type_idx)];
+                call_args.extend(args.iter().map(|a| self.masked(a)));
                 let call = format!("self.t{table_index}.call({})", call_args.join(", "));
                 w.line(assign_results(results, call));
             }
@@ -1423,34 +1424,34 @@ impl<'a> Gen<'a> {
                 w.line(format!(
                     "{} = self.m.grow({})",
                     temp(*dst),
-                    self.expr(delta)
+                    self.masked(delta)
                 ));
             }
             Stmt::MemoryCopy { dst, src, len } => {
                 self.use_unit("memory/copy");
                 w.line(format!(
                     "self.m.copy({}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.masked(dst),
+                    self.masked(src),
+                    self.masked(len)
                 ));
             }
             Stmt::MemoryFill { dst, val, len } => {
                 self.use_unit("memory/fill");
                 w.line(format!(
                     "self.m.fill({}, {}, {})",
-                    self.expr(dst),
-                    self.expr(val),
-                    self.expr(len)
+                    self.masked(dst),
+                    self.masked(val),
+                    self.masked(len)
                 ));
             }
             Stmt::MemoryInit { seg, dst, src, len } => {
                 self.use_unit("memory/init");
                 w.line(format!(
                     "self.m.init({}, self.data{seg}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.masked(dst),
+                    self.masked(src),
+                    self.masked(len)
                 ));
             }
             Stmt::DataDrop { seg } => {
@@ -1461,7 +1462,7 @@ impl<'a> Gen<'a> {
             }
             Stmt::Throw { tag, args } => {
                 self.use_unit("rt/wasm_exception");
-                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
                 w.line(format!(
                     "raise {}.WasmException(self.tag{tag}, [{}])",
                     self.rt_name,
@@ -1469,7 +1470,7 @@ impl<'a> Gen<'a> {
                 ));
             }
             Stmt::ThrowRef { exn } => {
-                w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
+                w.line(format!("{}({})", self.rt("throw_ref"), self.masked(exn)));
             }
             Stmt::SourceLine(pos) => {
                 let file = &self.module.debug_files[pos.file as usize];
@@ -1485,9 +1486,9 @@ impl<'a> Gen<'a> {
                 self.use_unit("table/init");
                 w.line(format!(
                     "self.t{table_index}.init({}, self.elem{seg}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.masked(dst),
+                    self.masked(src),
+                    self.masked(len)
                 ));
             }
             Stmt::TableCopy {
@@ -1500,9 +1501,9 @@ impl<'a> Gen<'a> {
                 self.use_unit("table/copy");
                 w.line(format!(
                     "self.t{dst_table}.copy({}, self.t{src_table}, {}, {})",
-                    self.expr(dst),
-                    self.expr(src),
-                    self.expr(len)
+                    self.masked(dst),
+                    self.masked(src),
+                    self.masked(len)
                 ));
             }
             Stmt::ElemDrop { seg } => {
@@ -1543,11 +1544,11 @@ impl<'a> Gen<'a> {
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
         match values {
             [] => w.line("return"),
-            [v] => w.line(format!("return {}", self.expr(v))),
+            [v] => w.line(format!("return {}", self.masked(v))),
             vs => {
                 let vs = vs
                     .iter()
-                    .map(|v| self.expr(v))
+                    .map(|v| self.masked(v))
                     .collect::<Vec<_>>()
                     .join(", ");
                 w.line(format!("return ({vs})"));
@@ -1640,13 +1641,19 @@ impl<'a> Gen<'a> {
 
     fn addr(&self, addr: &Expr, offset: u64) -> String {
         if offset == 0 {
-            self.expr(addr)
+            self.masked(addr)
         } else {
-            format!("{} + {offset}", self.expr(addr))
+            format!("{} + {offset}", self.masked(addr))
         }
     }
 
-    fn expr(&self, expr: &Expr) -> String {
+    /// An expression whose exact stored value is observed (a store, an argument, an address, a comparison operand): every result mask is kept.
+    fn masked(&self, expr: &Expr) -> String {
+        self.expr(expr, MaskContext::Masked)
+    }
+
+    /// `ctx` is the consumer's view of the value: under a `Modular` consumer a site's own result mask is skipped when the shared bound guard allows it (see [`ELISION_LIMIT`]).
+    fn expr(&self, expr: &Expr, ctx: MaskContext) -> String {
         match expr {
             Expr::I32Const(v) => v.to_string(),
             Expr::I64Const(v) => v.to_string(),
@@ -1673,8 +1680,15 @@ impl<'a> Gen<'a> {
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) if is_boolean(a) => {
                 format!("(0 if {} else 1)", self.cond(a))
             }
-            Expr::Un(op, a) => self.un(*op, &self.expr(a)),
-            Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
+            Expr::Un(op, a) => {
+                let a = self.expr(a, un_operand_context(*op));
+                self.un(*op, &a, elide(ctx, expr))
+            }
+            Expr::Bin(op, a, b) => {
+                let ra = self.expr(a, bin_operand_context(*op, 0, ctx));
+                let rb = self.expr(b, bin_operand_context(*op, 1, ctx));
+                self.bin(*op, &ra, &rb, elide(ctx, expr))
+            }
             Expr::Load { op, addr, offset } => {
                 format!(
                     "self.m.{}({})",
@@ -1685,9 +1699,9 @@ impl<'a> Gen<'a> {
             Expr::Select { cond, then, els } => {
                 format!(
                     "({} if {} else {})",
-                    self.expr(then),
+                    self.masked(then),
                     self.cond(cond),
-                    self.expr(els)
+                    self.masked(els)
                 )
             }
             Expr::MemorySize => {
@@ -1707,10 +1721,10 @@ impl<'a> Gen<'a> {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
             Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
-                Some(rel) => self.rel(rel, &self.expr(a), &self.expr(b)),
-                None => format!("({}) != 0", self.expr(e)),
+                Some(rel) => self.rel(rel, &self.masked(a), &self.masked(b)),
+                None => format!("({}) != 0", self.masked(e)),
             },
-            _ => format!("({}) != 0", self.expr(e)),
+            _ => format!("({}) != 0", self.masked(e)),
         }
     }
 
@@ -1723,7 +1737,7 @@ impl<'a> Gen<'a> {
             Expr::Bin(op, ..) if signed_view_rel_op(*op).is_some() => {
                 format!("not ({})", self.cond(e))
             }
-            _ => format!("{} == 0", self.expr(e)),
+            _ => format!("{} == 0", self.masked(e)),
         }
     }
 
@@ -1738,7 +1752,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn un(&self, op: UnOp, a: &str) -> String {
+    fn un(&self, op: UnOp, a: &str, elide_mask: bool) -> String {
         use UnOp::*;
         match op {
             I32Eqz | I64Eqz => format!("(1 if {a} == 0 else 0)"),
@@ -1757,7 +1771,13 @@ impl<'a> Gen<'a> {
             F32Nearest | F64Nearest => format!("{}({a})", self.rt("fnearest")),
             F32Sqrt => format!("{}({}({a}))", self.rt("f32"), self.rt("fsqrt")),
             F64Sqrt => format!("{}({a})", self.rt("fsqrt")),
-            I32WrapI64 => format!("({a} & 0xFFFFFFFF)"),
+            I32WrapI64 => {
+                if elide_mask {
+                    a.to_string()
+                } else {
+                    format!("({a} & 0xFFFFFFFF)")
+                }
+            }
             I32TruncF32S | I32TruncF64S => format!("{}({a})", self.rt("i32_trunc_s")),
             I32TruncF32U | I32TruncF64U => format!("{}({a})", self.rt("i32_trunc_u")),
             I64TruncF32S | I64TruncF64S => format!("{}({a})", self.rt("i64_trunc_s")),
@@ -1790,19 +1810,19 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
+    fn bin(&self, op: BinOp, a: &str, b: &str, elide_mask: bool) -> String {
         use BinOp::*;
         // A comparison is a Python boolean; outside condition position it needs the conditional back to the i32 0 or 1 wasm expects (see `cond`).
         if let Some(rel) = signed_view_rel_op(op) {
             return format!("(1 if {} else 0)", self.rel(rel, a, b));
         }
         match op {
-            I32Add => format!("(({a} + {b}) & 0xFFFFFFFF)"),
-            I32Sub => format!("(({a} - {b}) & 0xFFFFFFFF)"),
-            I32Mul => format!("(({a} * {b}) & 0xFFFFFFFF)"),
-            I64Add => format!("(({a} + {b}) & 0xFFFFFFFFFFFFFFFF)"),
-            I64Sub => format!("(({a} - {b}) & 0xFFFFFFFFFFFFFFFF)"),
-            I64Mul => format!("(({a} * {b}) & 0xFFFFFFFFFFFFFFFF)"),
+            I32Add => mask32_unless(elide_mask, format!("{a} + {b}")),
+            I32Sub => mask32_unless(elide_mask, format!("{a} - {b}")),
+            I32Mul => mask32_unless(elide_mask, format!("{a} * {b}")),
+            I64Add => mask64_unless(elide_mask, format!("{a} + {b}")),
+            I64Sub => mask64_unless(elide_mask, format!("{a} - {b}")),
+            I64Mul => mask64_unless(elide_mask, format!("{a} * {b}")),
             I32DivS => format!("{}({a}, {b})", self.rt("i32_div_s")),
             I32DivU => format!("{}({a}, {b})", self.rt("i32_div_u")),
             I32RemS => format!("{}({a}, {b})", self.rt("i32_rem_s")),
@@ -1814,15 +1834,12 @@ impl<'a> Gen<'a> {
             I32And | I64And => format!("({a} & {b})"),
             I32Or | I64Or => format!("({a} | {b})"),
             I32Xor | I64Xor => format!("({a} ^ {b})"),
-            I32Shl => format!("(({a} << ({b} & 31)) & 0xFFFFFFFF)"),
+            I32Shl => mask32_unless(elide_mask, format!("{a} << ({b} & 31)")),
             I32ShrU => format!("({a} >> ({b} & 31))"),
-            I32ShrS => format!("(({}({a}) >> ({b} & 31)) & 0xFFFFFFFF)", self.rt("s32")),
-            I64Shl => format!("(({a} << ({b} & 63)) & 0xFFFFFFFFFFFFFFFF)"),
+            I32ShrS => mask32_unless(elide_mask, format!("{}({a}) >> ({b} & 31)", self.rt("s32"))),
+            I64Shl => mask64_unless(elide_mask, format!("{a} << ({b} & 63)")),
             I64ShrU => format!("({a} >> ({b} & 63))"),
-            I64ShrS => format!(
-                "(({}({a}) >> ({b} & 63)) & 0xFFFFFFFFFFFFFFFF)",
-                self.rt("s64")
-            ),
+            I64ShrS => mask64_unless(elide_mask, format!("{}({a}) >> ({b} & 63)", self.rt("s64"))),
             I32Rotl => format!("{}({a}, {b})", self.rt("i32_rotl")),
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
@@ -1842,6 +1859,33 @@ impl<'a> Gen<'a> {
             _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
     }
+}
+
+/// The i32 result mask, skipped when the consumer restores it; the grouping parentheses stay.
+fn mask32_unless(elide: bool, e: String) -> String {
+    if elide {
+        format!("({e})")
+    } else {
+        format!("(({e}) & 0xFFFFFFFF)")
+    }
+}
+
+/// The i64 counterpart of [`mask32_unless`].
+fn mask64_unless(elide: bool, e: String) -> String {
+    if elide {
+        format!("({e})")
+    } else {
+        format!("(({e}) & 0xFFFFFFFFFFFFFFFF)")
+    }
+}
+
+/// CPython integers are heap-allocated 30-bit-digit bignums at every size, so no unboxed range bounds an exposed intermediate the way Ruby's Fixnum does.
+/// The Ruby limit is kept anyway: under it every exposed intermediate fits in three digits, at most one more than the masked value it replaces, and the guard makes the same claim on every backend that uses it.
+const ELISION_LIMIT: i128 = 1 << 62;
+
+/// Whether `e`'s own result mask may be skipped here: the consumer must be modular and the shared bound guard must hold.
+fn elide(ctx: MaskContext, e: &Expr) -> bool {
+    ctx == MaskContext::Modular && elides_mask(e, ELISION_LIMIT)
 }
 
 /// A Python float literal that round-trips to the same double.
@@ -1900,6 +1944,128 @@ fn stmt_emits(stmt: &Stmt) -> bool {
         }
         // Everything else emits unconditionally (an `if` emits its header, with an empty `then` arm becoming `pass`), so only a construct that can lower to nothing needs an arm above.
         _ => true,
+    }
+}
+
+/// Codegen-shape checks for mask elision.
+/// The spec harness proves the generated code computes the right values; these pin the shapes it cannot distinguish: a mask restored by a modular consumer is gone, and a mask a non-modular consumer or the bound guard requires is still there.
+#[cfg(test)]
+mod masks {
+    use super::*;
+
+    fn body(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// One function of two i32 params whose body is `expr`, stored into a local so folding cannot drop it.
+    fn i32_expr(expr: &str) -> String {
+        body(&format!(
+            "(module (func (export \"f\") (param i32 i32) (result i32) (local.set 0 {expr}) (local.get 0)))"
+        ))
+    }
+
+    /// The i64 counterpart of [`i32_expr`].
+    fn i64_expr(expr: &str) -> String {
+        body(&format!(
+            "(module (func (export \"f\") (param i64 i64) (result i64) (local.set 0 {expr}) (local.get 0)))"
+        ))
+    }
+
+    fn assert_line(src: &str, want: &str) {
+        assert!(
+            src.lines().any(|l| l.trim() == want),
+            "expected line `{want}` in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn modular_consumer_drops_the_operand_mask() {
+        // The outer add's mask reduces the whole sum; the inner add needs none.
+        assert_line(
+            &i32_expr("(i32.add (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = (((l0 + l1) + l1) & 0xFFFFFFFF)",
+        );
+        // `shr_s` exposes at most the signed 32-bit range, so its own mask goes too.
+        assert_line(
+            &i32_expr("(i32.add (i32.shr_s (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = (((MRt.s32(l0) >> (l1 & 31)) + l1) & 0xFFFFFFFF)",
+        );
+        // A shift count is read through `& 31`, so the subtraction feeding it needs no mask.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (i32.sub (local.get 1) (i32.const 1)))"),
+            "l0 = ((l0 << ((l1 - 1) & 31)) & 0xFFFFFFFF)",
+        );
+        // The wrap disappears when the exposed i64 is provably narrow (here at most 2^32).
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i64) (result i32) (local i32) \
+                 (local.set 1 (i32.add (i32.wrap_i64 (i64.shr_u (local.get 0) (i64.const 32))) (i32.const 7))) (local.get 1)))",
+            ),
+            "l1 = (((l0 >> (32 & 63)) + 7) & 0xFFFFFFFF)",
+        );
+    }
+
+    #[test]
+    fn non_modular_consumer_keeps_the_operand_mask() {
+        // A division observes the exact value.
+        assert_line(
+            &i32_expr("(i32.div_u (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = MRt.i32_div_u(((l0 + l1) & 0xFFFFFFFF), l1)",
+        );
+        // So does a comparison.
+        assert_line(
+            &i32_expr("(i32.lt_u (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = (1 if ((l0 + l1) & 0xFFFFFFFF) < l1 else 0)",
+        );
+        // And storage: the statement position itself is an observation point, so the outer mask always stays.
+        assert_line(
+            &i32_expr("(i32.add (local.get 0) (local.get 1))"),
+            "l0 = ((l0 + l1) & 0xFFFFFFFF)",
+        );
+    }
+
+    #[test]
+    fn bound_guard_keeps_the_mask_on_wide_intermediates() {
+        // A full-range i32 product reaches 2^64, past the elision limit: the mul stays masked under a modular consumer.
+        assert_line(
+            &i32_expr("(i32.add (i32.mul (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = ((((l0 * l1) & 0xFFFFFFFF) + l1) & 0xFFFFFFFF)",
+        );
+        // Narrowed to bytes, the product is provably small and the mask goes.
+        assert_line(
+            &i32_expr(
+                "(i32.add (i32.mul (i32.and (local.get 0) (i32.const 255)) (i32.and (local.get 1) (i32.const 255))) (local.get 1))",
+            ),
+            "l0 = ((((l0 & 255) * (l1 & 255)) + l1) & 0xFFFFFFFF)",
+        );
+        // A full-range i64 wraps past the limit too: the wrap keeps its mask.
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i64) (result i32) (local i32) \
+                 (local.set 1 (i32.add (i32.wrap_i64 (local.get 0)) (i32.const 7))) (local.get 1)))",
+            ),
+            "l1 = (((l0 & 0xFFFFFFFF) + 7) & 0xFFFFFFFF)",
+        );
+    }
+
+    #[test]
+    fn i64_elides_only_under_the_shared_bound() {
+        // Two full-range i64 values sum past the limit: the inline mask stays even under the modular sub.
+        assert_line(
+            &i64_expr("(i64.sub (i64.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = ((((l0 + l1) & 0xFFFFFFFFFFFFFFFF) - l1) & 0xFFFFFFFFFFFFFFFF)",
+        );
+        // Provably narrow (the high half plus a constant), the inner mask goes.
+        assert_line(
+            &i64_expr(
+                "(i64.sub (local.get 1) (i64.add (i64.shr_u (local.get 0) (i64.const 32)) (i64.const 5)))",
+            ),
+            "l0 = ((l1 - ((l0 >> (32 & 63)) + 5)) & 0xFFFFFFFFFFFFFFFF)",
+        );
     }
 }
 
