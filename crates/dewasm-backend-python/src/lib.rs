@@ -28,7 +28,10 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use dewasm_backend::masking::{bin_operand_context, elides_mask, un_operand_context, MaskContext};
+use dewasm_backend::masking::{
+    bin_operand_context, elides_mask, eq_const_rewrite, fold_and_chain, un_operand_context,
+    MaskContext,
+};
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
     local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
@@ -1658,7 +1661,7 @@ impl<'a> Gen<'a> {
         (method, args)
     }
 
-    /// An expression whose exact stored value is observed (an argument, a comparison operand): every result mask is kept.
+    /// An expression whose exact stored value is observed (an argument, a comparison operand): a result mask stays unless it is provably the identity on the exact value.
     fn masked(&self, expr: &Expr) -> String {
         self.expr(expr, MaskContext::Masked)
     }
@@ -1701,8 +1704,16 @@ impl<'a> Gen<'a> {
                 self.un(*op, &a, elide(ctx, expr))
             }
             Expr::Bin(op, a, b) => {
-                let ra = self.expr(a, bin_operand_context(*op, 0, ctx));
-                let rb = self.expr(b, bin_operand_context(*op, 1, ctx));
+                if matches!(op, BinOp::I32And | BinOp::I64And) {
+                    if let Some((e, c)) = fold_and_chain(a, b) {
+                        return format!("({} & {c})", self.expr(e, MaskContext::Reducing));
+                    }
+                }
+                if let Some((ra, rb)) = self.eq_rewrite_operands(*op, a, b) {
+                    return self.bin(*op, &ra, &rb, false);
+                }
+                let ra = self.expr(a, bin_operand_context(*op, 0, b, ctx));
+                let rb = self.expr(b, bin_operand_context(*op, 1, a, ctx));
                 self.bin(*op, &ra, &rb, elide(ctx, expr))
             }
             Expr::Load { op, addr, offset } => {
@@ -1734,11 +1745,41 @@ impl<'a> Gen<'a> {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
             Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
-                Some(rel) => self.rel(rel, &self.masked(a), &self.masked(b)),
-                None => format!("({}) != 0", self.masked(e)),
+                Some(rel) => {
+                    let (ra, rb) = match self.eq_rewrite_operands(*op, a, b) {
+                        Some(pair) => pair,
+                        None => (self.masked(a), self.masked(b)),
+                    };
+                    self.rel(rel, &ra, &rb)
+                }
+                None => self.nonzero_test(e),
             },
-            _ => format!("({}) != 0", self.masked(e)),
+            _ => self.nonzero_test(e),
         }
+    }
+
+    /// `e != 0`: the fallback test for a value that is not already a Python boolean.
+    /// A mask site whose raw interval pins a unique preimage of 0 compares unmasked against it (see [`eq_const_rewrite`]).
+    fn nonzero_test(&self, e: &Expr) -> String {
+        match eq_const_rewrite(e, 0, ELISION_LIMIT) {
+            Some((x, ctx, t)) => format!("{} != {t}", self.expr(x, ctx)),
+            None => format!("({}) != 0", self.masked(e)),
+        }
+    }
+
+    /// The rendered operands of an integer equality whose one side is a constant, when the shared analysis pins the other side's mask to a unique raw preimage (see [`eq_const_rewrite`]); `None` renders both sides exact.
+    fn eq_rewrite_operands(&self, op: BinOp, a: &Expr, b: &Expr) -> Option<(String, String)> {
+        use BinOp::*;
+        if !matches!(op, I32Eq | I32Ne | I64Eq | I64Ne) {
+            return None;
+        }
+        let (e, c) = match (a, b) {
+            (Expr::I32Const(c), e) | (e, Expr::I32Const(c)) => (e, u64::from(*c)),
+            (Expr::I64Const(c), e) | (e, Expr::I64Const(c)) => (e, *c),
+            _ => return None,
+        };
+        let (x, ctx, t) = eq_const_rewrite(e, c, ELISION_LIMIT)?;
+        Some((self.expr(x, ctx), t.to_string()))
     }
 
     /// The negation of [`cond`]: `e` is zero.
@@ -1750,7 +1791,10 @@ impl<'a> Gen<'a> {
             Expr::Bin(op, ..) if signed_view_rel_op(*op).is_some() => {
                 format!("not ({})", self.cond(e))
             }
-            _ => format!("{} == 0", self.masked(e)),
+            _ => match eq_const_rewrite(e, 0, ELISION_LIMIT) {
+                Some((x, ctx, t)) => format!("{} == {t}", self.expr(x, ctx)),
+                None => format!("{} == 0", self.masked(e)),
+            },
         }
     }
 
@@ -1896,9 +1940,9 @@ fn mask64_unless(elide: bool, e: String) -> String {
 /// The Ruby limit is kept anyway: under it every exposed intermediate fits in three digits, at most one more than the masked value it replaces, and the guard makes the same claim on every backend that uses it.
 const ELISION_LIMIT: i128 = 1 << 62;
 
-/// Whether `e`'s own result mask may be skipped here: the consumer must be modular and the shared bound guard must hold.
+/// Whether `e`'s own result mask may be skipped here, per the shared context and bound analysis.
 fn elide(ctx: MaskContext, e: &Expr) -> bool {
-    ctx == MaskContext::Modular && elides_mask(e, ELISION_LIMIT)
+    elides_mask(e, ctx, ELISION_LIMIT)
 }
 
 /// A Python float literal that round-trips to the same double.
@@ -2078,6 +2122,93 @@ mod masks {
                 "(i64.sub (local.get 1) (i64.add (i64.shr_u (local.get 0) (i64.const 32)) (i64.const 5)))",
             ),
             "l0 = ((l1 - ((l0 >> (32 & 63)) + 5)) & 0xFFFFFFFFFFFFFFFF)",
+        );
+    }
+
+    #[test]
+    fn and_chain_constants_fold_at_conversion_time() {
+        assert_line(
+            &i32_expr("(i32.and (i32.and (local.get 0) (i32.const 65280)) (i32.const 4080))"),
+            "l0 = (l0 & 3840)",
+        );
+        // A single constant is the plain AND shape: nothing folds.
+        assert_line(
+            &i32_expr("(i32.and (i32.and (local.get 0) (local.get 1)) (i32.const 15))"),
+            "l0 = ((l0 & l1) & 15)",
+        );
+    }
+
+    #[test]
+    fn a_constant_and_drops_the_operand_mask_unguarded() {
+        // The raw product exceeds the bound guard, but `& 255` reduces at least as strongly as the mask it replaces.
+        assert_line(
+            &i32_expr("(i32.and (i32.mul (local.get 0) (local.get 1)) (i32.const 255))"),
+            "l0 = ((l0 * l1) & 255)",
+        );
+        // The i64 mask disappears the same way.
+        assert_line(
+            &i64_expr("(i64.and (i64.add (local.get 0) (local.get 1)) (i64.const 255))"),
+            "l0 = ((l0 + l1) & 255)",
+        );
+        // The reduction covers only the AND's own operand: under the XOR the bound guard still binds.
+        assert_line(
+            &i32_expr(
+                "(i32.and (i32.xor (i32.mul (local.get 0) (local.get 1)) (local.get 1)) (i32.const 255))",
+            ),
+            "l0 = ((((l0 * l1) & 0xFFFFFFFF) ^ l1) & 255)",
+        );
+    }
+
+    #[test]
+    fn an_identity_mask_drops_at_an_observation_point() {
+        // The high half extracted by `>> 32` sits in [0, 2^32): the wrap is the identity even in the stored position.
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i64) (result i32) (local i32) \
+                 (local.set 1 (i32.wrap_i64 (i64.shr_u (local.get 0) (i64.const 32)))) (local.get 1)))",
+            ),
+            "l1 = (l0 >> (32 & 63))",
+        );
+    }
+
+    #[test]
+    fn a_pinned_constant_equality_drops_the_mask() {
+        // `((l0 - 5) & 0xFFFFFFFF) == 7` admits exactly one raw preimage, and the constant migrates across the sub.
+        assert_line(
+            &i32_expr("(i32.eq (i32.sub (local.get 0) (i32.const 5)) (i32.const 7))"),
+            "l0 = (1 if l0 == 12 else 0)",
+        );
+        // The same rewrite in boolean position.
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+                 (if (i32.eq (i32.sub (local.get 0) (i32.const 5)) (i32.const 7)) (then (local.set 1 (i32.const 1)))) (local.get 1)))",
+            ),
+            "if l0 == 12:",
+        );
+        // `eqz` is the equality against 0.
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+                 (if (i32.eqz (i32.sub (local.get 0) (i32.const 5))) (then (local.set 1 (i32.const 1)))) (local.get 1)))",
+            ),
+            "if l0 == 5:",
+        );
+    }
+
+    #[test]
+    fn an_unpinned_constant_equality_keeps_the_mask() {
+        // A two-sided sub spans almost 2^33: two candidates fit, so the mask stays.
+        assert_line(
+            &i32_expr("(i32.eq (i32.sub (local.get 0) (local.get 1)) (i32.const 7))"),
+            "l0 = (1 if ((l0 - l1) & 0xFFFFFFFF) == 7 else 0)",
+        );
+        // No candidate fits: statically false, but the comparison still runs (the operand could trap), only the identity mask goes.
+        assert_line(
+            &i32_expr(
+                "(i32.eq (i32.add (i32.and (local.get 0) (i32.const 3)) (i32.const 1)) (i32.const 9))",
+            ),
+            "l0 = (1 if ((l0 & 3) + 1) == 9 else 0)",
         );
     }
 }
