@@ -24,6 +24,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use dewasm_backend::masking::{bin_operand_context, elides_mask, un_operand_context, MaskContext};
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
     local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
@@ -1451,10 +1452,10 @@ impl<'a> Gen<'a> {
 
     fn addr(&self, addr: &Expr, offset: u64) -> Rendered {
         if offset == 0 {
-            self.expr(addr)
+            self.masked(addr)
         } else {
             infix(
-                self.expr(addr),
+                self.masked(addr),
                 "+",
                 Rendered::atom(offset.to_string()),
                 ADD,
@@ -1464,10 +1465,16 @@ impl<'a> Gen<'a> {
 
     /// An expression in a position that constrains nothing, ready to be pasted into a statement.
     fn expr_text(&self, expr: &Expr) -> String {
-        self.expr(expr).free()
+        self.masked(expr).free()
     }
 
-    fn expr(&self, expr: &Expr) -> Rendered {
+    /// An expression whose exact stored value is observed (a store, an argument, an address, a comparison operand): every result mask is kept.
+    fn masked(&self, expr: &Expr) -> Rendered {
+        self.expr(expr, MaskContext::Masked)
+    }
+
+    /// `ctx` is the consumer's view of the value: under a `Modular` consumer a site's own result mask is skipped when the shared bound guard allows it (see [`FIXNUM_LIMIT`]).
+    fn expr(&self, expr: &Expr, ctx: MaskContext) -> Rendered {
         match expr {
             Expr::I32Const(v) => number(v.to_string()),
             Expr::I64Const(v) => number(v.to_string()),
@@ -1496,15 +1503,22 @@ impl<'a> Gen<'a> {
                 Rendered::atom("0".to_string()),
                 Rendered::atom("1".to_string()),
             ),
-            Expr::Un(op, a) => self.un(*op, self.expr(a)),
-            Expr::Bin(op, a, b) => self.bin(*op, self.expr(a), self.expr(b)),
+            Expr::Un(op, a) => {
+                let a = self.expr(a, un_operand_context(*op));
+                self.un(*op, a, elide(ctx, expr))
+            }
+            Expr::Bin(op, a, b) => {
+                let ra = self.expr(a, bin_operand_context(*op, 0, ctx));
+                let rb = self.expr(b, bin_operand_context(*op, 1, ctx));
+                self.bin(*op, ra, rb, elide(ctx, expr))
+            }
             Expr::Load { op, addr, offset } => Rendered::atom(format!(
                 "@m.{}({})",
                 self.mem(load_method(*op)),
                 self.addr(addr, *offset).free()
             )),
             Expr::Select { cond, then, els } => {
-                ternary(self.cond(cond), self.expr(then), self.expr(els))
+                ternary(self.cond(cond), self.masked(then), self.masked(els))
             }
             Expr::MemorySize => {
                 self.use_unit("memory/size");
@@ -1523,7 +1537,7 @@ impl<'a> Gen<'a> {
             // `eqz` in boolean context is the negation of its operand's own test.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
             Expr::Bin(op, a, b) => match signed_view_rel_op(*op) {
-                Some(rel) => self.rel(rel, self.expr(a), self.expr(b)),
+                Some(rel) => self.rel(rel, self.masked(a), self.masked(b)),
                 None => self.zero_test("!=", e),
             },
             _ => self.zero_test("!=", e),
@@ -1543,7 +1557,7 @@ impl<'a> Gen<'a> {
 
     /// `e == 0` / `e != 0`: the fallback test for a value that is not already a Ruby boolean.
     fn zero_test(&self, op: &'static str, e: &Expr) -> Rendered {
-        compare(self.expr(e), op, Rendered::atom("0".to_string()), EQ)
+        compare(self.masked(e), op, Rendered::atom("0".to_string()), EQ)
     }
 
     /// A one-argument call to a runtime helper, recording its unit.
@@ -1555,7 +1569,16 @@ impl<'a> Gen<'a> {
         Rendered::atom(format!("{}({}, {})", self.rt(name), a.free(), b.free()))
     }
 
-    fn un(&self, op: UnOp, a: Rendered) -> Rendered {
+    /// The i64 result mask (`Rt.m64`), skipped when the consumer restores it; an elided site also keeps the `rt/m64` unit out of the bundle.
+    fn m64_unless(&self, elide: bool, a: Rendered) -> Rendered {
+        if elide {
+            a
+        } else {
+            self.call1("m64", a)
+        }
+    }
+
+    fn un(&self, op: UnOp, a: Rendered, elide_mask: bool) -> Rendered {
         use UnOp::*;
         match op {
             I32Eqz | I64Eqz => ternary(
@@ -1581,7 +1604,7 @@ impl<'a> Gen<'a> {
                 self.call1("f32", r)
             }
             F64Sqrt => self.call1("fsqrt", a),
-            I32WrapI64 => mask32(a),
+            I32WrapI64 => mask32_unless(elide_mask, a),
             I32TruncF32S | I32TruncF64S => self.call1("i32_trunc_s", a),
             I32TruncF32U | I32TruncF64U => self.call1("i32_trunc_u", a),
             I64TruncF32S | I64TruncF64S => self.call1("i64_trunc_s", a),
@@ -1623,7 +1646,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn bin(&self, op: BinOp, a: Rendered, b: Rendered) -> Rendered {
+    fn bin(&self, op: BinOp, a: Rendered, b: Rendered, elide_mask: bool) -> Rendered {
         use BinOp::*;
         // A comparison is a Ruby boolean; outside condition position it needs the ternary back to the i32 0 or 1 wasm expects (see `cond`).
         if let Some(rel) = signed_view_rel_op(op) {
@@ -1634,12 +1657,12 @@ impl<'a> Gen<'a> {
             );
         }
         match op {
-            I32Add => mask32(infix(a, "+", b, ADD)),
-            I32Sub => mask32(infix(a, "-", b, ADD)),
-            I32Mul => mask32(infix(a, "*", b, MUL)),
-            I64Add => self.call1("m64", infix(a, "+", b, ADD)),
-            I64Sub => self.call1("m64", infix(a, "-", b, ADD)),
-            I64Mul => self.call1("m64", infix(a, "*", b, MUL)),
+            I32Add => mask32_unless(elide_mask, infix(a, "+", b, ADD)),
+            I32Sub => mask32_unless(elide_mask, infix(a, "-", b, ADD)),
+            I32Mul => mask32_unless(elide_mask, infix(a, "*", b, MUL)),
+            I64Add => self.m64_unless(elide_mask, infix(a, "+", b, ADD)),
+            I64Sub => self.m64_unless(elide_mask, infix(a, "-", b, ADD)),
+            I64Mul => self.m64_unless(elide_mask, infix(a, "*", b, MUL)),
             I32DivS => self.call2("i32_div_s", a, b),
             I32DivU => self.call2("i32_div_u", a, b),
             I32RemS => self.call2("i32_rem_s", a, b),
@@ -1651,14 +1674,17 @@ impl<'a> Gen<'a> {
             I32And | I64And => infix(a, "&", b, BIT_AND),
             I32Or | I64Or => infix(a, "|", b, BIT_OR),
             I32Xor | I64Xor => infix(a, "^", b, BIT_OR),
-            I32Shl => mask32(infix(a, "<<", shift_count(b, 31), SHIFT)),
+            I32Shl => mask32_unless(elide_mask, infix(a, "<<", shift_count(b, 31), SHIFT)),
             I32ShrU => infix(a, ">>", shift_count(b, 31), SHIFT),
-            I32ShrS => mask32(infix(self.call1("s32", a), ">>", shift_count(b, 31), SHIFT)),
-            I64Shl => self.call1("m64", infix(a, "<<", shift_count(b, 63), SHIFT)),
+            I32ShrS => mask32_unless(
+                elide_mask,
+                infix(self.call1("s32", a), ">>", shift_count(b, 31), SHIFT),
+            ),
+            I64Shl => self.m64_unless(elide_mask, infix(a, "<<", shift_count(b, 63), SHIFT)),
             I64ShrU => infix(a, ">>", shift_count(b, 63), SHIFT),
             I64ShrS => {
                 let s = self.call1("s64", a);
-                self.call1("m64", infix(s, ">>", shift_count(b, 63), SHIFT))
+                self.m64_unless(elide_mask, infix(s, ">>", shift_count(b, 63), SHIFT))
             }
             I32Rotl => self.call2("i32_rotl", a, b),
             I32Rotr => self.call2("i32_rotr", a, b),
@@ -1844,6 +1870,23 @@ fn not(a: Rendered) -> Rendered {
 
 fn mask32(a: Rendered) -> Rendered {
     infix(a, "&", Rendered::atom("0xffffffff".to_string()), BIT_AND)
+}
+
+/// The i32 result mask, skipped when the consumer restores it.
+fn mask32_unless(elide: bool, a: Rendered) -> Rendered {
+    if elide {
+        a
+    } else {
+        mask32(a)
+    }
+}
+
+/// 64-bit MRI keeps integers in `-2**62 .. 2**62 - 1` unboxed; a skipped mask must never expose an intermediate outside that range, or the elision would trade a cheap mask for bignum arithmetic.
+const FIXNUM_LIMIT: i128 = 1 << 62;
+
+/// Whether `e`'s own result mask may be skipped here: the consumer must be modular and the shared bound guard must hold.
+fn elide(ctx: MaskContext, e: &Expr) -> bool {
+    ctx == MaskContext::Modular && elides_mask(e, FIXNUM_LIMIT)
 }
 
 /// A shift count, masked to the width wasm defines it modulo.
@@ -2050,6 +2093,128 @@ mod parens {
             )
             .contains("if !(l0 < l1)"),
             "the negated comparison lost its group"
+        );
+    }
+}
+
+/// Codegen-shape checks for mask elision.
+/// The spec harness proves the generated code computes the right values; these pin the shapes it cannot distinguish: a mask restored by a modular consumer is gone, and a mask a non-modular consumer or the Fixnum bound guard requires is still there.
+#[cfg(test)]
+mod masks {
+    use super::*;
+
+    fn body(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("parse wat");
+        let module = dewasm_core::build_module(&bytes).expect("build module");
+        let (src, _) =
+            generate_class_with_units(&module, "M", &RuntimeLinkage::Embedded, false).unwrap();
+        src
+    }
+
+    /// One function of two i32 params whose body is `expr`, stored into a local so folding cannot drop it.
+    fn i32_expr(expr: &str) -> String {
+        body(&format!(
+            "(module (func (export \"f\") (param i32 i32) (result i32) (local.set 0 {expr}) (local.get 0)))"
+        ))
+    }
+
+    /// The i64 counterpart of [`i32_expr`].
+    fn i64_expr(expr: &str) -> String {
+        body(&format!(
+            "(module (func (export \"f\") (param i64 i64) (result i64) (local.set 0 {expr}) (local.get 0)))"
+        ))
+    }
+
+    fn assert_line(src: &str, want: &str) {
+        assert!(
+            src.lines().any(|l| l.trim() == want),
+            "expected line `{want}` in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn modular_consumer_drops_the_operand_mask() {
+        // The outer add's mask reduces the whole sum; the inner add needs none.
+        assert_line(
+            &i32_expr("(i32.add (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = l0 + l1 + l1 & 0xffffffff",
+        );
+        // `shr_s` exposes at most the signed 32-bit range, so its own mask goes too.
+        assert_line(
+            &i32_expr("(i32.add (i32.shr_s (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = (s32(l0) >> (l1 & 31)) + l1 & 0xffffffff",
+        );
+        // A shift count is read through `& 31`, so the subtraction feeding it needs no mask.
+        assert_line(
+            &i32_expr("(i32.shl (local.get 0) (i32.sub (local.get 1) (i32.const 1)))"),
+            "l0 = l0 << (l1 - 1 & 31) & 0xffffffff",
+        );
+        // The wrap disappears when the exposed i64 is provably narrow (here at most 2^32).
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i64) (result i32) (local i32) \
+                 (local.set 1 (i32.add (i32.wrap_i64 (i64.shr_u (local.get 0) (i64.const 32))) (i32.const 7))) (local.get 1)))",
+            ),
+            "l1 = (l0 >> (32 & 63)) + 7 & 0xffffffff",
+        );
+    }
+
+    #[test]
+    fn non_modular_consumer_keeps_the_operand_mask() {
+        // A division observes the exact value.
+        assert_line(
+            &i32_expr("(i32.div_u (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = i32_div_u(l0 + l1 & 0xffffffff, l1)",
+        );
+        // So does a comparison.
+        assert_line(
+            &i32_expr("(i32.lt_u (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = l0 + l1 & 0xffffffff < l1 ? 1 : 0",
+        );
+        // And storage: the statement position itself is an observation point, so the outer mask always stays.
+        assert_line(
+            &i32_expr("(i32.add (local.get 0) (local.get 1))"),
+            "l0 = l0 + l1 & 0xffffffff",
+        );
+    }
+
+    #[test]
+    fn bound_guard_keeps_the_mask_on_wide_intermediates() {
+        // A full-range i32 product reaches 2^64, past the Fixnum limit: the mul stays masked under a modular consumer.
+        assert_line(
+            &i32_expr("(i32.add (i32.mul (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = (l0 * l1 & 0xffffffff) + l1 & 0xffffffff",
+        );
+        // Narrowed to bytes, the product is provably small and the mask goes.
+        assert_line(
+            &i32_expr(
+                "(i32.add (i32.mul (i32.and (local.get 0) (i32.const 255)) (i32.and (local.get 1) (i32.const 255))) (local.get 1))",
+            ),
+            "l0 = (l0 & 255) * (l1 & 255) + l1 & 0xffffffff",
+        );
+        // A full-range i64 wraps past the limit too: the wrap keeps its mask.
+        assert_line(
+            &body(
+                "(module (func (export \"f\") (param i64) (result i32) (local i32) \
+                 (local.set 1 (i32.add (i32.wrap_i64 (local.get 0)) (i32.const 7))) (local.get 1)))",
+            ),
+            "l1 = (l0 & 0xffffffff) + 7 & 0xffffffff",
+        );
+    }
+
+    #[test]
+    fn i64_elides_only_under_the_same_fixnum_bound() {
+        // Two full-range i64 values sum past the Fixnum limit: `Rt.m64` stays even under the modular sub.
+        assert_line(
+            &i64_expr("(i64.sub (i64.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "l0 = m64(m64(l0 + l1) - l1)",
+        );
+        // Provably narrow (the high half plus a constant), the inner `Rt.m64` goes.
+        assert_line(
+            &i64_expr(
+                "(i64.sub (local.get 1) (i64.add (i64.shr_u (local.get 0) (i64.const 32)) (i64.const 5)))",
+            ),
+            "l0 = m64(l1 - ((l0 >> (32 & 63)) + 5))",
         );
     }
 }

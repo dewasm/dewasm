@@ -3,6 +3,7 @@
 Status: **Accepted, 2026-07-23.**
 Backfilled; implemented for Ruby in `runtime/ruby/runtime.rb`.
 The conventions below bind every backend whose language lacks fixed-width/unsigned integers or 32-bit floats (Ruby, Python, PHP, Bash); Java/Go map to native types instead.
+[Decision 71](71-mask-elision-modular-consumers.md) loosens the always-masked convention to masked at observation points: inside one expression tree, a value whose consumer restores the mask may stay unmasked; the storage representation itself is unchanged.
 
 ## Context
 
