@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="272" viewBox="0 0 820 272" font-family="system-ui, -apple-system, Segoe UI, sans-serif" role="img" aria-label="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 72.0 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number.">
-<title>ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 72.0 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="272" viewBox="0 0 820 272" font-family="system-ui, -apple-system, Segoe UI, sans-serif" role="img" aria-label="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 66.9 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number.">
+<title>ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 66.9 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number.</title>
 <rect width="820" height="272" fill="#1a1a19"/>
 <line x1="168.0" y1="68.0" x2="168.0" y2="242.0" stroke="#c3c2b7" stroke-width="1" stroke-opacity="0.25"/>
 <text x="168.0" y="258.0" text-anchor="middle" font-size="11" fill="#c3c2b7">10 MB</text>
@@ -11,17 +11,17 @@
 <circle cx="368.6" cy="86.0" r="5.5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="90.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">35.0 MB</text>
 <text x="152.0" y="114.0" text-anchor="end" font-size="12" fill="#ffffff">ruby</text>
-<line x1="168.0" y1="110.0" x2="483.9" y2="110.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="483.9" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">72.0 MB</text>
+<line x1="168.0" y1="110.0" x2="472.1" y2="110.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="472.1" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">66.9 MB</text>
 <text x="152.0" y="138.0" text-anchor="end" font-size="12" fill="#ffffff">python</text>
-<line x1="168.0" y1="134.0" x2="505.1" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="505.1" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">82.2 MB</text>
+<line x1="168.0" y1="134.0" x2="494.9" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="494.9" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">77.1 MB</text>
 <text x="152.0" y="162.0" text-anchor="end" font-size="12" fill="#ffffff">go</text>
-<line x1="168.0" y1="158.0" x2="579.9" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="579.9" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">131 MB</text>
+<line x1="168.0" y1="158.0" x2="579.1" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="579.1" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">130 MB</text>
 <text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
 <line x1="168.0" y1="182.0" x2="584.3" y2="182.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="584.3" cy="182.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
