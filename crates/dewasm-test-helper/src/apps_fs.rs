@@ -200,6 +200,34 @@ pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
+/// toywasm (a WebAssembly interpreter written in C) interpreting a second wasm binary: the converted interpreter loads the cached `cowsay.wasm` out of the app cache, preopened at `/apps`, and `--wasi` gives that guest its own WASI.
+/// The expected stdout is the [`COWSAY_ARGS`](crate::COWSAY_ARGS) snapshot, so the case asserts that running cowsay *through* the converted interpreter produces the same bytes as running cowsay directly under wasmtime.
+/// That indirect ground truth is the only one available: wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with `EBADF`, and toywasm's WASI setup treats the failure as fatal, so wasmtime cannot run the pinned toywasm binary at all.
+pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
+    name: "toywasm_cowsay",
+    wasm: "toywasm",
+    class: "Toywasm",
+    env: &[],
+    preopens: &[],
+    cache_preopens: &[("/apps", "")],
+    stage: &[],
+    runs: &[FsRun {
+        args: &[
+            "toywasm",
+            "--wasi",
+            "/apps/cowsay.wasm",
+            "Hello",
+            "from",
+            "dewasm!",
+        ],
+        stdin: "",
+        expect_stdout: Some(include_str!(
+            "../../../examples/apps/snapshots/cowsay_args.stdout"
+        )),
+        assert_host: assert_none,
+    }],
+};
+
 /// Apply each [`Stage`] step into `scratch`, copying from `fixtures` (the shared [`apps_fixtures_dir`]).
 /// Shared by the filesystem-app runner and the
 /// C-API runner (the exiftool case stages its image fixture the same way), so fixture staging lives in one place.

@@ -2,6 +2,7 @@
 
 Status: **Accepted, 2026-07-29.**
 Implemented in PR #43 (issue #42).
+Decision 80 records the one exception to date: `fd_fdstat_set_flags` accepts any open fd, where copying wasmtime would make the toywasm app unrunnable.
 
 ## Context
 

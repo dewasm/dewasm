@@ -222,6 +222,14 @@ rescue Cruby::Rt::Exit
 end
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const RUBY_TOYWASM_GLUE: &str = r#"inst = Toywasm.new({}, args: ["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env: {}, preopens: {"/apps" => "{cache}"})
+begin
+  inst.invoke("_start")
+rescue Toywasm::Rt::Exit
+end
+"#;
+
 // C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory.
 // No wasmtime snapshot (the results live in guest memory), so each drive's output is pinned in the shared case const.
 // Only the file-backed case uses {scratch}.
@@ -599,6 +607,8 @@ dewasm_test_helper::rg_search_e2e!(Ruby, RUBY_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Ruby, RUBY_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Ruby, RUBY_CRUBY_GLUE);
 dewasm_test_helper::cruby_packed_hello_e2e!(Ruby);
+// Slow, like the other filesystem app cases: measured 1.7 s (convert the interpreter, then interpret the cowsay guest).
+dewasm_test_helper::toywasm_cowsay_e2e!(Ruby, RUBY_TOYWASM_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Ruby);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_MEM);

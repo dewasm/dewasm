@@ -328,6 +328,18 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Toywasm inst = new Toywasm(null, new String[]{"toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
+        try {
+            ((Toywasm.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Toywasm.Rt.Exit e) {
+        }
+    }
+}
+"#;
+
 /// The interpreter stdlib trees mount straight from the app cache ({cache}), never copied.
 const JAVA_CPYTHON_HELLO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -877,6 +889,8 @@ dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
+// Slow, like the other filesystem app cases: measured 7.6 s including `javac` (convert the interpreter, then interpret the cowsay guest).
+dewasm_test_helper::toywasm_cowsay_e2e!(Java, JAVA_TOYWASM_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);

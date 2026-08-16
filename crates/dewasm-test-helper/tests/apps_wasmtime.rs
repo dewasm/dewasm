@@ -75,7 +75,9 @@ fn gzip() {
     dewasm_test_helper::run_gzip_cases(&dewasm_test_helper::Wasmtime);
 }
 
-// The filesystem app cases: the `wasmtime_test` feature is already the opt-in, and `run_fs_app_case` runs unconditionally, so wasmtime runs the full set with no per-case exclusion; its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string.
+// The filesystem app cases: the `wasmtime_test` feature is already the opt-in, and `run_fs_app_case` runs unconditionally, so wasmtime runs every case it can here; its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string.
+// `TOYWASM_COWSAY` is the one exclusion: wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with EBADF and toywasm's WASI setup treats that as fatal, so wasmtime cannot run that binary.
+// The case takes its ground truth from the `cowsay_args` snapshot instead (see the case const).
 // Hand-written rather than via the per-case `*_e2e!` macros because those cannot carry the `wasmtime_test` `#[ignore]` attribute (the same reason `apps`/`gzip` above are hand-written).
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]

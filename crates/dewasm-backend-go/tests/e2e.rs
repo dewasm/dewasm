@@ -351,6 +351,21 @@ const GO_RG_SEARCH_GLUE: &str = r#"func RunTest() {
 }
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const GO_TOYWASM_GLUE: &str = r#"func RunTest() {
+	inst := NewToywasm(nil, []string{"toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, nil, map[string]string{"/apps": "{cache}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
 const GO_CPYTHON_GLUE: &str = r#"func RunTest() {
 	inst := NewCpython(nil, []string{"python", "-c", "print('hello from cpython', 6 * 7)"}, []string{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, map[string]string{"/lib": "{cache}/cpython-lib/lib"})
 	defer func() {
@@ -909,6 +924,8 @@ dewasm_test_helper::cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
 // The 49 MB wasi-vfs-packed variant is the same interpreter plus embedded stdlib (~14m13s).
 dewasm_test_helper::cruby_hello_e2e!(Go, GO_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Go, ultra);
+// Slow, like the other filesystem app cases: measured 7.6 s including the `go build` (convert the interpreter, then interpret the cowsay guest).
+dewasm_test_helper::toywasm_cowsay_e2e!(Go, GO_TOYWASM_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Go);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);

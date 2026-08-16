@@ -264,6 +264,15 @@ rg_invoke '_start'
 exit 0
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const BASH_TOYWASM_GLUE: &str = r#"WASI_ARGS=(toywasm --wasi /apps/cowsay.wasm Hello from 'dewasm!')
+WASI_ENV=()
+WASI_DIRS=('{cache}::/apps')
+toywasm_init || { echo "init failed" >&2; exit 1; }
+toywasm_invoke '_start'
+exit 0
+"#;
+
 /// CPython reading its stdlib from the cache-preopened tree at `/lib`; `WASI_ENV` carries `PYTHONHOME`/`PYTHONPATH` as the `NAME=value` strings the standalone main also builds.
 ///
 /// The leading `ulimit` is the one thing these two interpreters need that the smaller filesystem apps do not.
@@ -742,6 +751,9 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Bash, BASH_CPYTHON_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Bash, BASH_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Bash, ultra);
+// Ultra: interpreting the cowsay guest through the converted interpreter measured 697 s, the same order as the language-runtime giants above (an interpreter's dispatch loop is one bash function call per executed guest instruction).
+// It runs at `slow` on every other backend, so the case itself stays CI-covered.
+dewasm_test_helper::toywasm_cowsay_e2e!(Bash, BASH_TOYWASM_GLUE, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 // Ultra-slow category: tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run, well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)

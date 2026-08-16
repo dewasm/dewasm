@@ -72,7 +72,7 @@ Applies to all prose: docs, comments, PR text.
 Each rule is stated here in full; the cited decision holds its rationale and rejected alternatives.
 
 - The spec testsuite binds (decision 3). Correctness of generated code outranks its readability; readability improvements go into optional passes, never into semantics-relevant lowering.
-- Where the WASI spec is silent, copy wasmtime's behavior as measured on both CI hosts (decision 49).
+- Where the WASI spec is silent, copy wasmtime's behavior as measured on both CI hosts (decision 49). An exception needs all three of: wasmtime's shape breaks an in-scope app, the alternative has a reference implementation, the conformance suite does not assert wasmtime's shape; record it as a decision (decision 80 is the one to date).
 - Numeric representation conventions (masked-unsigned integers, f32 re-rounding, NaN bit paths) are shared across backends (decision 2).
   A backend skips a result mask only through the shared analyses in `dewasm_backend::masking`, never by its own reasoning: the consumption-context and bound analysis inside one expression tree (decision 71), and the per-function variable dataflow for unmasked local and temp stores (decision 73); a shift-count reduction folds or drops only through the same module's `shift_count_mode` (decision 74); constant AND operands, identity masks, and constant equalities go through the same machinery (decision 77).
 - Each backend's lowering shapes are fixed; follow them rather than restructuring in passing. They are recorded per backend: Ruby decisions 4/42-44/58/60/65/72/75/76/78/79, Bash decisions 5/11-13/34/35/51/52, Python decisions 28/75/76/78/79, Go decision 29, Java decision 30, Perl decision 55.

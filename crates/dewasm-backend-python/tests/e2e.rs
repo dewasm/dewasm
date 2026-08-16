@@ -226,6 +226,14 @@ except RgRt.Exit:
     pass
 "#;
 
+/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+const PYTHON_TOYWASM_GLUE: &str = r#"inst = Toywasm({}, args=["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
+try:
+    inst.invoke("_start")
+except ToywasmRt.Exit:
+    pass
+"#;
+
 const PYTHON_CPYTHON_GLUE: &str = r#"inst = Cpython({}, args=["python", "-c", "print('hello from cpython', 6 * 7)"], env={"PYTHONHOME": "/", "PYTHONPATH": "/lib/python3.14"}, preopens={"/lib": "{cache}/cpython-lib/lib"})
 try:
     inst.invoke("_start")
@@ -640,6 +648,8 @@ dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
 // Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on concurrent threads: three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature), where the pre-existing two fit.
 // The packed case is the newcomer, so it leaves the CI run; it still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
+// Slow, like the other filesystem app cases: measured 6.7 s (convert the interpreter, then interpret the cowsay guest).
+dewasm_test_helper::toywasm_cowsay_e2e!(Python, PYTHON_TOYWASM_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Python);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);

@@ -32,7 +32,7 @@ pub use apps_capi::{
 pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
     run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, RG_SEARCH,
-    SQLITE3_SHELL_DBFILE,
+    SQLITE3_SHELL_DBFILE, TOYWASM_COWSAY,
 };
 pub use backend::{
     derive_module_name, module_name_style, run_command, run_command_bytes, run_script,
@@ -583,6 +583,23 @@ macro_rules! cruby_hello_e2e {
             #[test]
             fn cruby_hello() {
                 $crate::run_fs_app_case(&$lang, &$crate::CRUBY_HELLO, $glue);
+            }
+        }
+    };
+}
+
+/// See [`qjs_file_io_e2e!`].
+/// Runs [`TOYWASM_COWSAY`](crate::TOYWASM_COWSAY): a wasm interpreter, itself converted out of wasm, interpreting a second cached wasm binary.
+#[macro_export]
+macro_rules! toywasm_cowsay_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::toywasm_cowsay_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn toywasm_cowsay() {
+                $crate::run_fs_app_case(&$lang, &$crate::TOYWASM_COWSAY, $glue);
             }
         }
     };
