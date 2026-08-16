@@ -1,4 +1,4 @@
 def i64_store8o(self, a, off, v):
-    a += off
+    a = (a & 0xFFFFFFFF) + off
     self.check(a, 1)
     self.data[a] = v & 0xFF

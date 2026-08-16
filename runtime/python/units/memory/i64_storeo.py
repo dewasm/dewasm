@@ -1,4 +1,4 @@
 def i64_storeo(self, a, off, v):
-    a += off
+    a = (a & 0xFFFFFFFF) + off
     self.check(a, 8)
-    self.data[a:a + 8] = (v & 0xFFFFFFFFFFFFFFFF).to_bytes(8, "little")
+    self.data[a:a + 8] = (v if 0 <= v <= 0xFFFFFFFFFFFFFFFF else v & 0xFFFFFFFFFFFFFFFF).to_bytes(8, "little")
