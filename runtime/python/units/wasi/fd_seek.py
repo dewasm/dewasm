@@ -1,4 +1,4 @@
-# requires: memory/i64_store, rt/s64
+# requires: memory/ids, rt/s64
 def wasi_fd_seek(self, fd, offset, whence, out_ptr):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
@@ -17,7 +17,7 @@ def wasi_fd_seek(self, fd, offset, whence, out_ptr):
         return self.ERRNO_INVAL
     try:
         io.seek(Rt.s64(offset), mode)
-        self.memory.i64_store(out_ptr, io.tell() & Rt.M64)
+        self.memory.ids(out_ptr, io.tell() & Rt.M64)
     except OSError as e:
         # A negative resulting offset is EINVAL, which WASI reports as INVAL
         # (not the generic IO used for other seek failures).

@@ -1,4 +1,4 @@
-# requires: memory/init, memory/i32_store, wasi/wasi_filetype, wasi/rights
+# requires: memory/init, memory/iws, wasi/wasi_filetype, wasi/rights
 def wasi_fd_readdir(fd, buf_ptr, buf_len, cookie, bufused_ptr)
   entry = @fds[fd]
   return ERRNO_BADF unless entry.is_a?(WasiDir)
@@ -18,7 +18,7 @@ def wasi_fd_readdir(fd, buf_ptr, buf_len, cookie, bufused_ptr)
   # A dirent may be legally truncated at the tail once buf_len runs out.
   out = out.byteslice(0, buf_len) if out.bytesize > buf_len
   @memory.init(buf_ptr, out, 0, out.bytesize)
-  @memory.i32_store(bufused_ptr, out.bytesize)
+  @memory.iws(bufused_ptr, out.bytesize)
   ERRNO_SUCCESS
 rescue SystemCallError
   ERRNO_IO

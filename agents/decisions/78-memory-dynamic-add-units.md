@@ -1,6 +1,6 @@
 # Decision 78: Wrapping-Add Memory Units for Dynamic Addresses
 
-Status: **Accepted, 2026-08-16.** Landed for Ruby and Python: each memory load/store unit has an `a`-suffixed twin taking a dynamic `i32.add` address as two arguments and wrapping their sum, and the emitters route offset-zero dynamic-add sites to it. Bash inlines its memory operations (decision 52), Go and Java compile the addition natively; Perl keeps the per-site arithmetic until it adopts the family with its own measurement.
+Status: **Accepted, 2026-08-16.** Landed for Ruby and Python: each memory load/store unit has an `a`-suffixed twin taking a dynamic `i32.add` address as two arguments and wrapping their sum, and the emitters route offset-zero dynamic-add sites to it. Bash inlines its memory operations (decision 52), Go and Java compile the addition natively; Perl keeps the per-site arithmetic until it adopts the family with its own measurement. The base unit names this record spells (`i32_load`, `i32_loada`, …) were later replaced by single-character codes (`iwl`, `iwla`, …; decision 79); the wrapping-add shape, the routing rule, and the `a` suffix stand unchanged.
 
 ## Context
 

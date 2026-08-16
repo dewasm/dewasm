@@ -29,10 +29,10 @@ use dewasm_backend::masking::{
     MaskContext,
 };
 use dewasm_backend::{
-    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
-    local_runs, module_name_error, signed_view_rel_op, store_method, terminates, type_key,
-    wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
+    module_name_error, signed_view_rel_op, store_code, terminates, type_key, wasi_bundled, Backend,
+    CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
+    SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -1111,7 +1111,7 @@ impl<'a> Gen<'a> {
                 value,
                 offset,
             } => {
-                let (method, addr_args) = self.mem_call(store_method(*op), addr, *offset);
+                let (method, addr_args) = self.mem_call(store_code(*op), addr, *offset);
                 w.line(format!(
                     "@m.{method}({addr_args}, {})",
                     self.modular(value).free()
@@ -1546,7 +1546,7 @@ impl<'a> Gen<'a> {
                 self.bin(*op, ra, rb, elide(ctx, expr))
             }
             Expr::Load { op, addr, offset } => {
-                let (method, addr_args) = self.mem_call(load_method(*op), addr, *offset);
+                let (method, addr_args) = self.mem_call(load_code(*op), addr, *offset);
                 Rendered::atom(format!("@m.{method}({addr_args})"))
             }
             Expr::Select { cond, then, els } => {
@@ -2394,11 +2394,11 @@ mod memory_offsets {
     fn nonzero_offset_rides_as_a_second_argument() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load offset=12 (local.get 0)))"),
-            "l1 = @m.i32_loado(l0, 12)",
+            "l1 = @m.iwlo(l0, 12)",
         );
         assert_line(
             &mem_stmt("(i32.store offset=8 (local.get 0) (local.get 1))"),
-            "@m.i32_storeo(l0, 8, l1)",
+            "@m.iwso(l0, 8, l1)",
         );
     }
 
@@ -2406,11 +2406,11 @@ mod memory_offsets {
     fn offset_zero_keeps_the_one_argument_unit() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load (local.get 0)))"),
-            "l1 = @m.i32_load(l0)",
+            "l1 = @m.iwl(l0)",
         );
         assert_line(
             &mem_stmt("(i32.store (local.get 0) (local.get 1))"),
-            "@m.i32_store(l0, l1)",
+            "@m.iws(l0, l1)",
         );
     }
 
@@ -2418,11 +2418,11 @@ mod memory_offsets {
     fn constant_base_folds_with_the_offset() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load offset=12 (i32.const 4)))"),
-            "l1 = @m.i32_load(16)",
+            "l1 = @m.iwl(16)",
         );
         assert_line(
             &mem_stmt("(i32.store offset=8 (i32.const 4) (local.get 1))"),
-            "@m.i32_store(12, l1)",
+            "@m.iws(12, l1)",
         );
     }
 
@@ -2430,11 +2430,11 @@ mod memory_offsets {
     fn dynamic_add_address_rides_as_two_arguments() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load (i32.add (local.get 0) (local.get 1))))"),
-            "l1 = @m.i32_loada(l0, l1)",
+            "l1 = @m.iwla(l0, l1)",
         );
         assert_line(
             &mem_stmt("(i32.store (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
-            "@m.i32_storea(l0, l1, l1)",
+            "@m.iwsa(l0, l1, l1)",
         );
     }
 
@@ -2442,7 +2442,7 @@ mod memory_offsets {
     fn constant_add_operand_keeps_the_one_argument_unit() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load (i32.add (i32.const 4) (local.get 0))))"),
-            "l1 = @m.i32_load(4 + l0)",
+            "l1 = @m.iwl(4 + l0)",
         );
     }
 
@@ -2450,7 +2450,7 @@ mod memory_offsets {
     fn dynamic_add_under_a_nonzero_offset_keeps_the_offset_unit() {
         assert_line(
             &mem_stmt("(i32.store offset=8 (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
-            "@m.i32_storeo(l0 + l1, 8, l1)",
+            "@m.iwso(l0 + l1, 8, l1)",
         );
     }
 }
@@ -2486,11 +2486,11 @@ mod memory_operand_reduction {
     fn address_renders_bare() {
         assert_line(
             &mem_stmt("(local.set 1 (i32.load (i32.add (local.get 0) (i32.const 4))))"),
-            "l1 = @m.i32_load(l0 + 4)",
+            "l1 = @m.iwl(l0 + 4)",
         );
         assert_line(
             &mem_stmt("(i32.store (i32.add (local.get 0) (i32.const 4)) (local.get 1))"),
-            "@m.i32_store(l0 + 4, l1)",
+            "@m.iws(l0 + 4, l1)",
         );
     }
 
@@ -2498,7 +2498,7 @@ mod memory_operand_reduction {
     fn two_argument_base_renders_bare() {
         assert_line(
             &mem_stmt("(i32.store offset=8 (i32.add (local.get 0) (i32.const 4)) (local.get 1))"),
-            "@m.i32_storeo(l0 + 4, 8, l1)",
+            "@m.iwso(l0 + 4, 8, l1)",
         );
     }
 
@@ -2506,7 +2506,7 @@ mod memory_operand_reduction {
     fn store_value_renders_bare() {
         assert_line(
             &mem_stmt("(i32.store (local.get 0) (i32.add (local.get 1) (i32.const 1)))"),
-            "@m.i32_store(l0, l1 + 1)",
+            "@m.iws(l0, l1 + 1)",
         );
     }
 
@@ -2514,7 +2514,7 @@ mod memory_operand_reduction {
     fn narrow_store_value_renders_bare() {
         assert_line(
             &mem_stmt("(i32.store8 (local.get 0) (i32.add (local.get 1) (i32.const 1)))"),
-            "@m.i32_store8(l0, l1 + 1)",
+            "@m.iwsb(l0, l1 + 1)",
         );
     }
 
@@ -2523,7 +2523,7 @@ mod memory_operand_reduction {
         // The folded sum would be reduced by the unit into a bounds success; base plus offset reaches the bounds check unreduced and traps.
         assert_line(
             &mem_stmt("(local.set 1 (i32.load offset=4294967295 (i32.const 1)))"),
-            "l1 = @m.i32_loado(1, 4294967295)",
+            "l1 = @m.iwlo(1, 4294967295)",
         );
     }
 }

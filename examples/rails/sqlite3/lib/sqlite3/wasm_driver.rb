@@ -93,7 +93,7 @@ module SQLite3
       p = malloc(4)
       begin
         yield p
-        @mem.i32_load(p)
+        @mem.iwl(p)
       ensure
         free(p)
       end

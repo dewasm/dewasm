@@ -1,4 +1,4 @@
-# requires: memory/i32_load, memory/i32_store, memory/init
+# requires: memory/iwl, memory/iws, memory/init
 def wasi_fd_pread(self, fd, iovs_ptr, iovs_len, offset, nread_ptr):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
@@ -10,8 +10,8 @@ def wasi_fd_pread(self, fd, iovs_ptr, iovs_len, offset, nread_ptr):
     nread = 0
     try:
         for i in range(iovs_len):
-            ptr = self.memory.i32_load(iovs_ptr + i * 8)
-            length = self.memory.i32_load(iovs_ptr + i * 8 + 4)
+            ptr = self.memory.iwl(iovs_ptr + i * 8)
+            length = self.memory.iwl(iovs_ptr + i * 8 + 4)
             if length == 0:
                 continue
             # os.pread returns b"" at end-of-file (a short/empty read).
@@ -24,5 +24,5 @@ def wasi_fd_pread(self, fd, iovs_ptr, iovs_len, offset, nread_ptr):
                 break
     except OSError:
         return self.ERRNO_IO
-    self.memory.i32_store(nread_ptr, nread)
+    self.memory.iws(nread_ptr, nread)
     return self.ERRNO_SUCCESS

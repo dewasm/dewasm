@@ -201,10 +201,10 @@ captured = +"".b
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
   mem = holder[:inst].memory
-  ptr = mem.i32_load(iovs)
-  len = mem.i32_load(iovs + 4)
+  ptr = mem.iwl(iovs)       # iwl = i32 load, iws = i32 store
+  len = mem.iwl(iovs + 4)
   captured << mem.read_string(ptr, len)
-  mem.i32_store(out_ptr, len)
+  mem.iws(out_ptr, len)
   0
 end
 

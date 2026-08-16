@@ -1,4 +1,4 @@
-# requires: memory/fill, memory/i32_store8, memory/i32_store16, memory/i64_store
+# requires: memory/fill, memory/iwsb, memory/iwsh, memory/ids
 def wasi_fd_fdstat_get(fd, out_ptr)
   io = @fds[fd]
   return ERRNO_BADF unless io
@@ -10,9 +10,9 @@ def wasi_fd_fdstat_get(fd, out_ptr)
     end
   base, inheriting, fdflags = @fd_meta[fd] || [Rt::M64, Rt::M64, 0]
   @memory.fill(out_ptr, 0, 24)
-  @memory.i32_store8(out_ptr, filetype)
-  @memory.i32_store16(out_ptr + 2, fdflags)
-  @memory.i64_store(out_ptr + 8, base)
-  @memory.i64_store(out_ptr + 16, inheriting)
+  @memory.iwsb(out_ptr, filetype)
+  @memory.iwsh(out_ptr + 2, fdflags)
+  @memory.ids(out_ptr + 8, base)
+  @memory.ids(out_ptr + 16, inheriting)
   ERRNO_SUCCESS
 end

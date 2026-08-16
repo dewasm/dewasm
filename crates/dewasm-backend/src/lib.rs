@@ -311,9 +311,9 @@ pub fn terminates(stmts: &[ir::Stmt]) -> bool {
     }
 }
 
-/// The runtime-unit name for `op`'s memory read (`i32_load8_u`, …), as the runtime units spell it.
+/// The runtime-unit name for `op`'s memory read (`i32_load8_u`, …), as the Go, Java, and Perl units spell it.
 /// Shared because the unit names are: a backend that renames one renames the unit, not this table.
-/// Bash keeps its own copy, which deliberately routes float loads to the integer units.
+/// Ruby and Python use the coded names ([`load_code`]); Bash keeps its own copy, which deliberately routes float loads to the integer units.
 pub fn load_method(op: ir::LoadOp) -> &'static str {
     use ir::LoadOp::*;
     match op {
@@ -347,6 +347,45 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
         I64Store8 => "i64_store8",
         I64Store16 => "i64_store16",
         I64Store32 => "i64_store32",
+    }
+}
+
+/// The runtime-unit name for `op`'s memory read as the Ruby and Python units spell it: `[iuf]` value kind (`u` marks a zero-extending narrow load), `[bhwd]` value width (8/16/32/64 bits), `l`, then the memory width for a narrow load.
+/// The backends' `mem_call` appends `o` (static-offset form) or `a` (wrapping-add form) to reach a unit's two-argument twins.
+/// Memory call sites dominate a converted artifact's source (443k sites on merman), so these names spend one character per distinction; the descriptively named units stay for the other backends ([`load_method`]).
+pub fn load_code(op: ir::LoadOp) -> &'static str {
+    use ir::LoadOp::*;
+    match op {
+        I32Load => "iwl",
+        I64Load => "idl",
+        F32Load => "fwl",
+        F64Load => "fdl",
+        I32Load8S => "iwlb",
+        I32Load8U => "uwlb",
+        I32Load16S => "iwlh",
+        I32Load16U => "uwlh",
+        I64Load8S => "idlb",
+        I64Load8U => "udlb",
+        I64Load16S => "idlh",
+        I64Load16U => "udlh",
+        I64Load32S => "idlw",
+        I64Load32U => "udlw",
+    }
+}
+
+/// The runtime-unit name for `op`'s memory write in the coded scheme, the [`load_code`] counterpart (`s` in place of `l`; stores have no signedness, so the first character is always the type's own).
+pub fn store_code(op: ir::StoreOp) -> &'static str {
+    use ir::StoreOp::*;
+    match op {
+        I32Store => "iws",
+        I64Store => "ids",
+        F32Store => "fws",
+        F64Store => "fds",
+        I32Store8 => "iwsb",
+        I32Store16 => "iwsh",
+        I64Store8 => "idsb",
+        I64Store16 => "idsh",
+        I64Store32 => "idsw",
     }
 }
 

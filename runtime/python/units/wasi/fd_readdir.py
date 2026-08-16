@@ -1,4 +1,4 @@
-# requires: memory/init, memory/i32_store, wasi/wasi_filetype
+# requires: memory/init, memory/iws, wasi/wasi_filetype
 def wasi_fd_readdir(self, fd, buf_ptr, buf_len, cookie, bufused_ptr):
     entry = self.fds.get(fd)
     if not isinstance(entry, self.WasiDir):
@@ -23,7 +23,7 @@ def wasi_fd_readdir(self, fd, buf_ptr, buf_len, cookie, bufused_ptr):
         if len(out) > buf_len:
             out = out[:buf_len]
         self.memory.init(buf_ptr, bytes(out), 0, len(out))
-        self.memory.i32_store(bufused_ptr, len(out))
+        self.memory.iws(bufused_ptr, len(out))
     except OSError:
         return self.ERRNO_IO
     return self.ERRNO_SUCCESS

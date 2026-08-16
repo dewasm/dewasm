@@ -244,7 +244,7 @@ module SQLite3
       path_ptr = @driver.cstr_in(path)
       begin
         rc = @driver.call("sqlite3_open_v2", path_ptr, pp_db, flags, 0)
-        @handle = @driver.mem.i32_load(pp_db)
+        @handle = @driver.mem.iwl(pp_db)
         unless rc.zero?
           message =
             if @handle.zero?

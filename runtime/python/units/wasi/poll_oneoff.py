@@ -1,4 +1,4 @@
-# requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
+# requires: memory/fill, memory/iwl, memory/uwlb, memory/uwlh, memory/idl, memory/iws, memory/iwsb, memory/iwsh, memory/ids
 # poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
 # 32-byte events out).
 # Only fd_read on stdin actually blocks (via select.select); regular files, stdout/stderr, and every fd_write are treated as immediately ready, and unknown fds report EBADF.
@@ -12,17 +12,17 @@ def wasi_poll_oneoff(self, in_ptr, out_ptr, nsubs, nevents_ptr):
     clocks = []   # (userdata, rel_ns)
     for i in range(nsubs):
         base = in_ptr + i * 48
-        userdata = self.memory.i64_load(base)
-        tag = self.memory.i32_load8_u(base + 8)
+        userdata = self.memory.idl(base)
+        tag = self.memory.uwlb(base + 8)
         if tag == 0:  # clock
-            clock_id = self.memory.i32_load(base + 16)
-            timeout = self.memory.i64_load(base + 24)
-            flags = self.memory.i32_load16_u(base + 40)
+            clock_id = self.memory.iwl(base + 16)
+            timeout = self.memory.idl(base + 24)
+            flags = self.memory.uwlh(base + 40)
             now = time.time_ns() if clock_id == 0 else time.monotonic_ns()
             rel = max(timeout - now, 0) if (flags & 1) else timeout
             clocks.append((userdata, rel))
         elif tag in (1, 2):  # fd_read / fd_write
-            fd = self.memory.i32_load(base + 16)
+            fd = self.memory.iwl(base + 16)
             io = self.fds.get(fd)
             if io is None or isinstance(io, self.WasiDir):
                 ready.append((userdata, self.ERRNO_BADF, tag, 0, 0))
@@ -58,10 +58,10 @@ def wasi_poll_oneoff(self, in_ptr, out_ptr, nsubs, nevents_ptr):
     for i, (userdata, error, type_, nbytes, flags) in enumerate(events):
         ev = out_ptr + i * 32
         self.memory.fill(ev, 0, 32)
-        self.memory.i64_store(ev, userdata)
-        self.memory.i32_store16(ev + 8, error)
-        self.memory.i32_store8(ev + 10, type_)
-        self.memory.i64_store(ev + 16, nbytes)
-        self.memory.i32_store16(ev + 24, flags)
-    self.memory.i32_store(nevents_ptr, len(events))
+        self.memory.ids(ev, userdata)
+        self.memory.iwsh(ev + 8, error)
+        self.memory.iwsb(ev + 10, type_)
+        self.memory.ids(ev + 16, nbytes)
+        self.memory.iwsh(ev + 24, flags)
+    self.memory.iws(nevents_ptr, len(events))
     return self.ERRNO_SUCCESS

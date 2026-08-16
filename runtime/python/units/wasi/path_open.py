@@ -1,4 +1,4 @@
-# requires: memory/read_string, memory/i32_store, wasi/resolve_path, wasi/errno_fs
+# requires: memory/read_string, memory/iws, wasi/resolve_path, wasi/errno_fs
 def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_base,
                    fs_rights_inheriting, fdflags, opened_fd_ptr):
     rel = self.memory.read_string(path_ptr, path_len).decode("utf-8", "surrogateescape")
@@ -57,6 +57,6 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
     except OSError as e:
         return self.fs_errno(e)
     self.fd_meta[self.next_fd] = [base, inheriting, fdflags & 0xFFFF]
-    self.memory.i32_store(opened_fd_ptr, self.next_fd)
+    self.memory.iws(opened_fd_ptr, self.next_fd)
     self.next_fd += 1
     return self.ERRNO_SUCCESS
