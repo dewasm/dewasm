@@ -1643,10 +1643,20 @@ impl<'a> Gen<'a> {
 
     /// The method name and address arguments for a load/store site.
     /// A nonzero static offset rides as a second argument to the `o`-suffixed unit, so the per-site addition disappears from the caller; an offset-zero site keeps the one-argument unit, whose call must not pay for an argument it never passes.
+    /// An offset-zero address that is itself a dynamic `i32.add` rides as two arguments to the `a`-suffixed unit, whose wrapped addition replaces the site's own; the offset addition must not wrap, so the two families stay separate.
+    /// A constant add operand keeps the one-argument unit, whose reduction of the site's sum already implements the wrap.
     /// The unit reduces the base address modulo 2^32 itself, so the base renders in `Modular` context and needs no call-site mask.
     /// A constant base folds with the offset at conversion time while the sum stays below 2^32 (where the unit's reduction is the identity); a larger sum can never be in bounds and rides as base plus offset so the unit's exact addition reaches the bounds check.
     fn mem_call(&self, method: &str, addr: &Expr, offset: u64) -> (String, String) {
         if offset == 0 {
+            if let Expr::Bin(BinOp::I32Add, x, y) = addr {
+                if !matches!(**x, Expr::I32Const(_)) && !matches!(**y, Expr::I32Const(_)) {
+                    let method = format!("{method}a");
+                    self.use_unit(&format!("memory/{method}"));
+                    let args = format!("{}, {}", self.modular(x), self.modular(y));
+                    return (method, args);
+                }
+            }
             return (self.mem(method).to_string(), self.modular(addr));
         }
         if let Expr::I32Const(base) = addr {
@@ -2213,7 +2223,7 @@ mod masks {
     }
 }
 
-/// Codegen-shape checks for the static load/store offset: a nonzero offset rides as a second argument to the `o`-suffixed unit, an offset-zero site keeps the one-argument unit, and a constant base folds with the offset at conversion time.
+/// Codegen-shape checks for the static load/store offset: a nonzero offset rides as a second argument to the `o`-suffixed unit, an offset-zero site keeps the one-argument unit, a constant base folds with the offset at conversion time, and an offset-zero dynamic `i32.add` address rides as two arguments to the `a`-suffixed unit.
 #[cfg(test)]
 mod memory_offsets {
     use super::*;
@@ -2273,6 +2283,34 @@ mod memory_offsets {
         assert_line(
             &mem_stmt("(i32.store offset=8 (i32.const 4) (local.get 1))"),
             "self.m.i32_store(12, l1)",
+        );
+    }
+
+    #[test]
+    fn dynamic_add_address_rides_as_two_arguments() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load (i32.add (local.get 0) (local.get 1))))"),
+            "l1 = self.m.i32_loada(l0, l1)",
+        );
+        assert_line(
+            &mem_stmt("(i32.store (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "self.m.i32_storea(l0, l1, l1)",
+        );
+    }
+
+    #[test]
+    fn constant_add_operand_keeps_the_one_argument_unit() {
+        assert_line(
+            &mem_stmt("(local.set 1 (i32.load (i32.add (i32.const 4) (local.get 0))))"),
+            "l1 = self.m.i32_load((4 + l0))",
+        );
+    }
+
+    #[test]
+    fn dynamic_add_under_a_nonzero_offset_keeps_the_offset_unit() {
+        assert_line(
+            &mem_stmt("(i32.store offset=8 (i32.add (local.get 0) (local.get 1)) (local.get 1))"),
+            "self.m.i32_storeo((l0 + l1), 8, l1)",
         );
     }
 }
