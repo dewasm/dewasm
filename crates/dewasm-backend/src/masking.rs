@@ -164,8 +164,8 @@ impl Bound {
 /// Which of one function's locals and temps may store an unmasked value, each with the interval its stored values stay in.
 ///
 /// A variable qualifies when the analysis proves two things.
-/// Every read of it is modular: an operand position the consumption table clears, or a copy into another qualifying variable.
-/// A comparison, a division, a signed or unsigned view, an address, a call argument, a return, a store, a global set, or any position the model does not cover disqualifies, which keeps the function boundary (decision 2's ABI) and every helper call fully masked; a function parameter is defined by the caller at full masked width.
+/// Every read of it is modular: an operand position the consumption table clears, a memory unit's address or stored-value operand (the unit reduces it itself), or a copy into another qualifying variable.
+/// A comparison, a division, a signed or unsigned view, a call argument, a return, a global set, or any position the model does not cover disqualifies, which keeps the function boundary (decision 2's ABI) and every helper call fully masked; a function parameter is defined by the caller at full masked width.
 /// And its interval converges within `limit`: each definition's bound (the expression bound with qualifying variables read at their current intervals, an external definition such as a call result at full masked width) is joined to a fixpoint, so a loop-carried definition whose unmasked updates compound past the limit is demoted and keeps its masks.
 pub struct Elision {
     limit: i128,
@@ -501,6 +501,8 @@ enum Site<'a> {
     External(Temp),
     /// `expr` is a statement root whose exact value is observed; reads inside it follow the consumption table from `Masked` down.
     Observe(&'a Expr),
+    /// `expr` is a statement root a memory unit consumes (a store's address or value): the unit reduces its operand itself, so reads inside it follow the consumption table from `Modular` down.
+    ModularRoot(&'a Expr),
 }
 
 /// Every dataflow-relevant position directly in `stmt`; nested statement sequences are reached by [`Stmt::any`].
@@ -525,8 +527,8 @@ fn sites<'a>(stmt: &'a Stmt, f: &mut impl FnMut(Site<'a>)) {
         Stmt::LocalSet { idx, expr } => f(Site::Assign(Var::Local(*idx), expr)),
         Stmt::GlobalSet { expr, .. } => f(Site::Observe(expr)),
         Stmt::Store { addr, value, .. } => {
-            f(Site::Observe(addr));
-            f(Site::Observe(value));
+            f(Site::ModularRoot(addr));
+            f(Site::ModularRoot(value));
         }
         Stmt::If { cond, .. } => f(Site::Observe(cond)),
         Stmt::Br(t) => target(t, f),
@@ -612,7 +614,7 @@ fn sites<'a>(stmt: &'a Stmt, f: &mut impl FnMut(Site<'a>)) {
     }
 }
 
-/// The reads of locals and temps inside `e` that observe the exact value, mirroring the contexts emission threads through the tree: operands per the consumption table, a load address, `Select`'s condition and arms.
+/// The reads of locals and temps inside `e` that observe the exact value, mirroring the contexts emission threads through the tree: operands per the consumption table, a load address handed modular to its memory unit, `Select`'s condition and arms.
 /// A read under a `Reducing` consumer observes only bits congruence preserves (the table's constant-AND rule), so like a `Modular` one it does not count.
 fn scan_reads(e: &Expr, ctx: MaskContext, on_masked_read: &mut impl FnMut(&Expr)) {
     match e {
@@ -626,7 +628,7 @@ fn scan_reads(e: &Expr, ctx: MaskContext, on_masked_read: &mut impl FnMut(&Expr)
             scan_reads(a, bin_operand_context(*op, 0, b, ctx), on_masked_read);
             scan_reads(b, bin_operand_context(*op, 1, a, ctx), on_masked_read);
         }
-        Expr::Load { addr, .. } => scan_reads(addr, MaskContext::Masked, on_masked_read),
+        Expr::Load { addr, .. } => scan_reads(addr, MaskContext::Modular, on_masked_read),
         Expr::Select { cond, then, els } => {
             scan_reads(cond, MaskContext::Masked, on_masked_read);
             scan_reads(then, MaskContext::Masked, on_masked_read);
@@ -673,6 +675,11 @@ fn qualify(el: &mut Elision, func: &Func) {
                 Site::External(_) => {}
                 Site::Observe(e) => {
                     scan_reads(e, MaskContext::Masked, &mut |read| {
+                        changed |= remove_read(el, read)
+                    });
+                }
+                Site::ModularRoot(e) => {
+                    scan_reads(e, MaskContext::Modular, &mut |read| {
                         changed |= remove_read(el, read)
                     });
                 }
@@ -730,7 +737,7 @@ fn solve(el: &mut Elision, params: &[ValType], func: &Func) -> usize {
                         changed |= el.join(Var::Temp(t), Bound::masked(bits), bits, pass);
                     }
                 }
-                Site::Observe(_) => {}
+                Site::Observe(_) | Site::ModularRoot(_) => {}
             });
             false
         });
@@ -1324,6 +1331,29 @@ mod dataflow {
                 },
                 Stmt::Return {
                     values: vec![bin(BinOp::I32Add, local(1), c32(1))],
+                },
+            ],
+        );
+        let el = Elision::analyze(&[ValType::I32], &f, LIMIT);
+        assert!(el.unmasked_local(1));
+    }
+
+    #[test]
+    fn a_store_operand_read_counts_as_modular() {
+        // The memory units reduce their address and stored-value operands themselves, so reads at those positions leave l1 qualified.
+        let f = func(
+            vec![ValType::I32],
+            vec![],
+            vec![
+                Stmt::LocalSet {
+                    idx: 1,
+                    expr: bin(BinOp::I32Add, local(0), c32(5)),
+                },
+                Stmt::Store {
+                    op: dewasm_core::ir::StoreOp::I32Store,
+                    addr: local(1),
+                    value: local(1),
+                    offset: 0,
                 },
             ],
         );

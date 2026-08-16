@@ -16,7 +16,8 @@ Store masks are the largest group of what remains (a folded expression tree carr
 The analysis lives beside the consumption table in `dewasm_backend::masking` because it follows from the shared masked-unsigned convention (decision 2), not from any one language; only the limit and the emission are per backend.
 
 **Qualification: every read must be modular.**
-Reads are classified by the same consumption table emission threads through expression trees, from a `Masked` root at every observation statement (a comparison or condition, a division, a signed or unsigned view, an address, a call argument, a return, a memory store, a global set, a `Select` arm) and from a `Modular` root at a store whose destination itself qualifies.
+Reads are classified by the same consumption table emission threads through expression trees, from a `Masked` root at every observation statement (a comparison or condition, a division, a signed or unsigned view, a call argument, a return, a global set, a `Select` arm) and from a `Modular` root at a local or temp store whose destination itself qualifies.
+A memory store's address and value are `Modular` roots too, and a load's address is a modular read: the memory units reduce their address and stored-value operands themselves ([decision 76](76-memory-unit-operand-reduction.md)), so those positions observe only the value's congruence class.
 A read under [decision 77](77-mask-constant-folds.md)'s `Reducing` context (the non-constant operand of an AND with a constant) observes only bits congruence preserves, so like a `Modular` one it does not disqualify: `x & 1` in a condition leaves `x` qualified.
 Any read the model does not cover disqualifies.
 This preserves decision 2's ABI by construction: function boundaries, helper calls, and globals only ever see masked values, and a parameter is defined by its caller at full masked width.
@@ -51,9 +52,9 @@ Under the uniform limit an i64 variable qualifies only if every definition is pr
 
 ## Consequences
 
-- On the converted `sqlite3-shell` (standalone Ruby), against the base with decisions 74 to 79 landed: `& 0xffffffff` sites 21,218 to 21,019 (199 elided, 0.9%), `m64` calls 2,106 to 2,094, file size 7,249,218 to 7,246,571 bytes, ISeq instructions 1,274,551 to 1,274,129, ISeq memsize 43,390,448 to 43,373,600 bytes (same methodology as decision 71).
-- Coverage is small by design: in C-derived code most integers are eventually compared, used as an address, or passed across a boundary, and one such read disqualifies the whole variable.
+- On the converted `sqlite3-shell` (standalone Ruby), against the base with decisions 74 to 79 landed: `& 0xffffffff` sites 21,218 to 20,700 (518 elided, 2.4%; 319 of them need the decision 76 store positions), `m64` calls 2,106 to 2,092, file size 7,249,218 to 7,242,414 bytes, ISeq instructions 1,274,551 to 1,273,487, ISeq memsize 43,390,448 to 43,347,776 bytes (same methodology as decision 71).
+- Coverage is small by design: in C-derived code most integers are eventually compared or passed across a boundary, and one such read disqualifies the whole variable.
   What does clear are variables read purely as arithmetic and bitwise operands; wider coverage needs a finer-grained model (per definition-use region instead of per variable), left to a later stage with measurement.
-- The spec harness (decision 3) binds as always and passes for the Ruby backend under this lowering; `mod dataflow` in `masking.rs` pins qualification, disqualification, the `&`-constant refinement, and both loop-carried outcomes, and `mod masks` in the Ruby backend pins the emitted shapes.
+- The spec harness (decision 3) binds as always and passes for the Ruby backend under this lowering; `mod dataflow` in `masking.rs` pins qualification, disqualification, the `&`-constant and store-position reads, and both loop-carried outcomes, and `mod masks` in the Ruby backend pins the emitted shapes.
 - The invariant of decision 71 tightens per variable: a qualifying variable is masked at none of its stores, and the soundness argument extends because all of its reads are modular consumers.
-- The analysis reruns per function at conversion time; its passes are bounded (qualification removes a variable per changing pass, widening caps interval changes), and converting `sqlite3-shell` measures 1.12 s to 1.25 s (debug build).
+- The analysis reruns per function at conversion time; its passes are bounded (qualification removes a variable per changing pass, widening caps interval changes), and converting `sqlite3-shell` measures 1.13 s to 1.27 s (debug build).
