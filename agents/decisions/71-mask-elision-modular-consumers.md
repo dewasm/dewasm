@@ -4,6 +4,7 @@ Status: **Accepted, 2026-08-15.**
 Landed as the shared analysis in `crates/dewasm-backend/src/masking.rs` and its application in the Ruby backend's expression rendering (`crates/dewasm-backend-ruby/src/lib.rs`).
 The other masked-unsigned backends (Perl, Bash) still mask every site; each can adopt the same analysis against its own unboxed-integer limit.
 The Python backend adopted the analysis with the same 2^62 limit, 2026-08-15 (issue #221); the limit judgement and the measurements are in the consequences below.
+[Decision 77](77-mask-constant-folds.md) extends the same machinery with constant AND folding, the `Reducing` context, identity-mask elision, and the pinned constant-equality rewrite.
 This is stage 1 of issue #164: elision within one expression tree only, no cross-statement analysis.
 
 ## Context

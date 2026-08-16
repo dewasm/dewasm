@@ -2,26 +2,30 @@
 //!
 //! The stored representation masks every integer to its width, and each wrapping operation re-masks its result.
 //! Inside a single [`Expr`] tree that is often double work: a consumer that reads its operand only modulo 2^32 or 2^64 (a wrapping add's operand, a shift count) cannot observe the high bits its own mask throws away.
-//! [`MaskContext`] names the two consumption contexts, [`bin_operand_context`] and [`un_operand_context`] are the table of which operands an operation reads modularly, and [`elides_mask`] is the guard: a backend may skip a site's own result mask exactly when the consumer is modular and the interval bound proves the exposed value stays within the backend's unboxed-integer range.
+//! [`MaskContext`] names the consumption contexts, [`bin_operand_context`] and [`un_operand_context`] are the table of which operands an operation reads modularly, and [`elides_mask`] is the guard: a backend may skip a site's own result mask exactly when the consumer's context and the interval bound allow it.
+//! [`fold_and_chain`] folds the constants of an AND chain at conversion time, and [`eq_const_rewrite`] drops the mask of a site compared for equality against a constant when the interval pins a unique raw preimage.
 //!
 //! Soundness rests on the targets' integers being arbitrary-precision two's complement (Ruby, Python, Perl): an unmasked intermediate is congruent to the masked value modulo 2^w, every modular consumer preserves that congruence (a bitwise operator reads a negative operand as its infinite two's-complement form, so `(x - y) & 0xffffffff` is the correct wrap of a negative difference), and the first non-modular consumer sits behind a kept mask, which reduces the value back to the stored representation.
+//! A mask whose raw interval already sits inside `[0, 2^w)` is the identity on the exact value, so it drops in every context.
 
 use dewasm_core::ir::{BinOp, Expr, LoadOp, UnOp};
 
-/// How a consumer reads an integer operand: `Masked` when it observes the exact stored value, `Modular` when it reads only the value's congruence class modulo the type width, so an unmasked operand serves.
+/// How a consumer reads an integer operand: `Masked` when it observes the exact stored value, `Modular` when it reads only the value's congruence class modulo the type width, so an unmasked operand serves, and `Reducing` when it additionally reduces what it is handed at least as strongly as the operand's own mask would (a bitwise AND with a constant operand, or the pinned equality of [`eq_const_rewrite`]), so the operand's mask drops with no bound guard.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MaskContext {
     Masked,
     Modular,
+    Reducing,
 }
 
-/// The context in which `op` consumes its operand `k` (0-based), given that `op`'s own result is consumed in `ctx`.
+/// The context in which `op` consumes its operand `k` (0-based), whose sibling operand is `sibling`, given that `op`'s own result is consumed in `ctx`.
 ///
 /// An operation with its own result mask (wrapping add/sub/mul, `shl`, the wrap) reads its operands modularly regardless of `ctx`: the site's mask restores the invariant even when its own elision guard fails.
 /// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift.
-/// The maskless bitwise operators pass `ctx` through: their result is exact only when their operands are.
+/// An AND with a constant sibling reduces its other operand into `[0, constant]` itself (every IR constant sits inside its width), at least as strong a reduction as the operand's own mask, in every `ctx`.
+/// The other maskless bitwise operators pass `ctx` through, except that a reducing consumer weakens to `Modular`: it reduces the operator's result, which needs only congruent operands, and the raw operands feed the operator itself, so the bound guard must still hold for them.
 /// Everything else (comparisons, division, signed and unsigned views, addresses, helper calls) observes the exact value.
-pub fn bin_operand_context(op: BinOp, k: usize, ctx: MaskContext) -> MaskContext {
+pub fn bin_operand_context(op: BinOp, k: usize, sibling: &Expr, ctx: MaskContext) -> MaskContext {
     use BinOp::*;
     match op {
         I32Add | I32Sub | I32Mul | I64Add | I64Sub | I64Mul | I32Shl | I64Shl => {
@@ -35,7 +39,11 @@ pub fn bin_operand_context(op: BinOp, k: usize, ctx: MaskContext) -> MaskContext
                 MaskContext::Masked
             }
         }
-        I32And | I32Or | I32Xor | I64And | I64Or | I64Xor => ctx,
+        I32And | I64And if int_const(sibling).is_some() => MaskContext::Reducing,
+        I32And | I32Or | I32Xor | I64And | I64Or | I64Xor => match ctx {
+            MaskContext::Reducing => MaskContext::Modular,
+            _ => ctx,
+        },
         _ => MaskContext::Masked,
     }
 }
@@ -48,13 +56,26 @@ pub fn un_operand_context(op: UnOp) -> MaskContext {
     }
 }
 
-/// Whether `e`'s own result mask may be skipped when its consumer is modular: `e` must carry a mask of its own, and the value it exposes unmasked must provably stay in `[-limit, limit)`.
-/// `limit` is the backend's unboxed-integer bound (Ruby: `1 << 62`); the guard keeps elision strictly profitable by never exposing an intermediate the mask would have kept out of bignum arithmetic.
-pub fn elides_mask(e: &Expr, limit: i128) -> bool {
+/// Whether `e`'s own result mask may be skipped when its consumer reads it in `ctx`: `e` must carry a mask of its own, and the interval of the value it exposes unmasked decides per [`may_skip_mask`].
+/// `limit` is the backend's unboxed-integer bound (Ruby: `1 << 62`).
+pub fn elides_mask(e: &Expr, ctx: MaskContext, limit: i128) -> bool {
     match raw_bound(e, limit) {
-        Some(raw) => raw.within(limit),
+        Some((raw, bits)) => may_skip_mask(raw, bits, ctx, limit),
         None => false,
     }
+}
+
+/// Whether a site with raw interval `raw` under a `bits`-wide mask may render unmasked when consumed in `ctx`.
+/// An interval inside `[0, 2^bits)` makes the mask the identity on the exact value: it drops in every context.
+/// A modular consumer needs only congruence, but elision must stay strictly profitable: the exposed value must provably stay in `[-limit, limit)`, never trading a cheap mask for bignum arithmetic.
+/// A reducing consumer hands the raw value to nothing but its own reduction, which the mask's presence would not weaken, so no guard applies.
+fn may_skip_mask(raw: Bound, bits: u32, ctx: MaskContext, limit: i128) -> bool {
+    raw.is_masked_range(bits)
+        || match ctx {
+            MaskContext::Masked => false,
+            MaskContext::Modular => raw.within(limit),
+            MaskContext::Reducing => true,
+        }
 }
 
 /// Everything the interval analysis tracks is clamped to this magnitude: far beyond any elision limit, and small enough that saturating i128 arithmetic on two clamped bounds cannot wrap.
@@ -105,14 +126,11 @@ impl Bound {
 /// The interval of the value `e`'s rendering takes when consumed in `ctx`, under the elision policy of [`elides_mask`] with the same `limit`.
 /// `bits` is the width of `e`'s integer type, which the caller knows from the operation consuming it.
 fn bound(e: &Expr, bits: u32, ctx: MaskContext, limit: i128) -> Bound {
-    if let Some(raw) = raw_bound(e, limit) {
-        if ctx == MaskContext::Modular && raw.within(limit) {
-            return raw;
-        }
-        // The kept mask reduces modulo 2^bits: exactly `raw` when no value in it wraps.
-        return if raw.is_masked_range(bits) {
+    if let Some((raw, _)) = raw_bound(e, limit) {
+        return if may_skip_mask(raw, bits, ctx, limit) {
             raw
         } else {
+            // The kept mask reduces modulo 2^bits.
             Bound::masked(bits)
         };
     }
@@ -142,8 +160,8 @@ fn bound(e: &Expr, bits: u32, ctx: MaskContext, limit: i128) -> Bound {
             match op {
                 I32And | I64And | I32Or | I64Or | I32Xor | I64Xor => bitwise_bound(
                     matches!(op, I32And | I64And),
-                    bound(a, bits, ctx, limit),
-                    bound(b, bits, ctx, limit),
+                    bound(a, bits, bin_operand_context(*op, 0, b, ctx), limit),
+                    bound(b, bits, bin_operand_context(*op, 1, a, ctx), limit),
                 ),
                 I32ShrU | I64ShrU => {
                     let ba = bound(a, bits, Masked, limit);
@@ -160,21 +178,21 @@ fn bound(e: &Expr, bits: u32, ctx: MaskContext, limit: i128) -> Bound {
     }
 }
 
-/// The interval of `e`'s value rendered without its own result mask, or `None` when `e` carries no mask of its own.
-fn raw_bound(e: &Expr, limit: i128) -> Option<Bound> {
+/// The interval of `e`'s value rendered without its own result mask and the width of that mask, or `None` when `e` carries no mask of its own.
+fn raw_bound(e: &Expr, limit: i128) -> Option<(Bound, u32)> {
     use BinOp::*;
     use MaskContext::Modular;
     match e {
-        Expr::Un(UnOp::I32WrapI64, a) => Some(bound(a, 64, Modular, limit)),
+        Expr::Un(UnOp::I32WrapI64, a) => Some((bound(a, 64, Modular, limit), 32)),
         Expr::Bin(op, a, b) => {
             let bits = match op {
                 I32Add | I32Sub | I32Mul | I32Shl | I32ShrS => 32,
                 I64Add | I64Sub | I64Mul | I64Shl | I64ShrS => 64,
                 _ => return None,
             };
-            let ba = bound(a, bits, bin_operand_context(*op, 0, Modular), limit);
+            let ba = bound(a, bits, bin_operand_context(*op, 0, b, Modular), limit);
             let bb = |b: &Expr| bound(b, bits, Modular, limit);
-            Some(match op {
+            let raw = match op {
                 I32Add | I64Add => {
                     let bb = bb(b);
                     Bound::new(ba.lo.saturating_add(bb.lo), ba.hi.saturating_add(bb.hi))
@@ -211,10 +229,97 @@ fn raw_bound(e: &Expr, limit: i128) -> Option<Bound> {
                     Bound::new(*c.iter().min().unwrap(), *c.iter().max().unwrap())
                 }
                 _ => unreachable!("filtered by the bits match above"),
-            })
+            };
+            Some((raw, bits))
         }
         _ => None,
     }
+}
+
+/// The value of an integer constant, in its stored masked-unsigned form.
+fn int_const(e: &Expr) -> Option<u64> {
+    match e {
+        Expr::I32Const(v) => Some(u64::from(*v)),
+        Expr::I64Const(v) => Some(*v),
+        _ => None,
+    }
+}
+
+/// The conversion-time fold of a constant AND chain: in `x & c1 & c2` the two constants meet in one `c1 & c2`, by associativity.
+/// `a` and `b` are the operands of the outermost AND; `Some` only when at least two constants fold.
+/// The residual expression is consumed in [`MaskContext::Reducing`], like the non-constant operand of any AND with a constant.
+pub fn fold_and_chain<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
+    let (mut e, mut c) = and_const_split(a, b)?;
+    let mut folded = false;
+    while let Expr::Bin(BinOp::I32And | BinOp::I64And, x, y) = e {
+        match and_const_split(x, y) {
+            Some((inner, c2)) => {
+                e = inner;
+                c &= c2;
+                folded = true;
+            }
+            None => break,
+        }
+    }
+    folded.then_some((e, c))
+}
+
+/// The non-constant operand of an AND and its constant sibling, when exactly one operand is an integer constant.
+fn and_const_split<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
+    match (int_const(a), int_const(b)) {
+        (Some(c), None) => Some((b, c)),
+        (None, Some(c)) => Some((a, c)),
+        _ => None,
+    }
+}
+
+/// The unmasked form of an integer equality between a mask site `e` and the constant `c` (given in its stored masked form): `wrap(v) == c` holds exactly when raw `v` lands on `c + k * 2^bits`, so when the raw interval of `v` meets exactly one such candidate, the mask drops and `v` compares against that candidate directly.
+/// The constant then migrates across the raw add/sub-by-constant layers the rendering exposes (`x - c1 == c'` is `x == c' + c1`), stopping at the first layer whose own mask stays.
+/// The result is the expression to render, the context to render it in, and the exact comparison constant.
+/// `None` keeps the mask: when `e` carries none, when several candidates fit the interval, and also when none does; the comparison is then statically false, but the operand can hold a trapping load or division, so it must still run.
+pub fn eq_const_rewrite(e: &Expr, c: u64, limit: i128) -> Option<(&Expr, MaskContext, i128)> {
+    let (raw, bits) = raw_bound(e, limit)?;
+    // An interval touching the analysis ceiling may have been clamped, hiding candidates beyond it.
+    if raw.lo <= -CEILING || raw.hi >= CEILING {
+        return None;
+    }
+    let module = 1i128 << bits;
+    let c = i128::from(c);
+    let k_min = (raw.lo - c + module - 1).div_euclid(module);
+    let k_max = (raw.hi - c).div_euclid(module);
+    if k_min != k_max {
+        return None;
+    }
+    let mut e = e;
+    let mut target = c + k_min * module;
+    let mut ctx = MaskContext::Reducing;
+    // Invariant: `e` rendered in `ctx` is the raw arithmetic form the algebra below rewrites (at the top the rewrite itself replaces the mask; deeper, elision is checked before descending).
+    loop {
+        use BinOp::*;
+        let peeled = match e {
+            Expr::Un(UnOp::I32WrapI64, x) => Some((&**x, target)),
+            Expr::Bin(I32Add | I64Add, x, y) => match (int_const(x), int_const(y)) {
+                (Some(c1), None) => Some((&**y, target - i128::from(c1))),
+                (None, Some(c1)) => Some((&**x, target - i128::from(c1))),
+                _ => None,
+            },
+            Expr::Bin(I32Sub | I64Sub, x, y) => match (int_const(x), int_const(y)) {
+                // `c1 - v == t` pins `v == c1 - t`.
+                (Some(c1), None) => Some((&**y, i128::from(c1) - target)),
+                (None, Some(c1)) => Some((&**x, target + i128::from(c1))),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some((inner, t)) = peeled else { break };
+        e = inner;
+        target = t;
+        ctx = MaskContext::Modular;
+        if !elides_mask(e, MaskContext::Modular, limit) {
+            break;
+        }
+    }
+    Some((e, ctx, target))
 }
 
 /// The values a shift count takes after its semantic `& (bits - 1)`: exact for a constant, the full `0..bits` otherwise.
@@ -285,6 +390,7 @@ fn load_bound(op: LoadOp, bits: u32) -> Bound {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use MaskContext::{Masked, Modular, Reducing};
 
     const LIMIT: i128 = 1 << 62;
 
@@ -304,22 +410,26 @@ mod tests {
         }
     }
 
+    fn elides_modular(e: &Expr) -> bool {
+        elides_mask(e, Modular, LIMIT)
+    }
+
     #[test]
     fn i32_add_and_sub_of_full_range_operands_elide() {
-        assert!(elides_mask(&bin(BinOp::I32Add, local(0), local(1)), LIMIT));
-        assert!(elides_mask(&bin(BinOp::I32Sub, local(0), local(1)), LIMIT));
+        assert!(elides_modular(&bin(BinOp::I32Add, local(0), local(1))));
+        assert!(elides_modular(&bin(BinOp::I32Sub, local(0), local(1))));
     }
 
     #[test]
     fn i32_mul_of_full_range_operands_keeps_its_mask() {
         // (2^32 - 1)^2 exceeds the Fixnum limit.
-        assert!(!elides_mask(&bin(BinOp::I32Mul, local(0), local(1)), LIMIT));
+        assert!(!elides_modular(&bin(BinOp::I32Mul, local(0), local(1))));
     }
 
     #[test]
     fn i32_mul_of_narrowed_operands_elides() {
         let byte = |idx| bin(BinOp::I32And, local(idx), Expr::I32Const(0xff));
-        assert!(elides_mask(&bin(BinOp::I32Mul, byte(0), byte(1)), LIMIT));
+        assert!(elides_modular(&bin(BinOp::I32Mul, byte(0), byte(1))));
     }
 
     #[test]
@@ -332,75 +442,219 @@ mod tests {
                 Expr::I32Const(0xff),
             )
         };
-        assert!(elides_mask(
-            &bin(BinOp::I32Mul, byte_of_diff(0, 1), byte_of_diff(2, 3)),
-            LIMIT
-        ));
+        assert!(elides_modular(&bin(
+            BinOp::I32Mul,
+            byte_of_diff(0, 1),
+            byte_of_diff(2, 3)
+        )));
     }
 
     #[test]
     fn i32_shr_s_always_elides() {
         // The raw signed value is within [-2^31, 2^31), well inside the limit.
-        assert!(elides_mask(&bin(BinOp::I32ShrS, local(0), local(1)), LIMIT));
+        assert!(elides_modular(&bin(BinOp::I32ShrS, local(0), local(1))));
     }
 
     #[test]
     fn shl_elides_only_under_a_small_count_or_operand() {
         // Full range shifted by an unknown count reaches 2^63.
-        assert!(!elides_mask(&bin(BinOp::I32Shl, local(0), local(1)), LIMIT));
+        assert!(!elides_modular(&bin(BinOp::I32Shl, local(0), local(1))));
         // An exact small count keeps the raw value within the limit.
-        assert!(elides_mask(
-            &bin(BinOp::I32Shl, local(0), Expr::I32Const(4)),
-            LIMIT
-        ));
+        assert!(elides_modular(&bin(
+            BinOp::I32Shl,
+            local(0),
+            Expr::I32Const(4)
+        )));
     }
 
     #[test]
     fn wrap_elides_only_for_a_narrow_i64() {
         let wrap = |e: Expr| Expr::Un(UnOp::I32WrapI64, Box::new(e));
         // A full-range i64 exceeds the limit, so the wrap's mask stays.
-        assert!(!elides_mask(&wrap(local(0)), LIMIT));
-        assert!(elides_mask(&wrap(load8u()), LIMIT));
+        assert!(!elides_modular(&wrap(local(0))));
+        assert!(elides_modular(&wrap(load8u())));
         // The high half extracted by `>> 32` is bounded by 2^32.
-        assert!(elides_mask(
-            &wrap(bin(BinOp::I64ShrU, local(0), Expr::I64Const(32))),
-            LIMIT
-        ));
+        assert!(elides_modular(&wrap(bin(
+            BinOp::I64ShrU,
+            local(0),
+            Expr::I64Const(32)
+        ))));
     }
 
     #[test]
     fn i64_arithmetic_elides_only_with_provably_narrow_operands() {
-        assert!(!elides_mask(&bin(BinOp::I64Add, local(0), local(1)), LIMIT));
-        assert!(!elides_mask(
-            &bin(BinOp::I64ShrS, local(0), local(1)),
-            LIMIT
-        ));
-        assert!(elides_mask(
-            &bin(BinOp::I64Add, load8u(), Expr::I64Const(1)),
-            LIMIT
-        ));
+        assert!(!elides_modular(&bin(BinOp::I64Add, local(0), local(1))));
+        assert!(!elides_modular(&bin(BinOp::I64ShrS, local(0), local(1))));
+        assert!(elides_modular(&bin(
+            BinOp::I64Add,
+            load8u(),
+            Expr::I64Const(1)
+        )));
     }
 
     #[test]
     fn nested_elision_bounds_compose() {
         // (l0 + l1) + l2 unmasked is below 3 * 2^32.
         let inner = bin(BinOp::I32Add, local(0), local(1));
-        assert!(elides_mask(&bin(BinOp::I32Add, inner, local(2)), LIMIT));
+        assert!(elides_modular(&bin(BinOp::I32Add, inner, local(2))));
         // ((l0 + l1) * l2) unmasked reaches 2^65: the mul keeps its mask even though its operand elides.
         let inner = bin(BinOp::I32Add, local(0), local(1));
-        assert!(!elides_mask(&bin(BinOp::I32Mul, inner, local(2)), LIMIT));
+        assert!(!elides_modular(&bin(BinOp::I32Mul, inner, local(2))));
     }
 
     #[test]
     fn operand_contexts_follow_the_table() {
-        use MaskContext::*;
-        assert_eq!(bin_operand_context(BinOp::I32Add, 0, Masked), Modular);
-        assert_eq!(bin_operand_context(BinOp::I32ShrU, 0, Modular), Masked);
-        assert_eq!(bin_operand_context(BinOp::I32ShrU, 1, Masked), Modular);
-        assert_eq!(bin_operand_context(BinOp::I32And, 0, Modular), Modular);
-        assert_eq!(bin_operand_context(BinOp::I32And, 0, Masked), Masked);
-        assert_eq!(bin_operand_context(BinOp::I32DivU, 0, Modular), Masked);
+        let l = local(1);
+        assert_eq!(bin_operand_context(BinOp::I32Add, 0, &l, Masked), Modular);
+        assert_eq!(bin_operand_context(BinOp::I32ShrU, 0, &l, Modular), Masked);
+        assert_eq!(bin_operand_context(BinOp::I32ShrU, 1, &l, Masked), Modular);
+        assert_eq!(bin_operand_context(BinOp::I32And, 0, &l, Modular), Modular);
+        assert_eq!(bin_operand_context(BinOp::I32And, 0, &l, Masked), Masked);
+        assert_eq!(bin_operand_context(BinOp::I32DivU, 0, &l, Modular), Masked);
         assert_eq!(un_operand_context(UnOp::I32WrapI64), Modular);
         assert_eq!(un_operand_context(UnOp::I64ExtendI32U), Masked);
+    }
+
+    #[test]
+    fn a_constant_and_sibling_makes_the_operand_context_reducing() {
+        let c = Expr::I32Const(0xff);
+        let c64 = Expr::I64Const(0xff);
+        let l = local(1);
+        assert_eq!(bin_operand_context(BinOp::I32And, 0, &c, Masked), Reducing);
+        assert_eq!(
+            bin_operand_context(BinOp::I64And, 0, &c64, Masked),
+            Reducing
+        );
+        // Only AND reduces its other operand; OR and XOR pass the high bits through.
+        assert_eq!(bin_operand_context(BinOp::I32Or, 0, &c, Masked), Masked);
+        assert_eq!(bin_operand_context(BinOp::I32Xor, 0, &c, Masked), Masked);
+        // A reducing consumer weakens to modular through a maskless bitwise operator.
+        assert_eq!(bin_operand_context(BinOp::I32Xor, 0, &l, Reducing), Modular);
+        assert_eq!(bin_operand_context(BinOp::I32And, 0, &l, Reducing), Modular);
+    }
+
+    #[test]
+    fn a_reducing_consumer_drops_the_mask_with_no_bound_guard() {
+        // A full-range product exceeds the limit, so a modular consumer keeps its mask; a reducing one drops it.
+        let mul = bin(BinOp::I32Mul, local(0), local(1));
+        assert!(!elides_mask(&mul, Modular, LIMIT));
+        assert!(elides_mask(&mul, Reducing, LIMIT));
+        let wrap = Expr::Un(UnOp::I32WrapI64, Box::new(local(0)));
+        assert!(!elides_mask(&wrap, Modular, LIMIT));
+        assert!(elides_mask(&wrap, Reducing, LIMIT));
+        // A maskless site has nothing to drop in any context.
+        assert!(!elides_mask(&local(0), Reducing, LIMIT));
+    }
+
+    #[test]
+    fn an_identity_mask_drops_in_every_context() {
+        // The high half extracted by `>> 32` sits in [0, 2^32): the wrap is the identity even at an observation point.
+        let wrap = Expr::Un(
+            UnOp::I32WrapI64,
+            Box::new(bin(BinOp::I64ShrU, local(0), Expr::I64Const(32))),
+        );
+        assert!(elides_mask(&wrap, Masked, LIMIT));
+        // A raw interval reaching outside [0, 2^32) is not the identity: the mask stays under a masked consumer.
+        let add = bin(BinOp::I32Add, local(0), local(1));
+        assert!(!elides_mask(&add, Masked, LIMIT));
+        let sub = bin(BinOp::I32Sub, local(0), Expr::I32Const(1));
+        assert!(!elides_mask(&sub, Masked, LIMIT));
+        // A sum of narrowed operands stays inside the width: identity again.
+        let narrow_add = bin(BinOp::I32Add, load8u(), Expr::I32Const(1));
+        assert!(elides_mask(&narrow_add, Masked, LIMIT));
+    }
+
+    #[test]
+    fn and_chains_fold_their_constants() {
+        let chain = bin(
+            BinOp::I32And,
+            bin(BinOp::I32And, local(0), Expr::I32Const(0xff00)),
+            Expr::I32Const(0x0ff0),
+        );
+        let Expr::Bin(_, a, b) = &chain else {
+            unreachable!()
+        };
+        let (e, c) = fold_and_chain(a, b).expect("two constants fold");
+        assert!(matches!(e, Expr::LocalGet(0)));
+        assert_eq!(c, 0x0f00);
+        // Constants on either side of either AND fold the same.
+        let chain = bin(
+            BinOp::I64And,
+            Expr::I64Const(0xff),
+            bin(BinOp::I64And, Expr::I64Const(0x0f), local(0)),
+        );
+        let Expr::Bin(_, a, b) = &chain else {
+            unreachable!()
+        };
+        let (e, c) = fold_and_chain(a, b).expect("two constants fold");
+        assert!(matches!(e, Expr::LocalGet(0)));
+        assert_eq!(c, 0x0f);
+    }
+
+    #[test]
+    fn and_chain_folding_needs_two_constants() {
+        // A single constant is the plain AND shape, not a chain.
+        assert!(fold_and_chain(&local(0), &Expr::I32Const(0xff)).is_none());
+        // No constant at the outer AND leaves nothing to fold into.
+        let inner = bin(BinOp::I32And, local(0), Expr::I32Const(0xff));
+        assert!(fold_and_chain(&inner, &local(1)).is_none());
+    }
+
+    #[test]
+    fn eq_rewrite_pins_a_unique_preimage_and_migrates_the_constant() {
+        // `(l0 - 5) & 0xffffffff == 7` has raw interval [-5, 2^32 - 6]: only 7 fits, and the constant migrates to `l0 == 12`.
+        let sub = bin(BinOp::I32Sub, local(0), Expr::I32Const(5));
+        let (e, ctx, t) = eq_const_rewrite(&sub, 7, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::LocalGet(0)));
+        assert_eq!(ctx, Modular);
+        assert_eq!(t, 12);
+        // `5 - l0` flips the migration: `l0 == 5 - 7` lands on the wrapped candidate 7 - 2^32.
+        let rsub = bin(BinOp::I32Sub, Expr::I32Const(5), local(0));
+        let (e, _, t) = eq_const_rewrite(&rsub, 7, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::LocalGet(0)));
+        assert_eq!(t, 5 - (7 - (1i128 << 32)));
+        // Migration walks through nested elided layers: `(l0 + 3) - 5 == 7` pins `l0 == 9`.
+        let nested = bin(
+            BinOp::I32Sub,
+            bin(BinOp::I32Add, local(0), Expr::I32Const(3)),
+            Expr::I32Const(5),
+        );
+        let (e, _, t) = eq_const_rewrite(&nested, 7, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::LocalGet(0)));
+        assert_eq!(t, 9);
+        // The wrap peels away like an add/sub layer, leaving its operand in modular context.
+        let wrap = Expr::Un(UnOp::I32WrapI64, Box::new(load8u()));
+        let (e, ctx, t) = eq_const_rewrite(&wrap, 7, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::Load { .. }));
+        assert_eq!(ctx, Modular);
+        assert_eq!(t, 7);
+        // A site with no peelable layer compares its whole raw form in reducing context: `i64.shr_s` raw is within [-2^63, 2^63), so only the candidate 7 fits.
+        let shr = bin(BinOp::I64ShrS, local(0), local(1));
+        let (e, ctx, t) = eq_const_rewrite(&shr, 7, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::Bin(BinOp::I64ShrS, ..)));
+        assert_eq!(ctx, Reducing);
+        assert_eq!(t, 7);
+    }
+
+    #[test]
+    fn eq_rewrite_against_zero_pins_a_two_sided_sub() {
+        // The sub's open interval (-2^32, 2^32) holds exactly one multiple of 2^32: zero itself, so `eqz(x - y)` reads the raw difference.
+        let sub = bin(BinOp::I32Sub, local(0), local(1));
+        let (e, ctx, t) = eq_const_rewrite(&sub, 0, LIMIT).expect("unique preimage");
+        assert!(matches!(e, Expr::Bin(BinOp::I32Sub, ..)));
+        assert_eq!(ctx, Reducing);
+        assert_eq!(t, 0);
+    }
+
+    #[test]
+    fn eq_rewrite_keeps_the_mask_without_a_unique_preimage() {
+        // A two-sided sub spans almost 2^33: both 7 and 7 - 2^32 fit.
+        let sub = bin(BinOp::I32Sub, local(0), local(1));
+        assert!(eq_const_rewrite(&sub, 7, LIMIT).is_none());
+        // A narrow interval missing the constant fits no candidate: statically false, but the operand must still run, so the mask stays.
+        let narrow = bin(BinOp::I32Add, load8u(), Expr::I32Const(1));
+        assert!(eq_const_rewrite(&narrow, 500, LIMIT).is_none());
+        // A maskless expression is no rewrite site.
+        assert!(eq_const_rewrite(&local(0), 7, LIMIT).is_none());
     }
 }
