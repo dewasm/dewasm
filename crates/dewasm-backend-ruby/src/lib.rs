@@ -20,7 +20,7 @@ mod flat {
 }
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
 
 use anyhow::Result;
@@ -178,6 +178,7 @@ fn generate_class_inner(
         frames: RefCell::new(flat::Frames::default()),
         frame_stack: RefCell::new(Vec::new()),
         flat: RefCell::new(None),
+        dead_clears: RefCell::new(HashSet::new()),
         boxed_globals,
         data_file: data_file.map(str::to_string),
         data_offsets,
@@ -412,6 +413,84 @@ fn hex_bytes(data: &[u8]) -> String {
     format!("[\"{}\"].pack(\"H*\")", hex_string(data))
 }
 
+/// Labels whose epilogue at method-body level (`__br = nil if __br == {id}`, see [`Gen::emit_land_or_relay`]) may be omitted because no later emission reads `__br`.
+///
+/// At an epilogue with no enclosing capturing frame, a pending `__br` can only name that frame: nothing outer exists for a relay to reach (a lexical ancestor a branch could target would be on that branch's path and, dissolution being all-or-nothing per path, could not have dissolved alone).
+/// So the statement never redirects control; it only resets `__br` to nil for whatever reads it later, and where nothing does, it is dead.
+///
+/// The walk is over emission order, which the structured lowering executes front to back, so a clear is dead when no read follows it in that order.
+/// A dissolved loop breaks that equation (its back-edge re-runs reads that sit before the clear), so nothing under one is ever marked.
+fn dead_clears(body: &[Stmt], frames: &flat::Frames, plan: Option<&flat::Plan>) -> HashSet<u32> {
+    let none = HashSet::new();
+    let dissolved = plan.map_or(&none, |p| &p.dissolved);
+    let mut dead = HashSet::new();
+    collect_dead_clears(body, frames, dissolved, false, &mut dead);
+    dead
+}
+
+/// Walk `stmts` backward, marking each frame that emits a method-body-level clear no later `__br` read can observe.
+/// `reads_after` states whether some emission after this sequence completes reads `__br`.
+fn collect_dead_clears(
+    stmts: &[Stmt],
+    frames: &flat::Frames,
+    dissolved: &HashSet<u32>,
+    mut reads_after: bool,
+    dead: &mut HashSet<u32>,
+) {
+    for stmt in stmts.iter().rev() {
+        match stmt {
+            Stmt::Block { label, .. } | Stmt::TryTable { label, .. } => {
+                if dissolved.contains(&label.id) {
+                    // A dissolved block emits no scope, so its body sits at method-body level and runs on into whatever follows the block.
+                    for seq in stmt.child_seqs() {
+                        collect_dead_clears(seq, frames, dissolved, reads_after, dead);
+                    }
+                } else if frames.crossed.contains(&label.id) && !reads_after {
+                    dead.insert(label.id);
+                }
+                // A surviving frame needs no recursion: everything inside it has this frame on the emission stack and emits the relaying spelling, never the clear.
+            }
+            Stmt::Loop { .. } => {
+                // A loop emits no clear of its own (its `__br` reads are the wrapped head check and the post-loop relay).
+                // Nothing under it is a candidate either: under a surviving loop the emission stack is non-empty, and under a dissolved one the back-edge re-runs earlier reads, so no recursion.
+            }
+            Stmt::If {
+                label, then, els, ..
+            } => {
+                if label.referenced && !dissolved.contains(&label.id) {
+                    if frames.crossed.contains(&label.id) && !reads_after {
+                        dead.insert(label.id);
+                    }
+                } else {
+                    // The arms emit inline (an unreferenced `if` is no frame, a dissolved one loses its scope), and only the taken arm runs, so each sees the reads after the `if` and not the other arm's.
+                    collect_dead_clears(then, frames, dissolved, reads_after, dead);
+                    collect_dead_clears(els, frames, dissolved, reads_after, dead);
+                }
+            }
+            // Every other statement carries no frame, so `Stmt::child_seqs` yields nothing for it today.
+            // A future variant that carries a body is skipped here, which can only keep a droppable clear, never drop a live one.
+            _ => {}
+        }
+        reads_after = reads_after || emits_br_read(std::slice::from_ref(stmt), frames, dissolved);
+    }
+}
+
+/// Whether emitting `stmts` produces any read of `__br`.
+/// Every read sits at a surviving crossed frame (the land-or-relay epilogue, the wrapped-loop head check, the post-loop relay), so that is the whole test.
+/// It over-approximates only for a crossed loop at method-body level, which emits no post-loop relay; branches write `__br` but never read it.
+fn emits_br_read(stmts: &[Stmt], frames: &flat::Frames, dissolved: &HashSet<u32>) -> bool {
+    Stmt::any(stmts, &mut |stmt| {
+        let label = match stmt {
+            Stmt::Block { label, .. }
+            | Stmt::Loop { label, .. }
+            | Stmt::If { label, .. }
+            | Stmt::TryTable { label, .. } => label,
+            _ => return false,
+        };
+        frames.crossed.contains(&label.id) && !dissolved.contains(&label.id)
+    })
+}
+
 /// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method; wider signatures fall back to the splat `call`.
 /// The `table/call0`..`table/call{MAX_FIXED_ARITY}` runtime units must exist.
 const MAX_FIXED_ARITY: usize = 8;
@@ -432,6 +511,8 @@ struct Gen<'a> {
     /// Flat-dispatch plan for the function being emitted, when it has cross-frame branches (see [`flat`]).
     /// `branch()` consults it to emit `state = N; next` instead of the cascade.
     flat: RefCell<Option<flat::Plan>>,
+    /// Per-function labels whose method-body-level clear is dead, set by `function()`; see [`dead_clears`].
+    dead_clears: RefCell<HashSet<u32>>,
     /// Global indices that need the `Rt::Global` box: imported globals (index space `0..imported_globals.len()`) and every `ExportKind:: Global` target.
     /// Computed once in `generate_class_inner`.
     /// See the boundary criterion in the comment there.
@@ -479,12 +560,14 @@ impl<'a> Gen<'a> {
 
     /// Land-or-relay epilogue for a crossed `Block`/referenced-`If`, emitted *after* the frame's `end while false` (so a `break` out of the scope, from a nested relay or a direct exit, skips any intervening body code and reaches this decision): if the pending `__br` names this frame, clear it and fall through (the wasm branch lands past the block); otherwise a still-pending `__br` targets an ancestor, so `break` again to relay it outward.
     /// Emitted as a single line: epilogues sit at every crossed frame, often deeply indented, so each extra line costs its full indent in output bytes.
+    ///
+    /// With no enclosing frame the relay arm is dead (a pending `__br` can only name this frame; see [`dead_clears`]), so the epilogue degenerates to a clear, and where no later emission reads `__br` even that is omitted.
     fn emit_land_or_relay(&self, w: &mut CodeWriter, label_id: u32) {
         if self.has_enclosing_frame() {
             w.line(format!(
                 "if __br == {label_id} then __br = nil elsif __br then break end"
             ));
-        } else {
+        } else if !self.dead_clears.borrow().contains(&label_id) {
             w.line(format!("__br = nil if __br == {label_id}"));
         }
     }
@@ -863,6 +946,8 @@ impl<'a> Gen<'a> {
                 w.line(format!("{names} = {default}"));
             }
             let plan = flat::plan(&func.body, &self.frames.borrow().paths, flat::DEEP_CROSSING);
+            *self.dead_clears.borrow_mut() =
+                dead_clears(&func.body, &self.frames.borrow(), plan.as_ref());
             // Hoist all temps to method scope: assignments inside the `begin`/`while` frames would otherwise be block-local in Ruby.
             // The pending-branch variable `__br` is hoisted alongside them only when the cascade can actually use it: a crossed frame that survives the plan still relays through `__br`, one addressed by state never does, and with no crossed frame at all nothing references it either.
             let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
@@ -2030,7 +2115,7 @@ mod cascade {
 
     /// A `br_table` tower `depth` blocks deep whose table names every level, so the outermost target is crossed by a branch of exactly that path length:
     /// the wasm compilation of a C `switch`, and the shape whose size decides between the two lowerings.
-    fn tower(depth: usize) -> String {
+    fn tower_body(depth: usize) -> String {
         let opens = (0..depth)
             .map(|i| format!("(block $l{i}"))
             .collect::<Vec<_>>()
@@ -2041,10 +2126,16 @@ mod cascade {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
-             {opens} (br_table {targets} (local.get 0)) {closes} \
-             (local.set 1 (i32.const 7)) (local.get 1)))",
+            "{opens} (br_table {targets} (local.get 0)) {closes}",
             closes = ")".repeat(depth)
+        )
+    }
+
+    fn tower(depth: usize) -> String {
+        format!(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             {} (local.set 1 (i32.const 7)) (local.get 1)))",
+            tower_body(depth)
         )
     }
 
@@ -2077,6 +2168,79 @@ mod cascade {
             "a shallow branch was flattened in:\n{src}"
         );
         assert!(!src.contains("state ="), "state machine leaked in:\n{src}");
+    }
+
+    // block $A { block $B { br_table $B $A } ... } with nothing after the tower: the epilogue at $A's method-body level is only a clear, and nothing later reads `__br`.
+    const DEAD_CLEAR: &str = r#"
+      (module
+        (func (export "f") (param i32) (result i32)
+          (local i32)
+          (block $A
+            (block $B
+              (br_table $B $A (local.get 0)))
+            (local.set 1 (i32.const 7)))
+          (local.get 1)))
+    "#;
+
+    #[test]
+    fn dead_method_level_clear_is_dropped() {
+        let src = convert(DEAD_CLEAR);
+        assert!(
+            src.contains("elsif __br"),
+            "the inner relay disappeared in:\n{src}"
+        );
+        assert!(
+            !src.contains("__br = nil if"),
+            "a dead method-level clear survived in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn method_level_clear_before_a_later_reader_is_kept() {
+        // Two towers in sequence: the first tower's clear protects the second tower's epilogue reads, the second's protects nothing.
+        let src = convert(
+            r#"
+          (module
+            (func (export "f") (param i32) (result i32)
+              (local i32)
+              (block $A
+                (block $B
+                  (br_table $B $A (local.get 0)))
+                (local.set 1 (i32.const 7)))
+              (block $C
+                (block $D
+                  (br_table $D $C (local.get 0)))
+                (local.set 1 (i32.const 9)))
+              (local.get 1)))
+        "#,
+        );
+        assert!(
+            src.contains("__br = nil if __br == 1"),
+            "the clear before a later reader was dropped in:\n{src}"
+        );
+        assert!(
+            !src.contains("__br = nil if __br == 3"),
+            "the dead final clear survived in:\n{src}"
+        );
+    }
+
+    #[test]
+    fn method_level_clear_under_a_dissolved_loop_is_kept() {
+        // A deep tower dissolves the enclosing loop, whose back-edge re-runs the shallow tower behind it: dropping that tower's clear would let a stale `__br` reach its epilogues on the next trip, even though nothing follows it in emission order.
+        let deep = tower_body(flat::DEEP_CROSSING + 2);
+        let src = convert(&format!(
+            "(module (func (export \"f\") (param i32) (result i32) (local i32) \
+             (loop $L \
+               {deep} \
+               (block $A (block $B (br_table $B $A (local.get 0))) (local.set 1 (i32.const 7))) \
+               (br_if $L (local.get 1))) \
+             (local.get 1)))"
+        ));
+        assert!(src.contains("case state"), "no dispatch in:\n{src}");
+        assert!(
+            src.contains("__br = nil if"),
+            "the clear under a dissolved loop was dropped in:\n{src}"
+        );
     }
 
     #[test]
