@@ -1,4 +1,4 @@
-# requires: memory/read_string, memory/init, memory/i32_store, wasi/resolve_path, wasi/errno_fs
+# requires: memory/read_string, memory/init, memory/iws, wasi/resolve_path, wasi/errno_fs
 def wasi_path_readlink(dirfd, path_ptr, path_len, buf_ptr, buf_len, bufused_ptr)
   rel = @memory.read_string(path_ptr, path_len)
   # readlink operates on the link itself: resolve the parent but not the final component.
@@ -7,7 +7,7 @@ def wasi_path_readlink(dirfd, path_ptr, path_len, buf_ptr, buf_len, bufused_ptr)
   bytes = File.readlink(host_path).b # raises EINVAL when not a symlink
   n = [bytes.bytesize, buf_len].min
   @memory.init(buf_ptr, bytes, 0, n)
-  @memory.i32_store(bufused_ptr, n)
+  @memory.iws(bufused_ptr, n)
   ERRNO_SUCCESS
 rescue SystemCallError => e
   fs_errno(e)

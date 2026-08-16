@@ -1,6 +1,6 @@
 # Decision 75: Pass the Static Load/Store Offset as a Second Argument
 
-Status: **Accepted, 2026-08-15.** Landed for Ruby and Python: each memory load/store unit has an `o`-suffixed twin taking the static offset as an argument, and the emitters select between the two per site. Bash inlines its memory operations (decision 52) and Go/Java compile the addition natively, so nothing applies there; Perl keeps the per-site addition for now.
+Status: **Accepted, 2026-08-15.** Landed for Ruby and Python: each memory load/store unit has an `o`-suffixed twin taking the static offset as an argument, and the emitters select between the two per site. Bash inlines its memory operations (decision 52) and Go/Java compile the addition natively, so nothing applies there; Perl keeps the per-site addition for now. The base unit names this record spells (`i32_load`, `i32_loado`, …) were later replaced by single-character codes (`iwl`, `iwlo`, …; decision 79); the two-argument shape, the selection rule, and the `o` suffix stand unchanged.
 
 ## Context
 

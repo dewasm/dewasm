@@ -1,4 +1,4 @@
-# requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
+# requires: memory/fill, memory/iwl, memory/uwlb, memory/uwlh, memory/idl, memory/iws, memory/iwsb, memory/iwsh, memory/ids
 # poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in,
 # 32-byte events out).
 # Only fd_read on stdin actually blocks (via IO.select);
@@ -12,13 +12,13 @@ def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
   clocks = []  # [userdata, rel_ns]
   nsubs.times do |i|
     base = in_ptr + i * 48
-    userdata = @memory.i64_load(base)
-    tag = @memory.i32_load8_u(base + 8)
+    userdata = @memory.idl(base)
+    tag = @memory.uwlb(base + 8)
     case tag
     when 0 # clock
-      clock_id = @memory.i32_load(base + 16)
-      timeout = @memory.i64_load(base + 24)
-      flags = @memory.i32_load16_u(base + 40)
+      clock_id = @memory.iwl(base + 16)
+      timeout = @memory.idl(base + 24)
+      flags = @memory.uwlh(base + 40)
       now =
         if clock_id == 0
           Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
@@ -28,7 +28,7 @@ def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
       rel = (flags & 1) != 0 ? [timeout - now, 0].max : timeout
       clocks << [userdata, rel]
     when 1, 2 # fd_read / fd_write
-      fd = @memory.i32_load(base + 16)
+      fd = @memory.iwl(base + 16)
       io = @fds[fd]
       if io.nil? || io.is_a?(WasiDir)
         ready << [userdata, ERRNO_BADF, tag, 0, 0]
@@ -68,12 +68,12 @@ def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
   events.each_with_index do |(userdata, error, type, nbytes, flags), i|
     ev = out_ptr + i * 32
     @memory.fill(ev, 0, 32)
-    @memory.i64_store(ev, userdata)
-    @memory.i32_store16(ev + 8, error)
-    @memory.i32_store8(ev + 10, type)
-    @memory.i64_store(ev + 16, nbytes)
-    @memory.i32_store16(ev + 24, flags)
+    @memory.ids(ev, userdata)
+    @memory.iwsh(ev + 8, error)
+    @memory.iwsb(ev + 10, type)
+    @memory.ids(ev + 16, nbytes)
+    @memory.iwsh(ev + 24, flags)
   end
-  @memory.i32_store(nevents_ptr, events.size)
+  @memory.iws(nevents_ptr, events.size)
   ERRNO_SUCCESS
 end

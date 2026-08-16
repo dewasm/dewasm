@@ -1,4 +1,4 @@
-# requires: memory/i32_load, memory/i32_store, memory/read_string
+# requires: memory/iwl, memory/iws, memory/read_string
 def wasi_fd_pwrite(self, fd, iovs_ptr, iovs_len, offset, nwritten_ptr):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
@@ -10,8 +10,8 @@ def wasi_fd_pwrite(self, fd, iovs_ptr, iovs_len, offset, nwritten_ptr):
     written = 0
     try:
         for i in range(iovs_len):
-            ptr = self.memory.i32_load(iovs_ptr + i * 8)
-            length = self.memory.i32_load(iovs_ptr + i * 8 + 4)
+            ptr = self.memory.iwl(iovs_ptr + i * 8)
+            length = self.memory.iwl(iovs_ptr + i * 8 + 4)
             chunk = self.memory.read_string(ptr, length)
             n = os.pwrite(io.fileno(), chunk, offset + written)
             written += n
@@ -20,5 +20,5 @@ def wasi_fd_pwrite(self, fd, iovs_ptr, iovs_len, offset, nwritten_ptr):
                 break
     except OSError:
         return self.ERRNO_IO
-    self.memory.i32_store(nwritten_ptr, written)
+    self.memory.iws(nwritten_ptr, written)
     return self.ERRNO_SUCCESS

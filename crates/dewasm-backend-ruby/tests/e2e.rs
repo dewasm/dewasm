@@ -250,7 +250,7 @@ puts "version: #{read_cstr(mem, db_mod.invoke('sqlite3_libversion'))}"
 pp_db = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_open", cstr(db_mod, mem, ":memory:"), pp_db)
 raise "open rc=#{rc}" unless rc.zero?
-db = mem.i32_load(pp_db)
+db = mem.iwl(pp_db)
 
 sql = "create table t(a,b); insert into t values (1,'x'),(2,'y');"
 rc = db_mod.invoke("sqlite3_exec", db, cstr(db_mod, mem, sql), 0, 0, 0)
@@ -261,7 +261,7 @@ rc = db_mod.invoke("sqlite3_prepare_v2", db,
                    cstr(db_mod, mem, "select a*10, b from t order by a desc"),
                    0xffffffff, pp_stmt, 0) # -1 as masked-unsigned i32
 raise "prepare rc=#{rc}" unless rc.zero?
-stmt = mem.i32_load(pp_stmt)
+stmt = mem.iwl(pp_stmt)
 
 while db_mod.invoke("sqlite3_step", stmt) == 100 # SQLITE_ROW
   row = (0...db_mod.invoke("sqlite3_column_count", stmt)).map do |i|
@@ -298,7 +298,7 @@ def open_db(mem, path)
   pp = DB_MOD.invoke("sqlite3_malloc", 4)
   rc = DB_MOD.invoke("sqlite3_open", cstr(mem, path), pp)
   raise "open rc=#{rc}" unless rc.zero?
-  mem.i32_load(pp)
+  mem.iwl(pp)
 end
 
 # create + insert, then close so the file is fully flushed
@@ -312,7 +312,7 @@ db = open_db(mem, "/db/data.db")
 pp_stmt = DB_MOD.invoke("sqlite3_malloc", 4)
 rc = DB_MOD.invoke("sqlite3_prepare_v2", db, cstr(mem, "select a*10, b from t order by a"), 0xffffffff, pp_stmt, 0)
 raise "prepare rc=#{rc}" unless rc.zero?
-stmt = mem.i32_load(pp_stmt)
+stmt = mem.iwl(pp_stmt)
 while DB_MOD.invoke("sqlite3_step", stmt) == 100 # SQLITE_ROW
   row = (0...DB_MOD.invoke("sqlite3_column_count", stmt)).map do |i|
     read_cstr(mem, DB_MOD.invoke("sqlite3_column_text", stmt, i))
@@ -332,7 +332,7 @@ MEM_HOLDER = {}
 host_row = lambda do |argc, argv_ptr|
   mem = MEM_HOLDER[:mem]
   row = (0...argc).map do |i|
-    p = mem.i32_load(argv_ptr + i * 4)
+    p = mem.iwl(argv_ptr + i * 4)
     next nil if p.zero?
     fin = p
     fin += 1 while mem.buffer.get_value(:U8, fin) != 0
@@ -362,7 +362,7 @@ end
 pp_db = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_open", cstr(db_mod, mem, ":memory:"), pp_db)
 raise "open rc=#{rc}" unless rc.zero?
-db = mem.i32_load(pp_db)
+db = mem.iwl(pp_db)
 
 rc = db_mod.invoke("sqlite3_exec", db,
                    cstr(db_mod, mem, "create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"),
@@ -392,13 +392,13 @@ end
 
 prog = inst.invoke("compile_filter", cstr(inst, mem, "tcp port 80"), 1, 65535)
 raise "compile failed" if prog.zero?
-n = mem.i32_load(prog)
+n = mem.iwl(prog)
 n.times do |i|
   base = prog + 4 + i * 8
-  code = mem.i32_load16_u(base)
-  jt = mem.i32_load8_u(base + 2)
-  jf = mem.i32_load8_u(base + 3)
-  k = mem.i32_load(base + 4)
+  code = mem.uwlh(base)
+  jt = mem.uwlb(base + 2)
+  jf = mem.uwlb(base + 3)
+  k = mem.iwl(base + 4)
   puts "#{code} #{jt} #{jf} #{k}"
 end
 inst.invoke("free", prog)
@@ -421,7 +421,7 @@ src = %q({"key": [1, true, null]})
 r = inst.invoke("parse_source", cstr(inst, mem, src), src.bytesize)
 raise "parse failed" if r.zero?
 fin = r
-fin += 1 while mem.i32_load8_u(fin) != 0
+fin += 1 while mem.uwlb(fin) != 0
 puts mem.read_string(r, fin - r)
 inst.invoke("free", r)
 puts "TS-OK"

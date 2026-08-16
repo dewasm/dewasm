@@ -96,6 +96,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 76 | [Memory Units Reduce Their Address and Stored-Value Operands](76-memory-unit-operand-reduction.md) | Accepted |
 | 77 | [Constant AND Operands, Identity Masks, and Pinned Constant Equalities Extend Mask Elision](77-mask-constant-folds.md) | Accepted |
 | 78 | [Wrapping-Add Memory Units for Dynamic Addresses](78-memory-dynamic-add-units.md) | Accepted |
+| 79 | [Single-Character Codes for the Memory Load/Store Unit Names](79-memory-unit-name-codes.md) | Accepted |
 
 ## Adding a new decision
 

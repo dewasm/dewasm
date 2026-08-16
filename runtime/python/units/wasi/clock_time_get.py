@@ -1,4 +1,4 @@
-# requires: memory/i64_store
+# requires: memory/ids
 def wasi_clock_time_get(self, id, precision, out_ptr):
     if id == 0:  # realtime
         ns = time.time_ns()
@@ -6,5 +6,5 @@ def wasi_clock_time_get(self, id, precision, out_ptr):
         ns = time.monotonic_ns()
     else:
         return self.ERRNO_INVAL
-    self.memory.i64_store(out_ptr, ns & Rt.M64)
+    self.memory.ids(out_ptr, ns & Rt.M64)
     return self.ERRNO_SUCCESS

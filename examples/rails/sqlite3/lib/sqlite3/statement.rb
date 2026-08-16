@@ -27,8 +27,8 @@ module SQLite3
       begin
         rc = drv.call("sqlite3_prepare_v2", db.handle, sql_ptr, sql.bytesize + 1, pp_stmt, pp_tail)
         db.check(rc, sql: sql)
-        @stmt = drv.mem.i32_load(pp_stmt)
-        tail = drv.mem.i32_load(pp_tail)
+        @stmt = drv.mem.iwl(pp_stmt)
+        tail = drv.mem.iwl(pp_tail)
         # The tail points into sql_ptr's buffer: read it before the ensure frees it.
         @remainder = tail.zero? ? "" : drv.read_cstr(tail)
       ensure

@@ -99,10 +99,10 @@ _holder = {}
 
 def _fd_write(fd, iovs, iovs_len, out_ptr):
     mem = _holder["inst"].memory
-    ptr = mem.i32_load(iovs)
-    length = mem.i32_load(iovs + 4)
+    ptr = mem.iwl(iovs)
+    length = mem.iwl(iovs + 4)
     _captured.extend(mem.read_string(ptr, length))
-    mem.i32_store(out_ptr, length)
+    mem.iws(out_ptr, length)
     return 0
 
 
@@ -131,10 +131,10 @@ class MyWasi:
         self.memory = instance.memory
 
     def _fd_write(self, fd, iovs, iovs_len, out_ptr):
-        ptr = self.memory.i32_load(iovs)
-        length = self.memory.i32_load(iovs + 4)
+        ptr = self.memory.iwl(iovs)
+        length = self.memory.iwl(iovs + 4)
         self.out.extend(self.memory.read_string(ptr, length))
-        self.memory.i32_store(out_ptr, length)
+        self.memory.iws(out_ptr, length)
         return 0
 
 
@@ -153,10 +153,10 @@ _holder = {}
 
 def _fd_write(fd, iovs, iovs_len, out_ptr):
     mem = _holder["inst"].memory
-    ptr = mem.i32_load(iovs)
-    length = mem.i32_load(iovs + 4)
+    ptr = mem.iwl(iovs)
+    length = mem.iwl(iovs + 4)
     _captured.extend(mem.read_string(ptr, length))
-    mem.i32_store(out_ptr, length)
+    mem.iws(out_ptr, length)
     return 0
 
 
@@ -268,7 +268,7 @@ print("version: " + read_cstr(db_mod.invoke("sqlite3_libversion")))
 pp_db = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_open", cstr(":memory:"), pp_db)
 assert rc == 0, "open rc=%d" % rc
-db = mem.i32_load(pp_db)
+db = mem.iwl(pp_db)
 
 rc = db_mod.invoke("sqlite3_exec", db, cstr("create table t(a,b); insert into t values (1,'x'),(2,'y');"), 0, 0, 0)
 assert rc == 0, "exec rc=%d: %s" % (rc, read_cstr(db_mod.invoke("sqlite3_errmsg", db)))
@@ -276,7 +276,7 @@ assert rc == 0, "exec rc=%d: %s" % (rc, read_cstr(db_mod.invoke("sqlite3_errmsg"
 pp_stmt = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_prepare_v2", db, cstr("select a*10, b from t order by a desc"), 0xffffffff, pp_stmt, 0)
 assert rc == 0, "prepare rc=%d" % rc
-stmt = mem.i32_load(pp_stmt)
+stmt = mem.iwl(pp_stmt)
 
 while db_mod.invoke("sqlite3_step", stmt) == 100:
     n = db_mod.invoke("sqlite3_column_count", stmt)
@@ -311,7 +311,7 @@ def open_db(path):
     pp = db_mod.invoke("sqlite3_malloc", 4)
     rc = db_mod.invoke("sqlite3_open", cstr(path), pp)
     assert rc == 0, "open rc=%d" % rc
-    return mem.i32_load(pp)
+    return mem.iwl(pp)
 
 
 db = open_db("/db/data.db")
@@ -323,7 +323,7 @@ db = open_db("/db/data.db")
 pp_stmt = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_prepare_v2", db, cstr("select a*10, b from t order by a"), 0xffffffff, pp_stmt, 0)
 assert rc == 0, "prepare rc=%d" % rc
-stmt = mem.i32_load(pp_stmt)
+stmt = mem.iwl(pp_stmt)
 while db_mod.invoke("sqlite3_step", stmt) == 100:
     n = db_mod.invoke("sqlite3_column_count", stmt)
     row = [read_cstr(db_mod.invoke("sqlite3_column_text", stmt, i)) for i in range(n)]
@@ -342,7 +342,7 @@ def host_row(argc, argv_ptr):
     mem = _holder["mem"]
     row = []
     for i in range(argc):
-        p = mem.i32_load(argv_ptr + i * 4)
+        p = mem.iwl(argv_ptr + i * 4)
         if p == 0:
             row.append(None)
         else:
@@ -375,7 +375,7 @@ def cstr(s):
 pp_db = db_mod.invoke("sqlite3_malloc", 4)
 rc = db_mod.invoke("sqlite3_open", cstr(":memory:"), pp_db)
 assert rc == 0, "open rc=%d" % rc
-db = mem.i32_load(pp_db)
+db = mem.iwl(pp_db)
 
 rc = db_mod.invoke("sqlite3_exec", db, cstr("create table t(a,b); insert into t values (1,'x'),(2,'y'),(3,'z');"), 0, 0, 0)
 assert rc == 0, "exec rc=%d: %s" % (rc, read_cstr(db_mod.invoke("sqlite3_errmsg", db)))
@@ -405,13 +405,13 @@ def cstr(s):
 
 prog = inst.invoke("compile_filter", cstr("tcp port 80"), 1, 65535)
 assert prog != 0, "compile failed"
-n = mem.i32_load(prog)
+n = mem.iwl(prog)
 for i in range(n):
     base = prog + 4 + i * 8
-    code = mem.i32_load16_u(base)
-    jt = mem.i32_load8_u(base + 2)
-    jf = mem.i32_load8_u(base + 3)
-    k = mem.i32_load(base + 4)
+    code = mem.uwlh(base)
+    jt = mem.uwlb(base + 2)
+    jf = mem.uwlb(base + 3)
+    k = mem.iwl(base + 4)
     print("%d %d %d %d" % (code, jt, jf, k))
 inst.invoke("free", prog)
 print("BPF-OK")

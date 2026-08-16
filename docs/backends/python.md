@@ -59,10 +59,10 @@ _holder = {}
 
 def _fd_write(fd, iovs, iovs_len, out_ptr):
     mem = _holder["inst"].memory
-    ptr = mem.i32_load(iovs)
-    length = mem.i32_load(iovs + 4)
+    ptr = mem.iwl(iovs)       # iwl = i32 load, iws = i32 store
+    length = mem.iwl(iovs + 4)
     _captured.extend(mem.read_string(ptr, length))
-    mem.i32_store(out_ptr, length)
+    mem.iws(out_ptr, length)
     return 0
 
 inst = Prog({"wasi_snapshot_preview1": {"fd_write": _fd_write}})

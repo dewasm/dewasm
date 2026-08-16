@@ -1,0 +1,4 @@
+def iwsbo(self, a, off, v):
+    a = (a & 0xFFFFFFFF) + off
+    self.check(a, 1)
+    self.data[a] = v & 0xFF

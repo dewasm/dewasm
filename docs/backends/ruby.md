@@ -36,7 +36,7 @@ Library mode exposes the exports:
 require_relative "add"
 inst = Add.new                 # Add.new(imports, preopens: {...}) if needed
 inst.invoke("add", 2, 3)       # => 5
-inst.memory                    # linear memory (read_string / i32_load / i32_store, over #buffer)
+inst.memory                    # linear memory (read_string, iwl = i32 load, iws = i32 store, over #buffer)
 ```
 
 `proc_exit` raises `<Class>::Rt::Exit` (with `#code`); rescue it around `invoke("_start")` in library mode.
