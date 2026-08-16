@@ -8,6 +8,7 @@ cargo xtask feature-audit examples/apps/cache/*.wasm
 
 and record the verdict here.
 An app that needs a proposal outside the accepted input (wasm 1.0 + the universal baseline: sign extension, saturating float-to-int, multi-value, bulk memory, mutable globals; plus the final exception-handling proposal, lowered per backend) is **deferred**, not worked around; the entry stays here so it is revisited if the feature returns.
+The same verdict covers an app with no artifact to run the audit tool on at all: when every published build is broken and a from-source build fails in the toolchain, the entry records that evidence so the investigation is not repeated.
 
 ## Verdicts
 
@@ -27,6 +28,8 @@ An app that needs a proposal outside the accepted input (wasm 1.0 + the universa
 | minigzip (zlib 1.3.1) | pinned-source zig build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
 | libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
 | tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
+| Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes wasm-ld, prebuilts broken) | ⛔ deferred |
+| PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
 
 ¹ **Reference-types encoding tolerance.**
 LLVM-based toolchains (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index immediates as padded, overlong LEBs when the `reference-types` target feature is enabled, the default since LLVM 19.
@@ -155,6 +158,30 @@ The execution case (`MRUBY_EH`, `mruby_eh_e2e!`) drives raise, rescue, ensure, a
 - Audit: **not yet run**, deferred pending audit.
   The fork-built artifact is not trustworthy enough to promote as-is.
 - Revisit by pinning the build (a reproducible from-source recipe, not the fork's prebuilt wasm) and running the feature-audit on the resulting binary before promoting it in scope.
+
+## Deferred: Lua
+
+- Source: no viable candidate.
+  [nalgeon/lua-wasi](https://github.com/nalgeon/lua-wasi) (npm `@antonz/lua-wasi`, MIT, wasm32-wasip1, 329 KB) was archived by its owner in 2026-02; it runs a plain script under `wasmtime`, but `pcall`/`error`, Lua's core error primitive, crash the whole VM with a wasm `unreachable` trap, since its own README concedes setjmp/longjmp are stubbed out to do nothing.
+  [singlestore-labs/lua-wasi](https://github.com/singlestore-labs/lua-wasi) carries the same disclaimer.
+  `vvanders/wasm_lua` and `ceifa/wasmoon` are Emscripten/browser-JS builds, not standalone WASI.
+  VMware's webassembly-language-runtimes project has no Lua build at all.
+- Audit: **no working artifact exists, and the from-source build fails in the linker.**
+  Building Lua 5.4.7 from source with `zig cc -target wasm32-wasi` stops at "Setjmp/longjmp support requires Exception handling support" until `-mllvm -wasm-enable-sjlj` is added (the same lowering mruby's build¹⁴ uses), at which point wasm-ld crashes on a SjLj-plus-weak-symbol bug (clang 21, measured 2026-08-02).
+  The exception-handling requirement itself is no longer a blocker: since the mruby work¹⁴ it is accepted input, lowered per backend.
+  Added value is low regardless: a Lua build would cover the same category (a complete small scripting engine in C) and the same WASI surface QuickJS already gives.
+- Revisit if the wasm-ld bug gets fixed upstream (the mruby recipe¹⁴ should then apply directly), or if a maintained WASI build with a working `pcall` appears.
+
+## Deferred: PHP
+
+- Source: no maintained WASI build exists.
+  VMware WLR's is the only prebuilt one, `php/8.2.6+20230714`, three years stale; its own writeup states it strips setjmp/longjmp (breaking exceptions and fatal-error handling), strips all networking, and no-ops many filesystem/process syscalls.
+  `php/php-src` carries an experimental wasm32-wasi target from a Jan-2023 RFC, with setjmp/longjmp emulation and Fibers still WIP and no maintained release artifact.
+  seanmorris/php-wasm and WordPress Playground's `php.wasm` are Emscripten plus JS glue, not standalone WASI modules.
+- Audit: **no artifact to audit, and no realistic build path.**
+  PHP's Zend engine routes essentially all error and exception control flow through `zend_try`/`zend_catch`, setjmp-based and pervasive, not opt-in the way Lua's `pcall` is.
+  The only prebuilt strips exactly that machinery; a from-source build would be a multi-week port, not a build-flag fix like mruby's¹⁴.
+- Revisit only if upstream `php-src` ships a maintained wasm32-wasi target with working exception handling.
 
 ## WASI p1 import surfaces
 
