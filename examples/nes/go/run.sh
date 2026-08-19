@@ -5,4 +5,4 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ./build.sh
-exec ./nes "$@"
+exec ./bin/nes "$@"

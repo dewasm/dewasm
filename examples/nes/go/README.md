@@ -1,8 +1,12 @@
 # NES (Go, ebiten)
 
 An interactive frontend for a converted NES emulator.
-`build.sh` builds `cache/nes.wasm` (agnes, wrapped with a small `allocRom`/`initGame`/`setInput`/`tickGame` export surface plus `screenOffset`/`paletteOffset` for the frame, see `examples/apps/scripts/nes.sh`) and converts it to Go with dewasm (`nes_gen.go`, gitignored, regenerated on every build).
-Unlike the DOOM frontend, `nes.wasm` has zero host imports, so `main.go` only loads a ROM into the module's memory and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten): no host-import wiring needed.
+`build.sh` builds `cache/nes.wasm` (agnes, wrapped with a small `allocRom`/`initGame`/`setInput`/`tickGame` export surface plus `screenOffset`/`paletteOffset` for the frame, see `examples/apps/scripts/nes.sh`) and converts it to Go with dewasm (`nes/nes_gen.go`, gitignored, regenerated on every build).
+Unlike the DOOM frontend, `nes.wasm` has zero host imports, so the frontend (`nes/host.go`) only loads a ROM into the module's memory and drives the game loop with [ebiten](https://github.com/hajimehoshi/ebiten): no host-import wiring needed.
+
+dewasm converts a module to a Go *package* named after `--module-name`, so the generated file declares `package nes` and lives in `nes/`; the frontend sits in the same directory because it reads the module's linear memory directly, which is unexported.
+The command at the directory top level is two lines: import the package, call `nes.Run()`.
+An embedder that only calls exports needs none of this: it can import the package from anywhere.
 
 ## Run
 
