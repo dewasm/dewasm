@@ -49,8 +49,26 @@ BINDING_EXPORTS=(
   sqlite3_malloc sqlite3_free
 )
 
-# The stamp covers the source sha, the export lists, and the wasm-opt version, so editing any of them retriggers the build.
-sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} wasm-opt:$(wasm_opt_version)"
+# patch_version_suffix <file>: rewrite the single `#define SQLITE_VERSION` line of the unpacked source to "3.53.3-wasm".
+# The converted engine must identify itself in demo output (examples/rails answers /stats with sqlite_version()), so it is not mistaken for a native SQLite.
+# SQLITE_VERSION_NUMBER and SQLITE_SOURCE_ID stay upstream: only the display string carries the suffix.
+# sed -i is not portable across BSD and GNU, hence the temp file; a source whose define does not have the assumed shape aborts the build instead of silently producing an unpatched artifact.
+patch_version_suffix() {
+  local f="$1"
+  sed 's/^#define SQLITE_VERSION  *"3\.53\.3"$/#define SQLITE_VERSION        "3.53.3-wasm"/' "$f" >"$f.patched"
+  mv "$f.patched" "$f"
+  grep -q '^#define SQLITE_VERSION  *"3\.53\.3-wasm"$' "$f" || {
+    echo "sqlite3: the -wasm version suffix did not apply to $f" >&2
+    exit 1
+  }
+  if grep -q '^#define SQLITE_VERSION  *"3\.53\.3"$' "$f"; then
+    echo "sqlite3: an unpatched version define remains in $f" >&2
+    exit 1
+  fi
+}
+
+# The stamp covers the source sha, the export lists, the version-string patch, and the wasm-opt version, so editing any of them retriggers the build.
+sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} version-suffix:-wasm wasm-opt:$(wasm_opt_version)"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if is_cached "$sqlite_stamp" "$sqlite_key" \
   cache/sqlite3-shell.wasm cache/libsqlite3.wasm cache/sqlite3-binding.wasm; then
@@ -66,6 +84,9 @@ echo "sqlite3: fetching $SQLITE_URL"
 new_tmpdir
 fetch_verified "$SQLITE_URL" "$SQLITE_SHA256" "$tmp/sqlite.zip"
 unzip -q "$tmp/sqlite.zip" -d "$tmp"
+# The amalgamation embeds a copy of the header in sqlite3.c, and shell.c includes sqlite3.h, so both files carry the define.
+patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.c"
+patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.h"
 # --strip-debug (all three builds) drops the DWARF wasm-opt cannot parse.
 echo "sqlite3: building sqlite3-shell.wasm (zig cc)"
 zig_cc_wasi "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \

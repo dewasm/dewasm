@@ -46,6 +46,14 @@ echo "--- GET /posts"
 curl -sf "http://127.0.0.1:$PORT/posts"
 echo
 echo "--- GET /stats (sqlite_version() answered by the wasm-converted SQLite)"
-curl -sf "http://127.0.0.1:$PORT/stats"
-echo
+stats=$(curl -sf "http://127.0.0.1:$PORT/stats")
+echo "$stats"
+# The -wasm suffix is patched into the wasm build (../apps/scripts/sqlite3.sh): its absence means the answer came from a native SQLite, not the converted engine.
+case "$stats" in
+  *3.53.3-wasm*) ;;
+  *)
+    echo "/stats did not report the converted engine's version 3.53.3-wasm" >&2
+    exit 1
+    ;;
+esac
 echo "RAILS-ON-DEWASM-OK"

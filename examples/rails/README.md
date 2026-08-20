@@ -18,7 +18,7 @@ $ ./run.sh
 ```
 
 That builds `libsqlite3.wasm` (needs `zig`), converts it with dewasm-cli, runs the shim + ActiveRecord smokes, generates the Rails app on first use (needs the `rails` gem, >= 8.1), migrates, boots the server, and drives it over HTTP.
-It ends with `RAILS-ON-DEWASM-OK` after a POST/GET round-trip and a `/stats` request whose `sqlite_version` is answered by the wasm-converted SQLite (3.53.3).
+It ends with `RAILS-ON-DEWASM-OK` after a POST/GET round-trip and a `/stats` request whose `sqlite_version` is answered by the wasm-converted SQLite: `3.53.3-wasm`, the suffix patched into the wasm build (`../apps/scripts/sqlite3.sh`) so the output identifies the converted engine rather than looking like a native SQLite.
 
 Pieces, individually:
 
