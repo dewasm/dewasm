@@ -34,7 +34,7 @@ use dewasm_backend::{
     CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
     SupportStatus,
 };
-use dewasm_backend::{licm, outline};
+use dewasm_backend::{fuse, licm, outline};
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
     BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp,
@@ -523,6 +523,7 @@ const LICM_PARAMS: licm::Params = licm::Params {
 /// The function list the emitter consumes: hoisting first (it needs the loops still in place), then loop-body outlining.
 fn transformed_funcs(module: &Module) -> outline::Outline {
     let mut funcs = module.funcs.clone();
+    fuse::fuse_byte_scatter(&mut funcs);
     licm::hoist(
         &mut funcs,
         &module.types,

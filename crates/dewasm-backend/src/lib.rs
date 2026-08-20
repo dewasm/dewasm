@@ -1,6 +1,7 @@
 //! Backend trait and code emission utilities shared by all language backends.
 
 pub mod flat;
+pub mod fuse;
 pub mod licm;
 pub mod masking;
 pub mod outline;
