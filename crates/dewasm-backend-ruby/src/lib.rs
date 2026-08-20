@@ -511,6 +511,7 @@ const OUTLINE_PARAMS: outline::Params = outline::Params {
     min_weight: 40,
     max_params: 12,
     max_results: 1,
+    min_weight_with_temps: 160,
 };
 
 struct Gen<'a> {

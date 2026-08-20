@@ -20,11 +20,12 @@ Lowering the compile threshold instead of restructuring was measured and does no
   The span need not start at the body's first statement: a head-tested loop opens with its own exit branch, which stays behind.
 - **The span may leave at most one value live for the rest of the function, returned from the call.**
   Live-outs are found by a backward may-liveness over the structured body (loops to a fixpoint); parameters are the variables possibly read before the span assigns them.
-  A spilled stack temp that would have to be a parameter refuses the extraction (the stack discipline makes that shape unreachable; refusing is cheaper than supporting it).
+  A spilled stack temp whose incoming value the span may read (possible once a span starts mid-body: earlier statements compute into temps) is passed as a trailing parameter and copied into its temp at the extracted function's entry, so the span body needs no rewriting beyond local renumbering.
 - **Inside a `try_table`, a throw-capable span is not extracted**: an exception would skip the write-back of values the catch handler could observe.
-- **Thresholds are per backend** ([`outline::Params`]: minimum span weight in IR nodes, maximum parameter count, maximum live-out count).
-  Ruby uses weight 40, 12 parameters, 1 live-out.
+- **Thresholds are per backend** ([`outline::Params`]: minimum span weight in IR nodes, maximum parameter count, maximum live-out count, and a higher weight floor for spans consuming incoming temps).
+  Ruby uses weight 40, 12 parameters, 1 live-out, and temp-consuming spans need weight 160.
   The weight floor is load-bearing in both directions: at 80 the second `c/sha256` extraction disappears and `--yjit` regresses from 10.6 s to 13.2 s, and small tight-loop bodies (the `wat/` microbenchmarks) must stay unextracted or the interpreter pays a call per iteration; at 24 the suite's outputs are byte-identical to 40.
+  The separate temp floor is equally load-bearing: without it, the temp-consuming spans unlocked in the DOOM module regress its smoke run from 16.7 to 12.7 ticks/sec, while with it the DOOM extraction set keeps the gain and `c/sha256` consolidates its two extractions into one larger span, improving `--yjit` from 10.62 s to 10.20 s.
 - **The pass rewrites a copied function list; the shared module is not mutated.**
   `outline()` returns the defined functions with spans replaced by calls, the extracted functions appended, and the type list extended; a backend swaps that list in at emission time.
 
@@ -61,5 +62,6 @@ Method counts grow (sqlite3-shell 1553 → 1817, ruby.wasm 17711 → 18123 gener
 
 **Carry-over.**
 A loop whose body returns from the middle (the NES example's frame-completion exit, `c/wordcount`, sqlite3-shell's interpreter loop) gets nothing today; the signal-protocol alternative above is the known route and needs its own measurement.
+For sqlite3-shell's interpreter function specifically, compiling it by other means was tried and lost: the step-lambda experiment (`agents/experiments.md`, step-lambda-dispatch) measured closure-environment access and large-compiled-method costs exceeding the JIT gain, so a future attempt needs a different shape (small per-opcode functions), not a revival of that one.
 The liveness cost is unoptimized (per-function boundary recording is capped at 256 leading statements per loop body, nothing else is pruned); skipping functions with no candidate loop is the obvious next cut.
 Only Ruby consumes the pass; a backend whose runtime compiles hot loops in place (PyPy traces loops mid-execution) has no reason to.

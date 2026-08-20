@@ -77,3 +77,10 @@ Each entry is one section in this shape:
 - **Verdict**: rejected as suite runners; both beat YJIT on microbenchmarks (TruffleRuby's f64_alu at 4x wasmtime vs YJIT's 78x) yet lose on real apps (sqlite3_query: JRuby 58-70 s vs YJIT 9.4 s; TruffleRuby unfinished after 48 min), because the largest generated methods (~13k lines) exceed the JVM's 64 KB per-method bytecode limit (JRuby raises MethodTooLargeException once `-Xjit.maxsize` allows the attempt), so the hottest functions stay interpreted.
 - **Invalidated when**: a pass caps generated method size by splitting functions (also relevant to the Java backend's 64 KB constraint), or JRuby's `IO::Buffer` gains the four-argument `copy`/`set_string` forms and TruffleRuby gains `IO::Buffer` at all.
 - **Details**: #206.
+
+## step-lambda-dispatch: wrapping a flat dispatch loop in a per-batch lambda loses under every JIT configuration (2026-08-21)
+
+- **Tried**: emitting a flat-dispatch function's `case state` inside `__step = lambda do ... end` so the states run in a closure invoked repeatedly (once per transition, then batched at 1024 transitions per call), which YJIT compiles even though the enclosing function is entered once; measured on sqlite3-shell's interpreter function (453 states, 34.6% self time in the query workload profile).
+- **Verdict**: rejected; per-transition calls measured 83 M JIT-boundary crossings and 9.51 s to 10.21 s under `--yjit`, and batching only recovered to 9.96 s (interpreter 19.63 s to 20.67 s), because the surviving costs are closure-environment variable access (every local becomes a heap-environment slot with a write barrier) and the compiled size of a 453-state method (12.4 MB of generated machine code), the same large-compiled-method loss optcarrot's generated core shows against its small-method core.
+- **Invalidated when**: YJIT gains on-stack replacement (the whole workaround becomes unnecessary), or compiled closure-environment access stops costing more than the interpreter saves.
+- **Details**: measurements in this experiment predate an issue; the step emission itself was reverted and only this entry records it.

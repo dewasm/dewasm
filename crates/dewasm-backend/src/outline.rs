@@ -21,6 +21,8 @@ pub struct Params {
     pub max_params: usize,
     /// Maximum number of values the region may leave live for the rest of the function: 1 (returned from the call) or 0 (require none).
     pub max_results: usize,
+    /// Minimum region size when the span consumes incoming temp values (see [`Extraction::arg_temps`]): such spans pay an extra argument and an entry copy per temp, so they must be larger to amortize it.
+    pub min_weight_with_temps: u32,
 }
 
 /// The rewritten function list: the module's defined functions with outlined regions replaced by calls, followed by the extracted functions.
@@ -135,7 +137,9 @@ fn try_outline_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
             if in_try && may_throw(&body[j..k]) {
                 continue;
             }
-            if let Some(extraction) = plan_extraction(&body[j..k], &bounds[k], cx) {
+            if let Some(extraction) =
+                plan_extraction(&body[j..k], weights[k] - weights[j], &bounds[k], cx)
+            {
                 apply(body, j, k, extraction, cx);
                 return;
             }
@@ -160,6 +164,8 @@ fn may_throw(stmts: &[Stmt]) -> bool {
 struct Extraction {
     /// Caller locals passed as arguments, in ascending index order.
     arg_locals: Vec<u32>,
+    /// Caller temps whose incoming value the region may read (a span starting mid-body can consume what earlier statements computed), passed as trailing arguments and copied into the matching temp at the extracted function's entry.
+    arg_temps: Vec<Temp>,
     /// The one variable the region leaves live for the rest of the function, if any.
     live_out: Option<Var>,
     /// Caller locals that become the extracted function's own locals (referenced, not parameters), ascending.
@@ -168,7 +174,12 @@ struct Extraction {
     temps: Vec<Temp>,
 }
 
-fn plan_extraction(region: &[Stmt], live_after: &BTreeSet<Var>, cx: &Cx) -> Option<Extraction> {
+fn plan_extraction(
+    region: &[Stmt],
+    weight: u32,
+    live_after: &BTreeSet<Var>,
+    cx: &Cx,
+) -> Option<Extraction> {
     let mut reads = BTreeSet::new();
     let mut writes = BTreeSet::new();
     collect_seq(region, &mut reads, &mut writes);
@@ -180,17 +191,18 @@ fn plan_extraction(region: &[Stmt], live_after: &BTreeSet<Var>, cx: &Cx) -> Opti
     let live_out = live_outs.first().copied();
 
     let (maybe_read_first, definite) = first_read_scan(region);
-    // A temp read before the region assigns it would need to be a parameter, which the rewrite does not support; the stack discipline makes this shape unreachable, so refuse rather than handle it.
-    if maybe_read_first.iter().any(|v| matches!(v, Var::Temp(_))) {
-        return None;
+    let mut param_locals: BTreeSet<u32> = BTreeSet::new();
+    let mut param_temps: BTreeSet<Temp> = BTreeSet::new();
+    for v in &maybe_read_first {
+        match v {
+            Var::Local(i) => {
+                param_locals.insert(*i);
+            }
+            Var::Temp(t) => {
+                param_temps.insert(*t);
+            }
+        }
     }
-    let mut param_locals: BTreeSet<u32> = maybe_read_first
-        .iter()
-        .filter_map(|v| match v {
-            Var::Local(i) => Some(*i),
-            Var::Temp(_) => None,
-        })
-        .collect();
     if let Some(v) = live_out {
         // A live-out the region does not assign on every path must flow through from the caller.
         if !definite.contains(&v) {
@@ -198,15 +210,21 @@ fn plan_extraction(region: &[Stmt], live_after: &BTreeSet<Var>, cx: &Cx) -> Opti
                 Var::Local(i) => {
                     param_locals.insert(i);
                 }
-                Var::Temp(_) => return None,
+                Var::Temp(t) => {
+                    param_temps.insert(t);
+                }
             }
         }
     }
-    if param_locals.len() > cx.params.max_params {
+    if param_locals.len() + param_temps.len() > cx.params.max_params {
+        return None;
+    }
+    if !param_temps.is_empty() && weight < cx.params.min_weight_with_temps {
         return None;
     }
 
     let arg_locals: Vec<u32> = param_locals.iter().copied().collect();
+    let arg_temps: Vec<Temp> = param_temps.iter().copied().collect();
     let inner_locals: Vec<u32> = reads
         .union(&writes)
         .filter_map(|v| match v {
@@ -223,6 +241,7 @@ fn plan_extraction(region: &[Stmt], live_after: &BTreeSet<Var>, cx: &Cx) -> Opti
         .collect();
     Some(Extraction {
         arg_locals,
+        arg_temps,
         live_out,
         inner_locals,
         temps,
@@ -232,19 +251,34 @@ fn plan_extraction(region: &[Stmt], live_after: &BTreeSet<Var>, cx: &Cx) -> Opti
 fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx) {
     let mut region: Vec<Stmt> = body.drain(j..k).collect();
 
-    // Renumber caller locals into the extracted function's local index space: parameters first, then its own locals.
+    // Renumber caller locals into the extracted function's local index space: local parameters, then temp parameters, then its own locals.
+    let params = ext.arg_locals.len() + ext.arg_temps.len();
     let mut map: BTreeMap<u32, u32> = BTreeMap::new();
-    for (new, old) in ext.arg_locals.iter().chain(&ext.inner_locals).enumerate() {
+    for (new, old) in ext.arg_locals.iter().enumerate() {
         map.insert(*old, new as u32);
+    }
+    for (new, old) in ext.inner_locals.iter().enumerate() {
+        map.insert(*old, (params + new) as u32);
     }
     for stmt in &mut region {
         renumber_stmt(stmt, &map);
+    }
+    // An incoming temp value arrives as a parameter and is copied into its temp at entry, so the region body reads it unchanged.
+    for (i, t) in ext.arg_temps.iter().enumerate().rev() {
+        region.insert(
+            0,
+            Stmt::Assign {
+                dst: *t,
+                expr: Expr::LocalGet((ext.arg_locals.len() + i) as u32),
+            },
+        );
     }
 
     let param_tys: Vec<ValType> = ext
         .arg_locals
         .iter()
         .map(|i| cx.local_tys[*i as usize])
+        .chain(ext.arg_temps.iter().map(|t| t.ty))
         .collect();
     let result_ty = ext.live_out.map(|v| match v {
         Var::Local(i) => cx.local_tys[i as usize],
@@ -281,7 +315,12 @@ fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx)
         body: region,
     });
 
-    let args: Vec<Expr> = ext.arg_locals.iter().map(|i| Expr::LocalGet(*i)).collect();
+    let args: Vec<Expr> = ext
+        .arg_locals
+        .iter()
+        .map(|i| Expr::LocalGet(*i))
+        .chain(ext.arg_temps.iter().map(|t| Expr::Temp(*t)))
+        .collect();
     let replacement: Vec<Stmt> = match ext.live_out {
         None => vec![Stmt::Call {
             func: func_idx,
@@ -991,6 +1030,7 @@ mod tests {
         min_weight: 1,
         max_params: 8,
         max_results: 1,
+        min_weight_with_temps: 1,
     };
 
     #[test]
