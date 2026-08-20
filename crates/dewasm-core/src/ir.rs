@@ -223,7 +223,8 @@ pub struct DataSegment {
     pub data: Vec<u8>,
 }
 
-#[derive(Debug)]
+/// Clonable so a backend-side rewriting pass (loop-body outlining) can produce an adjusted function list without mutating the shared module.
+#[derive(Clone, Debug)]
 pub struct Func {
     pub type_idx: u32,
     /// Declared locals (excluding params).
@@ -431,6 +432,40 @@ impl Stmt {
             | Stmt::Unreachable => [&[], &[]],
         };
         seqs.into_iter().filter(|seq| !seq.is_empty())
+    }
+
+    /// Mutable counterpart of [`Stmt::child_seqs`], for passes that rewrite statement trees in place.
+    /// The same exhaustiveness contract applies: a new variant carrying statements must appear in both.
+    pub fn child_seqs_mut(&mut self) -> impl Iterator<Item = &mut Vec<Stmt>> {
+        let seqs: [Option<&mut Vec<Stmt>>; 2] = match self {
+            Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {
+                [Some(body), None]
+            }
+            Stmt::If { then, els, .. } => [Some(then), Some(els)],
+            Stmt::SourceLine(_)
+            | Stmt::Assign { .. }
+            | Stmt::LocalSet { .. }
+            | Stmt::GlobalSet { .. }
+            | Stmt::Store { .. }
+            | Stmt::Br(_)
+            | Stmt::BrIf { .. }
+            | Stmt::BrTable { .. }
+            | Stmt::Return { .. }
+            | Stmt::Call { .. }
+            | Stmt::CallIndirect { .. }
+            | Stmt::MemoryGrow { .. }
+            | Stmt::MemoryCopy { .. }
+            | Stmt::MemoryFill { .. }
+            | Stmt::MemoryInit { .. }
+            | Stmt::DataDrop { .. }
+            | Stmt::TableInit { .. }
+            | Stmt::TableCopy { .. }
+            | Stmt::ElemDrop { .. }
+            | Stmt::Throw { .. }
+            | Stmt::ThrowRef { .. }
+            | Stmt::Unreachable => [None, None],
+        };
+        seqs.into_iter().flatten()
     }
 
     /// Whether `pred` holds for any statement in `stmts` or in the sequences nested below them.

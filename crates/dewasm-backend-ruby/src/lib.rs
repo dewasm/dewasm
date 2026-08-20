@@ -28,6 +28,7 @@ use dewasm_backend::masking::{
     bin_operand_context, fold_and_chain, shift_count_mode, shift_width, un_operand_context,
     Elision, MaskContext, ShiftCountMode,
 };
+use dewasm_backend::outline;
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
     module_name_error, signed_view_rel_op, store_code, terminates, type_key, wasi_bundled, Backend,
@@ -177,6 +178,7 @@ fn generate_class_inner(
     }
     let gen = Gen {
         module,
+        outline: outline::outline(module, &OUTLINE_PARAMS),
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
@@ -502,8 +504,19 @@ const MAX_FIXED_ARITY: usize = 8;
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
+/// Loop-body outlining thresholds (see [`dewasm_backend::outline`]).
+/// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize a ~12 ns call per iteration is worth extracting into one.
+/// Tuned against the benchmark suite and the DOOM/NES examples; other backends would pick their own values.
+const OUTLINE_PARAMS: outline::Params = outline::Params {
+    min_weight: 40,
+    max_params: 12,
+    max_results: 1,
+};
+
 struct Gen<'a> {
     module: &'a Module,
+    /// The function list actually emitted: the module's functions with outlined loop bodies replaced by calls, followed by the extracted functions, with `types` extended to match.
+    outline: outline::Outline,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
@@ -665,7 +678,7 @@ impl<'a> Gen<'a> {
         });
         w.line("");
         w.line("private");
-        for (i, func) in self.module.funcs.iter().enumerate() {
+        for (i, func) in self.outline.funcs.iter().enumerate() {
             w.line("");
             let idx = self.module.num_imported_funcs() as usize + i;
             self.function(w, idx as u32, func);
@@ -932,7 +945,7 @@ impl<'a> Gen<'a> {
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
         *self.frames.borrow_mut() = flat::frames(&func.body, flat::BreakToBlockEnd::Available);
         self.frame_stack.borrow_mut().clear();
-        let ty = &self.module.types[func.type_idx as usize];
+        let ty = &self.outline.types[func.type_idx as usize];
         *self.elision.borrow_mut() = Elision::analyze(&ty.params, func, FIXNUM_LIMIT);
         let params = (0..ty.params.len())
             .map(|i| format!("l{i}"))

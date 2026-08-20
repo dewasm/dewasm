@@ -2,6 +2,7 @@
 
 pub mod flat;
 pub mod masking;
+pub mod outline;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
