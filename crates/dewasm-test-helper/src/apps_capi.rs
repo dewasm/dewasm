@@ -1,5 +1,5 @@
 //! C-API-driving app cases: a converted library-mode artifact whose C API is driven directly from host-language glue: `sqlite3_malloc`, guest-memory pointer plumbing, and (for the callback case) an imported `env.host_row` provider.
-//! Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh`.
+//! Unlike the `apps`/`fs_apps` suites there is **no wasmtime snapshot**: the CLI cannot drive a C-API flow whose results live in guest memory, so each case pins a fixed expected string, every value in it anchored by the amalgamation version pinned in `examples/apps/setup.sh` and the `-wasm` suffix the build patches into that version string.
 //!
 //! Each case is a `pub const` [`CApiCase`] driven by a per-case macro (`libsqlite3_c_api_e2e!`, `pcap_compile_e2e!`, `zeroperl_eval_e2e!`, …).
 //! The per-language variation is the named glue const passed to that macro (malloc/pointer plumbing/memory access/provider registration written out literally in the backend's language); the file-backed case's runtime scratch path (and the app-cache root) arrive through the `{scratch}`/`{cache}` placeholders the runner fills, with staged fixtures (the exiftool image) copied into that scratch dir.
@@ -47,12 +47,13 @@ fn assert_dbfile(scratch: &Path) {
 }
 
 /// The library half of the sqlite3 build: the C API driven in memory. version + two SELECT rows + a sentinel, all pinned by the amalgamation version.
+/// The reported version carries the `-wasm` suffix `examples/apps/scripts/sqlite3.sh` patches into the source, so demo output identifies the converted engine.
 /// In-memory (`:memory:`), so the `{scratch}` placeholder goes unused.
 pub const LIBSQLITE3_C_API: CApiCase = CApiCase {
     name: "libsqlite3_c_api",
     wasm: "libsqlite3",
     class: "Libsqlite3",
-    expect_stdout: "version: 3.53.3\n20|y\n10|x\nC-API-OK\n",
+    expect_stdout: "version: 3.53.3-wasm\n20|y\n10|x\nC-API-OK\n",
     stage: &[],
     assert_host: assert_none,
 };
