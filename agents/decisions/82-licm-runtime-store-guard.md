@@ -46,4 +46,5 @@ Fusing that byte-decomposed store into one 32-bit store (the `agents/experiments
 
 **Carry-over.**
 The call barrier keeps every interpreter-shaped hot loop out (sqlite3-shell's dispatch calls helpers; the NES frame function calls per-instruction helpers 10.5 M times per smoke run); admitting calls needs per-callee store summaries, a whole-program analysis this pass deliberately avoided.
+That extension was later measured to be not worth building for the two programs it would target: the oracle experiment in `agents/experiments.md` (call-crossing-licm-ceiling) hoisted everything with no guards and moved neither NES nor sqlite.
 Hoisting is limited to loads whose address is a literal constant; loads at loop-invariant but computed addresses (a base local never written in the loop) are the next admission candidate and need an invariance check instead of a constant match.
