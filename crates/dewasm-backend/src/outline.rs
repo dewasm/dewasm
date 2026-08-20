@@ -36,10 +36,23 @@ pub struct Outline {
 const BOUNDARY_CAP: usize = 256;
 
 pub fn outline(module: &Module, params: &Params) -> Outline {
-    let mut types = module.types.clone();
-    let mut funcs: Vec<Func> = module.funcs.clone();
+    outline_funcs(
+        module.funcs.clone(),
+        module.types.clone(),
+        module.imported_funcs.len() as u32,
+        params,
+    )
+}
+
+/// The same rewrite over an already-transformed function list (an earlier pass may run between the module and this one).
+pub fn outline_funcs(
+    mut funcs: Vec<Func>,
+    mut types: Vec<FuncType>,
+    num_imported: u32,
+    params: &Params,
+) -> Outline {
     let mut synths: Vec<Func> = Vec::new();
-    let base_idx = module.imported_funcs.len() as u32 + module.funcs.len() as u32;
+    let base_idx = num_imported + funcs.len() as u32;
     for func in &mut funcs {
         let boundaries = Liveness::run(func);
         let mut local_tys = types[func.type_idx as usize].params.clone();
@@ -426,7 +439,7 @@ fn stmt_weight(stmt: &Stmt) -> u32 {
 }
 
 /// Visit every expression held directly by `stmt` (not those of nested statements).
-fn for_each_expr(stmt: &Stmt, f: &mut impl FnMut(&Expr)) {
+pub(crate) fn for_each_expr(stmt: &Stmt, f: &mut impl FnMut(&Expr)) {
     let target_exprs = |t: &BrTarget, f: &mut dyn FnMut(&Expr)| {
         if let BrTarget::Return { values } = t {
             values.iter().for_each(f);
@@ -665,7 +678,7 @@ fn renumber_stmt(stmt: &mut Stmt, map: &BTreeMap<u32, u32>) {
 }
 
 /// Mutable counterpart of [`for_each_expr`].
-fn for_each_expr_mut(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) {
+pub(crate) fn for_each_expr_mut(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) {
     let target_exprs = |t: &mut BrTarget, f: &mut dyn FnMut(&mut Expr)| {
         if let BrTarget::Return { values } = t {
             values.iter_mut().for_each(f);

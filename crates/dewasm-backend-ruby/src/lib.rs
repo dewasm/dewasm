@@ -28,13 +28,13 @@ use dewasm_backend::masking::{
     bin_operand_context, fold_and_chain, shift_count_mode, shift_width, un_operand_context,
     Elision, MaskContext, ShiftCountMode,
 };
-use dewasm_backend::outline;
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
     module_name_error, signed_view_rel_op, store_code, terminates, type_key, wasi_bundled, Backend,
     CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
     SupportStatus,
 };
+use dewasm_backend::{licm, outline};
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
     BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp,
@@ -178,7 +178,7 @@ fn generate_class_inner(
     }
     let gen = Gen {
         module,
-        outline: outline::outline(module, &OUTLINE_PARAMS),
+        outline: transformed_funcs(module),
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
@@ -513,6 +513,29 @@ const OUTLINE_PARAMS: outline::Params = outline::Params {
     max_results: 1,
     min_weight_with_temps: 160,
 };
+
+/// Invariant constant-address load hoisting thresholds (see [`dewasm_backend::licm`]).
+/// The guard is a few integer compares per store; two hoisted loads per iteration already outweigh it.
+const LICM_PARAMS: licm::Params = licm::Params {
+    min_hoisted_with_stores: 2,
+};
+
+/// The function list the emitter consumes: hoisting first (it needs the loops still in place), then loop-body outlining.
+fn transformed_funcs(module: &Module) -> outline::Outline {
+    let mut funcs = module.funcs.clone();
+    licm::hoist(
+        &mut funcs,
+        &module.types,
+        licm::memory_min_bytes(module),
+        &LICM_PARAMS,
+    );
+    outline::outline_funcs(
+        funcs,
+        module.types.clone(),
+        module.imported_funcs.len() as u32,
+        &OUTLINE_PARAMS,
+    )
+}
 
 struct Gen<'a> {
     module: &'a Module,
