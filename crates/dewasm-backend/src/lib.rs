@@ -2,6 +2,8 @@
 
 pub mod extract;
 pub mod flat;
+pub mod fuse;
+pub mod licm;
 pub mod masking;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

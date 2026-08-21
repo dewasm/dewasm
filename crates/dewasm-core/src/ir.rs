@@ -506,7 +506,7 @@ pub enum Expr {
     MemorySize,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum LoadOp {
     I32Load,
     I64Load,
