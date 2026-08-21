@@ -1,14 +1,14 @@
-# Decision 81: Loop-Body Outlining into Per-Iteration Functions
+# Decision 81: Loop-Body Extraction into Per-Iteration Functions
 
 Status: **Accepted, 2026-08-21.**
-The shared pass lives in [`crates/dewasm-backend/src/outline.rs`](../../crates/dewasm-backend/src/outline.rs); the Ruby backend is the only consumer, with its thresholds in `OUTLINE_PARAMS` (`crates/dewasm-backend-ruby/src/lib.rs`).
+The shared pass lives in [`crates/dewasm-backend/src/extract.rs`](../../crates/dewasm-backend/src/extract.rs); the Ruby backend is the only consumer, with its thresholds in `EXTRACT_PARAMS` (`crates/dewasm-backend-ruby/src/lib.rs`).
 Regions containing a `return` or an outward branch are not yet extractable, which leaves the NES example and sqlite3-shell's interpreter loop uncaptured; see Consequences.
 
 ## Context
 
 YJIT and ZJIT compile a method only when it is entered through a call, never mid-execution (no on-stack replacement).
 A hot loop inside a function that is entered once is therefore interpreted forever: the converted `c/mandelbrot` benchmark runs its whole workload inside one function and measures identically with and without `--yjit` (9.2 s / 9.1 s), while its hand-split counterpart with the loop body behind a call runs 3.1 s under `--yjit`.
-Decision 58 recorded the no-OSR measurement and rejected per-state outlining on it; that rejection covers 5-to-10-line dispatch states, which are too small to carry a call and leave the dispatch loop itself uncompiled.
+Decision 58 recorded the no-OSR measurement and rejected per-state extraction on it; that rejection covers 5-to-10-line dispatch states, which are too small to carry a call and leave the dispatch loop itself uncompiled.
 The shape that wins is different: a loop body large enough to amortize the call, containing its inner loops, extracted whole so the JIT compiles the work.
 
 Lowering the compile threshold instead of restructuring was measured and does not work: `--yjit-call-threshold=1` changes nothing on `c/mandelbrot` (the running method is never recompiled) and makes `app/sqlite3_query` 1.52x slower (cold methods get compiled for nothing).
@@ -22,16 +22,16 @@ Lowering the compile threshold instead of restructuring was measured and does no
   Live-outs are found by a backward may-liveness over the structured body (loops to a fixpoint); parameters are the variables possibly read before the span assigns them.
   A spilled stack temp whose incoming value the span may read (possible once a span starts mid-body: earlier statements compute into temps) is passed as a trailing parameter and copied into its temp at the extracted function's entry, so the span body needs no rewriting beyond local renumbering.
 - **Inside a `try_table`, a throw-capable span is not extracted**: an exception would skip the write-back of values the catch handler could observe.
-- **Thresholds are per backend** ([`outline::Params`]: minimum span weight in IR nodes, maximum parameter count, maximum live-out count, and a higher weight floor for spans consuming incoming temps).
+- **Thresholds are per backend** ([`extract::Params`]: minimum span weight in IR nodes, maximum parameter count, maximum live-out count, and a higher weight floor for spans consuming incoming temps).
   Ruby uses weight 40, 12 parameters, 1 live-out, and temp-consuming spans need weight 160.
   The weight floor is load-bearing in both directions: at 80 the second `c/sha256` extraction disappears and `--yjit` regresses from 10.6 s to 13.2 s, and small tight-loop bodies (the `wat/` microbenchmarks) must stay unextracted or the interpreter pays a call per iteration; at 24 the suite's outputs are byte-identical to 40.
   The separate temp floor is equally load-bearing: without it, the temp-consuming spans unlocked in the DOOM module regress its smoke run from 16.7 to 12.7 ticks/sec, while with it the DOOM extraction set keeps the gain and `c/sha256` consolidates its two extractions into one larger span, improving `--yjit` from 10.62 s to 10.20 s.
 - **The pass rewrites a copied function list; the shared module is not mutated.**
-  `outline()` returns the defined functions with spans replaced by calls, the extracted functions appended, and the type list extended; a backend swaps that list in at emission time.
+  `extract()` returns the defined functions with spans replaced by calls, the extracted functions appended, and the type list extended; a backend swaps that list in at emission time.
 
 ## Rejected alternatives
 
-- **Per-state outlining of dispatch states.**
+- **Per-state extraction of dispatch states.**
   Rejected with measurements in decision 58; the granularity is wrong, not the idea of a method boundary.
 - **Multiple live-outs via an array return.**
   A Ruby method returning a pair allocates an Array per call, in the hottest place the program has.

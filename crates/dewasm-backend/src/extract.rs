@@ -1,4 +1,4 @@
-//! Loop-body outlining: move a contiguous, branch-closed span of a loop body into its own function, called once per iteration.
+//! Loop-body extraction: move a contiguous, branch-closed span of a loop body into its own function, called once per iteration.
 //!
 //! Ruby's JITs (and several others) compile a method only when it is entered through a call, never mid-execution, so a hot loop inside a function entered once is interpreted forever.
 //! Splitting the body across a call turns it into a method invoked every iteration, which such a JIT does compile; the call costs nanoseconds per iteration while a compiled body of sufficient size saves far more.
@@ -25,9 +25,9 @@ pub struct Params {
     pub min_weight_with_temps: u32,
 }
 
-/// The rewritten function list: the module's defined functions with outlined regions replaced by calls, followed by the extracted functions.
+/// The rewritten function list: the module's defined functions with extracted regions replaced by calls, followed by the extracted functions.
 /// `types` extends the module's type list with any new signatures; indices below `module.types.len()` are unchanged, so only [`Func::type_idx`] lookups need the extended list.
-pub struct Outline {
+pub struct Extracted {
     pub funcs: Vec<Func>,
     pub types: Vec<FuncType>,
 }
@@ -35,7 +35,7 @@ pub struct Outline {
 /// Boundaries per loop body are recorded only up to this many leading statements; a longer prefix is never a candidate.
 const BOUNDARY_CAP: usize = 256;
 
-pub fn outline(module: &Module, params: &Params) -> Outline {
+pub fn extract(module: &Module, params: &Params) -> Extracted {
     let mut types = module.types.clone();
     let mut funcs: Vec<Func> = module.funcs.clone();
     let mut synths: Vec<Func> = Vec::new();
@@ -57,7 +57,7 @@ pub fn outline(module: &Module, params: &Params) -> Outline {
         walk_seq(body, &mut cx, false);
     }
     funcs.append(&mut synths);
-    Outline { funcs, types }
+    Extracted { funcs, types }
 }
 
 /// A variable the analyses track: a wasm local or a spilled stack temp.
@@ -88,7 +88,7 @@ fn walk_seq(seq: &mut [Stmt], cx: &mut Cx, in_try: bool) {
         if let Stmt::Loop { label, body } = stmt {
             // A loop nothing branches back to runs its body once; a call there gains no compilation.
             if label.referenced {
-                try_outline_loop(body, cx, in_try);
+                try_extract_loop(body, cx, in_try);
             }
         }
         let enters_try = matches!(stmt, Stmt::TryTable { .. });
@@ -98,7 +98,7 @@ fn walk_seq(seq: &mut [Stmt], cx: &mut Cx, in_try: bool) {
     }
 }
 
-fn try_outline_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
+fn try_extract_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
     let Some(bounds) = cx.boundaries.get(&(body.as_ptr() as usize)) else {
         return;
     };
@@ -1036,7 +1036,7 @@ mod tests {
     #[test]
     fn extracts_accumulator_loop_body() {
         let module = module_of(vec![ValType::I32], vec![ValType::I32; 3], accumulate_body());
-        let out = outline(&module, &TEST_PARAMS);
+        let out = extract(&module, &TEST_PARAMS);
         assert_eq!(out.funcs.len(), 2);
 
         let synth = &out.funcs[1];
@@ -1105,7 +1105,7 @@ mod tests {
             },
         ];
         let module = module_of(vec![ValType::I32], vec![ValType::I32; 3], body);
-        let out = outline(&module, &TEST_PARAMS);
+        let out = extract(&module, &TEST_PARAMS);
         assert_eq!(out.funcs.len(), 2);
 
         let Stmt::Block { body, .. } = &out.funcs[0].body[0] else {
@@ -1143,7 +1143,7 @@ mod tests {
             }],
         }];
         let module = module_of(vec![ValType::I32], vec![], body);
-        let out = outline(&module, &TEST_PARAMS);
+        let out = extract(&module, &TEST_PARAMS);
         assert_eq!(out.funcs.len(), 1);
     }
 
@@ -1154,7 +1154,7 @@ mod tests {
             min_weight: 1000,
             ..TEST_PARAMS
         };
-        let out = outline(&module, &params);
+        let out = extract(&module, &params);
         assert_eq!(out.funcs.len(), 1);
     }
 
@@ -1167,7 +1167,7 @@ mod tests {
         label.referenced = false;
         inner.pop();
         let module = module_of(vec![ValType::I32], vec![ValType::I32; 3], body);
-        let out = outline(&module, &TEST_PARAMS);
+        let out = extract(&module, &TEST_PARAMS);
         assert_eq!(out.funcs.len(), 1);
     }
 }
