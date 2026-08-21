@@ -34,7 +34,7 @@ use dewasm_backend::{
     CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
     SupportStatus,
 };
-use dewasm_backend::{fuse, licm, outline};
+use dewasm_backend::{extract, fuse, licm};
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
     BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp,
@@ -178,7 +178,7 @@ fn generate_class_inner(
     }
     let gen = Gen {
         module,
-        outline: transformed_funcs(module),
+        extracted: transformed_funcs(module),
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
@@ -504,10 +504,10 @@ const MAX_FIXED_ARITY: usize = 8;
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
-/// Loop-body outlining thresholds (see [`dewasm_backend::outline`]).
+/// Loop-body extraction thresholds (see [`dewasm_backend::extract`]).
 /// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize a ~12 ns call per iteration is worth extracting into one.
 /// Tuned against the benchmark suite and the DOOM/NES examples; other backends would pick their own values.
-const OUTLINE_PARAMS: outline::Params = outline::Params {
+const EXTRACT_PARAMS: extract::Params = extract::Params {
     min_weight: 40,
     max_params: 12,
     max_results: 1,
@@ -520,8 +520,8 @@ const LICM_PARAMS: licm::Params = licm::Params {
     min_hoisted_with_stores: 2,
 };
 
-/// The function list the emitter consumes: hoisting first (it needs the loops still in place), then loop-body outlining.
-fn transformed_funcs(module: &Module) -> outline::Outline {
+/// The function list the emitter consumes: hoisting first (it needs the loops still in place), then loop-body extraction.
+fn transformed_funcs(module: &Module) -> extract::Extracted {
     let mut funcs = module.funcs.clone();
     fuse::fuse_byte_scatter(&mut funcs);
     licm::hoist(
@@ -530,18 +530,18 @@ fn transformed_funcs(module: &Module) -> outline::Outline {
         licm::memory_min_bytes(module),
         &LICM_PARAMS,
     );
-    outline::outline_funcs(
+    extract::extract_funcs(
         funcs,
         module.types.clone(),
         module.imported_funcs.len() as u32,
-        &OUTLINE_PARAMS,
+        &EXTRACT_PARAMS,
     )
 }
 
 struct Gen<'a> {
     module: &'a Module,
-    /// The function list actually emitted: the module's functions with outlined loop bodies replaced by calls, followed by the extracted functions, with `types` extended to match.
-    outline: outline::Outline,
+    /// The function list actually emitted: the module's functions with extracted loop bodies replaced by calls, followed by the extracted functions, with `types` extended to match.
+    extracted: extract::Extracted,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
@@ -703,7 +703,7 @@ impl<'a> Gen<'a> {
         });
         w.line("");
         w.line("private");
-        for (i, func) in self.outline.funcs.iter().enumerate() {
+        for (i, func) in self.extracted.funcs.iter().enumerate() {
             w.line("");
             let idx = self.module.num_imported_funcs() as usize + i;
             self.function(w, idx as u32, func);
@@ -970,7 +970,7 @@ impl<'a> Gen<'a> {
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
         *self.frames.borrow_mut() = flat::frames(&func.body, flat::BreakToBlockEnd::Available);
         self.frame_stack.borrow_mut().clear();
-        let ty = &self.outline.types[func.type_idx as usize];
+        let ty = &self.extracted.types[func.type_idx as usize];
         *self.elision.borrow_mut() = Elision::analyze(&ty.params, func, FIXNUM_LIMIT);
         let params = (0..ty.params.len())
             .map(|i| format!("l{i}"))
