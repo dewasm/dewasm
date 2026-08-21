@@ -67,8 +67,12 @@ WASM_OPT_FEATURES=(
   --enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int
   --enable-mutable-globals --enable-multivalue --enable-reference-types
 )
+# wasm_opt_inplace <wasm> [extra-flag...]: the shared pass, plus any flags one app needs (sqlite3's mod build passes its inlining and stripping flags here).
+# The extra flags precede -O2: wasm-opt applies an option only to the passes named after it, so a flag placed after -O2 is accepted and does nothing.
 wasm_opt_inplace() {
-  wasm-opt "${WASM_OPT_FEATURES[@]}" -O2 "$1" -o "$1"
+  local w="$1"
+  shift
+  wasm-opt "${WASM_OPT_FEATURES[@]}" "$@" -O2 "$w" -o "$w"
 }
 # The version string folded into a locally-built module's stamp (empty when wasm-opt is absent, so the cache misses and the loud prereq check fires).
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
