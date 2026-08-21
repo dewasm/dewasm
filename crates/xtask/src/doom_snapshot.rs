@@ -139,7 +139,9 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 
     // Guard against a degenerate (blank/near-blank) capture: DOOM's paletted renderer lands in the low hundreds of distinct colors on a real frame.
     let distinct = frame
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|px| [px[0], px[1], px[2]])
         .collect::<std::collections::HashSet<_>>()
         .len();
@@ -160,7 +162,7 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 /// This PNG exists only for humans to view: no test compares it.
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
-    for px in frame.chunks_exact(4) {
+    for px in frame.as_chunks::<4>().0 {
         rgb.extend_from_slice(&[px[2], px[1], px[0]]);
     }
     let mut out = Vec::new();
