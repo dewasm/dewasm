@@ -256,6 +256,10 @@ const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm run
 /// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
 const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
     ("dewasm-bash", BASH_MINIGZIP_REASON),
+    (
+        "wasm3",
+        "excluded: wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")",
+    ),
     ("pywasm-cpython", PYWASM_MINIGZIP_REASON),
     ("wardite", WARDITE_MINIGZIP_REASON),
     ("wardite-yjit", WARDITE_MINIGZIP_REASON),
