@@ -21,7 +21,7 @@ pub fn memory_min_bytes(module: &Module) -> Option<u64> {
         .or_else(|| module.imported_memory.as_ref().map(|m| m.min_pages * 65536))
 }
 
-use crate::outline::{for_each_expr, for_each_expr_mut};
+use crate::extract::{for_each_expr, for_each_expr_mut};
 
 /// Hoisting thresholds; each backend picks its own values.
 #[derive(Clone, Copy, Debug)]

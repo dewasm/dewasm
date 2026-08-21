@@ -223,7 +223,7 @@ pub struct DataSegment {
     pub data: Vec<u8>,
 }
 
-/// Clonable so a backend-side rewriting pass (loop-body outlining) can produce an adjusted function list without mutating the shared module.
+/// Clonable so a backend-side rewriting pass (loop-body extraction) can produce an adjusted function list without mutating the shared module.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub type_idx: u32,

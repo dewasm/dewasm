@@ -1,7 +1,7 @@
 # Decision 83: Byte-Scatter Store Fusion Behind a Runtime Precondition
 
 Status: **Accepted, 2026-08-21.**
-The shared pass lives in [`crates/dewasm-backend/src/fuse.rs`](../../crates/dewasm-backend/src/fuse.rs); the Ruby backend runs it first, before load hoisting (decision 82) and loop-body outlining (decision 81), so the hoisting pass sees one store where the idiom fired and emits one guard instead of four.
+The shared pass lives in [`crates/dewasm-backend/src/fuse.rs`](../../crates/dewasm-backend/src/fuse.rs); the Ruby backend runs it first, before load hoisting (decision 82) and loop-body extraction (decision 81), so the hoisting pass sees one store where the idiom fired and emits one guard instead of four.
 The recognizer covers the one idiom shape measured hot (the four-byte little-endian scatter); widening it is driven by profiles, not speculation.
 
 ## Context

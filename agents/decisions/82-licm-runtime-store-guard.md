@@ -1,7 +1,7 @@
 # Decision 82: Hoist Invariant Constant-Address Loads with a Runtime Store Guard
 
 Status: **Accepted, 2026-08-21.**
-The shared pass lives in [`crates/dewasm-backend/src/licm.rs`](../../crates/dewasm-backend/src/licm.rs); the Ruby backend runs it before loop-body outlining (decision 81), with its threshold in `LICM_PARAMS` (`crates/dewasm-backend-ruby/src/lib.rs`).
+The shared pass lives in [`crates/dewasm-backend/src/licm.rs`](../../crates/dewasm-backend/src/licm.rs); the Ruby backend runs it before loop-body extraction (decision 81), with its threshold in `LICM_PARAMS` (`crates/dewasm-backend-ruby/src/lib.rs`).
 Loops containing calls or bulk-memory operations are not hoisted from; that exclusion keeps the two profiled interpreter-style hot functions (sqlite3-shell's, the NES frame function) out of reach and is the main open end.
 
 ## Context
@@ -22,7 +22,7 @@ Hand-hoisting those seven loads (assuming no aliasing) measured 13.5 to 23 ticks
   The store's address is spilled to a temp first, which also keeps its evaluation (and any trap inside it) in the original order.
 - **A loop containing a call, an indirect call, or a bulk-memory operation is not hoisted from**: those can write memory (or run code that does) with no address to guard.
 - **The threshold is per backend** ([`licm::Params`]): a loop with stores needs at least `min_hoisted_with_stores` distinct hoistable loads (Ruby: 2) before the per-store guards pay; a loop without stores hoists from one load with no guards at all.
-- **The pass runs before loop-body outlining**: outlining moves loop bodies into functions where the loop structure is gone, so hoisting must see the loops first.
+- **The pass runs before loop-body extraction**: extraction moves loop bodies into functions where the loop structure is gone, so hoisting must see the loops first.
 
 ## Rejected alternatives
 

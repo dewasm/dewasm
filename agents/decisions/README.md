@@ -100,7 +100,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 78 | [Wrapping-Add Memory Units for Dynamic Addresses](78-memory-dynamic-add-units.md) | Accepted |
 | 79 | [Single-Character Codes for the Memory Load/Store Unit Names](79-memory-unit-name-codes.md) | Accepted |
 | 80 | [`fd_fdstat_set_flags` Accepts Any Open Fd, a Recorded Exception to Decision 49](80-fdstat-set-flags-any-fd.md) | Accepted |
-| 81 | [Loop-Body Outlining into Per-Iteration Functions](81-loop-body-outlining.md) | Accepted |
+| 81 | [Loop-Body Extraction into Per-Iteration Functions](81-loop-body-extraction.md) | Accepted |
 | 82 | [Hoist Invariant Constant-Address Loads with a Runtime Store Guard](82-licm-runtime-store-guard.md) | Accepted |
 | 83 | [Byte-Scatter Store Fusion Behind a Runtime Precondition](83-byte-scatter-store-fusion.md) | Accepted |
 
