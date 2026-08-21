@@ -103,6 +103,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 81 | [Loop-Body Extraction into Per-Iteration Functions](81-loop-body-extraction.md) | Accepted |
 | 82 | [Hoist Invariant Constant-Address Loads with a Runtime Store Guard](82-licm-runtime-store-guard.md) | Accepted |
 | 83 | [Byte-Scatter Store Fusion Behind a Runtime Precondition](83-byte-scatter-store-fusion.md) | Accepted |
+| 84 | [Per-Receiver `IO::Buffer` Scratch for the Ruby Float Bit Conversions](84-ruby-float-scratch-buffer.md) | Accepted |
 
 ## Adding a new decision
 

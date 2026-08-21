@@ -5,6 +5,10 @@ Backfilled; implemented for Ruby in `runtime/ruby/runtime.rb`.
 The conventions below bind every backend whose language lacks fixed-width/unsigned integers or 32-bit floats (Ruby, Python, PHP, Bash); Java/Go map to native types instead.
 [Decision 71](71-mask-elision-modular-consumers.md) loosens the always-masked convention to masked at observation points: inside one expression tree, a value whose consumer restores the mask may stay unmasked; the storage representation itself is unchanged.
 
+**Revision, 2026-08-21 ([decision 84](84-ruby-float-scratch-buffer.md)):** Ruby's bit conversions narrow and widen through an `IO::Buffer` scratch instead of `pack`/`unpack1`.
+The software NaN paths stay, for a narrower reason: the double-to-float cast quietens a signaling NaN and cannot carry a zero payload, where `pack("e")` discarded sign and payload outright.
+What changes is the NaN an f32 arithmetic result carries, from the canonical one to the propagated one, which the spec permits (an arithmetic NaN) and which the Python, Perl, Go and Java backends already return.
+
 ## Context
 
 Wasm requires bit-exact numerics: wrapping two's-complement i32/i64 with signed *and* unsigned views, IEEE 754 f32/f64 including NaN bit patterns, and precise trap conditions.

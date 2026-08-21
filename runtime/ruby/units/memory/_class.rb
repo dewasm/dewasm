@@ -1,4 +1,7 @@
 # requires: rt/trap
+# The f32 accessors call the runtime's bit conversions as instance methods, so the scratch buffer they borrow (rt/scratch) belongs to this memory instead of the Rt module every instance shares.
+include Rt
+
 PAGE_SIZE = 65536
 
 attr_reader :buffer
