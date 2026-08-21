@@ -99,6 +99,11 @@ fi
 require_tool sqlite3 zig "install zig (e.g. brew install zig) to build the sqlite3 apps"
 require_tool sqlite3 unzip
 require_tool sqlite3 wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the sqlite3 apps"
+# The mod build passes --no-inline to keep the split VDBE opcode functions out of Binaryen's single-caller inlining; a binaryen too old to know the flag would fail mid-build, so refuse it up front.
+if ! wasm-opt --help 2>&1 | grep -q -- --no-inline; then
+  echo "sqlite3: this wasm-opt does not support --no-inline; install a newer binaryen (local dev uses version 132)" >&2
+  exit 1
+fi
 
 echo "sqlite3: fetching $SQLITE_URL"
 new_tmpdir
