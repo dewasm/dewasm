@@ -21,7 +21,7 @@ pub struct Params {
     pub max_params: usize,
     /// Maximum number of values the region may leave live for the rest of the function: 1 (returned from the call) or 0 (require none).
     pub max_results: usize,
-    /// Minimum region size when the span consumes incoming temp values (see [`Extraction::arg_temps`]): such spans pay an extra argument and an entry copy per temp, so they must be larger to amortize it.
+    /// Minimum region size when the span consumes incoming temp values (see `Extraction::arg_temps`): such spans pay an extra argument and an entry copy per temp, so they must be larger to amortize it.
     pub min_weight_with_temps: u32,
 }
 
