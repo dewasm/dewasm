@@ -7,7 +7,7 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-08-16T09:23:36Z.
+Measured 2026-08-21T04:00:29Z.
 
 | | |
 | --- | --- |
@@ -68,13 +68,13 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-shell-dark.svg">
-  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 7.24 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
+  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.31 MB, then ruby at 7.22 MB; bash is largest at 37.6 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.31 MB |
-| `ruby` | 7.24 MB |
+| `ruby` | 7.22 MB |
 | `python` | 7.70 MB |
 | `perl` | 12.9 MB |
 | `bash` | 37.6 MB |
@@ -85,13 +85,13 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-qjs-dark.svg">
-  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.54 MB, then python at 6.56 MB; bash is largest at 27.0 MB, a span of 18x. The table below carries every number." src="figs/app-qjs.svg">
+  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.54 MB, then ruby at 6.55 MB; bash is largest at 27.0 MB, a span of 18x. The table below carries every number." src="figs/app-qjs.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.54 MB |
-| `ruby` | 6.58 MB |
+| `ruby` | 6.55 MB |
 | `python` | 6.56 MB |
 | `perl` | 10.5 MB |
 | `bash` | 27.0 MB |

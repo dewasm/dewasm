@@ -40,9 +40,14 @@ jobs:
         with:
           version: 0.16.0 # keep in sync with local dev
       - name: Install setup.sh build tools (binaryen, bison, flex)
+        # Binaryen comes from the pinned upstream release, not apt: the sqlite3-mod build needs wasm-opt's --no-inline, which Ubuntu's packaged binaryen predates.
+        # keep in sync with local dev
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends binaryen bison flex
+          sudo apt-get install -y --no-install-recommends bison flex
+          curl -sSfL -o /tmp/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
+          tar -xzf /tmp/binaryen.tar.gz -C /tmp
+          sudo cp /tmp/binaryen-version_132/bin/* /usr/local/bin/
       - name: Add wasm32-wasip1 target (setup.sh builds ripgrep with it)
         run: rustup target add wasm32-wasip1
       - name: Install wasi-vfs CLI (setup.sh packs ruby-packed with it)

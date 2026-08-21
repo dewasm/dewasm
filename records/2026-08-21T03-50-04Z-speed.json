@@ -1,0 +1,7313 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-21T03:50:04Z",
+  "host": {
+    "os": "macOS 26.5.2",
+    "arch": "aarch64",
+    "kernel": "Darwin 25.5.0",
+    "cpu": "Apple M1 Pro"
+  },
+  "settings": {
+    "reps": 5,
+    "target_ms": 300,
+    "timeout_s": 900,
+    "filter": null
+  },
+  "runtimes": [
+    {
+      "runner": "wasmtime",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wasmtime 47.0.3 (5554cc1a6 2026-07-31)"
+    },
+    {
+      "runner": "wasmer",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wasmer 7.2.1"
+    },
+    {
+      "runner": "wasmedge",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wasmedge version 0.17.1"
+    },
+    {
+      "runner": "wazero",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "1.12.0"
+    },
+    {
+      "runner": "wasm3",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "Wasm3 v0.5.0 on arm64-v8a"
+    },
+    {
+      "runner": "dewasm-ruby",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-ruby-yjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-ruby-zjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "ruby 4.0.4 (2026-05-12 revision b89eb1bcbf) +PRISM [arm64-darwin25]"
+    },
+    {
+      "runner": "dewasm-python",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "Python 3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]"
+    },
+    {
+      "runner": "dewasm-pypy",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "Python 3.11.15 (194f9f44b505, Jul 15 2026, 12:14:56)"
+    },
+    {
+      "runner": "dewasm-perl",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "v5.44.0"
+    },
+    {
+      "runner": "dewasm-go",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "go version go1.26.2 darwin/arm64"
+    },
+    {
+      "runner": "dewasm-java",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "java version \"25.0.4.1\" 2026-08-18 LTS"
+    },
+    {
+      "runner": "dewasm-bash",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "5.3.15(1)-release"
+    },
+    {
+      "runner": "pywasm-cpython",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "pywasm 2.2.3"
+    },
+    {
+      "runner": "pywasm-pypy",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "pywasm 2.2.3"
+    },
+    {
+      "runner": "wardite",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wardite 0.9.0"
+    },
+    {
+      "runner": "wardite-yjit",
+      "available": true,
+      "unavailable_reason": null,
+      "version": "wardite 0.9.0"
+    }
+  ],
+  "results": [
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 3013457,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.0054705,
+        "median_s": 0.005869375,
+        "samples_s": [
+          0.006431416,
+          0.006150958,
+          0.005869375,
+          0.0054705,
+          0.005600708
+        ]
+      },
+      "total": {
+        "min_s": 0.295708417,
+        "median_s": 0.296166084,
+        "samples_s": [
+          0.295708417,
+          0.297819542,
+          0.296166084,
+          0.296388125,
+          0.295890833
+        ]
+      },
+      "compute_s": 0.290237917,
+      "ns_per_op_min": 96.31394010267941,
+      "ns_per_op_median": 96.33344992146893,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 3172418,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.00891475,
+        "median_s": 0.009308542,
+        "samples_s": [
+          0.00891475,
+          0.009308542,
+          0.009380375,
+          0.009064917,
+          0.0094485
+        ]
+      },
+      "total": {
+        "min_s": 0.312266875,
+        "median_s": 0.312751709,
+        "samples_s": [
+          0.312266875,
+          0.3124295,
+          0.312751709,
+          0.347293417,
+          0.313471166
+        ]
+      },
+      "compute_s": 0.303352125,
+      "ns_per_op_min": 95.62173868639,
+      "ns_per_op_median": 95.6504366700731,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 65536,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.016326125,
+        "median_s": 0.017028125,
+        "samples_s": [
+          0.016949417,
+          0.016326125,
+          0.017426416,
+          0.017028125,
+          0.0173465
+        ]
+      },
+      "total": {
+        "min_s": 0.2656045,
+        "median_s": 0.265924042,
+        "samples_s": [
+          0.266110417,
+          0.2664935,
+          0.265924042,
+          0.265702708,
+          0.2656045
+        ]
+      },
+      "compute_s": 0.24927837500000002,
+      "ns_per_op_min": 3803.686141967774,
+      "ns_per_op_median": 3797.8502960205083,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 2659665,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005001125,
+        "median_s": 0.005395416,
+        "samples_s": [
+          0.005001125,
+          0.00563025,
+          0.005335125,
+          0.005395416,
+          0.005506833
+        ]
+      },
+      "total": {
+        "min_s": 0.290171708,
+        "median_s": 0.290578625,
+        "samples_s": [
+          0.291036416,
+          0.290171708,
+          0.290578625,
+          0.2909355,
+          0.290411166
+        ]
+      },
+      "compute_s": 0.285170583,
+      "ns_per_op_min": 107.22048942254006,
+      "ns_per_op_median": 107.22523663694489,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 664849,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004458958,
+        "median_s": 0.004642667,
+        "samples_s": [
+          0.004684291,
+          0.004714709,
+          0.004458958,
+          0.004474792,
+          0.004642667
+        ]
+      },
+      "total": {
+        "min_s": 0.307257375,
+        "median_s": 0.307444834,
+        "samples_s": [
+          0.307257375,
+          0.307751916,
+          0.307457209,
+          0.307322959,
+          0.307444834
+        ]
+      },
+      "compute_s": 0.302798417,
+      "ns_per_op_min": 455.43938097222076,
+      "ns_per_op_median": 455.4450213507127,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 66071,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.038987584,
+        "median_s": 0.040298292,
+        "samples_s": [
+          0.040298292,
+          0.04009475,
+          0.040435459,
+          0.041345917,
+          0.038987584
+        ]
+      },
+      "total": {
+        "min_s": 0.339534542,
+        "median_s": 0.340451125,
+        "samples_s": [
+          0.340451125,
+          0.340769,
+          0.340842084,
+          0.339975208,
+          0.339534542
+        ]
+      },
+      "compute_s": 0.300546958,
+      "ns_per_op_min": 4548.848329827004,
+      "ns_per_op_median": 4542.883155998849,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 148614,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039239959,
+        "median_s": 0.040106292,
+        "samples_s": [
+          0.041106708,
+          0.040106292,
+          0.039239959,
+          0.040484875,
+          0.039699792
+        ]
+      },
+      "total": {
+        "min_s": 0.26416525,
+        "median_s": 0.269742417,
+        "samples_s": [
+          0.269200917,
+          0.269742417,
+          0.26416525,
+          0.270005875,
+          0.271531625
+        ]
+      },
+      "compute_s": 0.22492529100000003,
+      "ns_per_op_min": 1513.4865557753646,
+      "ns_per_op_median": 1545.1850094876663,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 77310,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039454791,
+        "median_s": 0.040566042,
+        "samples_s": [
+          0.040195583,
+          0.040566042,
+          0.040826458,
+          0.039454791,
+          0.040614791
+        ]
+      },
+      "total": {
+        "min_s": 0.309958958,
+        "median_s": 0.310797583,
+        "samples_s": [
+          0.310474709,
+          0.310797583,
+          0.313774583,
+          0.313959417,
+          0.309958958
+        ]
+      },
+      "compute_s": 0.270504167,
+      "ns_per_op_min": 3498.9544302160134,
+      "ns_per_op_median": 3495.4280300090545,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 55895,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.029058291,
+        "median_s": 0.029658791,
+        "samples_s": [
+          0.029058291,
+          0.030878208,
+          0.029658791,
+          0.029901459,
+          0.029400583
+        ]
+      },
+      "total": {
+        "min_s": 0.227825667,
+        "median_s": 0.230126375,
+        "samples_s": [
+          0.229287084,
+          0.227825667,
+          0.230305542,
+          0.230126375,
+          0.230429042
+        ]
+      },
+      "compute_s": 0.198767376,
+      "ns_per_op_min": 3556.085088111638,
+      "ns_per_op_median": 3586.502978799535,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 2011993,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040301333,
+        "median_s": 0.040500459,
+        "samples_s": [
+          0.04095525,
+          0.040500459,
+          0.041233,
+          0.040301333,
+          0.04044025
+        ]
+      },
+      "total": {
+        "min_s": 0.324685708,
+        "median_s": 0.326213291,
+        "samples_s": [
+          0.324685708,
+          0.326213291,
+          0.326532042,
+          0.326394709,
+          0.325393042
+        ]
+      },
+      "compute_s": 0.284384375,
+      "ns_per_op_min": 141.3446145190366,
+      "ns_per_op_median": 142.00488371480418,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 5195,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.010709959,
+        "median_s": 0.011569042,
+        "samples_s": [
+          0.010709959,
+          0.011569042,
+          0.011677916,
+          0.011822625,
+          0.011353666
+        ]
+      },
+      "total": {
+        "min_s": 0.300810041,
+        "median_s": 0.301117667,
+        "samples_s": [
+          0.300810041,
+          0.301117667,
+          0.302805125,
+          0.30177825,
+          0.300918292
+        ]
+      },
+      "compute_s": 0.290100082,
+      "ns_per_op_min": 55842.171703561115,
+      "ns_per_op_median": 55736.02021174206,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 1250554,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002540125,
+        "median_s": 0.002701834,
+        "samples_s": [
+          0.002927542,
+          0.002874458,
+          0.002540125,
+          0.002671417,
+          0.002701834
+        ]
+      },
+      "total": {
+        "min_s": 0.296689333,
+        "median_s": 0.297150125,
+        "samples_s": [
+          0.297222416,
+          0.297150125,
+          0.297347959,
+          0.296873708,
+          0.296689333
+        ]
+      },
+      "compute_s": 0.294149208,
+      "ns_per_op_min": 235.21511905923296,
+      "ns_per_op_median": 235.45427946334183,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 2496717,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.064466459,
+        "median_s": 0.065036583,
+        "samples_s": [
+          0.0660355,
+          0.065036583,
+          0.064466459,
+          0.064481375,
+          0.065779209
+        ]
+      },
+      "total": {
+        "min_s": 0.30811625,
+        "median_s": 0.308572292,
+        "samples_s": [
+          0.308488959,
+          0.309663584,
+          0.310150042,
+          0.308572292,
+          0.30811625
+        ]
+      },
+      "compute_s": 0.24364979099999998,
+      "ns_per_op_min": 97.58806905227944,
+      "ns_per_op_median": 97.54237624848953,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 155,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.012838917,
+        "median_s": 0.013047625,
+        "samples_s": [
+          0.013429166,
+          0.012838917,
+          0.013234084,
+          0.012906792,
+          0.013047625
+        ]
+      },
+      "total": {
+        "min_s": 3.129893,
+        "median_s": 3.133905209,
+        "samples_s": [
+          3.133905209,
+          3.131145875,
+          3.129893,
+          3.140914375,
+          3.140424792
+        ]
+      },
+      "compute_s": 3.117054083,
+      "ns_per_op_min": 20110026.341935486,
+      "ns_per_op_median": 20134565.058064517,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 256,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.042393375,
+        "median_s": 0.043993417,
+        "samples_s": [
+          0.045691917,
+          0.043640833,
+          0.044983875,
+          0.043993417,
+          0.042393375
+        ]
+      },
+      "total": {
+        "min_s": 0.423002875,
+        "median_s": 0.423801292,
+        "samples_s": [
+          0.423678125,
+          0.424598625,
+          0.423801292,
+          0.423872209,
+          0.423002875
+        ]
+      },
+      "compute_s": 0.3806095,
+      "ns_per_op_min": 1486755.859375,
+      "ns_per_op_median": 1483624.51171875,
+      "load_ms": 0.823,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 86,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.079529291,
+        "median_s": 0.081082625,
+        "samples_s": [
+          0.081082625,
+          0.082493292,
+          0.08168575,
+          0.080285958,
+          0.079529291
+        ]
+      },
+      "total": {
+        "min_s": 0.262302917,
+        "median_s": 0.263617,
+        "samples_s": [
+          0.262577625,
+          0.263617,
+          0.262302917,
+          0.269265458,
+          0.265333209
+        ]
+      },
+      "compute_s": 0.18277362600000002,
+      "ns_per_op_min": 2125274.720930233,
+      "ns_per_op_median": 2122492.732558139,
+      "load_ms": 5.49,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 752,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.052850167,
+        "median_s": 0.053228709,
+        "samples_s": [
+          0.053610042,
+          0.052933666,
+          0.0532495,
+          0.052850167,
+          0.053228709
+        ]
+      },
+      "total": {
+        "min_s": 0.344053208,
+        "median_s": 0.345596917,
+        "samples_s": [
+          0.344053208,
+          0.345809709,
+          0.345326458,
+          0.346969666,
+          0.345596917
+        ]
+      },
+      "compute_s": 0.291203041,
+      "ns_per_op_min": 387238.0864361702,
+      "ns_per_op_median": 388787.5106382979,
+      "load_ms": 4.22,
+      "verification": "match"
+    },
+    {
+      "workload": "c/mandelbrot",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 1249,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.102671584,
+        "median_s": 0.104261209,
+        "samples_s": [
+          0.103819875,
+          0.102671584,
+          0.105065541,
+          0.104261209,
+          0.104383875
+        ]
+      },
+      "total": {
+        "min_s": 0.3356765,
+        "median_s": 0.336890833,
+        "samples_s": [
+          0.3356765,
+          0.336890833,
+          0.336451125,
+          0.337410458,
+          0.337317458
+        ]
+      },
+      "compute_s": 0.233004916,
+      "ns_per_op_min": 186553.17534027222,
+      "ns_per_op_median": 186252.70136108887,
+      "load_ms": 10.217,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 996305,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005193583,
+        "median_s": 0.005604375,
+        "samples_s": [
+          0.005604375,
+          0.005550917,
+          0.005619167,
+          0.005693417,
+          0.005193583
+        ]
+      },
+      "total": {
+        "min_s": 0.2972545,
+        "median_s": 0.297736125,
+        "samples_s": [
+          0.297736125,
+          0.297886458,
+          0.2972545,
+          0.297788125,
+          0.297364959
+        ]
+      },
+      "compute_s": 0.292060917,
+      "ns_per_op_min": 293.1440843918278,
+      "ns_per_op_median": 293.21518009043416,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 1005425,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008732542,
+        "median_s": 0.009139875,
+        "samples_s": [
+          0.00885925,
+          0.009522792,
+          0.008732542,
+          0.00925025,
+          0.009139875
+        ]
+      },
+      "total": {
+        "min_s": 0.303325666,
+        "median_s": 0.30342875,
+        "samples_s": [
+          0.303733709,
+          0.303401916,
+          0.303538583,
+          0.30342875,
+          0.303325666
+        ]
+      },
+      "compute_s": 0.294593124,
+      "ns_per_op_min": 293.00357958077427,
+      "ns_per_op_median": 292.7009722256757,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 6959,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.016427583,
+        "median_s": 0.016604708,
+        "samples_s": [
+          0.016427583,
+          0.016604708,
+          0.016498042,
+          0.017322792,
+          0.016958
+        ]
+      },
+      "total": {
+        "min_s": 0.308005791,
+        "median_s": 0.30825975,
+        "samples_s": [
+          0.309095833,
+          0.308094958,
+          0.30825975,
+          0.308271542,
+          0.308005791
+        ]
+      },
+      "compute_s": 0.29157820799999995,
+      "ns_per_op_min": 41899.440724241984,
+      "ns_per_op_median": 41910.481678402066,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 774028,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004850709,
+        "median_s": 0.005392542,
+        "samples_s": [
+          0.005528917,
+          0.005944292,
+          0.00534725,
+          0.004850709,
+          0.005392542
+        ]
+      },
+      "total": {
+        "min_s": 0.29836125,
+        "median_s": 0.300594,
+        "samples_s": [
+          0.300368541,
+          0.301858667,
+          0.302621667,
+          0.29836125,
+          0.300594
+        ]
+      },
+      "compute_s": 0.293510541,
+      "ns_per_op_min": 379.19886748283005,
+      "ns_per_op_median": 381.3834357413427,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 55167,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004427375,
+        "median_s": 0.00465775,
+        "samples_s": [
+          0.00465775,
+          0.004427375,
+          0.005094583,
+          0.004571875,
+          0.004731375
+        ]
+      },
+      "total": {
+        "min_s": 0.28304225,
+        "median_s": 0.284326875,
+        "samples_s": [
+          0.285286584,
+          0.28343425,
+          0.28304225,
+          0.285034209,
+          0.284326875
+        ]
+      },
+      "compute_s": 0.278614875,
+      "ns_per_op_min": 5050.390178911306,
+      "ns_per_op_median": 5069.500335345405,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 3773,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039535958,
+        "median_s": 0.040145208,
+        "samples_s": [
+          0.040498875,
+          0.039789291,
+          0.040509208,
+          0.039535958,
+          0.040145208
+        ]
+      },
+      "total": {
+        "min_s": 0.336630208,
+        "median_s": 0.338735042,
+        "samples_s": [
+          0.339133333,
+          0.339273291,
+          0.338735042,
+          0.336630208,
+          0.337390916
+        ]
+      },
+      "compute_s": 0.29709425,
+      "ns_per_op_min": 78742.18128809966,
+      "ns_per_op_median": 79138.57248873575,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 8371,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039776042,
+        "median_s": 0.040036667,
+        "samples_s": [
+          0.041341375,
+          0.039981375,
+          0.039776042,
+          0.040036667,
+          0.041631208
+        ]
+      },
+      "total": {
+        "min_s": 0.32850175,
+        "median_s": 0.32945975,
+        "samples_s": [
+          0.331000125,
+          0.373862333,
+          0.32945975,
+          0.32850175,
+          0.328567209
+        ]
+      },
+      "compute_s": 0.28872570799999997,
+      "ns_per_op_min": 34491.18480468282,
+      "ns_per_op_median": 34574.4932505077,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 5343,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039524583,
+        "median_s": 0.040855292,
+        "samples_s": [
+          0.039524583,
+          0.040996416,
+          0.039905958,
+          0.040855292,
+          0.042354917
+        ]
+      },
+      "total": {
+        "min_s": 0.328792166,
+        "median_s": 0.329903416,
+        "samples_s": [
+          0.332119084,
+          0.33059575,
+          0.328792166,
+          0.329684416,
+          0.329903416
+        ]
+      },
+      "compute_s": 0.289267583,
+      "ns_per_op_min": 54139.543889200824,
+      "ns_per_op_median": 54098.469773535464,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 1073,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.029458458,
+        "median_s": 0.030159583,
+        "samples_s": [
+          0.030159583,
+          0.029458458,
+          0.029711083,
+          0.030646792,
+          0.030755042
+        ]
+      },
+      "total": {
+        "min_s": 0.319757,
+        "median_s": 0.322181625,
+        "samples_s": [
+          0.320507709,
+          0.326403958,
+          0.322181625,
+          0.319757,
+          0.327000084
+        ]
+      },
+      "compute_s": 0.290298542,
+      "ns_per_op_min": 270548.5013979497,
+      "ns_per_op_median": 272154.7455731594,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 18698,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040710792,
+        "median_s": 0.041836,
+        "samples_s": [
+          0.040710792,
+          0.042147167,
+          0.042536916,
+          0.041836,
+          0.041257459
+        ]
+      },
+      "total": {
+        "min_s": 0.303323084,
+        "median_s": 0.304077708,
+        "samples_s": [
+          0.306617833,
+          0.304985292,
+          0.303991875,
+          0.304077708,
+          0.303323084
+        ]
+      },
+      "compute_s": 0.262612292,
+      "ns_per_op_min": 14044.940207508826,
+      "ns_per_op_median": 14025.12076157878,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 929,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.011116666,
+        "median_s": 0.011558292,
+        "samples_s": [
+          0.011116666,
+          0.011558292,
+          0.011562334,
+          0.011431916,
+          0.011935708
+        ]
+      },
+      "total": {
+        "min_s": 0.308156291,
+        "median_s": 0.310860292,
+        "samples_s": [
+          0.310992208,
+          0.310860292,
+          0.311710833,
+          0.308156291,
+          0.310130458
+        ]
+      },
+      "compute_s": 0.29703962500000003,
+      "ns_per_op_min": 319741.2540365985,
+      "ns_per_op_median": 322176.5339074273,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 838956,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002527125,
+        "median_s": 0.002963,
+        "samples_s": [
+          0.002593458,
+          0.002527125,
+          0.003048666,
+          0.002963,
+          0.003091541
+        ]
+      },
+      "total": {
+        "min_s": 0.2946635,
+        "median_s": 0.295404041,
+        "samples_s": [
+          0.294762708,
+          0.295852041,
+          0.296011833,
+          0.295404041,
+          0.2946635
+        ]
+      },
+      "compute_s": 0.292136375,
+      "ns_per_op_min": 348.2141792894979,
+      "ns_per_op_median": 348.57732825082604,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 431222,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.065729125,
+        "median_s": 0.066317167,
+        "samples_s": [
+          0.065744458,
+          0.065729125,
+          0.066570209,
+          0.066317167,
+          0.066399542
+        ]
+      },
+      "total": {
+        "min_s": 0.28188275,
+        "median_s": 0.3035405,
+        "samples_s": [
+          0.28188275,
+          0.3035405,
+          0.2841385,
+          0.336279583,
+          0.315784333
+        ]
+      },
+      "compute_s": 0.21615362500000002,
+      "ns_per_op_min": 501.25834257064815,
+      "ns_per_op_median": 550.1188088733877,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 18,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.014841,
+        "median_s": 0.015029375,
+        "samples_s": [
+          0.015029375,
+          0.015556375,
+          0.015166208,
+          0.014841,
+          0.014935666
+        ]
+      },
+      "total": {
+        "min_s": 0.302338875,
+        "median_s": 0.302415458,
+        "samples_s": [
+          0.303061041,
+          0.302342458,
+          0.303968416,
+          0.302415458,
+          0.302338875
+        ]
+      },
+      "compute_s": 0.287497875,
+      "ns_per_op_min": 15972104.166666666,
+      "ns_per_op_median": 15965893.5,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 19,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.044503333,
+        "median_s": 0.044639459,
+        "samples_s": [
+          0.045270167,
+          0.044639459,
+          0.044588917,
+          0.045450917,
+          0.044503333
+        ]
+      },
+      "total": {
+        "min_s": 0.319167542,
+        "median_s": 0.321018083,
+        "samples_s": [
+          0.320629167,
+          0.321018083,
+          0.319167542,
+          0.322717125,
+          0.321321625
+        ]
+      },
+      "compute_s": 0.27466420900000005,
+      "ns_per_op_min": 14456011.000000004,
+      "ns_per_op_median": 14546243.368421054,
+      "load_ms": 1.398,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 28,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.087394416,
+        "median_s": 0.088678375,
+        "samples_s": [
+          0.087394416,
+          0.088594208,
+          0.089499416,
+          0.089192792,
+          0.088678375
+        ]
+      },
+      "total": {
+        "min_s": 0.290550334,
+        "median_s": 0.293796,
+        "samples_s": [
+          0.292383458,
+          0.294228084,
+          0.290550334,
+          0.294468458,
+          0.293796
+        ]
+      },
+      "compute_s": 0.20315591800000002,
+      "ns_per_op_min": 7255568.500000001,
+      "ns_per_op_median": 7325629.464285715,
+      "load_ms": 7.846,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 59,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.053883458,
+        "median_s": 0.053989792,
+        "samples_s": [
+          0.0539595,
+          0.054347333,
+          0.053989792,
+          0.053883458,
+          0.054612125
+        ]
+      },
+      "total": {
+        "min_s": 0.299371708,
+        "median_s": 0.301609959,
+        "samples_s": [
+          0.301609959,
+          0.299371708,
+          0.301453,
+          0.302133791,
+          0.301621584
+        ]
+      },
+      "compute_s": 0.24548825000000002,
+      "ns_per_op_min": 4160817.79661017,
+      "ns_per_op_median": 4196951.9830508465,
+      "load_ms": 4.314,
+      "verification": "match"
+    },
+    {
+      "workload": "c/sha256",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 124,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.103596333,
+        "median_s": 0.105292292,
+        "samples_s": [
+          0.104900667,
+          0.105292292,
+          0.103596333,
+          0.105332291,
+          0.106236416
+        ]
+      },
+      "total": {
+        "min_s": 0.343750417,
+        "median_s": 0.345969625,
+        "samples_s": [
+          0.345969625,
+          0.344168916,
+          0.343750417,
+          0.347289417,
+          0.345988833
+        ]
+      },
+      "compute_s": 0.240154084,
+      "ns_per_op_min": 1936726.4838709678,
+      "ns_per_op_median": 1940946.2338709678,
+      "load_ms": 10.523,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 161150873,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005004167,
+        "median_s": 0.00544625,
+        "samples_s": [
+          0.005642375,
+          0.00544125,
+          0.00544625,
+          0.005504667,
+          0.005004167
+        ]
+      },
+      "total": {
+        "min_s": 0.272311584,
+        "median_s": 0.274537541,
+        "samples_s": [
+          0.274537541,
+          0.272311584,
+          0.274910291,
+          0.273615125,
+          0.274698375
+        ]
+      },
+      "compute_s": 0.267307417,
+      "ns_per_op_min": 1.6587401112000182,
+      "ns_per_op_median": 1.6698097006275603,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 171058135,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008747708,
+        "median_s": 0.009060083,
+        "samples_s": [
+          0.009560083,
+          0.008747708,
+          0.009060083,
+          0.008913875,
+          0.009442375
+        ]
+      },
+      "total": {
+        "min_s": 0.280493125,
+        "median_s": 0.285112875,
+        "samples_s": [
+          0.280493125,
+          0.2890115,
+          0.285112875,
+          0.28226475,
+          0.287733375
+        ]
+      },
+      "compute_s": 0.271745417,
+      "ns_per_op_min": 1.588614402933833,
+      "ns_per_op_median": 1.613795169694794,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 1395269,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.01721225,
+        "median_s": 0.017667834,
+        "samples_s": [
+          0.01721225,
+          0.017700292,
+          0.017262375,
+          0.017937333,
+          0.017667834
+        ]
+      },
+      "total": {
+        "min_s": 0.302586125,
+        "median_s": 0.302894875,
+        "samples_s": [
+          0.302872292,
+          0.302586125,
+          0.303045208,
+          0.303082125,
+          0.302894875
+        ]
+      },
+      "compute_s": 0.285373875,
+      "ns_per_op_min": 204.5296462545932,
+      "ns_per_op_median": 204.42440919994638,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 96819483,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005021959,
+        "median_s": 0.005303292,
+        "samples_s": [
+          0.005809792,
+          0.005021959,
+          0.005179375,
+          0.005303292,
+          0.005640208
+        ]
+      },
+      "total": {
+        "min_s": 0.296635625,
+        "median_s": 0.296921833,
+        "samples_s": [
+          0.296635625,
+          0.296921833,
+          0.297708792,
+          0.297380417,
+          0.296870584
+        ]
+      },
+      "compute_s": 0.291613666,
+      "ns_per_op_min": 3.0119316584245754,
+      "ns_per_op_median": 3.0119820098605565,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 11086656,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004350375,
+        "median_s": 0.004788584,
+        "samples_s": [
+          0.004815542,
+          0.004350375,
+          0.004788584,
+          0.004919292,
+          0.004666625
+        ]
+      },
+      "total": {
+        "min_s": 0.233023792,
+        "median_s": 0.233628708,
+        "samples_s": [
+          0.234638458,
+          0.233869333,
+          0.233445459,
+          0.233628708,
+          0.233023792
+        ]
+      },
+      "compute_s": 0.22867341700000002,
+      "ns_per_op_min": 20.62600454095446,
+      "ns_per_op_median": 20.64104126618522,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 701024,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040709084,
+        "median_s": 0.041679958,
+        "samples_s": [
+          0.041679958,
+          0.041858833,
+          0.040709084,
+          0.042069958,
+          0.041464292
+        ]
+      },
+      "total": {
+        "min_s": 0.32726175,
+        "median_s": 0.328749167,
+        "samples_s": [
+          0.328197334,
+          0.32915325,
+          0.328749167,
+          0.32726175,
+          0.329111792
+        ]
+      },
+      "compute_s": 0.286552666,
+      "ns_per_op_min": 408.762989569544,
+      "ns_per_op_median": 409.49983024832244,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 1042101,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.041606042,
+        "median_s": 0.041633292,
+        "samples_s": [
+          0.041606042,
+          0.041633292,
+          0.041626458,
+          0.041770917,
+          0.044330625
+        ]
+      },
+      "total": {
+        "min_s": 0.326950792,
+        "median_s": 0.327895791,
+        "samples_s": [
+          0.328079625,
+          0.327895791,
+          0.326950792,
+          0.327049917,
+          0.327953333
+        ]
+      },
+      "compute_s": 0.28534475,
+      "ns_per_op_min": 273.816789351512,
+      "ns_per_op_median": 274.69746118658367,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 923260,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.041560541,
+        "median_s": 0.042307583,
+        "samples_s": [
+          0.041560541,
+          0.042417208,
+          0.042961791,
+          0.042307583,
+          0.042071583
+        ]
+      },
+      "total": {
+        "min_s": 0.314411791,
+        "median_s": 0.31593925,
+        "samples_s": [
+          0.314411791,
+          0.317291333,
+          0.31593925,
+          0.317013958,
+          0.315797625
+        ]
+      },
+      "compute_s": 0.27285125,
+      "ns_per_op_min": 295.53024066893397,
+      "ns_per_op_median": 296.37552477092044,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 329172,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.032505042,
+        "median_s": 0.033614583,
+        "samples_s": [
+          0.032829,
+          0.033750333,
+          0.033614583,
+          0.032505042,
+          0.033844208
+        ]
+      },
+      "total": {
+        "min_s": 0.328068875,
+        "median_s": 0.328571083,
+        "samples_s": [
+          0.328571083,
+          0.330479167,
+          0.328068875,
+          0.328399209,
+          0.331619416
+        ]
+      },
+      "compute_s": 0.295563833,
+      "ns_per_op_min": 897.9008937576708,
+      "ns_per_op_median": 896.0558613733851,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 4577810,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.045161708,
+        "median_s": 0.046263708,
+        "samples_s": [
+          0.046263708,
+          0.046524708,
+          0.046775583,
+          0.046096833,
+          0.045161708
+        ]
+      },
+      "total": {
+        "min_s": 0.30764375,
+        "median_s": 0.30779425,
+        "samples_s": [
+          0.309115583,
+          0.30764375,
+          0.30779425,
+          0.307726166,
+          0.308051
+        ]
+      },
+      "compute_s": 0.26248204199999997,
+      "ns_per_op_min": 57.33790655357037,
+      "ns_per_op_median": 57.130056074848014,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 202622,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.018644083,
+        "median_s": 0.018837167,
+        "samples_s": [
+          0.018644083,
+          0.018892875,
+          0.018837167,
+          0.018816417,
+          0.019468917
+        ]
+      },
+      "total": {
+        "min_s": 0.319634542,
+        "median_s": 0.320628833,
+        "samples_s": [
+          0.320402208,
+          0.322128625,
+          0.319634542,
+          0.320640417,
+          0.320628833
+        ]
+      },
+      "compute_s": 0.30099045900000004,
+      "ns_per_op_min": 1485.4776825813587,
+      "ns_per_op_median": 1489.4318780783922,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 117698366,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002579166,
+        "median_s": 0.002743625,
+        "samples_s": [
+          0.002743625,
+          0.002579166,
+          0.002721459,
+          0.002778042,
+          0.0029775
+        ]
+      },
+      "total": {
+        "min_s": 0.283549042,
+        "median_s": 0.286104667,
+        "samples_s": [
+          0.284466042,
+          0.286991958,
+          0.2886745,
+          0.286104667,
+          0.283549042
+        ]
+      },
+      "compute_s": 0.28096987599999995,
+      "ns_per_op_min": 2.387202860573272,
+      "ns_per_op_median": 2.4075189115199778,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 94644064,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.066795125,
+        "median_s": 0.06728775,
+        "samples_s": [
+          0.068248125,
+          0.06728775,
+          0.066795125,
+          0.0675305,
+          0.067190583
+        ]
+      },
+      "total": {
+        "min_s": 0.371657125,
+        "median_s": 0.375712334,
+        "samples_s": [
+          0.379667125,
+          0.375045041,
+          0.371657125,
+          0.375712334,
+          0.37904
+        ]
+      },
+      "compute_s": 0.30486199999999997,
+      "ns_per_op_min": 3.2211423211919548,
+      "ns_per_op_median": 3.258784238174726,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 6844,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.12460975,
+        "median_s": 0.125142708,
+        "samples_s": [
+          0.125142708,
+          0.12469525,
+          0.155482125,
+          0.130592375,
+          0.12460975
+        ]
+      },
+      "total": {
+        "min_s": 0.415959333,
+        "median_s": 0.417993708,
+        "samples_s": [
+          0.418130875,
+          0.416379667,
+          0.417993708,
+          0.415959333,
+          0.430184
+        ]
+      },
+      "compute_s": 0.29134958299999997,
+      "ns_per_op_min": 42570.073495032135,
+      "ns_per_op_median": 42789.450613676214,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 4619,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.28138675,
+        "median_s": 0.281736083,
+        "samples_s": [
+          0.282493292,
+          0.282743542,
+          0.2815175,
+          0.281736083,
+          0.28138675
+        ]
+      },
+      "total": {
+        "min_s": 0.555674708,
+        "median_s": 0.557948542,
+        "samples_s": [
+          0.559158584,
+          0.555674708,
+          0.562382666,
+          0.557948542,
+          0.557414958
+        ]
+      },
+      "compute_s": 0.27428795799999994,
+      "ns_per_op_min": 59382.54124269321,
+      "ns_per_op_median": 59799.190084433845,
+      "load_ms": 1.276,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 13360,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.195787833,
+        "median_s": 0.1971435,
+        "samples_s": [
+          0.197676333,
+          0.1971435,
+          0.197045792,
+          0.195787833,
+          0.198697792
+        ]
+      },
+      "total": {
+        "min_s": 0.400215833,
+        "median_s": 0.402990041,
+        "samples_s": [
+          0.4033165,
+          0.400215833,
+          0.402990041,
+          0.403837333,
+          0.40119225
+        ]
+      },
+      "compute_s": 0.20442800000000003,
+      "ns_per_op_min": 15301.497005988027,
+      "ns_per_op_median": 15407.6752245509,
+      "load_ms": 8.299,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 9313,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.121490875,
+        "median_s": 0.123894083,
+        "samples_s": [
+          0.121490875,
+          0.123894083,
+          0.124335375,
+          0.122170917,
+          0.123988333
+        ]
+      },
+      "total": {
+        "min_s": 0.317091125,
+        "median_s": 0.318391875,
+        "samples_s": [
+          0.318366584,
+          0.319840083,
+          0.317091125,
+          0.319025792,
+          0.318391875
+        ]
+      },
+      "compute_s": 0.19560024999999998,
+      "ns_per_op_min": 21002.926017395035,
+      "ns_per_op_median": 20884.547621604208,
+      "load_ms": 4.517,
+      "verification": "match"
+    },
+    {
+      "workload": "c/wordcount",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 29884,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.144287166,
+        "median_s": 0.145220958,
+        "samples_s": [
+          0.144287166,
+          0.145488875,
+          0.144540166,
+          0.145234208,
+          0.145220958
+        ]
+      },
+      "total": {
+        "min_s": 0.4328065,
+        "median_s": 0.439556709,
+        "samples_s": [
+          0.437465541,
+          0.44025375,
+          0.444558458,
+          0.4328065,
+          0.439556709
+        ]
+      },
+      "compute_s": 0.28851933399999996,
+      "ns_per_op_min": 9654.642417347073,
+      "ns_per_op_median": 9849.27556552001,
+      "load_ms": 10.251,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 85786245,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005292375,
+        "median_s": 0.005507875,
+        "samples_s": [
+          0.005421875,
+          0.005507875,
+          0.005528458,
+          0.00552075,
+          0.005292375
+        ]
+      },
+      "total": {
+        "min_s": 0.305365834,
+        "median_s": 0.305666292,
+        "samples_s": [
+          0.30543975,
+          0.305921084,
+          0.305365834,
+          0.306097584,
+          0.305666292
+        ]
+      },
+      "compute_s": 0.300073459,
+      "ns_per_op_min": 3.4979204300176563,
+      "ns_per_op_median": 3.4989107752647293,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 84985160,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008735416,
+        "median_s": 0.009037417,
+        "samples_s": [
+          0.009037417,
+          0.009476833,
+          0.008735416,
+          0.00938475,
+          0.008814666
+        ]
+      },
+      "total": {
+        "min_s": 0.304334667,
+        "median_s": 0.304748333,
+        "samples_s": [
+          0.304774625,
+          0.304739667,
+          0.304748333,
+          0.305411166,
+          0.304334667
+        ]
+      },
+      "compute_s": 0.295599251,
+      "ns_per_op_min": 3.4782455078039507,
+      "ns_per_op_median": 3.4795594430839456,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 1369049,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.015715583,
+        "median_s": 0.016586333,
+        "samples_s": [
+          0.016942042,
+          0.016833875,
+          0.01606275,
+          0.016586333,
+          0.015715583
+        ]
+      },
+      "total": {
+        "min_s": 0.301289416,
+        "median_s": 0.302785208,
+        "samples_s": [
+          0.303008042,
+          0.302357333,
+          0.301289416,
+          0.302785208,
+          0.30283475
+        ]
+      },
+      "compute_s": 0.285573833,
+      "ns_per_op_min": 208.59285021938587,
+      "ns_per_op_median": 209.04940217625514,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 49741199,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004841917,
+        "median_s": 0.005311083,
+        "samples_s": [
+          0.004841917,
+          0.005677209,
+          0.005311083,
+          0.005376875,
+          0.005053875
+        ]
+      },
+      "total": {
+        "min_s": 0.303302542,
+        "median_s": 0.304347709,
+        "samples_s": [
+          0.303302542,
+          0.304837,
+          0.304347709,
+          0.305015708,
+          0.303500791
+        ]
+      },
+      "compute_s": 0.29846062500000003,
+      "ns_per_op_min": 6.000270017616585,
+      "ns_per_op_median": 6.011849975711281,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 5378538,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004133833,
+        "median_s": 0.004344208,
+        "samples_s": [
+          0.004133833,
+          0.00449325,
+          0.0047945,
+          0.004344208,
+          0.004208917
+        ]
+      },
+      "total": {
+        "min_s": 0.271869292,
+        "median_s": 0.272617792,
+        "samples_s": [
+          0.271913583,
+          0.271869292,
+          0.272617792,
+          0.272992625,
+          0.273059292
+        ]
+      },
+      "compute_s": 0.267735459,
+      "ns_per_op_min": 49.77848236825695,
+      "ns_per_op_median": 49.87853279088109,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1175188,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.038975875,
+        "median_s": 0.039788167,
+        "samples_s": [
+          0.039289875,
+          0.038975875,
+          0.039935417,
+          0.039788167,
+          0.039964083
+        ]
+      },
+      "total": {
+        "min_s": 0.282888959,
+        "median_s": 0.283898417,
+        "samples_s": [
+          0.285050041,
+          0.285208334,
+          0.283898417,
+          0.283603417,
+          0.282888959
+        ]
+      },
+      "compute_s": 0.243913084,
+      "ns_per_op_min": 207.55239502105195,
+      "ns_per_op_median": 207.72016902827465,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 2639513,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.038898708,
+        "median_s": 0.0397795,
+        "samples_s": [
+          0.04022825,
+          0.039371625,
+          0.039985291,
+          0.0397795,
+          0.038898708
+        ]
+      },
+      "total": {
+        "min_s": 0.326877708,
+        "median_s": 0.32849475,
+        "samples_s": [
+          0.329425125,
+          0.328935708,
+          0.326877708,
+          0.32849475,
+          0.32793925
+        ]
+      },
+      "compute_s": 0.287979,
+      "ns_per_op_min": 109.10308075770038,
+      "ns_per_op_median": 109.38201478833406,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 1650242,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039089292,
+        "median_s": 0.039903125,
+        "samples_s": [
+          0.039713666,
+          0.039903125,
+          0.039089292,
+          0.040806208,
+          0.039964833
+        ]
+      },
+      "total": {
+        "min_s": 0.24839425,
+        "median_s": 0.248813416,
+        "samples_s": [
+          0.249899,
+          0.248813416,
+          0.24839425,
+          0.249533583,
+          0.248520584
+        ]
+      },
+      "compute_s": 0.209304958,
+      "ns_per_op_min": 126.83288754013047,
+      "ns_per_op_median": 126.59373049528496,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 706262,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.028962958,
+        "median_s": 0.029276333,
+        "samples_s": [
+          0.029618833,
+          0.029076791,
+          0.029964208,
+          0.029276333,
+          0.028962958
+        ]
+      },
+      "total": {
+        "min_s": 0.324024417,
+        "median_s": 0.327172042,
+        "samples_s": [
+          0.327172042,
+          0.324024417,
+          0.327694041,
+          0.327989166,
+          0.325109542
+        ]
+      },
+      "compute_s": 0.295061459,
+      "ns_per_op_min": 417.7790380906802,
+      "ns_per_op_median": 421.7920672498308,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 2220565,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040292208,
+        "median_s": 0.040564375,
+        "samples_s": [
+          0.040654583,
+          0.040564375,
+          0.040557417,
+          0.040292208,
+          0.040997875
+        ]
+      },
+      "total": {
+        "min_s": 0.237756167,
+        "median_s": 0.238600459,
+        "samples_s": [
+          0.238600459,
+          0.237985209,
+          0.238669458,
+          0.238782292,
+          0.237756167
+        ]
+      },
+      "compute_s": 0.197463959,
+      "ns_per_op_min": 88.92509744141694,
+      "ns_per_op_median": 89.18274583270474,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 270211,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.010926292,
+        "median_s": 0.011067291,
+        "samples_s": [
+          0.011093917,
+          0.010926292,
+          0.011064583,
+          0.011067291,
+          0.011200917
+        ]
+      },
+      "total": {
+        "min_s": 0.309507583,
+        "median_s": 0.310868291,
+        "samples_s": [
+          0.316926291,
+          0.310868291,
+          0.309857625,
+          0.309507583,
+          0.311452792
+        ]
+      },
+      "compute_s": 0.29858129099999997,
+      "ns_per_op_min": 1104.9931016872,
+      "ns_per_op_median": 1109.5070148883653,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 72773600,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.00264325,
+        "median_s": 0.002879167,
+        "samples_s": [
+          0.00297675,
+          0.00264325,
+          0.002941583,
+          0.002879167,
+          0.002684833
+        ]
+      },
+      "total": {
+        "min_s": 0.301729709,
+        "median_s": 0.30300125,
+        "samples_s": [
+          0.302853042,
+          0.301729709,
+          0.303064125,
+          0.303128375,
+          0.30300125
+        ]
+      },
+      "compute_s": 0.299086459,
+      "ns_per_op_min": 4.1098208553651325,
+      "ns_per_op_median": 4.124051620367826,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 74536376,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.065608709,
+        "median_s": 0.066037333,
+        "samples_s": [
+          0.066546042,
+          0.066037333,
+          0.065608709,
+          0.065832167,
+          0.066548208
+        ]
+      },
+      "total": {
+        "min_s": 0.331521333,
+        "median_s": 0.332884042,
+        "samples_s": [
+          0.333334834,
+          0.331521333,
+          0.332308709,
+          0.3332325,
+          0.332884042
+        ]
+      },
+      "compute_s": 0.265912624,
+      "ns_per_op_min": 3.567555041849633,
+      "ns_per_op_median": 3.580086976592476,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 4925,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.012468916,
+        "median_s": 0.012798458,
+        "samples_s": [
+          0.01271425,
+          0.013260375,
+          0.012468916,
+          0.01299375,
+          0.012798458
+        ]
+      },
+      "total": {
+        "min_s": 0.285776083,
+        "median_s": 0.28830475,
+        "samples_s": [
+          0.28830475,
+          0.28939825,
+          0.290335,
+          0.285776083,
+          0.286443875
+        ]
+      },
+      "compute_s": 0.273307167,
+      "ns_per_op_min": 55493.84101522843,
+      "ns_per_op_median": 55940.36385786802,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 5950,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.043406792,
+        "median_s": 0.044070833,
+        "samples_s": [
+          0.044102792,
+          0.043406792,
+          0.044070833,
+          0.043882958,
+          0.0453405
+        ]
+      },
+      "total": {
+        "min_s": 0.33575,
+        "median_s": 0.337686666,
+        "samples_s": [
+          0.338307209,
+          0.338479083,
+          0.337614042,
+          0.337686666,
+          0.33575
+        ]
+      },
+      "compute_s": 0.292343208,
+      "ns_per_op_min": 49133.31226890756,
+      "ns_per_op_median": 49347.19882352942,
+      "load_ms": 0.613,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 23014,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.077276833,
+        "median_s": 0.078168583,
+        "samples_s": [
+          0.078799166,
+          0.078168583,
+          0.079704417,
+          0.077276833,
+          0.078137917
+        ]
+      },
+      "total": {
+        "min_s": 0.30887,
+        "median_s": 0.310257791,
+        "samples_s": [
+          0.310573292,
+          0.30887,
+          0.310257791,
+          0.310835166,
+          0.309718375
+        ]
+      },
+      "compute_s": 0.231593167,
+      "ns_per_op_min": 10063.142739202225,
+      "ns_per_op_median": 10084.69661944903,
+      "load_ms": 3.792,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 11860,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.053193334,
+        "median_s": 0.053424833,
+        "samples_s": [
+          0.053809375,
+          0.05414975,
+          0.053274292,
+          0.053424833,
+          0.053193334
+        ]
+      },
+      "total": {
+        "min_s": 0.266158459,
+        "median_s": 0.26703025,
+        "samples_s": [
+          0.266572333,
+          0.26703025,
+          0.269725916,
+          0.26807275,
+          0.266158459
+        ]
+      },
+      "compute_s": 0.212965125,
+      "ns_per_op_min": 17956.58726812816,
+      "ns_per_op_median": 18010.57478920742,
+      "load_ms": 4.36,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_direct",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 33393,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.102705375,
+        "median_s": 0.103238042,
+        "samples_s": [
+          0.103238042,
+          0.103179458,
+          0.103867917,
+          0.103686416,
+          0.102705375
+        ]
+      },
+      "total": {
+        "min_s": 0.380291542,
+        "median_s": 0.381302,
+        "samples_s": [
+          0.381461292,
+          0.387110833,
+          0.381061791,
+          0.380291542,
+          0.381302
+        ]
+      },
+      "compute_s": 0.277586167,
+      "ns_per_op_min": 8312.705267571047,
+      "ns_per_op_median": 8327.013386038989,
+      "load_ms": 8.88,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 33554432,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005241125,
+        "median_s": 0.005981,
+        "samples_s": [
+          0.006141792,
+          0.005241125,
+          0.0060555,
+          0.005495416,
+          0.005981
+        ]
+      },
+      "total": {
+        "min_s": 0.356638125,
+        "median_s": 0.357008917,
+        "samples_s": [
+          0.357552209,
+          0.357348709,
+          0.356638125,
+          0.356643959,
+          0.357008917
+        ]
+      },
+      "compute_s": 0.35139699999999996,
+      "ns_per_op_min": 10.472446680068968,
+      "ns_per_op_median": 10.46144714951515,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 33554432,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.0089665,
+        "median_s": 0.00904275,
+        "samples_s": [
+          0.009097916,
+          0.009017208,
+          0.0089665,
+          0.00904275,
+          0.009388
+        ]
+      },
+      "total": {
+        "min_s": 0.359330042,
+        "median_s": 0.359905583,
+        "samples_s": [
+          0.362213958,
+          0.359905583,
+          0.360740125,
+          0.359330042,
+          0.359782417
+        ]
+      },
+      "compute_s": 0.35036354200000003,
+      "ns_per_op_min": 10.441647231578827,
+      "ns_per_op_median": 10.456527262926102,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 706498,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.016175417,
+        "median_s": 0.016439,
+        "samples_s": [
+          0.016439,
+          0.016175417,
+          0.016685833,
+          0.016485041,
+          0.016348042
+        ]
+      },
+      "total": {
+        "min_s": 0.31258925,
+        "median_s": 0.313404917,
+        "samples_s": [
+          0.31258925,
+          0.314098792,
+          0.313404917,
+          0.313288708,
+          0.313919875
+        ]
+      },
+      "compute_s": 0.29641383299999996,
+      "ns_per_op_min": 419.5536760188988,
+      "ns_per_op_median": 420.3351134751974,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 15401113,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004961875,
+        "median_s": 0.005207042,
+        "samples_s": [
+          0.005362791,
+          0.005504042,
+          0.005207042,
+          0.004961875,
+          0.005169875
+        ]
+      },
+      "total": {
+        "min_s": 0.186980416,
+        "median_s": 0.187195459,
+        "samples_s": [
+          0.188258417,
+          0.187847125,
+          0.187008708,
+          0.187195459,
+          0.186980416
+        ]
+      },
+      "compute_s": 0.182018541,
+      "ns_per_op_min": 11.81853162170812,
+      "ns_per_op_median": 11.816575659174763,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 4079357,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004140625,
+        "median_s": 0.004296958,
+        "samples_s": [
+          0.004140625,
+          0.004506167,
+          0.004935042,
+          0.004250125,
+          0.004296958
+        ]
+      },
+      "total": {
+        "min_s": 0.286156125,
+        "median_s": 0.288547667,
+        "samples_s": [
+          0.288547667,
+          0.288589708,
+          0.289662458,
+          0.286650792,
+          0.286156125
+        ]
+      },
+      "compute_s": 0.2820155,
+      "ns_per_op_min": 69.13234119985086,
+      "ns_per_op_median": 69.68027289594905,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 428091,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039493583,
+        "median_s": 0.040256334,
+        "samples_s": [
+          0.040256334,
+          0.0408015,
+          0.039493583,
+          0.040193166,
+          0.040314042
+        ]
+      },
+      "total": {
+        "min_s": 0.325453958,
+        "median_s": 0.325962375,
+        "samples_s": [
+          0.325844125,
+          0.325453958,
+          0.325962375,
+          0.329500458,
+          0.328083125
+        ]
+      },
+      "compute_s": 0.285960375,
+      "ns_per_op_min": 667.9896914441089,
+      "ns_per_op_median": 667.3955794445574,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 534089,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039227334,
+        "median_s": 0.040232625,
+        "samples_s": [
+          0.040545583,
+          0.039227334,
+          0.040103542,
+          0.040232625,
+          0.041250375
+        ]
+      },
+      "total": {
+        "min_s": 0.260725459,
+        "median_s": 0.261223,
+        "samples_s": [
+          0.260784291,
+          0.26157075,
+          0.261379166,
+          0.261223,
+          0.260725459
+        ]
+      },
+      "compute_s": 0.221498125,
+      "ns_per_op_min": 414.7213760253441,
+      "ns_per_op_median": 413.77069177608973,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 534433,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039195458,
+        "median_s": 0.0403915,
+        "samples_s": [
+          0.040594,
+          0.0403915,
+          0.040532292,
+          0.04025825,
+          0.039195458
+        ]
+      },
+      "total": {
+        "min_s": 0.29485625,
+        "median_s": 0.2964265,
+        "samples_s": [
+          0.29485625,
+          0.2964265,
+          0.296642459,
+          0.295282584,
+          0.297842583
+        ]
+      },
+      "compute_s": 0.25566079199999997,
+      "ns_per_op_min": 478.37763012388825,
+      "ns_per_op_median": 479.07782640667773,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 382580,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.029321583,
+        "median_s": 0.029479167,
+        "samples_s": [
+          0.029479167,
+          0.029506,
+          0.029420833,
+          0.029827042,
+          0.029321583
+        ]
+      },
+      "total": {
+        "min_s": 0.32981575,
+        "median_s": 0.33055575,
+        "samples_s": [
+          0.32981575,
+          0.33075875,
+          0.332419792,
+          0.330444125,
+          0.33055575
+        ]
+      },
+      "compute_s": 0.30049416700000003,
+      "ns_per_op_min": 785.4413900360711,
+      "ns_per_op_median": 786.9637278477702,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 1724163,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.03974025,
+        "median_s": 0.040404583,
+        "samples_s": [
+          0.041289833,
+          0.041080833,
+          0.040060875,
+          0.040404583,
+          0.03974025
+        ]
+      },
+      "total": {
+        "min_s": 0.281796542,
+        "median_s": 0.282353167,
+        "samples_s": [
+          0.283138833,
+          0.284428417,
+          0.28181,
+          0.281796542,
+          0.282353167
+        ]
+      },
+      "compute_s": 0.24205629199999998,
+      "ns_per_op_min": 140.39060808055848,
+      "ns_per_op_median": 140.32813834886844,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 131072,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.011098125,
+        "median_s": 0.011460709,
+        "samples_s": [
+          0.011456625,
+          0.011800542,
+          0.011928875,
+          0.011098125,
+          0.011460709
+        ]
+      },
+      "total": {
+        "min_s": 0.333727416,
+        "median_s": 0.335456875,
+        "samples_s": [
+          0.335786917,
+          0.335067916,
+          0.333727416,
+          0.337464625,
+          0.335456875
+        ]
+      },
+      "compute_s": 0.322629291,
+      "ns_per_op_min": 2461.466148376465,
+      "ns_per_op_median": 2471.894577026367,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 16777216,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002684959,
+        "median_s": 0.003096209,
+        "samples_s": [
+          0.003096209,
+          0.002881333,
+          0.003108917,
+          0.003187208,
+          0.002684959
+        ]
+      },
+      "total": {
+        "min_s": 0.183944583,
+        "median_s": 0.18449575,
+        "samples_s": [
+          0.18449575,
+          0.184526,
+          0.183944583,
+          0.184396166,
+          0.185352167
+        ]
+      },
+      "compute_s": 0.181259624,
+      "ns_per_op_min": 10.80391550064087,
+      "ns_per_op_median": 10.812255203723907,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 3623667,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.06393925,
+        "median_s": 0.066297834,
+        "samples_s": [
+          0.06393925,
+          0.066297834,
+          0.064501709,
+          0.068203958,
+          0.067140917
+        ]
+      },
+      "total": {
+        "min_s": 0.253066708,
+        "median_s": 0.265674125,
+        "samples_s": [
+          0.265619875,
+          0.266102917,
+          0.265674125,
+          0.265942042,
+          0.253066708
+        ]
+      },
+      "compute_s": 0.18912745799999997,
+      "ns_per_op_min": 52.19228422479217,
+      "ns_per_op_median": 55.02058853641904,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 3739,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.012727625,
+        "median_s": 0.013028416,
+        "samples_s": [
+          0.012842833,
+          0.013047458,
+          0.013028416,
+          0.012727625,
+          0.013211542
+        ]
+      },
+      "total": {
+        "min_s": 0.293666666,
+        "median_s": 0.294735833,
+        "samples_s": [
+          0.294735833,
+          0.296352792,
+          0.295018792,
+          0.293666666,
+          0.294409458
+        ]
+      },
+      "compute_s": 0.280939041,
+      "ns_per_op_min": 75137.4808772399,
+      "ns_per_op_median": 75342.9839529286,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 3239,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.042658167,
+        "median_s": 0.043667958,
+        "samples_s": [
+          0.042658167,
+          0.042772125,
+          0.044705833,
+          0.044353666,
+          0.043667958
+        ]
+      },
+      "total": {
+        "min_s": 0.308910833,
+        "median_s": 0.309837209,
+        "samples_s": [
+          0.309837209,
+          0.308910833,
+          0.310645708,
+          0.309980375,
+          0.309338333
+        ]
+      },
+      "compute_s": 0.26625266599999997,
+      "ns_per_op_min": 82202.11979005866,
+      "ns_per_op_median": 82176.36647113306,
+      "load_ms": 0.868,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 5968,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.07741025,
+        "median_s": 0.078954125,
+        "samples_s": [
+          0.079213167,
+          0.078954125,
+          0.079751959,
+          0.078851584,
+          0.07741025
+        ]
+      },
+      "total": {
+        "min_s": 0.276613292,
+        "median_s": 0.276779792,
+        "samples_s": [
+          0.277364916,
+          0.277057458,
+          0.276779792,
+          0.276694958,
+          0.276613292
+        ]
+      },
+      "compute_s": 0.199203042,
+      "ns_per_op_min": 33378.525804289544,
+      "ns_per_op_median": 33147.73240616622,
+      "load_ms": 4.452,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 7626,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.052481,
+        "median_s": 0.053878625,
+        "samples_s": [
+          0.05438225,
+          0.053119834,
+          0.052481,
+          0.054616791,
+          0.053878625
+        ]
+      },
+      "total": {
+        "min_s": 0.268834583,
+        "median_s": 0.270276459,
+        "samples_s": [
+          0.269527334,
+          0.271644167,
+          0.268834583,
+          0.270733208,
+          0.270276459
+        ]
+      },
+      "compute_s": 0.21635358300000002,
+      "ns_per_op_min": 28370.519669551537,
+      "ns_per_op_median": 28376.322318384475,
+      "load_ms": 4.419,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/call_indirect",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 18045,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.102511542,
+        "median_s": 0.103849791,
+        "samples_s": [
+          0.104341542,
+          0.102925417,
+          0.103849791,
+          0.102511542,
+          0.104193
+        ]
+      },
+      "total": {
+        "min_s": 0.356323291,
+        "median_s": 0.358612625,
+        "samples_s": [
+          0.356323291,
+          0.358612625,
+          0.35803425,
+          0.360666583,
+          0.361435334
+        ]
+      },
+      "compute_s": 0.253811749,
+      "ns_per_op_min": 14065.488999722913,
+      "ns_per_op_median": 14118.195289553893,
+      "load_ms": 9.651,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 299151698,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005132667,
+        "median_s": 0.005632417,
+        "samples_s": [
+          0.005838042,
+          0.005664458,
+          0.005132667,
+          0.005632417,
+          0.005526833
+        ]
+      },
+      "total": {
+        "min_s": 0.295078667,
+        "median_s": 0.295598708,
+        "samples_s": [
+          0.295367459,
+          0.295598708,
+          0.295078667,
+          0.297649167,
+          0.29806025
+        ]
+      },
+      "compute_s": 0.28994600000000004,
+      "ns_per_op_min": 0.9692273249273018,
+      "ns_per_op_median": 0.9692951533907055,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 298392043,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008818292,
+        "median_s": 0.009050542,
+        "samples_s": [
+          0.0096035,
+          0.008818292,
+          0.008936208,
+          0.009696125,
+          0.009050542
+        ]
+      },
+      "total": {
+        "min_s": 0.299907791,
+        "median_s": 0.30030825,
+        "samples_s": [
+          0.300265791,
+          0.30030825,
+          0.30058675,
+          0.301134625,
+          0.299907791
+        ]
+      },
+      "compute_s": 0.291089499,
+      "ns_per_op_min": 0.9755270149747257,
+      "ns_per_op_median": 0.976090733089689,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 3286381,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.015925625,
+        "median_s": 0.016399792,
+        "samples_s": [
+          0.01713675,
+          0.016248916,
+          0.016795625,
+          0.016399792,
+          0.015925625
+        ]
+      },
+      "total": {
+        "min_s": 0.286609666,
+        "median_s": 0.286850459,
+        "samples_s": [
+          0.287064,
+          0.286959041,
+          0.286609666,
+          0.286725833,
+          0.286850459
+        ]
+      },
+      "compute_s": 0.270684041,
+      "ns_per_op_min": 82.36538642354614,
+      "ns_per_op_median": 82.29437396333535,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 301474360,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004681208,
+        "median_s": 0.005108541,
+        "samples_s": [
+          0.004681208,
+          0.005108541,
+          0.0052125,
+          0.005021709,
+          0.005467
+        ]
+      },
+      "total": {
+        "min_s": 0.295981,
+        "median_s": 0.297835084,
+        "samples_s": [
+          0.298078875,
+          0.297835084,
+          0.295981,
+          0.297957458,
+          0.296291709
+        ]
+      },
+      "compute_s": 0.291299792,
+      "ns_per_op_min": 0.9662506357091196,
+      "ns_per_op_median": 0.9709832139622089,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 55272073,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004173916,
+        "median_s": 0.004700375,
+        "samples_s": [
+          0.004700375,
+          0.004173916,
+          0.00447825,
+          0.004743917,
+          0.004700417
+        ]
+      },
+      "total": {
+        "min_s": 0.304401042,
+        "median_s": 0.304852625,
+        "samples_s": [
+          0.304401042,
+          0.305625334,
+          0.304762416,
+          0.304852625,
+          0.305236916
+        ]
+      },
+      "compute_s": 0.300227126,
+      "ns_per_op_min": 5.431805063653031,
+      "ns_per_op_median": 5.4304503831437625,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 2409227,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039291459,
+        "median_s": 0.039765334,
+        "samples_s": [
+          0.039395875,
+          0.039765334,
+          0.040187416,
+          0.039840125,
+          0.039291459
+        ]
+      },
+      "total": {
+        "min_s": 0.286271208,
+        "median_s": 0.286984458,
+        "samples_s": [
+          0.287524875,
+          0.286271208,
+          0.286984458,
+          0.287644458,
+          0.286453542
+        ]
+      },
+      "compute_s": 0.246979749,
+      "ns_per_op_min": 102.51410473151762,
+      "ns_per_op_median": 102.61346232629802,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 3829062,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039898417,
+        "median_s": 0.040065041,
+        "samples_s": [
+          0.041011667,
+          0.039984959,
+          0.040065041,
+          0.040929833,
+          0.039898417
+        ]
+      },
+      "total": {
+        "min_s": 0.331392917,
+        "median_s": 0.33172225,
+        "samples_s": [
+          0.331549333,
+          0.332753875,
+          0.331392917,
+          0.33172225,
+          0.334694042
+        ]
+      },
+      "compute_s": 0.2914945,
+      "ns_per_op_min": 76.12686866914143,
+      "ns_per_op_median": 76.16936184371002,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 3023904,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039646,
+        "median_s": 0.04072,
+        "samples_s": [
+          0.04072,
+          0.040942334,
+          0.040342666,
+          0.04110025,
+          0.039646
+        ]
+      },
+      "total": {
+        "min_s": 0.287973458,
+        "median_s": 0.290256959,
+        "samples_s": [
+          0.287973458,
+          0.290276542,
+          0.289088292,
+          0.292064583,
+          0.290256959
+        ]
+      },
+      "compute_s": 0.248327458,
+      "ns_per_op_min": 82.12147541720901,
+      "ns_per_op_median": 82.52145537689026,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 1926726,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.028933583,
+        "median_s": 0.029700917,
+        "samples_s": [
+          0.029785625,
+          0.029700917,
+          0.029845709,
+          0.029558333,
+          0.028933583
+        ]
+      },
+      "total": {
+        "min_s": 0.322903167,
+        "median_s": 0.323154083,
+        "samples_s": [
+          0.323154083,
+          0.324465542,
+          0.322903167,
+          0.323102875,
+          0.326120042
+        ]
+      },
+      "compute_s": 0.293969584,
+      "ns_per_op_min": 152.57467019181763,
+      "ns_per_op_median": 152.30664142176937,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 108062842,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039717584,
+        "median_s": 0.040663583,
+        "samples_s": [
+          0.040791208,
+          0.039871333,
+          0.039717584,
+          0.040663583,
+          0.041209792
+        ]
+      },
+      "total": {
+        "min_s": 0.273322833,
+        "median_s": 0.273910125,
+        "samples_s": [
+          0.273786291,
+          0.273910125,
+          0.275130791,
+          0.276506959,
+          0.273322833
+        ]
+      },
+      "compute_s": 0.233605249,
+      "ns_per_op_min": 2.1617537043861943,
+      "ns_per_op_median": 2.158434274752833,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 358753,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.014812834,
+        "median_s": 0.015433083,
+        "samples_s": [
+          0.015737209,
+          0.014819583,
+          0.014812834,
+          0.015993958,
+          0.015433083
+        ]
+      },
+      "total": {
+        "min_s": 0.314428166,
+        "median_s": 0.314570083,
+        "samples_s": [
+          0.314825625,
+          0.314478791,
+          0.314570083,
+          0.315206167,
+          0.314428166
+        ]
+      },
+      "compute_s": 0.299615332,
+      "ns_per_op_min": 835.1577046045608,
+      "ns_per_op_median": 833.8243861375375,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 84199547,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002718667,
+        "median_s": 0.002824834,
+        "samples_s": [
+          0.002824834,
+          0.003171042,
+          0.002718667,
+          0.003084209,
+          0.002813833
+        ]
+      },
+      "total": {
+        "min_s": 0.298481292,
+        "median_s": 0.29914975,
+        "samples_s": [
+          0.299381083,
+          0.29944125,
+          0.298574166,
+          0.298481292,
+          0.29914975
+        ]
+      },
+      "compute_s": 0.295762625,
+      "ns_per_op_min": 3.5126391475716607,
+      "ns_per_op_median": 3.5193172238800763,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 175111355,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.064626583,
+        "median_s": 0.066459333,
+        "samples_s": [
+          0.064626583,
+          0.066557375,
+          0.066413958,
+          0.066459333,
+          0.067676458
+        ]
+      },
+      "total": {
+        "min_s": 0.351926458,
+        "median_s": 0.353168666,
+        "samples_s": [
+          0.353168666,
+          0.352348167,
+          0.353506792,
+          0.351926458,
+          0.353807667
+        ]
+      },
+      "compute_s": 0.287299875,
+      "ns_per_op_min": 1.6406695899303618,
+      "ns_per_op_median": 1.6372972101095329,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 516,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.012623708,
+        "median_s": 0.012754333,
+        "samples_s": [
+          0.013004667,
+          0.012623708,
+          0.012754333,
+          0.013070708,
+          0.012721542
+        ]
+      },
+      "total": {
+        "min_s": 0.311809333,
+        "median_s": 0.312521833,
+        "samples_s": [
+          0.312038,
+          0.313304708,
+          0.312521833,
+          0.311809333,
+          0.312926875
+        ]
+      },
+      "compute_s": 0.299185625,
+      "ns_per_op_min": 579817.1027131783,
+      "ns_per_op_median": 580944.7674418605,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 8316,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.042909,
+        "median_s": 0.043495167,
+        "samples_s": [
+          0.043888167,
+          0.044435042,
+          0.043495167,
+          0.043083791,
+          0.042909
+        ]
+      },
+      "total": {
+        "min_s": 0.285737584,
+        "median_s": 0.287876417,
+        "samples_s": [
+          0.289296834,
+          0.287876417,
+          0.285737584,
+          0.286936292,
+          0.288584333
+        ]
+      },
+      "compute_s": 0.242828584,
+      "ns_per_op_min": 29200.166426166426,
+      "ns_per_op_median": 29386.8746993747,
+      "load_ms": 0.593,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 25302,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.077786625,
+        "median_s": 0.078626791,
+        "samples_s": [
+          0.077786625,
+          0.078281834,
+          0.079779416,
+          0.079296667,
+          0.078626791
+        ]
+      },
+      "total": {
+        "min_s": 0.269409542,
+        "median_s": 0.271048709,
+        "samples_s": [
+          0.269409542,
+          0.271048709,
+          0.270506583,
+          0.272876,
+          0.272200875
+        ]
+      },
+      "compute_s": 0.191622917,
+      "ns_per_op_min": 7573.429649830053,
+      "ns_per_op_median": 7605.008220694016,
+      "load_ms": 3.3,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 27494,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.052103625,
+        "median_s": 0.0527695,
+        "samples_s": [
+          0.0527695,
+          0.052103625,
+          0.053507875,
+          0.052544458,
+          0.053957916
+        ]
+      },
+      "total": {
+        "min_s": 0.264905083,
+        "median_s": 0.265193083,
+        "samples_s": [
+          0.265158333,
+          0.265535666,
+          0.266468042,
+          0.265193083,
+          0.264905083
+        ]
+      },
+      "compute_s": 0.212801458,
+      "ns_per_op_min": 7739.9235469557,
+      "ns_per_op_median": 7726.179639194006,
+      "load_ms": 4.091,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/f64_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 69667,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.10443025,
+        "median_s": 0.105907042,
+        "samples_s": [
+          0.105907042,
+          0.105659791,
+          0.106136209,
+          0.107655917,
+          0.10443025
+        ]
+      },
+      "total": {
+        "min_s": 0.355630875,
+        "median_s": 0.356848834,
+        "samples_s": [
+          0.357439,
+          0.356848834,
+          0.377225125,
+          0.355630875,
+          0.35645125
+        ]
+      },
+      "compute_s": 0.251200625,
+      "ns_per_op_min": 3605.7333457734653,
+      "ns_per_op_median": 3602.0180573298694,
+      "load_ms": 8.879,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 130166091,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005586167,
+        "median_s": 0.005620958,
+        "samples_s": [
+          0.005770333,
+          0.00558775,
+          0.005586167,
+          0.005620958,
+          0.005622791
+        ]
+      },
+      "total": {
+        "min_s": 0.307171834,
+        "median_s": 0.307914875,
+        "samples_s": [
+          0.307699042,
+          0.307914875,
+          0.307171834,
+          0.309043875,
+          0.308500958
+        ]
+      },
+      "compute_s": 0.301585667,
+      "ns_per_op_min": 2.316929583450424,
+      "ns_per_op_median": 2.32237070866636,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 125693606,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008802167,
+        "median_s": 0.009186292,
+        "samples_s": [
+          0.009057792,
+          0.008802167,
+          0.009379667,
+          0.009186292,
+          0.00949075
+        ]
+      },
+      "total": {
+        "min_s": 0.300085916,
+        "median_s": 0.300521417,
+        "samples_s": [
+          0.300841125,
+          0.300085916,
+          0.300521417,
+          0.300663416,
+          0.300448125
+        ]
+      },
+      "compute_s": 0.291283749,
+      "ns_per_op_min": 2.317411030438573,
+      "ns_per_op_median": 2.317819770402641,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 1924220,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.016160917,
+        "median_s": 0.016818208,
+        "samples_s": [
+          0.016701208,
+          0.017314041,
+          0.016933,
+          0.016160917,
+          0.016818208
+        ]
+      },
+      "total": {
+        "min_s": 0.319646,
+        "median_s": 0.320327709,
+        "samples_s": [
+          0.320327709,
+          0.319685875,
+          0.320781791,
+          0.319646,
+          0.320500959
+        ]
+      },
+      "compute_s": 0.303485083,
+      "ns_per_op_min": 157.71849528640178,
+      "ns_per_op_median": 157.73118510357443,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 110667247,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004737334,
+        "median_s": 0.005226333,
+        "samples_s": [
+          0.005226333,
+          0.005573292,
+          0.004996084,
+          0.004737334,
+          0.005419958
+        ]
+      },
+      "total": {
+        "min_s": 0.29946575,
+        "median_s": 0.299833958,
+        "samples_s": [
+          0.299833958,
+          0.299855875,
+          0.300034042,
+          0.299648458,
+          0.29946575
+        ]
+      },
+      "compute_s": 0.294728416,
+      "ns_per_op_min": 2.6631946125848778,
+      "ns_per_op_median": 2.6621031333688103,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 14487808,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004115,
+        "median_s": 0.004566666,
+        "samples_s": [
+          0.00460125,
+          0.004429458,
+          0.004566666,
+          0.004581125,
+          0.004115
+        ]
+      },
+      "total": {
+        "min_s": 0.193089333,
+        "median_s": 0.193625208,
+        "samples_s": [
+          0.193625208,
+          0.194102291,
+          0.193089333,
+          0.195099917,
+          0.193506458
+        ]
+      },
+      "compute_s": 0.188974333,
+      "ns_per_op_min": 13.043680106749068,
+      "ns_per_op_median": 13.04949251122047,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1646380,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.03970075,
+        "median_s": 0.040064917,
+        "samples_s": [
+          0.040064917,
+          0.04014325,
+          0.03970075,
+          0.039769291,
+          0.040072417
+        ]
+      },
+      "total": {
+        "min_s": 0.341660042,
+        "median_s": 0.342253375,
+        "samples_s": [
+          0.342033,
+          0.341660042,
+          0.342253375,
+          0.342278417,
+          0.343829167
+        ]
+      },
+      "compute_s": 0.301959292,
+      "ns_per_op_min": 183.40801759010677,
+      "ns_per_op_median": 183.54721145786516,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 1768369,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039035416,
+        "median_s": 0.039991584,
+        "samples_s": [
+          0.039991584,
+          0.040588375,
+          0.039973542,
+          0.039035416,
+          0.040151667
+        ]
+      },
+      "total": {
+        "min_s": 0.28546425,
+        "median_s": 0.28711525,
+        "samples_s": [
+          0.28546425,
+          0.287672417,
+          0.306501834,
+          0.287018667,
+          0.28711525
+        ]
+      },
+      "compute_s": 0.24642883399999999,
+      "ns_per_op_min": 139.35374008479,
+      "ns_per_op_median": 139.74666260265815,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 1761457,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039822458,
+        "median_s": 0.040336625,
+        "samples_s": [
+          0.040336625,
+          0.040732583,
+          0.040487334,
+          0.039822458,
+          0.040061291
+        ]
+      },
+      "total": {
+        "min_s": 0.302934334,
+        "median_s": 0.305401208,
+        "samples_s": [
+          0.305401208,
+          0.302934334,
+          0.303090042,
+          0.306438375,
+          0.306141959
+        ]
+      },
+      "compute_s": 0.263111876,
+      "ns_per_op_min": 149.37172806375634,
+      "ns_per_op_median": 150.48030295374792,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 535902,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.029154708,
+        "median_s": 0.02927025,
+        "samples_s": [
+          0.02965275,
+          0.02919425,
+          0.02927025,
+          0.029930667,
+          0.029154708
+        ]
+      },
+      "total": {
+        "min_s": 0.329563417,
+        "median_s": 0.330120916,
+        "samples_s": [
+          0.33199125,
+          0.330718667,
+          0.329563417,
+          0.330120916,
+          0.330068375
+        ]
+      },
+      "compute_s": 0.30040870900000005,
+      "ns_per_op_min": 560.5665009647288,
+      "ns_per_op_median": 561.3911983907506,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 25895803,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039451292,
+        "median_s": 0.040715542,
+        "samples_s": [
+          0.04078675,
+          0.040056166,
+          0.039451292,
+          0.040715542,
+          0.041143083
+        ]
+      },
+      "total": {
+        "min_s": 0.286752542,
+        "median_s": 0.289350417,
+        "samples_s": [
+          0.289350417,
+          0.290434083,
+          0.289413709,
+          0.286752542,
+          0.288544791
+        ]
+      },
+      "compute_s": 0.24730125,
+      "ns_per_op_min": 9.549858330324803,
+      "ns_per_op_median": 9.601357988396808,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 434010,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.010799375,
+        "median_s": 0.010868958,
+        "samples_s": [
+          0.010801,
+          0.011537208,
+          0.011498958,
+          0.010868958,
+          0.010799375
+        ]
+      },
+      "total": {
+        "min_s": 0.311578041,
+        "median_s": 0.312661916,
+        "samples_s": [
+          0.312367917,
+          0.313036959,
+          0.311578041,
+          0.31349875,
+          0.312661916
+        ]
+      },
+      "compute_s": 0.300778666,
+      "ns_per_op_min": 693.0224326628419,
+      "ns_per_op_median": 695.3594571553651,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 97711828,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002764833,
+        "median_s": 0.002903125,
+        "samples_s": [
+          0.002873583,
+          0.003417917,
+          0.002992083,
+          0.002903125,
+          0.002764833
+        ]
+      },
+      "total": {
+        "min_s": 0.303153583,
+        "median_s": 0.303322125,
+        "samples_s": [
+          0.303322125,
+          0.303153583,
+          0.3055705,
+          0.304000625,
+          0.303206833
+        ]
+      },
+      "compute_s": 0.30038875,
+      "ns_per_op_min": 3.0742311974759082,
+      "ns_per_op_median": 3.074540781285967,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 124716710,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.064608875,
+        "median_s": 0.065524916,
+        "samples_s": [
+          0.066457542,
+          0.065524916,
+          0.065048334,
+          0.064608875,
+          0.067065916
+        ]
+      },
+      "total": {
+        "min_s": 0.356683417,
+        "median_s": 0.358390875,
+        "samples_s": [
+          0.356683417,
+          0.358390875,
+          0.358435459,
+          0.35692875,
+          0.358438917
+        ]
+      },
+      "compute_s": 0.292074542,
+      "ns_per_op_min": 2.3419038395095573,
+      "ns_per_op_median": 2.348249556935875,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 11036,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.01281425,
+        "median_s": 0.01307525,
+        "samples_s": [
+          0.01300875,
+          0.01307525,
+          0.013382791,
+          0.01281425,
+          0.013095417
+        ]
+      },
+      "total": {
+        "min_s": 0.2893925,
+        "median_s": 0.289743708,
+        "samples_s": [
+          0.29132375,
+          0.289743708,
+          0.289629584,
+          0.2893925,
+          0.290427416
+        ]
+      },
+      "compute_s": 0.27657825,
+      "ns_per_op_min": 25061.45795578108,
+      "ns_per_op_median": 25069.63193185937,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 4780,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.042379583,
+        "median_s": 0.043906041,
+        "samples_s": [
+          0.043321,
+          0.042379583,
+          0.044632625,
+          0.043949083,
+          0.043906041
+        ]
+      },
+      "total": {
+        "min_s": 0.300057875,
+        "median_s": 0.301349917,
+        "samples_s": [
+          0.300057875,
+          0.301349917,
+          0.301603459,
+          0.301657166,
+          0.301073042
+        ]
+      },
+      "compute_s": 0.257678292,
+      "ns_per_op_min": 53907.59246861924,
+      "ns_per_op_median": 53858.55146443515,
+      "load_ms": 0.716,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 7872,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.078544625,
+        "median_s": 0.080560875,
+        "samples_s": [
+          0.082158709,
+          0.079658083,
+          0.080560875,
+          0.0812915,
+          0.078544625
+        ]
+      },
+      "total": {
+        "min_s": 0.2705125,
+        "median_s": 0.271335292,
+        "samples_s": [
+          0.2705125,
+          0.27475,
+          0.271849459,
+          0.270626875,
+          0.271335292
+        ]
+      },
+      "compute_s": 0.19196787499999998,
+      "ns_per_op_min": 24386.162982723574,
+      "ns_per_op_median": 24234.5550050813,
+      "load_ms": 3.7,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 18922,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.051987875,
+        "median_s": 0.052971917,
+        "samples_s": [
+          0.054107959,
+          0.052663709,
+          0.051987875,
+          0.053903041,
+          0.052971917
+        ]
+      },
+      "total": {
+        "min_s": 0.3439775,
+        "median_s": 0.344758709,
+        "samples_s": [
+          0.344403917,
+          0.344758709,
+          0.3439775,
+          0.345987167,
+          0.346335541
+        ]
+      },
+      "compute_s": 0.291989625,
+      "ns_per_op_min": 15431.224236338654,
+      "ns_per_op_median": 15420.504809216785,
+      "load_ms": 3.848,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i32_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 48572,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.101574209,
+        "median_s": 0.102748583,
+        "samples_s": [
+          0.10345,
+          0.101574209,
+          0.102748583,
+          0.102452791,
+          0.103091083
+        ]
+      },
+      "total": {
+        "min_s": 0.442642833,
+        "median_s": 0.444532791,
+        "samples_s": [
+          0.444532791,
+          0.444744083,
+          0.442642833,
+          0.446487417,
+          0.444012708
+        ]
+      },
+      "compute_s": 0.34106862400000004,
+      "ns_per_op_min": 7021.918471547395,
+      "ns_per_op_median": 7036.650909989295,
+      "load_ms": 9.238,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 129122827,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005372916,
+        "median_s": 0.005735917,
+        "samples_s": [
+          0.005735917,
+          0.005852833,
+          0.005372916,
+          0.005553667,
+          0.005756541
+        ]
+      },
+      "total": {
+        "min_s": 0.306191708,
+        "median_s": 0.3064195,
+        "samples_s": [
+          0.306500833,
+          0.30680075,
+          0.3064195,
+          0.306257459,
+          0.306191708
+        ]
+      },
+      "compute_s": 0.300818792,
+      "ns_per_op_min": 2.329710392725525,
+      "ns_per_op_median": 2.328663257969097,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 124962840,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.0082835,
+        "median_s": 0.008898791,
+        "samples_s": [
+          0.0082835,
+          0.00939175,
+          0.0088495,
+          0.008898791,
+          0.009235542
+        ]
+      },
+      "total": {
+        "min_s": 0.299371625,
+        "median_s": 0.29960075,
+        "samples_s": [
+          0.300429667,
+          0.29960075,
+          0.299523708,
+          0.300445833,
+          0.299371625
+        ]
+      },
+      "compute_s": 0.291088125,
+      "ns_per_op_min": 2.3293974832838305,
+      "ns_per_op_median": 2.326307236615301,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 1734355,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.016482041,
+        "median_s": 0.017126041,
+        "samples_s": [
+          0.017155083,
+          0.016482041,
+          0.017676041,
+          0.017126041,
+          0.016832416
+        ]
+      },
+      "total": {
+        "min_s": 0.290130459,
+        "median_s": 0.29092125,
+        "samples_s": [
+          0.290130459,
+          0.291507375,
+          0.29092125,
+          0.290756834,
+          0.291005459
+        ]
+      },
+      "compute_s": 0.273648418,
+      "ns_per_op_min": 157.78108749362156,
+      "ns_per_op_median": 157.8657247218707,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 111467568,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.00474275,
+        "median_s": 0.005324583,
+        "samples_s": [
+          0.005018667,
+          0.005324583,
+          0.00474275,
+          0.005404709,
+          0.005650291
+        ]
+      },
+      "total": {
+        "min_s": 0.301025958,
+        "median_s": 0.301832708,
+        "samples_s": [
+          0.302929458,
+          0.301025958,
+          0.302700208,
+          0.301530959,
+          0.301832708
+        ]
+      },
+      "compute_s": 0.29628320799999996,
+      "ns_per_op_min": 2.65802164087764,
+      "ns_per_op_median": 2.6600394206142544,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 16777216,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004383,
+        "median_s": 0.004767125,
+        "samples_s": [
+          0.004652041,
+          0.004971667,
+          0.004767125,
+          0.004383,
+          0.00480075
+        ]
+      },
+      "total": {
+        "min_s": 0.208918333,
+        "median_s": 0.2097945,
+        "samples_s": [
+          0.211873834,
+          0.2097945,
+          0.210691375,
+          0.208918333,
+          0.209310792
+        ]
+      },
+      "compute_s": 0.204535333,
+      "ns_per_op_min": 12.191255867481232,
+      "ns_per_op_median": 12.220583856105803,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 215543,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.038916084,
+        "median_s": 0.03929425,
+        "samples_s": [
+          0.038933833,
+          0.0405035,
+          0.038916084,
+          0.03929425,
+          0.039790584
+        ]
+      },
+      "total": {
+        "min_s": 0.328847958,
+        "median_s": 0.331797833,
+        "samples_s": [
+          0.328847958,
+          0.331906958,
+          0.333136417,
+          0.329243292,
+          0.331797833
+        ]
+      },
+      "compute_s": 0.289931874,
+      "ns_per_op_min": 1345.1231262439512,
+      "ns_per_op_median": 1357.0544299745295,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 260631,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.0385385,
+        "median_s": 0.039681542,
+        "samples_s": [
+          0.040271792,
+          0.040274708,
+          0.039681542,
+          0.038947542,
+          0.0385385
+        ]
+      },
+      "total": {
+        "min_s": 0.29899025,
+        "median_s": 0.299536,
+        "samples_s": [
+          0.3005375,
+          0.29899025,
+          0.301664,
+          0.299149708,
+          0.299536
+        ]
+      },
+      "compute_s": 0.26045175,
+      "ns_per_op_min": 999.3122460490117,
+      "ns_per_op_median": 997.0205309422133,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 276205,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039930417,
+        "median_s": 0.040719125,
+        "samples_s": [
+          0.039930417,
+          0.040578667,
+          0.041627291,
+          0.040719125,
+          0.040915625
+        ]
+      },
+      "total": {
+        "min_s": 0.333834167,
+        "median_s": 0.3341865,
+        "samples_s": [
+          0.337866125,
+          0.33386175,
+          0.3341865,
+          0.340919041,
+          0.333834167
+        ]
+      },
+      "compute_s": 0.29390375,
+      "ns_per_op_min": 1064.078311399142,
+      "ns_per_op_median": 1062.4984160315707,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 450319,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.029003834,
+        "median_s": 0.029370833,
+        "samples_s": [
+          0.029728625,
+          0.029003834,
+          0.029370833,
+          0.029068292,
+          0.029429042
+        ]
+      },
+      "total": {
+        "min_s": 0.315151291,
+        "median_s": 0.317311666,
+        "samples_s": [
+          0.315597417,
+          0.320949958,
+          0.317311666,
+          0.31862925,
+          0.315151291
+        ]
+      },
+      "compute_s": 0.286147457,
+      "ns_per_op_min": 635.4327865357669,
+      "ns_per_op_median": 639.4152434163337,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 819530,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039708542,
+        "median_s": 0.041061083,
+        "samples_s": [
+          0.040805708,
+          0.041454125,
+          0.041061083,
+          0.039708542,
+          0.041559125
+        ]
+      },
+      "total": {
+        "min_s": 0.225248458,
+        "median_s": 0.226228583,
+        "samples_s": [
+          0.227070458,
+          0.226552875,
+          0.225248458,
+          0.226228583,
+          0.225622125
+        ]
+      },
+      "compute_s": 0.18553991600000003,
+      "ns_per_op_min": 226.39795492538408,
+      "ns_per_op_median": 225.9435286078606,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 289790,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.010523833,
+        "median_s": 0.011485458,
+        "samples_s": [
+          0.011544083,
+          0.010979083,
+          0.010523833,
+          0.011485458,
+          0.011596417
+        ]
+      },
+      "total": {
+        "min_s": 0.301795042,
+        "median_s": 0.304459542,
+        "samples_s": [
+          0.335122542,
+          0.304459542,
+          0.303723334,
+          0.301795042,
+          0.304677583
+        ]
+      },
+      "compute_s": 0.29127120900000003,
+      "ns_per_op_min": 1005.1113185410127,
+      "ns_per_op_median": 1010.9875565064357,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 111926972,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002694,
+        "median_s": 0.00320125,
+        "samples_s": [
+          0.003136167,
+          0.002694,
+          0.00320125,
+          0.00324775,
+          0.003206667
+        ]
+      },
+      "total": {
+        "min_s": 0.297249666,
+        "median_s": 0.299189875,
+        "samples_s": [
+          0.2997645,
+          0.299233709,
+          0.298900209,
+          0.299189875,
+          0.297249666
+        ]
+      },
+      "compute_s": 0.29455566600000005,
+      "ns_per_op_min": 2.6316772511276376,
+      "ns_per_op_median": 2.6444798756817973,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 107783465,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.064222458,
+        "median_s": 0.06716,
+        "samples_s": [
+          0.067473292,
+          0.069550875,
+          0.064222458,
+          0.06716,
+          0.066267583
+        ]
+      },
+      "total": {
+        "min_s": 0.319121042,
+        "median_s": 0.319685208,
+        "samples_s": [
+          0.321704792,
+          0.319685208,
+          0.320844333,
+          0.319121042,
+          0.319131125
+        ]
+      },
+      "compute_s": 0.25489858400000004,
+      "ns_per_op_min": 2.364913616388191,
+      "ns_per_op_median": 2.3428937638996854,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 10180,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.01347775,
+        "median_s": 0.013584,
+        "samples_s": [
+          0.01347775,
+          0.01427625,
+          0.013836083,
+          0.013584,
+          0.013583708
+        ]
+      },
+      "total": {
+        "min_s": 0.296724042,
+        "median_s": 0.29911675,
+        "samples_s": [
+          0.29911675,
+          0.300088792,
+          0.296917041,
+          0.296724042,
+          0.30039675
+        ]
+      },
+      "compute_s": 0.283246292,
+      "ns_per_op_min": 27823.800785854615,
+      "ns_per_op_median": 28048.40373280943,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 5100,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.043279417,
+        "median_s": 0.044466875,
+        "samples_s": [
+          0.043279417,
+          0.044466875,
+          0.045213167,
+          0.04492625,
+          0.0436505
+        ]
+      },
+      "total": {
+        "min_s": 0.340511709,
+        "median_s": 0.341489125,
+        "samples_s": [
+          0.341165084,
+          0.340511709,
+          0.342012708,
+          0.341489125,
+          0.343893667
+        ]
+      },
+      "compute_s": 0.297232292,
+      "ns_per_op_min": 58280.84156862745,
+      "ns_per_op_median": 58239.6568627451,
+      "load_ms": 0.626,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 591,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.082422125,
+        "median_s": 0.083956542,
+        "samples_s": [
+          0.08499825,
+          0.08410625,
+          0.083956542,
+          0.082422125,
+          0.083427708
+        ]
+      },
+      "total": {
+        "min_s": 0.282750209,
+        "median_s": 0.283561625,
+        "samples_s": [
+          0.285369667,
+          0.283561625,
+          0.282750209,
+          0.285137792,
+          0.28347025
+        ]
+      },
+      "compute_s": 0.20032808399999996,
+      "ns_per_op_min": 338964.6091370558,
+      "ns_per_op_median": 337741.2571912014,
+      "load_ms": 3.651,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 13327,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.052434625,
+        "median_s": 0.053316667,
+        "samples_s": [
+          0.05330225,
+          0.053839625,
+          0.052434625,
+          0.053316667,
+          0.053891208
+        ]
+      },
+      "total": {
+        "min_s": 0.276953542,
+        "median_s": 0.278340375,
+        "samples_s": [
+          0.278340375,
+          0.280487292,
+          0.2793065,
+          0.277517459,
+          0.276953542
+        ]
+      },
+      "compute_s": 0.22451891699999998,
+      "ns_per_op_min": 16846.921062504687,
+      "ns_per_op_median": 16884.798379230135,
+      "load_ms": 4.353,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/i64_alu",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 31284,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.102015666,
+        "median_s": 0.102902167,
+        "samples_s": [
+          0.103472709,
+          0.104126792,
+          0.102902167,
+          0.102015666,
+          0.102522041
+        ]
+      },
+      "total": {
+        "min_s": 0.393880584,
+        "median_s": 0.394435167,
+        "samples_s": [
+          0.394435167,
+          0.399262083,
+          0.393980208,
+          0.397252208,
+          0.393880584
+        ]
+      },
+      "compute_s": 0.291864918,
+      "ns_per_op_min": 9329.526850786344,
+      "ns_per_op_median": 9318.917018284106,
+      "load_ms": 9.471,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": 291484765,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.005052958,
+        "median_s": 0.005598625,
+        "samples_s": [
+          0.005598625,
+          0.005651791,
+          0.005213417,
+          0.005623333,
+          0.005052958
+        ]
+      },
+      "total": {
+        "min_s": 0.301175125,
+        "median_s": 0.301900625,
+        "samples_s": [
+          0.301900625,
+          0.301175125,
+          0.302705208,
+          0.302271542,
+          0.301587708
+        ]
+      },
+      "compute_s": 0.296122167,
+      "ns_per_op_min": 1.0159095862179968,
+      "ns_per_op_median": 1.0165265412756648,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": 284120819,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.008963708,
+        "median_s": 0.009190875,
+        "samples_s": [
+          0.009823875,
+          0.00914925,
+          0.009299875,
+          0.008963708,
+          0.009190875
+        ]
+      },
+      "total": {
+        "min_s": 0.297146875,
+        "median_s": 0.300012375,
+        "samples_s": [
+          0.2996095,
+          0.300064375,
+          0.300012375,
+          0.330037041,
+          0.297146875
+        ]
+      },
+      "compute_s": 0.28818316699999996,
+      "ns_per_op_min": 1.0142979596296318,
+      "ns_per_op_median": 1.023583914137598,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": 2144168,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.0160895,
+        "median_s": 0.01643925,
+        "samples_s": [
+          0.01643925,
+          0.016978333,
+          0.0160895,
+          0.017133875,
+          0.016420917
+        ]
+      },
+      "total": {
+        "min_s": 0.301228792,
+        "median_s": 0.301491625,
+        "samples_s": [
+          0.301228792,
+          0.30161775,
+          0.301491625,
+          0.30129675,
+          0.301792708
+        ]
+      },
+      "compute_s": 0.28513929200000004,
+      "ns_per_op_min": 132.98365240037165,
+      "ns_per_op_median": 132.94311593121432,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": 192488785,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004904958,
+        "median_s": 0.005265416,
+        "samples_s": [
+          0.005099959,
+          0.005413417,
+          0.005508208,
+          0.004904958,
+          0.005265416
+        ]
+      },
+      "total": {
+        "min_s": 0.304214958,
+        "median_s": 0.304689833,
+        "samples_s": [
+          0.304962791,
+          0.304689833,
+          0.30629425,
+          0.304576292,
+          0.304214958
+        ]
+      },
+      "compute_s": 0.29930999999999996,
+      "ns_per_op_min": 1.5549477337082258,
+      "ns_per_op_median": 1.5555421423642941,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": 33554432,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.004479583,
+        "median_s": 0.004641333,
+        "samples_s": [
+          0.0045645,
+          0.004641333,
+          0.004479583,
+          0.004735834,
+          0.004769334
+        ]
+      },
+      "total": {
+        "min_s": 0.348793375,
+        "median_s": 0.349083833,
+        "samples_s": [
+          0.349363125,
+          0.349083833,
+          0.348793375,
+          0.350889042,
+          0.348799708
+        ]
+      },
+      "compute_s": 0.344313792,
+      "ns_per_op_min": 10.261350631713867,
+      "ns_per_op_median": 10.265186429023743,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": 1543920,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039377833,
+        "median_s": 0.039834666,
+        "samples_s": [
+          0.03938875,
+          0.040147959,
+          0.039377833,
+          0.039834666,
+          0.040717583
+        ]
+      },
+      "total": {
+        "min_s": 0.318495041,
+        "median_s": 0.320024375,
+        "samples_s": [
+          0.321268458,
+          0.321127041,
+          0.31986125,
+          0.318495041,
+          0.320024375
+        ]
+      },
+      "compute_s": 0.27911720799999995,
+      "ns_per_op_min": 180.78476086843875,
+      "ns_per_op_median": 181.47942186123635,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": 1862437,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.039255917,
+        "median_s": 0.040027417,
+        "samples_s": [
+          0.040299583,
+          0.040027417,
+          0.039255917,
+          0.040175083,
+          0.039454458
+        ]
+      },
+      "total": {
+        "min_s": 0.291009375,
+        "median_s": 0.2922105,
+        "samples_s": [
+          0.291009375,
+          0.291729542,
+          0.2922105,
+          0.29403475,
+          0.292227333
+        ]
+      },
+      "compute_s": 0.25175345800000004,
+      "ns_per_op_min": 135.17421421503118,
+      "ns_per_op_median": 135.40489315880214,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": 1943551,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040084084,
+        "median_s": 0.040612791,
+        "samples_s": [
+          0.040391875,
+          0.040084084,
+          0.040612791,
+          0.040613125,
+          0.040934042
+        ]
+      },
+      "total": {
+        "min_s": 0.31895975,
+        "median_s": 0.319242833,
+        "samples_s": [
+          0.31920475,
+          0.319242833,
+          0.320138291,
+          0.319995125,
+          0.31895975
+        ]
+      },
+      "compute_s": 0.27887566599999997,
+      "ns_per_op_min": 143.48770163479114,
+      "ns_per_op_median": 143.36132265116788,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": 385509,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.028980917,
+        "median_s": 0.029439167,
+        "samples_s": [
+          0.02902425,
+          0.029870834,
+          0.029539042,
+          0.029439167,
+          0.028980917
+        ]
+      },
+      "total": {
+        "min_s": 0.324954541,
+        "median_s": 0.32708425,
+        "samples_s": [
+          0.326352375,
+          0.328159792,
+          0.32708425,
+          0.330798416,
+          0.324954541
+        ]
+      },
+      "compute_s": 0.295973624,
+      "ns_per_op_min": 767.7476375389421,
+      "ns_per_op_median": 772.0833573275852,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": 5382869,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.040519208,
+        "median_s": 0.041269083,
+        "samples_s": [
+          0.040519208,
+          0.042666625,
+          0.040696125,
+          0.042041959,
+          0.041269083
+        ]
+      },
+      "total": {
+        "min_s": 0.334582208,
+        "median_s": 0.335601917,
+        "samples_s": [
+          0.334582208,
+          0.337677959,
+          0.334907375,
+          0.335601917,
+          0.335898125
+        ]
+      },
+      "compute_s": 0.29406299999999996,
+      "ns_per_op_min": 54.629417881059325,
+      "ns_per_op_median": 54.67954616766636,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": 299211,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.010651292,
+        "median_s": 0.010884334,
+        "samples_s": [
+          0.011477,
+          0.010651292,
+          0.010838541,
+          0.011439042,
+          0.010884334
+        ]
+      },
+      "total": {
+        "min_s": 0.309456458,
+        "median_s": 0.310819959,
+        "samples_s": [
+          0.309456458,
+          0.310137708,
+          0.310819959,
+          0.310922958,
+          0.31259175
+        ]
+      },
+      "compute_s": 0.298805166,
+      "ns_per_op_min": 998.6436528068821,
+      "ns_per_op_median": 1002.4217859637513,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": 197655147,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.002674625,
+        "median_s": 0.003033708,
+        "samples_s": [
+          0.002955167,
+          0.003221875,
+          0.003225125,
+          0.003033708,
+          0.002674625
+        ]
+      },
+      "total": {
+        "min_s": 0.302442083,
+        "median_s": 0.303345625,
+        "samples_s": [
+          0.303024125,
+          0.303472333,
+          0.303345625,
+          0.302442083,
+          0.304383875
+        ]
+      },
+      "compute_s": 0.299767458,
+      "ns_per_op_min": 1.5166185275205608,
+      "ns_per_op_median": 1.5193731180701304,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": 150427483,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.065246208,
+        "median_s": 0.065889166,
+        "samples_s": [
+          0.066189542,
+          0.065889166,
+          0.065991667,
+          0.065246208,
+          0.065335667
+        ]
+      },
+      "total": {
+        "min_s": 0.331722125,
+        "median_s": 0.332421209,
+        "samples_s": [
+          0.332312583,
+          0.332421209,
+          0.331722125,
+          0.333285833,
+          0.333006959
+        ]
+      },
+      "compute_s": 0.26647591699999995,
+      "ns_per_op_min": 1.771457659768195,
+      "ns_per_op_median": 1.7718307697802802,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": 8773,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.012174708,
+        "median_s": 0.012341,
+        "samples_s": [
+          0.013209458,
+          0.012174708,
+          0.012289042,
+          0.012341,
+          0.012831083
+        ]
+      },
+      "total": {
+        "min_s": 0.292577417,
+        "median_s": 0.29365725,
+        "samples_s": [
+          0.292577417,
+          0.295232833,
+          0.293576666,
+          0.294607625,
+          0.29365725
+        ]
+      },
+      "compute_s": 0.280402709,
+      "ns_per_op_min": 31962.009460845777,
+      "ns_per_op_median": 32066.140430867435,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": 6280,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.04175475,
+        "median_s": 0.044193542,
+        "samples_s": [
+          0.043741125,
+          0.044291208,
+          0.044193542,
+          0.04175475,
+          0.044791208
+        ]
+      },
+      "total": {
+        "min_s": 0.293086708,
+        "median_s": 0.294534208,
+        "samples_s": [
+          0.296731292,
+          0.294667875,
+          0.294534208,
+          0.293086708,
+          0.294211042
+        ]
+      },
+      "compute_s": 0.25133195799999997,
+      "ns_per_op_min": 40021.01242038216,
+      "ns_per_op_median": 39863.16337579619,
+      "load_ms": 0.763,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": 24352,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.077641834,
+        "median_s": 0.07935725,
+        "samples_s": [
+          0.079513166,
+          0.078702333,
+          0.081213792,
+          0.077641834,
+          0.07935725
+        ]
+      },
+      "total": {
+        "min_s": 0.29659825,
+        "median_s": 0.298162167,
+        "samples_s": [
+          0.298364042,
+          0.297871166,
+          0.298162167,
+          0.299631167,
+          0.29659825
+        ]
+      },
+      "compute_s": 0.218956416,
+      "ns_per_op_min": 8991.311432325887,
+      "ns_per_op_median": 8985.09021846255,
+      "load_ms": 5.006,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": 20018,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.052499584,
+        "median_s": 0.054400834,
+        "samples_s": [
+          0.054400834,
+          0.053398083,
+          0.054731916,
+          0.052499584,
+          0.054883333
+        ]
+      },
+      "total": {
+        "min_s": 0.323667959,
+        "median_s": 0.329215792,
+        "samples_s": [
+          0.323667959,
+          0.325867375,
+          0.330860375,
+          0.329215792,
+          0.3307695
+        ]
+      },
+      "compute_s": 0.271168375,
+      "ns_per_op_min": 13546.227145568988,
+      "ns_per_op_median": 13728.3923468878,
+      "load_ms": 3.933,
+      "verification": "match"
+    },
+    {
+      "workload": "wat/mem_rw",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": 45403,
+      "runs_per_sample": null,
+      "reps": 5,
+      "cold_start": {
+        "min_s": 0.103060208,
+        "median_s": 0.105423709,
+        "samples_s": [
+          0.105919,
+          0.103060208,
+          0.106407833,
+          0.105423709,
+          0.104702667
+        ]
+      },
+      "total": {
+        "min_s": 0.399546958,
+        "median_s": 0.407597291,
+        "samples_s": [
+          0.411742166,
+          0.399641334,
+          0.399546958,
+          0.40803625,
+          0.407597291
+        ]
+      },
+      "compute_s": 0.29648675,
+      "ns_per_op_min": 6530.1136488778275,
+      "ns_per_op_median": 6655.365989031562,
+      "load_ms": 10.796,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 31,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.010160565838709676,
+        "median_s": 0.01035232658064516,
+        "samples_s": [
+          0.010230924709677416,
+          0.01035232658064516,
+          0.010491009354838713,
+          0.010438311838709677,
+          0.010160565838709676
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 22,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.014750200772727274,
+        "median_s": 0.014922772818181818,
+        "samples_s": [
+          0.014922772818181818,
+          0.014750200772727274,
+          0.014969608,
+          0.014798064499999998,
+          0.015229134454545457
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 11,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.02814965145454545,
+        "median_s": 0.028578689090909094,
+        "samples_s": [
+          0.028381314545454547,
+          0.028578689090909094,
+          0.02814965145454545,
+          0.028632401454545455,
+          0.028875697272727274
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 3,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.10904141699999999,
+        "median_s": 0.11253911100000001,
+        "samples_s": [
+          0.11253911100000001,
+          0.11175606933333333,
+          0.11303234733333334,
+          0.114355722,
+          0.10904141699999999
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 39,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.007385801256410258,
+        "median_s": 0.007427226461538459,
+        "samples_s": [
+          0.007385801256410258,
+          0.00740013682051282,
+          0.007427226461538459,
+          0.007685868666666665,
+          0.007831880384615384
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.1470201875,
+        "median_s": 0.1489847915,
+        "samples_s": [
+          0.1503147715,
+          0.151325125,
+          0.1470201875,
+          0.1489847915,
+          0.1487858545
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.2021229585,
+        "median_s": 0.204211833,
+        "samples_s": [
+          0.202171208,
+          0.2021229585,
+          0.23506875,
+          0.20614481299999998,
+          0.204211833
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.25506289550000005,
+        "median_s": 0.2584715835,
+        "samples_s": [
+          0.26198968749999996,
+          0.2584715835,
+          0.25605689600000003,
+          0.25506289550000005,
+          0.259609042
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.408679333,
+        "median_s": 0.412944417,
+        "samples_s": [
+          0.412944417,
+          0.411209,
+          0.408679333,
+          0.423205375,
+          0.426395875
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.640380083,
+        "median_s": 0.643168042,
+        "samples_s": [
+          0.6476765,
+          0.641192083,
+          0.643168042,
+          0.640380083,
+          0.647231791
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 3,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.11154009733333332,
+        "median_s": 0.11489395833333334,
+        "samples_s": [
+          0.11154009733333332,
+          0.11489395833333334,
+          0.11514443033333333,
+          0.11583291666666667,
+          0.11459483366666667
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 57,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.004828421701754387,
+        "median_s": 0.004866344315789474,
+        "samples_s": [
+          0.004846452491228069,
+          0.004866344315789474,
+          0.004898350947368421,
+          0.005599659368421052,
+          0.004828421701754387
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 3,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.13914111133333332,
+        "median_s": 0.14092240233333334,
+        "samples_s": [
+          0.141914458,
+          0.13914111133333332,
+          0.14122238899999998,
+          0.14072718066666665,
+          0.14092240233333334
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "dewasm-bash",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 1.3496038750000001,
+        "median_s": 1.357978416,
+        "samples_s": [
+          1.379945459,
+          1.385375625,
+          1.3496038750000001,
+          1.357978416,
+          1.353583
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "pywasm-cpython",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.501201208,
+        "median_s": 0.505938458,
+        "samples_s": [
+          0.505287458,
+          0.517023084,
+          0.505938458,
+          0.55462975,
+          0.501201208
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 275.731,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.909927834,
+        "median_s": 0.923460917,
+        "samples_s": [
+          0.926231542,
+          0.932262042,
+          0.917929292,
+          0.923460917,
+          0.909927834
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 474.935,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wardite",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.237073084,
+        "median_s": 0.2385657715,
+        "samples_s": [
+          0.2385657715,
+          0.2400501045,
+          0.2399667295,
+          0.237073084,
+          0.2380940415
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 111.459,
+      "verification": "match"
+    },
+    {
+      "workload": "app/cowsay",
+      "runner": "wardite-yjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.272016625,
+        "median_s": 0.27407895800000004,
+        "samples_s": [
+          0.275290125,
+          0.27326104149999997,
+          0.274356625,
+          0.272016625,
+          0.27407895800000004
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 89.069,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 4,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.07615469799999999,
+        "median_s": 0.07630335425,
+        "samples_s": [
+          0.0765459165,
+          0.07615469799999999,
+          0.07630335425,
+          0.07626330199999999,
+          0.07631156224999999
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 4,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.08630016674999999,
+        "median_s": 0.08637328124999999,
+        "samples_s": [
+          0.086592625,
+          0.0867099375,
+          0.08637328124999999,
+          0.08632294825,
+          0.08630016674999999
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 9.780603125,
+        "median_s": 9.857509792,
+        "samples_s": [
+          9.872498666,
+          9.857509792,
+          9.836771833,
+          9.900687334,
+          9.780603125
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.645284292,
+        "median_s": 0.647404667,
+        "samples_s": [
+          0.647745583,
+          0.647404667,
+          0.645284292,
+          0.645309584,
+          0.648408833
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 1.084991709,
+        "median_s": 1.090179875,
+        "samples_s": [
+          1.084991709,
+          1.090117625,
+          1.091791708,
+          1.101534,
+          1.090179875
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 19.181907042,
+        "median_s": 19.285247917,
+        "samples_s": [
+          19.285247917,
+          19.308758833,
+          19.285331917,
+          19.181907042,
+          19.223432333
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 9.160466834,
+        "median_s": 9.191771916,
+        "samples_s": [
+          9.160466834,
+          9.2128375,
+          9.188596,
+          9.2354265,
+          9.191771916
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 14.077451833,
+        "median_s": 14.115088792,
+        "samples_s": [
+          14.115088792,
+          14.077451833,
+          14.132824833,
+          14.088983708,
+          14.14218575
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 55.330837792,
+        "median_s": 55.515281458,
+        "samples_s": [
+          55.330837792,
+          55.515281458,
+          55.614512167,
+          55.357107917,
+          55.703989041
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 11.811512584,
+        "median_s": 11.913691875,
+        "samples_s": [
+          11.914188667,
+          11.88123325,
+          11.913691875,
+          11.975414375,
+          11.811512584
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 113.055565042,
+        "median_s": 113.270901166,
+        "samples_s": [
+          113.830823375,
+          113.270901166,
+          113.055565042,
+          113.61564525,
+          113.230460958
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 2,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.17098543700000002,
+        "median_s": 0.1720809795,
+        "samples_s": [
+          0.17098543700000002,
+          0.1721541245,
+          0.173261979,
+          0.1720809795,
+          0.171847666
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 2.342660792,
+        "median_s": 2.394062666,
+        "samples_s": [
+          2.415168459,
+          2.342660792,
+          2.394062666,
+          2.396133125,
+          2.371404833
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "dewasm-bash",
+      "status": "skipped",
+      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "pywasm-cpython",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "pywasm-pypy",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wardite",
+      "status": "skipped",
+      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    },
+    {
+      "workload": "app/sqlite3_query",
+      "runner": "wardite-yjit",
+      "status": "skipped",
+      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 4,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.08312036450000002,
+        "median_s": 0.083241646,
+        "samples_s": [
+          0.08391073975,
+          0.083241646,
+          0.08312036450000002,
+          0.08317884375000001,
+          0.0834357085
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 4,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.0912870005,
+        "median_s": 0.09155655199999999,
+        "samples_s": [
+          0.09170055225000001,
+          0.09162855225,
+          0.09155655199999999,
+          0.0912870005,
+          0.0914816665
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 10.085416625,
+        "median_s": 10.13324675,
+        "samples_s": [
+          10.1609945,
+          10.085416625,
+          10.120601,
+          10.133664333,
+          10.13324675
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.637037167,
+        "median_s": 0.638310958,
+        "samples_s": [
+          0.639970125,
+          0.638310958,
+          0.637037167,
+          0.639338417,
+          0.637111833
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wasm3",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 1.190503166,
+        "median_s": 1.207638917,
+        "samples_s": [
+          1.211396541,
+          1.190503166,
+          1.2129815,
+          1.207638917,
+          1.205404
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 20.316586125,
+        "median_s": 20.336117708,
+        "samples_s": [
+          20.374456917,
+          20.336117708,
+          20.316586125,
+          20.378210084,
+          20.3323915
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 8.217193083,
+        "median_s": 8.260414459,
+        "samples_s": [
+          8.217193083,
+          8.245999208,
+          8.269678167,
+          8.260414459,
+          8.306602542
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 14.529389334,
+        "median_s": 14.582133959,
+        "samples_s": [
+          14.630416208,
+          14.575734,
+          14.529389334,
+          14.586591625,
+          14.582133959
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 56.624798709,
+        "median_s": 57.009495583,
+        "samples_s": [
+          57.009495583,
+          57.124943625,
+          56.624798709,
+          57.145382958,
+          56.86205475
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 12.43094075,
+        "median_s": 12.797635583,
+        "samples_s": [
+          12.868504083,
+          12.806192833,
+          12.797635583,
+          12.43094075,
+          12.770943459
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 114.674660333,
+        "median_s": 115.146923208,
+        "samples_s": [
+          115.223141166,
+          115.208695,
+          114.674660333,
+          115.146923208,
+          114.821821917
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 3,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.12595088866666668,
+        "median_s": 0.12645745833333333,
+        "samples_s": [
+          0.12645745833333333,
+          0.12595088866666668,
+          0.12615822200000001,
+          0.12682248599999998,
+          0.12650583333333335
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 5.521538417,
+        "median_s": 5.538652542,
+        "samples_s": [
+          5.521538417,
+          5.542676375,
+          5.534623583,
+          5.628775459,
+          5.538652542
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "dewasm-bash",
+      "status": "skipped",
+      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "pywasm-cpython",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "pywasm-pypy",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wardite",
+      "status": "skipped",
+      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    },
+    {
+      "workload": "app/sqlite3_mod_query",
+      "runner": "wardite-yjit",
+      "status": "skipped",
+      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wasmtime",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 7,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.046742333285714276,
+        "median_s": 0.04688491071428572,
+        "samples_s": [
+          0.04688491071428572,
+          0.04691811328571428,
+          0.04710132742857143,
+          0.046836631000000004,
+          0.046742333285714276
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "reference"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wasmer",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 6,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.052434902666666665,
+        "median_s": 0.052708506833333335,
+        "samples_s": [
+          0.052708506833333335,
+          0.052934548666666664,
+          0.052775361,
+          0.052434902666666665,
+          0.05266349283333333
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wasmedge",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 2.25334525,
+        "median_s": 2.2561217080000002,
+        "samples_s": [
+          2.25341325,
+          2.25334525,
+          2.256714417,
+          2.256855041,
+          2.2561217080000002
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wazero",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 4,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.0882409375,
+        "median_s": 0.08847393725,
+        "samples_s": [
+          0.0882409375,
+          0.08862575,
+          0.08831057275,
+          0.08861994775,
+          0.08847393725
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wasm3",
+      "status": "skipped",
+      "reason": "excluded: wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-ruby",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 5.272900583,
+        "median_s": 5.277838166,
+        "samples_s": [
+          5.272900583,
+          5.277838166,
+          5.276561042,
+          5.279684125,
+          5.281174292
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-ruby-yjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 1.6396578339999999,
+        "median_s": 1.640856416,
+        "samples_s": [
+          1.6396578339999999,
+          1.640218792,
+          1.643839458,
+          1.640856416,
+          1.662995917
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-ruby-zjit",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 3.356130208,
+        "median_s": 3.360011833,
+        "samples_s": [
+          3.361620875,
+          3.360011833,
+          3.356130208,
+          3.358221792,
+          3.364399875
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-python",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 15.301687958,
+        "median_s": 15.357217125,
+        "samples_s": [
+          15.46293625,
+          15.301687958,
+          15.339440917,
+          15.357217125,
+          15.438591125
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 2.857608417,
+        "median_s": 2.871571333,
+        "samples_s": [
+          2.866099375,
+          2.871571333,
+          2.8801616660000002,
+          2.885960125,
+          2.857608417
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-perl",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 24.276450625,
+        "median_s": 24.386311917,
+        "samples_s": [
+          24.4826895,
+          24.321125334,
+          24.457541334,
+          24.276450625,
+          24.386311917
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-go",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 6,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.057923978833333334,
+        "median_s": 0.058127888999999995,
+        "samples_s": [
+          0.057923978833333334,
+          0.05805954866666666,
+          0.05827160416666666,
+          0.05837001383333334,
+          0.058127888999999995
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-java",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 0.500076084,
+        "median_s": 0.526850084,
+        "samples_s": [
+          0.562527167,
+          0.580036167,
+          0.5038055,
+          0.500076084,
+          0.526850084
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": null,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "dewasm-bash",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "pywasm-cpython",
+      "status": "skipped",
+      "reason": "excluded on cost, not capability: pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "pywasm-pypy",
+      "status": "ok",
+      "iterations": null,
+      "runs_per_sample": 1,
+      "reps": 5,
+      "cold_start": null,
+      "total": {
+        "min_s": 81.2623765,
+        "median_s": 81.453061833,
+        "samples_s": [
+          81.453061833,
+          81.2623765,
+          81.820834416,
+          81.426483917,
+          82.140976916
+        ]
+      },
+      "compute_s": null,
+      "ns_per_op_min": null,
+      "ns_per_op_median": null,
+      "load_ms": 328.878,
+      "verification": "match"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wardite",
+      "status": "skipped",
+      "reason": "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
+    },
+    {
+      "workload": "app/minigzip",
+      "runner": "wardite-yjit",
+      "status": "skipped",
+      "reason": "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
+    }
+  ]
+}

@@ -23,7 +23,7 @@ mod wasmtime_backend;
 
 pub use apps::{
     run_app_case, run_gzip_cases, run_slow_app_case, AppCase, COWSAY_ARGS, COWSAY_STDIN,
-    CRUBY_PACKED_HELLO, MRUBY_EH, QJS_EVAL, SQLITE3_SHELL,
+    CRUBY_PACKED_HELLO, MRUBY_EH, QJS_EVAL, SQLITE3_MOD_SHELL, SQLITE3_SHELL,
 };
 pub use apps_capi::{
     run_capi_case, CApiCase, EXIFTOOL_EXTRACT, LIBSQLITE3_C_API, PCAP_COMPILE,
@@ -427,6 +427,24 @@ macro_rules! sqlite3_shell_e2e {
             #[test]
             fn sqlite3_shell() {
                 $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_SHELL);
+            }
+        }
+    };
+}
+
+/// See [`cowsay_args_e2e!`].
+/// Runs the slow [`SQLITE3_MOD_SHELL`](crate::SQLITE3_MOD_SHELL) case: the opcode-split shell against the stock shell's snapshot, so a patch or a build-flag change that alters behavior fails here.
+/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+#[macro_export]
+macro_rules! sqlite3_mod_shell_e2e {
+    ($lang:expr) => {
+        $crate::sqlite3_mod_shell_e2e!($lang, slow);
+    };
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn sqlite3_mod_shell() {
+                $crate::run_slow_app_case(&$lang, &$crate::SQLITE3_MOD_SHELL);
             }
         }
     };

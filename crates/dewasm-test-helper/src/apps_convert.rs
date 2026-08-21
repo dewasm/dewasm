@@ -95,6 +95,12 @@ const MANIFEST: &[AppConvert] = &[
         requires: None,
     },
     AppConvert {
+        stem: "sqlite3-mod",
+        mode: Mode::Standalone,
+        heavy: false,
+        requires: None,
+    },
+    AppConvert {
         stem: "sqlite3-shell",
         mode: Mode::Standalone,
         heavy: false,
