@@ -599,6 +599,9 @@ dewasm_test_helper::cowsay_stdin_e2e!(Ruby);
 dewasm_test_helper::mruby_eh_e2e!(Ruby);
 dewasm_test_helper::qjs_eval_e2e!(Ruby);
 dewasm_test_helper::sqlite3_shell_e2e!(Ruby);
+// Ruby only: the opcode-split shell exists for the benchmark suite's YJIT numbers, and every other backend converts it through the whole-cache convert suite.
+// Slow, the stock shell case's class: same program on a same-sized module, measured 3.1 s against that case's 3.1 s.
+dewasm_test_helper::sqlite3_mod_shell_e2e!(Ruby);
 dewasm_test_helper::gzip_e2e!(Ruby);
 
 dewasm_test_helper::qjs_file_io_e2e!(Ruby, RUBY_QJS_FILE_IO_GLUE);

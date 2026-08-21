@@ -58,6 +58,16 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
+/// The same script on `cache/sqlite3-mod.wasm`, the shell built with the hot VDBE opcode bodies split into their own functions (`examples/apps/src/sqlite3-vdbe-split.patch`).
+/// The split is a code-shape change only, so this case takes the stock shell's snapshot as its expectation: the two artifacts must print the same bytes.
+pub const SQLITE3_MOD_SHELL: AppCase = AppCase {
+    name: "sqlite3-mod",
+    args: SQLITE3_SHELL.args,
+    stdin: SQLITE3_SHELL.stdin,
+    expect_stdout: SQLITE3_SHELL.expect_stdout,
+    expect_code: SQLITE3_SHELL.expect_code,
+};
+
 /// The wasi-vfs-packed CRuby: `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape.
 /// Needs no preopens (a `require` from the stdlib proves the embedded VFS serves it), so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`.
 /// Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine).
