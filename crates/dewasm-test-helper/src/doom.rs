@@ -51,7 +51,7 @@ pub fn frame_to_ppm(frame: &[u8], w: u32, h: u32) -> Vec<u8> {
     );
     let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
     out.reserve((w * h * 3) as usize);
-    for px in frame.chunks_exact(4) {
+    for px in frame.as_chunks::<4>().0 {
         out.extend_from_slice(&[px[2], px[1], px[0]]);
     }
     out

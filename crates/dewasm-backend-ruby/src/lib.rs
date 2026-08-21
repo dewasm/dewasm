@@ -24,6 +24,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::OnceLock;
 
 use anyhow::Result;
+use dewasm_backend::extract;
 use dewasm_backend::masking::{
     bin_operand_context, fold_and_chain, shift_count_mode, shift_width, un_operand_context,
     Elision, MaskContext, ShiftCountMode,
@@ -177,6 +178,7 @@ fn generate_class_inner(
     }
     let gen = Gen {
         module,
+        extracted: extract::extract(module, &EXTRACT_PARAMS),
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
@@ -502,8 +504,20 @@ const MAX_FIXED_ARITY: usize = 8;
 
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
+/// Loop-body extraction thresholds (see [`dewasm_backend::extract`]).
+/// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize a ~12 ns call per iteration is worth extracting into one.
+/// Tuned against the benchmark suite and the DOOM/NES examples; other backends would pick their own values.
+const EXTRACT_PARAMS: extract::Params = extract::Params {
+    min_weight: 40,
+    max_params: 12,
+    max_results: 1,
+    min_weight_with_temps: 160,
+};
+
 struct Gen<'a> {
     module: &'a Module,
+    /// The function list actually emitted: the module's functions with extracted loop bodies replaced by calls, followed by the extracted functions, with `types` extended to match.
+    extracted: extract::Extracted,
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
@@ -665,7 +679,7 @@ impl<'a> Gen<'a> {
         });
         w.line("");
         w.line("private");
-        for (i, func) in self.module.funcs.iter().enumerate() {
+        for (i, func) in self.extracted.funcs.iter().enumerate() {
             w.line("");
             let idx = self.module.num_imported_funcs() as usize + i;
             self.function(w, idx as u32, func);
@@ -932,7 +946,7 @@ impl<'a> Gen<'a> {
     fn function(&self, w: &mut CodeWriter, idx: u32, func: &dewasm_core::ir::Func) {
         *self.frames.borrow_mut() = flat::frames(&func.body, flat::BreakToBlockEnd::Available);
         self.frame_stack.borrow_mut().clear();
-        let ty = &self.module.types[func.type_idx as usize];
+        let ty = &self.extracted.types[func.type_idx as usize];
         *self.elision.borrow_mut() = Elision::analyze(&ty.params, func, FIXNUM_LIMIT);
         let params = (0..ty.params.len())
             .map(|i| format!("l{i}"))
