@@ -743,6 +743,8 @@ struct Liveness {
     labels: BTreeMap<u32, BTreeSet<Var>>,
     /// Union of the live sets at the catch targets of enclosing try_tables: what an exception thrown here may expose.
     catch_live: BTreeSet<Var>,
+    /// Converged head set of every loop analyzed so far, keyed by its label id, which is unique within one function.
+    loop_heads: BTreeMap<u32, BTreeSet<Var>>,
     boundaries: BTreeMap<usize, Vec<BTreeSet<Var>>>,
 }
 
@@ -751,6 +753,7 @@ impl Liveness {
         let mut lv = Liveness {
             labels: BTreeMap::new(),
             catch_live: BTreeSet::new(),
+            loop_heads: BTreeMap::new(),
             boundaries: BTreeMap::new(),
         };
         lv.seq(&func.body, BTreeSet::new(), false);
@@ -856,7 +859,8 @@ impl Liveness {
             }
             Stmt::Loop { label, body } => {
                 // Fixpoint on the live set at the loop head: a back edge re-enters the body, and falling off its end exits the loop.
-                let mut head = BTreeSet::new();
+                // An enclosing loop re-enters this one with inputs that only grow, and the transfer functions are monotone, so the previous convergence is at or below the new least fixpoint and iterating from it reaches that same least fixpoint. Starting over from the empty set costs one full fixpoint per entry, which doubles the body passes per nesting level.
+                let mut head = self.loop_heads.get(&label.id).cloned().unwrap_or_default();
                 loop {
                     self.labels.insert(label.id, head.clone());
                     let new_head = self.seq(body, live.clone(), true);
@@ -866,6 +870,7 @@ impl Liveness {
                     head = new_head;
                 }
                 self.labels.remove(&label.id);
+                self.loop_heads.insert(label.id, head.clone());
                 head
             }
             Stmt::If {
