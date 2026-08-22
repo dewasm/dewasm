@@ -29,7 +29,7 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Perl (see runtime/perl/units/).
+/// The runtime unit bundler for Perl (see crates/dewasm-backend-perl/units/).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {

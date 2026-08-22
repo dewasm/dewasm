@@ -9,7 +9,7 @@ private :within?
 # root.
 # Every call re-validates against its own dirfd's root, so nested path_opens can't be used to launder an escape one level cheaper.
 #
-# A trailing slash is stripped for resolution and re-appended to the returned host path, so the host call enforces it (issue #42; mirrors runtime/python/units/wasi/resolve_path.py).
+# A trailing slash is stripped for resolution and re-appended to the returned host path, so the host call enforces it (issue #42; mirrors crates/dewasm-backend-python/units/wasi/resolve_path.py).
 #
 # `follow_last: false` resolves the parent but leaves the final component untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that operate on a symlink itself (lstat, unlink, rename, rmdir, mkdir, link, symlink, readlink).
 # A trailing "." or ".." is never a symlink, so those fall back to full resolution.
