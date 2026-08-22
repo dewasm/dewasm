@@ -9,7 +9,7 @@ repo_root="$script_dir/../../.."
 
 "$script_dir/../../apps/scripts/doom.sh"
 
-(cd "$repo_root" && cargo run -q -p dewasm-cli -- \
+(cd "$repo_root" && cargo run -q -p dewasm -- \
   examples/apps/cache/doom.wasm --target java --mode library \
   --module-name Doom -o examples/doom/java/Doom.java)
 

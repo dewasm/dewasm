@@ -1,5 +1,5 @@
 //! Bash-only WASI filesystem regression pins (the issue-29 fixes, plus the issue-143 single-file preopen): drive a converted library-mode module plus its bundled units directly under bash, the same direct-drive shape as `softfloat.rs`.
-//! These cases do not join the shared `WASI_CASES` conformance table because the other backends inherit the probed errnos from the host OS (which differs between Linux and macOS on some of them) while the bash units implement each choice deterministically; the exact codes pinned here are bash's own contract (`runtime/bash/units/wasi/path_rename.sh` / `fd_close.sh` / `fd_allocate.sh` / `init_preopens.sh`).
+//! These cases do not join the shared `WASI_CASES` conformance table because the other backends inherit the probed errnos from the host OS (which differs between Linux and macOS on some of them) while the bash units implement each choice deterministically; the exact codes pinned here are bash's own contract (`crates/dewasm-backend-bash/units/wasi/path_rename.sh` / `fd_close.sh` / `fd_allocate.sh` / `init_preopens.sh`).
 //!
 //! The permission-based cases (a read-only parent to fail `rmdir`, a read-only file to fail the close-time flush) assume a non-root test user: root ignores permission bits and would see the operations succeed.
 #![cfg(unix)]

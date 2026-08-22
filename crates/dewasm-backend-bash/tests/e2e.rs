@@ -94,7 +94,7 @@ const BASH_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   # (fd, iovs, iovs_len, nwritten_ptr): capture and print the actual
   # bytes the module wrote, the same observable proof of interception
   # `RUBY_OVERRIDE_GLUE` uses, via the same byte-reconstruction the
-  # bundled fd_write unit itself uses (runtime/bash/units/wasi/fd_write.sh).
+  # bundled fd_write unit itself uses (crates/dewasm-backend-bash/units/wasi/fd_write.sh).
   prog_mem_i32_load prog_ "$2" || return $?
   local ptr=$R0
   prog_mem_i32_load prog_ $(( $2 + 4 )) || return $?

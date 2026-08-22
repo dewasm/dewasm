@@ -104,6 +104,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 82 | [Hoist Invariant Constant-Address Loads with a Runtime Store Guard](82-licm-runtime-store-guard.md) | Accepted |
 | 83 | [Byte-Scatter Store Fusion Behind a Runtime Precondition](83-byte-scatter-store-fusion.md) | Accepted |
 | 84 | [Round to f32 by Veltkamp Splitting, with the Pack Path as Fallback](84-f32-rounding-by-splitting.md) | Accepted |
+| 85 | [crates.io Publish Layout (Units Inside Their Crates, CLI Crate Named `dewasm`)](85-crates-io-publish-layout.md) | Accepted |
 
 ## Adding a new decision
 
@@ -151,7 +152,7 @@ Then verify:
   The common failure mode is writing too much, not too little.
   Decision 5 is a reasonable length for a policy-sized decision, decision 0 for a foundation-sized one.
 - Move research material (surveys, comparison tables) out of the record and cite it; the record is the decision, not the research.
-- Anchor claims to real code (`crates/.../file.rs`, `runtime/<lang>/`) where possible.
+- Anchor claims to real code (`crates/.../file.rs`, `crates/dewasm-backend-<lang>/units/`) where possible.
 
 ## Relationship to other documents
 

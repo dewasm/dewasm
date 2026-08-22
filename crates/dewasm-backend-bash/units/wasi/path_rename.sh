@@ -1,6 +1,6 @@
 # requires: wasi/read_path, wasi/resolve_path
 # WASI path_rename: one of the four namespace-mutation units licensed to shell out, a single `--`-guarded `mv` on the two resolved physical paths. rename(2) never follows trailing symlinks on either side
-# (it moves the link itself and replaces the destination link), so both resolutions use follow_last=0, mirroring runtime/ruby/units/wasi/path_rename.rb.
+# (it moves the link itself and replaces the destination link), so both resolutions use follow_last=0, mirroring crates/dewasm-backend-ruby/units/wasi/path_rename.rb.
 #
 # `mv`'s own semantics diverge from rename(2) whenever the destination already exists, so the divergent cases are probed and handled *before*
 # `mv` ever runs, rather than trusting `mv`'s exit status/diagnostics:

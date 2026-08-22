@@ -27,7 +27,7 @@ jobs:
           shared-key: lint
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
-      - run: git ls-files '*.sh' | grep -v '^runtime/bash/units/' | xargs shellcheck -x
+      - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
 
   apps-cache:
     runs-on: ubuntu-latest
@@ -136,7 +136,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      # dewasm-cli holds the cross-backend tests, so this job needs every backend toolchain (bash ships with the runner; python is pinned below because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code, #21).
+      # dewasm holds the cross-backend tests, so this job needs every backend toolchain (bash ships with the runner; python is pinned below because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code, #21).
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -162,13 +162,13 @@ jobs:
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
       # Speed categories: the `slow_test` feature covers the slow cases.
-      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite, which execs the xtask binary (it embeds the pinned wasmtime crate, so nothing is installed for it) and never builds it, hence the explicit build step below; `dewasm-cli/slow_test` runs the slow cross-backend `--data-file` real-app cases.
+      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite, which execs the xtask binary (it embeds the pinned wasmtime crate, so nothing is installed for it) and never builds it, hence the explicit build step below; `dewasm/slow_test` runs the slow cross-backend `--data-file` real-app cases.
       - name: Build the snapshot runner
         if: github.event_name != 'pull_request'
         run: cargo build -p xtask
       - name: Test
         if: github.event_name == 'pull_request'
-        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask --no-fail-fast
       - name: Test (slow)
         if: github.event_name != 'pull_request'
-        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm-cli -p dewasm-test-helper -p xtask --no-fail-fast --features dewasm-cli/slow_test,dewasm-test-helper/wasmtime_test
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask --no-fail-fast --features dewasm/slow_test,dewasm-test-helper/wasmtime_test

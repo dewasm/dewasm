@@ -495,6 +495,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "dewasm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "dewasm-backend",
+ "dewasm-backend-bash",
+ "dewasm-backend-go",
+ "dewasm-backend-java",
+ "dewasm-backend-perl",
+ "dewasm-backend-python",
+ "dewasm-backend-ruby",
+ "dewasm-core",
+ "wat",
+]
+
+[[package]]
 name = "dewasm-backend"
 version = "0.1.0"
 dependencies = [
@@ -577,23 +594,6 @@ dependencies = [
  "dewasm-test-helper",
  "regex",
  "wast 254.0.0",
- "wat",
-]
-
-[[package]]
-name = "dewasm-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "dewasm-backend",
- "dewasm-backend-bash",
- "dewasm-backend-go",
- "dewasm-backend-java",
- "dewasm-backend-perl",
- "dewasm-backend-python",
- "dewasm-backend-ruby",
- "dewasm-core",
  "wat",
 ]
 

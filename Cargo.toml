@@ -10,14 +10,14 @@ authors = ["Hiroya Fujinami <make.just.on@gmail.com>"]
 repository = "https://github.com/dewasm/dewasm"
 
 [workspace.dependencies]
-dewasm-core = { path = "crates/dewasm-core" }
-dewasm-backend = { path = "crates/dewasm-backend" }
-dewasm-backend-ruby = { path = "crates/dewasm-backend-ruby" }
-dewasm-backend-bash = { path = "crates/dewasm-backend-bash" }
-dewasm-backend-python = { path = "crates/dewasm-backend-python" }
-dewasm-backend-perl = { path = "crates/dewasm-backend-perl" }
-dewasm-backend-go = { path = "crates/dewasm-backend-go" }
-dewasm-backend-java = { path = "crates/dewasm-backend-java" }
+dewasm-core = { path = "crates/dewasm-core", version = "0.1.0" }
+dewasm-backend = { path = "crates/dewasm-backend", version = "0.1.0" }
+dewasm-backend-ruby = { path = "crates/dewasm-backend-ruby", version = "0.1.0" }
+dewasm-backend-bash = { path = "crates/dewasm-backend-bash", version = "0.1.0" }
+dewasm-backend-python = { path = "crates/dewasm-backend-python", version = "0.1.0" }
+dewasm-backend-perl = { path = "crates/dewasm-backend-perl", version = "0.1.0" }
+dewasm-backend-go = { path = "crates/dewasm-backend-go", version = "0.1.0" }
+dewasm-backend-java = { path = "crates/dewasm-backend-java", version = "0.1.0" }
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 anyhow = "1"
 wasmparser = "0.254"

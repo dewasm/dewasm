@@ -1,7 +1,8 @@
 # Decision 6: Runtime as Per-Method Units with Selectable Linkage
 
 Status: **Accepted, 2026-07-23.**
-Implemented for Ruby: the runtime lives in `runtime/ruby/units/` (118 units), the generic bundler in `crates/dewasm-backend/src/lib.rs` (`RuntimeBundler`), and generated code references the runtime via the relative name `Rt`.
+Implemented for Ruby: the runtime lives in per-method units (118 at the time), the generic bundler in `crates/dewasm-backend/src/lib.rs` (`RuntimeBundler`), and generated code references the runtime via the relative name `Rt`.
+The units originally lived under `runtime/<lang>/units/`; decision 85 moved them to `crates/dewasm-backend-<lang>/units/` for crates.io packaging, with the mechanism unchanged.
 The external/gem linkage is designed for but not shipped.
 
 ## Context

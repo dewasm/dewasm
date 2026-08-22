@@ -28,7 +28,7 @@ Run `./setup.sh` first.
 
 ```console
 $ ./setup.sh
-$ cargo run -q -p dewasm-cli -- examples/apps/cache/qjs.wasm --target ruby --mode standalone -o qjs.rb
+$ cargo run -q -p dewasm -- examples/apps/cache/qjs.wasm --target ruby --mode standalone -o qjs.rb
 $ ruby qjs.rb -e 'console.log("JS on Ruby:", 6 * 7)'
 JS on Ruby: 42
 ```

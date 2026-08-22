@@ -9,7 +9,7 @@ repo_root="$script_dir/../../.."
 
 "$script_dir/../../apps/scripts/nes.sh"
 
-(cd "$repo_root" && cargo run -q -p dewasm-cli -- \
+(cd "$repo_root" && cargo run -q -p dewasm -- \
   examples/apps/cache/nes.wasm --target java --mode library \
   --module-name Nes -o examples/nes/java/Nes.java)
 

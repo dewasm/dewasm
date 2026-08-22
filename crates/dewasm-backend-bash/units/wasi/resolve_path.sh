@@ -1,4 +1,4 @@
-# wasi_resolve_path <p> <dirfd> <rel> <follow>: resolve a guest-relative path against a directory fd to a physical host path, confined to that dirfd's own stored root (mirroring runtime/ruby/units/wasi/resolve_path.rb).
+# wasi_resolve_path <p> <dirfd> <rel> <follow>: resolve a guest-relative path against a directory fd to a physical host path, confined to that dirfd's own stored root (mirroring crates/dewasm-backend-ruby/units/wasi/resolve_path.rb).
 # R0 is the errno (0 = ok), R1 the physical path on success.
 #
 # The parent is resolved physically via a `cd -P` subshell and the basename appended lexically, so `..`/symlinks in the parent are collapsed before the containment check: nesting can't launder an escape.

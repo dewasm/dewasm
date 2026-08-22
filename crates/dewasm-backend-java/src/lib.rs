@@ -67,7 +67,7 @@ const FN_PER_PARTITION: usize = 1500;
 /// Emitted as `-1`.
 const RETURN_SENTINEL: u32 = u32::MAX;
 
-/// The runtime unit bundler for Java (see runtime/java/units/).
+/// The runtime unit bundler for Java (see crates/dewasm-backend-java/units/).
 /// Each scope is a *top-level* package-private class wrapping its unit bodies (methods / nested types); generated code refers to them as `Rt.*` / `Memory` / `Table` / `WASI`.
 /// This is the shared-runtime shape: the spec harness bundles one runtime for all the modules of a `.wast` file, and the multi-module shared-runtime composition does the same.
 /// Self-contained `Embedded` output uses [`nested_bundler`] instead.

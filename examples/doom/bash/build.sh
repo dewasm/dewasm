@@ -16,7 +16,7 @@ repo_root="$(cd ../../.. && pwd)"
 
 (
   cd "$repo_root"
-  cargo run -q -p dewasm-cli -- \
+  cargo run -q -p dewasm -- \
     examples/apps/cache/doom.wasm \
     --target bash --mode library --module-name doom \
     -o examples/doom/bash/doom_gen.sh

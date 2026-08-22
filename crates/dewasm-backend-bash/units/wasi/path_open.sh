@@ -1,5 +1,5 @@
 # requires: mem/i32_store, wasi/read_path, wasi/resolve_path, wasi/file_slurp
-# WASI path_open, mirroring runtime/ruby/units/wasi/path_open.rb.
+# WASI path_open, mirroring crates/dewasm-backend-ruby/units/wasi/path_open.rb.
 # Resolves the guest path (lookupflags bit 0 = follow symlinks), then opens a directory or a whole-file byte-buffer fd. oflags: CREAT=0x1, DIRECTORY=0x2, EXCL=0x4, TRUNC=0x8; rights FD_READ=0x2
 # / FD_WRITE=0x40 pick the open mode; fdflags APPEND=0x1.
 #

@@ -10,7 +10,7 @@ repo_root="$(cd ../../.. && pwd)"
 
 (
   cd "$repo_root"
-  cargo run -q -p dewasm-cli -- \
+  cargo run -q -p dewasm -- \
     examples/apps/cache/nes.wasm \
     --target ruby --mode library --module-name Nes \
     -o examples/nes/ruby/nes_gen.rb

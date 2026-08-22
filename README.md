@@ -58,10 +58,8 @@ Here is a quick summary of what `dewasm` can do:
 
 ## Installation
 
-Currently, `dewasm` is not published to [crates.io](https://crates.io).
-
 ```console
-$ cargo install --git https://github.com/dewasm/dewasm dewasm-cli
+$ cargo install dewasm
 ```
 
 or:

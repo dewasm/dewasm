@@ -1,4 +1,4 @@
-//! Embeds the runtime units from runtime/python/units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source).
+//! Embeds the runtime units from units/ as `UNIT_SOURCES: &[(&str, &str)]` (unit id, source).
 //! Mirrors the Ruby crate's build.rs; only the source directory differs.
 
 use std::fmt::Write as _;
@@ -6,10 +6,8 @@ use std::path::Path;
 
 fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let units_dir = Path::new(&manifest_dir).join("../../runtime/python/units");
-    let units_dir = units_dir
-        .canonicalize()
-        .expect("runtime/python/units exists");
+    let units_dir = Path::new(&manifest_dir).join("units");
+    let units_dir = units_dir.canonicalize().expect("units/ exists");
     println!("cargo:rerun-if-changed={}", units_dir.display());
 
     let mut entries = Vec::new();

@@ -1,7 +1,7 @@
 # Getting started
 
 A hands-on tour of dewasm: convert a wasm module to a real language, run it standalone, then call it as a library and override one of its imports.
-Every command here is verified against the repository; the `dewasm` binary is built with `cargo build --release` (`target/release/dewasm`) or run in place with `cargo run -p dewasm-cli --`.
+Every command here is verified against the repository; the `dewasm` binary is built with `cargo build --release` (`target/release/dewasm`) or run in place with `cargo run -p dewasm --`.
 
 ## 1. A binary to convert
 

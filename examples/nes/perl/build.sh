@@ -12,7 +12,7 @@ repo_root="$(cd ../../.. && pwd)"
 
 (
   cd "$repo_root"
-  cargo run -q -p dewasm-cli -- \
+  cargo run -q -p dewasm -- \
     examples/apps/cache/nes.wasm \
     --target perl --mode library --module-name Nes \
     -o examples/nes/perl/nes_gen.pl
