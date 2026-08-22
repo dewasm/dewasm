@@ -1,3 +1,4 @@
-# requires: memory/iwla, rt/f32_from_bits
-# The bit path preserves a NaN's sign and payload.
-def fwla(a, b) = Rt.f32_from_bits(iwla(a, b))
+# requires: rt/f32_from_bits, rt/trap
+# Reading :f32 is bit-exact for every non-NaN value.
+# A NaN takes the bit path because the float-to-double conversion quietens it, and wasm's f32.load is bit-preserving.
+def fwla(a, b) = (a = (a + b) & M32; Rt.trap("out of bounds memory access") if a + 4 > @size; r = @buffer.get_value(:f32, a); r.nan? ? Rt.f32_from_bits(@buffer.get_value(:u32, a)) : r)
