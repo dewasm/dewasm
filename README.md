@@ -1,7 +1,9 @@
 ![dewasm logo](./assets/dewasm_logo_hex_gradient.png)
 
 `dewasm` converts WebAssembly binaries into **pure source code** for languages like Ruby, Bash, and Go.
+
 No WebAssembly runtime is *required*.
+The output runs anywhere plain `ruby`, `bash`, or `go` does.
 
 Here is [`cowsay`](https://wasmer.io/syrusakbary/cowsay), a WebAssembly binary, converted to a **pure Bash script** and run with *nothing but* `bash`:
 
@@ -18,7 +20,7 @@ $ echo "Hello from Bash" | bash cowsay.sh
                 ||     ||
 ```
 
-As a larger example, [QuickJS-NG](https://quickjs-ng.github.io/quickjs/), a JavaScript engine written in C, can be converted just as well, this time to **pure Ruby**:
+Even, [QuickJS-NG](https://quickjs-ng.github.io/quickjs/), a JavaScript engine written in C, can be converted just as well, this time to **pure Ruby**:
 
 ```console
 $ dewasm examples/apps/cache/qjs.wasm --target ruby --mode standalone -o qjs.rb
@@ -49,7 +51,7 @@ Beyond simple examples, `dewasm` scales to *real libraries and applications* too
 
 Here is a quick summary of what `dewasm` can do:
 
-- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs to convert existing WebAssembly binaries, plus the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends (which is what setjmp/longjmp-based C programs such as mruby compile to).
+- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs, plus the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends.
 - **Target multiple languages**: Translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
 - **Adapt to your needs**: Generates either standalone scripts or importable library source code.
 - **Keep it minimal**: Bundles only the specific runtime code that the WebAssembly binary actually requires.
