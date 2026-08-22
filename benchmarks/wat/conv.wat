@@ -1,7 +1,9 @@
-;; mem_rw: i32 store/load over linear memory.
+;; conv: conversions between f64, i32 and i64.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; One iteration truncates a double to i32 and to i64, converts integers back to double in both signednesses, and moves a value through i64.reinterpret_f64 and f64.reinterpret_i64.
+;; The backends implement these as runtime helpers rather than as host operators, which neither the arithmetic nor the memory cases exercise.
+;;
+;; Two constraints hold every value in range: each truncation input is built from a 24-bit integer, because an out-of-range truncation traps, and the only bits ever reinterpreted into f64 are mantissa bits of a value that came out of finite f64 arithmetic, because a NaN would not be comparable across runtimes (its payload bits differ).
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -37,7 +39,7 @@
   (import "wasi_snapshot_preview1" "proc_exit"
     (func $proc_exit (param i32)))
 
-  (memory (export "memory") 8)
+  (memory (export "memory") 2)
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
@@ -97,7 +99,8 @@
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $h i32)
+    (local $x f64) (local $y f64) (local $bits i64) (local $a i64)
     (local.set $n (call $iterations))
     (local.set $h (i32.const 0x12345678))
     (block $done
@@ -106,13 +109,28 @@
         (local.set $h
           (i32.add (i32.mul (local.get $h) (i32.const 1664525))
                    (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
-        (local.set $p
-          (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+        (local.set $x
+          (f64.add (f64.convert_i32_u (i32.shr_u (local.get $h) (i32.const 8)))
+                   (f64.const 1.5)))
+        (local.set $bits (i64.reinterpret_f64 (local.get $x)))
+        ;; The exponent field is left alone, so the value stays finite.
+        (local.set $bits (i64.xor (local.get $bits) (i64.const 0x3ff)))
+        (local.set $x (f64.reinterpret_i64 (local.get $bits)))
+        (local.set $a
+          (i64.add (local.get $a) (i64.trunc_f64_s (local.get $x))))
+        (local.set $a
+          (i64.xor (local.get $a)
+                   (i64.extend_i32_u
+                     (i32.trunc_f64_s
+                       (f64.mul (local.get $x) (f64.const -0.25))))))
+        (local.set $y
+          (f64.convert_i64_s
+            (i64.sub (i64.and (local.get $a) (i64.const 0xffffff))
+                     (i64.const 0x800000))))
+        (local.set $a
+          (i64.add (local.get $a)
+                   (i64.trunc_f64_s (f64.mul (local.get $y) (f64.const 1.25)))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
-    (call $print (i64.extend_i32_u (local.get $a))))
+    (call $print (local.get $a)))
 )

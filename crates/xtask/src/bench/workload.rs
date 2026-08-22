@@ -22,13 +22,70 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
     ("wat/i32_alu", 500_000_000),
     ("wat/i64_alu", 500_000_000),
     ("wat/f64_alu", 500_000_000),
+    ("wat/f32_alu", 900_000_000),
     ("wat/mem_rw", 500_000_000),
+    ("wat/mem_narrow", 600_000_000),
     ("wat/call_direct", 500_000_000),
     ("wat/call_indirect", 500_000_000),
+    ("wat/eh_throw", 4_000_000),
+    ("wat/eh_try", 330_000_000),
+    ("wat/i32_div", 120_000_000),
+    ("wat/i64_div", 110_000_000),
+    ("wat/conv", 120_000_000),
+    ("wat/br_table", 105_000_000),
     ("c/sha256", 10_000_000),
     ("c/mandelbrot", 20_000_000),
     ("c/wordcount", 500_000_000),
 ];
+
+/// Runners excluded from one microbenchmark, keyed by its id.
+/// Same discipline as [`SQLITE_QUERY_EXCLUDES`]: every reason is a measurement or an observed error, never a guess.
+const MICRO_EXCLUDES: &[(&str, &[(&str, &str)])] = &[
+    ("wat/eh_throw", EH_EXCLUDES),
+    ("wat/eh_try", EH_EXCLUDES),
+    ("wat/f32_alu", F32_ALU_EXCLUDES),
+    ("wat/i64_div", I64_DIV_EXCLUDES),
+];
+
+/// Runners excluded from both exception-handling microbenchmarks, since the reason is the same axis on both: none of these five decode or accept the tag section that `try_table`/`throw` needs.
+const EH_EXCLUDES: &[(&str, &str)] = &[
+    (
+        "dewasm-bash",
+        "excluded: the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)",
+    ),
+    (
+        "wazero",
+        "excluded: wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\"",
+    ),
+    (
+        "wasm3",
+        "excluded: wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
+    ),
+    ("pywasm-cpython", PYWASM_EH_REASON),
+    ("pywasm-pypy", PYWASM_EH_REASON),
+    ("wardite", WARDITE_EH_REASON),
+    ("wardite-yjit", WARDITE_EH_REASON),
+];
+
+const PYWASM_EH_REASON: &str = "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)";
+
+const WARDITE_EH_REASON: &str = "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\"";
+
+/// wardite does not re-round f32 arithmetic to single precision between operations, so a chain of dependent f32 ops accumulates double-precision bits and diverges from wasmtime; the byte-for-byte verification would fail the whole run.
+const F32_ALU_EXCLUDES: &[(&str, &str)] = &[
+    ("wardite", WARDITE_F32_ALU_REASON),
+    ("wardite-yjit", WARDITE_F32_ALU_REASON),
+];
+
+const WARDITE_F32_ALU_REASON: &str = "excluded: wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run";
+
+/// wardite computes `i64.div_s` at `f64` precision, which loses bits for operands beyond 2^53 and gives a wrong quotient.
+const I64_DIV_EXCLUDES: &[(&str, &str)] = &[
+    ("wardite", WARDITE_I64_DIV_REASON),
+    ("wardite-yjit", WARDITE_I64_DIV_REASON),
+];
+
+const WARDITE_I64_DIV_REASON: &str = "excluded: wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct";
 
 /// The `sqlite3_query` script: a 100k-row table in one transaction (recursive CTE, so the work is the engine's), then an aggregate and a `LIKE` scan. 100k rows because at 20k wasmtime finished in ~30 ms (nearly all process startup), leaving the baseline unresolvable.
 /// The script is fixed rather than calibrated per runner (that is what makes it realistic), which is why the slowest runners are excluded instead of measured at their own size.
@@ -141,7 +198,15 @@ pub fn workloads() -> Vec<Workload> {
             ids.push(found);
         }
     }
-    ids.sort();
+    // Family-major (in `MICRO_FAMILIES`'s declared order), alphabetical within a family, rather than a plain alphabetical sort, which would put `c/*` before `wat/*` and scatter run order, results.md sections and charts out of the families' declared order.
+    ids.sort_by_key(|id| {
+        let family = id.split('/').next().unwrap_or(id.as_str());
+        let family_rank = MICRO_FAMILIES
+            .iter()
+            .position(|known| *known == family)
+            .unwrap_or(MICRO_FAMILIES.len());
+        (family_rank, id.clone())
+    });
 
     let cache = bench_cache_dir();
     let mut out: Vec<Workload> = ids
@@ -151,11 +216,15 @@ pub fn workloads() -> Vec<Workload> {
                 .iter()
                 .find(|(known, _)| *known == id)
                 .map_or(DEFAULT_ITER_CAP, |(_, cap)| *cap);
+            let exclude = MICRO_EXCLUDES
+                .iter()
+                .find(|(known, _)| *known == id)
+                .map_or(&[][..], |(_, excludes)| *excludes);
             Workload {
                 wasm: cache.join(format!("{id}.wasm")),
                 label: id,
                 kind: Kind::Micro { iter_cap },
-                exclude: &[],
+                exclude,
             }
         })
         .collect();
@@ -244,6 +313,8 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
     ("pywasm-pypy", PYWASM_SQLITE_REASON),
     ("wardite", WARDITE_SQLITE_REASON),
     ("wardite-yjit", WARDITE_SQLITE_REASON),
+    ("dewasm-perl", DEWASM_PERL_SQLITE_REASON),
+    ("dewasm-python", DEWASM_PYTHON_SQLITE_REASON),
 ];
 
 /// wardite loads the module and handles a bare `.quit`, but any actual query dies.
@@ -252,6 +323,13 @@ const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads the sqlite3 shell b
 /// Cost, not capability: pywasm runs this correctly (byte-identical under `-batch`) at ~17.9 ms/row, so 100k rows is ~half an hour per sample.
 /// The row count cannot be lowered to meet it: below ~20k rows wasmtime's side is all process startup and the baseline dissolves.
 const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";
+
+/// Cost, not capability: dewasm-perl runs this correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), measured in the 2026-08-21 full record.
+/// One warmup plus the timed repetitions across both query cases alone cost roughly 19 of the suite's roughly 65 minutes.
+const DEWASM_PERL_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks";
+
+/// Cost, not capability: dewasm-python runs this correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), measured in the 2026-08-21 full record.
+const DEWASM_PYTHON_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks";
 
 /// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
 const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
@@ -266,7 +344,7 @@ const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
 ];
 
 /// Extrapolated linearly from two prefix sizes (20000 and 50000 bytes) of the same generated text, both close enough to the per-byte rate that the fit is not just two points hiding curvature.
-/// At 6 runs per cell (one warmup plus 5 reps) that is over an hour on this workload alone, which is why the input size is fixed for wasmtime rather than calibrated down to fit bash: the doc comment on [`minigzip_input`] gives the reason it must stay put.
+/// At 4 runs per cell (one warmup plus the default 3 reps) that is roughly 48 minutes on this workload alone, which is why the input size is fixed for wasmtime rather than calibrated down to fit bash: the doc comment on [`minigzip_input`] gives the reason it must stay put.
 const BASH_MINIGZIP_REASON: &str = "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run";
 
 /// Extrapolated the same way as [`BASH_MINIGZIP_REASON`], from prefixes of 5000 and 20000 bytes.

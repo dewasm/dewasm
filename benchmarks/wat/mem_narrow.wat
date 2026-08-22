@@ -1,7 +1,8 @@
-;; mem_rw: i32 store/load over linear memory.
+;; mem_narrow: 8-bit and 16-bit loads and stores.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; The mem_rw access pattern at the narrow widths: two 8-bit loads (zero and sign extending), two 16-bit loads (likewise), one i32.store8 and one i32.store16 per iteration, over the same 256 KiB window.
+;; mem_rw's traffic is 32-bit only, so it pays neither for assembling a value out of bytes nor for sign extension, and the difference between the two cases is what those cost.
+;; The 16-bit offsets are 2-byte aligned; the 8-bit offsets are anywhere in the window.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -97,7 +98,8 @@
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $h i32)
+    (local $p i32) (local $q i32) (local $a i32)
     (local.set $n (call $iterations))
     (local.set $h (i32.const 0x12345678))
     (block $done
@@ -106,12 +108,28 @@
         (local.set $h
           (i32.add (i32.mul (local.get $h) (i32.const 1664525))
                    (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
+        ;; The masks keep every access inside the 256 KiB window that starts one page in, clear of the preamble's scratch area, and keep the 16-bit ones 2-byte aligned.
         (local.set $p
           (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+                   (i32.and (local.get $h) (i32.const 0x3ffff))))
+        (local.set $q
+          (i32.add (i32.const 0x10000)
+                   (i32.and (i32.shr_u (local.get $h) (i32.const 8))
+                            (i32.const 0x3fffe))))
+        (local.set $a
+          (i32.add (local.get $a) (i32.load8_u (local.get $p))))
+        (local.set $a
+          (i32.xor (local.get $a) (i32.load8_s (local.get $q))))
+        (local.set $a
+          (i32.add (local.get $a) (i32.load16_u (local.get $q))))
+        (local.set $a
+          (i32.xor (local.get $a)
+                   (i32.load16_s
+                     (i32.add (i32.const 0x10000)
+                              (i32.and (i32.shr_u (local.get $h) (i32.const 4))
+                                       (i32.const 0x3fffe))))))
+        (i32.store8 (local.get $p) (local.get $a))
+        (i32.store16 (local.get $q) (i32.xor (local.get $a) (local.get $i)))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
     (call $print (i64.extend_i32_u (local.get $a))))

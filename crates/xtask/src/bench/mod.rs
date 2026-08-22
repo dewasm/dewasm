@@ -36,7 +36,8 @@ use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
 
 /// Default timed repetitions per measurement, after one discarded warmup.
-const DEFAULT_REPS: usize = 5;
+/// Across the 219 measured pairs of the 2026-08-21 full record, the spread between the fastest and slowest of 5 samples had a median of 0.9% and a 90th percentile of 3.1%, so 3 loses little.
+const DEFAULT_REPS: usize = 3;
 /// Default compute time the iteration calibrator aims each sample at.
 const DEFAULT_TARGET_MS: u64 = 300;
 /// Default per-process wall-clock ceiling.
@@ -392,11 +393,13 @@ fn measure_workload(
             let iters = m
                 .iterations
                 .map_or_else(String::new, |n| format!("{n} iters, "));
-            let cold = m
-                .cold_start
-                .as_ref()
-                .map_or_else(String::new, |s| format!(", cold start {} ms", ms(s.min_s)));
-            println!("    {iters}{} ms total (min){cold}", ms(m.total.min_s));
+            let cold = m.cold_start.as_ref().map_or_else(String::new, |s| {
+                format!(", cold start {} ms", ms(s.median_s))
+            });
+            println!(
+                "    {iters}{} ms total (median){cold}",
+                ms(m.total.median_s)
+            );
         }
         results.push(Cell {
             workload: workload.label.clone(),
