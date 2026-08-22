@@ -1,7 +1,8 @@
-;; mem_rw: i32 store/load over linear memory.
+;; f32_alu: f32 add / mul / sqrt in a tight loop.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; The f64_alu body in single precision with the same constants, so the difference between the two cases is the cost of re-rounding every result to f32.
+;; The printed number is the accumulator's bit pattern rather than a scaled integer, so a backend that carries the intermediates in double precision fails the harness's byte comparison instead of reporting a fast wrong number.
+;; Each accumulator stops growing once its ulp exceeds what is added to it, near 2^24 and 2^37, so no iteration count reaches infinity or NaN.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -37,7 +38,7 @@
   (import "wasi_snapshot_preview1" "proc_exit"
     (func $proc_exit (param i32)))
 
-  (memory (export "memory") 8)
+  (memory (export "memory") 2)
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
@@ -97,22 +98,16 @@
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $a f32) (local $b f32)
     (local.set $n (call $iterations))
-    (local.set $h (i32.const 0x12345678))
     (block $done
       (loop $next
         (br_if $done (i32.ge_u (local.get $i) (local.get $n)))
-        (local.set $h
-          (i32.add (i32.mul (local.get $h) (i32.const 1664525))
-                   (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
-        (local.set $p
-          (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+        (local.set $a (f32.add (local.get $a) (f32.const 1)))
+        (local.set $b
+          (f32.add (local.get $b)
+                   (f32.mul (f32.sqrt (local.get $a)) (f32.const 1.5))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
-    (call $print (i64.extend_i32_u (local.get $a))))
+    (call $print (i64.extend_i32_u (i32.reinterpret_f32 (local.get $b)))))
 )

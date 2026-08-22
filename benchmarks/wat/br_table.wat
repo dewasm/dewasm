@@ -1,7 +1,7 @@
-;; mem_rw: i32 store/load over linear memory.
+;; br_table: a 16-arm branch table.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; The index is derived from a pseudo-random sequence, so no runtime can predict the arm, and each arm applies a different ordered pair of operators with constants no other arm uses, so the table cannot be folded back into arithmetic.
+;; Against i32_alu, whose body is straight-line arithmetic of comparable size, the difference is what the dispatch costs.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -37,7 +37,7 @@
   (import "wasi_snapshot_preview1" "proc_exit"
     (func $proc_exit (param i32)))
 
-  (memory (export "memory") 8)
+  (memory (export "memory") 2)
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
@@ -97,21 +97,89 @@
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $h i32) (local $k i32) (local $a i32)
     (local.set $n (call $iterations))
     (local.set $h (i32.const 0x12345678))
+    (local.set $a (i32.const 1))
     (block $done
       (loop $next
         (br_if $done (i32.ge_u (local.get $i) (local.get $n)))
         (local.set $h
           (i32.add (i32.mul (local.get $h) (i32.const 1664525))
                    (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
-        (local.set $p
-          (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+        (local.set $k
+          (i32.and (i32.shr_u (local.get $h) (i32.const 12)) (i32.const 15)))
+        (block $sw
+          (block $c0 (block $c1 (block $c2 (block $c3
+          (block $c4 (block $c5 (block $c6 (block $c7
+          (block $c8 (block $c9 (block $c10 (block $c11
+          (block $c12 (block $c13 (block $c14 (block $c15
+            ;; $k is masked to 0..15, so the default target is never taken.
+            (br_table $c0 $c1 $c2 $c3 $c4 $c5 $c6 $c7 $c8 $c9 $c10 $c11 $c12 $c13 $c14 $c15 $c0 (local.get $k)))
+          ;; $c15
+          (local.set $a (i32.mul (local.get $a) (i32.const 0x28b7bd67)))
+          (local.set $a (i32.mul (local.get $a) (i32.const 0xbd794d61)))
+          (br $sw))
+          ;; $c14
+          (local.set $a (i32.mul (local.get $a) (i32.const 0xec48c9f5)))
+          (local.set $a (i32.sub (local.get $a) (i32.const 0xb1a1b88b)))
+          (br $sw))
+          ;; $c13
+          (local.set $a (i32.mul (local.get $a) (i32.const 0xafd9d683)))
+          (local.set $a (i32.xor (local.get $a) (i32.const 0xa5ca23b5)))
+          (br $sw))
+          ;; $c12
+          (local.set $a (i32.mul (local.get $a) (i32.const 0x736ae311)))
+          (local.set $a (i32.add (local.get $a) (i32.const 0x99f28edf)))
+          (br $sw))
+          ;; $c11
+          (local.set $a (i32.sub (local.get $a) (i32.const 0x36fbef9f)))
+          (local.set $a (i32.mul (local.get $a) (i32.const 0x8e1afa09)))
+          (br $sw))
+          ;; $c10
+          (local.set $a (i32.sub (local.get $a) (i32.const 0xfa8cfc2d)))
+          (local.set $a (i32.sub (local.get $a) (i32.const 0x82436533)))
+          (br $sw))
+          ;; $c9
+          (local.set $a (i32.sub (local.get $a) (i32.const 0xbe1e08bb)))
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x766bd05d)))
+          (br $sw))
+          ;; $c8
+          (local.set $a (i32.sub (local.get $a) (i32.const 0x81af1549)))
+          (local.set $a (i32.add (local.get $a) (i32.const 0x6a943b87)))
+          (br $sw))
+          ;; $c7
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x454021d7)))
+          (local.set $a (i32.mul (local.get $a) (i32.const 0x5ebca6b1)))
+          (br $sw))
+          ;; $c6
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x08d12e65)))
+          (local.set $a (i32.sub (local.get $a) (i32.const 0x52e511db)))
+          (br $sw))
+          ;; $c5
+          (local.set $a (i32.xor (local.get $a) (i32.const 0xcc623af3)))
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x470d7d05)))
+          (br $sw))
+          ;; $c4
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x8ff34781)))
+          (local.set $a (i32.add (local.get $a) (i32.const 0x3b35e82f)))
+          (br $sw))
+          ;; $c3
+          (local.set $a (i32.add (local.get $a) (i32.const 0x5384540f)))
+          (local.set $a (i32.mul (local.get $a) (i32.const 0x2f5e5359)))
+          (br $sw))
+          ;; $c2
+          (local.set $a (i32.add (local.get $a) (i32.const 0x1715609d)))
+          (local.set $a (i32.sub (local.get $a) (i32.const 0x2386be83)))
+          (br $sw))
+          ;; $c1
+          (local.set $a (i32.add (local.get $a) (i32.const 0xdaa66d2b)))
+          (local.set $a (i32.xor (local.get $a) (i32.const 0x17af29ad)))
+          (br $sw))
+          ;; $c0
+          (local.set $a (i32.add (local.get $a) (i32.const 0x9e3779b9)))
+          (local.set $a (i32.add (local.get $a) (i32.const 0x0bd794d7)))
+          (br $sw))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
     (call $print (i64.extend_i32_u (local.get $a))))

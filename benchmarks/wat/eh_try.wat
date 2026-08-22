@@ -1,7 +1,7 @@
-;; mem_rw: i32 store/load over linear memory.
+;; eh_try: exception handling scaffolding with nothing thrown.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; The eh_throw loop with a callee that returns its argument instead of throwing it, with the call still inside a try_table that has a catch arm.
+;; This is what the scaffolding costs on the path where no exception occurs; the two cases print the same number by construction.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -37,7 +37,7 @@
   (import "wasi_snapshot_preview1" "proc_exit"
     (func $proc_exit (param i32)))
 
-  (memory (export "memory") 8)
+  (memory (export "memory") 2)
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
@@ -96,8 +96,13 @@
     (drop (call $fd_write
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
+  (tag $carry (param i32))
+
+  (func $pass (param $x i32) (result i32)
+    (local.get $x))
+
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $h i32) (local $acc i32)
     (local.set $n (call $iterations))
     (local.set $h (i32.const 0x12345678))
     (block $done
@@ -106,13 +111,12 @@
         (local.set $h
           (i32.add (i32.mul (local.get $h) (i32.const 1664525))
                    (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
-        (local.set $p
-          (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+        (local.set $acc
+          (i32.add (local.get $acc)
+            (block $caught (result i32)
+              (try_table (result i32) (catch $carry $caught)
+                (call $pass (local.get $h))))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
-    (call $print (i64.extend_i32_u (local.get $a))))
+    (call $print (i64.extend_i32_u (local.get $acc))))
 )

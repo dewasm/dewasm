@@ -1,7 +1,10 @@
-;; mem_rw: i32 store/load over linear memory.
+;; i64_div: i64 division and remainder, signed and unsigned.
 ;;
-;; One iteration reads one i32 and writes one i32 at a pseudo-random offset in a 256 KiB window, so the address stream defeats any locality the backend's memory representation might otherwise get for free.
-;; Against i32_alu this separates memory-access cost from arithmetic cost.
+;; The i32_div chain widened to i64.
+;; Against i32_div it separates the cost of the 64-bit value representation from the cost of the division correction itself, the way i64_alu does against i32_alu.
+;; Every divisor is `(x & 0xffff) | 3`, which is at least 3, and that covers two requirements at once.
+;; Nothing traps: division by zero and the INT64_MIN / -1 overflow are both out of reach.
+;; No unsigned quotient reaches 2^63: pywasm 2.2.3 stores an i64.div_u result as a signed value and raises OverflowError above that point, and this case is here to measure division, not to reproduce that bug.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
@@ -37,7 +40,7 @@
   (import "wasi_snapshot_preview1" "proc_exit"
     (func $proc_exit (param i32)))
 
-  (memory (export "memory") 8)
+  (memory (export "memory") 2)
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
@@ -97,22 +100,31 @@
       (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
 
   (func (export "_start")
-    (local $n i32) (local $i i32) (local $h i32) (local $a i32) (local $p i32)
+    (local $n i32) (local $i i32) (local $h i64) (local $d i64) (local $a i64)
     (local.set $n (call $iterations))
-    (local.set $h (i32.const 0x12345678))
+    (local.set $h (i64.const 0x123456789abcdef))
     (block $done
       (loop $next
         (br_if $done (i32.ge_u (local.get $i) (local.get $n)))
         (local.set $h
-          (i32.add (i32.mul (local.get $h) (i32.const 1664525))
-                   (i32.const 1013904223)))
-        ;; 0x3fffc keeps the offset i32-aligned inside the 256 KiB window that starts one page in, clear of the preamble's scratch area.
-        (local.set $p
-          (i32.add (i32.const 0x10000)
-                   (i32.and (local.get $h) (i32.const 0x3fffc))))
-        (local.set $a (i32.add (local.get $a) (i32.load (local.get $p))))
-        (i32.store (local.get $p) (i32.xor (local.get $a) (local.get $i)))
+          (i64.add (i64.mul (local.get $h) (i64.const 6364136223846793005))
+                   (i64.const 1442695040888963407)))
+        (local.set $d
+          (i64.or (i64.and (local.get $h) (i64.const 0xffff)) (i64.const 3)))
+        (local.set $a
+          (i64.add (local.get $a)
+                   (i64.div_s (local.get $h) (local.get $d))))
+        (local.set $a
+          (i64.xor (local.get $a)
+                   (i64.div_u (local.get $a) (local.get $d))))
+        (local.set $a
+          (i64.add (local.get $a)
+                   (i64.rem_s (local.get $h) (local.get $d))))
+        (local.set $a
+          (i64.sub (local.get $a)
+                   (i64.rem_u (i64.xor (local.get $h) (local.get $a))
+                              (local.get $d))))
         (local.set $i (i32.add (local.get $i) (i32.const 1)))
         (br $next)))
-    (call $print (i64.extend_i32_u (local.get $a))))
+    (call $print (local.get $a)))
 )
