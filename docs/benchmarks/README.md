@@ -8,7 +8,7 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ```console
 $ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
-$ cargo xtask record-speed           # the full matrix, roughly 25 minutes
+$ cargo xtask record-speed           # the full matrix, roughly 30 minutes
 $ cargo xtask render-speed           # results.md and its charts, from that record
 ```
 

@@ -15,6 +15,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-16T09-22-02Z-speed.json`: re-baseline after the issue #164 mask elision and memory-unit rework (#224 to #245).
 - `2026-08-21T02-38-15Z-speed.json`: TODO: describe the occasion.
 - `2026-08-21T03-50-04Z-speed.json`: TODO: describe the occasion.
+- `2026-08-22T06-26-23Z-speed.json`: the first record with the shortened suite and the eight new wat cases (#266); measured 29 minutes wall.
 
 ## Size records
 
