@@ -1,5 +1,5 @@
-# requires: rt/m64
+# requires: rt/low_mask
 def i64_rotr(a, b)
   r = b & 63
-  m64((a >> r) | (a << (64 - r)))
+  (a >> r) | ((a & LOW_MASK[r]) << (64 - r))
 end
