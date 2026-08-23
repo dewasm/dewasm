@@ -1,5 +1,8 @@
 ![dewasm logo](./assets/dewasm_logo_hex_gradient.png)
 
+[![CI](https://github.com/dewasm/dewasm/actions/workflows/ci.yml/badge.svg)](https://github.com/dewasm/dewasm/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/dewasm)](https://crates.io/crates/dewasm)
+
 `dewasm` converts WebAssembly binaries into **pure source code** for languages like Ruby, Bash, and Go.
 
 No WebAssembly runtime is *required*.
