@@ -507,9 +507,11 @@ pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 /// Loop-body extraction thresholds (see [`dewasm_backend::extract`]).
 /// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize a ~12 ns call per iteration is worth extracting into one.
 /// Tuned against the benchmark suite and the DOOM/NES examples; other backends would pick their own values.
+/// `max_params` 34 is the smallest budget that admits the NES frame loop (30 parameters), whose extraction measures +3.4% under YJIT.
+/// YJIT compiles high-arity methods without a cliff (~0.26 ns per extra parameter, no side exits up to 64), so the budget is bounded by the per-call marshalling cost, not by compilability; above 34 only sqlite3-shell's span set changes, with no measured gain.
 const EXTRACT_PARAMS: extract::Params = extract::Params {
     min_weight: 40,
-    max_params: 12,
+    max_params: 34,
     max_results: 1,
     min_weight_with_temps: 160,
 };
