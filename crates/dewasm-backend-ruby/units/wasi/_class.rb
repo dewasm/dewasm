@@ -21,11 +21,14 @@ def initialize(args: [], env: {}, preopens: {})
   @args = args.map(&:to_s)
   @env = env.map { |k, v| "#{k}=#{v}" }
   @fds = { 0 => $stdin, 1 => $stdout, 2 => $stderr }
-  # Per-fd capability metadata: fd => [rights_base, rights_inheriting, fdflags]. stdio is seeded all-rights (it is never rights-tested and must stay readable/writable); preopens likewise, so a real embedder keeps unrestricted access and path_open derives the narrowed rights from them.
+  # Per-fd capability metadata: fd => [rights_base, rights_inheriting, fdflags, filetype].
+  # `filetype` is what fd_fdstat_get reports, filled in on its first query and nil until then.
+  # An open descriptor's filetype cannot change while it is open, and this metadata travels with its fd-table entry (fd_renumber moves both, and fds are never revived after close), so the memoized answer cannot outlive the descriptor it describes.
+  # stdio is seeded all-rights (it is never rights-tested and must stay readable/writable); preopens likewise, so a real embedder keeps unrestricted access and path_open derives the narrowed rights from them.
   @fd_meta = {
-    0 => [Rt::M64, Rt::M64, 0],
-    1 => [Rt::M64, Rt::M64, 0],
-    2 => [Rt::M64, Rt::M64, 0],
+    0 => [Rt::M64, Rt::M64, 0, nil],
+    1 => [Rt::M64, Rt::M64, 0, nil],
+    2 => [Rt::M64, Rt::M64, 0, nil],
   }
   # The stdio special-cases (SPIPE on seek/tell/pread/pwrite, no close)
   # key on the objects captured here, in lockstep with the fd table, not on whatever the globals point at when a syscall runs.
@@ -42,7 +45,7 @@ def initialize(args: [], env: {}, preopens: {})
     # A preopen is a directory, so its base is the directory-rights set
     # (no FD_WRITE etc.); its inheriting rights carry the full file-rights set so guest-opened files under it get real read/write capability.
     # root_directory() in the testsuite reopens the preopen with exactly these, so seeding all-of-M64 here would wrongly hand a directory the write right and make that reopen fail EISDIR.
-    @fd_meta[next_fd] = [DIR_BASE_RIGHTS, DIR_INHERITING_RIGHTS, 0]
+    @fd_meta[next_fd] = [DIR_BASE_RIGHTS, DIR_INHERITING_RIGHTS, 0, nil]
     next_fd += 1
   end
   @next_fd = next_fd

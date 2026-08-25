@@ -76,10 +76,14 @@ const (
 
 // Per-fd rights/flags carried alongside the fd-table entry.
 // Every live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
+// filetype memoizes what fd_fdstat_get reports, valid once filetypeKnown is set.
+// An open descriptor's filetype cannot change while it is open, and this meta travels with its fd-table entry (fd_renumber moves both, and fds are never reused after close), so the memoized answer cannot outlive the descriptor it describes.
 type wasiFdMeta struct {
-    base       uint64
-    inheriting uint64
-    fdflags    uint16
+    base          uint64
+    inheriting    uint64
+    fdflags       uint16
+    filetype      uint32
+    filetypeKnown bool
 }
 
 // A directory descriptor: either a preopen (preopenName set to the guest-visible path passed in preopens) or a directory the guest opened itself via path_open (preopenName nil). entries is the fd_readdir listing cache, filled lazily; loaded guards the one-shot snapshot.

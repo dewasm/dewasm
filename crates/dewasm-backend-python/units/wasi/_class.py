@@ -73,11 +73,13 @@ def __init__(self, args=None, env=None, preopens=None):
     self.args = [a if isinstance(a, bytes) else str(a).encode("utf-8") for a in (args or [])]
     self.env = [("%s=%s" % (k, v)).encode("utf-8") for k, v in (env or {}).items()]
     self.fds = {0: sys.stdin.buffer, 1: sys.stdout.buffer, 2: sys.stderr.buffer}
-    # Parallel per-fd capability map: fd -> [base, inheriting, fdflags]. stdio gets the full file-right set (a stream can read/write/etc.); preopens get the directory base and the directory-plus-file inheriting set.
+    # Parallel per-fd capability map: fd -> [base, inheriting, fdflags, filetype]. stdio gets the full file-right set (a stream can read/write/etc.); preopens get the directory base and the directory-plus-file inheriting set.
+    # `filetype` is what fd_fdstat_get reports, filled in on its first query and None until then.
+    # An open descriptor's filetype cannot change while it is open, and this entry travels with its fd-table entry (fd_renumber moves both, and fds are never revived after close), so the memoized answer cannot outlive the descriptor it describes.
     self.fd_meta = {
-        0: [self.FILE_RIGHTS_BASE, 0, 0],
-        1: [self.FILE_RIGHTS_BASE, 0, 0],
-        2: [self.FILE_RIGHTS_BASE, 0, 0],
+        0: [self.FILE_RIGHTS_BASE, 0, 0, None],
+        1: [self.FILE_RIGHTS_BASE, 0, 0, None],
+        2: [self.FILE_RIGHTS_BASE, 0, 0, None],
     }
     # The stdio special-cases (SPIPE on seek/tell/pread/pwrite, no close) key on the objects captured here, in lockstep with the fd table.
     self.std_ios = (sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer)
@@ -91,7 +93,7 @@ def __init__(self, args=None, env=None, preopens=None):
             raise ValueError("preopen %r => %r: does not exist" % (guest, host))
         name = guest if isinstance(guest, bytes) else str(guest).encode("utf-8")
         self.fds[next_fd] = self.WasiDir(real, name, None)
-        self.fd_meta[next_fd] = [self.DIR_RIGHTS_BASE, self.DIR_RIGHTS_INHERITING, 0]
+        self.fd_meta[next_fd] = [self.DIR_RIGHTS_BASE, self.DIR_RIGHTS_INHERITING, 0, None]
         next_fd += 1
     self.next_fd = next_fd
 

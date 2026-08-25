@@ -74,6 +74,11 @@ use constant DIR_RIGHTS_INHERITING => DIR_RIGHTS_BASE | FILE_RIGHTS_BASE;
 # * dir:    { dir => 1, path => realpath'd host path, preopen => guest
 # name (undef when the guest opened it itself via path_open),
 # entries => lazily built fd_readdir cache }.
+# Any shape may also carry `filetype`, what fd_fdstat_get reports, filled in
+# on its first query.
+# An open descriptor's filetype cannot change while it is open, and the entry
+# is the descriptor (fd_renumber moves it, fd_close drops it), so the memoized
+# answer cannot outlive the descriptor it describes.
 sub new {
     my ($class, %opts) = @_;
     my $env = $opts{env} // {};
