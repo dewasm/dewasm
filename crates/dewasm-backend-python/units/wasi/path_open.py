@@ -56,7 +56,7 @@ def wasi_path_open(self, dirfd, dirflags, path_ptr, path_len, oflags, fs_rights_
             inheriting = fs_rights_inheriting & self.fd_meta[dirfd][1] & self.FILE_RIGHTS_BASE
     except OSError as e:
         return self.fs_errno(e)
-    self.fd_meta[self.next_fd] = [base, inheriting, fdflags & 0xFFFF]
+    self.fd_meta[self.next_fd] = [base, inheriting, fdflags & 0xFFFF, None]
     self.memory.iws(opened_fd_ptr, self.next_fd)
     self.next_fd += 1
     return self.ERRNO_SUCCESS

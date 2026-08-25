@@ -46,6 +46,7 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
       base & parent_inheriting & DIR_BASE_RIGHTS,
       inheriting & parent_inheriting & DIR_INHERITING_RIGHTS,
       0,
+      nil,
     ]
   else
     granted = base & parent_inheriting & FILE_BASE_RIGHTS
@@ -65,7 +66,7 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
     io.binmode
     @fds[@next_fd] = io
     # APPEND is honored by fd_write (seek-to-end) rather than O_APPEND, so fd_fdstat_set_flags can toggle it; store the whole fdflags word.
-    @fd_meta[@next_fd] = [granted, inheriting & parent_inheriting & FILE_BASE_RIGHTS, fdflags & 0x1f]
+    @fd_meta[@next_fd] = [granted, inheriting & parent_inheriting & FILE_BASE_RIGHTS, fdflags & 0x1f, nil]
   end
   @memory.iws(opened_fd_ptr, @next_fd)
   @next_fd += 1

@@ -1,7 +1,7 @@
 # WASI p1 rights bits and the per-filetype masks used to grant and enforce capabilities.
 # Kept in its own unit so every rights-aware syscall can require it without pulling extra filesystem code.
 # The `@fd_meta` map
-# (fd => [base, inheriting, fdflags]) that these operate on is seeded in wasi/_class.
+# (fd => [base, inheriting, fdflags, filetype]) that these operate on is seeded in wasi/_class.
 RIGHT_FD_DATASYNC = 1 << 0
 RIGHT_FD_READ = 1 << 1
 RIGHT_FD_SEEK = 1 << 2
