@@ -329,18 +329,12 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
 
 const CONVERTED_WASM3_SQLITE_REASON: &str = "excluded on cost, not capability: the converted wasm3 runs this program correctly (stdout matching the oracle) at 160 s per run on wasm3-ruby-yjit, the fastest of the four wasm3-* runners, so one warmup plus the timed repetitions across both query cases and all four runners would add hours to the suite";
 
-/// wardite loads the module and handles a bare `.quit`, but any actual query dies.
 const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
 
-/// Cost, not capability: pywasm runs this correctly (byte-identical under `-batch`) at ~17.9 ms/row, so 100k rows is ~half an hour per sample.
-/// The row count cannot be lowered to meet it: below ~20k rows wasmtime's side is all process startup and the baseline dissolves.
 const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";
 
-/// Cost, not capability: dewasm-perl runs this correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), measured in the 2026-08-21 full record.
-/// One warmup plus the timed repetitions across both query cases alone cost roughly 19 of the suite's roughly 65 minutes.
 const DEWASM_PERL_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks";
 
-/// Cost, not capability: dewasm-python runs this correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), measured in the 2026-08-21 full record.
 const DEWASM_PYTHON_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks";
 
 /// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
@@ -361,13 +355,8 @@ const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
 
 const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded: the converted wasm3's meta-WASI layer does not provide fd_tell either, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\"), measured through the converted interpreter";
 
-/// Extrapolated linearly from two prefix sizes (20000 and 50000 bytes) of the same generated text, both close enough to the per-byte rate that the fit is not just two points hiding curvature.
-/// At 4 runs per cell (one warmup plus the default 3 reps) that is roughly 48 minutes on this workload alone, which is why the input size is fixed for wasmtime rather than calibrated down to fit bash: the doc comment on [`minigzip_input`] gives the reason it must stay put.
 const BASH_MINIGZIP_REASON: &str = "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run";
 
-/// Extrapolated the same way as [`BASH_MINIGZIP_REASON`], from prefixes of 5000 and 20000 bytes.
-/// pypy runs the same driver roughly 6.6x faster (measured 84 s on the full 1.2 MB input, byte-identical to wasmtime), which is why only the CPython interpreter is excluded here.
 const PYWASM_MINIGZIP_REASON: &str = "excluded on cost, not capability: pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run";
 
-/// wardite runs the compression correctly (byte-identical to wasmtime, verified on small inputs) but the driver crashes on exit: minigzip closes stdout at the end of the run, wardite's `fd_close` closes the underlying host fd along with it, and the driver's own trailing `$stdout.flush` then raises `IOError: closed stream`, so the process exits 1 and the harness's success check fails every run.
 const WARDITE_MINIGZIP_REASON: &str = "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1";
