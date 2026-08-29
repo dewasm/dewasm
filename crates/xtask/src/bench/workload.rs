@@ -61,11 +61,17 @@ const EH_EXCLUDES: &[(&str, &str)] = &[
         "wasm3",
         "excluded: wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
     ),
+    ("wasm3-ruby", CONVERTED_WASM3_EH_REASON),
+    ("wasm3-ruby-yjit", CONVERTED_WASM3_EH_REASON),
+    ("wasm3-python", CONVERTED_WASM3_EH_REASON),
+    ("wasm3-pypy", CONVERTED_WASM3_EH_REASON),
     ("pywasm-cpython", PYWASM_EH_REASON),
     ("pywasm-pypy", PYWASM_EH_REASON),
     ("wardite", WARDITE_EH_REASON),
     ("wardite-yjit", WARDITE_EH_REASON),
 ];
+
+const CONVERTED_WASM3_EH_REASON: &str = "excluded: the converted wasm3 0.5.0 fails to load it like the native one, \"out of order Wasm section\" (the tag section is unknown to it), measured through the converted interpreter";
 
 const PYWASM_EH_REASON: &str = "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)";
 
@@ -315,7 +321,14 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
     ("wardite-yjit", WARDITE_SQLITE_REASON),
     ("dewasm-perl", DEWASM_PERL_SQLITE_REASON),
     ("dewasm-python", DEWASM_PYTHON_SQLITE_REASON),
+    ("wasm3-ruby", CONVERTED_WASM3_SQLITE_REASON),
+    ("wasm3-ruby-yjit", CONVERTED_WASM3_SQLITE_REASON),
+    ("wasm3-python", CONVERTED_WASM3_SQLITE_REASON),
+    ("wasm3-pypy", CONVERTED_WASM3_SQLITE_REASON),
 ];
+
+/// Cost, not capability: measured 2026-08-29 on `sqlite3-shell.wasm` with the fastest of the four converted-wasm3 runners; the other three are slower than wasm3-ruby-yjit on every microbenchmark (plain ruby by ~2.4x, cpython by ~7x on `wat/i32_alu`), so their cells only get worse.
+const CONVERTED_WASM3_SQLITE_REASON: &str = "excluded on cost, not capability: the converted wasm3 runs this program correctly (stdout matching the oracle) at 160 s per run on wasm3-ruby-yjit, the fastest of the four wasm3-* runners, so one warmup plus the timed repetitions across both query cases and all four runners would add hours to the suite";
 
 /// wardite loads the module and handles a bare `.quit`, but any actual query dies.
 const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
@@ -338,10 +351,17 @@ const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
         "wasm3",
         "excluded: wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")",
     ),
+    ("wasm3-ruby", CONVERTED_WASM3_MINIGZIP_REASON),
+    ("wasm3-ruby-yjit", CONVERTED_WASM3_MINIGZIP_REASON),
+    ("wasm3-python", CONVERTED_WASM3_MINIGZIP_REASON),
+    ("wasm3-pypy", CONVERTED_WASM3_MINIGZIP_REASON),
     ("pywasm-cpython", PYWASM_MINIGZIP_REASON),
     ("wardite", WARDITE_MINIGZIP_REASON),
     ("wardite-yjit", WARDITE_MINIGZIP_REASON),
 ];
+
+/// The same fd_tell gap as the native wasm3 entry above: the meta-WASI layer serves its guest only the functions it implements, and fd_tell is not among them, measured through the converted interpreter on Ruby.
+const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded: the converted wasm3's meta-WASI layer does not provide fd_tell either, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\"), measured through the converted interpreter";
 
 /// Extrapolated linearly from two prefix sizes (20000 and 50000 bytes) of the same generated text, both close enough to the per-byte rate that the fit is not just two points hiding curvature.
 /// At 4 runs per cell (one warmup plus the default 3 reps) that is roughly 48 minutes on this workload alone, which is why the input size is fixed for wasmtime rather than calibrated down to fit bash: the doc comment on [`minigzip_input`] gives the reason it must stay put.

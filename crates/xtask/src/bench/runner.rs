@@ -1,6 +1,6 @@
 //! The runner matrix: every execution environment a workload is measured on, how to tell whether it is usable on this host, and how to turn a `.wasm` into something runnable on it.
 //!
-//! Four families:
+//! Five families:
 //!
 //! * **wasmtime**: the AOT ceiling and the correctness reference.
 //! * **native runtimes** (wasmer, wasmedge, wazero, wasm3): consume the `.wasm` directly; [`Native`] holds the per-runtime command-line spelling.
@@ -8,6 +8,8 @@
 //! * **dewasm-\***: generated source on the host language.
 //!   Codegen goes through the [`Backend`] trait, never the CLI binary.
 //!   Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`).
+//! * **wasm3-\***: the meta-WASI wasm3 build from the app cache, converted to host-language source by a dewasm backend, interpreting the workload module at run time.
+//!   The runtime-loading counterpart the pure-source interpreters below are compared against.
 //! * **pywasm / wardite**: third-party interpreters, driven via `benchmarks/drivers/`, provisioned by `benchmarks/setup.sh`.
 //!
 //! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it (the harness keeps going, the gap is named in both outputs).
@@ -22,7 +24,7 @@ use std::sync::OnceLock;
 use anyhow::{bail, Context, Result};
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 
-use crate::bench::{bench_cache_dir, display_path, drivers_dir};
+use crate::bench::{apps_cache_dir, bench_cache_dir, display_path, drivers_dir};
 
 /// A launchable recipe: `program args... <workload args...>`, with `env` overlaid on the inherited environment.
 #[derive(Clone)]
@@ -111,6 +113,9 @@ pub enum Kind {
     Wasmtime,
     Native(Native),
     Dewasm(Target),
+    /// A wasm interpreter (the meta-WASI wasm3 from the app cache), itself converted standalone by the [`Target`]'s backend, interpreting the workload module.
+    /// The launch preopens the workload's directory and passes the module's guest path through, so the workload contract holds unchanged one interpretation layer down.
+    ConvertedInterpreter(Target),
     Driver(Driver),
 }
 
@@ -137,6 +142,16 @@ pub fn runners() -> Vec<Runner> {
         r("dewasm-go", Kind::Dewasm(Target::Go)),
         r("dewasm-java", Kind::Dewasm(Target::Java)),
         r("dewasm-bash", Kind::Dewasm(Target::Bash)),
+        r(
+            "wasm3-ruby",
+            Kind::ConvertedInterpreter(Target::Ruby("--disable-yjit")),
+        ),
+        r(
+            "wasm3-ruby-yjit",
+            Kind::ConvertedInterpreter(Target::Ruby("--yjit")),
+        ),
+        r("wasm3-python", Kind::ConvertedInterpreter(Target::Python)),
+        r("wasm3-pypy", Kind::ConvertedInterpreter(Target::PyPy)),
         r("pywasm-cpython", Kind::Driver(Driver::PywasmCPython)),
         r("pywasm-pypy", Kind::Driver(Driver::PywasmPyPy)),
         r("wardite", Kind::Driver(Driver::Wardite("--disable-yjit"))),
@@ -160,6 +175,12 @@ impl Runner {
                 )
             }),
             Kind::Dewasm(target) => target.availability(),
+            Kind::ConvertedInterpreter(target) => {
+                target.availability()?;
+                converted_wasm3().map(|_| ()).ok_or_else(|| {
+                    "examples/apps/cache/wasm3.wasm missing: run examples/apps/setup.sh".to_string()
+                })
+            }
             Kind::Driver(driver) => driver.availability(),
         }
     }
@@ -171,7 +192,7 @@ impl Runner {
         match &self.kind {
             Kind::Wasmtime => wasmtime_bin(),
             Kind::Native(native) => native.bin_path(),
-            Kind::Dewasm(_) | Kind::Driver(_) => None,
+            Kind::Dewasm(_) | Kind::ConvertedInterpreter(_) | Kind::Driver(_) => None,
         }
     }
 
@@ -181,6 +202,7 @@ impl Runner {
             Kind::Wasmtime => capture_version(&wasmtime_bin()?, &["--version"]),
             Kind::Native(native) => capture_version(&native.bin_path()?, native.version_args),
             Kind::Dewasm(target) => target.version(),
+            Kind::ConvertedInterpreter(target) => converted_interpreter_version(*target),
             Kind::Driver(driver) => driver.version(),
         }
     }
@@ -410,6 +432,7 @@ impl Workshop {
             }),
             Kind::Native(native) => native.launch(wasm),
             Kind::Dewasm(target) => self.dewasm_launch(*target, wasm),
+            Kind::ConvertedInterpreter(target) => self.converted_interpreter_launch(*target, wasm),
             Kind::Driver(driver) => driver_launch(*driver, wasm),
         }
     }
@@ -417,56 +440,94 @@ impl Workshop {
     fn dewasm_launch(&mut self, target: Target, wasm: &Path) -> Result<Launch> {
         let bytes =
             std::fs::read(wasm).with_context(|| format!("failed to read {}", wasm.display()))?;
-        let backend = target.backend();
-        let key = (hash_bytes(&bytes), backend.name());
-        let artifact = match self.artifacts.get(&key) {
+        let artifact = self.artifact_for(target, &bytes)?;
+        host_launch(target, artifact)
+    }
+
+    /// The converted wasm3 on `target`'s host, told to run `wasm`: the interpreter artifact's launch plus `--dir <wasm's dir>::/work` and the module's guest path, so the caller-appended guest arguments reach the module one interpretation layer down.
+    /// The Ruby hosts get `RUBY_THREAD_VM_STACK_SIZE` raised: wasm3's dispatch nests one host call per guest opcode until a loop or return unwinds it, deeper than the default VM stack for guests with a deep startup, and Ruby cannot raise that stack after boot.
+    fn converted_interpreter_launch(&mut self, target: Target, wasm: &Path) -> Result<Launch> {
+        let interpreter = converted_wasm3()
+            .context("examples/apps/cache/wasm3.wasm missing: run examples/apps/setup.sh")?;
+        let bytes = std::fs::read(&interpreter)
+            .with_context(|| format!("failed to read {}", interpreter.display()))?;
+        let artifact = self.artifact_for(target, &bytes)?;
+        let mut launch = host_launch(target, artifact)?;
+        if let Target::Ruby(_) = target {
+            launch.env.push((
+                "RUBY_THREAD_VM_STACK_SIZE".to_string(),
+                (64 << 20).to_string(),
+            ));
+        }
+        let dir = wasm
+            .parent()
+            .with_context(|| format!("{} has no parent directory", wasm.display()))?;
+        let base = wasm
+            .file_name()
+            .with_context(|| format!("{} has no file name", wasm.display()))?
+            .to_string_lossy()
+            .into_owned();
+        launch.args.push("--dir".to_string());
+        launch.args.push(format!("{}::/work", path_arg(dir)));
+        launch.args.push(format!("/work/{base}"));
+        Ok(launch)
+    }
+
+    /// The runnable artifact for `bytes` under `target`'s backend, through both cache levels.
+    fn artifact_for(&mut self, target: Target, bytes: &[u8]) -> Result<Artifact> {
+        let key = (hash_bytes(bytes), target.backend().name());
+        Ok(match self.artifacts.get(&key) {
             Some(cached) => cached.clone(),
             None => {
-                let built = build_artifact(target, &bytes)?;
+                let built = build_artifact(target, bytes)?;
                 self.artifacts.insert(key, built.clone());
                 built
             }
-        };
-        Ok(match (target, artifact) {
-            (Target::Ruby(flag), Artifact::Script(path)) => Launch {
-                program: dewasm_backend_ruby::find_ruby().context("ruby not found")?,
-                args: vec![flag.to_string(), path_arg(&path)],
-                env: Vec::new(),
-            },
-            (Target::Python, Artifact::Script(path)) => Launch {
-                program: dewasm_backend_python::find_python().context("python3 not found")?,
-                args: vec![path_arg(&path)],
-                env: Vec::new(),
-            },
-            (Target::PyPy, Artifact::Script(path)) => Launch {
-                program: pypy_bin().context("pypy3 not found")?,
-                args: vec![path_arg(&path)],
-                env: Vec::new(),
-            },
-            (Target::Perl, Artifact::Script(path)) => Launch {
-                program: dewasm_backend_perl::find_perl().context("perl not found")?,
-                args: vec![path_arg(&path)],
-                env: Vec::new(),
-            },
-            (Target::Bash, Artifact::Script(path)) => Launch {
-                program: dewasm_backend_bash::find_bash5().context("bash >= 5 not found")?,
-                args: vec![path_arg(&path)],
-                env: Vec::new(),
-            },
-            // `go run` prints "exit status N" and exits 1 instead of propagating the guest's exit code, so the built binary is executed directly (same reason the Go e2e suite does).
-            (Target::Go, Artifact::Binary(bin)) => Launch {
-                program: bin,
-                args: Vec::new(),
-                env: Vec::new(),
-            },
-            (Target::Java, Artifact::ClassDir(dir)) => Launch {
-                program: dewasm_backend_java::find_java().context("java not found")?,
-                args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
-                env: Vec::new(),
-            },
-            _ => bail!("internal: artifact kind does not match the target"),
         })
     }
+}
+
+/// How `target`'s host interpreter launches a built artifact, up to but excluding the guest's own arguments.
+fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
+    Ok(match (target, artifact) {
+        (Target::Ruby(flag), Artifact::Script(path)) => Launch {
+            program: dewasm_backend_ruby::find_ruby().context("ruby not found")?,
+            args: vec![flag.to_string(), path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::Python, Artifact::Script(path)) => Launch {
+            program: dewasm_backend_python::find_python().context("python3 not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::PyPy, Artifact::Script(path)) => Launch {
+            program: pypy_bin().context("pypy3 not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::Perl, Artifact::Script(path)) => Launch {
+            program: dewasm_backend_perl::find_perl().context("perl not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::Bash, Artifact::Script(path)) => Launch {
+            program: dewasm_backend_bash::find_bash5().context("bash >= 5 not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        // `go run` prints "exit status N" and exits 1 instead of propagating the guest's exit code, so the built binary is executed directly (same reason the Go e2e suite does).
+        (Target::Go, Artifact::Binary(bin)) => Launch {
+            program: bin,
+            args: Vec::new(),
+            env: Vec::new(),
+        },
+        (Target::Java, Artifact::ClassDir(dir)) => Launch {
+            program: dewasm_backend_java::find_java().context("java not found")?,
+            args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
+            env: Vec::new(),
+        },
+        _ => bail!("internal: artifact kind does not match the target"),
+    })
 }
 
 /// Convert `bytes` with `target`'s backend and get it into runnable shape, reusing the content-addressed `/tmp` cache when a previous run already produced it.
@@ -636,6 +697,25 @@ fn venv_python() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+/// The wasm3 interpreter binary the converted-interpreter runners convert, when the app cache has it.
+fn converted_wasm3() -> Option<PathBuf> {
+    let path = apps_cache_dir().join("wasm3.wasm");
+    path.is_file().then_some(path)
+}
+
+/// The converted interpreter's version, captured by running the converted artifact's own `--version`, so it records what actually ran rather than what was pinned.
+fn converted_interpreter_version(target: Target) -> Option<String> {
+    let bytes = std::fs::read(converted_wasm3()?).ok()?;
+    let launch = host_launch(target, build_artifact(target, &bytes).ok()?).ok()?;
+    let out = Command::new(&launch.program)
+        .args(&launch.args)
+        .arg("--version")
+        .envs(launch.env)
+        .output()
+        .ok()?;
+    first_line(&out)
+}
+
 /// The `GEM_HOME` under `benchmarks/cache/` that holds wardite.
 /// Found by looking for the `<gem_home>/gems/wardite-*` layout rather than by hardcoding a directory name, so the exact name `benchmarks/setup.sh` picks does not matter here.
 fn wardite_gem_home() -> Option<PathBuf> {
@@ -696,6 +776,10 @@ fn probe(program: &Path, args: &[&str]) -> bool {
 /// The first non-empty line of `program args...`, reading stdout and stderr both: `java -version` and `perl -v` each pick a different one.
 fn capture_version(program: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new(program).args(args).output().ok()?;
+    first_line(&out)
+}
+
+fn first_line(out: &std::process::Output) -> Option<String> {
     let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
     text.push('\n');
     text.push_str(&String::from_utf8_lossy(&out.stderr));
