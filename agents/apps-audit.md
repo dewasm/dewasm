@@ -31,7 +31,7 @@ The same verdict covers an app with no artifact to run the audit tool on at all:
 | Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes wasm-ld, prebuilts broken) | ⛔ deferred |
 | PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
 | toywasm 76.0.0 | pinned in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
-| wasm3 0.5.0 | pinned-source zig build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **executes on every backend**¹⁶) |
+| wasm3 0.9.0 | pinned-source zig build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **executes on every backend**¹⁶) |
 
 ¹ **Reference-types encoding tolerance.**
 LLVM-based toolchains (clang/wasi-sdk, zig, rustc) emit `call_indirect` type/table-index immediates as padded, overlong LEBs when the `reference-types` target feature is enabled, the default since LLVM 19.
@@ -156,21 +156,21 @@ That indirect ground truth is the only one available.
 wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with EBADF (it accepts the call on regular files only), and toywasm's WASI setup treats the failure as fatal, so the pinned binary does not run under wasmtime at all; dewasm's runtimes accept the call on any open fd and record the flags, which is why the converted interpreter runs.
 The case therefore has no wasmtime freshness run and adds no snapshot file.
 
-¹⁶ **wasm3 (audited 2026-08-29, deferral retracted).**
-An earlier entry deferred wasm3 on evidence measured against its master branch, whose whole dispatch is `M3_MUSTTAIL return nextOpImpl()`: the stock build demands the tail-call proposal, and a `-DM3_HAS_TAIL_CALL=0` build grows the C stack once per *executed* opcode until it dies (issue #101 records both).
-The pinned v0.5.0 release (2021-06, the last upstream release) predates that dispatch entirely, so neither finding applies: `zig cc -target wasm32-wasi` builds it unchanged, and its loop and return opcodes unwind the dispatch chain, so a flat guest loop runs in bounded stack.
-Measured: a 64 KiB stack build ran one million `wat/i32_alu` iterations (15M+ guest opcodes) byte-identical to wasmtime.
+¹⁶ **wasm3 (audited 2026-08-29, deferral retracted; re-pinned to v0.9.0 the same day).**
+An earlier entry deferred wasm3 on evidence measured against its 2026-08 master snapshot, whose whole dispatch is `M3_MUSTTAIL return nextOpImpl()`: the stock build demands the tail-call proposal, and its `-DM3_HAS_TAIL_CALL=0` escape was measured growing the C stack once per *executed* opcode (issue #101 records both).
+The promotion first landed on v0.5.0 (2021-06), which predates that dispatch; upstream then resumed releases with v0.9.0 (2026-08-24) and the pin moved there.
 
-Upstream ships no wasm32-wasi artifact, so `scripts/wasm3.sh` builds the pinned source tarball in the meta-WASI configuration (`-Dd_m3HasMetaWASI`), which forwards the guest's WASI calls straight to the outer host: exactly the shape a converted interpreter needs.
-Two mechanical fixes against the current wasi-libc ride along as `src/wasm3-meta-wasi-compat.patch` (its header states what it changes and why).
-Audit: pure baseline after the `wasm-opt` pass¹¹, with a 28-function WASI import list.
+v0.9.0 keeps the musttail dispatch by default: the official `wasm3-wasi.wasm` release asset audits as needing tail-call and reference-types, outside the accepted input, so `scripts/wasm3.sh` builds the pinned source tarball with `-DM3_HAS_TAIL_CALL=0` in the meta-WASI configuration (`-Dd_m3HasMetaWASI`), which forwards the guest's WASI calls straight to the outer host: exactly the shape a converted interpreter needs.
+The old per-opcode stack growth does not reproduce on that build: dispatch frames unwind at loops and returns, and one million `wat/i32_alu` iterations (15M+ guest opcodes) complete byte-identical to wasmtime both under wasmtime itself and under the Ruby conversion, the same bounded behavior v0.5.0 showed.
+The wasi-libc compatibility fixes the v0.5.0 build carried as a patch are upstream in v0.9.0, so nothing is patched, and its meta-WASI layer serves 38 WASI functions where v0.5.0 served 28 (fd_tell among the additions: minigzip round-trips through it, measured).
+Conversion cost and speed are at parity with the v0.5.0 build (about 3.5 us per `wat/i32_alu` iteration on ruby+yjit against v0.5.0's 3.6).
+Audit: pure baseline after the `wasm-opt` pass¹¹.
 
 The case (`WASM3_COWSAY`, `wasm3_cowsay_e2e!`) mirrors `TOYWASM_COWSAY`¹⁵: the converted interpreter runs the cached `cowsay.wasm` out of the app cache preopened at `/apps`, against the `cowsay_args` snapshot.
 Two differences from toywasm: wasm3's CLI takes the guest module directly (no `--wasi` flag; the meta-WASI build always wires the guest's WASI), and the artifact runs under wasmtime, so the `fs_apps` freshness run cross-checks the case against a live engine, the ground truth the toywasm case cannot have.
 
 What remains of the old finding, shrunk: the dispatch nests one host-language call per guest opcode until a loop or return unwinds it, so a guest whose startup runs deep (cowsay) exceeds Ruby's default VM stack and CPython's default recursion limit.
 Each affected glue self-serves the raise, the same pattern as the CPython-on-Bash glue's `ulimit -s`⁵: the Ruby glue re-execs itself once with `RUBY_THREAD_VM_STACK_SIZE` raised (Ruby cannot grow that stack after boot), the Python glue raises `sys.setrecursionlimit`; Perl, Go, and Java need nothing.
-One more measured sharp edge: v0.5.0's parser rejects the DWARF fixture's overlong LEB encodings ("LEB encoded value overflow"), so a guest handed to it should be a wasm-opt-normalized or release binary (cowsay is).
 
 Why a second interpreter next to toywasm¹⁵: wasm3 natively interprets roughly 6x slower than wasmtime where toywasm sits near 300x, which makes converted wasm3 the carrier that keeps a converted interpreter competitive with the wasm interpreters hand-written in the target languages (wardite, pywasm); the speed benchmark suite measures that comparison.
 

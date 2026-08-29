@@ -2,29 +2,27 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# wasm3: a WebAssembly interpreter written in C, built from the pinned v0.5.0 source release with zig.
-# Upstream ships no wasm32-wasi artifact, so it is compiled locally in the meta-WASI configuration (-Dd_m3HasMetaWASI), which forwards the guest's WASI calls to the outer host: the shape a converted interpreter needs.
-# v0.5.0 predates the musttail dispatch that makes current wasm3 master need the tail-call proposal, so this build audits as baseline wasm and interprets with a bounded C stack.
-# src/wasm3-meta-wasi-compat.patch carries the two wasi-libc compatibility fixes; its header states what it changes and why.
+# wasm3: a WebAssembly interpreter written in C, built from the pinned v0.9.0 source release with zig.
+# The official wasm3-wasi.wasm release asset needs the tail-call proposal (the default dispatch is a musttail chain), which is outside the accepted input, so it is compiled locally with that dispatch off; the build then audits as baseline wasm.
+# The meta-WASI configuration (-Dd_m3HasMetaWASI) forwards the guest's WASI calls to the outer host: the shape a converted interpreter needs.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-WASM3_URL="https://github.com/wasm3/wasm3/archive/refs/tags/v0.5.0.tar.gz"
-WASM3_SHA256="b778dd72ee2251f4fe9e2666ee3fe1c26f06f517c3ffce572416db067546536c"
-WASM3_DIR="wasm3-0.5.0"
-WASM3_COMPAT_PATCH="src/wasm3-meta-wasi-compat.patch"
+WASM3_URL="https://github.com/wasm3/wasm3/archive/refs/tags/v0.9.0.tar.gz"
+WASM3_SHA256="cab79ce74bcac25bbf80b5ebe14af9795b9bac30b05ee8f620a3bc8002f3b8e6"
+WASM3_DIR="wasm3-0.9.0"
 # The interpreter core plus the libc/meta-WASI/tracer API layers and the CLI main.
 # The other two WASI variants (m3_api_wasi.c, m3_api_uvwasi.c) stay out: their defines are off anyway, and excluding them keeps the build's WASI surface unambiguous.
 WASM3_SRCS=(
   source/m3_api_libc.c source/m3_api_meta_wasi.c source/m3_api_tracer.c
   source/m3_bind.c source/m3_code.c source/m3_compile.c source/m3_core.c
-  source/m3_emit.c source/m3_env.c source/m3_exec.c source/m3_function.c
-  source/m3_info.c source/m3_module.c source/m3_parse.c
+  source/m3_env.c source/m3_exec.c source/m3_function.c
+  source/m3_info.c source/m3_module.c source/m3_parse.c source/m3_validate.c
   platforms/app/main.c
 )
 
 wasm3_stamp="cache/wasm3.src-sha256"
-wasm3_key="$(printf '%s compat:%s wasm-opt:%s' "$WASM3_SHA256" "$(shasum -a 256 "$WASM3_COMPAT_PATCH" | cut -d' ' -f1)" "$(wasm_opt_version)")"
+wasm3_key="$(printf '%s wasm-opt:%s' "$WASM3_SHA256" "$(wasm_opt_version)")"
 if is_cached "$wasm3_stamp" "$wasm3_key" cache/wasm3.wasm; then
   echo "wasm3: cached"
   exit 0
@@ -37,16 +35,19 @@ echo "wasm3: fetching $WASM3_URL"
 new_tmpdir
 fetch_verified "$WASM3_URL" "$WASM3_SHA256" "$tmp/wasm3.tar.gz"
 tar xzf "$tmp/wasm3.tar.gz" -C "$tmp"
-patch -s -p1 -F 0 -d "$tmp/$WASM3_DIR" -i "$PWD/$WASM3_COMPAT_PATCH" || {
-  echo "wasm3: $WASM3_COMPAT_PATCH does not apply to the pinned source; regenerate it" >&2
-  exit 1
-}
 echo "wasm3: building wasm3.wasm (zig cc)"
 srcs=()
 for s in "${WASM3_SRCS[@]}"; do srcs+=("$tmp/$WASM3_DIR/$s"); done
 # Flag notes:
-# -w              2021-era third-party C under a current clang; the pointer-sign
-# and deprecation warnings it trips are upstream's, not ours.
+# -DM3_HAS_TAIL_CALL=0
+# the default dispatch is `M3_MUSTTAIL return nextOpImpl()`, which
+# wasm32 can only compile with the tail-call proposal; with the knob
+# off the chain compiles to plain calls whose frames unwind at loops
+# and returns, so flat guest loops interpret in bounded stack
+# (measured: one million wat/i32_alu iterations complete under
+# wasmtime's default stack limits).
+# -w              keep upstream's warnings out of the build output;
+# they are third-party C's, not ours.
 # -mno-*          keep the output inside the suite's baseline feature set (see
 # benchmarks/c/build.sh for the per-flag reasons).
 # -fomit-frame-pointer -fno-stack-protector
@@ -55,7 +56,7 @@ for s in "${WASM3_SRCS[@]}"; do srcs+=("$tmp/$WASM3_DIR/$s"); done
 # recurse on it, so keep upstream's headroom.
 # --strip-debug   drops the DWARF wasm-opt cannot parse.
 zig_cc_wasi -O3 \
-  -Dd_m3HasMetaWASI \
+  -Dd_m3HasMetaWASI -DM3_HAS_TAIL_CALL=0 \
   -I "$tmp/$WASM3_DIR/source" -w \
   -mno-bulk-memory -mno-bulk-memory-opt -mno-nontrapping-fptoint -mno-multivalue -mno-reference-types \
   -fomit-frame-pointer -fno-stack-protector \

@@ -228,7 +228,7 @@ pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
     }],
 };
 
-/// wasm3 (a second WebAssembly interpreter written in C, the meta-WASI build of the pinned v0.5.0 source) interpreting the cached `cowsay.wasm` out of the app cache, preopened at `/apps`.
+/// wasm3 (a second WebAssembly interpreter written in C, the meta-WASI build of the pinned source) interpreting the cached `cowsay.wasm` out of the app cache, preopened at `/apps`.
 /// Same shape as [`TOYWASM_COWSAY`], with two differences: wasm3's CLI takes the guest module directly (no `--wasi` flag; the meta-WASI build always forwards the guest's WASI to the outer host), and the artifact runs under wasmtime, so the `fs_apps` freshness run covers this case against a live engine where toywasm's ground truth is indirect.
 pub const WASM3_COWSAY: FsAppCase = FsAppCase {
     name: "wasm3_cowsay",
