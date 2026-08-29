@@ -6,7 +6,7 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ## Running
 
 ```console
-$ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...) and the wasm3 build the wasm3-* runners convert
+$ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
 $ cargo xtask record-speed           # the full matrix, roughly 30 minutes
 $ cargo xtask render-speed           # results.md and its charts, from that record

@@ -327,7 +327,6 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
     ("wasm3-pypy", CONVERTED_WASM3_SQLITE_REASON),
 ];
 
-/// Cost, not capability: measured 2026-08-29 on `sqlite3-shell.wasm` with the fastest of the four converted-wasm3 runners; the other three are slower than wasm3-ruby-yjit on every microbenchmark (plain ruby by ~2.4x, cpython by ~7x on `wat/i32_alu`), so their cells only get worse.
 const CONVERTED_WASM3_SQLITE_REASON: &str = "excluded on cost, not capability: the converted wasm3 runs this program correctly (stdout matching the oracle) at 160 s per run on wasm3-ruby-yjit, the fastest of the four wasm3-* runners, so one warmup plus the timed repetitions across both query cases and all four runners would add hours to the suite";
 
 /// wardite loads the module and handles a bare `.quit`, but any actual query dies.
@@ -360,7 +359,6 @@ const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
     ("wardite-yjit", WARDITE_MINIGZIP_REASON),
 ];
 
-/// The same fd_tell gap as the native wasm3 entry above: the meta-WASI layer serves its guest only the functions it implements, and fd_tell is not among them, measured through the converted interpreter on Ruby.
 const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded: the converted wasm3's meta-WASI layer does not provide fd_tell either, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\"), measured through the converted interpreter";
 
 /// Extrapolated linearly from two prefix sizes (20000 and 50000 bytes) of the same generated text, both close enough to the per-byte rate that the fit is not just two points hiding curvature.
