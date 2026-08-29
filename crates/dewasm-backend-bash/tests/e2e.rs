@@ -274,7 +274,9 @@ exit 0
 "#;
 
 /// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-const BASH_WASM3_GLUE: &str = r#"WASI_ARGS=(wasm3 /apps/cowsay.wasm Hello from 'dewasm!')
+/// Raises the stack rlimit for the same reason [`BASH_CPYTHON_GLUE`] does: wasm3's dispatch nests one native bash call per executed guest opcode until a loop or return unwinds it, deep enough to exhaust the default process stack.
+const BASH_WASM3_GLUE: &str = r#"ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -Hs)" 2>/dev/null || true
+WASI_ARGS=(wasm3 /apps/cowsay.wasm Hello from 'dewasm!')
 WASI_ENV=()
 WASI_DIRS=('{cache}::/apps')
 wasm3_init || { echo "init failed" >&2; exit 1; }
