@@ -366,6 +366,21 @@ const GO_TOYWASM_GLUE: &str = r#"func RunTest() {
 }
 "#;
 
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+const GO_WASM3_GLUE: &str = r#"func RunTest() {
+	inst := NewWasm3(nil, []string{"wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, nil, map[string]string{"/apps": "{cache}"})
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(*rtExit); ok {
+				return
+			}
+			panic(r)
+		}
+	}()
+	inst.Exports["_start"].(func())()
+}
+"#;
+
 const GO_CPYTHON_GLUE: &str = r#"func RunTest() {
 	inst := NewCpython(nil, []string{"python", "-c", "print('hello from cpython', 6 * 7)"}, []string{"PYTHONHOME=/", "PYTHONPATH=/lib/python3.14"}, map[string]string{"/lib": "{cache}/cpython-lib/lib"})
 	defer func() {
@@ -926,6 +941,8 @@ dewasm_test_helper::cruby_hello_e2e!(Go, GO_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Go, ultra);
 // Slow, like the other filesystem app cases: measured 7.6 s including the `go build` (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Go, GO_TOYWASM_GLUE);
+// Slow for the same reason as the toywasm case above.
+dewasm_test_helper::wasm3_cowsay_e2e!(Go, GO_WASM3_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Go);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Go, GO_LIBSQLITE3_MEM, ultra);

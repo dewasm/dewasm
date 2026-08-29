@@ -230,6 +230,19 @@ rescue Toywasm::Rt::Exit
 end
 "#;
 
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+/// wasm3's continuation-passing dispatch nests one Ruby call per guest opcode until a loop or return unwinds it, and cowsay's startup runs deeper than the default VM stack; Ruby cannot raise that stack after boot, so the glue re-execs itself once with it raised (the Ruby analog of the `ulimit -s` the CPython-on-Bash glue needs).
+const RUBY_WASM3_GLUE: &str = r#"if ENV["RUBY_THREAD_VM_STACK_SIZE"].to_i < 64 * 1024 * 1024
+  require "rbconfig"
+  exec({ "RUBY_THREAD_VM_STACK_SIZE" => (64 * 1024 * 1024).to_s }, RbConfig.ruby, __FILE__, *ARGV)
+end
+inst = Wasm3.new({}, args: ["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env: {}, preopens: {"/apps" => "{cache}"})
+begin
+  inst.invoke("_start")
+rescue Wasm3::Rt::Exit
+end
+"#;
+
 // C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory.
 // No wasmtime snapshot (the results live in guest memory), so each drive's output is pinned in the shared case const.
 // Only the file-backed case uses {scratch}.
@@ -612,6 +625,8 @@ dewasm_test_helper::cruby_hello_e2e!(Ruby, RUBY_CRUBY_GLUE);
 dewasm_test_helper::cruby_packed_hello_e2e!(Ruby);
 // Slow, like the other filesystem app cases: measured 1.7 s (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Ruby, RUBY_TOYWASM_GLUE);
+// Slow for the same reason as the toywasm case above.
+dewasm_test_helper::wasm3_cowsay_e2e!(Ruby, RUBY_WASM3_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Ruby);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Ruby, RUBY_LIBSQLITE3_MEM);

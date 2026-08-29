@@ -113,6 +113,12 @@ const MANIFEST: &[AppConvert] = &[
         requires: None,
     },
     AppConvert {
+        stem: "wasm3",
+        mode: Mode::Standalone,
+        heavy: false,
+        requires: None,
+    },
+    AppConvert {
         stem: "doom",
         mode: Mode::Library,
         heavy: false,

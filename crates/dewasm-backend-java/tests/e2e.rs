@@ -340,6 +340,18 @@ const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
 }
 "#;
 
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+const JAVA_WASM3_GLUE: &str = r#"public class Main {
+    public static void main(String[] a) throws Exception {
+        Wasm3 inst = new Wasm3(null, new String[]{"wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
+        try {
+            ((Wasm3.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Wasm3.Rt.Exit e) {
+        }
+    }
+}
+"#;
+
 /// The interpreter stdlib trees mount straight from the app cache ({cache}), never copied.
 const JAVA_CPYTHON_HELLO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -891,6 +903,8 @@ dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
 // Slow, like the other filesystem app cases: measured 7.6 s including `javac` (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Java, JAVA_TOYWASM_GLUE);
+// Slow for the same reason as the toywasm case above.
+dewasm_test_helper::wasm3_cowsay_e2e!(Java, JAVA_WASM3_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
