@@ -1,6 +1,6 @@
 # Decision 86: wasm3 as the Converted-Interpreter Benchmark Runner
 
-Status: **Accepted, 2026-08-29.** The speed suite carries four `wasm3-*` runners (`Kind::ConvertedInterpreter` in [`crates/xtask/src/bench/runner.rs`](../../crates/xtask/src/bench/runner.rs)): the meta-WASI wasm3 v0.5.0 build from the app cache, converted standalone by the Ruby and Python backends, interpreting each workload on ruby, ruby+yjit, cpython, and pypy.
+Status: **Accepted, 2026-08-29.** The speed suite carries four `wasm3-*` runners (`Kind::ConvertedInterpreter` in [`crates/xtask/src/bench/runner.rs`](../../crates/xtask/src/bench/runner.rs)): the meta-WASI wasm3 build from the app cache (pinned v0.9.0), converted standalone by the Ruby and Python backends, interpreting each workload on ruby, ruby+yjit, cpython, and pypy.
 
 ## Context
 
@@ -10,7 +10,7 @@ A wasm interpreter that is itself dewasm output closes the category gap: it also
 
 ## Decision
 
-The interpreter the suite converts is wasm3 v0.5.0, and the criterion is the interpreter's own native speed: conversion multiplies the interpreter's cost by a roughly constant factor (about 270x on ruby+yjit for interpreter-shaped code, measured 2026-08-29), so only an interpreter that is fast natively keeps the converted stack ahead of the hand-written interpreters.
+The interpreter the suite converts is wasm3 (pinned v0.9.0; the comparative measurements below were taken on the v0.5.0 build, with the v0.9.0 build measured at parity the same day), and the criterion is the interpreter's own native speed: conversion multiplies the interpreter's cost by a roughly constant factor (about 270x on ruby+yjit for interpreter-shaped code, measured 2026-08-29), so only an interpreter that is fast natively keeps the converted stack ahead of the hand-written interpreters.
 wasm3 interprets at roughly 6x wasmtime natively and the converted build won every same-language pairing against wardite and pywasm (1.3x to 3.4x on `wat/i32_alu` and `wat/mem_rw`, 2026-08-29); toywasm sits near 300x natively and the converted build lost the same pairings by 5x to 14x, measured the same day with the same harness discipline.
 
 ## Rejected alternatives

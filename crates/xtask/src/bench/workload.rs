@@ -59,7 +59,7 @@ const EH_EXCLUDES: &[(&str, &str)] = &[
     ),
     (
         "wasm3",
-        "excluded: wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
+        "excluded: wasm3 0.9.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
     ),
     ("wasm3-ruby", CONVERTED_WASM3_EH_REASON),
     ("wasm3-ruby-yjit", CONVERTED_WASM3_EH_REASON),
@@ -71,7 +71,7 @@ const EH_EXCLUDES: &[(&str, &str)] = &[
     ("wardite-yjit", WARDITE_EH_REASON),
 ];
 
-const CONVERTED_WASM3_EH_REASON: &str = "excluded: the converted wasm3 0.5.0 fails to load it like the native one, \"out of order Wasm section\" (the tag section is unknown to it), measured through the converted interpreter";
+const CONVERTED_WASM3_EH_REASON: &str = "excluded: the converted wasm3 0.9.0 fails to load it like the native one, \"out of order Wasm section\" (the tag section is unknown to it), measured through the converted interpreter";
 
 const PYWASM_EH_REASON: &str = "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)";
 
@@ -340,12 +340,7 @@ const DEWASM_PYTHON_SQLITE_REASON: &str = "excluded on cost, not capability: dew
 /// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
 const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
     ("dewasm-bash", BASH_MINIGZIP_REASON),
-    (
-        "wasm3",
-        "excluded: wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")",
-    ),
     ("wasm3-ruby", CONVERTED_WASM3_MINIGZIP_REASON),
-    ("wasm3-ruby-yjit", CONVERTED_WASM3_MINIGZIP_REASON),
     ("wasm3-python", CONVERTED_WASM3_MINIGZIP_REASON),
     ("wasm3-pypy", CONVERTED_WASM3_MINIGZIP_REASON),
     ("pywasm-cpython", PYWASM_MINIGZIP_REASON),
@@ -353,7 +348,7 @@ const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
     ("wardite-yjit", WARDITE_MINIGZIP_REASON),
 ];
 
-const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded: the converted wasm3's meta-WASI layer does not provide fd_tell either, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\"), measured through the converted interpreter";
+const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded on cost, not capability: the converted wasm3 compresses the full 1.2 MB input correctly (byte-identical to wasmtime) but at 149 s per run on plain ruby and 301 s on pypy, both measured, and roughly 7 minutes on cpython (measured 107 s on a 300000-byte prefix); wasm3-ruby-yjit runs it at 54 s and stays measured";
 
 const BASH_MINIGZIP_REASON: &str = "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run";
 
