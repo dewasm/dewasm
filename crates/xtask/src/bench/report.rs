@@ -5,10 +5,16 @@
 //! The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
 
 use std::fmt::Write as _;
+use std::path::Path;
 
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
 use crate::bench::chart::Chart;
+
+/// The current speed-record schema.
+/// A bump means `cargo xtask migrate-records` learns the upgrade; every reader supports only this version and names that command when it meets an older record, so cross-version handling lives in the migration alone.
+pub const SCHEMA: u32 = 2;
 
 /// The full result record.
 /// `schema` exists so a later reader can tell an old drop from a new one.
@@ -66,6 +72,7 @@ pub enum Outcome {
     /// Deliberately not run (unavailable runner, unbuilt module, declared exclusion).
     /// Always reported, never silently dropped.
     Skipped {
+        kind: SkipKind,
         reason: String,
     },
     /// Attempted and broke.
@@ -73,6 +80,28 @@ pub enum Outcome {
     Failed {
         reason: String,
     },
+}
+
+/// Why a skipped cell is not measured, as a class; the reason string carries the specifics without restating the class.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipKind {
+    /// The pair runs correctly, but too slowly to keep in the suite.
+    Cost,
+    /// The runner cannot execute the workload.
+    Capability,
+    /// This host lacks the runner or the built module; the reason names the setup command.
+    Setup,
+}
+
+impl SkipKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            SkipKind::Cost => "cost",
+            SkipKind::Capability => "capability",
+            SkipKind::Setup => "setup",
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -123,6 +152,28 @@ impl Report {
         text.push('\n');
         Ok(text)
     }
+}
+
+/// Read the speed record at `path`, accepting only the current [`SCHEMA`].
+/// Every command that consumes a record loads it through here; an older record is not parsed further, it is redirected to `cargo xtask migrate-records`.
+pub fn load(path: &Path) -> anyhow::Result<Report> {
+    #[derive(Deserialize)]
+    struct SchemaProbe {
+        schema: u32,
+    }
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let probe: SchemaProbe = serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a speed record", path.display()))?;
+    anyhow::ensure!(
+        probe.schema == SCHEMA,
+        "{} has record schema {}, and this xtask reads schema {} only: run `cargo xtask migrate-records`",
+        path.display(),
+        probe.schema,
+        SCHEMA
+    );
+    serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a schema-{SCHEMA} speed record", path.display()))
 }
 
 /// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` (no front matter, plain `##` headings, markdown tables), plus the generated-file marker `docs/support.md` carries.
@@ -324,15 +375,16 @@ fn render_gaps(out: &mut String, report: &Report) {
         out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
         return;
     }
-    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\n\n");
-    out.push_str("| Workload | Runner | Reason |\n| --- | --- | --- |\n");
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap: *cost* (runs correctly, but too slowly to keep in the suite), *capability* (the runner cannot execute the workload), *setup* (this host lacks the runner or the built module).\n\n");
+    out.push_str("| Workload | Runner | Kind | Reason |\n| --- | --- | --- | --- |\n");
     for cell in skipped {
-        if let Outcome::Skipped { reason } = &cell.outcome {
+        if let Outcome::Skipped { kind, reason } = &cell.outcome {
             let _ = writeln!(
                 out,
-                "| `{}` | `{}` | {} |",
+                "| `{}` | `{}` | {} | {} |",
                 cell.workload,
                 cell.runner,
+                kind.label(),
                 md_cell(reason)
             );
         }

@@ -12,6 +12,10 @@ use crate::bench::chart::round3;
 use crate::bench::report::Host;
 use crate::size::chart::Chart;
 
+/// The current size-record schema.
+/// Bumps follow the speed record's rule: `cargo xtask migrate-records` learns the upgrade, readers support only this version.
+pub const SCHEMA: u32 = 1;
+
 /// The full size record.
 /// `schema` exists so a later reader can tell an old record from a new one.
 #[derive(Serialize, Deserialize)]
@@ -96,6 +100,28 @@ impl Report {
         text.push('\n');
         Ok(text)
     }
+}
+
+/// Read the size record at `path`, accepting only the current [`SCHEMA`]; an older record is redirected to `cargo xtask migrate-records`, where all cross-version knowledge lives.
+pub fn load(path: &std::path::Path) -> anyhow::Result<Report> {
+    use anyhow::Context as _;
+    #[derive(serde::Deserialize)]
+    struct SchemaProbe {
+        schema: u32,
+    }
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let probe: SchemaProbe = serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a size record", path.display()))?;
+    anyhow::ensure!(
+        probe.schema == SCHEMA,
+        "{} has record schema {}, and this xtask reads schema {} only: run `cargo xtask migrate-records`",
+        path.display(),
+        probe.schema,
+        SCHEMA
+    );
+    serde_json::from_str(&text)
+        .with_context(|| format!("{} is not a schema-{SCHEMA} size record", path.display()))
 }
 
 /// Render `docs/sizes/results.md`: the layout of `docs/benchmarks/results.md`: the generated-file marker, two sentences pointing at the hand-written README, then the environment and the numbers.

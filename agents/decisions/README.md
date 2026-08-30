@@ -106,6 +106,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 84 | [Round to f32 by Veltkamp Splitting, with the Pack Path as Fallback](84-f32-rounding-by-splitting.md) | Accepted |
 | 85 | [crates.io Publish Layout (Units Inside Their Crates, CLI Crate Named `dewasm`)](85-crates-io-publish-layout.md) | Accepted |
 | 86 | [wasm3 as the Converted-Interpreter Benchmark Runner](86-converted-interpreter-benchmark-runner.md) | Accepted |
+| 87 | [Record Schema Evolution by In-Place Migration](87-record-schema-migration.md) | Accepted |
 
 ## Adding a new decision
 

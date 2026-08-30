@@ -10,7 +10,7 @@
 //! Raw bytes throughout, never compressed: a release artifact's weight is the honest distribution figure, and compression flattens exactly the differences the record exists to track.
 
 mod chart;
-mod report;
+pub mod report;
 
 use std::path::{Path, PathBuf};
 
@@ -32,10 +32,7 @@ const CORPUS: [&str; 4] = ["cowsay.wasm", "sqlite3-shell.wasm", "qjs.wasm", "rub
 /// Converting the corpus with six backends takes minutes, so a wording fix must not require re-measuring: the JSON is the record, the markdown is a view of it.
 pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
     let path = record_to_render(args, SIZE_SUFFIX)?;
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", display_path(&path)))?;
-    let report: report::Report = serde_json::from_str(&text)
-        .with_context(|| format!("{} is not a size record", display_path(&path)))?;
+    let report = report::load(&path)?;
     write_doc(&report)
 }
 
@@ -65,7 +62,7 @@ fn run() -> Result<()> {
 
     let generated_at = utc_timestamp();
     let report = report::Report {
-        schema: 1,
+        schema: report::SCHEMA,
         generated_at: generated_at.clone(),
         host: host_info(),
         runtimes,

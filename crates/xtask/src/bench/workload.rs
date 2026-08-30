@@ -40,58 +40,99 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
 
 /// Runners excluded from one microbenchmark, keyed by its id.
 /// Same discipline as [`SQLITE_QUERY_EXCLUDES`]: every reason is a measurement or an observed error, never a guess.
-const MICRO_EXCLUDES: &[(&str, &[(&str, &str)])] = &[
+const MICRO_EXCLUDES: &[(&str, &[(&str, Exclusion)])] = &[
     ("wat/eh_throw", EH_EXCLUDES),
     ("wat/eh_try", EH_EXCLUDES),
     ("wat/f32_alu", F32_ALU_EXCLUDES),
     ("wat/i64_div", I64_DIV_EXCLUDES),
 ];
 
+/// One declared exclusion: the class the rendered document shows as its own column, and the specifics without the class restated.
+/// Every reason is a measurement or an observed error, never a guess.
+#[derive(Clone, Copy)]
+pub struct Exclusion {
+    pub kind: ExclusionKind,
+    pub reason: &'static str,
+}
+
+/// The two classes a declared exclusion falls into; the third skip class in the record, a host setup gap, never comes from these tables.
+#[derive(Clone, Copy)]
+pub enum ExclusionKind {
+    /// Runs correctly, but too slowly to keep in the suite.
+    Cost,
+    /// The runner cannot execute the workload.
+    Capability,
+}
+
 /// Runners excluded from both exception-handling microbenchmarks, since the reason is the same axis on both: none of these five decode or accept the tag section that `try_table`/`throw` needs.
-const EH_EXCLUDES: &[(&str, &str)] = &[
+const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "dewasm-bash",
-        "excluded: the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)",
+        Exclusion {
+        kind: ExclusionKind::Capability,
+        reason: "the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)",
+    },
     ),
     (
         "wazero",
-        "excluded: wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\"",
+        Exclusion {
+        kind: ExclusionKind::Capability,
+        reason: "wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\"",
+    },
     ),
     (
         "wasm3",
-        "excluded: wasm3 0.9.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
+        Exclusion {
+        kind: ExclusionKind::Capability,
+        reason: "wasm3 0.9.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)",
+    },
     ),
-    ("wasm3-ruby", CONVERTED_WASM3_EH_REASON),
-    ("wasm3-ruby-yjit", CONVERTED_WASM3_EH_REASON),
-    ("wasm3-python", CONVERTED_WASM3_EH_REASON),
-    ("wasm3-pypy", CONVERTED_WASM3_EH_REASON),
-    ("pywasm-cpython", PYWASM_EH_REASON),
-    ("pywasm-pypy", PYWASM_EH_REASON),
-    ("wardite", WARDITE_EH_REASON),
-    ("wardite-yjit", WARDITE_EH_REASON),
+    ("wasm3-ruby", CONVERTED_WASM3_EH_EXCLUSION),
+    ("wasm3-ruby-yjit", CONVERTED_WASM3_EH_EXCLUSION),
+    ("wasm3-python", CONVERTED_WASM3_EH_EXCLUSION),
+    ("wasm3-pypy", CONVERTED_WASM3_EH_EXCLUSION),
+    ("pywasm-cpython", PYWASM_EH_EXCLUSION),
+    ("pywasm-pypy", PYWASM_EH_EXCLUSION),
+    ("wardite", WARDITE_EH_EXCLUSION),
+    ("wardite-yjit", WARDITE_EH_EXCLUSION),
 ];
 
-const CONVERTED_WASM3_EH_REASON: &str = "excluded: the converted wasm3 0.9.0 fails to load it like the native one, \"out of order Wasm section\" (the tag section is unknown to it), measured through the converted interpreter";
+const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "the converted wasm3 0.9.0 fails to load it like the native one, \"out of order Wasm section\" (the tag section is unknown to it), measured through the converted interpreter",
+};
 
-const PYWASM_EH_REASON: &str = "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)";
+const PYWASM_EH_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)",
+};
 
-const WARDITE_EH_REASON: &str = "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\"";
+const WARDITE_EH_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\"",
+};
 
 /// wardite does not re-round f32 arithmetic to single precision between operations, so a chain of dependent f32 ops accumulates double-precision bits and diverges from wasmtime; the byte-for-byte verification would fail the whole run.
-const F32_ALU_EXCLUDES: &[(&str, &str)] = &[
-    ("wardite", WARDITE_F32_ALU_REASON),
-    ("wardite-yjit", WARDITE_F32_ALU_REASON),
+const F32_ALU_EXCLUDES: &[(&str, Exclusion)] = &[
+    ("wardite", WARDITE_F32_ALU_EXCLUSION),
+    ("wardite-yjit", WARDITE_F32_ALU_EXCLUSION),
 ];
 
-const WARDITE_F32_ALU_REASON: &str = "excluded: wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run";
+const WARDITE_F32_ALU_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run",
+};
 
 /// wardite computes `i64.div_s` at `f64` precision, which loses bits for operands beyond 2^53 and gives a wrong quotient.
-const I64_DIV_EXCLUDES: &[(&str, &str)] = &[
-    ("wardite", WARDITE_I64_DIV_REASON),
-    ("wardite-yjit", WARDITE_I64_DIV_REASON),
+const I64_DIV_EXCLUDES: &[(&str, Exclusion)] = &[
+    ("wardite", WARDITE_I64_DIV_EXCLUSION),
+    ("wardite-yjit", WARDITE_I64_DIV_EXCLUSION),
 ];
 
-const WARDITE_I64_DIV_REASON: &str = "excluded: wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct";
+const WARDITE_I64_DIV_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct",
+};
 
 /// The `sqlite3_query` script: a 100k-row table in one transaction (recursive CTE, so the work is the engine's), then an aggregate and a `LIKE` scan. 100k rows because at 20k wasmtime finished in ~30 ms (nearly all process startup), leaving the baseline unresolvable.
 /// The script is fixed rather than calibrated per runner (that is what makes it realistic), which is why the slowest runners are excluded instead of measured at their own size.
@@ -160,7 +201,7 @@ pub struct Workload {
     pub kind: Kind,
     /// Runner labels this workload deliberately does not run on, each with the reason reported in the JSON and the doc.
     /// Never a silent omission (a gap is stated, not hidden).
-    pub exclude: &'static [(&'static str, &'static str)],
+    pub exclude: &'static [(&'static str, Exclusion)],
 }
 
 impl Workload {
@@ -184,11 +225,11 @@ impl Workload {
         self.label.split('/').next().unwrap_or(&self.label)
     }
 
-    pub fn excluded(&self, runner: &str) -> Option<&'static str> {
+    pub fn excluded(&self, runner: &str) -> Option<Exclusion> {
         self.exclude
             .iter()
             .find(|(label, _)| *label == runner)
-            .map(|(_, reason)| *reason)
+            .map(|(_, exclusion)| *exclusion)
     }
 }
 
@@ -310,48 +351,78 @@ fn app_workloads() -> Vec<Workload> {
 /// Runners excluded from both SQL query cases, which run the same script on two builds of the same engine.
 /// Every reason below is measured, not guessed: an earlier draft guessed "do not finish in a practical time" for all four interpreter entries and was wrong on both counts (wardite fails outright; pywasm runs it fine, just slowly).
 /// The measurements were taken on `sqlite3-shell.wasm`; each names the engine rather than the file, because the opcode-split build is the same program.
-const SQLITE_QUERY_EXCLUDES: &[(&str, &str)] = &[
+const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "dewasm-bash",
-        "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time",
+        Exclusion {
+        kind: ExclusionKind::Cost,
+        reason: "bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time",
+    },
     ),
-    ("pywasm-cpython", PYWASM_SQLITE_REASON),
-    ("pywasm-pypy", PYWASM_SQLITE_REASON),
-    ("wardite", WARDITE_SQLITE_REASON),
-    ("wardite-yjit", WARDITE_SQLITE_REASON),
-    ("dewasm-perl", DEWASM_PERL_SQLITE_REASON),
-    ("dewasm-python", DEWASM_PYTHON_SQLITE_REASON),
-    ("wasm3-ruby", CONVERTED_WASM3_SQLITE_REASON),
-    ("wasm3-ruby-yjit", CONVERTED_WASM3_SQLITE_REASON),
-    ("wasm3-python", CONVERTED_WASM3_SQLITE_REASON),
-    ("wasm3-pypy", CONVERTED_WASM3_SQLITE_REASON),
+    ("pywasm-cpython", PYWASM_SQLITE_EXCLUSION),
+    ("pywasm-pypy", PYWASM_SQLITE_EXCLUSION),
+    ("wardite", WARDITE_SQLITE_EXCLUSION),
+    ("wardite-yjit", WARDITE_SQLITE_EXCLUSION),
+    ("dewasm-perl", DEWASM_PERL_SQLITE_EXCLUSION),
+    ("dewasm-python", DEWASM_PYTHON_SQLITE_EXCLUSION),
+    ("wasm3-ruby", CONVERTED_WASM3_SQLITE_EXCLUSION),
+    ("wasm3-ruby-yjit", CONVERTED_WASM3_SQLITE_EXCLUSION),
+    ("wasm3-python", CONVERTED_WASM3_SQLITE_EXCLUSION),
+    ("wasm3-pypy", CONVERTED_WASM3_SQLITE_EXCLUSION),
 ];
 
-const CONVERTED_WASM3_SQLITE_REASON: &str = "excluded on cost, not capability: the converted wasm3 runs this program correctly (stdout matching the oracle) at 160 s per run on wasm3-ruby-yjit, the fastest of the four wasm3-* runners, so one warmup plus the timed repetitions across both query cases and all four runners would add hours to the suite";
+const CONVERTED_WASM3_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "the converted wasm3 runs this program correctly (stdout matching the oracle) at 160 s per run on wasm3-ruby-yjit, the fastest of the four wasm3-* runners, so one warmup plus the timed repetitions across both query cases and all four runners would add hours to the suite",
+};
 
-const WARDITE_SQLITE_REASON: &str = "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs";
+const WARDITE_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs",
+};
 
-const PYWASM_SQLITE_REASON: &str = "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample";
+const PYWASM_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample",
+};
 
-const DEWASM_PERL_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks";
+const DEWASM_PERL_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks",
+};
 
-const DEWASM_PYTHON_SQLITE_REASON: &str = "excluded on cost, not capability: dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks";
+const DEWASM_PYTHON_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks",
+};
 
 /// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
-const MINIGZIP_EXCLUDES: &[(&str, &str)] = &[
-    ("dewasm-bash", BASH_MINIGZIP_REASON),
-    ("wasm3-ruby", CONVERTED_WASM3_MINIGZIP_REASON),
-    ("wasm3-python", CONVERTED_WASM3_MINIGZIP_REASON),
-    ("wasm3-pypy", CONVERTED_WASM3_MINIGZIP_REASON),
-    ("pywasm-cpython", PYWASM_MINIGZIP_REASON),
-    ("wardite", WARDITE_MINIGZIP_REASON),
-    ("wardite-yjit", WARDITE_MINIGZIP_REASON),
+const MINIGZIP_EXCLUDES: &[(&str, Exclusion)] = &[
+    ("dewasm-bash", BASH_MINIGZIP_EXCLUSION),
+    ("wasm3-ruby", CONVERTED_WASM3_MINIGZIP_EXCLUSION),
+    ("wasm3-python", CONVERTED_WASM3_MINIGZIP_EXCLUSION),
+    ("wasm3-pypy", CONVERTED_WASM3_MINIGZIP_EXCLUSION),
+    ("pywasm-cpython", PYWASM_MINIGZIP_EXCLUSION),
+    ("wardite", WARDITE_MINIGZIP_EXCLUSION),
+    ("wardite-yjit", WARDITE_MINIGZIP_EXCLUSION),
 ];
 
-const CONVERTED_WASM3_MINIGZIP_REASON: &str = "excluded on cost, not capability: the converted wasm3 compresses the full 1.2 MB input correctly (byte-identical to wasmtime) but at 149 s per run on plain ruby and 301 s on pypy, both measured, and roughly 7 minutes on cpython (measured 107 s on a 300000-byte prefix); wasm3-ruby-yjit runs it at 54 s and stays measured";
+const CONVERTED_WASM3_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "the converted wasm3 compresses the full 1.2 MB input correctly (byte-identical to wasmtime) but at 149 s per run on plain ruby and 301 s on pypy, both measured, and roughly 7 minutes on cpython (measured 107 s on a 300000-byte prefix); wasm3-ruby-yjit runs it at 54 s and stays measured",
+};
 
-const BASH_MINIGZIP_REASON: &str = "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run";
+const BASH_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run",
+};
 
-const PYWASM_MINIGZIP_REASON: &str = "excluded on cost, not capability: pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run";
+const PYWASM_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run",
+};
 
-const WARDITE_MINIGZIP_REASON: &str = "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1";
+const WARDITE_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1",
+};
