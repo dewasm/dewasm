@@ -32,7 +32,7 @@ pub use apps_capi::{
 pub use apps_convert::{apps_convert_main, apps_convert_trials};
 pub use apps_fs::{
     run_fs_app_case, FsAppCase, FsRun, Stage, CPYTHON_HELLO, CRUBY_HELLO, QJS_FILE_IO, RG_SEARCH,
-    SQLITE3_SHELL_DBFILE, TOYWASM_COWSAY,
+    SQLITE3_SHELL_DBFILE, TOYWASM_COWSAY, WASM3_COWSAY,
 };
 pub use backend::{
     derive_module_name, module_name_style, run_command, run_command_bytes, run_script,
@@ -618,6 +618,23 @@ macro_rules! toywasm_cowsay_e2e {
             #[test]
             fn toywasm_cowsay() {
                 $crate::run_fs_app_case(&$lang, &$crate::TOYWASM_COWSAY, $glue);
+            }
+        }
+    };
+}
+
+/// See [`qjs_file_io_e2e!`].
+/// Runs [`WASM3_COWSAY`](crate::WASM3_COWSAY): the second converted wasm interpreter (wasm3's meta-WASI build) interpreting the cached cowsay binary.
+#[macro_export]
+macro_rules! wasm3_cowsay_e2e {
+    ($lang:expr, $glue:expr) => {
+        $crate::wasm3_cowsay_e2e!($lang, $glue, slow);
+    };
+    ($lang:expr, $glue:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn wasm3_cowsay() {
+                $crate::run_fs_app_case(&$lang, &$crate::WASM3_COWSAY, $glue);
             }
         }
     };

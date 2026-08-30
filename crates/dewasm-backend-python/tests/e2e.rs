@@ -234,6 +234,18 @@ except ToywasmRt.Exit:
     pass
 "#;
 
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+/// wasm3's continuation-passing dispatch nests one Python call per guest opcode until a loop or return unwinds it, and cowsay's startup runs deeper than the default recursion limit, so the glue raises it (the Python analog of the Ruby glue's re-exec).
+const PYTHON_WASM3_GLUE: &str = r#"import sys
+
+sys.setrecursionlimit(200000)
+inst = Wasm3({}, args=["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
+try:
+    inst.invoke("_start")
+except Wasm3Rt.Exit:
+    pass
+"#;
+
 const PYTHON_CPYTHON_GLUE: &str = r#"inst = Cpython({}, args=["python", "-c", "print('hello from cpython', 6 * 7)"], env={"PYTHONHOME": "/", "PYTHONPATH": "/lib/python3.14"}, preopens={"/lib": "{cache}/cpython-lib/lib"})
 try:
     inst.invoke("_start")
@@ -650,6 +662,8 @@ dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
 // Slow, like the other filesystem app cases: measured 6.7 s (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Python, PYTHON_TOYWASM_GLUE);
+// Slow for the same reason as the toywasm case above.
+dewasm_test_helper::wasm3_cowsay_e2e!(Python, PYTHON_WASM3_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Python);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Python, PYTHON_LIBSQLITE3_MEM);
