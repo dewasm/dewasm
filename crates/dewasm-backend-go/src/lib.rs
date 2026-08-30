@@ -523,6 +523,12 @@ fn ty_suffix(ty: ValType) -> &'static str {
     }
 }
 
+/// Whether `expr` renders as a Go integer constant, which makes any operation over two of them a compile-time constant expression.
+/// Float constants render as calls (`f32_from_bits`), so they are never constant to Go.
+fn int_const(expr: &Expr) -> bool {
+    matches!(expr, Expr::I32Const(_) | Expr::I64Const(_))
+}
+
 fn zero_value(ty: ValType) -> &'static str {
     match ty {
         ValType::FuncRef | ValType::ExnRef => "nil",
@@ -1726,6 +1732,15 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// The same constant, always laundered through the identity call, so the expression holding it is not a Go constant expression.
+    fn laundered_const(&self, expr: &Expr) -> String {
+        match expr {
+            Expr::I32Const(v) => format!("{}(0x{v:x})", self.rt("i32c")),
+            Expr::I64Const(v) => format!("{}(0x{v:x})", self.rt("i64c")),
+            other => self.expr(other),
+        }
+    }
+
     fn expr(&self, expr: &Expr) -> String {
         match expr {
             // A folded constant may land directly inside a signed cast (int32/int64); Go rejects that conversion for a compile-time constant beyond the signed range, so launder large values through a call to keep the conversion a runtime one.
@@ -1750,6 +1765,11 @@ impl<'a> Gen<'a> {
             Expr::LocalGet(idx) => format!("l{idx}"),
             Expr::GlobalGet(idx) => format!("p.g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
+            // Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps; laundering one operand makes the operation a runtime one, which wraps.
+            // Applied to every operator rather than the ones known to overflow today (`+`, `-`, `*`, `<<`), because the rule is about the operands being constants at all, and `bin` is free to lower an operator into arithmetic that overflows where the operator itself would not.
+            Expr::Bin(op, a, b) if int_const(a) && int_const(b) => {
+                self.bin(*op, &self.laundered_const(a), &self.expr(b))
+            }
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
             Expr::Load { op, addr, offset } => {
                 format!(

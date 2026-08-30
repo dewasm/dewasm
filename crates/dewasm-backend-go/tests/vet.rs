@@ -84,6 +84,22 @@ const PRUNED_TAIL_WAT: &str = r#"(module
     (i32.const 3)))
 "#;
 
+/// Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps, so the emitter has to keep such an operation from being a Go constant expression at all.
+/// The spec testsuite passes its operands in at each `invoke`, so no `.wast` file produces this shape; it reached the emitter through the official wasm3 build (issue #289), whose PRNG multiplies two constants.
+const CONST_ARITHMETIC_WAT: &str = r#"(module
+  (func (export "mul") (result i32) (i32.mul (i32.const 20152) (i32.const 1103515245)))
+  (func (export "sub") (result i32) (i32.sub (i32.const 0) (i32.const 1)))
+  (func (export "shl") (result i32) (i32.shl (i32.const 3) (i32.const 31)))
+  (func (export "add64") (result i64) (i64.add (i64.const 9223372036854775807) (i64.const 1))))
+"#;
+
+#[test]
+fn arithmetic_between_two_constants_wraps_instead_of_overflowing_the_compiler() {
+    let bytes = wat::parse_str(CONST_ARITHMETIC_WAT).expect("parse wat");
+    let src = dewasm_test_helper::convert_bytes(&GoBackend, &bytes, Mode::Library, "constarith");
+    assert_vet_clean("constarith", &src);
+}
+
 #[test]
 fn a_pruned_tail_takes_its_label_and_local_reads_with_it() {
     let bytes = wat::parse_str(PRUNED_TAIL_WAT).expect("parse wat");
