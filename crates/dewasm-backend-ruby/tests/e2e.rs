@@ -231,12 +231,8 @@ end
 "#;
 
 /// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-/// wasm3's continuation-passing dispatch nests one Ruby call per guest opcode until a loop or return unwinds it, and cowsay's startup runs deeper than the default VM stack; Ruby cannot raise that stack after boot, so the glue re-execs itself once with it raised (the Ruby analog of the `ulimit -s` the CPython-on-Bash glue needs).
-const RUBY_WASM3_GLUE: &str = r#"if ENV["RUBY_THREAD_VM_STACK_SIZE"].to_i < 64 * 1024 * 1024
-  require "rbconfig"
-  exec({ "RUBY_THREAD_VM_STACK_SIZE" => (64 * 1024 * 1024).to_s }, RbConfig.ruby, __FILE__, *ARGV)
-end
-inst = Wasm3.new({}, args: ["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env: {}, preopens: {"/apps" => "{cache}"})
+/// Plain glue, unlike every other converted-interpreter case here: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one Ruby frame and no stack is raised.
+const RUBY_WASM3_GLUE: &str = r#"inst = Wasm3.new({}, args: ["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env: {}, preopens: {"/apps" => "{cache}"})
 begin
   inst.invoke("_start")
 rescue Wasm3::Rt::Exit

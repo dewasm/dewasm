@@ -445,7 +445,7 @@ impl Workshop {
     }
 
     /// The converted wasm3 on `target`'s host, told to run `wasm`: the interpreter artifact's launch plus `--dir <wasm's dir>::/work` and the module's guest path, so the caller-appended guest arguments reach the module one interpretation layer down.
-    /// The Ruby hosts get `RUBY_THREAD_VM_STACK_SIZE` raised: wasm3's dispatch nests one host call per guest opcode until a loop or return unwinds it, deeper than the default VM stack for guests with a deep startup, and Ruby cannot raise that stack after boot.
+    /// No host stack is raised: the pinned asset's dispatch is a tail call, so the trampoline runs the whole chain in one host frame.
     fn converted_interpreter_launch(&mut self, target: Target, wasm: &Path) -> Result<Launch> {
         let interpreter = converted_wasm3()
             .context("examples/apps/cache/wasm3.wasm missing: run examples/apps/setup.sh")?;
@@ -453,12 +453,6 @@ impl Workshop {
             .with_context(|| format!("failed to read {}", interpreter.display()))?;
         let artifact = self.artifact_for(target, &bytes)?;
         let mut launch = host_launch(target, artifact)?;
-        if let Target::Ruby(_) = target {
-            launch.env.push((
-                "RUBY_THREAD_VM_STACK_SIZE".to_string(),
-                (64 << 20).to_string(),
-            ));
-        }
         let dir = wasm
             .parent()
             .with_context(|| format!("{} has no parent directory", wasm.display()))?;
