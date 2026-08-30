@@ -574,6 +574,17 @@ fn sites<'a>(stmt: &'a Stmt, f: &mut impl FnMut(Site<'a>)) {
                 f(Site::External(*r));
             }
         }
+        Stmt::ReturnCall { args, .. } => {
+            for a in args {
+                f(Site::Observe(a));
+            }
+        }
+        Stmt::ReturnCallIndirect { index, args, .. } => {
+            f(Site::Observe(index));
+            for a in args {
+                f(Site::Observe(a));
+            }
+        }
         Stmt::MemoryGrow { dst, delta } => {
             f(Site::Observe(delta));
             f(Site::External(*dst));

@@ -26,7 +26,7 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory) plus exception handling.
+/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory) plus exception handling and tail calls.
 /// The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit, but every actual reference-types construct is rejected during IR building.
 /// `LEGACY_EXCEPTIONS` stays off: the retired `try`/`catch`/`rethrow`/`delegate` encoding is refused at validation, so only the `try_table` design reaches the IR.
 /// Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
@@ -38,6 +38,7 @@ pub fn features() -> WasmFeatures {
         | WasmFeatures::BULK_MEMORY
         | WasmFeatures::REFERENCE_TYPES
         | WasmFeatures::EXCEPTIONS
+        | WasmFeatures::TAIL_CALL
 }
 
 /// Whether `bytes` is a component-model binary (layer 1) rather than a core module (layer 0).

@@ -342,6 +342,18 @@ pub enum Stmt {
         args: Vec<Expr>,
         results: Vec<Temp>,
     },
+    /// Replaces the current frame with a call to `func`: the callee must run after this frame, including any handler it carries, is gone.
+    ReturnCall {
+        func: u32,
+        args: Vec<Expr>,
+    },
+    /// `ReturnCall` through a table; the slot is resolved, and its traps raised, at this instruction's execution point.
+    ReturnCallIndirect {
+        type_idx: u32,
+        table_index: u32,
+        index: Expr,
+        args: Vec<Expr>,
+    },
     MemoryGrow {
         dst: Temp,
         delta: Expr,
@@ -419,6 +431,8 @@ impl Stmt {
             | Stmt::Return { .. }
             | Stmt::Call { .. }
             | Stmt::CallIndirect { .. }
+            | Stmt::ReturnCall { .. }
+            | Stmt::ReturnCallIndirect { .. }
             | Stmt::MemoryGrow { .. }
             | Stmt::MemoryCopy { .. }
             | Stmt::MemoryFill { .. }
@@ -453,6 +467,8 @@ impl Stmt {
             | Stmt::Return { .. }
             | Stmt::Call { .. }
             | Stmt::CallIndirect { .. }
+            | Stmt::ReturnCall { .. }
+            | Stmt::ReturnCallIndirect { .. }
             | Stmt::MemoryGrow { .. }
             | Stmt::MemoryCopy { .. }
             | Stmt::MemoryFill { .. }

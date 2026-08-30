@@ -2039,6 +2039,10 @@ impl<'a> Gen<'a> {
                     self.iref(&format!("data{seg}"))
                 ));
             }
+            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
+            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
+                unreachable!("tail calls are refused by check_module_support")
+            }
             Stmt::Unreachable => {
                 // Void method that throws: emitting it as a statement (not a `throw`) avoids an "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
@@ -2589,8 +2593,11 @@ impl CostMemo {
                     + targets.iter().map(|t| 1 + target_cost(t)).sum::<usize>()
             }
             Stmt::Return { values } => values.iter().map(expr_cost).sum(),
-            Stmt::Call { args, .. } => args.iter().map(expr_cost).sum(),
-            Stmt::CallIndirect { index, args, .. } => {
+            Stmt::Call { args, .. } | Stmt::ReturnCall { args, .. } => {
+                args.iter().map(expr_cost).sum()
+            }
+            Stmt::CallIndirect { index, args, .. }
+            | Stmt::ReturnCallIndirect { index, args, .. } => {
                 expr_cost(index) + args.iter().map(expr_cost).sum::<usize>()
             }
             Stmt::MemoryGrow { delta, .. } => expr_cost(delta),

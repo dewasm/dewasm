@@ -1594,6 +1594,10 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("p.data{seg} = nil"));
             }
+            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
+            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
+                unreachable!("tail calls are refused by check_module_support")
+            }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
@@ -2116,12 +2120,12 @@ fn collect_reads_stmt(
                 e(v, read_locals, used_locals, read_temps);
             }
         }
-        Stmt::Call { args, .. } => {
+        Stmt::Call { args, .. } | Stmt::ReturnCall { args, .. } => {
             for a in args {
                 e(a, read_locals, used_locals, read_temps);
             }
         }
-        Stmt::CallIndirect { index, args, .. } => {
+        Stmt::CallIndirect { index, args, .. } | Stmt::ReturnCallIndirect { index, args, .. } => {
             e(index, read_locals, used_locals, read_temps);
             for a in args {
                 e(a, read_locals, used_locals, read_temps);

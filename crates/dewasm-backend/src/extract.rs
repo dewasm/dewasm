@@ -384,7 +384,10 @@ fn closed(stmt: &Stmt) -> bool {
             Stmt::BrTable {
                 targets, default, ..
             } => targets.iter().chain([default]).all(|t| target_ok(t, scope)),
-            Stmt::Return { .. } => false,
+            // A tail call ends the enclosing wasm frame just as a return does, so it pins the boundary the same way.
+            Stmt::Return { .. } | Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
+                false
+            }
             // Catch targets are resolved outside the try_table's own frame, so they are checked against the scope before it opens.
             Stmt::TryTable { catches, .. } => catches.iter().all(|c| target_ok(&c.target, scope)),
             _ => true,
@@ -473,8 +476,10 @@ pub(crate) fn for_each_expr(stmt: &Stmt, f: &mut impl FnMut(&Expr)) {
             }
         }
         Stmt::Return { values } => values.iter().for_each(f),
-        Stmt::Call { args, .. } | Stmt::Throw { args, .. } => args.iter().for_each(f),
-        Stmt::CallIndirect { index, args, .. } => {
+        Stmt::Call { args, .. } | Stmt::Throw { args, .. } | Stmt::ReturnCall { args, .. } => {
+            args.iter().for_each(f)
+        }
+        Stmt::CallIndirect { index, args, .. } | Stmt::ReturnCallIndirect { index, args, .. } => {
             f(index);
             args.iter().for_each(f);
         }
@@ -712,8 +717,10 @@ pub(crate) fn for_each_expr_mut(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) 
             }
         }
         Stmt::Return { values } => values.iter_mut().for_each(f),
-        Stmt::Call { args, .. } | Stmt::Throw { args, .. } => args.iter_mut().for_each(f),
-        Stmt::CallIndirect { index, args, .. } => {
+        Stmt::Call { args, .. } | Stmt::Throw { args, .. } | Stmt::ReturnCall { args, .. } => {
+            args.iter_mut().for_each(f)
+        }
+        Stmt::CallIndirect { index, args, .. } | Stmt::ReturnCallIndirect { index, args, .. } => {
             f(index);
             args.iter_mut().for_each(f);
         }
@@ -909,6 +916,22 @@ impl Liveness {
                 for v in values {
                     expr_reads(v, &mut l);
                 }
+                l
+            }
+            // A tail call ends this frame, so nothing after it is live, and `catch_live` does not survive it either: the callee runs once the enclosing handlers are gone, so what it throws cannot reach them.
+            Stmt::ReturnCall { args, .. } => {
+                let mut l = BTreeSet::new();
+                for a in args {
+                    expr_reads(a, &mut l);
+                }
+                l
+            }
+            Stmt::ReturnCallIndirect { index, args, .. } => {
+                let mut l = BTreeSet::new();
+                for a in args {
+                    expr_reads(a, &mut l);
+                }
+                expr_reads(index, &mut l);
                 l
             }
             Stmt::TryTable {

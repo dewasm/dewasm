@@ -909,6 +909,38 @@ impl<'a> FuncBuilder<'a> {
                     results,
                 });
             }
+            Operator::ReturnCall { function_index } => {
+                let ty = self.func_type_of(function_index).clone();
+                self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
+                let mut args = vec![Expr::I32Const(0); ty.params.len()];
+                for i in (0..ty.params.len()).rev() {
+                    args[i] = self.pop_expr().0;
+                }
+                self.emit(Stmt::ReturnCall {
+                    func: function_index,
+                    args,
+                });
+                self.cur().unreachable = true;
+            }
+            Operator::ReturnCallIndirect {
+                type_index,
+                table_index,
+            } => {
+                self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
+                let ty = self.module.types[type_index as usize].clone();
+                let (index, _, _) = self.pop_expr();
+                let mut args = vec![Expr::I32Const(0); ty.params.len()];
+                for i in (0..ty.params.len()).rev() {
+                    args[i] = self.pop_expr().0;
+                }
+                self.emit(Stmt::ReturnCallIndirect {
+                    type_idx: type_index,
+                    table_index,
+                    index,
+                    args,
+                });
+                self.cur().unreachable = true;
+            }
             Operator::CallIndirect {
                 type_index,
                 table_index,

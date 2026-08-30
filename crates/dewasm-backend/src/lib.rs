@@ -134,7 +134,46 @@ pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Resul
         &|| module_uses_exception_handling(module),
         "tag, exnref value, or try_table/throw/throw_ref instruction",
     )?;
+    require(
+        Feature::TailCall,
+        &|| module.funcs.iter().any(|f| stmts_use_tail_calls(&f.body)),
+        "return_call/return_call_indirect instruction",
+    )?;
     Ok(())
+}
+
+/// Whether `stmts` contains a tail call, the analysis a backend implementing the proposal also needs to decide which functions its trampoline must split.
+/// Same exhaustiveness contract as [`stmts_use_table_bulk_ops`].
+pub fn stmts_use_tail_calls(stmts: &[ir::Stmt]) -> bool {
+    ir::Stmt::any(stmts, &mut |stmt| match stmt {
+        ir::Stmt::ReturnCall { .. } | ir::Stmt::ReturnCallIndirect { .. } => true,
+        ir::Stmt::SourceLine(_)
+        | ir::Stmt::Assign { .. }
+        | ir::Stmt::LocalSet { .. }
+        | ir::Stmt::GlobalSet { .. }
+        | ir::Stmt::Store { .. }
+        | ir::Stmt::Block { .. }
+        | ir::Stmt::Loop { .. }
+        | ir::Stmt::If { .. }
+        | ir::Stmt::Br(_)
+        | ir::Stmt::BrIf { .. }
+        | ir::Stmt::BrTable { .. }
+        | ir::Stmt::Return { .. }
+        | ir::Stmt::Call { .. }
+        | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::MemoryGrow { .. }
+        | ir::Stmt::MemoryCopy { .. }
+        | ir::Stmt::MemoryFill { .. }
+        | ir::Stmt::MemoryInit { .. }
+        | ir::Stmt::DataDrop { .. }
+        | ir::Stmt::TableInit { .. }
+        | ir::Stmt::TableCopy { .. }
+        | ir::Stmt::ElemDrop { .. }
+        | ir::Stmt::TryTable { .. }
+        | ir::Stmt::Throw { .. }
+        | ir::Stmt::ThrowRef { .. }
+        | ir::Stmt::Unreachable => false,
+    })
 }
 
 /// Whether the module contains any exception-handling construct: a tag (defined or imported, which every tag export implies), an exnref-typed value anywhere, or one of the proposal's instructions.
@@ -176,6 +215,8 @@ fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
         | ir::Stmt::Return { .. }
         | ir::Stmt::Call { .. }
         | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::ReturnCall { .. }
+        | ir::Stmt::ReturnCallIndirect { .. }
         | ir::Stmt::MemoryGrow { .. }
         | ir::Stmt::MemoryCopy { .. }
         | ir::Stmt::MemoryFill { .. }
@@ -477,6 +518,8 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
         | ir::Stmt::Return { .. }
         | ir::Stmt::Call { .. }
         | ir::Stmt::CallIndirect { .. }
+        | ir::Stmt::ReturnCall { .. }
+        | ir::Stmt::ReturnCallIndirect { .. }
         | ir::Stmt::MemoryGrow { .. }
         | ir::Stmt::MemoryCopy { .. }
         | ir::Stmt::MemoryFill { .. }

@@ -1412,6 +1412,10 @@ impl<'a> Gen<'a> {
             Stmt::ThrowRef { exn } => {
                 w.line(format!("{}({})", self.rt("throw_ref"), self.expr_text(exn)));
             }
+            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
+            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
+                unreachable!("tail calls are refused by check_module_support")
+            }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
             }
