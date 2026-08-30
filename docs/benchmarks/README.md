@@ -22,6 +22,7 @@ Useful options:
 | `cargo xtask record-speed <filter>` | Only pairs whose workload or runner label contains the substring, e.g. `dewasm-ruby` or `app/`. A record from a filtered run covers only those pairs, so publish from a full run. |
 | `--reps N`, `--target-ms MS`, `--timeout SECS` | Timed runs per measurement (default 3), calibration target per sample (default 300), per-process ceiling (default 900). |
 | `cargo xtask render-speed <record>` | Render an older record instead of the newest one; a `-size.json` path is refused. |
+| `cargo xtask migrate-records` | Upgrade every stored record to its kind's current schema, in place; the render commands read only the current schema. |
 
 `wasmtime` is required; any other missing runner is reported as skipped with the reason, and the run continues.
 

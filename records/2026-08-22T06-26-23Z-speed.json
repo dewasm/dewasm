@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generated_at": "2026-08-22T06:26:23Z",
   "host": {
     "os": "macOS 26.5.2",
@@ -2453,13 +2453,15 @@
       "workload": "wat/eh_throw",
       "runner": "wazero",
       "status": "skipped",
-      "reason": "excluded: wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\""
+      "kind": "capability",
+      "reason": "wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\""
     },
     {
       "workload": "wat/eh_throw",
       "runner": "wasm3",
       "status": "skipped",
-      "reason": "excluded: wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)"
+      "kind": "capability",
+      "reason": "wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)"
     },
     {
       "workload": "wat/eh_throw",
@@ -2713,31 +2715,36 @@
       "workload": "wat/eh_throw",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded: the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)"
+      "kind": "capability",
+      "reason": "the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
+      "kind": "capability",
+      "reason": "pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
+      "kind": "capability",
+      "reason": "pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
+      "kind": "capability",
+      "reason": "wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
     },
     {
       "workload": "wat/eh_throw",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
+      "kind": "capability",
+      "reason": "wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
     },
     {
       "workload": "wat/eh_try",
@@ -2836,13 +2843,15 @@
       "workload": "wat/eh_try",
       "runner": "wazero",
       "status": "skipped",
-      "reason": "excluded: wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\""
+      "kind": "capability",
+      "reason": "wazero 1.12.0 rejects the module: \"tag section not supported as feature \\\"exception-handling\\\" is disabled\""
     },
     {
       "workload": "wat/eh_try",
       "runner": "wasm3",
       "status": "skipped",
-      "reason": "excluded: wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)"
+      "kind": "capability",
+      "reason": "wasm3 0.5.0 fails to load it: \"out of order Wasm section\" (the tag section is unknown to it)"
     },
     {
       "workload": "wat/eh_try",
@@ -3096,31 +3105,36 @@
       "workload": "wat/eh_try",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded: the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)"
+      "kind": "capability",
+      "reason": "the bash backend has no exception-handling lowering and rejects the module at conversion time with \"unsupported (exception-handling): tag, exnref value, or try_table/throw/throw_ref instruction\" (see docs/support.md)"
     },
     {
       "workload": "wat/eh_try",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
+      "kind": "capability",
+      "reason": "pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
     },
     {
       "workload": "wat/eh_try",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded: pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
+      "kind": "capability",
+      "reason": "pywasm 2.2.3 has no exception-handling opcodes; decoding dies with AssertionError on the throw/try_table opcode (pywasm/core.py, from_reader)"
     },
     {
       "workload": "wat/eh_try",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
+      "kind": "capability",
+      "reason": "wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
     },
     {
       "workload": "wat/eh_try",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
+      "kind": "capability",
+      "reason": "wardite 0.9.0 fails to load the tag section: Wardite::LoadError \"unknown code: 13\""
     },
     {
       "workload": "wat/f32_alu",
@@ -3622,13 +3636,15 @@
       "workload": "wat/f32_alu",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run"
+      "kind": "capability",
+      "reason": "wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run"
     },
     {
       "workload": "wat/f32_alu",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run"
+      "kind": "capability",
+      "reason": "wardite 0.9.0 does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime (1232349357 vs 1232349355 at 10000 iterations) and the byte-for-byte verification would fail the whole run"
     },
     {
       "workload": "wat/f64_alu",
@@ -6362,13 +6378,15 @@
       "workload": "wat/i64_div",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct"
+      "kind": "capability",
+      "reason": "wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct"
     },
     {
       "workload": "wat/i64_div",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct"
+      "kind": "capability",
+      "reason": "wardite 0.9.0 computes i64.div_s at f64 precision, wrong for operands beyond 2^53: i64.div_s(0x8000000000000000, 3) gives -3074457345618258432 where -3074457345618258602 is correct"
     },
     {
       "workload": "wat/mem_narrow",
@@ -9762,7 +9780,8 @@
       "workload": "app/sqlite3_query",
       "runner": "dewasm-python",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks"
+      "kind": "cost",
+      "reason": "dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_query",
@@ -9791,7 +9810,8 @@
       "workload": "app/sqlite3_query",
       "runner": "dewasm-perl",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks"
+      "kind": "cost",
+      "reason": "dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_query",
@@ -9843,31 +9863,36 @@
       "workload": "app/sqlite3_query",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+      "kind": "cost",
+      "reason": "bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "kind": "cost",
+      "reason": "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "kind": "cost",
+      "reason": "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "kind": "capability",
+      "reason": "wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "kind": "capability",
+      "reason": "wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -10057,7 +10082,8 @@
       "workload": "app/sqlite3_mod_query",
       "runner": "dewasm-python",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks"
+      "kind": "cost",
+      "reason": "dewasm-python runs this program correctly but at 56 s and 57 s per run (median, sqlite3_query and sqlite3_mod_query), costing roughly 9 minutes of the roughly 65 minute full suite; dewasm-python stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -10086,7 +10112,8 @@
       "workload": "app/sqlite3_mod_query",
       "runner": "dewasm-perl",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks"
+      "kind": "cost",
+      "reason": "dewasm-perl runs this program correctly but at 113 s and 115 s per run (median, sqlite3_query and sqlite3_mod_query), so one warmup plus the timed repetitions across both cases alone cost roughly 19 minutes of the roughly 65 minute full suite; dewasm-perl stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -10138,31 +10165,36 @@
       "workload": "app/sqlite3_mod_query",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+      "kind": "cost",
+      "reason": "bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "kind": "cost",
+      "reason": "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "kind": "cost",
+      "reason": "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "kind": "capability",
+      "reason": "wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
+      "kind": "capability",
+      "reason": "wardite loads the sqlite3 shell but cannot execute a query, raising Wardite::EvalError (\"maybe empty or invalid stack\", convert.generated.rb:200) as soon as any SQL runs"
     },
     {
       "workload": "app/minigzip",
@@ -10260,7 +10292,8 @@
       "workload": "app/minigzip",
       "runner": "wasm3",
       "status": "skipped",
-      "reason": "excluded: wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")"
+      "kind": "capability",
+      "reason": "wasm3's WASI does not provide fd_tell, which minigzip's stdio imports, so the module fails before running (\"missing imported function ('wasi_snapshot_preview1.fd_tell')\")"
     },
     {
       "workload": "app/minigzip",
@@ -10450,13 +10483,15 @@
       "workload": "app/minigzip",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run"
+      "kind": "cost",
+      "reason": "bash compresses this workload's generated text at ~0.61 ms/byte (measured 30.6 s on a 50000-byte prefix), so the full 1.2 MB input needs roughly 12 minutes per run"
     },
     {
       "workload": "app/minigzip",
       "runner": "pywasm-cpython",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run"
+      "kind": "cost",
+      "reason": "pywasm under CPython compresses this workload's generated text at ~0.46 ms/byte (measured 9.2 s on a 20000-byte prefix), so the full 1.2 MB input needs roughly 9 minutes per run"
     },
     {
       "workload": "app/minigzip",
@@ -10485,13 +10520,15 @@
       "workload": "app/minigzip",
       "runner": "wardite",
       "status": "skipped",
-      "reason": "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
+      "kind": "capability",
+      "reason": "wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
     },
     {
       "workload": "app/minigzip",
       "runner": "wardite-yjit",
       "status": "skipped",
-      "reason": "excluded: wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
+      "kind": "capability",
+      "reason": "wardite computes the correct compressed output but its driver crashes on exit (IOError: closed stream at wardite.rb:40) because minigzip closes stdout itself and wardite's fd_close closes the real fd under it, so the driver's own trailing flush fails and the process exits 1"
     }
   ]
 }

@@ -32,7 +32,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{bail, Context, Result};
 
 use crate::bench::measure::{calibrate, describe_diff, repeat, repeat_app, run_once, stats};
-use crate::bench::report::{Cell, Measurement, Outcome, Samples, Verification};
+use crate::bench::report::{Cell, Measurement, Outcome, Samples, SkipKind, Verification};
 use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
 
@@ -104,10 +104,7 @@ impl Options {
 /// Rendering needs neither the runner probes nor the workloads on disk: everything it reports already lives in the record.
 pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
     let path = record_to_render(args, SPEED_SUFFIX)?;
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", display_path(&path)))?;
-    let report: report::Report = serde_json::from_str(&text)
-        .with_context(|| format!("{} is not a speed record", display_path(&path)))?;
+    let report = report::load(&path)?;
     write_doc(&report)
 }
 
@@ -176,19 +173,23 @@ fn list(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()
         }
     }
 
-    let excluded: Vec<(&str, &str, &str)> = workloads
+    let excluded: Vec<(&str, &str, workload::Exclusion)> = workloads
         .iter()
         .flat_map(|workload| {
             workload
                 .exclude
                 .iter()
-                .map(move |(runner, reason)| (workload.label.as_str(), *runner, *reason))
+                .map(move |(runner, exclusion)| (workload.label.as_str(), *runner, *exclusion))
         })
         .collect();
     if !excluded.is_empty() {
         println!("\nDeclared exclusions ({}):", excluded.len());
-        for (workload, runner, reason) in excluded {
-            println!("  {workload} x {runner}: {reason}");
+        for (workload, runner, exclusion) in excluded {
+            println!(
+                "  {workload} x {runner} ({}): {}",
+                skip_kind(exclusion.kind).label(),
+                exclusion.reason
+            );
         }
     }
 
@@ -262,7 +263,7 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
 
     let generated_at = utc_timestamp();
     let report = report::Report {
-        schema: 1,
+        schema: report::SCHEMA,
         host: host_info(),
         settings: report::Settings {
             reps: opts.reps,
@@ -362,7 +363,7 @@ fn measure_workload(
 
     if let Some(reason) = workload.missing_reason() {
         for runner in selected {
-            results.push(skipped(workload, runner, reason.clone()));
+            results.push(skipped(workload, runner, SkipKind::Setup, reason.clone()));
         }
         return;
     }
@@ -375,11 +376,16 @@ fn measure_workload(
             .find(|rt| rt.runner == runner.label)
             .and_then(|rt| rt.unavailable_reason.clone())
         {
-            results.push(skipped(workload, runner, reason));
+            results.push(skipped(workload, runner, SkipKind::Setup, reason));
             continue;
         }
-        if let Some(reason) = workload.excluded(runner.label) {
-            results.push(skipped(workload, runner, reason.to_string()));
+        if let Some(exclusion) = workload.excluded(runner.label) {
+            results.push(skipped(
+                workload,
+                runner,
+                skip_kind(exclusion.kind),
+                exclusion.reason.to_string(),
+            ));
             continue;
         }
         println!("  {:<24} {}", workload.label, runner.label);
@@ -410,11 +416,19 @@ fn measure_workload(
     }
 }
 
-fn skipped(workload: &Workload, runner: &Runner, reason: String) -> Cell {
+fn skipped(workload: &Workload, runner: &Runner, kind: SkipKind, reason: String) -> Cell {
     Cell {
         workload: workload.label.clone(),
         runner: runner.label.to_string(),
-        outcome: Outcome::Skipped { reason },
+        outcome: Outcome::Skipped { kind, reason },
+    }
+}
+
+/// A declared exclusion's class as the record states it; the record's third class, [`SkipKind::Setup`], never comes from an exclusion table.
+fn skip_kind(kind: workload::ExclusionKind) -> SkipKind {
+    match kind {
+        workload::ExclusionKind::Cost => SkipKind::Cost,
+        workload::ExclusionKind::Capability => SkipKind::Capability,
     }
 }
 

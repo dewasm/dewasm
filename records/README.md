@@ -4,6 +4,8 @@ Every measurement dewasm keeps: the dated JSON records `cargo xtask record-speed
 A record's suffix names its kind, `-speed.json` or `-size.json`.
 The generated documents, [docs/benchmarks/results.md](../docs/benchmarks/results.md) and [docs/sizes/results.md](../docs/sizes/results.md), are rendered from the newest record of each kind by `cargo xtask render-speed` and `cargo xtask render-size`; an older record is measurement history, re-renderable by naming it (`cargo xtask render-speed records/<file>-speed.json`).
 
+A record names its schema version; a schema bump ships with a `cargo xtask migrate-records` upgrade that rewrites every stored record in place, and the commands that read records support only the current schema.
+
 Every record file has one line here saying why it was taken.
 A run appends its line with a `TODO`; fill it in when committing the record.
 

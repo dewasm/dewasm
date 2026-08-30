@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "generated_at": "2026-08-11T18:25:24Z",
   "host": {
     "os": "macOS 26.5.2",
@@ -618,6 +618,7 @@
       "workload": "c/mandelbrot",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -659,12 +660,14 @@
       "workload": "c/mandelbrot",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "c/mandelbrot",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -1161,6 +1164,7 @@
       "workload": "c/sha256",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -1202,12 +1206,14 @@
       "workload": "c/sha256",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "c/sha256",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -1704,6 +1710,7 @@
       "workload": "c/wordcount",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -1745,12 +1752,14 @@
       "workload": "c/wordcount",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "c/wordcount",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -2247,6 +2256,7 @@
       "workload": "wat/call_direct",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -2288,12 +2298,14 @@
       "workload": "wat/call_direct",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/call_direct",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -2790,6 +2802,7 @@
       "workload": "wat/call_indirect",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -2831,12 +2844,14 @@
       "workload": "wat/call_indirect",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/call_indirect",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -3333,6 +3348,7 @@
       "workload": "wat/f64_alu",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -3374,12 +3390,14 @@
       "workload": "wat/f64_alu",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/f64_alu",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -3876,6 +3894,7 @@
       "workload": "wat/i32_alu",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -3917,12 +3936,14 @@
       "workload": "wat/i32_alu",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/i32_alu",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -4419,6 +4440,7 @@
       "workload": "wat/i64_alu",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -4460,12 +4482,14 @@
       "workload": "wat/i64_alu",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/i64_alu",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -4962,6 +4986,7 @@
       "workload": "wat/mem_rw",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -5003,12 +5028,14 @@
       "workload": "wat/mem_rw",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "wat/mem_rw",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -5365,6 +5392,7 @@
       "workload": "app/cowsay",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
@@ -5396,12 +5424,14 @@
       "workload": "app/cowsay",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "app/cowsay",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
@@ -5733,30 +5763,35 @@
       "workload": "app/sqlite3_query",
       "runner": "dewasm-bash",
       "status": "skipped",
-      "reason": "excluded: bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
+      "kind": "cost",
+      "reason": "bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-cpython",
       "status": "skipped",
+      "kind": "setup",
       "reason": "benchmarks/cache/venv missing: run benchmarks/setup.sh"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
-      "reason": "excluded on cost, not capability: pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
+      "kind": "cost",
+      "reason": "pywasm runs this program correctly (byte-identical to wasmtime under -batch) at ~17.9 ms/row: measured 358 s at 20k rows, so the 100k-row script needs roughly half an hour per sample"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite-yjit",
       "status": "skipped",
+      "kind": "setup",
       "reason": "no GEM_HOME with wardite under benchmarks/cache/: run benchmarks/setup.sh"
     }
   ]
