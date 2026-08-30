@@ -1,7 +1,7 @@
 # Decision 88: Tail Calls Join the Accepted Input, Declared Per Backend
 
-Status: **Accepted, 2026-08-30.**
-The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`); every backend declares it unsupported and rejects it at conversion time, and each lowering lands as its own change.
+Status: **Accepted, 2026-08-31.**
+The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`); Ruby, Python, and Perl lower it, Go, Java, and Bash reject it at conversion time, and their lowerings land as their own changes.
 
 ## Context
 
@@ -22,12 +22,15 @@ Nothing else about it is out of scope.
 
 - The core IR accepts `return_call` and `return_call_indirect` unconditionally, as `Stmt::ReturnCall` and `Stmt::ReturnCallIndirect`.
 - `check_module_support` rejects them, with the standard attributed error, for every backend whose `Backend::feature_status` does not declare `Feature::TailCall` supported.
-  Every backend declares it unsupported as of this decision.
 - A backend declares `Supported` only when the shared spec harness passes for it with `return_call.wast` and `return_call_indirect.wast` enabled.
   The harness turns any remaining tail-call-attributed skip into a hard failure at that moment.
 
 The constraint that shapes every lowering, and the reason each is its own change rather than a flag flip: `return_call.wast` drives 1,000,000-deep *mutual* recursion, so no backend passes it by lowering a tail call as a call followed by a return.
-[Decision 18](18-ruby-tail-calls.md) holds the design that did pass, a flat trampoline with a body/entry split, and is accepted again as each backend implements it.
+[Decision 18](18-ruby-tail-calls.md) holds the design that did pass, a flat trampoline with a body/entry split; Ruby, Python, and Perl all lower it that way, since none of the three has dependable tail-call elimination.
+
+Go, Java, and Bash stay `Unsupported` for now, for reasons that differ from Bash's standing exception-handling one and are not a judgement that they cannot:
+Go and Java are statically typed, so a thunk needs a named type per result signature rather than one dynamic wrapper, and Go additionally lowers a `try_table` body as a closure whose escapes are numbered outcomes, which a thunk has to join.
+Bash returns results through globals and uses the exit status as its trap channel, so the thunk has nowhere to live that a call site does not already read.
 
 `return_call_ref` stays rejected: it belongs to the function-references proposal, which no pinned app needs.
 
@@ -48,7 +51,7 @@ Code this governs: `crates/dewasm-core/src/{ir,func,module}.rs` (the two stateme
 
 ## Consequences
 
-- Positive: a module using tail calls now reaches the IR, so the rejection is a backend declaration rather than a validation failure, and the error names the instruction rather than the validator's phrasing.
-- Positive: `docs/support.md` gains a tail-call row, which reads unsupported for every backend today and flips per backend as the lowerings land.
-- Carry-over: the workarounds and the source build stay in place until enough backends lower the proposal; the pinned app cannot move to the official asset before the backends that run it can convert it.
-- Carry-over: Bash may end up the backend that declines, as it does for exception handling, but unlike mruby the wasm3 app does run under Bash, so that is a decision to make against a real case rather than in advance.
+- Positive: the official `wasm3-wasi.wasm` asset converts and runs on the three declaring backends, with no stack workaround at all: converted to Ruby it runs the cowsay guest in under a second on a stock `ruby`, where the `-DM3_HAS_TAIL_CALL=0` build needs `RUBY_THREAD_VM_STACK_SIZE` raised to get that far.
+- Positive: `docs/support.md` gains a tail-call row, the second feature row that differs per backend.
+- Carry-over: the source build and the glue workarounds stay until Go, Java, and Bash lower the proposal, because the app case runs on all six; the pinned app cannot move to the official asset before then.
+- Carry-over: a tail-calling function allocates one thunk per hop and pays a wrapper frame even when called normally, the cost decision 18 already recorded.

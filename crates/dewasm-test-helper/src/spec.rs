@@ -188,6 +188,10 @@ pub const CURATED_SPEC_FILES: &[&str] = &[
 /// One list rather than four copies so the set cannot drift per backend.
 pub const EXCEPTION_HANDLING_SPEC_FILES: &[&str] = &["try_table", "throw", "throw_ref", "tag"];
 
+/// The tail-call testsuite files, the shared `extra` for every backend that declares the feature and curates at all.
+/// `return_call_ref` is not among them: it belongs to the function-references proposal, which stays rejected.
+pub const TAIL_CALL_SPEC_FILES: &[&str] = &["return_call", "return_call_indirect"];
+
 /// [`CURATED_SPEC_FILES`] plus every slice in `extras`, so a backend composes the shared lists ([`EXCEPTION_HANDLING_SPEC_FILES`]) with its own additions without copying either.
 /// Leaked because [`SpecBackend::curated_files`] hands back a `'static` slice and each backend calls this once per suite run, when its trials are built.
 pub fn curated_with(extras: &[&[&'static str]]) -> &'static [&'static str] {

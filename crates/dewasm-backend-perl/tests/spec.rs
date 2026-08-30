@@ -53,6 +53,7 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
             dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
+            dewasm_test_helper::TAIL_CALL_SPEC_FILES,
         ]))
     }
 

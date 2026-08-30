@@ -17,7 +17,7 @@ The features a backend can meaningfully differ on; every other `Feature` variant
 | Bulk table ops / passive element segments | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Floating-point (wasm 1.0) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Exception handling | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Tail calls | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Tail calls | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
 
 ## WASI preview 1
 

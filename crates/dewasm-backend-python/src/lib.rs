@@ -34,9 +34,9 @@ use dewasm_backend::masking::{
 };
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
-    module_name_error, signed_view_rel_op, store_code, terminates, type_key, wasi_bundled, Backend,
-    CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
-    SupportStatus,
+    module_name_error, signed_view_rel_op, stmts_use_tail_calls, store_code, terminates, type_key,
+    wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -165,11 +165,19 @@ fn generate_class_inner(
         acc += data.data.len();
     }
     let rt_name = runtime_name(class_name, linkage);
+    let tail_callers: BTreeSet<u32> = module
+        .funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+        .map(|(i, _)| module.num_imported_funcs() + i as u32)
+        .collect();
     let gen = Gen {
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         flat: RefCell::new(None),
+        tail_callers,
         data_file: data_file.map(str::to_string),
         data_offsets,
         rt_name: rt_name.clone(),
@@ -228,6 +236,8 @@ impl Backend for PythonBackend {
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects (fresh instances, compared with `is`), a thrown exception is a native Python exception that doubles as the exnref, and traps stay uncatchable: the same model as Ruby's.
             Feature::ExceptionHandling => SupportStatus::Supported,
+            // A flat trampoline with a body/entry split, the same shape as Ruby's: CPython has no tail-call elimination, so the lowering keeps chains flat itself.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -485,6 +495,8 @@ struct Gen<'a> {
     /// Flat-dispatch plan for the function being emitted, when it holds a deep enough crossing (see [`flat`]).
     /// `branch()` consults it to emit `_state = N; continue` instead of setting the branch register.
     flat: RefCell<Option<flat::Plan>>,
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `_fN_body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary data file of this filename (loaded once into the module-level `DATA_BLOB`) instead of embedded as `bytes.fromhex` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
@@ -908,12 +920,18 @@ impl<'a> Gen<'a> {
     }
 
     /// A funcref value: the `[type_key, callable]` pair tables store.
+    /// A tail-calling function carries its body method as a third element, which `table/tail_ref` hands to the trampoline so a chain through the table stays flat.
     fn func_pair(&self, func_idx: u32) -> String {
-        format!(
-            "[{}, {}]",
+        let base = format!(
+            "{}, {}",
             self.func_type_symbol(func_idx),
             self.func_ref(func_idx)
-        )
+        );
+        if self.tail_callers.contains(&func_idx) {
+            format!("[{base}, self._f{func_idx}_body]")
+        } else {
+            format!("[{base}]")
+        }
     }
 
     fn call_string(&self, func_idx: u32, args: &[String]) -> String {
@@ -931,7 +949,29 @@ impl<'a> Gen<'a> {
         for i in 0..ty.params.len() {
             params.push_str(&format!(", l{i}"));
         }
-        w.line(format!("def _f{idx}(self{params}):"));
+        // A tail-calling function's real code lives in `_fN_body`, which returns `TailCall` thunks instead of growing the stack; the public `_fN` is the trampoline that unwraps them, so every existing call site is unchanged.
+        let is_tail_caller = self.tail_callers.contains(&idx);
+        if is_tail_caller {
+            let args = (0..ty.params.len())
+                .map(|i| format!("l{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            w.line(format!("def _f{idx}(self{params}):"));
+            w.indent();
+            self.use_unit("rt/tail_call");
+            w.line(format!(
+                "return {}.trampoline(self._f{idx}_body({args}))",
+                self.rt_name
+            ));
+            w.dedent();
+            w.line("");
+        }
+        let name = if is_tail_caller {
+            format!("_f{idx}_body")
+        } else {
+            format!("_f{idx}")
+        };
+        w.line(format!("def {name}(self{params}):"));
         w.indent();
         // The defaults are immutable literals, so a chained assignment binds every name to its own value rather than to one shared object.
         for run in local_runs(&func.locals, default_value) {
@@ -1459,9 +1499,40 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("self.data{seg} = b\"\""));
             }
-            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
-            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("tail calls are refused by check_module_support")
+            // A thunk, never a plain call: the callee must run once this frame, including its `except` blocks, is gone, and returning the thunk is what unwinds them.
+            // The target is the callee's *body* where it has one, so a mutual chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
+            Stmt::ReturnCall { func, args } => {
+                self.use_unit("rt/tail_call");
+                let target = if self.tail_callers.contains(func) {
+                    format!("self._f{func}_body")
+                } else {
+                    self.func_ref(*func)
+                };
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
+                w.line(format!(
+                    "return {}.tail_call({target}, ({}{}))",
+                    self.rt_name,
+                    args.join(", "),
+                    if args.len() == 1 { "," } else { "" }
+                ));
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                self.use_unit("rt/tail_call");
+                self.use_unit("table/tail_ref");
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
+                w.line(format!(
+                    "return {}.tail_call(self.t{table_index}.tail_ref({}, {}), ({}{}))",
+                    self.rt_name,
+                    self.masked(index),
+                    self.type_symbol(*type_idx),
+                    args.join(", "),
+                    if args.len() == 1 { "," } else { "" }
+                ));
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));

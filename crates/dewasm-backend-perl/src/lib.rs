@@ -17,9 +17,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
-    local_runs, module_name_error, signed_view_rel_op, store_method, type_key, wasi_bundled,
-    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage,
-    RuntimeScope, SupportStatus,
+    local_runs, module_name_error, signed_view_rel_op, stmts_use_tail_calls, store_method,
+    type_key, wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -152,10 +152,18 @@ fn generate_package_inner(
         RuntimeLinkage::Embedded => format!("{package_name}::Rt"),
         RuntimeLinkage::Alias(_) => "Rt".to_string(),
     };
+    let tail_callers: BTreeSet<u32> = module
+        .funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+        .map(|(i, _)| module.num_imported_funcs() + i as u32)
+        .collect();
     let gen = Gen {
         module,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
+        tail_callers,
         data_file: data_file.map(str::to_string),
         data_offsets,
         rt_name,
@@ -217,6 +225,8 @@ impl Backend for PerlBackend {
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects (reference equality via `==` on a blessed hashref), a thrown exception is a blessed `WasmException` that doubles as the exnref, and traps stay uncatchable: see `emit_try_table`.
             Feature::ExceptionHandling => SupportStatus::Supported,
+            // A flat trampoline with a body/entry split, the same shape as Ruby's; perl's real tail call, `goto &sub`, cannot leave the `eval` a try_table body runs in.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -447,6 +457,8 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `_fN_body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary data file of this filename (loaded once into the file-scoped `$DATA_BLOB`) instead of embedded as `pack('H*', ...)` literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
@@ -871,12 +883,18 @@ impl<'a> Gen<'a> {
     }
 
     /// A funcref value: the `[type_key, coderef]` pair tables store.
+    /// A tail-calling function carries a coderef for its body as a third element, which `table/tail_ref` hands to the trampoline so a chain through the table stays flat.
     fn func_pair(&self, func_idx: u32) -> String {
-        format!(
-            "[{}, {}]",
+        let base = format!(
+            "{}, {}",
             self.func_type_symbol(func_idx),
             self.func_closure(func_idx)
-        )
+        );
+        if self.tail_callers.contains(&func_idx) {
+            format!("[{base}, sub {{ return $self->_f{func_idx}_body(@_); }}]")
+        } else {
+            format!("[{base}]")
+        }
     }
 
     fn call_string(&self, func_idx: u32, args: &[String]) -> String {
@@ -894,7 +912,26 @@ impl<'a> Gen<'a> {
         for i in 0..ty.params.len() {
             params.push_str(&format!(", $l{i}"));
         }
-        w.line(format!("sub _f{idx} {{"));
+        // A tail-calling function's real code lives in `_fN_body`, which returns a thunk instead of growing the stack; the public `_fN` is the trampoline that unwraps them, so every existing call site is unchanged.
+        let is_tail_caller = self.tail_callers.contains(&idx);
+        if is_tail_caller {
+            self.use_unit("rt/tail_call");
+            w.line(format!("sub _f{idx} {{"));
+            w.indent();
+            w.line(format!(
+                "return {}::trampoline($_[0]->_f{idx}_body(@_[1 .. $#_]));",
+                self.rt_name
+            ));
+            w.dedent();
+            w.line("}");
+            w.line("");
+        }
+        let name = if is_tail_caller {
+            format!("_f{idx}_body")
+        } else {
+            format!("_f{idx}")
+        };
+        w.line(format!("sub {name} {{"));
         w.indent();
         w.line(format!("my ($self{params}) = @_;"));
         // The explicit call-depth cutoff: `local` restores the counter on every exit path, including a trap's die-unwind.
@@ -936,10 +973,14 @@ impl<'a> Gen<'a> {
             w.line("my $_bt = 0;");
         }
         // A `return` (or a branch to the function frame) that must cross a try_table's `eval` writes its values here first (`materialize_escape`), one set shared by every try_table in the function: at most one escape is ever in flight, and it only ever heads to this same final `return`, however many `eval`s it has to leave along the way.
-        if !ty.results.is_empty() && seq_has_try_table(&func.body) {
-            let names: Vec<String> = (0..ty.results.len())
-                .map(|i| format!("$__tt_ret{i}"))
-                .collect();
+        // A tail call escapes as a one-value return carrying its thunk, so a nullary tail-calling function needs `$__tt_ret0` even though its own arity declares none.
+        let escape_slots = if self.tail_callers.contains(&idx) {
+            ty.results.len().max(1)
+        } else {
+            ty.results.len()
+        };
+        if escape_slots > 0 && seq_has_try_table(&func.body) {
+            let names: Vec<String> = (0..escape_slots).map(|i| format!("$__tt_ret{i}")).collect();
             let decl = match names.as_slice() {
                 [one] => one.clone(),
                 many => format!("({})", many.join(", ")),
@@ -1154,9 +1195,34 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("$self->{{data{seg}}} = '';"));
             }
-            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
-            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("tail calls are refused by check_module_support")
+            // A thunk, never a plain call: the callee must run once this frame, including every `eval` a try_table opened, is gone, and escaping the thunk as a return is what unwinds them.
+            // The target is the callee's *body* where it has one, so a mutual chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
+            Stmt::ReturnCall { func, args } => {
+                let target = if self.tail_callers.contains(func) {
+                    format!("sub {{ return $self->_f{func}_body(@_); }}")
+                } else {
+                    self.func_closure(*func)
+                };
+                let mut parts = vec![target];
+                parts.extend(args.iter().map(|a| self.expr(a)));
+                let thunk = format!("{}({})", self.rt("tail_call"), parts.join(", "));
+                self.tail_escape(w, thunk);
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                self.use_unit("table/tail_ref");
+                let mut parts = vec![format!(
+                    "$self->{{t{table_index}}}->tail_ref({}, {})",
+                    self.expr(index),
+                    self.type_symbol(*type_idx)
+                )];
+                parts.extend(args.iter().map(|a| self.expr(a)));
+                let thunk = format!("{}({})", self.rt("tail_call"), parts.join(", "));
+                self.tail_escape(w, thunk);
             }
             Stmt::Unreachable => {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
@@ -1258,6 +1324,20 @@ impl<'a> Gen<'a> {
                 w.line(format!("{kw} L{label};"));
             }
         }
+    }
+
+    /// Leave the function carrying `thunk`, the way `branch` leaves it carrying return values: one value, so it crosses each open `try_table`'s `eval` through that barrier's outcome table rather than as a bare `return`, which would only exit the `eval`.
+    /// The trampoline that unwraps it sits outside every barrier, which is what gives a tail call its frame-replacement semantics.
+    fn tail_escape(&self, w: &mut CodeWriter, thunk: String) {
+        let escape = Escape::Return { count: 1 };
+        if let Some((barrier_id, code)) = self.cross_eval_barrier(&escape) {
+            w.line(format!("$__tt_ret0 = {thunk};"));
+            w.line(format!(
+                "$__tt_out{barrier_id} = {code}; last TTBODY{barrier_id};"
+            ));
+            return;
+        }
+        w.line(format!("return {thunk};"));
     }
 
     /// Write a deferred escape's operands before it crosses its first `eval` boundary: a `Label` target's `assigns` (already-materialized temps, so this is the same write `branch`'s direct case makes, only timed earlier), or a `Return` target's values into the function-scoped `$__tt_retN` lexicals (`function`'s declaration, `Escape::Return`).

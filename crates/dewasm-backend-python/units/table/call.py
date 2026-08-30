@@ -5,7 +5,6 @@ def call(self, i, type_key, *args):
     slot = self._slots[i]
     if slot is None:
         Rt.trap("uninitialized element")
-    ty, func = slot
-    if ty != type_key:
+    if slot[0] != type_key:
         Rt.trap("indirect call type mismatch")
-    return func(*args)
+    return slot[1](*args)
