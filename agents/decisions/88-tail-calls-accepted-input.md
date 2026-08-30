@@ -1,7 +1,7 @@
 # Decision 88: Tail Calls Join the Accepted Input, Declared Per Backend
 
 Status: **Accepted, 2026-08-31.**
-The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`); Ruby, Python, and Perl lower it, Go, Java, and Bash reject it at conversion time, and their lowerings land as their own changes.
+The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`); every backend but Bash lowers it, and Bash rejects it at conversion time.
 
 ## Context
 
@@ -28,9 +28,14 @@ Nothing else about it is out of scope.
 The constraint that shapes every lowering, and the reason each is its own change rather than a flag flip: `return_call.wast` drives 1,000,000-deep *mutual* recursion, so no backend passes it by lowering a tail call as a call followed by a return.
 [Decision 18](18-ruby-tail-calls.md) holds the design that did pass, a flat trampoline with a body/entry split; Ruby, Python, and Perl all lower it that way, since none of the three has dependable tail-call elimination.
 
-Go, Java, and Bash stay `Unsupported` for now, for reasons that differ from Bash's standing exception-handling one and are not a judgement that they cannot:
-Go and Java are statically typed, so a thunk needs a named type per result signature rather than one dynamic wrapper, and Go additionally lowers a `try_table` body as a closure whose escapes are numbered outcomes, which a thunk has to join.
-Bash returns results through globals and uses the exit status as its trap channel, so the thunk has nowhere to live that a call site does not already read.
+The two statically-typed backends need the thunk typed rather than boxed, and each takes the shape its own lowering already has:
+
+- Go gives each result signature its own thunk type, `type XTailI32 func() (int32, XTailI32)`, so nothing is boxed; a body returns its results *and* the thunk, and the entry loops on the thunk being non-nil.
+  A `try_table` body is a closure whose exits are numbered outcomes, so a tail call inside one becomes another outcome, re-emitted outside the closure where the handler is already gone.
+- Java needs no new type: its result register is already `Object` for multi-value returns, so a tail-calling body types it `Object` and a tail call is simply a return of the thunk, unwound by the same `_br` register as any other return.
+
+Bash stays `Unsupported`, for the same shape of reason decision 69 gave it for exception handling: results come back through global variables and the exit status is the trap channel, so a thunk has nowhere to live that a call site does not already read, and threading one through would change the calling convention of every Bash artifact.
+The wasm3 app case does run under Bash, unlike mruby, so this costs something concrete: that case keeps the `-DM3_HAS_TAIL_CALL=0` source build and its `ulimit -s` raise.
 
 `return_call_ref` stays rejected: it belongs to the function-references proposal, which no pinned app needs.
 
@@ -51,7 +56,10 @@ Code this governs: `crates/dewasm-core/src/{ir,func,module}.rs` (the two stateme
 
 ## Consequences
 
-- Positive: the official `wasm3-wasi.wasm` asset converts and runs on the three declaring backends, with no stack workaround at all: converted to Ruby it runs the cowsay guest in under a second on a stock `ruby`, where the `-DM3_HAS_TAIL_CALL=0` build needs `RUBY_THREAD_VM_STACK_SIZE` raised to get that far.
+- Positive: the official `wasm3-wasi.wasm` asset converts and runs the cowsay guest with no stack workaround at all: under a second on a stock `ruby` where the `-DM3_HAS_TAIL_CALL=0` build needs `RUBY_THREAD_VM_STACK_SIZE` raised, and on a default JVM stack where the same build needed the glue's own 64 MB thread.
 - Positive: `docs/support.md` gains a tail-call row, the second feature row that differs per backend.
-- Carry-over: the source build and the glue workarounds stay until Go, Java, and Bash lower the proposal, because the app case runs on all six; the pinned app cannot move to the official asset before then.
+- Negative: the pinned app cannot move to the official asset while the case still runs under Bash, so the source build and the Bash `ulimit -s` raise stay; what the other five backends gain is that their own workarounds become unnecessary once it does move.
 - Carry-over: a tail-calling function allocates one thunk per hop and pays a wrapper frame even when called normally, the cost decision 18 already recorded.
+  In converted wasm3 that hop is the guest opcode dispatch, so the allocation sits in the hottest loop there is; whether it costs more than the stack growth it replaces is a measurement the benchmark suite should make once the app moves.
+- Carry-over: converting the official asset to Go exposed an unrelated emission bug (issue #289): a constant `i32.mul` renders as a Go constant expression, which Go rejects for overflow instead of wrapping.
+  Go therefore cannot build that asset yet, though its tail-call lowering passes the conformance suite.

@@ -79,6 +79,7 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
         Some(dewasm_test_helper::curated_with(&[
             &["skip-stack-guard-page"],
             dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
+            dewasm_test_helper::TAIL_CALL_SPEC_FILES,
         ]))
     }
 

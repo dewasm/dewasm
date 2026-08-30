@@ -21,8 +21,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasm_backend::{
     check_module_support, comparison, is_boolean, is_ident, is_wasi_module, load_method,
-    local_runs, module_name_error, store_method, type_key, wasi_bundled, Backend, CodeWriter,
-    CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
+    local_runs, module_name_error, stmts_use_tail_calls, store_method, type_key, wasi_bundled,
+    Backend, CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -216,6 +217,8 @@ impl Backend for JavaBackend {
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects, a thrown exception is a native Java exception that doubles as the exnref, and traps stay uncatchable.
             Feature::ExceptionHandling => SupportStatus::Supported,
+            // A trampoline with a body/entry split: the body's result register holds either the result or the thunk, so it is typed `Object`, the shape multi-value results already use.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -291,6 +294,13 @@ fn new_gen(
         module,
         default_wasi,
         type_name,
+        tail_callers: module
+            .funcs
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+            .map(|(i, _)| module.num_imported_funcs() + i as u32)
+            .collect(),
         uses: RefCell::new(BTreeSet::new()),
         split: Cell::new(false),
         next_part: Cell::new(0),
@@ -607,6 +617,8 @@ pub fn java_string(s: &str) -> String {
 }
 
 struct Gen<'a> {
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `f{idx}Body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
     module: &'a Module,
     default_wasi: bool,
     type_name: String,
@@ -745,18 +757,23 @@ impl<'a> Gen<'a> {
     /// A call to a *defined* function by index, honoring partitioning: a partitioned module calls `P{k}.f{idx}(<inst>, args)`; otherwise `[inst.]f{idx}(args)` (the `inst.` form serves the non-partitioned `Elem` class).
     /// `args_joined` is the already-formatted argument list.
     fn defined_call(&self, func_idx: u32, args_joined: &str) -> String {
+        self.defined_call_named(func_idx, &format!("f{func_idx}"), args_joined)
+    }
+
+    /// The same call, naming the method explicitly: a tail-calling function is reached either through its entry (`fN`) or through its split body (`fNBody`), and both live in the same partition class.
+    fn defined_call_named(&self, func_idx: u32, method: &str, args_joined: &str) -> String {
         if self.partitioned.get() {
             let k = self.partition_of(func_idx);
             let s = self.self_arg();
             if args_joined.is_empty() {
-                format!("P{k}.f{func_idx}({s})")
+                format!("P{k}.{method}({s})")
             } else {
-                format!("P{k}.f{func_idx}({s}, {args_joined})")
+                format!("P{k}.{method}({s}, {args_joined})")
             }
         } else if self.via_inst() {
-            format!("inst.f{func_idx}({args_joined})")
+            format!("inst.{method}({args_joined})")
         } else {
-            format!("f{func_idx}({args_joined})")
+            format!("{method}({args_joined})")
         }
     }
 
@@ -1322,6 +1339,50 @@ impl<'a> Gen<'a> {
 
     /// The `Rt.Fn` value for a function export / table element.
     /// When emitting the nested `Elem` helper class, functions are reached through the passed module instance (`inst.`), so the lambdas can live in that class's own constant pool.
+    /// Evaluate each argument into a fresh final local, so the lambda that runs later closes over the values the tail call had; a Java lambda captures variables, and only effectively-final ones.
+    fn bind_tail_args(&self, w: &mut CodeWriter, params: &[ValType], args: &[Expr]) -> Vec<String> {
+        let mut names = Vec::with_capacity(args.len());
+        for (arg, ty) in args.iter().zip(params) {
+            let n = self.next_tail_name();
+            w.line(format!("final {} {n} = {};", jtype(*ty), self.expr(arg)));
+            names.push(n);
+        }
+        names
+    }
+
+    fn next_tail_name(&self) -> String {
+        let n = self.mv_counter.get();
+        self.mv_counter.set(n + 1);
+        format!("__ta{n}")
+    }
+
+    /// Return the thunk the way a `return` returns a value: the branch register unwinds this frame first, and the trampoline outside runs `call`.
+    fn emit_tail(&self, w: &mut CodeWriter, results: &[ValType], call: String) {
+        let run = if results.is_empty() {
+            format!("{{ {call}; return null; }}")
+        } else {
+            call
+        };
+        w.line(format!("{} = new Rt.TailCall(() -> {run});", self.ret()));
+        w.line(format!("{} = -1;", self.br()));
+    }
+
+    /// The `Rt.Fn` view of a tail-calling function's split body: it returns `Object` (a result or a thunk), so no unboxing happens here.
+    fn body_value(&self, func_idx: u32) -> String {
+        let ty = self.module.func_type(func_idx);
+        let call_args = ty
+            .params
+            .iter()
+            .enumerate()
+            .map(|(k, t)| unbox(*t, &format!("__a[{k}]")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "(Rt.Fn)(__a -> {})",
+            self.defined_call_named(func_idx, &format!("f{func_idx}Body"), &call_args)
+        )
+    }
+
     fn func_value(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             return format!("(Rt.Fn) {}", self.iref(&format!("if{func_idx}")));
@@ -1345,8 +1406,13 @@ impl<'a> Gen<'a> {
     fn elem_item(&self, item: &ElemItem) -> String {
         match item {
             ElemItem::Func(func_idx) => {
+                let body = if self.tail_callers.contains(func_idx) {
+                    format!(", {}", self.body_value(*func_idx))
+                } else {
+                    String::new()
+                };
                 format!(
-                    "new Rt.Funcref({}, {})",
+                    "new Rt.Funcref({}, {}{body})",
                     java_string(&self.func_type_symbol(*func_idx)),
                     self.func_value(*func_idx)
                 )
@@ -1372,11 +1438,60 @@ impl<'a> Gen<'a> {
         let ty = &self.module.types[func.type_idx as usize];
         let nparams = ty.params.len();
         let results = &ty.results;
-        let has_result = !results.is_empty();
+        // A tail-calling function's real code lives in `f{idx}Body`, whose result register holds either this frame's result or the thunk that continues the chain, so it is typed `Object`; the public `f{idx}` is the trampoline that unwraps it, so no call site changes.
+        let is_tail_caller = self.tail_callers.contains(&idx);
+        let has_result = !results.is_empty() || is_tail_caller;
         // A method returns one value; multi-value signatures return a boxed `Object[]`.
         // The result register (`_ret` / frame `ret`) takes the same shape.
-        let ret_ty = ret_slot_ty(results);
-        let ret_init = ret_slot_init(results);
+        let ret_ty = if is_tail_caller {
+            "Object".to_string()
+        } else {
+            ret_slot_ty(results)
+        };
+        let ret_init = if is_tail_caller {
+            "null".to_string()
+        } else {
+            ret_slot_init(results)
+        };
+        if is_tail_caller {
+            self.use_unit("rt/tail_call");
+            let params_str = (0..nparams)
+                .map(|i| {
+                    format!(
+                        "{} l{i}",
+                        jtype(if i < ty.params.len() {
+                            ty.params[i]
+                        } else {
+                            func.locals[i - ty.params.len()]
+                        })
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let args = (0..nparams)
+                .map(|i| format!("l{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            w.line(self.method_head(&ret_slot_ty(results), &format!("f{idx}"), &params_str));
+            w.indent();
+            let unwrapped = format!(
+                "Rt.trampoline({})",
+                self.defined_call_named(idx, &format!("f{idx}Body"), &args)
+            );
+            match results.as_slice() {
+                [] => w.line(format!("{unwrapped};")),
+                [t] => w.line(format!("return {};", unbox(*t, &unwrapped))),
+                _ => w.line(format!("return (Object[]) {unwrapped};")),
+            }
+            w.dedent();
+            w.line("}");
+            w.line("");
+        }
+        let method_name = if is_tail_caller {
+            format!("f{idx}Body")
+        } else {
+            format!("f{idx}")
+        };
 
         let mut local_types = ty.params.clone();
         local_types.extend(func.locals.iter().copied());
@@ -1411,7 +1526,7 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("{} p{i}", jtype(local_types[i])))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(self.method_head(&ret_ty, &format!("f{idx}"), &params_str));
+            w.line(self.method_head(&ret_ty, &method_name, &params_str));
             w.indent();
             w.line(format!("Frame{idx} f = new Frame{idx}();"));
             for i in 0..nparams {
@@ -1434,7 +1549,7 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("{} l{i}", jtype(local_types[i])))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(self.method_head(&ret_ty, &format!("f{idx}"), &params_str));
+            w.line(self.method_head(&ret_ty, &method_name, &params_str));
             w.indent();
             // Locals start at their type's zero.
             // A run of consecutive locals of one type becomes a single declaration; Java has no chained assignment in a declarator list, so each name keeps its own initializer and only the type name is shared.
@@ -2039,9 +2154,40 @@ impl<'a> Gen<'a> {
                     self.iref(&format!("data{seg}"))
                 ));
             }
-            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
-            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("tail calls are refused by check_module_support")
+            // A thunk returned like any other result: the enclosing frame's `_br = -1` unwinds it, including any `try_table` handler, before the trampoline runs the callee.
+            // The thunk targets the callee's *body* where it has one, so a mutual chain runs in the one outermost trampoline with no frame per hop.
+            Stmt::ReturnCall { func, args } => {
+                self.use_unit("rt/tail_call");
+                let fty = self.module.func_type(*func).clone();
+                let bound = self.bind_tail_args(w, &fty.params, args);
+                let call = if self.tail_callers.contains(func) {
+                    self.defined_call_named(*func, &format!("f{func}Body"), &bound.join(", "))
+                } else {
+                    self.call_string(*func, &bound)
+                };
+                self.emit_tail(w, &fty.results, call);
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                self.use_unit("rt/tail_call");
+                self.use_unit("table/tail_ref");
+                let ty = self.module.types[*type_idx as usize].clone();
+                // The slot is resolved, and its traps raised, here rather than inside the thunk: an indirect tail call's checks happen at the instruction, not after the frame is gone.
+                let slot = self.next_tail_name();
+                w.line(format!(
+                    "Rt.Fn {slot} = {}.tailRef({}, {});",
+                    self.iref(&format!("t{table_index}")),
+                    self.expr(index),
+                    java_string(&self.type_symbol(*type_idx))
+                ));
+                let bound = self.bind_tail_args(w, &ty.params, args);
+                // No unboxing: the slot may be a split body, whose `Object` is either the result or the next thunk.
+                let call = self.invoke_string(&slot, &bound.join(", "), None);
+                self.emit_tail(w, &ty.results, call);
             }
             Stmt::Unreachable => {
                 // Void method that throws: emitting it as a statement (not a `throw`) avoids an "unreachable statement" error after it.
@@ -2509,7 +2655,8 @@ fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
             }
             true
         }
-        Stmt::Return { .. } => {
+        // A tail call ends the frame the way a return does: it writes the branch register, so following siblings must be guarded.
+        Stmt::Return { .. } | Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
             free.insert(RETURN_SENTINEL);
             true
         }
