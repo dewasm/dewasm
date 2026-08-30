@@ -19,6 +19,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-22T08-27-05Z-speed.json`: re-baseline after the f32 rounding change (#268).
 - `2026-08-24T22-56-29Z-speed.json`: TODO: describe the occasion.
 - `2026-08-24T23-27-21Z-speed.json`: TODO: describe the occasion.
+- `2026-08-30T05-11-20Z-speed.json`: the first record with the converted-wasm3 runners (#279) on the wasm3 v0.9.0 pin (#278).
 
 ## Size records
 
