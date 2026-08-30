@@ -1,6 +1,7 @@
 //! `cargo xtask record-speed` and `cargo xtask render-speed`: the cross-runtime benchmark suite and the document it feeds.
 //!
 //! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite).
+//! The `wasm3-*` runners add the same-category counterpart to those interpreters: the converted wasm3 build interpreting the workload at run time, so "a runtime-loading wasm runtime in pure Ruby/Python" is compared hand-written against converted.
 //! Measuring and rendering are separate commands: `record-speed` writes a dated record under `records/`, `render-speed` turns a record into `docs/benchmarks/results.md` with its charts.
 //! A full run takes tens of minutes, so a wording fix in the renderer must not require re-measuring: the JSON is the record, the markdown is only a view of it.
 //! Neither is a compared snapshot: a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).

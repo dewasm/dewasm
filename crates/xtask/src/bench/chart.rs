@@ -73,7 +73,7 @@ pub enum Family {
     /// A wasm runtime executing the module natively: wasmer, wasmedge, wazero, wasm3.
     /// Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
     Native,
-    /// A wasm interpreter written in a host language: pywasm, wardite.
+    /// A wasm interpreter running on a host language, whether hand-written (pywasm, wardite) or converted by dewasm (the `wasm3-*` runners).
     /// The comparison dewasm actually cares about.
     Interpreter,
 }
@@ -83,7 +83,9 @@ fn family(runner: &str) -> Family {
         "wasmtime" => Family::Baseline,
         "wasmer" | "wasmedge" | "wazero" | "wasm3" => Family::Native,
         r if r.starts_with("dewasm-") => Family::Dewasm,
-        r if r.starts_with("pywasm") || r.starts_with("wardite") => Family::Interpreter,
+        r if r.starts_with("pywasm") || r.starts_with("wardite") || r.starts_with("wasm3-") => {
+            Family::Interpreter
+        }
         // Anything later added beside wasmtime as a reference runtime.
         _ => Family::Baseline,
     }
