@@ -559,6 +559,15 @@ fn rel((r, cmp): (&str, Option<&str>), a: &str, b: &str) -> String {
     }
 }
 
+/// The name suffix distinguishing a tail-entry interface, field and table by the result signature they carry.
+fn tail_suffix(results: &[ValType]) -> String {
+    match results {
+        [] => "V".to_string(),
+        [t] => jtype_suffix(*t).to_uppercase(),
+        _ => "A".to_string(),
+    }
+}
+
 /// The field-name suffix distinguishing a parked argument slot's type.
 fn jtype_suffix(ty: ValType) -> &'static str {
     match ty {
@@ -865,23 +874,28 @@ impl<'a> Gen<'a> {
         // Built once, before anything that parks a target or stores one in a table: a tail call reads its target out of here rather than building a lambda per hop.
         // Each entry is bound to this instance and reads *its* parked slots, which is what makes the owner check at an indirect tail call necessary.
         if !self.tail_callers.is_empty() {
-            let entries: Vec<String> = self
-                .tail_callers
-                .iter()
-                .map(|f| {
-                    let params = &self.module.func_type(*f).params;
-                    let args: Vec<String> = params
-                        .iter()
-                        .enumerate()
-                        .map(|(i, t)| Self::arg_slot(i, *t))
-                        .collect();
-                    format!("() -> f{f}Body({})", args.join(", "))
-                })
-                .collect();
-            w.line(format!(
-                "this.tb = new Rt.TailBody[]{{{}}};",
-                entries.join(", ")
-            ));
+            for sig in self.tail_signatures() {
+                let entries: Vec<String> = self
+                    .tail_callers
+                    .iter()
+                    .filter(|f| self.module.func_type(**f).results == sig)
+                    .map(|f| {
+                        let params = &self.module.func_type(*f).params;
+                        let args: Vec<String> = params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| Self::arg_slot(i, *t))
+                            .collect();
+                        format!("() -> f{f}Body({})", args.join(", "))
+                    })
+                    .collect();
+                w.line(format!(
+                    "this.{} = new {}[]{{{}}};",
+                    self.tail_table(&sig),
+                    self.tail_iface(&sig),
+                    entries.join(", ")
+                ));
+            }
         }
 
         // Memory: imported or locally defined (index space has at most one).
@@ -1221,14 +1235,24 @@ impl<'a> Gen<'a> {
     }
 
     fn struct_fields(&self, w: &mut CodeWriter) {
-        // Parked tail calls: one argument slot per position and type a tail call passes, plus the pending target and the entry table built once in the constructor.
+        // Parked tail calls: one entry interface, pending target and entry table per result signature, plus one argument slot per position and type a tail call passes.
+        // The interface carries the signature's own Java type, so a chain ends without boxing its result.
         if !self.tail_callers.is_empty() {
-            self.use_unit("rt/tail_call");
+            for sig in self.tail_signatures() {
+                w.line(format!(
+                    "interface {} {{ {} run(); }}",
+                    self.tail_iface(&sig),
+                    ret_slot_ty(&sig)
+                ));
+            }
             for (name, ty) in self.arg_slots() {
                 w.line(format!("{} {name};", jtype(ty)));
             }
-            w.line("Rt.TailBody tf;");
-            w.line("Rt.TailBody[] tb;");
+            for sig in self.tail_signatures() {
+                let iface = self.tail_iface(&sig);
+                w.line(format!("{iface} {};", self.tail_field(&sig)));
+                w.line(format!("{iface}[] {};", self.tail_table(&sig)));
+            }
         }
         let m = self.module;
         if m.imported_memory.is_some() || m.memory.is_some() {
@@ -1427,9 +1451,38 @@ impl<'a> Gen<'a> {
             .collect()
     }
 
-    /// A tail-calling function's dense position in the instance's tail-entry table.
+    /// The distinct result signatures of the module's tail-calling functions, each needing its own entry interface, field and table.
+    fn tail_signatures(&self) -> Vec<Vec<ValType>> {
+        let mut seen: BTreeSet<Vec<ValType>> = BTreeSet::new();
+        for idx in &self.tail_callers {
+            seen.insert(self.module.func_type(*idx).results.clone());
+        }
+        seen.into_iter().collect()
+    }
+
+    /// The entry interface for a result signature: a call returning that signature's own Java type, so a chain ends without boxing.
+    fn tail_iface(&self, results: &[ValType]) -> String {
+        format!("TailBody{}", tail_suffix(results))
+    }
+
+    fn tail_field(&self, results: &[ValType]) -> String {
+        format!("tf{}", tail_suffix(results))
+    }
+
+    fn tail_table(&self, results: &[ValType]) -> String {
+        format!("tb{}", tail_suffix(results))
+    }
+
+    /// A tail-calling function's dense position in its result signature's table.
     fn tail_slot(&self, func_idx: u32) -> Option<usize> {
-        self.tail_callers.iter().position(|f| *f == func_idx)
+        if !self.tail_callers.contains(&func_idx) {
+            return None;
+        }
+        let results = self.module.func_type(func_idx).results.clone();
+        self.tail_callers
+            .iter()
+            .filter(|f| self.module.func_type(**f).results == results)
+            .position(|f| *f == func_idx)
     }
 
     /// Bind each argument to a final local, so a lambda over them compiles: java captures variables, and only effectively-final ones.
@@ -1446,21 +1499,34 @@ impl<'a> Gen<'a> {
     /// Park a call that has no tail entry to reuse, as a lambda; it still runs after this frame is gone, which is what a tail call means.
     fn park_lambda(&self, w: &mut CodeWriter, results: &[ValType], call: &str) {
         let run = if results.is_empty() {
-            format!("{{ {call}; return null; }}")
+            format!("{{ {call}; }}")
         } else {
             call.to_string()
         };
-        w.line(format!("{} = () -> {run};", self.iref("tf")));
+        w.line(format!(
+            "{} = () -> {run};",
+            self.iref(&self.tail_field(results))
+        ));
         w.line(format!("{} = -1;", self.br()));
     }
 
     /// Park a tail call and end this frame: the arguments into their slots, then the target, then the branch register, which unwinds the frame the way a return does.
     /// The arguments are already free of calls (the IR spills an effectful operand before the instruction), so nothing between these assignments can reach another trampoline and overwrite a slot.
-    fn park_tail(&self, w: &mut CodeWriter, params: &[ValType], args: &[String], target: &str) {
+    fn park_tail(
+        &self,
+        w: &mut CodeWriter,
+        params: &[ValType],
+        results: &[ValType],
+        args: &[String],
+        target: &str,
+    ) {
         for (i, (a, ty)) in args.iter().zip(params).enumerate() {
             w.line(format!("{} = {a};", self.iref(&Self::arg_slot(i, *ty))));
         }
-        w.line(format!("{} = {target};", self.iref("tf")));
+        w.line(format!(
+            "{} = {target};",
+            self.iref(&self.tail_field(results))
+        ));
         w.line(format!("{} = -1;", self.br()));
     }
 
@@ -1488,7 +1554,10 @@ impl<'a> Gen<'a> {
         match item {
             ElemItem::Func(func_idx) => {
                 let body = match self.tail_slot(*func_idx) {
-                    Some(k) => format!(", {}[{k}], this", self.iref("tb")),
+                    Some(k) => format!(
+                        ", {}[{k}], this",
+                        self.iref(&self.tail_table(&self.module.func_type(*func_idx).results))
+                    ),
                     None => String::new(),
                 };
                 format!(
@@ -1518,23 +1587,15 @@ impl<'a> Gen<'a> {
         let ty = &self.module.types[func.type_idx as usize];
         let nparams = ty.params.len();
         let results = &ty.results;
-        // A tail-calling function's real code lives in `f{idx}Body`, whose result register holds either this frame's result or the thunk that continues the chain, so it is typed `Object`; the public `f{idx}` is the trampoline that unwraps it, so no call site changes.
+        // A tail-calling function's real code lives in `f{idx}Body`; the public `f{idx}` is the trampoline that runs the chain, so no call site changes.
+        // The body's result register keeps the function's own type: a parked call carries the continuation, so the register never has to hold anything but a result.
         let is_tail_caller = self.tail_callers.contains(&idx);
-        let has_result = !results.is_empty() || is_tail_caller;
+        let has_result = !results.is_empty();
         // A method returns one value; multi-value signatures return a boxed `Object[]`.
         // The result register (`_ret` / frame `ret`) takes the same shape.
-        let ret_ty = if is_tail_caller {
-            "Object".to_string()
-        } else {
-            ret_slot_ty(results)
-        };
-        let ret_init = if is_tail_caller {
-            "null".to_string()
-        } else {
-            ret_slot_init(results)
-        };
+        let ret_ty = ret_slot_ty(results);
+        let ret_init = ret_slot_init(results);
         if is_tail_caller {
-            self.use_unit("rt/tail_call");
             let params_str = (0..nparams)
                 .map(|i| {
                     format!(
@@ -1554,21 +1615,26 @@ impl<'a> Gen<'a> {
                 .join(", ");
             w.line(self.method_head(&ret_slot_ty(results), &format!("f{idx}"), &params_str));
             w.indent();
-            w.line(format!(
-                "Object __r = {};",
-                self.defined_call_named(idx, &format!("f{idx}Body"), &args)
-            ));
-            w.line(format!("while ({} != null) {{", self.iref("tf")));
+            let field = self.iref(&self.tail_field(results));
+            let call = self.defined_call_named(idx, &format!("f{idx}Body"), &args);
+            if results.is_empty() {
+                w.line(format!("{call};"));
+            } else {
+                w.line(format!("{ret_ty} __r = {call};"));
+            }
+            w.line(format!("while ({field} != null) {{"));
             w.indent();
-            w.line(format!("Rt.TailBody __t = {};", self.iref("tf")));
-            w.line(format!("{} = null;", self.iref("tf")));
-            w.line("__r = __t.run();");
+            w.line(format!("{} __t = {field};", self.tail_iface(results)));
+            w.line(format!("{field} = null;"));
+            if results.is_empty() {
+                w.line("__t.run();");
+            } else {
+                w.line("__r = __t.run();");
+            }
             w.dedent();
             w.line("}");
-            match results.as_slice() {
-                [] => {}
-                [t] => w.line(format!("return {};", unbox(*t, "__r"))),
-                _ => w.line("return (Object[]) __r;"),
+            if !results.is_empty() {
+                w.line("return __r;");
             }
             w.dedent();
             w.line("}");
@@ -2244,13 +2310,12 @@ impl<'a> Gen<'a> {
             // Parked, never called: the enclosing frame's `_br = -1` unwinds it, including any `try_table` handler, before the entry's trampoline runs the callee.
             // The target is the callee's tail entry, built once at instantiation, so a hop allocates nothing.
             Stmt::ReturnCall { func, args } => {
-                self.use_unit("rt/tail_call");
                 let fty = self.module.func_type(*func).clone();
                 let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
                 match self.tail_slot(*func) {
                     Some(k) => {
-                        let target = format!("{}[{k}]", self.iref("tb"));
-                        self.park_tail(w, &fty.params, &args, &target);
+                        let target = format!("{}[{k}]", self.iref(&self.tail_table(&fty.results)));
+                        self.park_tail(w, &fty.params, &fty.results, &args, &target);
                     }
                     // A callee with no tail entry here still has to run once this frame is gone, or an exception it throws would be caught by a `try_table` this frame opened.
                     // So it is parked too, as a lambda over the arguments; that costs one allocation, on a path a chain does not take.
@@ -2267,7 +2332,6 @@ impl<'a> Gen<'a> {
                 index,
                 args,
             } => {
-                self.use_unit("rt/tail_call");
                 self.use_unit("table/tail_ref");
                 let ty = self.module.types[*type_idx as usize].clone();
                 // The slot is resolved, and its traps raised, here rather than after the frame is gone: an indirect tail call's checks happen at the instruction.
@@ -2282,17 +2346,25 @@ impl<'a> Gen<'a> {
                 let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
                 w.line(format!("if ({slot}.owner == {}) {{", self.self_ref()));
                 w.indent();
-                self.park_tail(w, &ty.params, &args, &format!("(Rt.TailBody) {slot}.body"));
+                let cast = format!("({}) {slot}.body", self.tail_iface(&ty.results));
+                self.park_tail(w, &ty.params, &ty.results, &args, &cast);
                 w.dedent();
                 w.line("} else {");
                 w.indent();
                 // Another instance's entry reads its own slots, so it cannot be parked; it is wrapped instead, which keeps it running after this frame is gone at the cost of one allocation.
                 let bound = self.bind_finals(w, &ty.params, &args);
-                let call = self.invoke_string(
-                    &format!("{slot}.fn"),
-                    &bound.join(", "),
-                    ty.results.first().copied(),
-                );
+                // The wrapper has to yield the entry interface's own type, so a multi-value result is cast rather than unboxed.
+                let call = match ty.results.as_slice() {
+                    [_, _, ..] => format!(
+                        "(Object[]) {}",
+                        self.invoke_string(&format!("{slot}.fn"), &bound.join(", "), None)
+                    ),
+                    rs => self.invoke_string(
+                        &format!("{slot}.fn"),
+                        &bound.join(", "),
+                        rs.first().copied(),
+                    ),
+                };
                 self.park_lambda(w, &ty.results, &call);
                 w.dedent();
                 w.line("}");
