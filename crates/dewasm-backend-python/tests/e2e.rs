@@ -235,11 +235,8 @@ except ToywasmRt.Exit:
 "#;
 
 /// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-/// wasm3's continuation-passing dispatch nests one Python call per guest opcode until a loop or return unwinds it, and cowsay's startup runs deeper than the default recursion limit, so the glue raises it (the Python analog of the Ruby glue's re-exec).
-const PYTHON_WASM3_GLUE: &str = r#"import sys
-
-sys.setrecursionlimit(200000)
-inst = Wasm3({}, args=["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
+/// Plain glue, unlike every other converted-interpreter case here: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one Python frame and no recursion limit is raised.
+const PYTHON_WASM3_GLUE: &str = r#"inst = Wasm3({}, args=["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
 try:
     inst.invoke("_start")
 except Wasm3Rt.Exit:

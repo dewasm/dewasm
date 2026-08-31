@@ -14,7 +14,7 @@ That is what the glue stack workarounds on Ruby, Python, Java, and Bash exist fo
 Accepting the proposal removes the workarounds at their source and lets the pinned app be the official asset rather than a source build.
 
 Measured on the v0.9.0 asset: with the proposal accepted, the module validates and builds into the IR, and the only thing left rejecting it is the per-backend declaration.
-Nothing else about it is out of scope.
+Nothing else about it is out of scope, so accepting the proposal is also what lets the pin be upstream's own asset instead of a local build.
 
 ## Decision
 
@@ -58,8 +58,9 @@ Code this governs: `crates/dewasm-core/src/{ir,func,module}.rs` (the two stateme
 
 - Positive: the official `wasm3-wasi.wasm` asset converts and runs the cowsay guest with no stack workaround at all: under a second on a stock `ruby` where the `-DM3_HAS_TAIL_CALL=0` build needs `RUBY_THREAD_VM_STACK_SIZE` raised, and on a default JVM stack where the same build needed the glue's own 64 MB thread.
 - Positive: `docs/support.md` gains a tail-call row, the second feature row that differs per backend.
-- Negative: the pinned app cannot move to the official asset while the case still runs under Bash, so the source build and the Bash `ulimit -s` raise stay; what the other five backends gain is that their own workarounds become unnecessary once it does move.
+- Positive: the pinned wasm3 is upstream's own release asset rather than a local build with the dispatch turned off, and every stack workaround this app needed is gone: the glue is plain on all five backends that run it.
+- Negative: Bash loses the case entirely, since the module it now converts is one Bash refuses; its `e2e.rs` callsite is commented out with that reason, and the convert manifest asserts the refusal so the loss cannot pass silently.
 - Carry-over: a tail-calling function allocates one thunk per hop and pays a wrapper frame even when called normally, the cost decision 18 already recorded.
   In converted wasm3 that hop is the guest opcode dispatch, so the allocation sits in the hottest loop there is; whether it costs more than the stack growth it replaces is a measurement the benchmark suite should make once the app moves.
 - Carry-over: converting the official asset to Go exposed an unrelated emission bug (issue #289): a constant `i32.mul` renders as a Go constant expression, which Go rejects for overflow instead of wrapping.
-  Go therefore cannot build that asset yet, though its tail-call lowering passes the conformance suite.
+  Fixed separately; the asset is what found it, since the spec testsuite passes its operands in at each `invoke` and so never produces the shape.

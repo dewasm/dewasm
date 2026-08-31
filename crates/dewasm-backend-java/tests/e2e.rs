@@ -341,24 +341,13 @@ const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
 "#;
 
 /// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-/// wasm3's dispatch nests one JVM frame per guest opcode, deeper than the JVM main thread's default stack on the Linux CI host, so the instance runs on a 64 MB thread like the standalone wrapper's guest thread.
-/// The rethrow is what makes a guest failure a nonzero exit: an uncaught exception on a non-main thread does not change the exit status.
+/// Plain glue on the main thread, unlike every other converted-interpreter case here: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one JVM frame and the default stack is enough.
 const JAVA_WASM3_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
-        Throwable[] failure = new Throwable[1];
-        Thread guest = new Thread(null, () -> {
-            try {
-                Wasm3 inst = new Wasm3(null, new String[]{"wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
-                ((Wasm3.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
-            } catch (Wasm3.Rt.Exit e) {
-            } catch (Throwable e) {
-                failure[0] = e;
-            }
-        }, "guest", 64L << 20);
-        guest.start();
-        guest.join();
-        if (failure[0] != null) {
-            throw new RuntimeException(failure[0]);
+        Wasm3 inst = new Wasm3(null, new String[]{"wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
+        try {
+            ((Wasm3.Rt.Fn) inst.Exports.get("_start")).invoke(new Object[]{});
+        } catch (Wasm3.Rt.Exit e) {
         }
     }
 }
