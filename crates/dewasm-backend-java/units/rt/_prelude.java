@@ -23,9 +23,16 @@ interface ImportProvider {
 static final class Funcref {
     final String ty;
     final Fn fn;
+    // The split body of a tail-calling function, which `table/tail_ref` hands to the trampoline so a chain through the table stays flat; null for everything else, which completes in a single frame anyway.
+    final Fn body;
 
     Funcref(String ty, Fn fn) {
+        this(ty, fn, null);
+    }
+
+    Funcref(String ty, Fn fn, Fn body) {
         this.ty = ty;
         this.fn = fn;
+        this.body = body;
     }
 }

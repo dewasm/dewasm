@@ -177,6 +177,8 @@ fn has_barrier(stmts: &[Stmt]) -> bool {
             s,
             Stmt::Call { .. }
                 | Stmt::CallIndirect { .. }
+                | Stmt::ReturnCall { .. }
+                | Stmt::ReturnCallIndirect { .. }
                 | Stmt::MemoryGrow { .. }
                 | Stmt::MemoryCopy { .. }
                 | Stmt::MemoryFill { .. }

@@ -37,7 +37,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
 | 16 | [Completing Wasm 1.0 for Ruby (Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking)](16-ruby-wasm1-completion.md) | Accepted |
 | 17 | [Reference Types in the Ruby Backend (funcref = the Table Pair, externref = a Raw Host Value)](17-ruby-reference-types.md) | Superseded (decision 24) |
-| 18 | [Tail Calls in the Ruby Backend (Flat Trampoline with a Body/Entry Split)](18-ruby-tail-calls.md) | Superseded (decision 24) |
+| 18 | [Tail Calls in the Ruby Backend (Flat Trampoline with a Body/Entry Split)](18-ruby-tail-calls.md) | Accepted |
 | 19 | [Exception Handling in the Ruby Backend (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Accepted |
 | 20 | [Component Model (Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary)](20-component-model-core-ir-adapters.md) | Superseded (decision 24) |
 | 21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (decision 24) |
@@ -107,6 +107,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 85 | [crates.io Publish Layout (Units Inside Their Crates, CLI Crate Named `dewasm`)](85-crates-io-publish-layout.md) | Accepted |
 | 86 | [wasm3 as the Converted-Interpreter Benchmark Runner](86-converted-interpreter-benchmark-runner.md) | Accepted |
 | 87 | [Record Schema Evolution by In-Place Migration](87-record-schema-migration.md) | Accepted |
+| 88 | [Tail Calls Join the Accepted Input, Declared Per Backend](88-tail-calls-accepted-input.md) | Accepted |
 
 ## Adding a new decision
 

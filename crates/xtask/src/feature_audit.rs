@@ -200,17 +200,18 @@ fn audit(path: &str) -> Result<bool> {
             true
         }
         Some(needed) => {
-            // Exception handling is accepted input, lowered per backend; only the remaining proposals can push an app out of scope.
+            // Exception handling and tail calls are accepted input, lowered per backend; only the remaining proposals can push an app out of scope.
+            const PER_BACKEND: [&str; 2] = ["exception-handling", "tail-call"];
             let blocking: Vec<&str> = needed
                 .iter()
                 .copied()
-                .filter(|n| *n != "exception-handling")
+                .filter(|n| !PER_BACKEND.contains(n))
                 .collect();
-            let eh_note = if needed.contains(&"exception-handling") {
-                " + exception-handling (accepted input, lowered per backend)"
-            } else {
-                ""
-            };
+            let eh_note: String = PER_BACKEND
+                .iter()
+                .filter(|p| needed.contains(*p))
+                .map(|p| format!(" + {p} (accepted input, lowered per backend)"))
+                .collect();
             if blocking.is_empty() {
                 println!("{name}: baseline{eh_note}, in scope");
                 true

@@ -22,6 +22,7 @@ const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::TableBulkOps,
     Feature::Floats,
     Feature::ExceptionHandling,
+    Feature::TailCall,
 ];
 
 pub fn render_support_docs() -> String {

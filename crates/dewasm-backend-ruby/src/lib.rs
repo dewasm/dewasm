@@ -30,9 +30,9 @@ use dewasm_backend::masking::{
 };
 use dewasm_backend::{
     check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_code, local_runs,
-    module_name_error, signed_view_rel_op, store_code, terminates, type_key, wasi_bundled, Backend,
-    CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
-    SupportStatus,
+    module_name_error, signed_view_rel_op, stmts_use_tail_calls, store_code, terminates, type_key,
+    wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_backend::{extract, fuse, licm};
 use dewasm_core::feature::Feature;
@@ -176,9 +176,17 @@ fn generate_class_inner(
         data_offsets.push(acc);
         acc += data.data.len();
     }
+    let extracted = transformed_funcs(module);
+    let tail_callers: BTreeSet<u32> = extracted
+        .funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+        .map(|(i, _)| module.num_imported_funcs() + i as u32)
+        .collect();
     let gen = Gen {
         module,
-        extracted: transformed_funcs(module),
+        extracted,
         default_wasi,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
@@ -187,6 +195,7 @@ fn generate_class_inner(
         dead_clears: RefCell::new(HashSet::new()),
         elision: RefCell::new(Elision::none(FIXNUM_LIMIT)),
         boxed_globals,
+        tail_callers,
         data_file: data_file.map(str::to_string),
         data_offsets,
     };
@@ -243,6 +252,8 @@ impl Backend for RubyBackend {
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects, a thrown exception is a native Ruby exception that doubles as the exnref, and traps stay uncatchable.
             Feature::ExceptionHandling => SupportStatus::Supported,
+            // A flat trampoline with a body/entry split; Ruby has no dependable tail-call elimination, so the lowering keeps chains flat itself.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -564,6 +575,8 @@ struct Gen<'a> {
     /// Computed once in `generate_class_inner`.
     /// See the boundary criterion in the comment there.
     boxed_globals: BTreeSet<u32>,
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `_fN_body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
     /// When `Some`, data segments are externalized into a binary data file of this filename (referenced via `__dir__`) instead of embedded as hex literals; `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
@@ -950,12 +963,18 @@ impl<'a> Gen<'a> {
 
     /// A funcref value: the `[type_symbol, callable]` pair tables store.
     /// Element items and `call_indirect` agree on this shape.
+    /// A tail-calling function carries its body method as a third element, which `table/tail_ref` hands to the trampoline so a chain through the table stays flat.
     fn func_pair(&self, func_idx: u32) -> String {
-        format!(
-            "[{}, {}]",
+        let base = format!(
+            "{}, {}",
             self.func_type_symbol(func_idx),
             self.func_ref(func_idx)
-        )
+        );
+        if self.tail_callers.contains(&func_idx) {
+            format!("[{base}, method(:_f{func_idx}_body)]")
+        } else {
+            format!("[{base}]")
+        }
     }
 
     fn call_string(&self, func_idx: u32, args: &[String]) -> String {
@@ -978,10 +997,29 @@ impl<'a> Gen<'a> {
             .map(|i| format!("l{i}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let header = if params.is_empty() {
-            format!("def _f{idx}")
+        // A tail-calling function's real code lives in `_fN_body`, which returns `Rt::TailCall` thunks instead of growing the stack; the public `_fN` is the trampoline that unwraps them, so every existing call site is unchanged.
+        let is_tail_caller = self.tail_callers.contains(&idx);
+        let name = if is_tail_caller {
+            format!("_f{idx}_body")
         } else {
-            format!("def _f{idx}({params})")
+            format!("_f{idx}")
+        };
+        if is_tail_caller {
+            self.use_unit("rt/tail_call");
+            let header = if params.is_empty() {
+                format!("def _f{idx}")
+            } else {
+                format!("def _f{idx}({params})")
+            };
+            w.block(header, "end", |w| {
+                w.line(format!("trampoline(_f{idx}_body({params}))"));
+            });
+            w.line("");
+        }
+        let header = if params.is_empty() {
+            format!("def {name}")
+        } else {
+            format!("def {name}({params})")
         };
         w.block(header, "end", |w| {
             // The chained assignment is sound only because the defaults are immutable literals: every name ends up bound to its own value, not to one shared object.
@@ -1411,6 +1449,37 @@ impl<'a> Gen<'a> {
             }
             Stmt::ThrowRef { exn } => {
                 w.line(format!("{}({})", self.rt("throw_ref"), self.expr_text(exn)));
+            }
+            // A thunk, never a plain call: the callee must run once this frame, including its `rescue` blocks, is gone, and returning the thunk is what unwinds them.
+            // The target is the callee's *body* where it has one, so a mutual chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
+            Stmt::ReturnCall { func, args } => {
+                self.use_unit("rt/tail_call");
+                let target = if self.tail_callers.contains(func) {
+                    format!("method(:_f{func}_body)")
+                } else {
+                    self.func_ref(*func)
+                };
+                let args: Vec<String> = args.iter().map(|a| self.expr_text(a)).collect();
+                w.line(format!(
+                    "return Rt::TailCall.new({target}, [{}])",
+                    args.join(", ")
+                ));
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                self.use_unit("rt/tail_call");
+                self.use_unit("table/tail_ref");
+                let args: Vec<String> = args.iter().map(|a| self.expr_text(a)).collect();
+                w.line(format!(
+                    "return Rt::TailCall.new(@t{table_index}.tail_ref({}, {}), [{}])",
+                    self.expr_text(index),
+                    self.type_symbol(*type_idx),
+                    args.join(", ")
+                ));
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
