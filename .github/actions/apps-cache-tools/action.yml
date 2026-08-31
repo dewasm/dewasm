@@ -1,0 +1,20 @@
+name: Install the tools the apps cache is keyed on
+description: >
+  Installs wasm-opt and the wasi-vfs CLI, the two tools whose versions appear in
+  examples/apps/scripts stamps. A job that reads the restored apps cache needs them
+  to verify it against its pins (examples/apps/setup.sh --check), even though it
+  does not build anything.
+runs:
+  using: composite
+  steps:
+    # Binaryen comes from the pinned upstream release, not apt, for the same reason the apps-cache job takes it from there.
+    - shell: bash
+      run: |
+        curl -sSfL -o /tmp/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
+        tar -xzf /tmp/binaryen.tar.gz -C /tmp
+        sudo cp /tmp/binaryen-version_132/bin/wasm-opt /usr/local/bin/
+        curl -fsSL --retry 5 -o /tmp/wasi-vfs-cli.zip \
+          https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip
+        echo "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485  /tmp/wasi-vfs-cli.zip" | shasum -a 256 -c -
+        sudo unzip -o /tmp/wasi-vfs-cli.zip -d /usr/local/bin
+        sudo chmod +x /usr/local/bin/wasi-vfs
