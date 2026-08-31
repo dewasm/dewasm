@@ -1,0 +1,126 @@
+;; tail_call: the same chain as call_direct, made of tail calls.
+;;
+;; One iteration walks the same four functions doing the same arithmetic, but each hop is a `return_call` instead of a `call`, so the chain replaces its frame rather than nesting four deep.
+;; call_direct prints the same number from the same work, so the difference between the two cases is the cost of a frame-replacing call against a nesting one; that pairing is why this case exists, and it is the shape eh_throw and eh_try already use for exception handling.
+;;
+;; The chain stays four hops rather than going a million deep on purpose.
+;; A depth no ordinary call could reach would measure the proposal's space guarantee, which is real, but it has no paired baseline to measure against and it would exclude every runner that lowers a tail call as an ordinary call.
+;;
+;; ---------------------------------------------------------------------------
+;; Shared preamble.
+;; Duplicated verbatim in every hand-written microbenchmark so each
+;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;;
+;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
+;; It does
+;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported, and a body stays inside i32/i64/f64 except for the one axis its case exists to measure: f32 in f32_alu, exception handling in eh_throw and eh_try.
+;; That keeps every other case within reach of the pure-Ruby and pure-Python interpreters this suite compares, and a runner that cannot execute a case's axis is excluded for that case in the harness workload table, with the reason stated there.
+;;
+;; Memory map, shared by every microbenchmark.
+;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;;
+;; 0x1000   4  argc                     (args_sizes_get out param)
+;; 0x1004   4  argv buffer size         (args_sizes_get out param)
+;; 0x1010      argv pointer array       (args_get out param)
+;; 0x1100      argv string buffer       (args_get out param)
+;; 0x1400   8  iovec { base, len }
+;; 0x1408   4  fd_write nwritten
+;; 0x1410  24  decimal scratch, filled backwards from 0x1428
+;; 0x1800  29  usage message
+;; 0x10000+    working set, for the microbenchmarks that have one
+;; ---------------------------------------------------------------------------
+(module
+  (import "wasi_snapshot_preview1" "args_sizes_get"
+    (func $args_sizes_get (param i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "args_get"
+    (func $args_get (param i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "fd_write"
+    (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  (import "wasi_snapshot_preview1" "proc_exit"
+    (func $proc_exit (param i32)))
+
+  (memory (export "memory") 2)
+
+  (data (i32.const 0x1800) "usage: <module> <iterations>\n")
+
+  ;; Every argv problem lands here.
+  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
+  (func $die
+    (i32.store (i32.const 0x1400) (i32.const 0x1800))
+    (i32.store (i32.const 0x1404) (i32.const 29))
+    (drop (call $fd_write
+      (i32.const 2) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408)))
+    (call $proc_exit (i32.const 2))
+    (unreachable))
+
+  ;; argv[1] as an unsigned decimal.
+  ;; Hand-rolled atoi: ask for the sizes, ask for the strings, then walk the bytes of argv[1].
+  (func $iterations (result i32)
+    (local $p i32) (local $start i32) (local $c i32) (local $n i32)
+    (if (call $args_sizes_get (i32.const 0x1000) (i32.const 0x1004))
+      (then (call $die)))
+    (if (i32.ne (i32.load (i32.const 0x1000)) (i32.const 2))
+      (then (call $die)))
+    (if (call $args_get (i32.const 0x1010) (i32.const 0x1100))
+      (then (call $die)))
+    (local.set $p (i32.load (i32.const 0x1014)))
+    (local.set $start (local.get $p))
+    (block $end
+      (loop $byte
+        (local.set $c (i32.load8_u (local.get $p)))
+        (br_if $end (i32.eqz (local.get $c)))
+        ;; Unsigned wraparound turns every non-digit into a large value.
+        (if (i32.gt_u (i32.sub (local.get $c) (i32.const 48)) (i32.const 9))
+          (then (call $die)))
+        (local.set $n
+          (i32.add (i32.mul (local.get $n) (i32.const 10))
+                   (i32.sub (local.get $c) (i32.const 48))))
+        (local.set $p (i32.add (local.get $p) (i32.const 1)))
+        (br $byte)))
+    (if (i32.eq (local.get $p) (local.get $start)) (then (call $die)))
+    (local.get $n))
+
+  ;; Write `<v>\n` to stdout with v as an unsigned decimal.
+  ;; Digits come out least significant first, so the scratch area is filled backwards.
+  (func $print (param $v i64)
+    (local $p i32)
+    (local.set $p (i32.const 0x1427))
+    (i32.store8 (local.get $p) (i32.const 10))
+    (loop $digit
+      (local.set $p (i32.sub (local.get $p) (i32.const 1)))
+      (i32.store8 (local.get $p)
+        (i32.add (i32.const 48)
+                 (i32.wrap_i64 (i64.rem_u (local.get $v) (i64.const 10)))))
+      (local.set $v (i64.div_u (local.get $v) (i64.const 10)))
+      (br_if $digit (i64.ne (local.get $v) (i64.const 0))))
+    (i32.store (i32.const 0x1400) (local.get $p))
+    (i32.store (i32.const 0x1404) (i32.sub (i32.const 0x1428) (local.get $p)))
+    (drop (call $fd_write
+      (i32.const 1) (i32.const 0x1400) (i32.const 1) (i32.const 0x1408))))
+
+  (func $mix3 (param $x i32) (result i32)
+    (i32.xor (local.get $x) (i32.shr_u (local.get $x) (i32.const 16))))
+
+  (func $mix2 (param $x i32) (result i32)
+    (return_call $mix3
+      (i32.add (i32.mul (local.get $x) (i32.const 0x85ebca77)) (i32.const 1))))
+
+  (func $mix1 (param $x i32) (result i32)
+    (return_call $mix2
+      (i32.xor (local.get $x) (i32.shr_u (local.get $x) (i32.const 13)))))
+
+  (func $mix0 (param $x i32) (result i32)
+    (return_call $mix1 (i32.mul (local.get $x) (i32.const 1664525))))
+
+  (func (export "_start")
+    (local $n i32) (local $i i32) (local $a i32)
+    (local.set $n (call $iterations))
+    (block $done
+      (loop $next
+        (br_if $done (i32.ge_u (local.get $i) (local.get $n)))
+        (local.set $a (call $mix0 (i32.add (local.get $a) (local.get $i))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $next)))
+    (call $print (i64.extend_i32_u (local.get $a))))
+)

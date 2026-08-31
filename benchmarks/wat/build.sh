@@ -23,9 +23,10 @@ require_tool wat2wasm "install wabt (brew install wabt / apt install wabt)"
 
 for src in wat/*.wat; do
   id=$(basename "$src" .wat)
-  # eh_throw and eh_try are the only cases allowed past wasm 1.0, so the exception-handling proposal is enabled for them alone: any other case that reaches for a post-1.0 instruction fails to assemble here.
+  # A case is allowed past wasm 1.0 only where its whole reason is the proposal it names, and only that proposal is enabled for it: any other case reaching for a post-1.0 instruction fails to assemble here.
   case "$id" in
     eh_*) wat2wasm --enable-exceptions "$src" -o "cache/wat/$id.wasm" ;;
+    tail_call) wat2wasm --enable-tail-call "$src" -o "cache/wat/$id.wasm" ;;
     *) wat2wasm "$src" -o "cache/wat/$id.wasm" ;;
   esac
   echo "$id: $src -> cache/wat/$id.wasm"

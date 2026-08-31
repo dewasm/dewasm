@@ -26,6 +26,7 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
     ("wat/mem_rw", 500_000_000),
     ("wat/mem_narrow", 600_000_000),
     ("wat/call_direct", 500_000_000),
+    ("wat/tail_call", 500_000_000),
     ("wat/call_indirect", 500_000_000),
     ("wat/eh_throw", 4_000_000),
     ("wat/eh_try", 330_000_000),
@@ -43,6 +44,7 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
 const MICRO_EXCLUDES: &[(&str, &[(&str, Exclusion)])] = &[
     ("wat/eh_throw", EH_EXCLUDES),
     ("wat/eh_try", EH_EXCLUDES),
+    ("wat/tail_call", TAIL_CALL_EXCLUDES),
     ("wat/f32_alu", F32_ALU_EXCLUDES),
     ("wat/i64_div", I64_DIV_EXCLUDES),
 ];
@@ -96,6 +98,40 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wardite", WARDITE_EH_EXCLUSION),
     ("wardite-yjit", WARDITE_EH_EXCLUSION),
 ];
+
+/// Runners excluded from the tail-call microbenchmark: none of these accepts `return_call`.
+/// The paired `call_direct` case has no exclusions, so a runner missing here is measured on both and a runner listed here is measured on the baseline alone.
+/// Every dewasm backend runs it, bash included: the proposal is lowered everywhere (see docs/support.md).
+const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
+    (
+        "wasmer",
+        Exclusion {
+            kind: ExclusionKind::Capability,
+            reason: "wasmer rejects the module: compile error Validate(\"tail calls support is not enabled\")",
+        },
+    ),
+    (
+        "wazero",
+        Exclusion {
+            kind: ExclusionKind::Capability,
+            reason: "wazero 1.12.0 rejects the module: \"return_call invalid as feature \\\"tail-call\\\" is disabled\"",
+        },
+    ),
+    ("pywasm-cpython", PYWASM_TAIL_CALL_EXCLUSION),
+    ("pywasm-pypy", PYWASM_TAIL_CALL_EXCLUSION),
+    ("wardite", WARDITE_TAIL_CALL_EXCLUSION),
+    ("wardite-yjit", WARDITE_TAIL_CALL_EXCLUSION),
+];
+
+const PYWASM_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "pywasm 2.2.3 has no tail-call opcodes; decoding dies with AssertionError on 0x12, the return_call opcode (pywasm/core.py)",
+};
+
+const WARDITE_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "wardite 0.9.0 decodes return_call but has no implementation: RuntimeError \"TODO! unsupported [:default, :return_call, [], nil, nil]\" (wardite.rb, eval_insn)",
+};
 
 const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
