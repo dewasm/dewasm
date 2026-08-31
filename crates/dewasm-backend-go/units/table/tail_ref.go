@@ -1,7 +1,7 @@
 // requires: rt/trap
-// `call`'s checks, raised at the same point in execution order, but returning the slot's func value for the trampoline instead of handing back the plain entry.
-// A slot's optional `body` is the split body of a tail-calling function; a slot without one completes in a single frame anyway, and the caller type-asserts whichever it got.
-func (t *Table) tailRef(i uint32, typeKey string) any {
+// `call`'s checks, raised at the same point in execution order, but resolving a tail call rather than an ordinary one.
+// A tail entry is bound to the instance that built it and reads *that* instance's parked slots, so it is only returned to its owner; every other caller gets the ordinary func value and completes the call itself, which costs one frame per instance switch.
+func (t *Table) tailRef(i uint32, typeKey string, owner any) (any, any) {
     if i >= uint32(len(t.slots)) {
         Rt.trap("undefined element")
     }
@@ -12,8 +12,8 @@ func (t *Table) tailRef(i uint32, typeKey string) any {
     if slot.ty != typeKey {
         Rt.trap("indirect call type mismatch")
     }
-    if slot.body != nil {
-        return slot.body
+    if slot.body != nil && slot.owner == owner {
+        return slot.body, nil
     }
-    return slot.fn
+    return nil, slot.fn
 }

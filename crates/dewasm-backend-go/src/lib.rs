@@ -191,7 +191,6 @@ pub fn generate_program_with_units(
         try_stack: RefCell::new(Vec::new()),
         tail_callers: tail_callers(module),
         cur_tail: RefCell::new(None),
-        tail_arg_seq: RefCell::new(0),
         spec: true,
         data_file: None,
         data_offsets: data_offsets(module),
@@ -223,7 +222,6 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         try_stack: RefCell::new(Vec::new()),
         tail_callers: tail_callers(module),
         cur_tail: RefCell::new(None),
-        tail_arg_seq: RefCell::new(0),
         spec: false,
         data_file: opts.data_file.as_ref().map(|c| c.data_file_name.clone()),
         data_offsets: data_offsets(module),
@@ -641,8 +639,6 @@ struct Gen<'a> {
     tail_callers: BTreeSet<u32>,
     /// The result signature of the tail-calling function currently being emitted, set by `function()`: every `return` in its body carries a trailing `nil` thunk.
     cur_tail: RefCell<Option<Vec<ValType>>>,
-    /// Names the per-argument bindings a tail call makes; only has to be unique within one function.
-    tail_arg_seq: RefCell<u32>,
     /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
     /// Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
     spec: bool,
@@ -665,64 +661,93 @@ impl<'a> Gen<'a> {
         seen.into_iter().collect()
     }
 
-    /// Evaluate each argument into a fresh local, so the thunk that runs later closes over the values the tail call had, not over variables the trampoline may reuse.
-    fn bind_args(&self, w: &mut CodeWriter, args: &[Expr]) -> Vec<String> {
-        let mut names = Vec::with_capacity(args.len());
-        for arg in args {
-            let n = self.next_tail_arg();
-            w.line(format!("{n} := {}", self.expr(arg)));
-            names.push(n);
-        }
-        names
+    /// The parked-target field for a result signature: a chain agrees on its results, so one field per signature is enough and nothing is boxed.
+    fn tail_field(&self, results: &[ValType]) -> String {
+        format!("tf{}", tail_suffix(results))
     }
 
-    fn next_tail_arg(&self) -> String {
-        let mut n = self.tail_arg_seq.borrow_mut();
-        *n += 1;
-        format!("__ta{n}")
+    /// The per-instance table of tail entries for a result signature, built once in the constructor.
+    fn tail_table(&self, results: &[ValType]) -> String {
+        format!("tb{}", tail_suffix(results))
     }
 
-    /// Return the thunk that continues the chain, alongside zero values for this frame's own results, which the trampoline discards.
-    /// `run` is the closure's whole body: it has the thunk signature, so it either forwards to another body or completes and ends the chain.
-    fn emit_thunk(&self, w: &mut CodeWriter, results: &[ValType], run: String) {
-        let mut parts: Vec<String> = results.iter().map(|t| zero_value(*t).to_string()).collect();
-        parts.push(format!(
-            "{}(func(){} {{ {run} }})",
-            self.tail_type(results),
-            self.body_results(results)
-        ));
-        w.line(format!("return {}", parts.join(", ")));
+    /// The Go type of a tail entry: a call that takes its arguments out of the parked slots and runs the callee's body.
+    /// Unnamed on purpose, so a slot written by another artifact still type-asserts here.
+    fn tail_entry_type(&self, results: &[ValType]) -> String {
+        format!("func(){}", go_results(results))
     }
 
-    /// A thunk body forwarding to another function's split body: its signature already matches.
-    fn forwarding_body(call: &str) -> String {
-        format!("return {call}")
+    /// The slot a tail call parks argument `i` of type `ty` in.
+    fn arg_slot(i: usize, ty: ValType) -> String {
+        format!("ta{i}{}", ty_suffix(ty))
     }
 
-    /// A thunk body calling a function that completes in one frame, so the chain ends with a `nil` thunk.
-    fn completing_body(results: &[ValType], call: &str) -> String {
-        match results.len() {
-            0 => format!("{call}; return nil"),
-            1 => format!("return {call}, nil"),
-            n => {
-                let rs: Vec<String> = (0..n).map(|i| format!("__r{i}")).collect();
-                format!("{} := {call}; return {}, nil", rs.join(", "), rs.join(", "))
+    /// Every argument slot the module's tail calls need: one per position and type a tail call passes.
+    /// A tail-calling function's own parameters, because its tail entry reads them back out; and every signature reachable through a table, because an indirect tail call parks against the *call site's* type, which need not be one of them.
+    fn arg_slots(&self) -> Vec<(String, ValType)> {
+        let mut seen: BTreeSet<(usize, ValType)> = BTreeSet::new();
+        let mut note = |params: &[ValType]| {
+            for (i, ty) in params.iter().enumerate() {
+                seen.insert((i, *ty));
             }
+        };
+        for idx in &self.tail_callers {
+            note(&self.module.func_type(*idx).params);
+        }
+        for f in &self.module.funcs {
+            Stmt::any(&f.body, &mut |st| {
+                if let Stmt::ReturnCallIndirect { type_idx, .. } = st {
+                    note(&self.module.types[*type_idx as usize].params);
+                }
+                false
+            });
+        }
+        seen.into_iter()
+            .map(|(i, ty)| (Self::arg_slot(i, ty), ty))
+            .collect()
+    }
+
+    /// A tail-calling function's dense position in its result signature's table.
+    fn tail_slot(&self, func_idx: u32) -> Option<usize> {
+        if !self.tail_callers.contains(&func_idx) {
+            return None;
+        }
+        let results = self.module.func_type(func_idx).results.clone();
+        self.tail_callers
+            .iter()
+            .filter(|f| self.module.func_type(**f).results == results)
+            .position(|f| *f == func_idx)
+    }
+
+    /// A tail call whose callee has no tail entry here: it completes in one frame, so the chain ends with its result.
+    fn return_call_completing(&self, w: &mut CodeWriter, call: &str) {
+        if self
+            .cur_tail
+            .borrow()
+            .as_ref()
+            .is_some_and(|r| r.is_empty())
+        {
+            w.line(call);
+            w.line("return");
+        } else {
+            w.line(format!("return {call}"));
         }
     }
 
-    /// The named type of a tail-call thunk for a given result signature: `func() (results, itself)`.
-    /// A type per signature rather than one dynamic wrapper, because a caller and the callee it tail-calls always agree on results (wasm requires it), so the thunk stays statically typed with nothing boxed.
-    /// Named after the module type, because the spec harness compiles several converted modules into one Go package.
-    fn tail_type(&self, results: &[ValType]) -> String {
-        format!("{}Tail{}", self.type_name, tail_suffix(results))
-    }
-
-    /// The Go signature of `f{idx}Body`: the function's own results followed by the thunk that continues the chain.
-    fn body_results(&self, results: &[ValType]) -> String {
-        let mut rets: Vec<String> = results.iter().map(|t| go_type(*t).to_string()).collect();
-        rets.push(self.tail_type(results));
-        format!(" ({})", rets.join(", "))
+    /// Park a tail call and leave: the arguments into their slots, then the target, then this frame's own zero results, which the trampoline discards.
+    /// The arguments are already free of calls (the IR spills an effectful operand before the instruction), so nothing between these assignments can reach another trampoline and overwrite a slot.
+    fn park_tail(&self, w: &mut CodeWriter, params: &[ValType], args: &[String], target: &str) {
+        for (i, (a, ty)) in args.iter().zip(params).enumerate() {
+            w.line(format!("p.{} = {a}", Self::arg_slot(i, *ty)));
+        }
+        let results = self.cur_tail.borrow().clone().unwrap_or_default();
+        w.line(format!("p.{} = {target}", self.tail_field(&results)));
+        let zeros: Vec<&str> = results.iter().map(|t| zero_value(*t)).collect();
+        if zeros.is_empty() {
+            w.line("return");
+        } else {
+            w.line(format!("return {}", zeros.join(", ")));
+        }
     }
 
     /// The Go expression yielding a data segment's bytes: a sub-slice of the embedded blob when `--data-file` is on (no runtime helper), else an `Rt.unhex(...)` inline hex literal.
@@ -763,13 +788,6 @@ impl<'a> Gen<'a> {
 
     fn emit_program(&self, w: &mut CodeWriter) {
         self.struct_def(w);
-        for sig in self.tail_signatures() {
-            let name = self.tail_type(&sig);
-            let mut rets: Vec<String> = sig.iter().map(|t| go_type(*t).to_string()).collect();
-            rets.push(name.clone());
-            w.line("");
-            w.line(format!("type {name} func() ({})", rets.join(", ")));
-        }
         w.line("");
         self.constructor(w);
         for (i, func) in self.module.funcs.iter().enumerate() {
@@ -906,6 +924,22 @@ impl<'a> Gen<'a> {
         for i in 0..m.datas.len() {
             w.line(format!("data{i} []byte"));
         }
+        // Parked tail calls: one argument slot per position and type a tail-calling function takes, and one target field plus one entry table per result signature.
+        for (name, ty) in self.arg_slots() {
+            w.line(format!("{name} {}", go_type(ty)));
+        }
+        for sig in self.tail_signatures() {
+            w.line(format!(
+                "{} {}",
+                self.tail_field(&sig),
+                self.tail_entry_type(&sig)
+            ));
+            w.line(format!(
+                "{} []{}",
+                self.tail_table(&sig),
+                self.tail_entry_type(&sig)
+            ));
+        }
         w.line("Exports map[string]any");
         w.dedent();
         w.line("}");
@@ -919,6 +953,35 @@ impl<'a> Gen<'a> {
         ));
         w.indent();
         w.line(format!("p := &{name}{{}}"));
+        // Built once, before anything that parks a target or stores one in a table: a tail call reads its target out of here rather than building a closure per hop.
+        // Each entry is bound to this instance and reads *its* parked slots, which is what makes the owner check at an indirect tail call necessary.
+        for sig in self.tail_signatures() {
+            let entries: Vec<String> = self
+                .tail_callers
+                .iter()
+                .filter(|f| self.module.func_type(**f).results == sig)
+                .map(|f| {
+                    let params = &self.module.func_type(*f).params;
+                    let args: Vec<String> = params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, t)| format!("p.{}", Self::arg_slot(i, *t)))
+                        .collect();
+                    let call = format!("p.f{f}Body({})", args.join(", "));
+                    if sig.is_empty() {
+                        format!("func() {{ {call} }}")
+                    } else {
+                        format!("func(){} {{ return {call} }}", go_results(&sig))
+                    }
+                })
+                .collect();
+            w.line(format!(
+                "p.{} = []{}{{{}}}",
+                self.tail_table(&sig),
+                self.tail_entry_type(&sig),
+                entries.join(", ")
+            ));
+        }
 
         if let Some(import) = &m.imported_memory {
             self.emit_typed_import(w, "p.memory", "*Memory", &import.module, &import.name);
@@ -1267,10 +1330,12 @@ impl<'a> Gen<'a> {
     fn elem_item(&self, item: &ElemItem) -> String {
         match item {
             ElemItem::Func(func_idx) => {
-                let body = if self.tail_callers.contains(func_idx) {
-                    format!(", body: p.f{func_idx}Body")
-                } else {
-                    String::new()
+                let body = match self.tail_slot(*func_idx) {
+                    Some(k) => format!(
+                        ", body: p.{}[{k}], owner: p",
+                        self.tail_table(&self.module.func_type(*func_idx).results)
+                    ),
+                    None => String::new(),
                 };
                 format!(
                     "&funcref{{ty: {}, fn: {}{body}}}",
@@ -1322,26 +1387,35 @@ impl<'a> Gen<'a> {
             .map(|(i, t)| format!("l{i} {}", go_type(*t)))
             .collect::<Vec<_>>()
             .join(", ");
-        // A tail-calling function's real code lives in `f{idx}Body`, which returns a thunk alongside its results instead of growing the stack; the public `f{idx}` is the trampoline that runs the chain, so no call site changes.
+        // A tail-calling function's real code lives in `f{idx}Body`, which parks the next call in the instance's slots instead of growing the stack; the public `f{idx}` is the trampoline that runs the chain, so no call site changes.
         let is_tail_caller = self.tail_callers.contains(&idx);
         if is_tail_caller {
             let args = (0..nparams)
                 .map(|i| format!("l{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let rs: Vec<String> = (0..ty.results.len()).map(|i| format!("r{i}")).collect();
-            let mut lhs = rs.clone();
-            lhs.push("next".to_string());
+            let field = self.tail_field(&ty.results);
             w.line(format!(
                 "func (p *{}) f{idx}({params_str}){} {{",
                 self.type_name,
                 go_results(&ty.results)
             ));
             w.indent();
-            w.line(format!("{} := p.f{idx}Body({args})", lhs.join(", ")));
-            w.line("for next != nil {");
+            let rs: Vec<String> = (0..ty.results.len()).map(|i| format!("r{i}")).collect();
+            if rs.is_empty() {
+                w.line(format!("p.f{idx}Body({args})"));
+            } else {
+                w.line(format!("{} := p.f{idx}Body({args})", rs.join(", ")));
+            }
+            w.line(format!("for p.{field} != nil {{"));
             w.indent();
-            w.line(format!("{} = next()", lhs.join(", ")));
+            w.line(format!("f := p.{field}"));
+            w.line(format!("p.{field} = nil"));
+            if rs.is_empty() {
+                w.line("f()");
+            } else {
+                w.line(format!("{} = f()", rs.join(", ")));
+            }
             w.dedent();
             w.line("}");
             if !rs.is_empty() {
@@ -1357,11 +1431,7 @@ impl<'a> Gen<'a> {
         } else {
             format!("f{idx}")
         };
-        let results_str = if is_tail_caller {
-            self.body_results(&ty.results)
-        } else {
-            go_results(&ty.results)
-        };
+        let results_str = go_results(&ty.results);
         w.line(format!(
             "func (p *{}) {name}({params_str}){results_str} {{",
             self.type_name
@@ -1406,12 +1476,9 @@ impl<'a> Gen<'a> {
 
         self.emit_seq(w, &body);
 
-        if (!ty.results.is_empty() || is_tail_caller) && !ends_unreachable(&body) {
+        if !ty.results.is_empty() && !ends_unreachable(&body) {
             // Go's missing-return rule is syntactic: a body whose last statement is a call that only panics inside the runtime (`Rt.trap`) still needs this.
-            let mut zeros: Vec<&str> = ty.results.iter().map(|t| zero_value(*t)).collect();
-            if is_tail_caller {
-                zeros.push("nil");
-            }
+            let zeros: Vec<&str> = ty.results.iter().map(|t| zero_value(*t)).collect();
             w.line(format!("return {}", zeros.join(", ")));
         }
         w.dedent();
@@ -1766,21 +1833,23 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("p.data{seg} = nil"));
             }
-            // A thunk, never a plain call: the callee must run once this frame, including any `try_table` closure that installed a handler, is gone, and returning the thunk is what unwinds them.
-            // The thunk targets the callee's *body* where it has one, so a mutual chain runs in the one outermost trampoline with no frame per hop.
+            // Parked, never called: the callee must run once this frame, including any `try_table` closure that installed a handler, is gone, and returning is what unwinds them.
+            // The target is the callee's tail entry, built once at instantiation, so a hop allocates nothing.
             Stmt::ReturnCall { func, args } => {
                 if let Some(code) = self.escape_tail(stmt) {
                     w.line(format!("return {code}"));
                     return;
                 }
-                let callee = self.module.func_type(*func).results.clone();
-                let bound = self.bind_args(w, args);
-                let run = if self.tail_callers.contains(func) {
-                    Self::forwarding_body(&format!("p.f{func}Body({})", bound.join(", ")))
-                } else {
-                    Self::completing_body(&callee, &self.call_string(*func, &bound))
-                };
-                self.emit_thunk(w, &callee, run);
+                let fty = self.module.func_type(*func).clone();
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                match self.tail_slot(*func) {
+                    Some(k) => {
+                        let target = format!("p.{}[{k}]", self.tail_table(&fty.results));
+                        self.park_tail(w, &fty.params, &args, &target);
+                    }
+                    // A callee without a tail entry completes in a single frame, so calling it here ends the chain, which the criterion permits.
+                    None => self.return_call_completing(w, &self.call_string(*func, &args)),
+                }
             }
             Stmt::ReturnCallIndirect {
                 type_idx,
@@ -1793,39 +1862,30 @@ impl<'a> Gen<'a> {
                     return;
                 }
                 self.use_unit("table/tail_ref");
-                let callee = self.module.types[*type_idx as usize].results.clone();
-                let mut bound = self.bind_args(w, std::slice::from_ref(index));
-                bound.extend(self.bind_args(w, args));
-                let (i, rest) = bound.split_first().expect("the index binding");
-                // The slot is resolved, and its traps raised, here rather than inside the thunk: an indirect tail call's checks happen at the instruction, not after the frame is gone.
-                let params: Vec<String> = self.module.types[*type_idx as usize]
-                    .params
-                    .iter()
-                    .map(|t| go_type(*t).to_string())
-                    .collect();
-                let body_sig = format!("func({}){}", params.join(", "), self.body_results(&callee));
-                let plain_sig = format!("func({}){}", params.join(", "), go_results(&callee));
+                let ty = self.module.types[*type_idx as usize].clone();
+                let idx = self.expr(index);
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                // The slot is resolved, and its traps raised, here rather than after the frame is gone: an indirect tail call's checks happen at the instruction.
+                // A tail entry belongs to the instance that built it and reads *its* parked slots, so only this instance's own entries can be parked; anything else completes here instead.
                 w.line(format!(
-                    "__tf := p.t{table_index}.tailRef({i}, {})",
+                    "__tb, __tf := p.t{table_index}.tailRef({idx}, {}, p)",
                     go_string(&self.type_symbol(*type_idx))
                 ));
-                w.line(format!("if __tb, __ok := __tf.({body_sig}); __ok {{"));
+                w.line("if __tb != nil {");
                 w.indent();
-                self.emit_thunk(
-                    w,
-                    &callee,
-                    Self::forwarding_body(&format!("__tb({})", rest.join(", "))),
-                );
+                let target = format!("__tb.({})", self.tail_entry_type(&ty.results));
+                self.park_tail(w, &ty.params, &args, &target);
                 w.dedent();
                 w.line("}");
-                self.emit_thunk(
-                    w,
-                    &callee,
-                    Self::completing_body(
-                        &callee,
-                        &format!("__tf.({plain_sig})({})", rest.join(", ")),
-                    ),
+                let params: Vec<String> =
+                    ty.params.iter().map(|t| go_type(*t).to_string()).collect();
+                let plain = format!(
+                    "__tf.(func({}){})({})",
+                    params.join(", "),
+                    go_results(&ty.results),
+                    args.join(", ")
                 );
+                self.return_call_completing(w, &plain);
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
@@ -1926,12 +1986,7 @@ impl<'a> Gen<'a> {
             w.line(format!("return {code}"));
             return;
         }
-        // Inside a tail-calling function's body the thunk is part of the signature, and a plain return ends the chain.
-        let tail = self.cur_tail.borrow().is_some();
-        let mut vs: Vec<String> = values.iter().map(|v| self.expr(v)).collect();
-        if tail {
-            vs.push("nil".to_string());
-        }
+        let vs: Vec<String> = values.iter().map(|v| self.expr(v)).collect();
         match vs.as_slice() {
             [] => w.line("return"),
             vs => w.line(format!("return {}", vs.join(", "))),

@@ -487,6 +487,10 @@ fn val_name(ty: ValType) -> &'static str {
     dewasm_backend::val_name(ty)
 }
 
+/// Arities a parked tail call spells out as `_ta<i>` slots; wider ones park a tuple.
+/// The `rt/tail_call` trampoline's fixed cases must cover the same range.
+const MAX_PARKED_ARITY: usize = 8;
+
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
@@ -619,6 +623,11 @@ impl<'a> Gen<'a> {
         };
         w.line(header);
         w.indent();
+        // The parked-call slot has to exist before the first hop reads it; Python has no implicit nil for an unset attribute.
+        if !self.tail_callers.is_empty() {
+            w.line("self._tf = None");
+            w.line("self._tn = 0");
+        }
         w.line("if imports is None:");
         w.indent();
         w.line("imports = {}");
@@ -919,6 +928,23 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// Park a tail call for the entry's trampoline: the arguments, then the arity, then the target, and return.
+    /// The arguments are already free of calls (the IR spills an effectful operand before the instruction), so nothing between these assignments can reach another trampoline and overwrite a slot.
+    fn park_tail(&self, w: &mut CodeWriter, target: &str, args: &[String]) {
+        self.use_unit("rt/tail_call");
+        if args.len() <= MAX_PARKED_ARITY {
+            for (i, a) in args.iter().enumerate() {
+                w.line(format!("self._ta{i} = {a}"));
+            }
+            w.line(format!("self._tn = {}", args.len()));
+        } else {
+            w.line(format!("self._taw = ({},)", args.join(", ")));
+            w.line("self._tn = -1");
+        }
+        w.line(format!("self._tf = {target}"));
+        w.line("return None");
+    }
+
     /// A funcref value: the `[type_key, callable]` pair tables store.
     /// A tail-calling function carries its body method as a third element, which `table/tail_ref` hands to the trampoline so a chain through the table stays flat.
     fn func_pair(&self, func_idx: u32) -> String {
@@ -960,7 +986,7 @@ impl<'a> Gen<'a> {
             w.indent();
             self.use_unit("rt/tail_call");
             w.line(format!(
-                "return {}.trampoline(self._f{idx}_body({args}))",
+                "return {}.trampoline(self, self._f{idx}_body({args}))",
                 self.rt_name
             ));
             w.dedent();
@@ -1499,22 +1525,16 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("self.data{seg} = b\"\""));
             }
-            // A thunk, never a plain call: the callee must run once this frame, including its `except` blocks, is gone, and returning the thunk is what unwinds them.
+            // Parked, never called: the callee must run once this frame, including its `except` blocks, is gone, and returning is what unwinds them.
             // The target is the callee's *body* where it has one, so a mutual chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
             Stmt::ReturnCall { func, args } => {
-                self.use_unit("rt/tail_call");
                 let target = if self.tail_callers.contains(func) {
                     format!("self._f{func}_body")
                 } else {
                     self.func_ref(*func)
                 };
                 let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
-                w.line(format!(
-                    "return {}.tail_call({target}, ({}{}))",
-                    self.rt_name,
-                    args.join(", "),
-                    if args.len() == 1 { "," } else { "" }
-                ));
+                self.park_tail(w, &target, &args);
             }
             Stmt::ReturnCallIndirect {
                 type_idx,
@@ -1522,17 +1542,15 @@ impl<'a> Gen<'a> {
                 index,
                 args,
             } => {
-                self.use_unit("rt/tail_call");
                 self.use_unit("table/tail_ref");
-                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
-                w.line(format!(
-                    "return {}.tail_call(self.t{table_index}.tail_ref({}, {}), ({}{}))",
-                    self.rt_name,
+                // The slot is resolved, and its traps raised, here rather than in the trampoline: an indirect tail call's checks happen at the instruction, not after the frame is gone.
+                let target = format!(
+                    "self.t{table_index}.tail_ref({}, {})",
                     self.masked(index),
-                    self.type_symbol(*type_idx),
-                    args.join(", "),
-                    if args.len() == 1 { "," } else { "" }
-                ));
+                    self.type_symbol(*type_idx)
+                );
+                let args: Vec<String> = args.iter().map(|a| self.masked(a)).collect();
+                self.park_tail(w, &target, &args);
             }
             Stmt::Unreachable => {
                 w.line(format!("{}(\"unreachable\")", self.rt("trap")));
