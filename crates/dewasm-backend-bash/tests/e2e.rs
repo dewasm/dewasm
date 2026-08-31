@@ -273,6 +273,16 @@ toywasm_invoke '_start'
 exit 0
 "#;
 
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+/// Plain glue, unlike the toywasm one: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one bash frame and no stack rlimit is raised.
+const BASH_WASM3_GLUE: &str = r#"WASI_ARGS=(wasm3 /apps/cowsay.wasm Hello from 'dewasm!')
+WASI_ENV=()
+WASI_DIRS=('{cache}::/apps')
+wasm3_init || { echo "init failed" >&2; exit 1; }
+wasm3_invoke '_start'
+exit 0
+"#;
+
 /// CPython reading its stdlib from the cache-preopened tree at `/lib`; `WASI_ENV` carries `PYTHONHOME`/`PYTHONPATH` as the `NAME=value` strings the standalone main also builds.
 ///
 /// The leading `ulimit` is the one thing these two interpreters need that the smaller filesystem apps do not.
@@ -754,9 +764,9 @@ dewasm_test_helper::cruby_packed_hello_e2e!(Bash, ultra);
 // Ultra: interpreting the cowsay guest through the converted interpreter measured 697 s, the same order as the language-runtime giants above (an interpreter's dispatch loop is one bash function call per executed guest instruction).
 // It runs at `slow` on every other backend, so the case itself stays CI-covered.
 dewasm_test_helper::toywasm_cowsay_e2e!(Bash, BASH_TOYWASM_GLUE, ultra);
-// REASON: the pinned wasm3 is upstream's official asset, whose dispatch is a musttail chain, so the module needs the tail-call proposal; Bash is the one backend that does not lower it, and `check_module_support` refuses the module before any of this runs.
-// The convert suite asserts that refusal (its manifest entry declares the requirement), and every other backend runs the case, so the app itself stays covered.
-// dewasm_test_helper::wasm3_cowsay_e2e!(Bash, BASH_WASM3_GLUE, ultra);
+// Ultra for the same reason as the toywasm case above; wasm3 interprets the same cowsay guest one bash function call at a time.
+// It runs at `slow` on every other backend, so the case itself stays CI-covered.
+dewasm_test_helper::wasm3_cowsay_e2e!(Bash, BASH_WASM3_GLUE, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
 // Ultra-slow category: tens of seconds per tick locally (mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation), ~20 min for the full 40-frame run, well past the ~1-minute CI-runner line, like the DOOM case above. (It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.)

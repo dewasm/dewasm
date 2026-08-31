@@ -20,8 +20,9 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, is_ident, is_wasi_module, module_name_error, type_key, wasi_bundled,
-    Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
+    check_module_support, is_ident, is_wasi_module, module_name_error, stmts_use_tail_calls,
+    type_key, wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -173,6 +174,13 @@ fn generate_module_inner(
         scratch: Cell::new(0),
         scratch_max: Cell::new(0),
         needs_ci: Cell::new(false),
+        tail_callers: module
+            .funcs
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+            .map(|(i, _)| module.num_imported_funcs() + i as u32)
+            .collect(),
     };
     let mut w = CodeWriter::new("\t");
     gen.body(&mut w);
@@ -208,6 +216,8 @@ impl Backend for BashBackend {
             Feature::ImportedTables => SupportStatus::Supported,
             // Passive/declared element segments, ref.null items, and table.init/copy/elem.drop all lower onto the same `<p>t<i>`/`<p>t<i>ty` table arrays and `<p>elem<n>`/ `<p>elem<n>ty` staging arrays as the active-segment path (tab/init.sh, tab/copy.sh).
             Feature::TableBulkOps => SupportStatus::Supported,
+            // A tail call parks its target and arguments in the `<p>tlfn`/`<p>tlargs` globals, the same channel results already travel on, and the entry's trampoline runs the chain; no call site changes, because the entry keeps the name, arity, `R<i>` results, and exit status the callers already use.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -364,6 +374,8 @@ struct Gen<'a> {
     scratch_max: Cell<u32>,
     /// Whether the current function needs the call_indirect scratch vars.
     needs_ci: Cell<bool>,
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `<p>f<i>_body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
 }
 
 impl<'a> Gen<'a> {
@@ -465,7 +477,7 @@ impl<'a> Gen<'a> {
                 "[[ -n $RESOLVED ]] || {{ {link_err} {msg}; return $?; }}"
             ));
             w.line(format!(
-                "declare -gn {p}t{i}=$RESOLVED {p}t{i}ty=${{RESOLVED}}ty {p}t{i}sz=${{RESOLVED}}sz"
+                "declare -gn {p}t{i}=$RESOLVED {p}t{i}ty=${{RESOLVED}}ty {p}t{i}tl=${{RESOLVED}}tl {p}t{i}sz=${{RESOLVED}}sz"
             ));
         }
         // Per unified-index-space defined table (imported ++ defined).
@@ -474,6 +486,7 @@ impl<'a> Gen<'a> {
             let idx = m.num_imported_tables() as usize + i;
             w.line(format!("{p}t{idx}=()"));
             w.line(format!("{p}t{idx}ty=()"));
+            w.line(format!("{p}t{idx}tl=()"));
             w.line(format!("{p}t{idx}sz={}", table.min));
         }
         // The bundled WASI's state is only *needed* by an import that actually falls back to it: one the embedder supplied through IMPORTS/PROVIDERS never reads a `<p>w*` variable.
@@ -551,15 +564,18 @@ impl<'a> Gen<'a> {
             // `ElemItem::Global` never reaches here: a ref-typed global (the only kind `global.get` could target inside an elem expression) is rejected by dewasm-core's `val_type` as soon as the Global/Import section is parsed (module.rs), which happens before the Element section, so a module containing one never makes it past conversion in the first place.
             let mut names = Vec::new();
             let mut keys = Vec::new();
+            let mut tails = Vec::new();
             for item in &elem.items {
                 match item {
                     ElemItem::Func(func_idx) => {
                         names.push(self.func_ref(*func_idx));
                         keys.push(format!("'{}'", self.func_type_key(*func_idx)));
+                        tails.push(self.tail_elem(*func_idx));
                     }
                     ElemItem::Null => {
                         names.push("''".to_string());
                         keys.push("''".to_string());
+                        tails.push("''".to_string());
                     }
                     ElemItem::Global(_) => {
                         unreachable!("ref-typed global element item reached the bash backend")
@@ -571,10 +587,12 @@ impl<'a> Gen<'a> {
                     // Never copied into a table; keep the pair of arrays empty so a stray table.init/elem.drop against this index is a harmless no-op-shaped array.
                     w.line(format!("{p}elem{n}=()"));
                     w.line(format!("{p}elem{n}ty=()"));
+                    w.line(format!("{p}elem{n}tl=()"));
                 }
                 ElemKind::Passive => {
                     w.line(format!("{p}elem{n}=({})", names.join(" ")));
                     w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
+                    w.line(format!("{p}elem{n}tl=({})", tails.join(" ")));
                 }
                 ElemKind::Active {
                     table_index,
@@ -584,6 +602,7 @@ impl<'a> Gen<'a> {
                     self.use_unit("tab/init");
                     w.line(format!("{p}elem{n}=({})", names.join(" ")));
                     w.line(format!("{p}elem{n}ty=({})", keys.join(" ")));
+                    w.line(format!("{p}elem{n}tl=({})", tails.join(" ")));
                     let off = self.value(w, offset);
                     w.line(format!(
                         "{} {p}t{table_index} {p}elem{n} $(( {off} )) 0 {} || return $?",
@@ -593,6 +612,7 @@ impl<'a> Gen<'a> {
                     // Active segments are auto-dropped right after instantiation (spec: table.init then an implicit elem.drop), so clear the staging array the same way an explicit ElemDrop would: a later table.init against this segment then traps 'out of bounds table access' like a genuinely dropped one.
                     w.line(format!("{p}elem{n}=()"));
                     w.line(format!("{p}elem{n}ty=()"));
+                    w.line(format!("{p}elem{n}tl=()"));
                 }
             }
         }
@@ -736,6 +756,25 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// The command a tail call hands the trampoline: a tail-calling function's *body*, so a chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
+    /// Anything else completes in a single frame, so its ordinary command is what the criterion asks for.
+    fn tail_ref(&self, func_idx: u32) -> String {
+        if self.tail_callers.contains(&func_idx) {
+            format!("{}f{func_idx}_body", self.prefix)
+        } else {
+            self.func_ref(func_idx)
+        }
+    }
+
+    /// The element-array entry for a slot's tail command: empty where the function has no body split, which is what makes `${...tl[i]:-$__fn}` fall back to the ordinary command.
+    fn tail_elem(&self, func_idx: u32) -> String {
+        if self.tail_callers.contains(&func_idx) {
+            format!("{}f{func_idx}_body", self.prefix)
+        } else {
+            "''".to_string()
+        }
+    }
+
     fn call_cmd(&self, func_idx: u32, args: &[String]) -> String {
         let target = if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("\"${{{}if{func_idx}}}\"", self.prefix)
@@ -761,7 +800,34 @@ impl<'a> Gen<'a> {
         bw.line("return 0");
         let body = bw.finish();
 
-        w.line(format!("{}f{idx}() {{", self.prefix));
+        let p = self.prefix;
+        // A tail-calling function's real code lives in `<p>f<i>_body`, which parks the next call in `<p>tlfn`/`<p>tlargs` instead of growing the stack; the public `<p>f<i>` is the trampoline that runs the chain.
+        // Its name, arity, `R<i>` results and exit status are all unchanged, so no call site changes.
+        if self.tail_callers.contains(&idx) {
+            w.line(format!("{p}f{idx}() {{"));
+            w.indent();
+            w.line(format!(r#"{p}f{idx}_body "$@" || return $?"#));
+            w.line("local __tf __ta");
+            w.line(format!("while [[ -n ${p}tlfn ]]; do"));
+            w.indent();
+            // Copied out before dispatching, because the callee overwrites both.
+            w.line(format!("__tf=${p}tlfn"));
+            w.line(format!(r#"__ta=("${{{p}tlargs[@]}}")"#));
+            w.line(format!("{p}tlfn="));
+            w.line(r#""$__tf" "${__ta[@]}" || return $?"#);
+            w.dedent();
+            w.line("done");
+            w.line("return 0");
+            w.dedent();
+            w.line("}");
+            w.line("");
+        }
+        let name = if self.tail_callers.contains(&idx) {
+            format!("{p}f{idx}_body")
+        } else {
+            format!("{p}f{idx}")
+        };
+        w.line(format!("{name}() {{"));
         w.indent();
         let mut decls: Vec<String> = (0..ty.params.len())
             .map(|i| format!("l{i}=\"${{{}}}\"", i + 1))
@@ -1066,9 +1132,45 @@ impl<'a> Gen<'a> {
                 w.line(format!("{p}elem{seg}=()"));
                 w.line(format!("{p}elem{seg}ty=()"));
             }
-            // Refused at conversion time: this backend does not declare tail calls supported, so `check_module_support` rejects the module before lowering.
-            Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("tail calls are refused by check_module_support")
+            // Parked for the trampoline, never called: the callee must run once this frame is gone, and returning is what ends it.
+            // The globals are the same channel results already travel on, so no call site reads them: the entry consumes the parked call before it returns.
+            Stmt::ReturnCall { func, args } => {
+                let p = self.prefix;
+                let args: Vec<String> = args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
+                w.line(format!("{p}tlfn={}", self.tail_ref(*func)));
+                w.line(format!("{p}tlargs=({})", args.join(" ")));
+                w.line("return 0");
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                let p = self.prefix;
+                let ti = *table_index;
+                self.needs_ci.set(true);
+                self.use_unit("rt/trap");
+                let trap = self.rt("rt_trap");
+                let i = self.value(w, index);
+                let args: Vec<String> = args.iter().map(|a| cmd_arg(&self.value(w, a))).collect();
+                // The slot is resolved, and its traps raised, here rather than in the trampoline: an indirect tail call's checks happen at the instruction, not after the frame is gone.
+                w.line(format!("(( __x = {i} ))"));
+                w.line(format!(
+                    "(( __x < {p}t{ti}sz )) || {{ {trap} 'undefined element'; return $?; }}"
+                ));
+                w.line(format!("__fn=${{{p}t{ti}[__x]-}}"));
+                w.line(format!(
+                    "[[ -n $__fn ]] || {{ {trap} 'uninitialized element'; return $?; }}"
+                ));
+                w.line(format!(
+                    "[[ ${{{p}t{ti}ty[__x]}} == '{}' ]] || {{ {trap} 'indirect call type mismatch'; return $?; }}",
+                    self.type_key(*type_idx)
+                ));
+                // A slot's tail command is its body where the function has one; an empty entry falls back to the ordinary command, which completes in a single frame anyway.
+                w.line(format!("{p}tlfn=${{{p}t{ti}tl[__x]:-$__fn}}"));
+                w.line(format!("{p}tlargs=({})", args.join(" ")));
+                w.line("return 0");
             }
             Stmt::Unreachable => {
                 self.use_unit("rt/trap");

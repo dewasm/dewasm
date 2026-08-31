@@ -1,7 +1,8 @@
 # Decision 88: Tail Calls Join the Accepted Input, Declared Per Backend
 
 Status: **Accepted, 2026-08-31.**
-The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`); every backend but Bash lowers it, and Bash rejects it at conversion time.
+The core IR accepts the tail-call proposal (`return_call`, `return_call_indirect`) and every backend lowers it.
+Bash was excluded for a day on the reasoning below, which was wrong; the correction is recorded in place.
 
 ## Context
 
@@ -34,8 +35,14 @@ The two statically-typed backends need the thunk typed rather than boxed, and ea
   A `try_table` body is a closure whose exits are numbered outcomes, so a tail call inside one becomes another outcome, re-emitted outside the closure where the handler is already gone.
 - Java needs no new type: its result register is already `Object` for multi-value returns, so a tail-calling body types it `Object` and a tail call is simply a return of the thunk, unwound by the same `_br` register as any other return.
 
-Bash stays `Unsupported`, for the same shape of reason decision 69 gave it for exception handling: results come back through global variables and the exit status is the trap channel, so a thunk has nowhere to live that a call site does not already read, and threading one through would change the calling convention of every Bash artifact.
-The wasm3 app case does run under Bash, unlike mruby, so this costs something concrete: that case keeps the `-DM3_HAS_TAIL_CALL=0` source build and its `ulimit -s` raise.
+Bash was first declared `Unsupported`, on the reasoning that results come back through global variables and the exit status is the trap channel, so a thunk had nowhere to live that a call site did not already read.
+That was wrong, and it is corrected here rather than quietly dropped: the thunk lives exactly where results already live, and no call site reads it, because the entry consumes it before returning.
+Bash parks the target and its arguments in `<p>tlfn`/`<p>tlargs` and the entry's trampoline runs the chain, so the entry keeps the name, arity, `R<i>` results, and exit status its callers already use, and nothing outside a tail-calling function changes.
+Two things make it easier there than in the backends that got the feature first: the table stores function *names*, so `return_call_indirect` needs no closure, only the same checks the existing `call_indirect` inlines plus one more parallel array for the tail command; and Bash has no exception handling, so the `try_table` interaction that shaped the Perl and Go lowerings does not exist.
+Measured against a plain-call lowering of the same recursion, which segfaults the shell at ten thousand deep: the trampoline runs the conformance suite's million-deep chains.
+
+The cost is one extra bash function call whenever a tail-calling function is entered normally, which in this backend is the dominant unit.
+That is paid only by tail-callers, unlike the exception-status propagation decision 69 rejected, which would have taxed every call site in every artifact; the two are not the same shape of change, and treating them as one is what produced the wrong call.
 
 `return_call_ref` stays rejected: it belongs to the function-references proposal, which no pinned app needs.
 
@@ -59,7 +66,7 @@ Code this governs: `crates/dewasm-core/src/{ir,func,module}.rs` (the two stateme
 - Positive: the official `wasm3-wasi.wasm` asset converts and runs the cowsay guest with no stack workaround at all: under a second on a stock `ruby` where the `-DM3_HAS_TAIL_CALL=0` build needs `RUBY_THREAD_VM_STACK_SIZE` raised, and on a default JVM stack where the same build needed the glue's own 64 MB thread.
 - Positive: `docs/support.md` gains a tail-call row, the second feature row that differs per backend.
 - Positive: the pinned wasm3 is upstream's own release asset rather than a local build with the dispatch turned off, and every stack workaround this app needed is gone: the glue is plain on all five backends that run it.
-- Negative: Bash loses the case entirely, since the module it now converts is one Bash refuses; its `e2e.rs` callsite is commented out with that reason, and the convert manifest asserts the refusal so the loss cannot pass silently.
+- Positive: every backend lowers the proposal, so `docs/support.md`'s tail-call row reads supported throughout and no app case is lost to it.
 - Carry-over: a tail-calling function allocates one thunk per hop and pays a wrapper frame even when called normally, the cost decision 18 already recorded.
   In converted wasm3 that hop is the guest opcode dispatch, so the allocation sits in the hottest loop there is; whether it costs more than the stack growth it replaces is a measurement the benchmark suite should make once the app moves.
 - Carry-over: converting the official asset to Go exposed an unrelated emission bug (issue #289): a constant `i32.mul` renders as a Go constant expression, which Go rejects for overflow instead of wrapping.

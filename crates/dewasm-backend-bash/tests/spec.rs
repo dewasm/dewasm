@@ -33,7 +33,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
 ];
 
 /// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial (`slow_test` runs everything).
-/// Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat.
+/// Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat, and the tail-call pair stays out for the same reason (its million-deep chains are minutes of bash function calls).
 const CURATED_FILES: &[&str] = &[
     "address",
     "address0",

@@ -116,7 +116,7 @@ const MANIFEST: &[AppConvert] = &[
         stem: "wasm3",
         mode: Mode::Standalone,
         heavy: false,
-        requires: Some(Feature::TailCall),
+        requires: None,
     },
     AppConvert {
         stem: "doom",
