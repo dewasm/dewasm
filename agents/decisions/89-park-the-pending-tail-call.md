@@ -39,12 +39,13 @@ Code this governs: the `Stmt::ReturnCall`/`Stmt::ReturnCallIndirect` lowering an
 - **Keep the thunk and make the allocation cheaper** (a reused instance, a struct rather than a class).
   The argument array remains, and in Go the thunk is a closure whose whole cost *is* the capture.
 - **Defunctionalize the mutually tail-calling set into one dispatch loop**, so a hop is a state assignment.
-  Measured: 2.85x faster than parking at ten arms, even at two hundred, and nine times *slower* at five hundred, where the JIT's code size falls off a cliff; the app's group is 519.
-  Worth revisiting only as a pass gated on a small group.
+  Measured: 2.85x faster than parking at ten arms, even at two hundred, and nine times *slower* at five hundred, where the JIT's code size falls off a cliff.
+  It could be had as a pass gated on a small group, and it is not being taken: the app the proposal was accepted for has a group of 519, squarely past the cliff, so the pass would refuse exactly the case that motivated the work, and it would buy a whole-module analysis with a closed-world requirement in exchange for guests nobody has pinned.
+  The measurements are kept here so the question does not have to be reopened from scratch.
 - **Extract the arms into methods and dispatch by `switch`**, keeping each arm JIT-compilable.
   Measured: ties parking in Go, and needs a binary decision tree rather than a `case` in Ruby just to reach the same point.
 - **Rewrite a self tail call into a loop**, which needs no trampoline at all.
-  Still worth doing, and cheap, but it is not this: the motivating app has no self tail calls.
+  Worth doing, and done separately ([decision 90](90-self-tail-call-to-loop.md)), but it is not this: the motivating app has no self tail calls.
 
 ## Consequences
 

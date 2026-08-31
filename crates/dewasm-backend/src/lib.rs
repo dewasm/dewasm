@@ -5,6 +5,7 @@ pub mod flat;
 pub mod fuse;
 pub mod licm;
 pub mod masking;
+pub mod selfcall;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 

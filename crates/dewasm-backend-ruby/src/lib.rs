@@ -34,7 +34,7 @@ use dewasm_backend::{
     wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
     RuntimeLinkage, RuntimeScope, SupportStatus,
 };
-use dewasm_backend::{extract, fuse, licm};
+use dewasm_backend::{extract, fuse, licm, selfcall};
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
     BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Module, Stmt, Temp, UnOp,
@@ -536,6 +536,12 @@ const LICM_PARAMS: licm::Params = licm::Params {
 /// The function list the emitter consumes: hoisting first (it needs the loops still in place), then loop-body extraction.
 fn transformed_funcs(module: &Module) -> extract::Extracted {
     let mut funcs = module.funcs.clone();
+    // Before the rest: a self tail call becomes a loop, which drops its function out of the tail-caller set, and the loop is then a candidate for the passes below like any other.
+    selfcall::rewrite(
+        &mut funcs,
+        &module.types,
+        module.imported_funcs.len() as u32,
+    );
     fuse::fuse_byte_scatter(&mut funcs);
     licm::hoist(
         &mut funcs,
