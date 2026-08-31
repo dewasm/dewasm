@@ -586,6 +586,17 @@ impl<'a> Gen<'a> {
         }
         w.line("$imports = {} unless defined $imports;");
         w.line("my $self = bless({}, $class);");
+        // Built once, before anything that parks a target or stores one in a table: a tail call reads its target out of here rather than building a closure per hop, and reuses the one argument array.
+        if !self.tail_callers.is_empty() {
+            let bodies: Vec<String> = self
+                .tail_callers
+                .iter()
+                .map(|f| format!("sub {{ return $self->_f{f}_body(@_); }}"))
+                .collect();
+            w.line(format!("$self->{{__tm}} = [{}];", bodies.join(", ")));
+            w.line("$self->{__ta} = [];");
+            w.line("$self->{__tf} = undef;");
+        }
         if wasi_fallback {
             w.line("$self->{_wasi} = undef;");
             w.line("$self->{_wasi_args} = $opts{args} // [];");
@@ -890,10 +901,9 @@ impl<'a> Gen<'a> {
             self.func_type_symbol(func_idx),
             self.func_closure(func_idx)
         );
-        if self.tail_callers.contains(&func_idx) {
-            format!("[{base}, sub {{ return $self->_f{func_idx}_body(@_); }}]")
-        } else {
-            format!("[{base}]")
+        match self.tail_body_slot(func_idx) {
+            Some(k) => format!("[{base}, $self->{{__tm}}[{k}]]"),
+            None => format!("[{base}]"),
         }
     }
 
@@ -919,7 +929,7 @@ impl<'a> Gen<'a> {
             w.line(format!("sub _f{idx} {{"));
             w.indent();
             w.line(format!(
-                "return {}::trampoline($_[0]->_f{idx}_body(@_[1 .. $#_]));",
+                "return {}::trampoline($_[0], $_[0]->_f{idx}_body(@_[1 .. $#_]));",
                 self.rt_name
             ));
             w.dedent();
@@ -973,14 +983,10 @@ impl<'a> Gen<'a> {
             w.line("my $_bt = 0;");
         }
         // A `return` (or a branch to the function frame) that must cross a try_table's `eval` writes its values here first (`materialize_escape`), one set shared by every try_table in the function: at most one escape is ever in flight, and it only ever heads to this same final `return`, however many `eval`s it has to leave along the way.
-        // A tail call escapes as a one-value return carrying its thunk, so a nullary tail-calling function needs `$__tt_ret0` even though its own arity declares none.
-        let escape_slots = if self.tail_callers.contains(&idx) {
-            ty.results.len().max(1)
-        } else {
-            ty.results.len()
-        };
-        if escape_slots > 0 && seq_has_try_table(&func.body) {
-            let names: Vec<String> = (0..escape_slots).map(|i| format!("$__tt_ret{i}")).collect();
+        if !ty.results.is_empty() && seq_has_try_table(&func.body) {
+            let names: Vec<String> = (0..ty.results.len())
+                .map(|i| format!("$__tt_ret{i}"))
+                .collect();
             let decl = match names.as_slice() {
                 [one] => one.clone(),
                 many => format!("({})", many.join(", ")),
@@ -1198,15 +1204,13 @@ impl<'a> Gen<'a> {
             // A thunk, never a plain call: the callee must run once this frame, including every `eval` a try_table opened, is gone, and escaping the thunk as a return is what unwinds them.
             // The target is the callee's *body* where it has one, so a mutual chain bounces in the one outermost trampoline instead of entering a fresh one per hop.
             Stmt::ReturnCall { func, args } => {
-                let target = if self.tail_callers.contains(func) {
-                    format!("sub {{ return $self->_f{func}_body(@_); }}")
-                } else {
-                    self.func_closure(*func)
+                // A coderef for the callee's *body* where it has one, taken from the table built once at instantiation so no closure is allocated per hop.
+                let target = match self.tail_body_slot(*func) {
+                    Some(k) => format!("$self->{{__tm}}[{k}]"),
+                    None => self.func_closure(*func),
                 };
-                let mut parts = vec![target];
-                parts.extend(args.iter().map(|a| self.expr(a)));
-                let thunk = format!("{}({})", self.rt("tail_call"), parts.join(", "));
-                self.tail_escape(w, thunk);
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                self.park_tail(w, &target, &args);
             }
             Stmt::ReturnCallIndirect {
                 type_idx,
@@ -1215,14 +1219,14 @@ impl<'a> Gen<'a> {
                 args,
             } => {
                 self.use_unit("table/tail_ref");
-                let mut parts = vec![format!(
+                // The slot is resolved, and its traps raised, here rather than in the trampoline: an indirect tail call's checks happen at the instruction, not after the frame is gone.
+                let target = format!(
                     "$self->{{t{table_index}}}->tail_ref({}, {})",
                     self.expr(index),
                     self.type_symbol(*type_idx)
-                )];
-                parts.extend(args.iter().map(|a| self.expr(a)));
-                let thunk = format!("{}({})", self.rt("tail_call"), parts.join(", "));
-                self.tail_escape(w, thunk);
+                );
+                let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                self.park_tail(w, &target, &args);
             }
             Stmt::Unreachable => {
                 w.line(format!("{}('unreachable');", self.rt("trap")));
@@ -1326,18 +1330,36 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// Park a tail call for the entry's trampoline, then leave the function.
+    /// The argument array is reused rather than rebuilt, and the arguments are already free of calls (the IR spills an effectful operand before the instruction), so nothing between these statements can reach another trampoline and overwrite a slot.
+    fn park_tail(&self, w: &mut CodeWriter, target: &str, args: &[String]) {
+        self.use_unit("rt/tail_call");
+        if args.is_empty() {
+            w.line("@{$self->{__ta}} = ();");
+        } else {
+            w.line(format!("@{{$self->{{__ta}}}} = ({});", args.join(", ")));
+        }
+        w.line(format!("$self->{{__tf}} = {target};"));
+        self.tail_escape(w);
+    }
+
+    /// A tail-calling function's dense position in `$self->{__tm}`.
+    fn tail_body_slot(&self, func_idx: u32) -> Option<usize> {
+        self.tail_callers.iter().position(|f| *f == func_idx)
+    }
+
     /// Leave the function carrying `thunk`, the way `branch` leaves it carrying return values: one value, so it crosses each open `try_table`'s `eval` through that barrier's outcome table rather than as a bare `return`, which would only exit the `eval`.
     /// The trampoline that unwraps it sits outside every barrier, which is what gives a tail call its frame-replacement semantics.
-    fn tail_escape(&self, w: &mut CodeWriter, thunk: String) {
-        let escape = Escape::Return { count: 1 };
+    fn tail_escape(&self, w: &mut CodeWriter) {
+        // A zero-value return: the parked call carries the target and the arguments, so nothing travels out with the escape.
+        let escape = Escape::Return { count: 0 };
         if let Some((barrier_id, code)) = self.cross_eval_barrier(&escape) {
-            w.line(format!("$__tt_ret0 = {thunk};"));
             w.line(format!(
                 "$__tt_out{barrier_id} = {code}; last TTBODY{barrier_id};"
             ));
             return;
         }
-        w.line(format!("return {thunk};"));
+        w.line("return;");
     }
 
     /// Write a deferred escape's operands before it crosses its first `eval` boundary: a `Label` target's `assigns` (already-materialized temps, so this is the same write `branch`'s direct case makes, only timed earlier), or a `Return` target's values into the function-scoped `$__tt_retN` lexicals (`function`'s declaration, `Escape::Return`).

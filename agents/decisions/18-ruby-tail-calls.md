@@ -2,8 +2,9 @@
 
 Status: **Accepted, 2026-08-31.**
 [Decision 88](88-tail-calls-accepted-input.md) put the design below back in force, and Python and Perl adopt it unchanged: all three lack dependable tail-call elimination, so the shape that keeps chains flat is the same in each.
-Go and Java follow the same body/entry split with the thunk typed instead of dynamic, and Bash parks it in the globals its results already travel through; both are described in decision 88.
-Perl differs only in the two places its language forces: the thunk escapes through the `try_table` outcome table rather than a bare `return` (perl's `return` inside an `eval` exits only the `eval`), and the trampoline is list-aware because perl flattens a multi-value return into its caller's argument list.
+Go, Java, and Bash follow the same body/entry split, described in decision 88.
+The thunk itself is gone everywhere: what a body leaves behind is parked in per-instance slots rather than allocated, the shape Bash had from the start and [decision 89](89-park-the-pending-tail-call.md) brought the rest to.
+Perl differs only in the two places its language forces: a parked call leaves through the `try_table` outcome table rather than a bare `return` (perl's `return` inside an `eval` exits only the `eval`), and the trampoline is list-aware because perl flattens a multi-value return into its caller's argument list.
 It had been superseded by [decision 24](24-01-scope-reset.md) between 2026-07-26 and 2026-08-31 and was kept as the design record that made the restoration cheap.
 The original acceptance note and implementation pointers below are retained as history; "ADR-18" in them is this decision, and the runtime units now live inside their backend crates ([decision 85](85-crates-io-publish-layout.md)).
 

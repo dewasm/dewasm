@@ -1,15 +1,12 @@
-# A pending tail call: a tail-calling function's body returns one of these instead of calling, and its entry wrapper unwraps them in a loop, so a chain of any length runs in constant stack space.
-# An arrayref rather than `goto &sub`, perl's real tail call, because the body runs inside an eval block and perl refuses to goto out of one.
-sub tail_call {
-    my ($target, @args) = @_;
-    return [$target, \@args];
-}
-
-# A body returns its results as a list, so a thunk is recognized by being the whole of a one-element list holding an arrayref: a wasm value is a number or a coderef, never an arrayref, so nothing else can look like one.
+# The trampoline a tail-calling function's entry runs.
+# A tail call parks its target and arguments on the instance and returns; nothing is allocated per hop, which is what a chain of any length pays otherwise.
+# The target is cleared before dispatching, so a callee that does not tail-call ends the chain, and the arguments are read as the call's own operands, before the callee can overwrite them.
+# The parked argument list is one array reused across hops, emptied and refilled rather than rebuilt, so the hop costs no allocation.
 sub trampoline {
-    my @r = @_;
-    while (@r == 1 && ref($r[0]) eq 'ARRAY') {
-        @r = $r[0][0]->(@{$r[0][1]});
+    my ($self, @r) = @_;
+    while (defined(my $f = $self->{__tf})) {
+        $self->{__tf} = undef;
+        @r = $f->(@{$self->{__ta}});
     }
     return wantarray ? @r : $r[0];
 }

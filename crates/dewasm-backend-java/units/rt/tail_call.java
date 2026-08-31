@@ -1,20 +1,6 @@
-// A pending tail call: a tail-calling function's body returns one of these instead of calling, and its entry wrapper unwraps them in a loop, so a chain of any length runs in constant stack space.
-// A wasm result is a boxed primitive, an `Object[]` (multi-value), or an `Fn` (funcref), never one of these, so nothing else can look like one.
-interface TailThunk {
+// The trampoline a tail-calling function's entry runs.
+// A tail call parks its target and arguments on the instance and returns; nothing is allocated per hop, which is what a chain of any length pays otherwise.
+// A tail entry is bound to the instance that built it and reads *that* instance's parked slots, which is why `table/tail_slot` hands one back only to its owner.
+interface TailBody {
 	Object run();
-}
-
-static final class TailCall {
-	final TailThunk thunk;
-
-	TailCall(TailThunk thunk) {
-		this.thunk = thunk;
-	}
-}
-
-static Object trampoline(Object r) {
-	while (r instanceof TailCall) {
-		r = ((TailCall) r).thunk.run();
-	}
-	return r;
 }
