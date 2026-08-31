@@ -101,14 +101,8 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
 
 /// Runners excluded from the tail-call microbenchmark: none of these accepts `return_call`.
 /// The paired `call_direct` case has no exclusions, so a runner missing here is measured on both and a runner listed here is measured on the baseline alone.
+/// Every dewasm backend runs it, bash included: the proposal is lowered everywhere (see docs/support.md).
 const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
-    (
-        "dewasm-bash",
-        Exclusion {
-            kind: ExclusionKind::Capability,
-            reason: "the bash backend has no tail-call lowering and rejects the module at conversion time with \"unsupported (tail-call): return_call/return_call_indirect instruction\" (see docs/support.md)",
-        },
-    ),
     (
         "wasmer",
         Exclusion {
