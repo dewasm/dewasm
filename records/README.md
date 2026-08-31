@@ -22,6 +22,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-24T22-56-29Z-speed.json`: TODO: describe the occasion.
 - `2026-08-24T23-27-21Z-speed.json`: TODO: describe the occasion.
 - `2026-08-30T05-11-20Z-speed.json`: the first record with the converted-wasm3 runners (#279) on the wasm3 v0.9.0 pin (#278).
+- `2026-08-31T09-49-13Z-speed.json`: the first record on the official wasm3 asset (#291), with tail calls lowered in every backend (#288, #296) and a pending tail call parked rather than allocated (#297); adds `wat/tail_call` (#294).
 
 ## Size records
 
