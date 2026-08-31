@@ -44,7 +44,7 @@ Code this governs: the `Stmt::ReturnCall`/`Stmt::ReturnCallIndirect` lowering an
 - **Extract the arms into methods and dispatch by `switch`**, keeping each arm JIT-compilable.
   Measured: ties parking in Go, and needs a binary decision tree rather than a `case` in Ruby just to reach the same point.
 - **Rewrite a self tail call into a loop**, which needs no trampoline at all.
-  Still worth doing, and cheap, but it is not this: the motivating app has no self tail calls.
+  Worth doing, and done separately ([decision 90](90-self-tail-call-to-loop.md)), but it is not this: the motivating app has no self tail calls.
 
 ## Consequences
 
