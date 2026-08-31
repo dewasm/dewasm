@@ -117,6 +117,8 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
+      # The cache-matches-its-pins test reproduces the stamps, which name these two tools' versions.
+      - uses: ./.github/actions/apps-cache-tools
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
@@ -161,6 +163,8 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
+      # The cache-matches-its-pins test reproduces the stamps, which name these two tools' versions.
+      - uses: ./.github/actions/apps-cache-tools
       # Speed categories: the `slow_test` feature covers the slow cases.
       # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite, which execs the xtask binary (it embeds the pinned wasmtime crate, so nothing is installed for it) and never builds it, hence the explicit build step below; `dewasm/slow_test` runs the slow cross-backend `--data-file` real-app cases.
       - name: Build the snapshot runner
