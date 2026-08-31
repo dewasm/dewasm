@@ -27,7 +27,7 @@ Everything else the test suite needs (interpreters, submodules, the apps cache) 
 | `cargo run -p dewasm -- input.wasm --target ruby --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `cargo xtask record-speed [filter]` | Measure the cross-runtime benchmark suite into a record under `records/`; see [`docs/benchmarks/README.md`](docs/benchmarks/README.md). |
 | `cargo xtask record-size` | Measure the distribution sizes into a record under `records/`; see [`docs/sizes/README.md`](docs/sizes/README.md). |
-| `examples/apps/setup.sh` | Fetch/build the pinned real-world apps into the gitignored cache; tool requirements are in docs/testing.md. |
+| `examples/apps/setup.sh` | Fetch/build the pinned real-world apps into the gitignored cache; `--check` verifies without fetching and names anything stale. Tool requirements are in docs/testing.md. |
 
 After any non-trivial change, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test`.
 The slower test categories are opt-in cargo features: `--features slow_test` (CI's main run) adds each backend's slow app cases and the full spec-testsuite run; `--features ultra_slow_test` adds the cases CI cannot afford, run in local pre-release verification.

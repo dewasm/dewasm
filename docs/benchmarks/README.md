@@ -14,6 +14,9 @@ $ cargo xtask render-speed           # results.md and its charts, from that reco
 
 Measuring and rendering are two commands: a run writes a dated `<timestamp>Z-speed.json` to [`records/`](../../records/README.md) and nothing else, and rendering turns a record into `docs/benchmarks/results.md` with its charts.
 That way a wording fix in the document costs a second, not a re-measurement of the whole suite.
+
+`record-speed` verifies the app cache against its pins before it measures anything, and refuses to start if a cached copy came from an earlier pin.
+A stale copy is a different program, and its numbers would be committed as a record of the current one.
 Useful options:
 
 | Command | Effect |

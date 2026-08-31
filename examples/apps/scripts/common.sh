@@ -43,14 +43,22 @@ new_tmpdir() {
 
 # is_cached <stamp> <key> <output...>: true when every output exists and the stamp matches key.
 # The stamp records which pinned inputs the cached copy came from; a re-pin refetches/rebuilds instead of silently keeping a stale copy (which would fail the snapshot comparison inscrutably).
+#
+# Under DEWASM_APPS_CHECK a mismatch is reported and the script exits 2 rather than fetching, which is what `setup.sh --check` runs and what a consumer calls before reading the cache.
+# Hooking it here rather than in each script is deliberate: every path that decides whether to rebuild goes through this one call, `fetch_app`'s included.
 is_cached() {
   local stamp="$1" key="$2"
   shift 2
-  local f
+  local f fresh=0
   for f in "$@"; do
-    [ -e "$f" ] || return 1
+    [ -e "$f" ] || fresh=1
   done
-  [ "$(cat "$stamp" 2>/dev/null || true)" = "$key" ]
+  [ "$(cat "$stamp" 2>/dev/null || true)" = "$key" ] || fresh=1
+  if [ -n "${DEWASM_APPS_CHECK-}" ] && [ "$fresh" = 1 ]; then
+    echo "${APP_NAME:-$(basename "$0" .sh)}: cache does not match the pin (run examples/apps/setup.sh)" >&2
+    exit 2
+  fi
+  [ "$fresh" = 0 ]
 }
 
 # write_stamp <stamp> <key>: record the pin the fresh artifacts came from.

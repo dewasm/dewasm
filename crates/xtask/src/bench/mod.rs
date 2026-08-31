@@ -127,7 +127,31 @@ pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
     if opts.list {
         return list(&opts, &runners, &workloads);
     }
+    verify_app_pins()?;
     run(&opts, &runners, &workloads)
+}
+
+/// Refuse to measure an app cache that does not match its pin.
+///
+/// The harness reads `cache/<app>.wasm` directly, so a copy left over from an earlier pin would be measured as the current one and its numbers committed as a record.
+/// The pins live in the fetch scripts, which already compare them against the cached stamp, so this asks them rather than keeping a second copy that could drift.
+/// `--check` needs no network: it reports and fails instead of fetching.
+fn verify_app_pins() -> Result<()> {
+    let script = repo_root().join("examples/apps/setup.sh");
+    if !script.exists() {
+        return Ok(());
+    }
+    let out = std::process::Command::new(&script)
+        .arg("--check")
+        .output()
+        .with_context(|| format!("failed to run {}", display_path(&script)))?;
+    if out.status.success() {
+        return Ok(());
+    }
+    bail!(
+        "the app cache does not match its pins, so the run would measure the wrong modules:\n{}\nrun examples/apps/setup.sh",
+        String::from_utf8_lossy(&out.stderr).trim_end()
+    );
 }
 
 /// Whether `workload` has at least one runner selected by `filter`.

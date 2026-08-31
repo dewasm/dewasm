@@ -16,6 +16,7 @@ The following tools and setup steps are required to run all tests correctly:
   * These environment variables override the lookup: `$DEWASM_RUBY`, `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`.
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
+  Re-run it after pulling a change that re-pins an app: a cached copy from the previous pin is a different program, and `examples/apps/setup.sh --check` names any that are stale without fetching.
   * Cached `.wasm` files are located in `examples/apps/cache`.
   * Building some apps from source needs more: `zig` (sqlite3 and others), a host Ruby with `rake` (mruby); each `scripts/*.sh` fails loudly naming what it is missing.
 
