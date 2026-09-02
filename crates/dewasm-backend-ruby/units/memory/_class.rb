@@ -17,6 +17,8 @@ def initialize(min_pages, max_pages)
   @max_pages = max_pages && max_pages < 65536 ? max_pages : 65536
 end
 
+# @buffer's capacity may exceed @size (grow resizes it geometrically).
+# Every access bounds-checks against @size, so the tail past @size is unreachable and stays zero-filled until grow makes it visible.
 def check(addr, len)
   Rt.trap("out of bounds memory access") if addr + len > @size
 end

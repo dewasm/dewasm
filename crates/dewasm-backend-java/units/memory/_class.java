@@ -4,6 +4,8 @@
 // The ByteBuffer is re-wrapped on grow.
 byte[] d;
 java.nio.ByteBuffer bb;
+// Visible memory size in bytes; d.length is capacity and may exceed it (grow reallocates geometrically).
+int size;
 int maxPages;
 
 Memory(int minPages, int maxPages) {
@@ -14,6 +16,7 @@ Memory(int minPages, int maxPages) {
         Rt.trap("cannot allocate " + minPages + " pages of linear memory (exceeds Java's byte[] limit)");
     }
     this.d = new byte[(int) bytes];
+    this.size = (int) bytes;
     this.maxPages = maxPages;
     rewrap();
 }
@@ -23,8 +26,9 @@ private void rewrap() {
 }
 
 // Bounds-check [addr, addr+length) and return the int index into the buffer.
+// The check is against size, not d.length: the tail past size is unreachable and, being never written, stays zero-filled (Java zero-initializes arrays) until grow makes it visible.
 private int at(long addr, long length) {
-    if (addr < 0 || addr + length > d.length) {
+    if (addr < 0 || addr + length > size) {
         Rt.trap("out of bounds memory access");
     }
     return (int) addr;
