@@ -1,1 +1,1 @@
-int size() { return d.length / 65536; }
+int size() { return size / 65536; }
