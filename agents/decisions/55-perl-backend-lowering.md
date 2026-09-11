@@ -2,6 +2,7 @@
 
 Status: **Accepted, 2026-08-01.**
 First milestone (the spec harness passes, issue #68) implemented in `crates/dewasm-backend-perl/src/lib.rs` + `runtime/perl/units/` (the full-testsuite run passes with the same `import-limits`/`linking` list as Python's).
+The float helper calls and memory method calls this decision accepted are narrowed to fallback paths by [decision 91](91-perl-inline-fast-paths.md); everything else stands.
 Numeric conventions are [decision 2](2-numeric-semantics.md)'s; this decision covers where Perl forced (or spared) a different shape from Ruby ([decision 4](4-ruby-backend-lowering.md)/[42](42-ruby-label-variable-cascade.md)) and Python ([decision 28](28-python-backend-lowering.md)), with the measured Perl behaviors each choice rests on (perl 5.42, `ivsize=8`/`nvsize=8`; the generated prelude verifies those sizes at load, [decision 15](15-tests-fail-not-skip.md), and `find_perl` tests at >= 5.26: the features used floor out at POSIX C99 math, 5.22, plus margin).
 WASI preview 1 is follow-up work (issue #69).
 
