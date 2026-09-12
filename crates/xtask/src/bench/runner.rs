@@ -39,14 +39,16 @@ pub struct Launch {
 pub enum Target {
     /// CRuby with the given JIT flag (`--disable-yjit`, `--yjit`, `--zjit`).
     Ruby(&'static str),
-    /// The Python backend's output on CPython.
+    Monoruby,
+    JRuby,
     Python,
-    /// The *same* Python output on PyPy: a JIT'd Python, and by far the fastest interpreted-language runner we have.
-    /// Not installed by `benchmarks/setup.sh`; it has to already be on the host.
+    PythonJit,
     PyPy,
+    GraalPy,
     Perl,
     Bash,
     Go,
+    TinyGo,
     Java,
 }
 
@@ -136,10 +138,15 @@ pub fn runners() -> Vec<Runner> {
         r("dewasm-ruby", Kind::Dewasm(Target::Ruby("--disable-yjit"))),
         r("dewasm-ruby-yjit", Kind::Dewasm(Target::Ruby("--yjit"))),
         r("dewasm-ruby-zjit", Kind::Dewasm(Target::Ruby("--zjit"))),
+        r("dewasm-monoruby", Kind::Dewasm(Target::Monoruby)),
+        r("dewasm-jruby", Kind::Dewasm(Target::JRuby)),
         r("dewasm-python", Kind::Dewasm(Target::Python)),
+        r("dewasm-python-jit", Kind::Dewasm(Target::PythonJit)),
         r("dewasm-pypy", Kind::Dewasm(Target::PyPy)),
+        r("dewasm-graalpy", Kind::Dewasm(Target::GraalPy)),
         r("dewasm-perl", Kind::Dewasm(Target::Perl)),
         r("dewasm-go", Kind::Dewasm(Target::Go)),
+        r("dewasm-tinygo", Kind::Dewasm(Target::TinyGo)),
         r("dewasm-java", Kind::Dewasm(Target::Java)),
         r("dewasm-bash", Kind::Dewasm(Target::Bash)),
         r(
@@ -248,11 +255,33 @@ impl Target {
                 })?;
                 ruby_jit_available(&ruby, flag)
             }
+            Target::Monoruby => monoruby_bin().map(|_| ()).ok_or_else(|| {
+                "monoruby not found on PATH (or $DEWASM_MONORUBY); benchmarks/setup.sh does not install it"
+                    .to_string()
+            }),
+            Target::JRuby => {
+                let jruby = jruby_bin().ok_or_else(|| {
+                    "jruby not found on PATH (or $DEWASM_JRUBY); benchmarks/setup.sh does not install it"
+                        .to_string()
+                })?;
+                jruby_io_buffer_available(&jruby)
+            }
             Target::Python => dewasm_backend_python::find_python()
                 .map(|_| ())
                 .ok_or_else(|| "python3 >= 3.9 not found on PATH: see docs/testing.md".to_string()),
+            Target::PythonJit => {
+                let python = python_jit_bin().ok_or_else(|| {
+                    "python3 not found on PATH (or $DEWASM_PYTHON_JIT): see docs/testing.md"
+                        .to_string()
+                })?;
+                python_jit_available(&python)
+            }
             Target::PyPy => pypy_bin().map(|_| ()).ok_or_else(|| {
                 "pypy3 not found on PATH (or $DEWASM_PYPY); benchmarks/setup.sh does not install it"
+                    .to_string()
+            }),
+            Target::GraalPy => graalpy_bin().map(|_| ()).ok_or_else(|| {
+                "graalpy not found on PATH (or $DEWASM_GRAALPY); benchmarks/setup.sh does not install it"
                     .to_string()
             }),
             Target::Perl => dewasm_backend_perl::find_perl()
@@ -264,6 +293,16 @@ impl Target {
             Target::Go => dewasm_backend_go::find_go()
                 .map(|_| ())
                 .ok_or_else(|| "go toolchain not found on PATH: see docs/testing.md".to_string()),
+            Target::TinyGo => {
+                // TinyGo resolves the standard library through the go toolchain, so both have to be present.
+                dewasm_backend_go::find_go().ok_or_else(|| {
+                    "go toolchain not found on PATH: see docs/testing.md".to_string()
+                })?;
+                tinygo_bin().map(|_| ()).ok_or_else(|| {
+                    "tinygo not found on PATH (or $DEWASM_TINYGO); benchmarks/setup.sh does not install it"
+                        .to_string()
+                })
+            }
             Target::Java => {
                 dewasm_backend_java::find_java().ok_or_else(|| {
                     "java not found on PATH (or $DEWASM_JAVA): see docs/testing.md".to_string()
@@ -281,8 +320,12 @@ impl Target {
     fn version(&self) -> Option<String> {
         match self {
             Target::Ruby(_) => capture_version(&dewasm_backend_ruby::find_ruby()?, &["-v"]),
+            Target::Monoruby => capture_version(&monoruby_bin()?, &["-v"]),
+            Target::JRuby => capture_version(&jruby_bin()?, &["-v"]),
             Target::Python => capture_version(&dewasm_backend_python::find_python()?, &["-VV"]),
+            Target::PythonJit => capture_version(&python_jit_bin()?, &["-VV"]),
             Target::PyPy => capture_version(&pypy_bin()?, &["-VV"]),
+            Target::GraalPy => capture_version(&graalpy_bin()?, &["--version"]),
             Target::Perl => {
                 capture_version(&dewasm_backend_perl::find_perl()?, &["-e", "print $^V"])
             }
@@ -291,20 +334,32 @@ impl Target {
                 &["-c", "echo $BASH_VERSION"],
             ),
             Target::Go => capture_version(&dewasm_backend_go::find_go()?, &["version"]),
+            Target::TinyGo => capture_version(&tinygo_bin()?, &["version"]),
             // `java -version` writes to stderr on every JDK that predates the `--version` spelling; `capture_version` reads both streams for exactly this reason.
             Target::Java => capture_version(&dewasm_backend_java::find_java()?, &["-version"]),
         }
     }
 
+    /// What the artifact cache keys this target's built artifact under.
+    /// Script targets share their backend's one generated file; compiled targets that share a backend but not a compiler (Go, TinyGo) must not share a binary.
+    fn artifact_tag(&self) -> &'static str {
+        match self {
+            Target::TinyGo => "tinygo",
+            _ => self.backend().name(),
+        }
+    }
+
     /// The dewasm backend behind this target.
-    /// Ruby's three JIT modes and Python/PyPy share one backend, so they also share one generated artifact.
+    /// Ruby's three JIT modes with monoruby and JRuby, and Python with PyPy, each share one backend, so they also share one generated artifact.
     fn backend(&self) -> &'static (dyn Backend + Sync) {
         match self {
-            Target::Ruby(_) => &dewasm_backend_ruby::RubyBackend,
-            Target::Python | Target::PyPy => &dewasm_backend_python::PythonBackend,
+            Target::Ruby(_) | Target::Monoruby | Target::JRuby => &dewasm_backend_ruby::RubyBackend,
+            Target::Python | Target::PythonJit | Target::PyPy | Target::GraalPy => {
+                &dewasm_backend_python::PythonBackend
+            }
             Target::Perl => &dewasm_backend_perl::PerlBackend,
             Target::Bash => &dewasm_backend_bash::BashBackend,
-            Target::Go => &dewasm_backend_go::GoBackend,
+            Target::Go | Target::TinyGo => &dewasm_backend_go::GoBackend,
             Target::Java => &dewasm_backend_java::JavaBackend,
         }
     }
@@ -468,8 +523,9 @@ impl Workshop {
     }
 
     /// The runnable artifact for `bytes` under `target`'s backend, through both cache levels.
+    /// The key carries [`Target::artifact_tag`], not just the backend name: Go and TinyGo share a backend but build different binaries.
     fn artifact_for(&mut self, target: Target, bytes: &[u8]) -> Result<Artifact> {
-        let key = (hash_bytes(bytes), target.backend().name());
+        let key = (hash_bytes(bytes), target.artifact_tag());
         Ok(match self.artifacts.get(&key) {
             Some(cached) => cached.clone(),
             None => {
@@ -489,13 +545,33 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             args: vec![flag.to_string(), path_arg(&path)],
             env: Vec::new(),
         },
+        (Target::Monoruby, Artifact::Script(path)) => Launch {
+            program: monoruby_bin().context("monoruby not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::JRuby, Artifact::Script(path)) => Launch {
+            program: jruby_bin().context("jruby not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
         (Target::Python, Artifact::Script(path)) => Launch {
             program: dewasm_backend_python::find_python().context("python3 not found")?,
             args: vec![path_arg(&path)],
             env: Vec::new(),
         },
+        (Target::PythonJit, Artifact::Script(path)) => Launch {
+            program: python_jit_bin().context("python3 not found (or $DEWASM_PYTHON_JIT)")?,
+            args: vec![path_arg(&path)],
+            env: vec![("PYTHON_JIT".to_string(), "1".to_string())],
+        },
         (Target::PyPy, Artifact::Script(path)) => Launch {
             program: pypy_bin().context("pypy3 not found")?,
+            args: vec![path_arg(&path)],
+            env: Vec::new(),
+        },
+        (Target::GraalPy, Artifact::Script(path)) => Launch {
+            program: graalpy_bin().context("graalpy not found")?,
             args: vec![path_arg(&path)],
             env: Vec::new(),
         },
@@ -510,7 +586,7 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             env: Vec::new(),
         },
         // `go run` prints "exit status N" and exits 1 instead of propagating the guest's exit code, so the built binary is executed directly (same reason the Go e2e suite does).
-        (Target::Go, Artifact::Binary(bin)) => Launch {
+        (Target::Go | Target::TinyGo, Artifact::Binary(bin)) => Launch {
             program: bin,
             args: Vec::new(),
             env: Vec::new(),
@@ -551,6 +627,33 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     bail!("go build failed:\n{}", String::from_utf8_lossy(&out.stderr));
                 }
                 std::fs::rename(&tmp, &bin).context("install the built go binary")?;
+            }
+            Ok(Artifact::Binary(bin))
+        }
+        Target::TinyGo => {
+            let bin = cache.join(format!("{stem}.tinygo.bin"));
+            if !bin.is_file() {
+                let src = cache.join(format!("{stem}.go"));
+                write_if_absent(&src, &source)?;
+                let tinygo =
+                    tinygo_bin().context("tinygo not found on PATH (or $DEWASM_TINYGO)")?;
+                let tmp = cache.join(format!("{stem}.tinygo.bin.tmp"));
+                // -opt=2 is TinyGo's speed setting; its default -opt=z optimizes for size.
+                let out = Command::new(tinygo)
+                    .arg("build")
+                    .arg("-opt=2")
+                    .arg("-o")
+                    .arg(&tmp)
+                    .arg(&src)
+                    .output()
+                    .context("spawn tinygo build")?;
+                if !out.status.success() {
+                    bail!(
+                        "tinygo build failed:\n{}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+                std::fs::rename(&tmp, &bin).context("install the built tinygo binary")?;
             }
             Ok(Artifact::Binary(bin))
         }
@@ -682,6 +785,84 @@ fn pypy_bin() -> Option<PathBuf> {
     .clone()
 }
 
+/// A host monoruby.
+/// Deliberately not provisioned by `benchmarks/setup.sh` (it is a whole alternative Ruby, built from its own Rust workspace), so its absence is a normal, reported skip.
+fn monoruby_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_MONORUBY") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("monoruby"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["-v"]))
+    })
+    .clone()
+}
+
+/// A host JRuby, same policy as [`monoruby_bin`]: host-provided, reported skip when missing.
+fn jruby_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_JRUBY") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("jruby"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["-v"]))
+    })
+    .clone()
+}
+
+/// The CPython the JIT runner launches: `$DEWASM_PYTHON_JIT` when set (a JIT-enabled build is usually a separate from-source install, not the PATH `python3`), the default python3 otherwise.
+fn python_jit_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        if let Some(env) = std::env::var_os("DEWASM_PYTHON_JIT") {
+            let candidate = PathBuf::from(env);
+            return probe(&candidate, &["-c", "import sys"]).then_some(candidate);
+        }
+        dewasm_backend_python::find_python()
+    })
+    .clone()
+}
+
+/// A host GraalPy, same policy as [`pypy_bin`]: host-provided, reported skip when missing.
+fn graalpy_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_GRAALPY") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("graalpy"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["-c", "import sys"]))
+    })
+    .clone()
+}
+
+/// A host TinyGo, same policy as [`pypy_bin`]: host-provided, reported skip when missing.
+fn tinygo_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_TINYGO") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("tinygo"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["version"]))
+    })
+    .clone()
+}
+
 /// The interpreter inside `benchmarks/cache/venv`, where `benchmarks/setup.sh` pins pywasm.
 fn venv_python() -> Option<PathBuf> {
     let bin = bench_cache_dir().join("venv/bin");
@@ -756,6 +937,33 @@ fn ruby_jit_available(ruby: &Path, flag: &str) -> Result<(), String> {
         .then_some(())
         .ok_or_else(|| {
             format!("this ruby does not enable the JIT behind {flag} (built without it?)")
+        })
+}
+
+/// Whether this JRuby's `IO::Buffer` carries the `source_offset` argument forms the generated runtime uses (`memory/copy.rb`, `memory/init.rb`).
+/// A JRuby without jruby/jruby#9588 accepts only 1..3 arguments there and would fail every workload at run time, so refuse it up front.
+/// Probed by behavior rather than by version: which release first carries the fix is not this probe's to predict, and a backport passes it just the same.
+fn jruby_io_buffer_available(jruby: &Path) -> Result<(), String> {
+    let check = r#"b = IO::Buffer.new(4); b.set_string("abcd", 0, 2, 1); b.copy(IO::Buffer.for("xy"), 2, 1, 1)"#;
+    probe(jruby, &["-e", check]).then_some(()).ok_or_else(|| {
+        "this JRuby's IO::Buffer copy/set_string lack the source_offset forms (fixed upstream in jruby/jruby#9588): use a JRuby that includes it"
+            .to_string()
+    })
+}
+
+/// Whether this python actually runs its experimental JIT under `PYTHON_JIT=1`.
+/// Distribution builds usually carry `sys._jit` but were compiled without the JIT, so the flag enables nothing; only the VM's own answer separates the two.
+fn python_jit_available(python: &Path) -> Result<(), String> {
+    let check = "import sys; raise SystemExit(0 if getattr(sys, '_jit', None) and sys._jit.is_enabled() else 1)";
+    Command::new(python)
+        .env("PYTHON_JIT", "1")
+        .args(["-c", check])
+        .output()
+        .is_ok_and(|out| out.status.success())
+        .then_some(())
+        .ok_or_else(|| {
+            "this python does not enable its experimental JIT under PYTHON_JIT=1 (built without --enable-experimental-jit?)"
+                .to_string()
         })
 }
 

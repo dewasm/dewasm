@@ -112,6 +112,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 90 | [Rewrite a Self Tail Call into a Loop](90-self-tail-call-to-loop.md) | Accepted |
 | 91 | [Perl Inline Fast Paths for Float Arithmetic and Memory Access](91-perl-inline-fast-paths.md) | Accepted |
 | 92 | [wasi-sdk as the C Toolchain for the Locally-Built Modules](92-wasi-sdk-c-toolchain.md) | Accepted |
+| 93 | [Alternative Engines as Speed-Suite Runners](93-engine-runners-in-speed-suite.md) | Accepted |
 
 ## Adding a new decision
 

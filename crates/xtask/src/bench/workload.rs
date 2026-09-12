@@ -401,11 +401,35 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wardite-yjit", WARDITE_SQLITE_EXCLUSION),
     ("dewasm-perl", DEWASM_PERL_SQLITE_EXCLUSION),
     ("dewasm-python", DEWASM_PYTHON_SQLITE_EXCLUSION),
+    ("dewasm-monoruby", MONORUBY_SQLITE_EXCLUSION),
+    ("dewasm-jruby", JRUBY_SQLITE_EXCLUSION),
+    ("dewasm-graalpy", GRAALPY_SQLITE_EXCLUSION),
+    ("dewasm-python-jit", PYTHON_JIT_SQLITE_EXCLUSION),
     ("wasm3-ruby", CONVERTED_WASM3_SQLITE_EXCLUSION),
     ("wasm3-ruby-yjit", CONVERTED_WASM3_SQLITE_EXCLUSION),
     ("wasm3-python", CONVERTED_WASM3_SQLITE_EXCLUSION),
     ("wasm3-pypy", CONVERTED_WASM3_SQLITE_EXCLUSION),
 ];
+
+const MONORUBY_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Capability,
+    reason: "monoruby aborts while JIT-compiling the sqlite3 shell's largest generated methods (monoasm panics with `ADR displacement out of range`, measured on master 9c32041f, arm64 macOS), so the query never completes; remeasure when that panic is fixed upstream",
+};
+
+const JRUBY_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "JRuby runs this program correctly but at 58-70 s per run (measured, jruby 10.0.3.0): the largest generated methods exceed the JVM's 64 KB per-method bytecode limit and stay interpreted, so the hottest functions never JIT (issue #206)",
+};
+
+const PYTHON_JIT_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "the JIT-enabled CPython runs this program correctly but at 70 s per run (measured, 3.14.7 built with --enable-experimental-jit), the same cost class as plain CPython's 56 s, so it is excluded for the same reason as dewasm-python",
+};
+
+const GRAALPY_SQLITE_EXCLUSION: Exclusion = Exclusion {
+    kind: ExclusionKind::Cost,
+    reason: "GraalPy runs this program correctly but at 88 s per run (measured, GraalPy 25.3.4.1 native standalone), slower than CPython's 56 s: the engine's JIT does not reach the largest generated methods, so a warmup plus the timed repetitions across both query cases would add roughly 12 minutes to the suite",
+};
 
 const CONVERTED_WASM3_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
