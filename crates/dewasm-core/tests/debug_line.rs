@@ -20,7 +20,7 @@ fn fixture_bytes() -> Vec<u8> {
     })
 }
 
-/// The `[Stmt::SourceLine]` positions in the body of the exported function named `export`, as `(file_path, line, col)`.
+/// The `[Stmt::SourceLine]` positions anywhere in the body of the exported function named `export` (nested statements included; the toolchain decides how much of a function's control flow nests), as `(file_path, line, col)` in traversal order.
 fn export_source_positions<'m>(
     module: &'m dewasm_core::ir::Module,
     export: &str,
@@ -36,15 +36,14 @@ fn export_source_positions<'m>(
         .unwrap_or_else(|| panic!("fixture has no exported function `{export}`"));
     assert!(idx >= n_imported, "`{export}` is an imported function");
     let func = &module.funcs[(idx - n_imported) as usize];
-    func.body
-        .iter()
-        .filter_map(|s| match s {
-            Stmt::SourceLine(SourcePos { file, line, col }) => {
-                Some((module.debug_files[*file as usize].as_str(), *line, *col))
-            }
-            _ => None,
-        })
-        .collect()
+    let mut positions = Vec::new();
+    Stmt::any(&func.body, &mut |s| {
+        if let Stmt::SourceLine(SourcePos { file, line, col }) = s {
+            positions.push((module.debug_files[*file as usize].as_str(), *line, *col));
+        }
+        false
+    });
+    positions
 }
 
 /// Any `SourceLine` marker anywhere in the module (nested statements included).
