@@ -26,10 +26,9 @@ const LOADER_PATH_VAR: &str = if cfg!(target_os = "macos") {
 /// `Err(Output)` carries the `codon build` failure so a piped run can report it via `status.success()`.
 /// A missing `codon` toolchain is a loud failure.
 ///
-/// Every suite builds *debug* by default: `-release` costs ~8x the compile time (superlinearly worse on huge single generated functions), CI pays every codon build fresh, and the build is semantically identical (the one optimizer-sensitive path, identity-fold NaN quieting, is handled at emission via the quiet-if-NaN wrappers).
-/// `DEWASM_CODON_RELEASE=1` switches every build to `-release`: the local pre-release verification runs the spec sweep once in the configuration the benchmarks and users run.
+/// Every suite builds *debug*: `-release` costs ~8x the compile time (superlinearly worse on huge single generated functions), CI pays every codon build fresh, and the build is semantically identical (the one optimizer-sensitive path, identity-fold NaN quieting, is handled at emission via the quiet-if-NaN wrappers, so no release-mode verification pass is kept either).
 pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
-    build_codon_with(source, std::env::var_os("DEWASM_CODON_RELEASE").is_some())
+    build_codon_with(source, false)
 }
 
 /// An alias kept for the e2e suites' call sites; same policy as [`build_codon`].

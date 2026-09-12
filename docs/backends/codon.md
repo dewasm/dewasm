@@ -65,6 +65,6 @@ Authoritative matrix: [docs/support.md](../support.md).
 
 - **Build cost dominates, superlinearly on huge functions.**
   Microbenchmark-size artifacts compile in seconds; a single function of tens of thousands of statements pushes `codon build -release` into minutes (cowsay end to end: ~9 minutes released, ~70 seconds as a debug build).
-  The test suites compile to a content-addressed cache binary to pay each build once, and build debug throughout (`DEWASM_CODON_RELEASE=1` switches a run to `-release`).
+  The test suites compile to a content-addressed cache binary to pay each build once, and build debug throughout.
 - The output is a Codon dialect, not CPython-compatible Python: `UInt[N]`, `Ptr[byte]` and `@llvm` blocks do not run under `python3`.
 - A standalone program runs the guest on the native stack (8 MB main-thread default), which carries deep-but-valid recursion like the 5000-frame e2e case unmitigated; a runaway recursion is a fatal overflow rather than a catchable trap outside the spec harness's guarded builds.

@@ -3,7 +3,7 @@
 //!
 //! Codon facts that shape the phrasing:
 //! - Codon is statically typed with no dynamic `invoke`, so each generated class carries a boxed `invoke(name, List[Val]) -> List[Val]` / `global_get(name) -> List[Val]` dispatcher, and the harness compares boxed results bit-exactly through `Rt.f32_bits`/`Rt.f64_bits`.
-//! Builds are debug by default (`DEWASM_CODON_RELEASE=1` for the local pre-release `-release` pass); see tests/common.
+//! Builds are debug (see tests/common).
 //! - Assertions live in named thunks (`def _tN(): ...`) rather than one flat run: a single module-level run of thousands of statements would form the megafunction shape whose `-release` compile time is superlinear.
 //! - A runaway recursion overflows the native stack fatally (uncatchable), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap.
 
@@ -178,7 +178,7 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one `-release` program, and even the shared curated list costs minutes of compile latency, which a pull-request CI job cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), and the full testsuite runs under `--features slow_test` (CI's main-branch lane) like every other backend's.
+    /// Codon compiles each `.wast` file to one program, and even the shared curated list costs minutes of compile latency, which the pull-request tier (target: ~3 minutes) cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), and the full testsuite runs under `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in).
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(&[
             "block",

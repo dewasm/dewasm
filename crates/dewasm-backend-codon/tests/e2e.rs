@@ -2,7 +2,7 @@
 //! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations.
 //! Codon covers full WASI preview 1 incl. the filesystem, exception handling, and tail calls, so it wires every WASI kind, the `apps`/`fs_apps`/`capi` suites, and both multi-module cases.
 //!
-//! Every codon build in the test suites is debug by default (see tests/common: ~8x faster, semantics preserved by the emission-level NaN quieting); `DEWASM_CODON_RELEASE=1` switches the local pre-release pass to `-release`.
+//! Every codon build in the test suites is debug (see tests/common: ~8x faster, semantics preserved by the emission-level NaN quieting).
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -846,7 +846,7 @@ dewasm_test_helper::standalone_dir_e2e!(Codon);
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 
-// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the slow e2e tier must stay within a few minutes, so only cases whose artifacts build in seconds (nes 5k lines, minigzip 18.5k, treesitter 22.5k) stay `slow`; everything from the cowsay class (72k lines, ~70 s) upward is `ultra`.
+// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the whole slow lane targets ~5 minutes, so only cases whose artifacts build in seconds (nes 5k lines, minigzip 18.5k, treesitter 22.5k) stay `slow`; everything from the cowsay class (72k lines) upward is `ultra`, run locally.
 // Every `ultra` case still runs at slow on the interpreted backends, so CI keeps covering the cases themselves.
 dewasm_test_helper::mruby_eh_e2e!(Codon, ultra);
 dewasm_test_helper::cowsay_args_e2e!(Codon, ultra);
