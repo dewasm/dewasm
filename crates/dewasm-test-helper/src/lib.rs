@@ -381,6 +381,15 @@ macro_rules! cowsay_args_e2e {
             $crate::run_app_case(&$lang, &$crate::COWSAY_ARGS);
         }
     };
+    // The speed-token form, for a backend whose run of this case is expensive (a compiled backend paying a per-artifact build).
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn cowsay_args() {
+                $crate::run_app_case(&$lang, &$crate::COWSAY_ARGS);
+            }
+        }
+    };
 }
 
 /// See [`cowsay_args_e2e!`].
@@ -391,6 +400,15 @@ macro_rules! cowsay_stdin_e2e {
         #[test]
         fn cowsay_stdin() {
             $crate::run_app_case(&$lang, &$crate::COWSAY_STDIN);
+        }
+    };
+    // See [`cowsay_args_e2e!`]'s speed-token form.
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn cowsay_stdin() {
+                $crate::run_app_case(&$lang, &$crate::COWSAY_STDIN);
+            }
         }
     };
 }

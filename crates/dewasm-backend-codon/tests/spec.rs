@@ -177,12 +177,20 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program (seconds each, dominated by compile latency), so a plain `cargo test` runs the shared curated list plus the exception-handling files.
+    /// Codon compiles each `.wast` file to one `-release` program, and even the shared curated list costs minutes of compile latency, which a pull-request CI job cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), and the full testsuite runs under `--features slow_test` (CI's main-branch lane) like every other backend's.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(dewasm_test_helper::curated_with(&[
-            dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
-            dewasm_test_helper::TAIL_CALL_SPEC_FILES,
-        ]))
+        Some(&[
+            "block",
+            "br_if",
+            "call",
+            "endianness",
+            "fac",
+            "forward",
+            "nop",
+            "select",
+            "switch",
+            "traps",
+        ])
     }
 
     fn seed_units(&self) -> &'static [&'static str] {

@@ -850,8 +850,8 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 // The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): a case stays `slow` only while the whole slow e2e tier finishes within ~5 minutes, which in practice means a debug build around a minute; anything beyond (measured or sized: mruby 151k lines, toywasm 132k, qjs 268k, the sqlite family 229-292k) is `ultra`.
 // Every `ultra` case still runs at slow on the interpreted backends, so CI keeps covering the cases themselves.
 dewasm_test_helper::mruby_eh_e2e!(Codon, ultra);
-dewasm_test_helper::cowsay_args_e2e!(Codon);
-dewasm_test_helper::cowsay_stdin_e2e!(Codon);
+dewasm_test_helper::cowsay_args_e2e!(Codon, slow);
+dewasm_test_helper::cowsay_stdin_e2e!(Codon, slow);
 dewasm_test_helper::qjs_eval_e2e!(Codon, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Codon, ultra);
 dewasm_test_helper::gzip_e2e!(Codon);

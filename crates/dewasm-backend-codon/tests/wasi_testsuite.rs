@@ -67,4 +67,11 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
     }
 }
 
-dewasm_test_helper::wasi_testsuite_suite!(CodonWasi);
+/// The suite is 72 `-release` codon builds (about six minutes), which a pull-request CI job cannot afford; like the full spec sweep it runs in the `slow_test` lane, and locally on demand.
+fn main() {
+    if !cfg!(feature = "slow_test") {
+        println!("codon wasi_testsuite runs under --features slow_test: 72 -release codon builds");
+        return;
+    }
+    dewasm_test_helper::wasi_testsuite_main(&CodonWasi);
+}
