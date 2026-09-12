@@ -314,6 +314,15 @@ macro_rules! wasi_suite {
             $crate::run_wasi_fs(&$lang, $template);
         }
     };
+    // The speed-token form of the Fs kind, for a backend whose eight fixture builds are expensive (a compiled backend paying a per-artifact build).
+    ($lang:expr, Fs, $template:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn wasi_fs() {
+                $crate::run_wasi_fs(&$lang, $template);
+            }
+        }
+    };
 }
 
 /// One `#[test]` exercising the standalone `--dir` interface for `$lang`: convert `wasi_standalone_dir.wat` standalone, run it with a `--dir` mount, and require the file round-trip to succeed.

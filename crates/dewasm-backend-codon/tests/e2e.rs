@@ -839,7 +839,8 @@ dewasm_test_helper::stdio_capture_e2e!(Codon, CODON_STDIO_CAPTURE_GLUE);
 dewasm_test_helper::wasi_suite!(Codon, Stdio);
 dewasm_test_helper::wasi_suite!(Codon, ArgsEnv);
 dewasm_test_helper::wasi_suite!(Codon, Poll);
-dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE);
+// The eight filesystem fixtures each pay a codon build; slow keeps the pull-request tier inside its ~3-minute target.
+dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE, slow);
 dewasm_test_helper::wasi_root_containment_e2e!(Codon, CODON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Codon);
 // The native 8 MB main stack carries the 5000-frame recursion unmitigated (like Ruby's host stack).

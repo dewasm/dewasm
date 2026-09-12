@@ -1,9 +1,10 @@
 //! Codon side of the shared spec harness: converts each module with the Codon backend, phrases every assertion as a Codon thunk plus a `check*` helper call, assembles one self-contained program per `.wast` file, and `codon build`s + runs it.
 //! The generic harness lives in `dewasm-test-helper`.
 //!
+//! Builds are debug (see tests/common).
+//!
 //! Codon facts that shape the phrasing:
 //! - Codon is statically typed with no dynamic `invoke`, so each generated class carries a boxed `invoke(name, List[Val]) -> List[Val]` / `global_get(name) -> List[Val]` dispatcher, and the harness compares boxed results bit-exactly through `Rt.f32_bits`/`Rt.f64_bits`.
-//! Builds are debug (see tests/common).
 //! - Assertions live in named thunks (`def _tN(): ...`) rather than one flat run: a single module-level run of thousands of statements would form the megafunction shape whose `-release` compile time is superlinear.
 //! - A runaway recursion overflows the native stack fatally (uncatchable), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap.
 
@@ -501,4 +502,6 @@ def _mk_spectest() -> Dict[str, Rt.Extern]:
 _spectest = _mk_spectest()
 "#;
 
-dewasm_test_helper::spec_suite!(CodonSpec);
+fn main() {
+    dewasm_test_helper::spec_main(&CodonSpec, cfg!(feature = "ultra_slow_test"));
+}

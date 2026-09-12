@@ -369,10 +369,22 @@ fn generate_class_inner(
     // Always bundled: embedder glue names `<Rt>.Trap`/`<Rt>.Exit` in `except` clauses, which Codon resolves statically even when the run never raises (CPython's lazy except-expression evaluation has no equivalent).
     seeds.insert("rt/trap".to_string());
     seeds.insert("rt/exit".to_string());
+    let mut tail_entry_set = tail_callers.clone();
+    for f in &module.funcs {
+        Stmt::any(&f.body, &mut |st| {
+            if let Stmt::ReturnCall { func, .. } = st {
+                if *func >= module.num_imported_funcs() {
+                    tail_entry_set.insert(*func);
+                }
+            }
+            false
+        });
+    }
     let gen = Gen {
         module,
         default_wasi,
         tail_callers,
+        tail_entry_set,
         uses: RefCell::new(seeds),
         rt_name: rt_name.clone(),
         class_name: class_name.to_string(),
@@ -591,6 +603,8 @@ struct Gen<'a> {
     default_wasi: bool,
     /// Defined functions (function index space) containing a tail call: these are the ones split into `_f{idx}_body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
+    /// [`Gen::tail_entries`]'s value, computed once: it scans every function body, and `tail_slot` consults it per element item and per `return_call`.
+    tail_entry_set: BTreeSet<u32>,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
@@ -639,21 +653,10 @@ impl<'a> Gen<'a> {
         codon_string(&type_key(ty, dewasm_backend::val_name))
     }
 
-    /// The defined functions that get a typed tail entry: the tail callers themselves plus every defined function a direct `return_call` targets.
+    /// The defined functions that get a typed tail entry: the tail callers themselves plus every defined function a direct `return_call` targets (computed once into `tail_entry_set`).
     /// A tail call always parks (running the callee inline would keep this frame's exception handlers alive, which the proposal forbids), so every parkable direct target needs an entry.
-    fn tail_entries(&self) -> BTreeSet<u32> {
-        let mut set = self.tail_callers.clone();
-        for f in &self.module.funcs {
-            Stmt::any(&f.body, &mut |st| {
-                if let Stmt::ReturnCall { func, .. } = st {
-                    if *func >= self.module.num_imported_funcs() {
-                        set.insert(*func);
-                    }
-                }
-                false
-            });
-        }
-        set
+    fn tail_entries(&self) -> &BTreeSet<u32> {
+        &self.tail_entry_set
     }
 
     /// The dense position of `func_idx` in its result signature's entry table, or None when it has no entry.
@@ -674,7 +677,7 @@ impl<'a> Gen<'a> {
     fn tail_signatures(&self) -> Vec<Vec<ValType>> {
         let mut seen: BTreeSet<Vec<ValType>> = BTreeSet::new();
         for idx in self.tail_entries() {
-            seen.insert(self.module.func_type(idx).results.clone());
+            seen.insert(self.module.func_type(*idx).results.clone());
         }
         for f in &self.module.funcs {
             Stmt::any(&f.body, &mut |st| {
@@ -702,7 +705,7 @@ impl<'a> Gen<'a> {
             }
         };
         for idx in self.tail_entries() {
-            note(&self.module.func_type(idx).params, &mut seen);
+            note(&self.module.func_type(*idx).params, &mut seen);
         }
         for f in &self.module.funcs {
             Stmt::any(&f.body, &mut |st| {
@@ -801,7 +804,7 @@ impl<'a> Gen<'a> {
         let m = self.module;
         let class = &self.class_name;
         let rt = &self.rt_name;
-        for idx in self.tail_entries().iter().copied().collect::<Vec<_>>() {
+        for idx in self.tail_entries().clone() {
             let ty = m.func_type(idx).clone();
             let id = sig_id(&ty.results);
             w.line(format!("class {class}_TB_{id}_F{idx}({class}_TB_{id}):"));
