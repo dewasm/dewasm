@@ -9,7 +9,7 @@
  * collects the rows. Built into cache/sqlite3-binding.wasm by
  * examples/apps/scripts/sqlite3.sh (a third artifact alongside the shell and the plain
  * reactor library) from the same pinned amalgamation, with the same
- * zig build flags.
+ * wasi-sdk build flags.
  */
 #include "sqlite3.h"
 

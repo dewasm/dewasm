@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Compile the C microbenchmarks into benchmarks/cache/c/<id>.wasm with zig cc, so that every runner in the suite consumes byte-identical modules.
+# Compile the C microbenchmarks into benchmarks/cache/c/<id>.wasm with wasi-sdk clang, so that every runner in the suite consumes byte-identical modules.
 #
 # The .c sources are checked in; the built .wasm is not, like everything else under cache/.
 # Run this after editing one, or via `benchmarks/setup.sh`, which calls it together with the .wat family's benchmarks/wat/build.sh.
@@ -13,13 +13,10 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p cache/c
 
 # Fail loudly with an actionable message rather than half-building.
-require_tool() {
-  command -v "$1" >/dev/null && return
-  echo "benchmarks/c/build.sh: $1 not found: $2" >&2
+if [ -z "${WASI_SDK_PATH-}" ] || [ ! -x "$WASI_SDK_PATH/bin/clang" ]; then
+  echo "benchmarks/c/build.sh: WASI_SDK_PATH does not point at a wasi-sdk root: download wasi-sdk (local dev and CI use wasi-sdk-34, https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root, as examples/apps/setup.sh also needs" >&2
   exit 1
-}
-
-require_tool zig "install zig (brew install zig), as examples/apps/setup.sh also needs"
+fi
 
 # --- C microbenchmark flags.
 # Each one is load-bearing.
@@ -29,8 +26,6 @@ require_tool zig "install zig (brew install zig), as examples/apps/setup.sh also
 # wasi-libc's stdio would import fd_seek and fd_close, which
 # wardite does not implement, and imports are resolved at
 # instantiation, so the module would not even load there.
-# (`-nostartfiles` is silently ignored by zig cc for wasm: crt1
-# still gets linked and _start collides.)
 # -mno-*         Keep the output inside the feature set every runner in the
 # suite handles. bulk-memory and bulk-memory-opt are separate
 # LLVM features and both must be off, or clang lowers array
@@ -40,8 +35,10 @@ require_tool zig "install zig (brew install zig), as examples/apps/setup.sh also
 # -z stack-size  The default leaves a 16 MiB shadow stack, which forces a
 # 16 MiB initial memory, a real cost for interpreters that back
 # linear memory with a host byte array. 64 KiB is ample here.
+# --no-wasm-opt: with a wasm-opt on PATH the driver would otherwise run it on the linked module, an uncontrolled pass that could reintroduce what the -mno-* flags disable.
 CFLAGS=(
-  -target wasm32-wasi
+  --target=wasm32-wasip1
+  --no-wasm-opt
   -O2
   -nostdlib
   -mno-bulk-memory
@@ -61,6 +58,6 @@ CFLAGS=(
 
 for src in c/*.c; do
   id=$(basename "$src" .c)
-  zig cc "${CFLAGS[@]}" -o "cache/c/$id.wasm" "$src"
+  "$WASI_SDK_PATH/bin/clang" "${CFLAGS[@]}" -o "cache/c/$id.wasm" "$src"
   echo "$id: $src -> cache/c/$id.wasm"
 done

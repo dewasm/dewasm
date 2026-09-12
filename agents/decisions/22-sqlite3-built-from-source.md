@@ -2,6 +2,7 @@
 
 Status: **Accepted, 2026-07-24.**
 Implemented: `examples/apps/setup.sh` (amalgamation download + two `zig cc` builds), `crates/dewasm-test-helper/src/apps.rs` (`sqlite3-shell` case, `libsqlite3_c_api_ruby`), `examples/apps/snapshot/sqlite3_shell.stdout`.
+The build toolchain has since moved from zig to wasi-sdk ([decision 92](92-wasi-sdk-c-toolchain.md)), reversing the "wasi-sdk/clang instead of zig" rejection below; the pinned-source criterion, the artifact set, and the stamp policy are unchanged.
 Extended (Phase 5a, 2026-07-26) with a third `zig cc` build, `sqlite3-binding.wasm`, compiled from the same pinned source plus our own `examples/apps/src/sqlite3_binding.c` (an exported `run_query` that calls `sqlite3_exec` with a C callback forwarding each row to an imported `env.host_row`), which exercises the guest→host `sqlite3_exec` function-pointer callback the two original artifacts left untested, driven from Ruby's `sqlite3_callback_binding_ruby`.
 
 ## Context

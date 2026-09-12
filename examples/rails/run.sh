@@ -7,7 +7,7 @@
 # ActiveRecord standalone smoke
 # 4. the Rails app: bundle, migrate, boot, drive it over HTTP
 #
-# Requires: ruby >= 3.4 with the rails gem installed, zig (for the wasm build), network access for the first bundle install.
+# Requires: ruby >= 3.4 with the rails gem installed, wasi-sdk with WASI_SDK_PATH set (for the wasm build), network access for the first bundle install.
 set -euo pipefail
 cd "$(dirname "$0")"
 

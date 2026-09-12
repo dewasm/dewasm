@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Populate examples/apps/cache/ with the real-world example apps: prebuilt wasm binaries fetched from upstream, or (sqlite3, libpcap, tree-sitter, minigzip, ripgrep) version-pinned source releases built locally with zig or cargo.
+# Populate examples/apps/cache/ with the real-world example apps: prebuilt wasm binaries fetched from upstream, or (sqlite3, libpcap, tree-sitter, minigzip, ripgrep) version-pinned source releases built locally with wasi-sdk or cargo.
 # Third-party artifacts are never committed; the apps e2e test fails loudly when the cache is absent.
 #
 # Each app is a standalone, directly-runnable script under scripts/ (e.g.

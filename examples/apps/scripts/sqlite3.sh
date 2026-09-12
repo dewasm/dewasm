@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# sqlite3: built from the pinned amalgamation source with zig.
+# sqlite3: built from the pinned amalgamation source with wasi-sdk.
 #
 # One pinned source release yields four artifacts:
 # cache/sqlite3-shell.wasm:   the CLI shell (standalone: _start, stdio)
@@ -86,8 +86,8 @@ wasm_func_count() {
     awk '$1 == "[funcs]" { print $3 }'
 }
 
-# The stamp covers the source sha, the export lists, the version-string patch, the split patch's bytes with the wasm-opt flags that keep it effective, and the wasm-opt version, so editing any of them retriggers the build.
-sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} version-suffix:-wasm split:$(shasum -a 256 "$SQLITE_SPLIT_PATCH" | cut -d' ' -f1) mod-wasm-opt:$SQLITE_MOD_NO_INLINE ${SQLITE_MOD_STRIP[*]} wasm-opt:$(wasm_opt_version)"
+# The stamp covers the source sha, the export lists, the version-string patch, the split patch's bytes with the wasm-opt flags that keep it effective, the wasm-opt version, and the toolchain token, so editing any of them retriggers the build.
+sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} version-suffix:-wasm split:$(shasum -a 256 "$SQLITE_SPLIT_PATCH" | cut -d' ' -f1) mod-wasm-opt:$SQLITE_MOD_NO_INLINE ${SQLITE_MOD_STRIP[*]} wasm-opt:$(wasm_opt_version) $(wasi_sdk_stamp)"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if is_cached "$sqlite_stamp" "$sqlite_key" \
   cache/sqlite3-shell.wasm cache/sqlite3-mod.wasm \
@@ -96,7 +96,7 @@ if is_cached "$sqlite_stamp" "$sqlite_key" \
   exit 0
 fi
 
-require_tool sqlite3 zig "install zig (e.g. brew install zig) to build the sqlite3 apps"
+require_wasi_sdk sqlite3
 require_tool sqlite3 unzip
 require_tool sqlite3 wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the sqlite3 apps"
 # The mod build passes --no-inline to keep the split VDBE opcode functions out of Binaryen's single-caller inlining; a binaryen too old to know the flag would fail mid-build, so refuse it up front.
@@ -114,24 +114,25 @@ unzip -q "$tmp/sqlite.zip" -d "$tmp"
 patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.c"
 patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.h"
 # --strip-debug (the three stock builds) drops the DWARF wasm-opt cannot parse; the mod build strips it in wasm-opt instead, see SQLITE_MOD_STRIP.
-echo "sqlite3: building sqlite3-shell.wasm (zig cc)"
-zig_cc_wasi "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
-  "$tmp/$SQLITE_DIR/sqlite3.c" "$tmp/$SQLITE_DIR/shell.c" \
+# The two shell builds add src/sqlite3_shell_wasi_compat.c (a getpid stand-in shell.c's debug path links); its header comment states why the engine needs none.
+echo "sqlite3: building sqlite3-shell.wasm (wasi-sdk clang)"
+wasi_sdk_clang "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
+  "$tmp/$SQLITE_DIR/sqlite3.c" "$tmp/$SQLITE_DIR/shell.c" src/sqlite3_shell_wasi_compat.c \
   -o cache/sqlite3-shell.wasm
 
-echo "sqlite3: building sqlite3-mod.wasm (zig cc, VDBE opcodes split out)"
+echo "sqlite3: building sqlite3-mod.wasm (wasi-sdk clang, VDBE opcodes split out)"
 cp -R "$tmp/$SQLITE_DIR" "$tmp/$SQLITE_DIR-mod"
 patch -s -p1 -F 0 -d "$tmp/$SQLITE_DIR-mod" -i "$PWD/$SQLITE_SPLIT_PATCH" || {
   echo "sqlite3: $SQLITE_SPLIT_PATCH does not apply to the pinned source; regenerate it" >&2
   exit 1
 }
-zig_cc_wasi "${SQLITE_CFLAGS[@]}" \
-  "$tmp/$SQLITE_DIR-mod/sqlite3.c" "$tmp/$SQLITE_DIR-mod/shell.c" \
+wasi_sdk_clang "${SQLITE_CFLAGS[@]}" \
+  "$tmp/$SQLITE_DIR-mod/sqlite3.c" "$tmp/$SQLITE_DIR-mod/shell.c" src/sqlite3_shell_wasi_compat.c \
   -o cache/sqlite3-mod.wasm
 
-echo "sqlite3: building libsqlite3.wasm (zig cc, reactor)"
+echo "sqlite3: building libsqlite3.wasm (wasi-sdk clang, reactor)"
 mapfile -t exports < <(wl_exports "${SQLITE_EXPORTS[@]}")
-zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
+wasi_sdk_clang -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   -DSQLITE_OMIT_LOAD_EXTENSION \
   "$tmp/$SQLITE_DIR/sqlite3.c" \
   "${exports[@]}" \
@@ -139,9 +140,9 @@ zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
 
 # The binding artifact: the reactor library plus our own run_query, which forwards each result row to the imported env.host_row.
 # Only the symbols this callback flow needs are exported; the import lands via the import_module/import_name attributes in src/sqlite3_binding.c.
-echo "sqlite3: building sqlite3-binding.wasm (zig cc, reactor + host callback)"
+echo "sqlite3: building sqlite3-binding.wasm (wasi-sdk clang, reactor + host callback)"
 mapfile -t binding_exports < <(wl_exports "${BINDING_EXPORTS[@]}")
-zig_cc_wasi -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
+wasi_sdk_clang -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   -DSQLITE_OMIT_LOAD_EXTENSION \
   -I "$tmp/$SQLITE_DIR" \
   "$tmp/$SQLITE_DIR/sqlite3.c" src/sqlite3_binding.c \

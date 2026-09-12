@@ -7,43 +7,15 @@
  * capture backend is built (see src/pcap_config.h); only pcap_compile_nopcap()
  * (which turns a textual filter like "tcp port 80" into a BPF program) is
  * reachable. Built into cache/libpcap.wasm by examples/apps/scripts/libpcap.sh from the
- * pinned upstream release, with the same zig reactor flags as the sqlite3
- * apps.
+ * pinned upstream release, with the same wasi-sdk reactor flags as the
+ * sqlite3 apps. The headers and resolver stand-ins the wasi build needs
+ * beyond wasi-libc live in src/pcap_wasi.
  */
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <netdb.h>
 #include <pcap/pcap.h>
-
-/*
- * WASI name-resolution stubs. libpcap resolves host/net/proto *names* in a
- * filter (e.g. "host example.com") through the C library's getaddrinfo /
- * getnetbyname / getprotobyname; wasip1's wasi-libc declares these (their
- * prototypes live in <netdb.h>) but ships no implementation, so the reactor
- * link would otherwise fail with undefined symbols. Name-based filters are
- * out of scope for this demo (which compiles numeric filters like
- * "tcp port 80"), so these stubs simply report "not found". The numeric
- * path never calls them.
- */
-int getaddrinfo(const char *node, const char *service,
-                const struct addrinfo *hints, struct addrinfo **res) {
-  (void)node;
-  (void)service;
-  (void)hints;
-  (void)res;
-  return EAI_FAIL;
-}
-void freeaddrinfo(struct addrinfo *res) { (void)res; }
-struct protoent *getprotobyname(const char *name) {
-  (void)name;
-  return NULL;
-}
-struct netent *getnetbyname(const char *name) {
-  (void)name;
-  return NULL;
-}
 
 /*
  * Compile the textual filter `expr` for datalink type `linktype` (e.g.

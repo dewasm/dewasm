@@ -20,14 +20,14 @@ The same verdict covers an app with no artifact to run the audit tool on at all:
 | CPython 3.14.6 | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 wasi-vfs-packed | derived in-cache by `setup.sh`¹³ | none (audited 2026-08-04) | ✅ in scope (shipping, **executes on every backend**¹³) |
-| mruby 3.4.0 | pinned-source zig build in `setup.sh` | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
+| mruby 3.4.0 | pinned-source wasi-sdk build in `setup.sh` | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
 | pandoc | see below | **simd** | ⛔ deferred |
 | zeroperl (Perl 5.42) | [6over3/zeroperl](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` npm pin in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on every backend**¹²) |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
 | ripgrep 14.1.1 | pinned-source cargo build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, fs on every backend⁶) |
-| minigzip (zlib 1.3.1) | pinned-source zig build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
-| libpcap 1.10.6 (BPF filter compiler) | pinned-source zig reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
-| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source zig reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
+| minigzip (zlib 1.3.1) | pinned-source wasi-sdk build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
+| libpcap 1.10.6 (BPF filter compiler) | pinned-source wasi-sdk reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
+| tree-sitter 0.26.11 + tree-sitter-json 0.24.8 | pinned-source wasi-sdk reactor build in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
 | Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes wasm-ld, prebuilts broken) | ⛔ deferred |
 | PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
 | toywasm 76.0.0 | pinned in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
@@ -88,7 +88,7 @@ Every backend runs it against the same fixture and snapshot, `slow_test`-feature
 Java is the class-split stress case: rg's ~7300 functions and ~4900-entry function table overflow a single class's 65535-entry constant pool, so its functions are partitioned across five nested `P{k}` classes and the table is built in a nested `Elem` class, each with its own pool.
 
 ⁷ **minigzip / zlib (compression CLI).**
-zlib 1.3.1's `minigzip` built from the pinned source release with `zig cc -target wasm32-wasi` (the zlib translation units + `test/minigzip.c`; `-DZ_HAVE_UNISTD_H` so the shipped `zconf.h` declares `lseek`).
+zlib 1.3.1's `minigzip` built from the pinned source release with `wasi-sdk clang --target=wasm32-wasip1` (the zlib translation units + `test/minigzip.c`; `-DZ_HAVE_UNISTD_H` so the shipped `zconf.h` declares `lseek`).
 Integer-only and tiny, with **binary** stdin/stdout: the byte-exact-stdio stress that runs under **every** backend (`run_gzip_cases`, wired via `gzip_e2e!` in each crate; the compiled backends, Go and Java, prove the byte-stdio path is exact through compiled output too).
 Two cases: *compress* (stdin text → gz stdout byte-identical to the `wasmtime` snapshot `examples/apps/snapshots/minigzip_compress.gz`) and *round trip* (compress then `-d` decompress → original, self-checking).
 zlib's gz stream is deterministic here (mtime 0, OS byte 3), so wasmtime and every backend agree byte-for-byte.
@@ -96,7 +96,7 @@ Not marked slow: no softfloat, so Bash runs it too.
 The binary stdin/snapshot cannot travel through the `&str`/`include_str!` `APP_CASES` path, so these live in a dedicated `run_gzip_cases` (bytes-capable `run_bytes`/`run_command_bytes` helpers) that each backend calls.
 
 ⁸ **libpcap (Track A).**
-libpcap 1.10.6 built from the pinned upstream release with `zig cc -target wasm32-wasi -mexec-model=reactor` as a C-API library.
+libpcap 1.10.6 built from the pinned upstream release with `wasi-sdk clang --target=wasm32-wasip1 -mexec-model=reactor` as a C-API library.
 Only the platform-independent BPF-filter-compilation translation units are compiled (no capture backend); the parser is regenerated with bison/flex (1.10.x no longer ships pre-generated `grammar.c`/`scanner.c`).
 Audit: baseline only after the `wasm-opt` pass¹¹ (which re-encodes the overlong `call_indirect` immediates), in scope.
 Our own `examples/apps/src/pcap_binding.c` exports `compile_filter`, which runs `pcap_compile_nopcap` and serializes the resulting BPF program (`[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`) into guest memory; the C-API case (`pcap_compile`, `pcap_compile_e2e!`) drives `compile_filter("tcp port 80", DLT_EN10MB, 65535)` on every backend and pins the canonical tcp-port-80 program (deterministic: BPF holds offsets and constants only).
@@ -109,7 +109,7 @@ A valid filter, the only kind this demo compiles, never takes the error path, so
 Name-based filters (`host example.com`) are likewise out of scope: `pcap_binding.c` stubs the missing `getaddrinfo`/`getnetbyname`/`getprotobyname` to report "not found".
 
 ¹⁰ **tree-sitter (Track A).**
-The tree-sitter incremental-parsing runtime 0.26.11 (single-TU amalgamation `lib/src/lib.c`) plus the pre-generated tree-sitter-json 0.24.8 grammar (`src/parser.c`), built from the pinned upstream releases with `zig cc -mexec-model=reactor` as a C-API library.
+The tree-sitter incremental-parsing runtime 0.26.11 (single-TU amalgamation `lib/src/lib.c`) plus the pre-generated tree-sitter-json 0.24.8 grammar (`src/parser.c`), built from the pinned upstream releases with `wasi-sdk clang -mexec-model=reactor` as a C-API library.
 Audit: baseline only after the `wasm-opt` pass¹¹, in scope; unlike libpcap, the runtime needs no shim (no `setjmp`, no host lookups).
 Our own `examples/apps/src/treesitter_binding.c` exports `parse_source`, which parses a source string and returns the parse tree's S-expression (`ts_node_string`, a malloc'd C string) into guest memory.
 The C-API case (`treesitter_parse`, `treesitter_parse_e2e!`) parses the fixed snippet `{"key": [1, true, null]}` on every backend and pins the S-expression `(document (object (pair key: (string (string_content)) value: (array (number) (true) (null)))))` (deterministic: tree-sitter's node naming is fixed by the pinned grammar).
@@ -143,7 +143,7 @@ Needing **no preopens at all**, the case (`CRUBY_PACKED_HELLO`, `cruby_packed_he
 Every backend runs it; it is faster than the unpacked case wherever both are measured, because the stdlib loads from guest memory instead of host I/O, but the speed categories still vary by backend, and on Python the constraint is host memory rather than the clock.
 
 ¹⁴ **mruby (audited 2026-08-14).**
-mruby 3.4.0 built from the pinned source tarball with `zig cc` for wasm32-wasi; setjmp/longjmp lowers onto the final exception-handling proposal (`-mllvm -wasm-enable-sjlj`), so this is the app that exercises `try_table`/`throw` end to end.
+mruby 3.4.0 built from the pinned source tarball with wasi-sdk clang for wasm32-wasip1; setjmp/longjmp lowers onto the final exception-handling proposal (`-mllvm -wasm-enable-sjlj`), so this is the app that exercises `try_table`/`throw` end to end.
 Exception handling is accepted input lowered per backend: the convert manifest asserts each declaring backend converts the module and each non-declaring backend rejects it with the attributed error, and Bash (no exception mechanism) stays on the rejection side.
 The execution case (`MRUBY_EH`, `mruby_eh_e2e!`) drives raise, rescue, ensure, a custom exception class, and retry through the converted interpreter on every declaring backend; the wasi build excludes mruby-io, mruby-dir, and mruby-socket, and a first-party `mruby-wasi-puts` gem restores `Kernel#puts`.
 
@@ -195,7 +195,7 @@ Why a second interpreter next to toywasm¹⁵: wasm3 natively interprets roughly
   `vvanders/wasm_lua` and `ceifa/wasmoon` are Emscripten/browser-JS builds, not standalone WASI.
   VMware's webassembly-language-runtimes project has no Lua build at all.
 - Audit: **no working artifact exists, and the from-source build fails in the linker.**
-  Building Lua 5.4.7 from source with `zig cc -target wasm32-wasi` stops at "Setjmp/longjmp support requires Exception handling support" until `-mllvm -wasm-enable-sjlj` is added (the same lowering mruby's build¹⁴ uses), at which point wasm-ld crashes on a SjLj-plus-weak-symbol bug (clang 21, measured 2026-08-02).
+  Building Lua 5.4.7 from source with `zig cc -target wasm32-wasi` stops at "Setjmp/longjmp support requires Exception handling support" until `-mllvm -wasm-enable-sjlj` is added (the same lowering mruby's build¹⁴ uses), at which point wasm-ld crashes on a SjLj-plus-weak-symbol bug (clang 21, measured 2026-08-02; the build toolchain has since moved to wasi-sdk, so a retry would go through wasi-sdk clang and its shipped libsetjmp).
   The exception-handling requirement itself is no longer a blocker: since the mruby work¹⁴ it is accepted input, lowered per backend.
   Added value is low regardless: a Lua build would cover the same category (a complete small scripting engine in C) and the same WASI surface QuickJS already gives.
 - Revisit if the wasm-ld bug gets fixed upstream (the mruby recipe¹⁴ should then apply directly), or if a maintained WASI build with a working `pcall` appears.

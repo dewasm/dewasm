@@ -9,7 +9,7 @@ use crate::ir::SourcePos;
 
 /// The wasm DWARF code-address convention.
 ///
-/// In a linked wasm binary produced by clang/lld (what `zig cc` emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset.
+/// In a linked wasm binary produced by clang/lld (what wasi-sdk emits), a DWARF code address is the byte offset of the instruction **relative to the start of the code section's contents**, not an absolute module-file offset.
 /// But `wasmparser`'s `OperatorsReader` reports operator positions as absolute module-file offsets.
 /// So to look a resolved operator up in the line table we subtract the code section's content start, and that is the address base.
 fn address_base(code_section_start: u64) -> u64 {
