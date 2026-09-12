@@ -25,7 +25,7 @@ go/run.sh    # or: java/run.sh, ruby/run.sh, ruby/gui/run.sh, ...
 go/run.sh path/to/other.nes   # any ROM agnes's mappers cover
 ```
 
-`build.sh` fetches agnes and the Alter Ego ROM (checksum-pinned) and compiles `nes.wasm` with `zig cc` (via `../apps/scripts/nes.sh`) into the gitignored apps cache.
+`build.sh` fetches agnes and the Alter Ego ROM (checksum-pinned) and compiles `nes.wasm` with wasi-sdk clang (via `../apps/scripts/nes.sh`) into the gitignored apps cache.
 Each frontend also has a headless `-smoke`/`--smoke` mode that ticks the emulator without a window/tty, sanity-checks the rendered frame, and writes it to a screenshot file.
 
 Controls (all frontends): arrows = D-pad, `x` = A, `z` = B, Enter = Start, Space = Select, `q`/Esc = quit.

@@ -1,6 +1,6 @@
 // dwarf_fixture.c — first-party DWARF fixture for the --dwarf-line source
 // back-mapping test. Built by examples/apps/scripts/dwarf-fixture.sh with
-//   zig cc -target wasm32-wasi -g -O1 -o cache/dwarf-fixture.wasm
+//   wasi-sdk clang -g -O1 -o cache/dwarf-fixture.wasm
 //
 // The two worker functions are exported and marked noinline so that -O1 keeps
 // them as distinct, addressable bodies with their own DWARF line-table rows

@@ -85,13 +85,30 @@ wasm_opt_inplace() {
 # The version string folded into a locally-built module's stamp (empty when wasm-opt is absent, so the cache misses and the loud prereq check fires).
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
 
-# zig_cc_wasi <args...>: `zig cc` for the wasm32-wasi target, the one flag every locally-compiled module shares.
-# Per-app choices (the reactor exec model, -O level, includes, --strip-debug) stay at the call site.
-zig_cc_wasi() {
-  zig cc -target wasm32-wasi "$@"
+# --- The C toolchain for the locally-compiled modules: wasi-sdk, located through WASI_SDK_PATH.
+# Local dev and CI use wasi-sdk-34; keep .github/workflows/ci.yml in sync.
+WASI_SDK_HINT="download wasi-sdk (local dev and CI use wasi-sdk-34, https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root"
+
+# require_wasi_sdk <app>: fail loudly unless WASI_SDK_PATH points at a wasi-sdk root.
+require_wasi_sdk() {
+  if [ -z "${WASI_SDK_PATH-}" ] || [ ! -x "$WASI_SDK_PATH/bin/clang" ]; then
+    echo "$1: WASI_SDK_PATH does not point at a wasi-sdk root: $WASI_SDK_HINT" >&2
+    exit 1
+  fi
 }
 
-# wl_exports <sym...>: emit one -Wl,--export=<sym> per line, for mapfile into a zig cc argument array.
+# wasi_sdk_clang <args...>: wasi-sdk's clang for the wasm32-wasip1 target, the flags every locally-compiled module shares.
+# Per-app choices (the reactor exec model, -O level, includes, --strip-debug) stay at the call site.
+# --no-wasm-opt: when a wasm-opt is on PATH, the driver otherwise runs it on the linked module itself, an uncontrolled pass ahead of wasm_opt_inplace's pinned one (it also drops the name section the sqlite3-mod build needs and the DWARF the dwarf-fixture exists to carry).
+wasi_sdk_clang() {
+  "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 --no-wasm-opt "$@"
+}
+
+# The token every locally-built module's stamp folds in, so a toolchain switch retriggers the build.
+# It names the toolchain, not its version: artifact bytes may vary across toolchain versions, and that is fine because the snapshots pin program behavior, which the pinned sources fix.
+wasi_sdk_stamp() { echo "cc:wasi-sdk"; }
+
+# wl_exports <sym...>: emit one -Wl,--export=<sym> per line, for mapfile into a clang argument array.
 wl_exports() {
   local e
   for e in "$@"; do printf -- '-Wl,--export=%s\n' "$e"; done

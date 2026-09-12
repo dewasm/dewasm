@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# nes: an import-free NES emulator built from the pinned agnes source with zig, plus a public-domain demo ROM.
+# nes: an import-free NES emulator built from the pinned agnes source with wasi-sdk, plus a public-domain demo ROM.
 # Shared between the NES example frontends and the deterministic framebuffer-snapshot test, mirroring the
 # DOOM fixture.
 #
@@ -36,15 +36,15 @@ NES_EXPORTS=(
   frameWidth frameHeight
 )
 
-# The stamp covers both source pins, the ROM pin, the export list, and the wasm-opt version, so editing any of them retriggers the build.
-nes_key="agnes:$AGNES_COMMIT h:$AGNES_H_SHA256 c:$AGNES_C_SHA256 rom:$ROM_SHA256 exports:${NES_EXPORTS[*]} wasm-opt:$(wasm_opt_version)"
+# The stamp covers both source pins, the ROM pin, the export list, the wasm-opt version, and the toolchain token, so editing any of them retriggers the build.
+nes_key="agnes:$AGNES_COMMIT h:$AGNES_H_SHA256 c:$AGNES_C_SHA256 rom:$ROM_SHA256 exports:${NES_EXPORTS[*]} wasm-opt:$(wasm_opt_version) $(wasi_sdk_stamp)"
 nes_stamp="cache/nes.src-sha256"
 if is_cached "$nes_stamp" "$nes_key" cache/nes.wasm cache/alter_ego.nes; then
   echo "nes: cached"
   exit 0
 fi
 
-require_tool nes zig "install zig (e.g. brew install zig) to build the nes app"
+require_wasi_sdk nes
 require_tool nes unzip
 require_tool nes wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the nes app"
 require_tool nes wasm-dis "install binaryen (e.g. brew install binaryen) to verify the nes import section"
@@ -58,10 +58,10 @@ echo "nes: fetching agnes ($AGNES_COMMIT)"
 fetch_verified "$AGNES_H_URL" "$AGNES_H_SHA256" "$tmp/agnes.h"
 fetch_verified "$AGNES_C_URL" "$AGNES_C_SHA256" "$tmp/agnes.c"
 
-echo "nes: building nes.wasm (zig cc, reactor)"
+echo "nes: building nes.wasm (wasi-sdk clang, reactor)"
 mapfile -t exports < <(wl_exports "${NES_EXPORTS[@]}")
 # --strip-debug drops the DWARF wasm-opt cannot parse; -I $tmp lets nes_demo.c find the fetched agnes.c/agnes.h, which it #includes rather than linking as a separate TU.
-zig_cc_wasi -O2 -mexec-model=reactor -Wl,--strip-debug \
+wasi_sdk_clang -O2 -mexec-model=reactor -Wl,--strip-debug \
   -I "$tmp" \
   src/nes_demo.c \
   "${exports[@]}" \

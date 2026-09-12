@@ -2,26 +2,20 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# mruby: built from the pinned 3.4.0 release source with zig, through
+# mruby: built from the pinned 3.4.0 release source with wasi-sdk, through
 # mruby's own `rake` build (src/mruby_build_config.rb).
 #
 # This app exists to exercise the wasm exception-handling proposal: mruby's
 # raise/rescue/ensure lower to C setjmp/longjmp (include/mruby/throw.h), and
 # wasm32 has no native setjmp/longjmp, so every object is compiled with
-# LLVM's SJLJ lowering (`-mexception-handling -mllvm -wasm-enable-sjlj
-# -mllvm -wasm-use-legacy-eh=false`), which rewrites them into
-# `try_table`/`throw`. wasm-opt is never run on the result (unlike the
-# sibling zig-built apps): common.sh's wasm_opt_inplace is pinned to a
-# baseline feature set that never includes exception-handling, and this
-# module exists specifically to carry EH instructions.
-#
-# zig 0.16 trap: passing -mexception-handling at LINK time makes zig build
-# wasi-libc's own setjmp runtime (rt.c) on demand WITHOUT the -mllvm flags
-# above, and it dies ("undefined tag symbol cannot be weak"). Workaround:
-# compile rt.c ourselves with the full flag set and feed the resulting rt.o
-# straight into the link, which then runs with no EH flags at all (so zig
-# never attempts that on-demand rebuild). rt.c ships inside zig's own libc
-# sysroot, so its path is derived from `zig env`, not hardcoded.
+# LLVM's SJLJ lowering (`-mllvm -wasm-enable-sjlj -mllvm
+# -wasm-use-legacy-eh=false`), which rewrites them into
+# `try_table`/`throw`; the link adds `-lsetjmp`, wasi-sdk's prebuilt
+# runtime for that lowering (SetjmpLongjmp.md in the wasi-sdk repository).
+# wasm-opt is never run on the result (unlike the sibling wasi-sdk-built
+# apps): common.sh's wasm_opt_inplace is pinned to a baseline feature set
+# that never includes exception-handling, and this module exists
+# specifically to carry EH instructions.
 #
 # Gem selection: the wasi build cannot include mruby-io, mruby-dir, or
 # mruby-socket. mruby-io's src/io.c unconditionally `#include <sys/wait.h>`
@@ -50,15 +44,20 @@ MRUBY_GEMS=(
   mruby-error mruby-metaprog mruby-pack mruby-random mruby-time
 )
 
-# The stamp covers the source sha and the gem list, so bumping either retriggers the build.
-mruby_key="$MRUBY_SHA256 gems:${MRUBY_GEMS[*]}"
+# The stamp covers the source sha, the gem list, and the toolchain token, so bumping any retriggers the build.
+mruby_key="$MRUBY_SHA256 gems:${MRUBY_GEMS[*]} $(wasi_sdk_stamp)"
 mruby_stamp="cache/mruby.src-sha256"
 if is_cached "$mruby_stamp" "$mruby_key" cache/mruby.wasm; then
   echo "mruby: cached"
   exit 0
 fi
 
-require_tool mruby zig "install zig (e.g. brew install zig) to build the mruby app"
+require_wasi_sdk mruby
+# The SJLJ lowering's runtime hooks; shipped prebuilt since wasi-sdk-26 (which also added the non-legacy EH flag this build passes).
+[ -f "$WASI_SDK_PATH/share/wasi-sysroot/lib/wasm32-wasip1/libsetjmp.a" ] || {
+  echo "mruby: this wasi-sdk ships no libsetjmp for wasm32-wasip1; $WASI_SDK_HINT" >&2
+  exit 1
+}
 require_tool mruby ruby "install a host Ruby (e.g. via a version manager, or brew install ruby) to run mruby's rake build"
 require_tool mruby rake "install rake (e.g. \`gem install rake\`) to run mruby's build"
 
@@ -67,39 +66,31 @@ new_tmpdir
 fetch_verified "$MRUBY_URL" "$MRUBY_SHA256" "$tmp/mruby.tar.gz"
 tar xzf "$tmp/mruby.tar.gz" -C "$tmp"
 
-MRUBY_EH_FLAGS=(-mexception-handling -mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false)
+MRUBY_EH_FLAGS=(-mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false)
 
-zig_lib_dir=$(zig env | sed -n 's/.*\.lib_dir = "\(.*\)",/\1/p')
-rt_c="$zig_lib_dir/libc/wasi/libc-top-half/musl/src/setjmp/wasm32/rt.c"
-[ -f "$rt_c" ] || {
-  echo "mruby: zig's wasi setjmp runtime not found at $rt_c (zig layout changed?)" >&2
-  exit 1
-}
-echo "mruby: building rt.o (zig's wasi setjmp runtime, with SJLJ lowering)"
-zig_cc_wasi "${MRUBY_EH_FLAGS[@]}" -O2 -c -o "$tmp/rt.o" "$rt_c"
-
-# Compile wrapper: every object needs the SJLJ flags. Link wrapper: NONE of
-# them (the zig-0.16 trap above), plus rt.o and --strip-debug (mruby.wasm
-# carries full DWARF otherwise, ~5x the stripped size; wasm-opt, which
-# strips it for the sibling apps, cannot run here).
+# Compile wrapper: every object needs the SJLJ flags. Link wrapper: -lsetjmp
+# after the objects, plus --strip-debug (mruby.wasm carries full DWARF
+# otherwise, ~5x the stripped size; wasm-opt, which strips it for the
+# sibling apps, cannot run here).
 cc_wrapper="$tmp/mruby-cc.sh"
 {
   echo '#!/bin/sh'
-  printf 'exec zig cc -target wasm32-wasi -O2'
+  printf 'exec "%s/bin/clang" --target=wasm32-wasip1 -O2' "$WASI_SDK_PATH"
   printf ' %s' "${MRUBY_EH_FLAGS[@]}"
   printf ' "$@"\n'
 } >"$cc_wrapper"
 chmod +x "$cc_wrapper"
 
+# --no-wasm-opt for the same reason as common.sh's wasi_sdk_clang; doubly load-bearing here, where the module must keep its EH instructions.
 ld_wrapper="$tmp/mruby-ld.sh"
-printf '#!/bin/sh\nexec zig cc -target wasm32-wasi -Wl,--strip-debug "$@" %s\n' "$tmp/rt.o" >"$ld_wrapper"
+printf '#!/bin/sh\nexec "%s/bin/clang" --target=wasm32-wasip1 --no-wasm-opt -Wl,--strip-debug "$@" -lsetjmp\n' "$WASI_SDK_PATH" >"$ld_wrapper"
 chmod +x "$ld_wrapper"
 
 ar_wrapper="$tmp/mruby-ar.sh"
-printf '#!/bin/sh\nexec zig ar "$@"\n' >"$ar_wrapper"
+printf '#!/bin/sh\nexec "%s/bin/llvm-ar" "$@"\n' "$WASI_SDK_PATH" >"$ar_wrapper"
 chmod +x "$ar_wrapper"
 
-echo "mruby: building mruby.wasm (rake, zig cc, LLVM SJLJ lowering)"
+echo "mruby: building mruby.wasm (rake, wasi-sdk clang, LLVM SJLJ lowering)"
 build_config="$(pwd)/src/mruby_build_config.rb"
 jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
 (

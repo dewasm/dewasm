@@ -1,6 +1,6 @@
 # NES (Java, Swing)
 
-An interactive NES frontend built on a pure-Java library that dewasm generated from `nes.wasm`, an import-free reactor (`examples/apps/scripts/nes.sh`, `examples/apps/src/nes_demo.c`) wrapping [kgabis/agnes](https://github.com/kgabis/agnes), built from source with zig.
+An interactive NES frontend built on a pure-Java library that dewasm generated from `nes.wasm`, an import-free reactor (`examples/apps/scripts/nes.sh`, `examples/apps/src/nes_demo.c`) wrapping [kgabis/agnes](https://github.com/kgabis/agnes), built from source with wasi-sdk.
 `Main.java` reads the ROM, copies it into the module's linear memory via `allocRom`, then drives `setInput`/`tickGame` and composes each frame into a `BufferedImage` straight out of guest memory: one palette *index* per pixel at `screenOffset()` against the fixed palette at `paletteOffset()`, decoded once into ARGB ints.
 The module has no host callbacks at all (unlike DOOM's console/save/UI import surface), so the frontend just pulls state after every tick, paced to 60 Hz on a dedicated game thread.
 

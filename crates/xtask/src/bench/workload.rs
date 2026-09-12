@@ -1,6 +1,6 @@
 //! What gets benchmarked: the two workload kinds and how the suite finds them.
 //!
-//! **Microbenchmarks** live in two families (hand-written `benchmarks/wat/`, zig-cc-compiled `benchmarks/c/`), each built by its own `build.sh` into `benchmarks/cache/<family>/`.
+//! **Microbenchmarks** live in two families (hand-written `benchmarks/wat/`, wasi-sdk-compiled `benchmarks/c/`), each built by its own `build.sh` into `benchmarks/cache/<family>/`.
 //! The contract: `<module> <iterations>` does that many units of work, prints exactly one decimal result line, exits 0; `<iterations> = 0` does no work but still prints, which is what lets [`crate::bench::measure`] separate startup + load from compute.
 //! Same `<iterations>` must give byte-identical stdout on every runtime: the wasmtime cross-check enforces it.
 //!
