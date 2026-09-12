@@ -2,8 +2,7 @@
 //! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations.
 //! Codon covers full WASI preview 1 incl. the filesystem, exception handling, and tail calls, so it wires every WASI kind, the `apps`/`fs_apps`/`capi` suites, and both multi-module cases.
 //!
-//! Every e2e run compiles with a *debug* `codon build`: `-release` compile time is superlinear on the giant apps' largest generated functions, a debug build is ~8x faster, and the one optimizer-sensitive semantic (identity-fold NaN quieting) is already handled at emission (the quiet-if-NaN wrappers).
-//! The spec and WASI-testsuite harnesses stay on `-release`, the configuration the benchmarks and users run.
+//! Every codon build in the test suites is debug by default (see tests/common: ~8x faster, semantics preserved by the emission-level NaN quieting); `DEWASM_CODON_RELEASE=1` switches the local pre-release pass to `-release`.
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -847,11 +846,11 @@ dewasm_test_helper::standalone_dir_e2e!(Codon);
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 
-// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): a case stays `slow` only while the whole slow e2e tier finishes within ~5 minutes, which in practice means a debug build around a minute; anything beyond (measured or sized: mruby 151k lines, toywasm 132k, qjs 268k, the sqlite family 229-292k) is `ultra`.
+// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the slow e2e tier must stay within a few minutes, so only cases whose artifacts build in seconds (nes 5k lines, minigzip 18.5k, treesitter 22.5k) stay `slow`; everything from the cowsay class (72k lines, ~70 s) upward is `ultra`.
 // Every `ultra` case still runs at slow on the interpreted backends, so CI keeps covering the cases themselves.
 dewasm_test_helper::mruby_eh_e2e!(Codon, ultra);
-dewasm_test_helper::cowsay_args_e2e!(Codon, slow);
-dewasm_test_helper::cowsay_stdin_e2e!(Codon, slow);
+dewasm_test_helper::cowsay_args_e2e!(Codon, ultra);
+dewasm_test_helper::cowsay_stdin_e2e!(Codon, ultra);
 dewasm_test_helper::qjs_eval_e2e!(Codon, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Codon, ultra);
 dewasm_test_helper::gzip_e2e!(Codon);
@@ -865,13 +864,13 @@ dewasm_test_helper::cruby_hello_e2e!(Codon, CODON_CRUBY_GLUE, ultra);
 // Ultra-slow category on every backend that runs it (issue #126's memory criterion for the host-compile of a CRuby-class artifact); for Codon the equivalent cost is the giant `codon build`, shared with the zeroperl pair below.
 dewasm_test_helper::cruby_packed_hello_e2e!(Codon, ultra);
 dewasm_test_helper::toywasm_cowsay_e2e!(Codon, CODON_TOYWASM_GLUE, ultra);
-dewasm_test_helper::wasm3_cowsay_e2e!(Codon, CODON_WASM3_GLUE);
+dewasm_test_helper::wasm3_cowsay_e2e!(Codon, CODON_WASM3_GLUE, ultra);
 dewasm_test_helper::qjs_repl_pty_e2e!(Codon, ultra);
 
 dewasm_test_helper::libsqlite3_c_api_e2e!(Codon, CODON_LIBSQLITE3_MEM, ultra);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Codon, CODON_LIBSQLITE3_FILE, ultra);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Codon, CODON_SQLITE3_CALLBACK, ultra);
-dewasm_test_helper::pcap_compile_e2e!(Codon, CODON_PCAP_COMPILE);
+dewasm_test_helper::pcap_compile_e2e!(Codon, CODON_PCAP_COMPILE, ultra);
 dewasm_test_helper::treesitter_parse_e2e!(Codon, CODON_TREESITTER_PARSE);
 // Ultra-slow category (the Python backend's issue #139 criterion, translated: the 25 MB zeroperl reactor's generated source is the biggest single `codon build` in the suite, and the two cases share the one oversized module).
 dewasm_test_helper::zeroperl_eval_e2e!(Codon, CODON_ZEROPERL_EVAL, ultra);

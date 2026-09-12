@@ -3,6 +3,7 @@
 //!
 //! Codon facts that shape the phrasing:
 //! - Codon is statically typed with no dynamic `invoke`, so each generated class carries a boxed `invoke(name, List[Val]) -> List[Val]` / `global_get(name) -> List[Val]` dispatcher, and the harness compares boxed results bit-exactly through `Rt.f32_bits`/`Rt.f64_bits`.
+//! Builds are debug by default (`DEWASM_CODON_RELEASE=1` for the local pre-release `-release` pass); see tests/common.
 //! - Assertions live in named thunks (`def _tN(): ...`) rather than one flat run: a single module-level run of thousands of statements would form the megafunction shape whose `-release` compile time is superlinear.
 //! - A runaway recursion overflows the native stack fatally (uncatchable), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap.
 
@@ -52,7 +53,7 @@ impl BackendUnderTest for CodonSpec {
         &CodonBackend
     }
 
-    /// Compile `source` to the crate's shared cache binary (identical programs build once) and run it with the Codon runtime dylibs on the loader path.
+    /// Compile `source` to the crate's shared cache binary (identical programs build once; debug by default, see tests/common) and run it with the Codon runtime dylibs on the loader path.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match common::build_codon(source) {
             Err(build) => build,
