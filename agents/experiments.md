@@ -76,6 +76,7 @@ Each entry is one section in this shape:
 - **Tried**: running the Ruby backend's output on TruffleRuby 33.0.1 (pure-Ruby `IO::Buffer` polyfill) and JRuby 10.0.3.0 (an `IO::Buffer` arity shim), microbenchmarks and apps.
 - **Verdict**: rejected as suite runners; both beat YJIT on microbenchmarks (TruffleRuby's f64_alu at 4x wasmtime vs YJIT's 78x) yet lose on real apps (sqlite3_query: JRuby 58-70 s vs YJIT 9.4 s; TruffleRuby unfinished after 48 min), because the largest generated methods (~13k lines) exceed the JVM's 64 KB per-method bytecode limit (JRuby raises MethodTooLargeException once `-Xjit.maxsize` allows the attempt), so the hottest functions stay interpreted.
 - **Invalidated when**: a pass caps generated method size by splitting functions (also relevant to the Java backend's 64 KB constraint), or JRuby's `IO::Buffer` gains the four-argument `copy`/`set_string` forms and TruffleRuby gains `IO::Buffer` at all.
+  Partially invalidated 2026-09-12: the JRuby arity gap is fixed upstream (jruby/jruby#9588, merged, release pending), and the suite now carries a `dewasm-jruby` runner whose availability probe checks those forms by behavior (decision 93); the method-size finding stands and keeps the sqlite pair excluded for it.
 - **Details**: #206.
 
 ## step-lambda-dispatch: wrapping a flat dispatch loop in a per-batch lambda loses under every JIT configuration (2026-08-21)
