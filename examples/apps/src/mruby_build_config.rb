@@ -5,11 +5,11 @@
 #   the bytecode compiler that turns mrblib/gem Ruby sources into the C
 #   arrays baked into the wasm build (mirrors upstream's build_config/mrbc.rb).
 # - 'wasm32-wasi': the actual target, whose cc/linker/archiver are wrapper
-#   scripts around `zig cc`/`zig ar` that scripts/mruby.sh generates and
-#   passes in through DEWASM_MRUBY_CC/LD/AR (the LLVM SJLJ flags and the
-#   zig-0.16 rt.o workaround live there, not here: see that script's
-#   comments). DEWASM_MRUBY_GEMS is the space-separated core-gem list
-#   scripts/mruby.sh selected as compiling clean on wasi.
+#   scripts around wasi-sdk's clang/llvm-ar that scripts/mruby.sh generates
+#   and passes in through DEWASM_MRUBY_CC/LD/AR (the LLVM SJLJ flags and the
+#   -lsetjmp link live there, not here: see that script's comments).
+#   DEWASM_MRUBY_GEMS is the space-separated core-gem list scripts/mruby.sh
+#   selected as compiling clean on wasi.
 #
 # Kernel#puts is defined only by mruby-io (mrblib/kernel.rb: `$stdout.puts`),
 # which cannot build for wasi (its src/io.c unconditionally `#include

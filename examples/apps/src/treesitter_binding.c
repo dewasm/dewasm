@@ -6,7 +6,7 @@
  * and the pre-generated tree-sitter-json grammar, then returns the parse
  * tree's S-expression. Built into cache/treesitter.wasm by
  * examples/apps/scripts/treesitter.sh from the pinned tree-sitter + tree-sitter-json
- * releases, with the same zig reactor flags as the other C-API apps.
+ * releases, with the same wasi-sdk reactor flags as the other C-API apps.
  */
 #include <stdint.h>
 #include <stdlib.h>
