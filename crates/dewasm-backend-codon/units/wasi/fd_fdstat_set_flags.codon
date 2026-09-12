@@ -1,0 +1,9 @@
+# requires: wasi/fd_entry
+# Any open fd is accepted, stdio included: toywasm's WASI setup sets NONBLOCK on stdin and treats failure as fatal, so wasmtime's regular-files-only EBADF answer is not copied.
+def wasi_fd_fdstat_set_flags(self, fd: UInt[32], flags: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    # Store the new fdflags; fd_write consults fdflags::APPEND before each write so clearing it here (set_flags 0) actually turns append off.
+    f.fdflags = int(flags) & 0xFFFF
+    return UInt[32](self.ERRNO_SUCCESS)

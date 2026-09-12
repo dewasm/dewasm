@@ -1,0 +1,25 @@
+# requires: rt/stat, rt/raw_load16, rt/raw_load32, rt/raw_load64
+# Decode a raw struct stat buffer at the platform's field offsets.
+# Layouts covered: darwin arm64 (the plain symbols are the 64-bit-inode variants there) and linux x86_64 glibc, the two host shapes decision 49 measures on; other host arches are unverified.
+@staticmethod
+def stat_read(p: Ptr[byte]) -> Rt.Stat:
+    if __apple__:
+        dev = int(Int[32](Rt.raw_load32(p)))
+        mode = int(Rt.raw_load16(p + 4))
+        nlink = int(Rt.raw_load16(p + 6))
+        ino = int(Int[64](Rt.raw_load64(p + 8)))
+        size = int(Int[64](Rt.raw_load64(p + 96)))
+        atim = int(Int[64](Rt.raw_load64(p + 32))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 40)))
+        mtim = int(Int[64](Rt.raw_load64(p + 48))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 56)))
+        ctim = int(Int[64](Rt.raw_load64(p + 64))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 72)))
+        return Rt.Stat(dev, ino, mode, nlink, size, atim, mtim, ctim)
+    else:
+        dev = int(Int[64](Rt.raw_load64(p)))
+        ino = int(Int[64](Rt.raw_load64(p + 8)))
+        nlink = int(Int[64](Rt.raw_load64(p + 16)))
+        mode = int(Rt.raw_load32(p + 24))
+        size = int(Int[64](Rt.raw_load64(p + 48)))
+        atim = int(Int[64](Rt.raw_load64(p + 72))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 80)))
+        mtim = int(Int[64](Rt.raw_load64(p + 88))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 96)))
+        ctim = int(Int[64](Rt.raw_load64(p + 104))) * 1000000000 + int(Int[64](Rt.raw_load64(p + 112)))
+        return Rt.Stat(dev, ino, mode, nlink, size, atim, mtim, ctim)

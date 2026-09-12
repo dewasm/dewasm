@@ -1,0 +1,7 @@
+# requires: rt/trap
+def read_string(self, a: int, n: int) -> bytes:
+    if a + n > self.n:
+        Rt.trap("out of bounds memory access")
+    p = Ptr[UInt[8]](n if n > 0 else 1)
+    str.memcpy(Ptr[byte](p.as_byte()), self.data + a, n)
+    return bytes(p, n)

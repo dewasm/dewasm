@@ -1,0 +1,8 @@
+# requires: rt/path_stat
+# Whether the (followed) path is a directory.
+@staticmethod
+def isdir(path: str) -> bool:
+    st = Rt.path_stat(path, True)
+    if st is None:
+        return False
+    return (st.mode & 0o170000) == 0o040000

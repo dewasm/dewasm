@@ -1,4 +1,4 @@
-# requires: rt/boxed, rt/tag, global/_class, table/_class, memory/_class
+# requires: rt/boxed, global/_class, table/_class, memory/_class
 # One import/export value: the kind tag says which typed field is set.
 # A typed field per global value type is what lets import resolution check the value type, not just the kind, without a dynamic cast.
 class Extern:
@@ -9,6 +9,7 @@ class Extern:
     g_i64: Optional[Rt.Global[UInt[64]]]
     g_f32: Optional[Rt.Global[float32]]
     g_f64: Optional[Rt.Global[float]]
+    g_exn: Optional[Rt.Global[Optional[Rt.WasmException]]]
     table: Optional[Rt.Table]
     memory: Optional[Rt.Memory]
     tag: Optional[Rt.Tag]
@@ -20,6 +21,7 @@ class Extern:
         self.g_i64 = None
         self.g_f32 = None
         self.g_f64 = None
+        self.g_exn = None
         self.table = None
         self.memory = None
         self.tag = None
@@ -48,6 +50,11 @@ class Extern:
     def of_global_f64(g: Rt.Global[float]) -> Rt.Extern:
         e = Rt.Extern("global_f64")
         e.g_f64 = g
+        return e
+    @staticmethod
+    def of_global_exn(g: Rt.Global[Optional[Rt.WasmException]]) -> Rt.Extern:
+        e = Rt.Extern("global_exn")
+        e.g_exn = g
         return e
     @staticmethod
     def of_table(t: Rt.Table) -> Rt.Extern:

@@ -1,0 +1,18 @@
+# requires: memory/read_path, memory/i32_store, memory/i32_store8, wasi/resolve_path, wasi/fs_errno
+def wasi_path_readlink(self, fd: UInt[32], path_ptr: UInt[32], path_len: UInt[32], buf_ptr: UInt[32], buf_len: UInt[32], bufused_ptr: UInt[32]) -> UInt[32]:
+    from C import readlink(cobj, Ptr[byte], int) -> int
+    rel = self.memory.read_path(int(path_ptr), int(path_len))
+    host, err = self.resolve_path(int(fd), rel, False)
+    if err != 0:
+        return UInt[32](err)
+    tmp = Ptr[byte](4096)
+    r = readlink(host.c_str(), tmp, 4096)
+    if r < 0:
+        return self.fs_errno()
+    # The content is truncated to buf_len (no NUL terminator); bufused reports how many bytes were written.
+    n = r if r < int(buf_len) else int(buf_len)
+    m = self.memory
+    for k in range(n):
+        m.i32_store8(int(buf_ptr) + k, UInt[32](int(tmp[k])))
+    m.i32_store(int(bufused_ptr), UInt[32](n))
+    return UInt[32](self.ERRNO_SUCCESS)

@@ -1,0 +1,11 @@
+# requires: wasi/fd_entry
+def wasi_fd_filestat_set_size(self, fd: UInt[32], size: UInt[64]) -> UInt[32]:
+    from C import ftruncate(int, int) -> int
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.base & self.RIGHTS_FD_FILESTAT_SET_SIZE == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    if ftruncate(f.host_fd, int(Int[64](size))) != 0:
+        return UInt[32](self.ERRNO_IO)
+    return UInt[32](self.ERRNO_SUCCESS)

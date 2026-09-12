@@ -1,0 +1,13 @@
+# requires: wasi/fd_entry
+def wasi_fd_fdstat_set_rights(self, fd: UInt[32], fs_rights_base: UInt[64], fs_rights_inheriting: UInt[64]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None:
+        return UInt[32](self.ERRNO_BADF)
+    base = int(Int[64](fs_rights_base))
+    inheriting = int(Int[64](fs_rights_inheriting))
+    # Rights can only be narrowed, never re-granted: a request for any bit the fd does not already hold is NOTCAPABLE.
+    if (base & ~f.base) != 0 or (inheriting & ~f.inheriting) != 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    f.base = base
+    f.inheriting = inheriting
+    return UInt[32](self.ERRNO_SUCCESS)

@@ -1,0 +1,14 @@
+# requires: wasi/fd_entry, wasi/fst_times, wasi/set_host_times, rt/fstat
+def wasi_fd_filestat_set_times(self, fd: UInt[32], atim: UInt[64], mtim: UInt[64], fst_flags: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    st = Rt.fstat(f.host_fd)
+    if st is None:
+        return UInt[32](self.ERRNO_IO)
+    a, m, err = self.fst_times(st, atim, mtim, fst_flags)
+    if err != 0:
+        return UInt[32](err)
+    if not self.set_host_times("", f.host_fd, a, m, True):
+        return UInt[32](self.ERRNO_IO)
+    return UInt[32](self.ERRNO_SUCCESS)

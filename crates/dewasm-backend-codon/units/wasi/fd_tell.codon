@@ -1,0 +1,13 @@
+# requires: memory/i64_store, wasi/fd_entry
+def wasi_fd_tell(self, fd: UInt[32], out_ptr: UInt[32]) -> UInt[32]:
+    from C import lseek(int, int, int) -> int
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.kind == 3:
+        return UInt[32](self.ERRNO_SPIPE)
+    r = lseek(f.host_fd, 0, 1)
+    if r < 0:
+        return UInt[32](self.ERRNO_IO)
+    self.memory.i64_store(int(out_ptr), UInt[64](r))
+    return UInt[32](self.ERRNO_SUCCESS)

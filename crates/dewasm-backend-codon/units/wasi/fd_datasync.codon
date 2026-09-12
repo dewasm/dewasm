@@ -1,0 +1,15 @@
+# requires: wasi/fd_entry
+def wasi_fd_datasync(self, fd: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if __apple__:
+        # fdatasync is not available on macOS.
+        from C import fsync(int) -> int
+        if fsync(f.host_fd) != 0:
+            return UInt[32](self.ERRNO_IO)
+    else:
+        from C import fdatasync(int) -> int
+        if fdatasync(f.host_fd) != 0:
+            return UInt[32](self.ERRNO_IO)
+    return UInt[32](self.ERRNO_SUCCESS)

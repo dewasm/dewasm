@@ -22,20 +22,31 @@ const LOADER_PATH_VAR: &str = if cfg!(target_os = "macos") {
     "LD_LIBRARY_PATH"
 };
 
-/// Compile `source` to a content-addressed cache binary and return its path.
+/// Compile `source` with `-release` to a content-addressed cache binary and return its path.
 /// `Err(Output)` carries the `codon build` failure so a piped run can report it via `status.success()`.
 /// A missing `codon` toolchain is a loud failure.
 pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
+    build_codon_with(source, true)
+}
+
+/// The debug-build variant, for the app-scale e2e suites: `-release` compile time is superlinear on huge single generated functions (minutes for the giant apps), while a debug build is ~8x faster and semantically identical (the one optimizer-sensitive path, identity-fold NaN quieting, is handled at emission via the quiet-if-NaN wrappers).
+/// The spec and WASI-testsuite harnesses stay on `-release`, the configuration the benchmarks and users run.
+pub fn build_codon_debug(source: &str) -> Result<PathBuf, Output> {
+    build_codon_with(source, false)
+}
+
+fn build_codon_with(source: &str, release: bool) -> Result<PathBuf, Output> {
     let codon = find_codon()
         .expect("codon toolchain not found on PATH (or $DEWASM_CODON): see docs/testing.md");
 
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     let hash = hasher.finish();
+    let tag = if release { "" } else { "-dbg" };
 
     let cache = std::env::temp_dir().join("dewasm-codon-cache");
     std::fs::create_dir_all(&cache).unwrap();
-    let bin = cache.join(format!("prog-{hash:016x}"));
+    let bin = cache.join(format!("prog{tag}-{hash:016x}"));
     if bin.exists() {
         return Ok(bin);
     }
@@ -47,12 +58,15 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
         std::process::id(),
         COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let tmp_bin = cache.join(format!("prog-{unique}"));
+    let tmp_bin = cache.join(format!("prog{tag}-{unique}"));
     let src = cache.join(format!("src-{unique}.codon"));
     std::fs::write(&src, source).unwrap();
-    let build = Command::new(&codon)
-        .arg("build")
-        .arg("-release")
+    let mut cmd = Command::new(&codon);
+    cmd.arg("build");
+    if release {
+        cmd.arg("-release");
+    }
+    let build = cmd
         .arg("-o")
         .arg(&tmp_bin)
         .arg(&src)
@@ -63,8 +77,31 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
         return Err(build);
     }
     let _ = std::fs::remove_file(&src);
+    ensure_runtime_dylibs(&cache);
     std::fs::rename(&tmp_bin, &bin).expect("move built binary into cache");
     Ok(bin)
+}
+
+/// Copy Codon's runtime shared libraries next to the cache binaries once: a built binary references them relative to itself (`@loader_path` on macOS), so a copy beside it runs without any loader-path environment variable.
+/// That matters to the WASI-testsuite runs, whose child environment is exactly the manifest's: a loader-path variable added there would leak into the guest's environ.
+fn ensure_runtime_dylibs(cache: &std::path::Path) {
+    let Some(lib) = find_codon().and_then(|c| codon_lib_dir(&c)) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&lib) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if !(name_str.ends_with(".dylib") || name_str.contains(".so")) {
+            continue;
+        }
+        let dst = cache.join(&name);
+        if !dst.exists() {
+            let _ = std::fs::copy(entry.path(), &dst);
+        }
+    }
 }
 
 /// Run a built binary with the Codon runtime dylibs on the loader path.

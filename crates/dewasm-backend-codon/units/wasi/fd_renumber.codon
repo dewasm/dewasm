@@ -1,0 +1,14 @@
+# requires: wasi/fd_entry
+def wasi_fd_renumber(self, fd: UInt[32], to: UInt[32]) -> UInt[32]:
+    from C import close(int) -> int
+    # Both endpoints must be open fds: renumbering onto an unused number is BADF.
+    src = int(fd)
+    dst = int(to)
+    if src not in self.fds or dst not in self.fds:
+        return UInt[32](self.ERRNO_BADF)
+    old = self.fds[dst]
+    if old.kind == 1:
+        close(old.host_fd)
+    self.fds[dst] = self.fds[src]
+    del self.fds[src]
+    return UInt[32](self.ERRNO_SUCCESS)

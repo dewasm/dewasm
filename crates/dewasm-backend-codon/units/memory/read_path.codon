@@ -1,0 +1,8 @@
+# requires: rt/trap
+# A guest path as a host string, bytes taken verbatim (no decoding).
+def read_path(self, a: int, n: int) -> str:
+    if a + n > self.n:
+        Rt.trap("out of bounds memory access")
+    p = Ptr[UInt[8]](n if n > 0 else 1)
+    str.memcpy(Ptr[byte](p.as_byte()), self.data + a, n)
+    return str(p, n)

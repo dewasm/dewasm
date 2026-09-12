@@ -1,0 +1,5 @@
+# requires: rt/wasi_fd
+def fd_entry(self, fd: int) -> Optional[Rt.WasiFd]:
+    if fd in self.fds:
+        return self.fds[fd]
+    return None

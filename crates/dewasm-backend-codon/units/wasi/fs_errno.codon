@@ -1,0 +1,30 @@
+# requires: rt/cerr
+# One host-errno-to-WASI-errno mapping shared by every filesystem syscall, so the same host error never maps to different codes depending on which syscall raised it.
+# The host values that differ per platform are conditional.
+def fs_errno(self) -> UInt[32]:
+    e = Rt.cerr()
+    if e == 13:
+        return UInt[32](self.ERRNO_ACCES)
+    if e == 9:
+        return UInt[32](self.ERRNO_BADF)
+    if e == 17:
+        return UInt[32](self.ERRNO_EXIST)
+    if e == 22:
+        return UInt[32](self.ERRNO_INVAL)
+    if e == 21:
+        return UInt[32](self.ERRNO_ISDIR)
+    if e == (62 if __apple__ else 40):
+        return UInt[32](self.ERRNO_LOOP)
+    if e == (63 if __apple__ else 36):
+        return UInt[32](self.ERRNO_NAMETOOLONG)
+    if e == 2:
+        return UInt[32](self.ERRNO_NOENT)
+    if e == 20:
+        return UInt[32](self.ERRNO_NOTDIR)
+    if e == (66 if __apple__ else 39):
+        return UInt[32](self.ERRNO_NOTEMPTY)
+    if e == 1:
+        return UInt[32](self.ERRNO_PERM)
+    if e == 29:
+        return UInt[32](self.ERRNO_SPIPE)
+    return UInt[32](self.ERRNO_IO)

@@ -21,9 +21,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasm_backend::{
     check_module_support, comparison, hex_string, is_boolean, is_ident, is_wasi_module,
-    load_method, module_name_error, store_method, type_key, wasi_bundled, Backend, CodeWriter,
-    CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
-    SupportStatus,
+    load_method, module_name_error, stmts_use_tail_calls, store_method, type_key, wasi_bundled,
+    Backend, CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler,
+    RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -148,8 +148,10 @@ impl Backend for CodonBackend {
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
-            // Accepted input without a lowering yet: rejected at conversion time.
-            Feature::ExceptionHandling | Feature::TailCall => SupportStatus::Unsupported,
+            // Tags are identity objects, a thrown exception is a native exception that doubles as the exnref, and traps stay uncatchable: the Python backend's model under Codon's typing.
+            Feature::ExceptionHandling => SupportStatus::Supported,
+            // A trampoline with a body/entry split (the Go backend's shape under Codon's nominal typing): a parked call is typed per argument slot and per result signature, so a chain bounces in one frame with nothing boxed.
+            Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
     }
@@ -356,15 +358,29 @@ fn generate_class_inner(
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&CodonBackend, module)?;
     let rt_name = runtime_name(class_name, linkage);
+    let tail_callers: BTreeSet<u32> = module
+        .funcs
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| stmts_use_tail_calls(&f.body))
+        .map(|(i, _)| module.num_imported_funcs() + i as u32)
+        .collect();
+    let mut seeds = extra_seeds.clone();
+    // Always bundled: embedder glue names `<Rt>.Trap`/`<Rt>.Exit` in `except` clauses, which Codon resolves statically even when the run never raises (CPython's lazy except-expression evaluation has no equivalent).
+    seeds.insert("rt/trap".to_string());
+    seeds.insert("rt/exit".to_string());
     let gen = Gen {
         module,
         default_wasi,
-        uses: RefCell::new(extra_seeds.clone()),
+        tail_callers,
+        uses: RefCell::new(seeds),
         rt_name: rt_name.clone(),
         class_name: class_name.to_string(),
         spec,
     };
     let mut wb = CodeWriter::new("\t");
+    // Tail-entry base classes come first: the generated class's parked-target fields name them in annotations, which Codon resolves in definition order.
+    gen.tail_bases(&mut wb);
     gen.class(&mut wb, class_name);
     let mut body = wb.finish();
 
@@ -470,8 +486,10 @@ fn codon_type(ty: ValType) -> &'static str {
         ValType::I64 => "UInt[64]",
         ValType::F32 => "float32",
         ValType::F64 => "float",
-        // Reference types as value types are rejected at conversion time.
-        ValType::FuncRef | ValType::ExnRef => unreachable!("reference-typed value"),
+        // Spelled by Gen::ty_str, which knows the runtime name.
+        ValType::ExnRef => unreachable!("exnref is spelled by ty_str"),
+        // funcref as a value type needs reference types, rejected at conversion time.
+        ValType::FuncRef => unreachable!("reference-typed value"),
     }
 }
 
@@ -481,7 +499,9 @@ fn zero_value(ty: ValType) -> &'static str {
         ValType::I64 => "UInt[64](0)",
         ValType::F32 => "float32(0.0)",
         ValType::F64 => "0.0",
-        ValType::FuncRef | ValType::ExnRef => unreachable!("reference-typed value"),
+        // A wasm exnref local/temp defaults to the null reference.
+        ValType::ExnRef => "None",
+        ValType::FuncRef => unreachable!("reference-typed value"),
     }
 }
 
@@ -517,7 +537,8 @@ fn val_get(ty: ValType) -> &'static str {
         ValType::I64 => "i64",
         ValType::F32 => "f32",
         ValType::F64 => "f64",
-        ValType::FuncRef | ValType::ExnRef => unreachable!("reference-typed value"),
+        ValType::ExnRef => "exn",
+        ValType::FuncRef => unreachable!("reference-typed value"),
     }
 }
 
@@ -528,7 +549,8 @@ fn val_of(ty: ValType) -> &'static str {
         ValType::I64 => "of_i64",
         ValType::F32 => "of_f32",
         ValType::F64 => "of_f64",
-        ValType::FuncRef | ValType::ExnRef => unreachable!("reference-typed value"),
+        ValType::ExnRef => "of_exn",
+        ValType::FuncRef => unreachable!("reference-typed value"),
     }
 }
 
@@ -539,8 +561,26 @@ fn global_extern(ty: ValType) -> (&'static str, &'static str) {
         ValType::I64 => ("of_global_i64", "import_global_i64"),
         ValType::F32 => ("of_global_f32", "import_global_f32"),
         ValType::F64 => ("of_global_f64", "import_global_f64"),
-        ValType::FuncRef | ValType::ExnRef => unreachable!("reference-typed global"),
+        ValType::ExnRef => ("of_global_exn", "import_global_exn"),
+        ValType::FuncRef => unreachable!("reference-typed global"),
     }
+}
+
+/// The identifier suffix naming a tail-call result signature: `v` for none, else the type suffixes joined by `_`.
+fn sig_id(results: &[ValType]) -> String {
+    if results.is_empty() {
+        return "v".to_string();
+    }
+    results
+        .iter()
+        .map(|t| ty_suffix(*t).to_string())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+/// The parked-argument field for position `i` of type `ty`.
+fn tail_arg_slot(i: usize, ty: ValType) -> String {
+    format!("_ta{i}_{}", ty_suffix(ty))
 }
 
 /// The recursion-guard budget (spec builds only), the Go backend's model: each generated function adds its frame's slot count to a shared counter on entry and traps once the running total exceeds this, turning an otherwise-fatal native stack overflow into a catchable "call stack exhausted" trap.
@@ -549,6 +589,8 @@ const SPEC_STACK_LIMIT: usize = 1024;
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
+    /// Defined functions (function index space) containing a tail call: these are the ones split into `_f{idx}_body` plus a trampoline entry.
+    tail_callers: BTreeSet<u32>,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
@@ -569,6 +611,15 @@ impl<'a> Gen<'a> {
         format!("{}.{name}", self.rt_name)
     }
 
+    /// The Codon spelling of a value type; exnref is the runtime's own nullable exception class, so it carries the per-artifact runtime name.
+    fn ty_str(&self, ty: ValType) -> String {
+        if ty == ValType::ExnRef {
+            self.use_unit("rt/boxed");
+            return format!("Optional[{}.WasmException]", self.rt_name);
+        }
+        codon_type(ty).to_string()
+    }
+
     /// Reference a Memory method, recording its unit.
     fn mem<'n>(&self, name: &'n str) -> &'n str {
         self.use_unit(&format!("memory/{name}"));
@@ -586,6 +637,97 @@ impl<'a> Gen<'a> {
     /// A structural type key (see [`type_key`]) as a string literal, which is what the table stores and `call_indirect` compares.
     fn type_symbol_of(&self, ty: &FuncType) -> String {
         codon_string(&type_key(ty, dewasm_backend::val_name))
+    }
+
+    /// The defined functions that get a typed tail entry: the tail callers themselves plus every defined function a direct `return_call` targets.
+    /// A tail call always parks (running the callee inline would keep this frame's exception handlers alive, which the proposal forbids), so every parkable direct target needs an entry.
+    fn tail_entries(&self) -> BTreeSet<u32> {
+        let mut set = self.tail_callers.clone();
+        for f in &self.module.funcs {
+            Stmt::any(&f.body, &mut |st| {
+                if let Stmt::ReturnCall { func, .. } = st {
+                    if *func >= self.module.num_imported_funcs() {
+                        set.insert(*func);
+                    }
+                }
+                false
+            });
+        }
+        set
+    }
+
+    /// The dense position of `func_idx` in its result signature's entry table, or None when it has no entry.
+    fn tail_slot(&self, func_idx: u32) -> Option<usize> {
+        let entries = self.tail_entries();
+        if !entries.contains(&func_idx) {
+            return None;
+        }
+        let results = self.module.func_type(func_idx).results.clone();
+        entries
+            .iter()
+            .filter(|f| self.module.func_type(**f).results == results)
+            .position(|f| *f == func_idx)
+    }
+
+    /// The distinct result signatures a parked tail call can carry: the entries' own, every indirect tail call site's, and every imported direct target's.
+    /// Each needs one parked-target field, one entry table, one entry base class, and one boxed entry subclass.
+    fn tail_signatures(&self) -> Vec<Vec<ValType>> {
+        let mut seen: BTreeSet<Vec<ValType>> = BTreeSet::new();
+        for idx in self.tail_entries() {
+            seen.insert(self.module.func_type(idx).results.clone());
+        }
+        for f in &self.module.funcs {
+            Stmt::any(&f.body, &mut |st| {
+                match st {
+                    Stmt::ReturnCallIndirect { type_idx, .. } => {
+                        seen.insert(self.module.types[*type_idx as usize].results.clone());
+                    }
+                    Stmt::ReturnCall { func, .. } if *func < self.module.num_imported_funcs() => {
+                        seen.insert(self.module.func_type(*func).results.clone());
+                    }
+                    _ => {}
+                }
+                false
+            });
+        }
+        seen.into_iter().collect()
+    }
+
+    /// Every argument slot the module's tail calls park into: one per position and type a tail-calling function's own parameters need (its entry reads them back out), plus every signature reachable through an indirect tail call site.
+    fn tail_arg_slots(&self) -> Vec<(usize, ValType)> {
+        let mut seen: BTreeSet<(usize, ValType)> = BTreeSet::new();
+        let note = |params: &[ValType], seen: &mut BTreeSet<(usize, ValType)>| {
+            for (i, ty) in params.iter().enumerate() {
+                seen.insert((i, *ty));
+            }
+        };
+        for idx in self.tail_entries() {
+            note(&self.module.func_type(idx).params, &mut seen);
+        }
+        for f in &self.module.funcs {
+            Stmt::any(&f.body, &mut |st| {
+                if let Stmt::ReturnCallIndirect { type_idx, .. } = st {
+                    note(&self.module.types[*type_idx as usize].params, &mut seen);
+                }
+                false
+            });
+        }
+        seen.into_iter().collect()
+    }
+
+    /// The return clause of a tail entry's `run` for a result signature.
+    fn tail_ret(&self, results: &[ValType]) -> String {
+        match results {
+            [] => String::new(),
+            [t] => format!(" -> {}", self.ty_str(*t)),
+            ts => format!(
+                " -> Tuple[{}]",
+                ts.iter()
+                    .map(|t| self.ty_str(*t))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
     }
 
     /// The wrapper classes the boxed boundary needs: one per defined function that is exported or referenced by an element segment, plus the bundled-WASI and ENOSYS fallbacks per imported function.
@@ -626,11 +768,112 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// Emit the abstract tail-entry base classes (module level, before the generated class): one per result signature, whose `run` re-enters a parked body.
+    fn tail_bases(&self, w: &mut CodeWriter) {
+        let class = &self.class_name;
+        for sig in self.tail_signatures() {
+            let id = sig_id(&sig);
+            w.line(format!("class {class}_TB_{id}:"));
+            w.indent();
+            w.line("def __init__(self):");
+            w.indent();
+            w.line("pass");
+            w.dedent();
+            w.line(format!("def run(self){}:", self.tail_ret(&sig)));
+            w.indent();
+            w.line(format!("{}(\"uncallable tail entry\")", self.rt("trap")));
+            match sig.as_slice() {
+                [] => {}
+                [t] => w.line(format!("return {}", zero_value(*t))),
+                ts => {
+                    let zeros = ts.iter().map(|t| zero_value(*t)).collect::<Vec<_>>();
+                    w.line(format!("return ({})", zeros.join(", ")));
+                }
+            }
+            w.dedent();
+            w.dedent();
+            w.line("");
+        }
+    }
+
     /// Emit every wrapper class this artifact needs (module level, after the generated class).
     fn wrappers(&self, w: &mut CodeWriter) {
         let m = self.module;
         let class = &self.class_name;
         let rt = &self.rt_name;
+        for idx in self.tail_entries().iter().copied().collect::<Vec<_>>() {
+            let ty = m.func_type(idx).clone();
+            let id = sig_id(&ty.results);
+            w.line(format!("class {class}_TB_{id}_F{idx}({class}_TB_{id}):"));
+            w.indent();
+            w.line(format!("p: {class}"));
+            w.line(format!("def __init__(self, p: {class}):"));
+            w.indent();
+            w.line("self.p = p");
+            w.dedent();
+            w.line(format!("def run(self){}:", self.tail_ret(&ty.results)));
+            w.indent();
+            let args = ty
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!("self.p.{}", tail_arg_slot(i, *t)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            // A tail caller's entry re-enters its body; a plain target's entry completes in one frame, which the criterion permits.
+            let call = if self.tail_callers.contains(&idx) {
+                format!("self.p._f{idx}_body({args})")
+            } else {
+                format!("self.p._f{idx}({args})")
+            };
+            if ty.results.is_empty() {
+                w.line(call);
+            } else {
+                w.line(format!("return {call}"));
+            }
+            w.dedent();
+            w.dedent();
+            w.line("");
+        }
+        // The boxed entry: an indirect tail call to another instance's function (or a direct one to an import) parks the boxed callee with its boxed arguments.
+        for sig in self.tail_signatures() {
+            self.use_unit("rt/boxed");
+            let id = sig_id(&sig);
+            w.line(format!("class {class}_TB_{id}_X({class}_TB_{id}):"));
+            w.indent();
+            w.line(format!("f: {rt}.Fn"));
+            w.line(format!("a: List[{rt}.Val]"));
+            w.line(format!(
+                "def __init__(self, f: {rt}.Fn, a: List[{rt}.Val]):"
+            ));
+            w.indent();
+            w.line("self.f = f");
+            w.line("self.a = a");
+            w.dedent();
+            w.line(format!("def run(self){}:", self.tail_ret(&sig)));
+            w.indent();
+            match sig.as_slice() {
+                [] => {
+                    w.line("self.f.invoke(self.a)");
+                }
+                [t] => {
+                    w.line(format!("return self.f.invoke(self.a)[0].{}()", val_get(*t)));
+                }
+                ts => {
+                    w.line("_ir = self.f.invoke(self.a)");
+                    let items = ts
+                        .iter()
+                        .enumerate()
+                        .map(|(k, t)| format!("_ir[{k}].{}()", val_get(*t)))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    w.line(format!("return ({items})"));
+                }
+            }
+            w.dedent();
+            w.dedent();
+            w.line("");
+        }
         for idx in self.boxed_funcs() {
             self.use_unit("rt/boxed");
             self.use_unit("rt/boxed");
@@ -797,16 +1040,20 @@ impl<'a> Gen<'a> {
         }
         for (i, imp) in m.imported_globals.iter().enumerate() {
             self.use_unit("global/_class");
-            w.line(format!("g{i}: {rt}.Global[{}]", codon_type(imp.ty)));
+            w.line(format!("g{i}: {rt}.Global[{}]", self.ty_str(imp.ty)));
         }
         let nig = m.imported_globals.len();
         for (i, g) in m.globals.iter().enumerate() {
             self.use_unit("global/_class");
-            w.line(format!("g{}: {rt}.Global[{}]", nig + i, codon_type(g.ty)));
+            w.line(format!("g{}: {rt}.Global[{}]", nig + i, self.ty_str(g.ty)));
         }
         for i in 0..m.imported_funcs.len() {
             self.use_unit("rt/boxed");
             w.line(format!("if{i}: {rt}.Fn"));
+        }
+        for i in 0..m.imported_tags.len() + m.tags.len() {
+            self.use_unit("rt/boxed");
+            w.line(format!("tag{i}: {rt}.Tag"));
         }
         for i in 0..m.elems.len() {
             self.use_unit("rt/boxed");
@@ -815,6 +1062,15 @@ impl<'a> Gen<'a> {
         for i in 0..m.datas.len() {
             self.use_unit("rt/data");
             w.line(format!("data{i}: {rt}.Data"));
+        }
+        for (i, ty) in self.tail_arg_slots() {
+            w.line(format!("{}: {}", tail_arg_slot(i, ty), self.ty_str(ty)));
+        }
+        for sig in self.tail_signatures() {
+            let id = sig_id(&sig);
+            let class = &self.class_name;
+            w.line(format!("_tf_{id}: Optional[{class}_TB_{id}]"));
+            w.line(format!("_tb_{id}: List[{class}_TB_{id}]"));
         }
         if self.wasi_fallback_used() {
             self.use_unit("wasi/_class");
@@ -835,6 +1091,27 @@ impl<'a> Gen<'a> {
             "def __init__(self, imports: Dict[str, Dict[str, {rt}.Extern]], args: List[str], env: Dict[str, str], preopens: Dict[str, str]):"
         ));
         w.indent();
+        for (i, ty) in self.tail_arg_slots() {
+            w.line(format!(
+                "self.{} = {}",
+                tail_arg_slot(i, ty),
+                zero_value(ty)
+            ));
+        }
+        // Entry tables are built before anything that parks a target or stores a funcref in a table: a tail call reads its target out of here rather than building a closure per hop.
+        for sig in self.tail_signatures() {
+            let id = sig_id(&sig);
+            let class = self.class_name.clone();
+            w.line(format!("self._tf_{id} = None"));
+            w.line(format!("self._tb_{id} = List[{class}_TB_{id}]()"));
+            for f in self
+                .tail_entries()
+                .iter()
+                .filter(|f| self.module.func_type(**f).results == sig)
+            {
+                w.line(format!("self._tb_{id}.append({class}_TB_{id}_F{f}(self))"));
+            }
+        }
         if wasi_fallback {
             w.line("self._wasi = None");
             w.line("self._wasi_args = args");
@@ -928,8 +1205,25 @@ impl<'a> Gen<'a> {
             w.line(format!(
                 "self.g{} = {rt}.Global[{}]({})",
                 nig + i,
-                codon_type(global.ty),
+                self.ty_str(global.ty),
                 self.expr(&global.init)
+            ));
+        }
+
+        // Tags: imported first, then defined (index space is imported_tags ++ tags).
+        // A defined tag is a fresh identity object; wasm tag equality is identity, never structure.
+        for (i, import) in m.imported_tags.iter().enumerate() {
+            self.use_unit("ext/import_tag");
+            w.line(format!(
+                "self.tag{i} = {}",
+                self.checked_import("import_tag", &import.module, &import.name)
+            ));
+        }
+        for i in 0..m.tags.len() {
+            self.use_unit("rt/boxed");
+            w.line(format!(
+                "self.tag{} = {rt}.Tag()",
+                m.imported_tags.len() + i
             ));
         }
 
@@ -1006,8 +1300,7 @@ impl<'a> Gen<'a> {
                 }
                 ExportKind::Table(idx) => format!("{rt}.Extern.of_table(self.t{idx})"),
                 ExportKind::Memory => format!("{rt}.Extern.of_memory(self.m)"),
-                // Tags require exception handling, rejected at conversion time.
-                ExportKind::Tag(_) => unreachable!("tag export without exception handling"),
+                ExportKind::Tag(idx) => format!("{rt}.Extern.of_tag(self.tag{idx})"),
             };
             w.line(format!(
                 "self.exports[{}] = {value}",
@@ -1138,7 +1431,12 @@ impl<'a> Gen<'a> {
                 } else {
                     format!("{}_W{idx}(self)", self.class_name)
                 };
-                format!("{rt}.Funcref({}, {fn_expr})", self.func_type_symbol(*idx))
+                // A tail-calling function's funcref carries its entry-table position, so a chain through the table stays flat within the owning instance.
+                let slot = self.tail_slot(*idx).map(|k| k as i64).unwrap_or(-1);
+                format!(
+                    "{rt}.Funcref({}, {fn_expr}, id(self), {slot})",
+                    self.func_type_symbol(*idx)
+                )
             }
             ElemItem::Null => "None".to_string(),
             // A `global.get` element item needs a ref-typed immutable global, i.e. reference types (rejected at conversion); unreachable here.
@@ -1161,20 +1459,60 @@ impl<'a> Gen<'a> {
         let ty = &self.module.types[func.type_idx as usize];
         let mut params = String::new();
         for (i, t) in ty.params.iter().enumerate() {
-            params.push_str(&format!(", l{i}: {}", codon_type(*t)));
+            params.push_str(&format!(", l{i}: {}", self.ty_str(*t)));
         }
         let ret = match ty.results.as_slice() {
             [] => String::new(),
-            [t] => format!(" -> {}", codon_type(*t)),
+            [t] => format!(" -> {}", self.ty_str(*t)),
             ts => format!(
                 " -> Tuple[{}]",
                 ts.iter()
-                    .map(|t| codon_type(*t))
+                    .map(|t| self.ty_str(*t))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
         };
-        w.line(format!("def _f{idx}(self{params}){ret}:"));
+        // A tail-calling function's real code lives in `_f{idx}_body`, which parks the next call in the instance's slots instead of growing the stack; the public `_f{idx}` is the trampoline that runs the chain, so no call site changes.
+        let is_tail_caller = self.tail_callers.contains(&idx);
+        if is_tail_caller {
+            let id = sig_id(&ty.results);
+            let args = (0..ty.params.len())
+                .map(|i| format!("l{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            w.line(format!("def _f{idx}(self{params}){ret}:"));
+            w.indent();
+            if ty.results.is_empty() {
+                w.line(format!("self._f{idx}_body({args})"));
+            } else {
+                w.line(format!("_r = self._f{idx}_body({args})"));
+            }
+            w.line("while True:");
+            w.indent();
+            w.line(format!("_t = self._tf_{id}"));
+            w.line("if _t is None:");
+            w.indent();
+            w.line("break");
+            w.dedent();
+            w.line(format!("self._tf_{id} = None"));
+            if ty.results.is_empty() {
+                w.line("_t.run()");
+            } else {
+                w.line("_r = _t.run()");
+            }
+            w.dedent();
+            if !ty.results.is_empty() {
+                w.line("return _r");
+            }
+            w.dedent();
+            w.line("");
+        }
+        let fname = if is_tail_caller {
+            format!("_f{idx}_body")
+        } else {
+            format!("_f{idx}")
+        };
+        w.line(format!("def {fname}(self{params}){ret}:"));
         w.indent();
 
         // Recursion guard (spec builds only): see SPEC_STACK_LIMIT.
@@ -1239,6 +1577,8 @@ impl<'a> Gen<'a> {
             Stmt::BrTable {
                 targets, default, ..
             } => relays(default) || targets.iter().any(relays),
+            // A catch clause's own branch relays through `_br` too, even when the body underneath never does.
+            Stmt::TryTable { catches, .. } => catches.iter().any(|c| relays(&c.target)),
             _ => false,
         })
     }
@@ -1334,8 +1674,49 @@ impl<'a> Gen<'a> {
                     free.extend(inner);
                     escapes
                 }
-                // Exception handling is rejected at conversion time.
-                Stmt::TryTable { .. } => unreachable!("try_table without exception handling"),
+                Stmt::TryTable {
+                    label,
+                    catches,
+                    body,
+                } => {
+                    // The body needs a real host scope: catching an exception raised anywhere inside it (a callee included) is not expressible through the `_br` register alone.
+                    // The wrapping `while True:` gives every catch clause's own branch somewhere to `break` to; the body itself keeps using `_br` for any branch it contains, same as a Block's (the Python backend's shape).
+                    self.use_unit("rt/boxed");
+                    w.line("while True:");
+                    w.indent();
+                    w.line("try:");
+                    w.indent();
+                    let mut inner = if body.is_empty() {
+                        w.line("pass");
+                        BTreeSet::new()
+                    } else {
+                        let mut inner_guarded = false;
+                        self.emit_seq(w, body, &mut inner_guarded, false)
+                    };
+                    w.dedent();
+                    w.line(format!("except {}.WasmException as e:", self.rt_name));
+                    w.indent();
+                    for clause in catches {
+                        self.catch_clause(w, clause);
+                        self.collect_target_free(&clause.target, &mut inner);
+                    }
+                    // No clause matched: the exception keeps unwinding.
+                    w.line("raise");
+                    w.dedent();
+                    // Reached only when the body ran to completion without an exception; an exception either lands in a clause (which breaks the loop itself) or re-raises past this statement entirely.
+                    w.line("break");
+                    w.dedent();
+                    if label.referenced && !stmt_tail {
+                        w.line(format!("if _br == {}:", label.id));
+                        w.indent();
+                        w.line("_br = 0");
+                        w.dedent();
+                    }
+                    inner.remove(&label.id);
+                    let escapes = !inner.is_empty();
+                    free.extend(inner);
+                    escapes
+                }
                 Stmt::SourceLine(_) => unreachable!("filtered by stmt_emits"),
                 _ => {
                     if let Some(line) = self.fused_call_line(stmt, stmts.get(i + 1)) {
@@ -1680,15 +2061,130 @@ impl<'a> Gen<'a> {
                 self.use_unit("rt/boxed");
                 w.line(format!("self.elem{seg} = List[Optional[{rt}.Funcref]]()"));
             }
-            // Rejected at conversion time (exception handling / tail calls).
-            Stmt::TryTable { .. }
-            | Stmt::Throw { .. }
-            | Stmt::ThrowRef { .. }
-            | Stmt::ReturnCall { .. }
-            | Stmt::ReturnCallIndirect { .. } => {
-                unreachable!("statement rejected by check_module_support")
+            Stmt::Throw { tag, args } => {
+                self.use_unit("rt/boxed");
+                let params = self.module.tag_params(*tag).to_vec();
+                let mut ks = Vec::new();
+                let mut bits = Vec::new();
+                let mut fs = Vec::new();
+                let mut ss = Vec::new();
+                for (a, t) in args.iter().zip(&params) {
+                    let r = self.expr(a);
+                    match t {
+                        ValType::I32 => {
+                            ks.push("0".to_string());
+                            bits.push(format!("UInt[64]({r})"));
+                            fs.push("0.0".to_string());
+                            ss.push("float32(0.0)".to_string());
+                        }
+                        ValType::I64 => {
+                            ks.push("1".to_string());
+                            bits.push(r);
+                            fs.push("0.0".to_string());
+                            ss.push("float32(0.0)".to_string());
+                        }
+                        ValType::F32 => {
+                            ks.push("2".to_string());
+                            bits.push("UInt[64](0)".to_string());
+                            fs.push("0.0".to_string());
+                            ss.push(r);
+                        }
+                        ValType::F64 => {
+                            ks.push("3".to_string());
+                            bits.push("UInt[64](0)".to_string());
+                            fs.push(r);
+                            ss.push("float32(0.0)".to_string());
+                        }
+                        // Tag parameters of reference type are not carried (see rt/boxed).
+                        ValType::FuncRef | ValType::ExnRef => {
+                            unreachable!("reference-typed tag parameter")
+                        }
+                    }
+                }
+                let list = |items: &[String], empty: &str| {
+                    if items.is_empty() {
+                        empty.to_string()
+                    } else {
+                        format!("[{}]", items.join(", "))
+                    }
+                };
+                w.line(format!(
+                    "raise {}.WasmException(self.tag{tag}, {}, {}, {}, {})",
+                    self.rt_name,
+                    list(&ks, "List[int]()"),
+                    list(&bits, "List[UInt[64]]()"),
+                    list(&fs, "List[float]()"),
+                    list(&ss, "List[float32]()")
+                ));
             }
-            Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
+            Stmt::ThrowRef { exn } => {
+                w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
+            }
+            // Parked, never called: the callee must run once this frame (any enclosing handler included) is gone, and returning is what unwinds them.
+            // The target is the callee's tail entry, built once at instantiation, so a hop allocates nothing.
+            Stmt::ReturnCall { func, args } => {
+                let args_r: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                let fty = self.module.func_type(*func).clone();
+                let id = sig_id(&fty.results);
+                match self.tail_slot(*func) {
+                    Some(k) => {
+                        for (i, (a, t)) in args_r.iter().zip(&fty.params).enumerate() {
+                            w.line(format!("self.{} = {a}", tail_arg_slot(i, *t)));
+                        }
+                        w.line(format!("self._tf_{id} = self._tb_{id}[{k}]"));
+                    }
+                    // An imported callee has no typed entry: park it boxed.
+                    None => {
+                        let vals = self.boxed_vals(&args_r, &fty.params);
+                        // Through an annotated local: Codon upcasts a subclass into a base-typed binding, but not directly into an Optional[base] field.
+                        w.line(format!(
+                            "_tx_{id}: {cls}_TB_{id} = {cls}_TB_{id}_X(self.if{func}, {vals})",
+                            cls = self.class_name
+                        ));
+                        w.line(format!("self._tf_{id} = _tx_{id}"));
+                    }
+                }
+                self.emit_zero_return(w, &fty.results);
+            }
+            Stmt::ReturnCallIndirect {
+                type_idx,
+                table_index,
+                index,
+                args,
+            } => {
+                self.use_unit("table/slot");
+                self.use_unit("rt/boxed");
+                let ty = self.module.types[*type_idx as usize].clone();
+                let id = sig_id(&ty.results);
+                // The slot is resolved, and its traps raised, here rather than after the frame is gone: an indirect tail call's checks happen at the instruction.
+                w.line(format!(
+                    "_fr = self.t{table_index}.slot({}, {})",
+                    self.expr(index),
+                    self.type_symbol(*type_idx)
+                ));
+                let args_r: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
+                // A tail entry belongs to the instance that built it and reads *its* parked slots, so only this instance's own entries can be parked; anything else completes here instead.
+                w.line("if _fr.owner == id(self) and _fr.tail_slot >= 0:");
+                w.indent();
+                for (i, (a, t)) in args_r.iter().zip(&ty.params).enumerate() {
+                    w.line(format!("self.{} = {a}", tail_arg_slot(i, *t)));
+                }
+                w.line(format!("self._tf_{id} = self._tb_{id}[_fr.tail_slot]"));
+                w.dedent();
+                w.line("else:");
+                w.indent();
+                // Another instance's function (or an own funcref without an entry): park it boxed, so the frame and its handlers are still gone before the callee runs.
+                let vals = self.boxed_vals(&args_r, &ty.params);
+                // Through an annotated local: Codon upcasts a subclass into a base-typed binding, but not directly into an Optional[base] field.
+                w.line(format!(
+                    "_tx_{id}: {cls}_TB_{id} = {cls}_TB_{id}_X(_fr.fn, {vals})",
+                    cls = self.class_name
+                ));
+                w.line(format!("self._tf_{id} = _tx_{id}"));
+                w.dedent();
+                self.emit_zero_return(w, &ty.results);
+            }
+            Stmt::TryTable { .. } | Stmt::Block { .. } | Stmt::Loop { .. } | Stmt::If { .. } => {
                 unreachable!("structured statement routed to simple_stmt")
             }
         }
@@ -1727,6 +2223,22 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// A boxed argument list from already-rendered expressions.
+    fn boxed_vals(&self, args: &[String], params: &[ValType]) -> String {
+        self.use_unit("rt/boxed");
+        let rt = &self.rt_name;
+        if args.is_empty() {
+            return format!("List[{rt}.Val]()");
+        }
+        let items = args
+            .iter()
+            .zip(params)
+            .map(|(a, t)| format!("{rt}.Val.{}({a})", val_of(*t)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("[{items}]")
+    }
+
     fn return_stmt(&self, w: &mut CodeWriter, values: &[Expr]) {
         match values {
             [] => w.line("return"),
@@ -1742,6 +2254,41 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
+    /// A tagged clause guards that with `is` (wasm tag equality is object identity); a catch-all runs unconditionally.
+    /// `branch()` alone never leaves the `except` suite, so this appends the `break` that exits the `try_table`'s wrapping `while True:` itself (dead, but harmless, right after a `return`).
+    fn catch_clause(&self, w: &mut CodeWriter, clause: &dewasm_core::ir::CatchClause) {
+        let bind_and_branch = |gen: &Self, w: &mut CodeWriter| {
+            for (i, t) in clause.value_temps.iter().enumerate() {
+                if Some(*t) == clause.exn_temp {
+                    w.line(format!("{} = e", temp(*t)));
+                } else {
+                    let read = match t.ty {
+                        ValType::I32 => format!("UInt[32](e.bits[{i}])"),
+                        ValType::I64 => format!("e.bits[{i}]"),
+                        ValType::F32 => format!("e.ss[{i}]"),
+                        ValType::F64 => format!("e.fs[{i}]"),
+                        ValType::FuncRef | ValType::ExnRef => {
+                            unreachable!("reference-typed tag parameter")
+                        }
+                    };
+                    w.line(format!("{} = {read}", temp(*t)));
+                }
+            }
+            gen.branch(w, &clause.target);
+            w.line("break");
+        };
+        match clause.tag {
+            Some(tag) => {
+                w.line(format!("if e.tag is self.tag{tag}:"));
+                w.indent();
+                bind_and_branch(self, w);
+                w.dedent();
+            }
+            None => bind_and_branch(self, w),
+        }
+    }
+
     fn branch(&self, w: &mut CodeWriter, target: &BrTarget) {
         match target {
             BrTarget::Return { values } => self.return_stmt(w, values),
@@ -1754,23 +2301,27 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any (i.e. whether it may leave `_br` set on fall-through).
-    fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
-        let collect = |t: &BrTarget, free: &mut BTreeSet<u32>| match t {
+    /// Record a branch target's label id into `free`, returning whether it is a label branch (one that travels through `_br`).
+    fn collect_target_free(&self, t: &BrTarget, free: &mut BTreeSet<u32>) -> bool {
+        match t {
             BrTarget::Return { .. } => false,
             BrTarget::Label { label, .. } => {
                 free.insert(*label);
                 true
             }
-        };
+        }
+    }
+
+    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any (i.e. whether it may leave `_br` set on fall-through).
+    fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
         match stmt {
-            Stmt::Br(t) | Stmt::BrIf { target: t, .. } => collect(t, free),
+            Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
             Stmt::BrTable {
                 targets, default, ..
             } => {
-                let mut any = collect(default, free);
+                let mut any = self.collect_target_free(default, free);
                 for t in targets {
-                    any |= collect(t, free);
+                    any |= self.collect_target_free(t, free);
                 }
                 any
             }
@@ -2158,8 +2709,11 @@ mod units {
                     "Fn" => "rt/boxed".to_string(),
                     "Funcref" => "rt/boxed".to_string(),
                     "Extern" => "ext/extern".to_string(),
-                    "Tag" => "rt/tag".to_string(),
+                    "Tag" => "rt/boxed".to_string(),
+                    "WasmException" => "rt/boxed".to_string(),
                     "Data" => "rt/data".to_string(),
+                    "Stat" => "rt/stat".to_string(),
+                    "WasiFd" => "rt/wasi_fd".to_string(),
                     "Memory" => "memory/_class".to_string(),
                     "Table" => "table/_class".to_string(),
                     "Global" => "global/_class".to_string(),

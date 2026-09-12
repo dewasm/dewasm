@@ -15,19 +15,19 @@ use dewasm_backend::Backend;
 use dewasm_backend_codon::{codon_string, CodonBackend};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
-use wast::core::{NanPattern, WastArgCore, WastRetCore};
+use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 mod common;
 
 /// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: import resolution checks the kind, a function's structural signature (the `Extern.fn_ty` key) and a global's value type (the typed `Extern` field), but not a global's mutability nor a table/memory's min/max limits.
+/// - `import-limits`: import resolution checks the kind, a function's structural signature (the `Extern.fn_ty` key) and a global's value type (the typed `Extern` field), but not a global's mutability, a table/memory's min/max limits, nor a tag's parameter types (a tag is an identity object carrying no type at all).
 ///   Every `assert_unlinkable` case testing one of those stays a known gap; the counts match the Go backend's, whose type assertion covers the same surface.
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
-    ("imports", 28, "import-limits"),
+    ("imports", 34, "import-limits"),
     ("imports2", 2, "import-limits"),
     ("linking", 2, "import-limits"),
     ("linking0", 1, "linking"),
@@ -88,7 +88,10 @@ fn arg_codon(arg: &WastArg<'_>) -> Result<String, String> {
             u64_lit(f.bits)
         )),
         WastArg::Core(WastArgCore::V128(_)) => Err("simd".to_string()),
-        WastArg::Core(WastArgCore::RefNull(hty)) => Err(dewasm_test_helper::heap_type_tag(hty)),
+        WastArg::Core(WastArgCore::RefNull(hty)) => match null_exn(hty) {
+            Some(v) => Ok(v),
+            None => Err(dewasm_test_helper::heap_type_tag(hty)),
+        },
         WastArg::Core(WastArgCore::RefExtern(_)) => Err("reference-types".to_string()),
         WastArg::Core(WastArgCore::RefHost(_)) => Err("reference-types".to_string()),
         _ => Err("component-model".to_string()),
@@ -127,6 +130,9 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
+        WastRet::Core(WastRetCore::RefNull(Some(hty))) if null_exn(hty).is_some() => {
+            Ok(format!("{value}.exn() is None"))
+        }
         WastRet::Core(WastRetCore::RefNull(Some(hty))) => {
             Err(dewasm_test_helper::heap_type_tag(hty))
         }
@@ -146,6 +152,17 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
     }
 }
 
+/// The boxed null exnref, the one `ref.null` host value this backend can express.
+fn null_exn(hty: &HeapType<'_>) -> Option<String> {
+    match hty {
+        HeapType::Abstract {
+            ty: AbstractHeapType::Exn | AbstractHeapType::NoExn,
+            ..
+        } if dewasm_test_helper::nullable_heap_type(hty) => Some("Rt.Val.of_exn(None)".to_string()),
+        _ => None,
+    }
+}
+
 /// `_spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance's `exports` dict doubles as an import source.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
@@ -160,9 +177,12 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program (seconds each, dominated by compile latency), so a plain `cargo test` runs the shared curated list.
+    /// Codon compiles each `.wast` file to one program (seconds each, dominated by compile latency), so a plain `cargo test` runs the shared curated list plus the exception-handling files.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(dewasm_test_helper::CURATED_SPEC_FILES)
+        Some(dewasm_test_helper::curated_with(&[
+            dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
+            dewasm_test_helper::TAIL_CALL_SPEC_FILES,
+        ]))
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -308,6 +328,19 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         let _ = writeln!(script, "check_ok({}, {name})", codon_string(desc));
     }
 
+    fn emit_check_exception(
+        &self,
+        script: &mut String,
+        desc: &str,
+        call: &str,
+    ) -> Result<(), String> {
+        let name = thunk_name();
+        let _ = writeln!(script, "def {name}():");
+        let _ = writeln!(script, "\t{call}");
+        let _ = writeln!(script, "check_exception({}, {name})", codon_string(desc));
+        Ok(())
+    }
+
     fn emit_check_unlinkable(&self, script: &mut String, desc: &str, call: &str) {
         let name = thunk_name();
         let _ = writeln!(script, "def {name}():");
@@ -404,6 +437,20 @@ def check_exhaust(desc: str, f):
 		return
 	_fail += 1
 	print("FAIL(no exhaustion): " + desc)
+
+def check_exception(desc: str, f):
+	global _pass, _fail
+	try:
+		f()
+	except Rt.WasmException:
+		_pass += 1
+		return
+	except BaseException as e:
+		_fail += 1
+		print("FAIL(panic " + str(e.message) + ", want a wasm exception): " + desc)
+		return
+	_fail += 1
+	print("FAIL(no exception): " + desc)
 
 def check_unlinkable(desc: str, f):
 	global _pass, _fail

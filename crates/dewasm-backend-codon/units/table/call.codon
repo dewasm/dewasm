@@ -1,13 +1,3 @@
-# requires: rt/trap, rt/boxed
-# Resolve a call_indirect slot: bounds, null, then the structural type key.
+# requires: table/slot, rt/boxed
 def call(self, i: UInt[32], ty: str) -> Rt.Fn:
-    idx = int(i)
-    if idx >= len(self.slots):
-        Rt.trap("undefined element")
-    fr = self.slots[idx]
-    if fr is None:
-        Rt.trap("uninitialized element")
-    frv: Rt.Funcref = fr
-    if frv.ty != ty:
-        Rt.trap("indirect call type mismatch")
-    return frv.fn
+    return self.slot(i, ty).fn

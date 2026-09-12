@@ -1,0 +1,20 @@
+# A decoded struct stat: the fields WASI's filestat and filetype logic consume.
+# Timestamps are nanoseconds since the epoch (negative before it); dev can be negative on macOS (devfs nodes), so every field stays a signed int and the filestat packer masks to u64.
+class Stat:
+    dev: int
+    ino: int
+    mode: int
+    nlink: int
+    size: int
+    atim: int
+    mtim: int
+    ctim: int
+    def __init__(self, dev: int, ino: int, mode: int, nlink: int, size: int, atim: int, mtim: int, ctim: int):
+        self.dev = dev
+        self.ino = ino
+        self.mode = mode
+        self.nlink = nlink
+        self.size = size
+        self.atim = atim
+        self.mtim = mtim
+        self.ctim = ctim

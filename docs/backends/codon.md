@@ -56,15 +56,15 @@ Import resolution checks the kind, a function's structural signature, and a glob
 
 ## Capabilities
 
-Full wasm core 1.0 plus the universal baseline (non-function imports, multiple tables, table bulk ops).
-The exception-handling and tail-call proposals are accepted input but rejected at conversion time until their lowerings land.
-WASI preview 1 currently covers the argv/env, stdout/stderr `fd_write`, `proc_exit`, `random_get` and `sched_yield` surface; the filesystem follows separately.
+Full wasm core 1.0 plus the universal baseline (non-function imports, multiple tables, table bulk ops), and **full WASI preview 1 including the filesystem**, built on libc via C interop.
+The final exception-handling proposal is supported: a thrown wasm exception is a native exception carrying its tag, and catch_all cannot observe traps.
+Tail calls are supported through a typed trampoline: a parked call carries its arguments in per-slot fields and its target as a prebuilt entry object, so a chain bounces in one frame with nothing boxed.
 Authoritative matrix: [docs/support.md](../support.md).
 
 ## Caveats
 
 - **Build cost dominates, superlinearly on huge functions.**
-  Microbenchmark-size artifacts compile in seconds; a single function of tens of thousands of statements pushes `codon build -release` into minutes.
-  The test suites compile to a content-addressed cache binary to pay each build once.
+  Microbenchmark-size artifacts compile in seconds; a single function of tens of thousands of statements pushes `codon build -release` into minutes (cowsay end to end: ~9 minutes released, ~70 seconds as a debug build).
+  The test suites compile to a content-addressed cache binary to pay each build once, and the app-scale e2e suites build debug.
 - The output is a Codon dialect, not CPython-compatible Python: `UInt[N]`, `Ptr[byte]` and `@llvm` blocks do not run under `python3`.
-- A standalone program runs the guest on the native stack with no depth mitigation yet, so extremely deep guest recursion can overflow it.
+- A standalone program runs the guest on the native stack (8 MB main-thread default), which carries deep-but-valid recursion like the 5000-frame e2e case unmitigated; a runaway recursion is a fatal overflow rather than a catchable trap outside the spec harness's guarded builds.

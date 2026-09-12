@@ -1,0 +1,12 @@
+# requires: memory/read_path, wasi/resolve_path, wasi/pack_filestat, wasi/fs_errno, rt/path_stat
+def wasi_path_filestat_get(self, dirfd: UInt[32], flags: UInt[32], path_ptr: UInt[32], path_len: UInt[32], buf_ptr: UInt[32]) -> UInt[32]:
+    rel = self.memory.read_path(int(path_ptr), int(path_len))
+    follow = int(flags) & 0x1 != 0  # lookupflags::SYMLINK_FOLLOW
+    host, err = self.resolve_path(int(dirfd), rel, follow)
+    if err != 0:
+        return UInt[32](err)
+    st = Rt.path_stat(host, follow)
+    if st is None:
+        return self.fs_errno()
+    self.pack_filestat(st, int(buf_ptr))
+    return UInt[32](self.ERRNO_SUCCESS)

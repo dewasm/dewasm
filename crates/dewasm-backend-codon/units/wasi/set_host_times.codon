@@ -1,0 +1,15 @@
+# requires: rt/raw_store64
+# utimensat/futimens with two absolute-nanosecond timestamps; empty path means the fd form.
+def set_host_times(self, path: str, fd: int, a_ns: int, m_ns: int, follow: bool) -> bool:
+    from C import utimensat(int, cobj, Ptr[byte], int) -> int
+    from C import futimens(int, Ptr[byte]) -> int
+    buf = Ptr[byte](32)
+    Rt.raw_store64(buf, UInt[64](a_ns // 1000000000))
+    Rt.raw_store64(buf + 8, UInt[64](a_ns % 1000000000))
+    Rt.raw_store64(buf + 16, UInt[64](m_ns // 1000000000))
+    Rt.raw_store64(buf + 24, UInt[64](m_ns % 1000000000))
+    if len(path) == 0:
+        return futimens(fd, buf) == 0
+    at_fdcwd = -2 if __apple__ else -100
+    nofollow = (0x20 if __apple__ else 0x100) if not follow else 0
+    return utimensat(at_fdcwd, path.c_str(), buf, nofollow) == 0

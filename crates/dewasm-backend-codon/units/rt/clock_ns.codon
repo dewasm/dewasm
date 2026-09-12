@@ -1,0 +1,14 @@
+# requires: rt/raw_load64
+# The named clock in nanoseconds: id 0 realtime, everything else monotonic (the platform clockid values differ).
+@staticmethod
+def clock_ns(realtime: bool) -> int:
+    from C import clock_gettime(int, Ptr[byte]) -> int
+    buf = Ptr[byte](16)
+    cid = 0
+    if not realtime:
+        cid = 6 if __apple__ else 1
+    if clock_gettime(cid, buf) != 0:
+        return 0
+    sec = int(Int[64](Rt.raw_load64(buf)))
+    nsec = int(Int[64](Rt.raw_load64(buf + 8)))
+    return sec * 1000000000 + nsec

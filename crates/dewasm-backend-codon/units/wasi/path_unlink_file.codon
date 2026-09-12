@@ -1,0 +1,11 @@
+# requires: memory/read_path, wasi/resolve_path, wasi/fs_errno
+def wasi_path_unlink_file(self, dirfd: UInt[32], path_ptr: UInt[32], path_len: UInt[32]) -> UInt[32]:
+    from C import unlink(cobj) -> int
+    rel = self.memory.read_path(int(path_ptr), int(path_len))
+    # unlink(2) never follows a trailing symlink: it removes the link.
+    host, err = self.resolve_path(int(dirfd), rel, False)
+    if err != 0:
+        return UInt[32](err)
+    if unlink(host.c_str()) != 0:
+        return self.fs_errno()
+    return UInt[32](self.ERRNO_SUCCESS)

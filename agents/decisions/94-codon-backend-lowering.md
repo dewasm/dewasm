@@ -1,6 +1,6 @@
 # Decision 94: Codon Backend Lowering Conventions
 
-Status: **Accepted, 2026-09-13.** Implemented in `crates/dewasm-backend-codon/src/lib.rs`, `crates/dewasm-backend-codon/units/`, and `crates/dewasm-backend-codon/tests/{spec,convert,e2e,module_name}.rs`: wasm 1.0 with the shared spec harness passing on the curated set (decision 3), a WASI surface covering the microbenchmark contract (argv/env, stdout/stderr `fd_write`, `proc_exit`, `random_get`, `sched_yield`); full WASI p1, the exception-handling and tail-call lowerings, and the shared perf passes (extract/licm/fuse/selfcall) remain (issue #310 tracks the split).
+Status: **Accepted, 2026-09-13.** Implemented in `crates/dewasm-backend-codon/src/lib.rs`, `crates/dewasm-backend-codon/units/`, and `crates/dewasm-backend-codon/tests/{spec,wasi_testsuite,convert,e2e,module_name}.rs`: wasm 1.0 with the shared spec harness passing (decision 3), full WASI p1 including the filesystem (the conformance harness passes, decision 36), the exception-handling (decision 69) and tail-call (decision 88) lowerings, and the full e2e surface; the shared perf passes (extract/licm/fuse/selfcall), the deep-crossing flat dispatch, and an unboxed same-module `call_indirect` fast path remain (issue #311).
 
 ## Context
 
@@ -21,6 +21,9 @@ Codon's semantics sit between the dynamic and the compiled targets, so each lowe
 - **Control flow: the Python backend's branch-register model (decision 28), without the flat state machine yet.**
   Codon has Python's statement syntax and no labeled break, so Go's labeled-loop shape is unavailable; the `_br` register with lazily opened `if _br == 0:` regions ports directly, and the measured kernels show LLVM compiles it to wasmtime-class code.
   The deep-crossing flat dispatch (decision 60's criterion) is a perf follow-up: relays are always emitted today.
+- **Every tail call parks; none runs its callee inline.**
+  The trampoline is the Go shape (decision 29's body/entry split) with typed per-(position, type) argument slots and one entry table per result signature; entries exist for the tail callers *and* every direct `return_call` target, and a callee with no entry here (an import, another instance's funcref) parks as a boxed pending call instead.
+  The criterion: a tail call must run its callee only after this frame, its exception handlers included, is gone (try_table.wast's return-call-in-try-catch pins it), so "complete it inline in one frame" is never a correct fallback.
 - **The dynamic boundary is uniformly boxed, the Java shape (decision 30) under Codon's nominal typing.**
   A wasm function value is an `Rt.Fn` subclass with `invoke(List[Val]) -> List[Val]`; `Val` carries one field per representation (f32 its own, so boxing never re-rounds).
   An import/export value is an `Rt.Extern` with a typed field per kind, four of them for globals: resolution checks the kind, a function's structural type key (`Extern.fn_ty`), and a global's value type by construction, mirroring what Go's type assertion checks.
@@ -53,4 +56,5 @@ Codon's semantics sit between the dynamic and the compiled targets, so each lowe
 
 - Positive: the curated spec harness passes with the failure ledger matching Go's surface (import mutability/limit checks, multi-memory-downstream linking rows); every `wat/` and `c/` microbenchmark output is byte-identical to the Python backend's, and the standalone artifacts run the microbenchmark speed contract.
 - Negative: imported-function calls and `call_indirect` allocate a boxed value list per call; huge single generated functions (sqlite-class, 10k+ statements) push `codon build -release` from seconds into minutes, unsettled until measured against the extraction pass (decision 81).
-- Carry-over: full WASI p1 (the fd table and filesystem), the exception-handling (decision 69) and tail-call (decision 88) lowerings, the shared perf passes, the flat dispatch, and a standalone deep-recursion mitigation are tracked in issue #310's follow-ups.
+- Carry-over: the shared perf passes (decisions 81-83, 90), the deep-crossing flat dispatch (decision 60's criterion), an unboxed same-module `call_indirect` fast path, and the giant-artifact `-release` compile cost (the e2e suites build debug meanwhile) are tracked in issue #311.
+  WASI p1 rests on libc via C interop with `__apple__`-conditional layouts verified on darwin arm64 and linux x86_64; other host arches are unverified.

@@ -1,0 +1,19 @@
+# requires: rt/stat, rt/clock_ns
+# Validate the fstflags and compute the (atime_ns, mtime_ns, errno) triple, filling any field not being set from the current stat `st`.
+# ATIM with ATIM_NOW (or MTIM with MTIM_NOW) is a contradiction and yields INVAL.
+def fst_times(self, st: Rt.Stat, atim: UInt[64], mtim: UInt[64], fst_flags: UInt[32]) -> Tuple[int, int, int]:
+    fl = int(fst_flags)
+    if (fl & 0x1 != 0 and fl & 0x2 != 0) or (fl & 0x4 != 0 and fl & 0x8 != 0):
+        return (0, 0, self.ERRNO_INVAL)
+    now = Rt.clock_ns(True)
+    a = st.atim
+    if fl & 0x1 != 0:
+        a = int(Int[64](atim))
+    elif fl & 0x2 != 0:
+        a = now
+    m = st.mtim
+    if fl & 0x4 != 0:
+        m = int(Int[64](mtim))
+    elif fl & 0x8 != 0:
+        m = now
+    return (a, m, 0)

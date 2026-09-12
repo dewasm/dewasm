@@ -1,4 +1,0 @@
-# A wasm exception tag: an identity object (tag equality is identity, never structure).
-class Tag:
-    def __init__(self):
-        pass

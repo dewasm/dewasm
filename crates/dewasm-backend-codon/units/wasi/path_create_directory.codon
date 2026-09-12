@@ -1,0 +1,17 @@
+# requires: memory/read_path, wasi/resolve_path, wasi/fs_errno
+def wasi_path_create_directory(self, dirfd: UInt[32], path_ptr: UInt[32], path_len: UInt[32]) -> UInt[32]:
+    from C import mkdir(cobj, int) -> int
+    rel = self.memory.read_path(int(path_ptr), int(path_len))
+    # Strip a trailing slash: mkdir names a directory anyway, and EEXIST is wasmtime's answer for mkdir("file/") where the hosts split.
+    core = rel
+    while core.endswith("/"):
+        core = core[:len(core) - 1]
+    if len(core) > 0:
+        rel = core
+    # mkdir(2) never follows a trailing symlink (an existing one is EEXIST).
+    host, err = self.resolve_path(int(dirfd), rel, False)
+    if err != 0:
+        return UInt[32](err)
+    if mkdir(host.c_str(), 0o777) != 0:
+        return self.fs_errno()
+    return UInt[32](self.ERRNO_SUCCESS)

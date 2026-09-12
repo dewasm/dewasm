@@ -1,0 +1,9 @@
+# The host errno, read through the platform's thread-local accessor.
+@staticmethod
+def cerr() -> int:
+    if __apple__:
+        from C import __error() -> Ptr[Int[32]]
+        return int(__error()[0])
+    else:
+        from C import __errno_location() -> Ptr[Int[32]]
+        return int(__errno_location()[0])

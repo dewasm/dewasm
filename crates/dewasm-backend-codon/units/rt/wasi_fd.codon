@@ -1,0 +1,27 @@
+# One fd-table entry: a host file descriptor (kind 1), a sandboxed directory (kind 2), or a stdio stream (kind 3, no close, SPIPE on seek-family calls).
+# Carries the wasmtime-modelled per-fd capability fields (rights base/inheriting, fdflags) and the memoized filetype (-1 until first queried), the dynamic backends' parallel fd_meta folded into the entry itself.
+# `entries` is the fd_readdir listing cache: (name bytes, filetype, inode) triples, valid only while `entries_valid`.
+class WasiFd:
+    kind: int
+    host_fd: int
+    host_path: str
+    preopen_name: bytes
+    has_preopen_name: bool
+    entries: List[Tuple[bytes, int, int]]
+    entries_valid: bool
+    base: int
+    inheriting: int
+    fdflags: int
+    filetype: int
+    def __init__(self, kind: int, host_fd: int, host_path: str, base: int, inheriting: int):
+        self.kind = kind
+        self.host_fd = host_fd
+        self.host_path = host_path
+        self.preopen_name = bytes(Ptr[UInt[8]](1), 0)
+        self.has_preopen_name = False
+        self.entries = List[Tuple[bytes, int, int]]()
+        self.entries_valid = False
+        self.base = base
+        self.inheriting = inheriting
+        self.fdflags = 0
+        self.filetype = -1
