@@ -15,6 +15,44 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
+/// The pull-request tier: no filesystem fixture, one trial per always-on interface (args, environ, stdout, exit, random, stdio round-trip).
+const FAST_TRIALS: &[&str] = &[
+    "assemblyscript/args_get-multiple-arguments",
+    "assemblyscript/environ_get-multiple-variables",
+    "assemblyscript/fd_write-to-stdout",
+    "assemblyscript/proc_exit-failure",
+    "assemblyscript/random_get-non-zero-length",
+    "rust/stdio",
+];
+
+/// The `slow_test` tier: the fast trials plus one representative per filesystem area (open/seek/stat, positioned io, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
+const SLOW_TRIALS: &[&str] = &[
+    "assemblyscript/args_get-multiple-arguments",
+    "assemblyscript/environ_get-multiple-variables",
+    "assemblyscript/fd_write-to-stdout",
+    "assemblyscript/proc_exit-failure",
+    "assemblyscript/random_get-non-zero-length",
+    "c/clock_gettime-monotonic",
+    "c/fdopendir-with-access",
+    "c/fopen-with-access",
+    "c/lseek",
+    "c/pwrite-with-append",
+    "c/sock_shutdown-invalid_fd",
+    "c/sock_shutdown-not_sock",
+    "c/stat-dev-ino",
+    "rust/clock_time_get",
+    "rust/fd_readdir",
+    "rust/file_pread_pwrite",
+    "rust/interesting_paths",
+    "rust/nofollow_errors",
+    "rust/path_open_read_write",
+    "rust/path_rename",
+    "rust/poll_oneoff_stdio",
+    "rust/readlink",
+    "rust/stdio",
+    "rust/symlink_create",
+];
+
 struct CodonWasi;
 
 impl BackendUnderTest for CodonWasi {
@@ -65,13 +103,19 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
             ),
         ]
     }
+
+    /// Every trial is a codon build, so the suite is tiered like the spec harness: a handful of no-fixture trials on a pull request, one representative per interface area under `slow_test`, and the full sweep only under `ultra_slow_test`.
+    fn curated_trials(&self) -> Option<&'static [&'static str]> {
+        if cfg!(feature = "ultra_slow_test") {
+            None
+        } else if cfg!(feature = "slow_test") {
+            Some(SLOW_TRIALS)
+        } else {
+            Some(FAST_TRIALS)
+        }
+    }
 }
 
-/// The suite is 72 `-release` codon builds (about six minutes), which a pull-request CI job cannot afford; like the full spec sweep it runs in the `slow_test` lane, and locally on demand.
 fn main() {
-    if !cfg!(feature = "slow_test") {
-        println!("codon wasi_testsuite runs under --features slow_test: 72 -release codon builds");
-        return;
-    }
     dewasm_test_helper::wasi_testsuite_main(&CodonWasi);
 }
