@@ -3,28 +3,28 @@
 //! Lowering conventions:
 //! - i32/i64 are masked-unsigned perl integers (IV/UV); signed views via `Rt::s32`/`Rt::s64` only where an instruction needs them.
 //!   Operations whose intermediates exceed the NV-exact range (i32 mul, all i64 add/sub/mul, div/rem, shr_s) live in runtime helpers built on tightly-scoped `use integer` blocks or the exact unsigned-division idiom.
-//! - f32/f64 are native NVs; f32 results are re-rounded with `Rt::f32` (with the pack-'f' overflow boundary handled in software), NaN bit paths go through software bit conversion, and division goes through `Rt::fdiv` because perl dies on `x / 0.0`.
+//! - f32/f64 are native NVs; add/sub/mul are inlined as native arithmetic plus a pack round-trip, with the runtime helpers as the fallback for the results the inline form cannot finish (exact zero for f64; zero, NaN, and infinity for f32); f32 results are re-rounded with `Rt::f32` (with the pack-'f' overflow boundary handled in software), NaN bit paths go through software bit conversion, and division goes through `Rt::fdiv` because perl dies on `x / 0.0`.
 //! - Control flow lowers to perl's native labeled blocks: `Block` becomes `Ln: { ... }`, `Loop` becomes `Ln: while (1) { ... last Ln; }`, and every `br` is a direct `last Ln`/`next Ln`: `last`/`next` escape any enclosing labeled frame at arbitrary depth, so the flag-variable cascades Ruby and Python need do not exist here.
 //! - Call-stack exhaustion is enforced by an explicit depth counter (`local $Rt::DEPTH`), because runaway perl recursion only stops at the OOM killer.
 //!
 //! The runtime is composed from per-method units in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`).
 //! Perl package names are absolute, so `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`) by rewriting the `Rt::` prefix at bundle time; `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, load_method,
-    local_runs, module_name_error, signed_view_rel_op, stmts_use_tail_calls, store_method,
-    type_key, wasi_bundled, Backend, CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_boolean, is_ident, is_wasi_module, local_runs,
+    module_name_error, signed_view_rel_op, stmts_use_tail_calls, type_key, wasi_bundled, Backend,
+    CodeWriter, GenOptions, Mode, OutputFile, RuntimeBundler, RuntimeLinkage, RuntimeScope,
+    SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Module, Stmt, Temp,
-    UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, LoadOp, Module, Stmt,
+    StoreOp, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -168,6 +168,12 @@ fn generate_package_inner(
         data_offsets,
         rt_name,
         eval_barriers: RefCell::new(Vec::new()),
+        float_temp_used: Cell::new(false),
+        float_pair_height: Cell::new(0),
+        mem_ref_used: Cell::new(false),
+        mem_load_addr_used: Cell::new(false),
+        mem_store_addr_used: Cell::new(false),
+        mem_store_value_used: Cell::new(false),
     };
     let mut wb = CodeWriter::new("\t");
     gen.package(&mut wb, package_name);
@@ -466,6 +472,18 @@ struct Gen<'a> {
     rt_name: String,
     /// Stack of currently open `try_table` `eval` barriers, innermost last: see `branch`, `cross_eval_barrier`, and `emit_try_table`.
     eval_barriers: RefCell<Vec<(u32, RefCell<Vec<Escape>>)>>,
+    /// Whether the function body being rendered used the `$__ft` float fast-path scratch (see `float_fast`); reset per function, read to emit its declaration.
+    float_temp_used: Cell<bool>,
+    /// The highest `$__fa{h}`/`$__fb{h}` operand-pair height the body being rendered used, 0 for none; reset per function.
+    float_pair_height: Cell<u32>,
+    /// Whether the body being rendered accessed linear memory inline (any load or store), needing the `$__mem` ref to the byte string; reset per function.
+    mem_ref_used: Cell<bool>,
+    /// Whether the body bound a non-leaf load address to `$__ma`; reset per function.
+    mem_load_addr_used: Cell<bool>,
+    /// Whether the body bound a non-leaf store address to `$__msa`; reset per function.
+    mem_store_addr_used: Cell<bool>,
+    /// Whether the body bound a non-leaf store value to `$__mv`; reset per function.
+    mem_store_value_used: Cell<bool>,
 }
 
 impl<'a> Gen<'a> {
@@ -993,7 +1011,46 @@ impl<'a> Gen<'a> {
             };
             w.line(format!("my {decl};"));
         }
-        self.emit_seq(w, &func.body);
+        // The body renders first, into its own writer: the float fast path (`float_fast`) and the inline memory accesses (`load_expr`, `store_stmt`) discover their scratch-lexical needs while rendering, and the declarations must precede the spliced body.
+        self.float_temp_used.set(false);
+        self.float_pair_height.set(0);
+        self.mem_ref_used.set(false);
+        self.mem_load_addr_used.set(false);
+        self.mem_store_addr_used.set(false);
+        self.mem_store_value_used.set(false);
+        let mut bw = CodeWriter::new("\t");
+        // Body lines sit two levels deep: the package block and the sub.
+        bw.indent();
+        bw.indent();
+        self.emit_seq(&mut bw, &func.body);
+        let body = bw.finish();
+        if self.float_temp_used.get() {
+            w.line("my $__ft;");
+        }
+        let pairs = self.float_pair_height.get();
+        if pairs > 0 {
+            let names: Vec<String> = (1..=pairs)
+                .flat_map(|h| [format!("$__fa{h}"), format!("$__fb{h}")])
+                .collect();
+            w.line(format!("my ({});", names.join(", ")));
+        }
+        if self.mem_ref_used.get() {
+            // One ref per call: `grow` appends to the same scalar in place, so the ref stays valid across calls.
+            w.line("my $__mem = \\$self->{memory}{data};");
+        }
+        if self.mem_load_addr_used.get() {
+            w.line("my $__ma;");
+        }
+        match (
+            self.mem_store_addr_used.get(),
+            self.mem_store_value_used.get(),
+        ) {
+            (true, true) => w.line("my ($__msa, $__mv);"),
+            (true, false) => w.line("my $__msa;"),
+            (false, true) => w.line("my $__mv;"),
+            (false, false) => {}
+        }
+        w.raw(&body);
         w.line("return;");
         w.dedent();
         w.line("}");
@@ -1095,14 +1152,7 @@ impl<'a> Gen<'a> {
                 addr,
                 value,
                 offset,
-            } => {
-                w.line(format!(
-                    "$self->{{memory}}->{}({}, {});",
-                    self.mem(store_method(*op)),
-                    self.addr(addr, *offset),
-                    self.expr(value)
-                ));
-            }
+            } => self.store_stmt(w, *op, addr, value, *offset),
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
                 w.line(format!("if ({}) {{", self.cond(cond)));
@@ -1530,18 +1580,167 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Reference a Memory method, recording its unit.
-    fn mem<'n>(&self, name: &'n str) -> &'n str {
-        self.use_unit(&format!("memory/{name}"));
-        name
-    }
-
-    fn addr(&self, addr: &Expr, offset: u64) -> String {
-        if offset == 0 {
+    /// The inline bounds test and access address for a load spanning `size` bytes at `addr + offset`.
+    /// A leaf address is duplicated into both (with `offset + size` folded into the bounds constant); anything else is bound to `$__ma` inside the bounds test, which the read then consumes immediately, with nothing else evaluating in between.
+    /// Address sums cannot wrap: the address is a masked u32 and `offset` is below 2^32, so both stay inside a 64-bit IV.
+    fn load_addr(&self, addr: &Expr, offset: u64, size: u64) -> (String, String) {
+        if let Expr::I32Const(v) = addr {
+            let base = u64::from(*v) + offset;
+            return (
+                format!("{} <= length($$__mem)", base + size),
+                base.to_string(),
+            );
+        }
+        if is_leaf(addr) {
+            let leaf = self.expr(addr);
+            let access = if offset == 0 {
+                leaf.clone()
+            } else {
+                format!("({leaf}) + {offset}")
+            };
+            return (
+                format!("({leaf}) + {} <= length($$__mem)", offset + size),
+                access,
+            );
+        }
+        self.mem_load_addr_used.set(true);
+        let rendered = if offset == 0 {
             self.expr(addr)
         } else {
             format!("{} + {offset}", self.expr(addr))
+        };
+        (
+            format!("($__ma = {rendered}) + {size} <= length($$__mem)"),
+            "$__ma".to_string(),
+        )
+    }
+
+    /// An `Expr::Load` as an inline bounds-tested read of the `$__mem` byte string, trapping in the untaken branch.
+    /// The fast branch always yields a fresh scalar (`unpack`/`vec` return values), never a bare shared lexical.
+    fn load_expr(&self, op: LoadOp, addr: &Expr, offset: u64) -> String {
+        use LoadOp::*;
+        // Signed narrow loads sign-extend the unsigned read; f32 goes through the bit-exact helper to preserve NaN sign/payload.
+        match op {
+            I32Load8S => return self.sext_load(I32Load8U, addr, offset, 8, "0xFFFFFFFF"),
+            I32Load16S => return self.sext_load(I32Load16U, addr, offset, 16, "0xFFFFFFFF"),
+            I64Load8S => return self.sext_load(I64Load8U, addr, offset, 8, "0xFFFFFFFFFFFFFFFF"),
+            I64Load16S => {
+                return self.sext_load(I64Load16U, addr, offset, 16, "0xFFFFFFFFFFFFFFFF")
+            }
+            I64Load32S => {
+                return self.sext_load(I64Load32U, addr, offset, 32, "0xFFFFFFFFFFFFFFFF")
+            }
+            F32Load => {
+                return format!(
+                    "{}({})",
+                    self.rt("f32_from_bits"),
+                    self.load_expr(I32Load, addr, offset)
+                )
+            }
+            _ => {}
         }
+        self.mem_ref_used.set(true);
+        let size = match op {
+            I32Load | I64Load32U => 4,
+            I64Load | F64Load => 8,
+            I32Load16U | I64Load16U => 2,
+            I32Load8U | I64Load8U => 1,
+            I32Load8S | I32Load16S | I64Load8S | I64Load16S | I64Load32S | F32Load => {
+                unreachable!("rewritten to the unsigned read above")
+            }
+        };
+        let (bounds, a) = self.load_addr(addr, offset, size);
+        let read = match op {
+            I32Load | I64Load32U => format!("unpack('V', substr($$__mem, {a}, 4))"),
+            I64Load => format!("unpack('Q<', substr($$__mem, {a}, 8))"),
+            // pack/unpack 'd' is a byte copy, so NaN payloads survive.
+            F64Load => format!("unpack('d<', substr($$__mem, {a}, 8))"),
+            I32Load16U | I64Load16U => format!("unpack('v', substr($$__mem, {a}, 2))"),
+            I32Load8U | I64Load8U => format!("vec($$__mem, {a}, 8)"),
+            _ => unreachable!("size match above already excluded these"),
+        };
+        format!(
+            "({bounds} ? {read} : {}('out of bounds memory access'))",
+            self.rt("trap")
+        )
+    }
+
+    /// A signed narrow load: the unsigned inline read wrapped in `Rt::sext`.
+    fn sext_load(
+        &self,
+        unsigned: LoadOp,
+        addr: &Expr,
+        offset: u64,
+        bits: u32,
+        mask: &str,
+    ) -> String {
+        format!(
+            "{}({}, {bits}, {mask})",
+            self.rt("sext"),
+            self.load_expr(unsigned, addr, offset)
+        )
+    }
+
+    /// A `Stmt::Store` as an inline write to the `$__mem` byte string behind a trap-if-out-of-bounds statement.
+    /// Wasm evaluates the address, then the value, then traps: a non-leaf value must be computed before the bounds test, so it is bound to `$__mv` first; a leaf cannot trap and is duplicated instead.
+    /// The store address binds `$__msa`, not `$__ma`: a non-leaf store value may contain loads, and those reuse `$__ma` transiently after the store address was bound.
+    fn store_stmt(&self, w: &mut CodeWriter, op: StoreOp, addr: &Expr, value: &Expr, offset: u64) {
+        use StoreOp::*;
+        self.mem_ref_used.set(true);
+        let size: u64 = match op {
+            I32Store | I64Store32 | F32Store => 4,
+            I64Store | F64Store => 8,
+            I32Store16 | I64Store16 => 2,
+            I32Store8 | I64Store8 => 1,
+        };
+        let (guard_sum, a) = if let Expr::I32Const(v) = addr {
+            let base = u64::from(*v) + offset;
+            ((base + size).to_string(), base.to_string())
+        } else if is_leaf(addr) {
+            let leaf = self.expr(addr);
+            let access = if offset == 0 {
+                leaf.clone()
+            } else {
+                format!("({leaf}) + {offset}")
+            };
+            (format!("({leaf}) + {}", offset + size), access)
+        } else {
+            self.mem_store_addr_used.set(true);
+            let rendered = if offset == 0 {
+                self.expr(addr)
+            } else {
+                format!("{} + {offset}", self.expr(addr))
+            };
+            w.line(format!("$__msa = {rendered};"));
+            (format!("$__msa + {size}"), "$__msa".to_string())
+        };
+        let v = if is_leaf(value) {
+            self.expr(value)
+        } else {
+            self.mem_store_value_used.set(true);
+            w.line(format!("$__mv = {};", self.expr(value)));
+            "$__mv".to_string()
+        };
+        w.line(format!(
+            "{}('out of bounds memory access') if {guard_sum} > length($$__mem);",
+            self.rt("trap")
+        ));
+        let write = match op {
+            I32Store | I64Store32 => {
+                format!("substr($$__mem, {a}, 4, pack('V', {v} & 0xFFFFFFFF));")
+            }
+            I64Store => format!("substr($$__mem, {a}, 8, pack('Q<', {v} & 0xFFFFFFFFFFFFFFFF));"),
+            I32Store16 | I64Store16 => format!("substr($$__mem, {a}, 2, pack('v', {v} & 0xFFFF));"),
+            I32Store8 | I64Store8 => format!("vec($$__mem, {a}, 8) = {v} & 0xFF;"),
+            // pack 'd' is a byte copy, so NaN payloads survive.
+            F64Store => format!("substr($$__mem, {a}, 8, pack('d<', {v}));"),
+            // The bit-exact helper preserves NaN sign/payload.
+            F32Store => format!(
+                "substr($$__mem, {a}, 4, pack('V', {}({v}) & 0xFFFFFFFF));",
+                self.rt("f32_bits")
+            ),
+        };
+        w.line(write);
     }
 
     fn expr(&self, expr: &Expr) -> String {
@@ -1572,14 +1771,9 @@ impl<'a> Gen<'a> {
                 format!("({} ? 0 : 1)", self.cond(a))
             }
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
+            Expr::Bin(op, a, b) if float_inline_op(*op).is_some() => self.float_fast(*op, a, b),
             Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
-            Expr::Load { op, addr, offset } => {
-                format!(
-                    "$self->{{memory}}->{}({})",
-                    self.mem(load_method(*op)),
-                    self.addr(addr, *offset)
-                )
-            }
+            Expr::Load { op, addr, offset } => self.load_expr(*op, addr, *offset),
             Expr::Select { cond, then, els } => {
                 format!(
                     "({} ? {} : {})",
@@ -1724,21 +1918,105 @@ impl<'a> Gen<'a> {
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
             I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            // Float add/sub/mul go through helpers because perl's arithmetic operators take an integer fast path that keeps integer exactness beyond double precision and drops -0.0 (measured).
-            F32Add => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fadd")),
-            F32Sub => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fsub")),
-            F32Mul => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fmul")),
+            // Float division stays a helper call because perl dies on `x / 0.0`; add/sub/mul are rendered by `float_fast` and never reach here.
             F32Div => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fdiv")),
-            F64Add => format!("{}({a}, {b})", self.rt("fadd")),
-            F64Sub => format!("{}({a}, {b})", self.rt("fsub")),
-            F64Mul => format!("{}({a}, {b})", self.rt("fmul")),
             F64Div => format!("{}({a}, {b})", self.rt("fdiv")),
+            F32Add | F32Sub | F32Mul | F64Add | F64Sub | F64Mul => {
+                unreachable!("op {op:?} is a float fast-path op, rendered by `float_fast`")
+            }
             F32Min | F64Min => format!("{}({a}, {b})", self.rt("fmin")),
             F32Max | F64Max => format!("{}({a}, {b})", self.rt("fmax")),
             F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
             F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
             _ => unreachable!("op {op:?} is a comparison, rendered by `rel`"),
         }
+    }
+
+    /// The inline fast path for float add/sub/mul: the native op plus a pack round-trip that restores IEEE rounding (perl's operators take an integer fast path that keeps integer exactness beyond double precision and drops -0.0), with the runtime helper as the fallback for the results the inline form cannot finish.
+    /// The f64 test must be exactly `!= 0.0`: only an exact-zero result needs the helper's operand-sign fix, and a NaN result passes the test and stays inline (pack 'd' copies its bytes unchanged).
+    /// The f32 test adds `$__ft - $__ft == 0`, which is false exactly for NaN and infinity, so NaN payloads and the pack-'f' overflow clamp stay in `Rt::f32`.
+    fn float_fast(&self, op: BinOp, a: &Expr, b: &Expr) -> String {
+        let (sym, helper, f32_round) = float_inline_op(op).expect("caller matched a fast-path op");
+        self.float_temp_used.set(true);
+        // The fallback branch re-evaluates only lexicals and leaves (`Expr` trees contain no calls and no side effects, so a leaf re-evaluation is sound).
+        // A non-leaf operand's binding nests inside the arithmetic, never behind the comma operator: these expressions land in list contexts, where a parenthesized comma expression would flatten into multiple arguments.
+        let h = 1 + fdepth(a).max(fdepth(b));
+        let operand = |side: &str, e: &Expr| {
+            let rendered = self.expr(e);
+            if is_leaf(e) {
+                (rendered.clone(), rendered)
+            } else {
+                self.float_pair_height
+                    .set(self.float_pair_height.get().max(h));
+                let lexical = format!("$__f{side}{h}");
+                (format!("({lexical} = {rendered})"), lexical)
+            }
+        };
+        let (a_inline, a_fallback) = operand("a", a);
+        let (b_inline, b_fallback) = operand("b", b);
+        // The fast branch yields `$__ft + 0`, never the bare lexical: in a list (a call's arguments), perl aliases each element to the yielded scalar until the callee copies `@_`, so a later sibling fast-path expression would overwrite an earlier bare `$__ft`.
+        // The copy is exact for every value the branch can yield: `x + 0 == x` bit-for-bit except for -0.0 (excluded by the zero test) and signaling NaN (the arithmetic already quieted any NaN result).
+        if f32_round {
+            format!(
+                "(($__ft = unpack('f<', pack('f<', {a_inline} {sym} {b_inline}))) != 0.0 && $__ft - $__ft == 0 ? $__ft + 0 : {}({}({a_fallback}, {b_fallback})))",
+                self.rt("f32"),
+                self.rt(helper)
+            )
+        } else {
+            format!(
+                "(($__ft = unpack('d<', pack('d<', {a_inline} {sym} {b_inline}))) != 0.0 ? $__ft + 0 : {}({a_fallback}, {b_fallback}))",
+                self.rt(helper)
+            )
+        }
+    }
+}
+
+/// The float ops with an inline fast path (`float_fast`): the perl operator, the runtime fallback helper, and whether the result re-rounds to f32.
+fn float_inline_op(op: BinOp) -> Option<(&'static str, &'static str, bool)> {
+    use BinOp::*;
+    match op {
+        F32Add => Some(("+", "fadd", true)),
+        F32Sub => Some(("-", "fsub", true)),
+        F32Mul => Some(("*", "fmul", true)),
+        F64Add => Some(("+", "fadd", false)),
+        F64Sub => Some(("-", "fsub", false)),
+        F64Mul => Some(("*", "fmul", false)),
+        _ => None,
+    }
+}
+
+/// Whether an operand is duplicated textually into multiple emission sites (a float fast path's fallback branch, a memory access's bounds test plus read or write): pure and cheap to re-evaluate.
+/// Anything else is bound to a lexical instead, so nested chains cannot grow the output exponentially.
+fn is_leaf(e: &Expr) -> bool {
+    matches!(
+        e,
+        Expr::I32Const(_)
+            | Expr::I64Const(_)
+            | Expr::F32Const(_)
+            | Expr::F64Const(_)
+            | Expr::Temp(_)
+            | Expr::LocalGet(_)
+            | Expr::GlobalGet(_)
+    )
+}
+
+/// The `$__fa{h}`/`$__fb{h}` pair height of a float fast-path node: one above everything it contains.
+/// A node binds its pair at its own height, and every float node strictly contains its operands, so whatever runs after a binding (the second operand's own bindings included) writes only lower-numbered pairs and the bound value survives to the fallback.
+fn fdepth(e: &Expr) -> u32 {
+    match e {
+        Expr::Bin(op, a, b) if float_inline_op(*op).is_some() => 1 + fdepth(a).max(fdepth(b)),
+        Expr::Bin(_, a, b) => fdepth(a).max(fdepth(b)),
+        Expr::Un(_, a) => fdepth(a),
+        Expr::Load { addr, .. } => fdepth(addr),
+        Expr::Select { cond, then, els } => fdepth(cond).max(fdepth(then)).max(fdepth(els)),
+        Expr::I32Const(_)
+        | Expr::I64Const(_)
+        | Expr::F32Const(_)
+        | Expr::F64Const(_)
+        | Expr::Temp(_)
+        | Expr::LocalGet(_)
+        | Expr::GlobalGet(_)
+        | Expr::MemorySize => 0,
     }
 }
 
@@ -1848,6 +2126,173 @@ mod branch_shape {
         );
         assert!(source.contains("::DEPTH + 5;"), "fat weight:\n{source}");
         assert!(source.contains("::DEPTH + 1;"), "slim weight:\n{source}");
+    }
+}
+
+/// Codegen-shape test for the float fast path: add/sub/mul must come out inline (native op plus pack round-trip) with the runtime helper only in the fallback branch, and a non-leaf operand must be bound to a height-numbered lexical.
+#[cfg(test)]
+mod float_shape {
+    use super::*;
+
+    fn generate(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("valid wat");
+        let module = dewasm_core::build_module(&bytes).expect("buildable module");
+        let (source, _) = generate_package_with_units(
+            &module,
+            "Shape",
+            &RuntimeLinkage::Alias("Rt".to_string()),
+            false,
+        )
+        .expect("generates");
+        source
+    }
+
+    #[test]
+    fn f64_add_is_inline_with_helper_fallback() {
+        let source = generate(
+            r#"(module
+              (func (export "f") (param f64 f64) (result f64)
+                (f64.add (local.get 0) (local.get 1))))"#,
+        );
+        assert!(source.contains("my $__ft;"), "scratch decl:\n{source}");
+        assert!(
+            source.contains("unpack('d<', pack('d<', $l0 + $l1))"),
+            "inline round-trip:\n{source}"
+        );
+        assert!(
+            source.contains("!= 0.0 ? $__ft + 0 : Rt::fadd($l0, $l1))"),
+            "helper fallback in ternary position:\n{source}"
+        );
+    }
+
+    #[test]
+    fn f32_mul_guards_nan_and_infinity() {
+        let source = generate(
+            r#"(module
+              (func (export "f") (param f32 f32) (result f32)
+                (f32.mul (local.get 0) (local.get 1))))"#,
+        );
+        assert!(
+            source.contains("unpack('f<', pack('f<', $l0 * $l1))"),
+            "inline round-trip:\n{source}"
+        );
+        assert!(
+            source.contains("$__ft - $__ft == 0 ? $__ft + 0 : Rt::f32(Rt::fmul($l0, $l1))"),
+            "NaN/infinity fallback:\n{source}"
+        );
+    }
+
+    #[test]
+    fn nested_operand_binds_height_lexical() {
+        // The outer add sits at height 2 (its operand is itself a float fast-path node), so its non-leaf operand binds pair 2 and the declaration covers pairs 1 and 2.
+        let source = generate(
+            r#"(module
+              (func (export "f") (param f64 f64 f64) (result f64)
+                (f64.add (f64.add (local.get 0) (local.get 1)) (local.get 2))))"#,
+        );
+        assert!(
+            source.contains("my ($__fa1, $__fb1, $__fa2, $__fb2);"),
+            "pair decls:\n{source}"
+        );
+        assert!(source.contains("($__fa2 = "), "operand binding:\n{source}");
+        assert!(
+            source.contains("Rt::fadd($__fa2, $l2)"),
+            "fallback reads the bound lexical:\n{source}"
+        );
+    }
+}
+
+/// Codegen-shape test for inline linear memory: loads and stores must come out as direct `unpack`/`substr`/`vec` accesses on the `$__mem` byte-string ref behind an inline bounds test, never as `Rt::Memory` method calls, with NaN-sensitive f32 loads kept on the software bit path.
+#[cfg(test)]
+mod memory_shape {
+    use super::*;
+
+    fn generate(wat: &str) -> String {
+        let bytes = wat::parse_str(wat).expect("valid wat");
+        let module = dewasm_core::build_module(&bytes).expect("buildable module");
+        let (source, _) = generate_package_with_units(
+            &module,
+            "Shape",
+            &RuntimeLinkage::Alias("Rt".to_string()),
+            false,
+        )
+        .expect("generates");
+        source
+    }
+
+    #[test]
+    fn i32_load_is_inline_with_folded_bounds() {
+        let source = generate(
+            r#"(module
+              (memory 1)
+              (func (export "f") (param i32) (result i32)
+                (i32.load offset=16 (local.get 0))))"#,
+        );
+        assert!(
+            source.contains("my $__mem = \\$self->{memory}{data};"),
+            "mem ref decl:\n{source}"
+        );
+        assert!(
+            source.contains("($l0) + 20 <= length($$__mem)"),
+            "folded bounds constant:\n{source}"
+        );
+        assert!(
+            source.contains("unpack('V', substr($$__mem, ($l0) + 16, 4))"),
+            "inline read:\n{source}"
+        );
+        assert!(!source.contains("->i32_load"), "method call:\n{source}");
+    }
+
+    #[test]
+    fn i32_store8_writes_vec_behind_trap() {
+        let source = generate(
+            r#"(module
+              (memory 1)
+              (func (export "f") (param i32 i32)
+                (i32.store8 (local.get 0) (local.get 1))))"#,
+        );
+        let trap = source
+            .find("Rt::trap('out of bounds memory access') if ($l0) + 1 > length($$__mem);")
+            .expect("inline trap statement");
+        let write = source
+            .find("vec($$__mem, $l0, 8) = $l1 & 0xFF;")
+            .expect("inline vec write");
+        assert!(trap < write, "trap precedes the write:\n{source}");
+        assert!(!source.contains("->i32_store8"), "method call:\n{source}");
+    }
+
+    #[test]
+    fn nested_load_address_binds_lexical() {
+        let source = generate(
+            r#"(module
+              (memory 1)
+              (func (export "f") (param i32) (result i32)
+                (i32.load (i32.load (local.get 0)))))"#,
+        );
+        assert!(source.contains("my $__ma;"), "address decl:\n{source}");
+        assert!(source.contains("($__ma = "), "address binding:\n{source}");
+        assert!(
+            source.contains("unpack('V', substr($$__mem, $__ma, 4))"),
+            "read of the bound address:\n{source}"
+        );
+    }
+
+    #[test]
+    fn f32_load_keeps_the_bit_path() {
+        let source = generate(
+            r#"(module
+              (memory 1)
+              (func (export "f") (param i32) (result f32)
+                (f32.load (local.get 0))))"#,
+        );
+        assert!(
+            source.contains("Rt::f32_from_bits(("),
+            "software bit path around the inline read:\n{source}"
+        );
+        assert!(
+            source.contains("unpack('V', substr($$__mem, $l0, 4))"),
+            "inline i32 read inside:\n{source}"
+        );
     }
 }
 

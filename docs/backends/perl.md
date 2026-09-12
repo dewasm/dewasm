@@ -59,7 +59,8 @@ Authoritative matrix: [docs/support.md](../support.md).
 - **Call depth is bounded by a counter.**
   Perl recursion grows on the heap and only stops at the OOM killer, so generated functions maintain an explicit depth counter (`$Rt::DEPTH`, limit `$Rt::LIMIT` = 100000) and trap with `call stack exhausted` past it.
   Raise `$Package::Rt::LIMIT` for legitimately deeper recursion (each frame costs heap).
-- Float arithmetic goes through helpers (`Rt::fadd` and friends): perl's own operators take an integer fast path that exceeds double precision and drops `-0.0`, and perl dies on `x / 0.0` and `sqrt(-1)`.
+- Float arithmetic corrects perl's own operators, which take an integer fast path that exceeds double precision and drops `-0.0`, and perl dies on `x / 0.0` and `sqrt(-1)`.
+  Add/sub/mul are inlined as the native operation plus a `pack` round-trip, falling back to the runtime helpers (`Rt::fadd` and friends) for the rare results the inline form cannot finish; division and the rest stay helper calls.
 - Numeric conventions are the shared masked-unsigned model; `use integer` appears only inside tightly-scoped runtime helpers.
 - **File timestamps are capped below nanosecond precision.**
   Core perl's only sub-second time APIs (`Time::HiRes` utime/stat) pass NV seconds (~400ns resolution at the current epoch), and there is no `lutimes`/`utimensat`, so a symlink cannot carry its own times (`path_filestat_set_times` without SYMLINK_FOLLOW sets the target's).

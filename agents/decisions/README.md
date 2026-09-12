@@ -110,6 +110,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 88 | [Tail Calls Join the Accepted Input, Declared Per Backend](88-tail-calls-accepted-input.md) | Accepted |
 | 89 | [Park a Pending Tail Call, Never Allocate One](89-park-the-pending-tail-call.md) | Accepted |
 | 90 | [Rewrite a Self Tail Call into a Loop](90-self-tail-call-to-loop.md) | Accepted |
+| 91 | [Perl Inline Fast Paths for Float Arithmetic and Memory Access](91-perl-inline-fast-paths.md) | Accepted |
 
 ## Adding a new decision
 
