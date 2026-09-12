@@ -1,0 +1,6 @@
+# requires: rt/trap
+@staticmethod
+def i32_rem_u(a: UInt[32], b: UInt[32]) -> UInt[32]:
+    if b == UInt[32](0):
+        Rt.trap("integer divide by zero")
+    return a % b

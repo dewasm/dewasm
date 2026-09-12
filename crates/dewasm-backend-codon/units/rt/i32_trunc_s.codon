@@ -1,0 +1,9 @@
+# requires: rt/trap, rt/f64_trunc
+@staticmethod
+def i32_trunc_s(x: float) -> UInt[32]:
+    if x != x:
+        Rt.trap("invalid conversion to integer")
+    t = Rt.f64_trunc(x)
+    if t < -2147483648.0 or t > 2147483647.0:
+        Rt.trap("integer overflow")
+    return UInt[32](Int[32](int(t)))

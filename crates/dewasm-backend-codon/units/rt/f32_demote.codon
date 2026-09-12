@@ -1,0 +1,8 @@
+# requires: rt/f64_bits, rt/f32_from_bits
+# A NaN input demotes to a quiet NaN carrying its sign (matching the Go and Java backends' payload shape).
+@staticmethod
+def f32_demote(x: float) -> float32:
+    if x != x:
+        b = Rt.f64_bits(x)
+        return Rt.f32_from_bits((UInt[32](b >> UInt[64](32)) & UInt[32](0x80000000)) | UInt[32](0x7FC00000))
+    return float32(x)

@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def i64_ctz(x: UInt[64]) -> UInt[64]:
+    %r = call i64 @llvm.cttz.i64(i64 %x, i1 false)
+    ret i64 %r

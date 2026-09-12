@@ -1,0 +1,9 @@
+# requires: rt/boxed
+slots: List[Optional[Rt.Funcref]]
+max: int
+
+def __init__(self, min: int, max: int):
+    self.slots = List[Optional[Rt.Funcref]]()
+    for _ in range(min):
+        self.slots.append(None)
+    self.max = max

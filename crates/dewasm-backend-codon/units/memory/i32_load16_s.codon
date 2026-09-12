@@ -1,0 +1,5 @@
+# requires: rt/trap, rt/raw_load16
+def i32_load16_s(self, a: int) -> UInt[32]:
+    if a + 2 > self.n:
+        Rt.trap("out of bounds memory access")
+    return UInt[32](Int[32](Int[16](Rt.raw_load16(self.data + a))))

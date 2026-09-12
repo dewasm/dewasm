@@ -1,0 +1,16 @@
+# requires: memory/_class
+# The bundled WASI preview 1 host, built on libc via Codon's C interop.
+# args and env are pre-encoded to UTF-8 so the sizes reported to the guest are byte lengths.
+# `memory` is bound by the generated constructor once the instance's memory exists.
+args: List[bytes]
+env: List[bytes]
+memory: Optional[Rt.Memory]
+
+def __init__(self, args: List[str], env: Dict[str, str], preopens: Dict[str, str]):
+    self.args = List[bytes]()
+    for a in args:
+        self.args.append(a.encode())
+    self.env = List[bytes]()
+    for k in env:
+        self.env.append((k + "=" + env[k]).encode())
+    self.memory = None

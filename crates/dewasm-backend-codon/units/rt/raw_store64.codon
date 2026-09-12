@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_store64(p: Ptr[byte], v: UInt[64]) -> None:
+    store i64 %v, ptr %p, align 1
+    ret {} {}

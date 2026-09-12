@@ -1,0 +1,11 @@
+# requires: rt/f64_trunc
+@staticmethod
+def i64_trunc_sat_s(x: float) -> UInt[64]:
+    if x != x:
+        return UInt[64](0)
+    t = Rt.f64_trunc(x)
+    if t < -9223372036854775808.0:
+        return UInt[64](0x8000000000000000)
+    if t >= 9223372036854775808.0:
+        return UInt[64](0x7FFFFFFFFFFFFFFF)
+    return UInt[64](int(t))

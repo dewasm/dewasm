@@ -1,0 +1,9 @@
+# requires: memory/i32_store
+def wasi_environ_sizes_get(self, envc_ptr: UInt[32], buf_size_ptr: UInt[32]) -> UInt[32]:
+    m = self.memory
+    total = 0
+    for e in self.env:
+        total += len(e) + 1
+    m.i32_store(int(envc_ptr), UInt[32](len(self.env)))
+    m.i32_store(int(buf_size_ptr), UInt[32](total))
+    return UInt[32](0)

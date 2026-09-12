@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/link_error
+@staticmethod
+def import_global_i32(e: Rt.Extern, mod: str, name: str) -> Rt.Global[UInt[32]]:
+    g = e.g_i32
+    if g is not None:
+        return g
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

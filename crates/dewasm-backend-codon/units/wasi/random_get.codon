@@ -1,0 +1,18 @@
+# requires: rt/trap
+# getentropy is the portable libc entropy call (macOS 10.12+, glibc 2.25+), capped at 256 bytes per call.
+def wasi_random_get(self, buf: UInt[32], ln: UInt[32]) -> UInt[32]:
+    from C import getentropy(Ptr[byte], int) -> int
+    m = self.memory
+    b = int(buf)
+    n = int(ln)
+    if b + n > m.n:
+        Rt.trap("out of bounds memory access")
+    off = 0
+    while off < n:
+        chunk = n - off
+        if chunk > 256:
+            chunk = 256
+        if getentropy(m.data + b + off, chunk) != 0:
+            return UInt[32](29)
+        off += chunk
+    return UInt[32](0)

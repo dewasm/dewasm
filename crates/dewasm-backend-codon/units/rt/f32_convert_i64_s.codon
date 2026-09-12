@@ -1,0 +1,6 @@
+# A single direct rounding: converting through double first double-rounds (the conversions.wast rounding-direction cases).
+@llvm
+@staticmethod
+def f32_convert_i64_s(x: UInt[64]) -> float32:
+    %r = sitofp i64 %x to float
+    ret float %r

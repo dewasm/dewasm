@@ -1,0 +1,6 @@
+# A single direct rounding: converting through double first double-rounds.
+@llvm
+@staticmethod
+def f32_convert_i64_u(x: UInt[64]) -> float32:
+    %r = uitofp i64 %x to float
+    ret float %r

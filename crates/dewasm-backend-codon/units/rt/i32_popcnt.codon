@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def i32_popcnt(x: UInt[32]) -> UInt[32]:
+    %r = call i32 @llvm.ctpop.i32(i32 %x)
+    ret i32 %r

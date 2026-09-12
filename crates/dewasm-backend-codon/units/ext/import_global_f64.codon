@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/link_error
+@staticmethod
+def import_global_f64(e: Rt.Extern, mod: str, name: str) -> Rt.Global[float]:
+    g = e.g_f64
+    if g is not None:
+        return g
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

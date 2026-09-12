@@ -1,0 +1,2 @@
+def wasi_sched_yield(self) -> UInt[32]:
+    return UInt[32](0)

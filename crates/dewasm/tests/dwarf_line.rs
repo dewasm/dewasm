@@ -215,7 +215,7 @@ fn ruby_dwarf_line_markers_are_neutral_and_run() {
 /// `--dwarf-line` is accepted by every target, whether it renders markers (Python, Perl) or drops them (Bash, Java): only that conversion succeeds is asserted here, marker content is the Go and Ruby cases' business.
 #[test]
 fn dwarf_line_flag_is_accepted_by_all_targets() {
-    for target in ["bash", "python", "perl", "java"] {
+    for target in ["bash", "python", "perl", "java", "codon"] {
         let dir = tempdir(target);
         let out = dir.join(format!("out.{target}"));
         let r = run_dewasm(&[

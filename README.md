@@ -76,7 +76,7 @@ $ cargo build --release
 
 ```console
 $ dewasm input.<wasm|wat>
-    --target <ruby|bash|python|perl|go|java>
+    --target <ruby|bash|python|perl|go|java|codon>
     --mode <standalone|library>
     -o output.<rb|sh|py|pl|go|java>
 ```

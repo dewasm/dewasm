@@ -1,0 +1,43 @@
+# requires: rt/trap
+# The boxed dynamic boundary, one unit because the three classes are inseparable: a boxed wasm value (f32 keeps its own single-precision field so boxing never re-rounds), the boxed function generated code subclasses per function, and the table slot pairing a structural type key with one.
+class Val:
+    k: int
+    i: UInt[64]
+    f: float
+    s: float32
+    def __init__(self, k: int, i: UInt[64], f: float, s: float32):
+        self.k = k
+        self.i = i
+        self.f = f
+        self.s = s
+    @staticmethod
+    def of_i32(x: UInt[32]) -> Rt.Val:
+        return Rt.Val(0, UInt[64](x), 0.0, float32(0.0))
+    @staticmethod
+    def of_i64(x: UInt[64]) -> Rt.Val:
+        return Rt.Val(1, x, 0.0, float32(0.0))
+    @staticmethod
+    def of_f32(x: float32) -> Rt.Val:
+        return Rt.Val(2, UInt[64](0), 0.0, x)
+    @staticmethod
+    def of_f64(x: float) -> Rt.Val:
+        return Rt.Val(3, UInt[64](0), x, float32(0.0))
+    def i32(self) -> UInt[32]:
+        return UInt[32](self.i)
+    def i64(self) -> UInt[64]:
+        return self.i
+    def f32(self) -> float32:
+        return self.s
+    def f64(self) -> float:
+        return self.f
+
+class Fn:
+    def invoke(self, a: List[Rt.Val]) -> List[Rt.Val]:
+        raise Rt.Trap("uncallable function")
+
+class Funcref:
+    ty: str
+    fn: Rt.Fn
+    def __init__(self, ty: str, fn: Rt.Fn):
+        self.ty = ty
+        self.fn = fn

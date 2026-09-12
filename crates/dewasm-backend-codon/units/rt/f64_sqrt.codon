@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_sqrt(x: float) -> float:
+    %r = call double @llvm.sqrt.f64(double %x)
+    ret double %r

@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/tag, rt/link_error
+@staticmethod
+def import_tag(e: Rt.Extern, mod: str, name: str) -> Rt.Tag:
+    t = e.tag
+    if t is not None:
+        return t
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

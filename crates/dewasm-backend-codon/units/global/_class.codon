@@ -1,0 +1,5 @@
+# A boxed mutable global, shared (never copied) across an instantiation boundary.
+value: T
+
+def __init__(self, v: T):
+    self.value = v

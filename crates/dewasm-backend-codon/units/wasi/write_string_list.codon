@@ -1,0 +1,13 @@
+# requires: memory/i32_store, memory/i32_store8
+def write_string_list(self, strings: List[bytes], list_ptr: UInt[32], buf_ptr: UInt[32]) -> UInt[32]:
+    m = self.memory
+    lp = int(list_ptr)
+    bp = int(buf_ptr)
+    for s in strings:
+        m.i32_store(lp, UInt[32](bp))
+        for k in range(len(s)):
+            m.i32_store8(bp + k, UInt[32](int(s[k])))
+        m.i32_store8(bp + len(s), UInt[32](0))
+        lp += 4
+        bp += len(s) + 1
+    return UInt[32](0)

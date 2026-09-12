@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_floor(x: float) -> float:
+    %r = call double @llvm.floor.f64(double %x)
+    ret double %r

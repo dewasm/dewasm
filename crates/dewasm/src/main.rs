@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use dewasm_backend::{Backend, DataFileConfig, GenOptions, Mode, RuntimeLinkage};
 use dewasm_backend_bash::BashBackend;
+use dewasm_backend_codon::CodonBackend;
 use dewasm_backend_go::GoBackend;
 use dewasm_backend_java::JavaBackend;
 use dewasm_backend_perl::PerlBackend;
@@ -17,7 +18,7 @@ struct Cli {
     /// Input file (.wasm or .wat)
     input: PathBuf,
 
-    /// Target language: ruby, bash, python, perl, go, or java.
+    /// Target language: ruby, bash, python, perl, go, java, or codon.
     #[arg(short, long)]
     target: String,
 
@@ -55,6 +56,7 @@ fn main() -> Result<()> {
         "ruby" => Box::new(RubyBackend),
         "bash" => Box::new(BashBackend),
         "python" => Box::new(PythonBackend),
+        "codon" => Box::new(CodonBackend),
         "perl" => Box::new(PerlBackend),
         "go" => Box::new(GoBackend),
         "java" => Box::new(JavaBackend),

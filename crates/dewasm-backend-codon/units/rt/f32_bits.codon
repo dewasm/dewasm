@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f32_bits(x: float32) -> UInt[32]:
+    %r = bitcast float %x to i32
+    ret i32 %r

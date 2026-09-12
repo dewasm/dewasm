@@ -1,0 +1,5 @@
+# requires: rt/trap, rt/raw_storef64
+def f64_store(self, a: int, v: float):
+    if a + 8 > self.n:
+        Rt.trap("out of bounds memory access")
+    Rt.raw_storef64(self.data + a, v)

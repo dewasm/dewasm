@@ -28,6 +28,7 @@ dewasm-backend-python.workspace = true
 dewasm-backend-perl.workspace = true
 dewasm-backend-go.workspace = true
 dewasm-backend-java.workspace = true
+dewasm-backend-codon.workspace = true
 # The benchmark suite's machine-readable result file.
 # Timings are not reproducible byte-for-byte, so this is a data drop, not a compared snapshot.
 serde.workspace = true

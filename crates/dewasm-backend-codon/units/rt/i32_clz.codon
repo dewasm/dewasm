@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def i32_clz(x: UInt[32]) -> UInt[32]:
+    %r = call i32 @llvm.ctlz.i32(i32 %x, i1 false)
+    ret i32 %r

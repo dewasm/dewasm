@@ -1,0 +1,17 @@
+# requires: rt/trap
+# memory.copy: overlap-safe (backward loop when the ranges overlap forward).
+def copy(self, d: UInt[32], s: UInt[32], ln: UInt[32]) -> None:
+    dst = int(d)
+    src = int(s)
+    n = int(ln)
+    if dst + n > self.n or src + n > self.n:
+        Rt.trap("out of bounds memory access")
+    if n == 0 or dst == src:
+        return
+    if dst < src:
+        str.memcpy(self.data + dst, self.data + src, n)
+    else:
+        i = n - 1
+        while i >= 0:
+            self.data[dst + i] = self.data[src + i]
+            i -= 1

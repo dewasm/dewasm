@@ -1,0 +1,7 @@
+# A data segment's bytes: a raw buffer plus its length.
+class Data:
+    p: Ptr[byte]
+    n: int
+    def __init__(self, p: Ptr[byte], n: int):
+        self.p = p
+        self.n = n

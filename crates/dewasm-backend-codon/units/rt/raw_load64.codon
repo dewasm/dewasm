@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_load64(p: Ptr[byte]) -> UInt[64]:
+    %r = load i64, ptr %p, align 1
+    ret i64 %r

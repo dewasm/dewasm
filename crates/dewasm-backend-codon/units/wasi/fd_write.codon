@@ -1,0 +1,22 @@
+# requires: memory/i32_load, memory/i32_store, rt/trap
+# stdout/stderr only until the full fd table lands; every other fd reports BADF.
+def wasi_fd_write(self, fd: UInt[32], iovs_ptr: UInt[32], iovs_len: UInt[32], nwritten_ptr: UInt[32]) -> UInt[32]:
+    from C import write(int, Ptr[byte], int) -> int
+    m = self.memory
+    fdi = int(fd)
+    if fdi != 1 and fdi != 2:
+        return UInt[32](8)
+    written = 0
+    for i in range(int(iovs_len)):
+        ptr = int(m.i32_load(int(iovs_ptr) + i * 8))
+        ln = int(m.i32_load(int(iovs_ptr) + i * 8 + 4))
+        if ptr + ln > m.n:
+            Rt.trap("out of bounds memory access")
+        if ln == 0:
+            continue
+        r = write(fdi, m.data + ptr, ln)
+        if r < 0:
+            return UInt[32](29)
+        written += r
+    m.i32_store(int(nwritten_ptr), UInt[32](written))
+    return UInt[32](0)

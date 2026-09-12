@@ -1,0 +1,4 @@
+@staticmethod
+def i64_rotl(a: UInt[64], b: UInt[64]) -> UInt[64]:
+    r = b & UInt[64](63)
+    return (a << r) | (a >> ((UInt[64](64) - r) & UInt[64](63)))

@@ -13,7 +13,7 @@ The following tools and setup steps are required to run all tests correctly:
 - **Rust toolchain**: `rustup` applies the pin in `rust-toolchain.toml` automatically; a non-rustup `cargo` ignores the pin.
 - **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states; a full `cargo test` needs all of them.
   * Each tool should be found under `PATH` (the `bash` lookup also tries the common Homebrew install paths).
-  * These environment variables override the lookup: `$DEWASM_RUBY`, `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`.
+  * These environment variables override the lookup: `$DEWASM_RUBY`, `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`, `$DEWASM_CODON`.
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
   Re-run it after pulling a change that re-pins an app: a cached copy from the previous pin is a different program, and `examples/apps/setup.sh --check` names any that are stale without fetching.

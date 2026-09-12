@@ -1,0 +1,5 @@
+# requires: rt/f32_bits, rt/f32_from_bits
+# A sign-bit operation, which cannot quiet a NaN (wasm requires payload preservation here).
+@staticmethod
+def f32_abs(x: float32) -> float32:
+    return Rt.f32_from_bits(Rt.f32_bits(x) & UInt[32](0x7FFFFFFF))

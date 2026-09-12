@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/link_error
+@staticmethod
+def import_memory(e: Rt.Extern, mod: str, name: str) -> Rt.Memory:
+    m = e.memory
+    if m is not None:
+        return m
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

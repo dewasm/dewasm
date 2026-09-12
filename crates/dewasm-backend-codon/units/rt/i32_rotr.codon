@@ -1,0 +1,4 @@
+@staticmethod
+def i32_rotr(a: UInt[32], b: UInt[32]) -> UInt[32]:
+    r = b & UInt[32](31)
+    return (a >> r) | (a << ((UInt[32](32) - r) & UInt[32](31)))

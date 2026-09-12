@@ -1,0 +1,5 @@
+class Exit(Exception):
+    code: int
+    def __init__(self, code: int):
+        self.code = code
+        super().__init__("proc_exit")

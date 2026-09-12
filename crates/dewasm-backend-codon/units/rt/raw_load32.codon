@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_load32(p: Ptr[byte]) -> UInt[32]:
+    %r = load i32, ptr %p, align 1
+    ret i32 %r

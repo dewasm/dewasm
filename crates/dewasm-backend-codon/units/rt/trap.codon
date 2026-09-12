@@ -1,0 +1,7 @@
+class Trap(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
+
+@staticmethod
+def trap(msg: str):
+    raise Rt.Trap(msg)

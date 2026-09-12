@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def i64_popcnt(x: UInt[64]) -> UInt[64]:
+    %r = call i64 @llvm.ctpop.i64(i64 %x)
+    ret i64 %r

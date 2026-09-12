@@ -1,0 +1,5 @@
+# requires: rt/trap, rt/raw_storef32
+def f32_store(self, a: int, v: float32):
+    if a + 4 > self.n:
+        Rt.trap("out of bounds memory access")
+    Rt.raw_storef32(self.data + a, v)

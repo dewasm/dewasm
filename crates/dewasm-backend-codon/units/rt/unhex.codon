@@ -1,0 +1,13 @@
+# requires: rt/data
+@staticmethod
+def unhex(s: str) -> Rt.Data:
+    n = len(s) // 2
+    p = Ptr[byte](n if n > 0 else 1)
+    q = Ptr[byte](s.c_str().as_byte())
+    for i in range(n):
+        h = int(q[2 * i])
+        l = int(q[2 * i + 1])
+        hv = h - 87 if h >= 97 else h - 48
+        lv = l - 87 if l >= 97 else l - 48
+        p[i] = byte(hv * 16 + lv)
+    return Rt.Data(p, n)
