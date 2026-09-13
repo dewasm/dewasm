@@ -38,6 +38,37 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
+/// The pull-request tier: a small cross-section of cheap files, a semantic area each.
+const FAST_SPEC_FILES: &[&str] = &[
+    "block",
+    "br_if",
+    "call",
+    "endianness",
+    "fac",
+    "forward",
+    "nop",
+    "select",
+    "switch",
+    "traps",
+];
+
+/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow tier is a superset by construction): the files covering this backend's own risk areas.
+/// Native unsigned arithmetic (`i32`/`i64`), the float bit and quieting paths (`f32`/`f64`/`conversions`), funcref tables and the element literal (`elem`/`call_indirect`), the memmove-backed copy (`memory_copy`), grow, globals, the branch-register loop shape, and the boxed import boundary with its failure-ledger rows (`imports`).
+const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
+    "call_indirect",
+    "conversions",
+    "elem",
+    "f32",
+    "f64",
+    "global",
+    "i32",
+    "i64",
+    "imports",
+    "loop",
+    "memory_copy",
+    "memory_grow",
+];
+
 /// Thunk names must be unique per assembled file; a process-wide counter is unique across every file, which is enough.
 static THUNK: AtomicU64 = AtomicU64::new(0);
 
@@ -167,26 +198,23 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program, and even the shared curated list costs minutes of compile latency, which the pull-request tier (target: ~3 minutes) cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in) runs the shared curated list plus the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
+    /// Codon compiles each `.wast` file to one program, so the tier sizes are set by compile latency, not run time: a plain `cargo test` (the pull-request tier, target: ~3 minutes) runs [`FAST_SPEC_FILES`], `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in; the shared curated list measured 268 seconds there, over half the lane) adds [`SLOW_EXTRA_SPEC_FILES`] and the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        if cfg!(feature = "slow_test") {
-            Some(dewasm_test_helper::curated_with(&[
-                dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
-                dewasm_test_helper::TAIL_CALL_SPEC_FILES,
-            ]))
+        if cfg!(feature = "ultra_slow_test") {
+            None
+        } else if cfg!(feature = "slow_test") {
+            static SLOW: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+            Some(SLOW.get_or_init(|| {
+                FAST_SPEC_FILES
+                    .iter()
+                    .chain(SLOW_EXTRA_SPEC_FILES)
+                    .chain(dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES)
+                    .chain(dewasm_test_helper::TAIL_CALL_SPEC_FILES)
+                    .copied()
+                    .collect()
+            }))
         } else {
-            Some(&[
-                "block",
-                "br_if",
-                "call",
-                "endianness",
-                "fac",
-                "forward",
-                "nop",
-                "select",
-                "switch",
-                "traps",
-            ])
+            Some(FAST_SPEC_FILES)
         }
     }
 
