@@ -526,6 +526,14 @@ macro_rules! gzip_e2e {
             $crate::run_gzip_cases(&$lang);
         }
     };
+    ($lang:expr, $speed:tt) => {
+        $crate::test_speed! { $speed,
+            #[test]
+            fn gzip() {
+                $crate::run_gzip_cases(&$lang);
+            }
+        }
+    };
 }
 
 /// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime snapshot.
