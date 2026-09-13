@@ -1237,7 +1237,7 @@ impl<'a> Gen<'a> {
                 }
                 ElemKind::Passive | ElemKind::Active { .. } => {
                     // One list literal, not one append per item: `__init__`'s statement count is what the optimizer's compile time is superlinear in.
-                    // Funcref items are wrapped in `Optional[...](...)` explicitly: Codon types the literal from its elements alone, and `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`.
+                    // Every item is wrapped in `Optional[...]` explicitly: Codon types the literal from its elements alone, `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`, and anchoring null items too keeps an all-null segment from depending on free-variable unification.
                     if elem.items.is_empty() {
                         w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
                     } else {
@@ -1245,7 +1245,7 @@ impl<'a> Gen<'a> {
                             .items
                             .iter()
                             .map(|item| match item {
-                                ElemItem::Null => self.elem_item(item),
+                                ElemItem::Null => format!("Optional[{rt}.Funcref]()"),
                                 _ => format!("Optional[{rt}.Funcref]({})", self.elem_item(item)),
                             })
                             .collect();
