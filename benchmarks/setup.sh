@@ -32,8 +32,8 @@ require_tool() {
 }
 
 require_tool python3 "install Python 3 (brew install python)"
-require_tool ruby "install Ruby (mise install ruby, or brew install ruby)"
-require_tool gem "install Ruby (mise install ruby, or brew install ruby)"
+require_tool ruby "install Ruby (brew install ruby)"
+require_tool gem "install Ruby (brew install ruby)"
 
 venv=cache/venv
 gems=cache/gems
