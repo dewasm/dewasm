@@ -22,14 +22,14 @@
 <line x1="168.0" y1="158.0" x2="579.1" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="579.1" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">130 MB</text>
-<text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
-<line x1="168.0" y1="182.0" x2="584.3" y2="182.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="584.3" cy="182.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="186.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">135 MB</text>
-<text x="152.0" y="210.0" text-anchor="end" font-size="12" fill="#ffffff">java</text>
-<line x1="168.0" y1="206.0" x2="594.2" y2="206.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="594.2" cy="206.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">143 MB</text>
+<text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">java</text>
+<line x1="168.0" y1="182.0" x2="594.2" y2="182.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="594.2" cy="182.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="186.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">143 MB</text>
+<text x="152.0" y="210.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
+<line x1="168.0" y1="206.0" x2="645.8" y2="206.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="645.8" cy="206.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">198 MB</text>
 <text x="152.0" y="234.0" text-anchor="end" font-size="12" fill="#ffffff">bash</text>
 <line x1="168.0" y1="230.0" x2="718.0" y2="230.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="718.0" cy="230.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>

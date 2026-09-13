@@ -11,25 +11,25 @@
 <circle cx="426.6" cy="86.0" r="5.5" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="90.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">772 kB</text>
 <text x="152.0" y="114.0" text-anchor="end" font-size="12" fill="#ffffff">python</text>
-<line x1="168.0" y1="110.0" x2="535.7" y2="110.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="535.7" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="110.0" x2="535.8" y2="110.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="535.8" cy="110.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="114.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.83 MB</text>
 <text x="152.0" y="138.0" text-anchor="end" font-size="12" fill="#ffffff">ruby</text>
-<line x1="168.0" y1="134.0" x2="541.3" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="541.3" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="134.0" x2="541.1" y2="134.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="541.1" cy="134.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="138.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">1.91 MB</text>
 <text x="152.0" y="162.0" text-anchor="end" font-size="12" fill="#ffffff">go</text>
-<line x1="168.0" y1="158.0" x2="568.7" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="568.7" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<line x1="168.0" y1="158.0" x2="568.8" y2="158.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="568.8" cy="158.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
 <text x="806.0" y="162.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.38 MB</text>
-<text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
-<line x1="168.0" y1="182.0" x2="577.8" y2="182.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="577.8" cy="182.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="186.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">2.55 MB</text>
-<text x="152.0" y="210.0" text-anchor="end" font-size="12" fill="#ffffff">java</text>
-<line x1="168.0" y1="206.0" x2="600.5" y2="206.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
-<circle cx="600.5" cy="206.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
-<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">3.05 MB</text>
+<text x="152.0" y="186.0" text-anchor="end" font-size="12" fill="#ffffff">java</text>
+<line x1="168.0" y1="182.0" x2="600.5" y2="182.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="600.5" cy="182.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="186.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">3.05 MB</text>
+<text x="152.0" y="210.0" text-anchor="end" font-size="12" fill="#ffffff">perl</text>
+<line x1="168.0" y1="206.0" x2="645.3" y2="206.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
+<circle cx="645.3" cy="206.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
+<text x="806.0" y="210.0" text-anchor="end" font-size="12" font-weight="600" fill="#ffffff">4.35 MB</text>
 <text x="152.0" y="234.0" text-anchor="end" font-size="12" fill="#ffffff">bash</text>
 <line x1="168.0" y1="230.0" x2="718.0" y2="230.0" stroke="#008300" stroke-width="2" stroke-opacity="0.45"/>
 <circle cx="718.0" cy="230.0" r="5.5" fill="#008300" stroke="#1a1a19" stroke-width="2"/>
