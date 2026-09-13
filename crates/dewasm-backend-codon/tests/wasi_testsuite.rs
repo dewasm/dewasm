@@ -25,25 +25,18 @@ const FAST_TRIALS: &[&str] = &[
     "rust/stdio",
 ];
 
-/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): one representative per filesystem area (open/seek/stat, positioned io, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
+/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): one representative per filesystem area (open, stat, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
+/// Sized against the ~5-minute slow lane: each trial is a codon build (measured ~5 seconds each there), so breadth beyond one representative per area belongs to the ultra sweep.
 const SLOW_EXTRA_TRIALS: &[&str] = &[
-    "c/clock_gettime-monotonic",
-    "c/fdopendir-with-access",
     "c/fopen-with-access",
-    "c/lseek",
-    "c/pwrite-with-append",
     "c/sock_shutdown-invalid_fd",
     "c/sock_shutdown-not_sock",
     "c/stat-dev-ino",
     "rust/clock_time_get",
     "rust/fd_readdir",
-    "rust/file_pread_pwrite",
-    "rust/interesting_paths",
-    "rust/nofollow_errors",
     "rust/path_open_read_write",
     "rust/path_rename",
     "rust/poll_oneoff_stdio",
-    "rust/readlink",
     "rust/symlink_create",
 ];
 
