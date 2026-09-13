@@ -6,10 +6,10 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ## Running
 
 ```console
-$ examples/apps/setup.sh             # the cached apps (sqlite3-shell, cowsay, ...)
+$ examples/apps/setup.sh             # fetches and builds the pinned apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
-$ cargo xtask record-speed           # the full matrix, roughly 30 minutes
-$ cargo xtask render-speed           # results.md and its charts, from that record
+$ cargo xtask record-speed           # measures every workload on every runner
+$ cargo xtask render-speed           # renders results.md and its charts from that record
 ```
 
 Measuring and rendering are two commands: a run writes a dated `<timestamp>Z-speed.json` to [`records/`](../../records/README.md) and nothing else, and rendering turns a record into `docs/benchmarks/results.md` with its charts.

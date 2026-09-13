@@ -395,6 +395,13 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
         reason: "bash runs ~10000x slower than wasmtime on compute, so 100k SQL inserts do not finish in a practical time",
     },
     ),
+    (
+        "dewasm-codon",
+        Exclusion {
+            kind: ExclusionKind::Cost,
+            reason: "codon build -release is superlinear on huge single functions (measured: 30 s at 10k statements, unfinished after 394 s at 50k), and the sqlite3 shell's VDBE interpreter is that class, so the artifact build does not finish in a practical time",
+        },
+    ),
     ("pywasm-cpython", PYWASM_SQLITE_EXCLUSION),
     ("pywasm-pypy", PYWASM_SQLITE_EXCLUSION),
     ("wardite", WARDITE_SQLITE_EXCLUSION),
