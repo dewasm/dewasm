@@ -1,47 +1,47 @@
 {
   "schema": 1,
-  "generated_at": "2026-08-21T04:00:29Z",
+  "generated_at": "2026-09-13T09:06:26Z",
   "host": {
-    "os": "macOS 26.5.2",
+    "os": "macOS 26.6.2",
     "arch": "aarch64",
-    "kernel": "Darwin 25.5.0",
+    "kernel": "Darwin 25.6.0",
     "cpu": "Apple M1 Pro"
   },
   "runtimes": [
     {
       "runtime": "wasmtime",
-      "version": "wasmtime 47.0.3 (5554cc1a6 2026-07-31)",
+      "version": "wasmtime 48.0.2 (e9f1ea232 2026-09-10)",
       "components": [
         {
-          "path": "/opt/homebrew/Cellar/wasmtime/47.0.3/bin/wasmtime",
-          "bytes": 48083168
+          "path": "/opt/homebrew/Cellar/wasmtime/48.0.2/bin/wasmtime",
+          "bytes": 48525120
         }
       ],
       "status": "ok",
-      "bytes": 48083168
+      "bytes": 48525120
     },
     {
       "runtime": "wasmer",
-      "version": "wasmer 7.2.1",
+      "version": "wasmer 7.4.1",
       "components": [
         {
-          "path": "/opt/homebrew/Cellar/wasmer/7.2.1/bin/wasmer",
-          "bytes": 53396944
+          "path": "/opt/homebrew/Cellar/wasmer/7.4.1/bin/wasmer",
+          "bytes": 63567152
         }
       ],
       "status": "ok",
-      "bytes": 53396944
+      "bytes": 63567152
     },
     {
       "runtime": "wasmedge",
       "version": "wasmedge version 0.17.1",
       "components": [
         {
-          "path": "/opt/homebrew/Cellar/wasmedge/0.17.1/bin/wasmedge",
+          "path": "/opt/homebrew/Cellar/wasmedge/0.17.1_1/bin/wasmedge",
           "bytes": 33600
         },
         {
-          "path": "/opt/homebrew/Cellar/wasmedge/0.17.1/lib/libwasmedge.0.1.1.dylib",
+          "path": "/opt/homebrew/Cellar/wasmedge/0.17.1_1/lib/libwasmedge.0.1.1.dylib",
           "bytes": 2380464
         }
       ],
@@ -62,15 +62,15 @@
     },
     {
       "runtime": "wasm3",
-      "version": "Wasm3 v0.5.0 on arm64-v8a",
+      "version": "Wasm3 v0.9.1-beta.1 on arm64-v8a",
       "components": [
         {
-          "path": "/opt/homebrew/Cellar/wasm3/0.5.0/bin/wasm3",
-          "bytes": 174832
+          "path": "/opt/homebrew/Cellar/wasm3/0.9.1/bin/wasm3",
+          "bytes": 247552
         }
       ],
       "status": "ok",
-      "bytes": 174832
+      "bytes": 247552
     }
   ],
   "apps": [
@@ -85,32 +85,32 @@
         {
           "target": "ruby",
           "status": "ok",
-          "bytes": 1912020
+          "bytes": 1908582
         },
         {
           "target": "python",
           "status": "ok",
-          "bytes": 1829789
+          "bytes": 1831131
         },
         {
           "target": "perl",
           "status": "ok",
-          "bytes": 2551269
+          "bytes": 4351001
         },
         {
           "target": "bash",
           "status": "ok",
-          "bytes": 7728646
+          "bytes": 7729525
         },
         {
           "target": "go",
           "status": "ok",
-          "bytes": 2375072
+          "bytes": 2375694
         },
         {
           "target": "java",
           "status": "ok",
-          "bytes": 3052569
+          "bytes": 3053667
         }
       ]
     },
@@ -119,38 +119,38 @@
       "file": "sqlite3-shell.wasm",
       "wasm": {
         "status": "ok",
-        "bytes": 1306771
+        "bytes": 1287224
       },
       "targets": [
         {
           "target": "ruby",
           "status": "ok",
-          "bytes": 7221739
+          "bytes": 7252356
         },
         {
           "target": "python",
           "status": "ok",
-          "bytes": 7699685
+          "bytes": 7679913
         },
         {
           "target": "perl",
           "status": "ok",
-          "bytes": 12884291
+          "bytes": 20843702
         },
         {
           "target": "bash",
           "status": "ok",
-          "bytes": 37625950
+          "bytes": 37757687
         },
         {
           "target": "go",
           "status": "ok",
-          "bytes": 12599550
+          "bytes": 12564739
         },
         {
           "target": "java",
           "status": "ok",
-          "bytes": 13456362
+          "bytes": 13438874
         }
       ]
     },
@@ -165,32 +165,32 @@
         {
           "target": "ruby",
           "status": "ok",
-          "bytes": 6550239
+          "bytes": 6537069
         },
         {
           "target": "python",
           "status": "ok",
-          "bytes": 6560778
+          "bytes": 6563303
         },
         {
           "target": "perl",
           "status": "ok",
-          "bytes": 10481782
+          "bytes": 15743745
         },
         {
           "target": "bash",
           "status": "ok",
-          "bytes": 26967418
+          "bytes": 26969453
         },
         {
           "target": "go",
           "status": "ok",
-          "bytes": 10335643
+          "bytes": 10336780
         },
         {
           "target": "java",
           "status": "ok",
-          "bytes": 10653388
+          "bytes": 10654486
         }
       ]
     },
@@ -205,32 +205,32 @@
         {
           "target": "ruby",
           "status": "ok",
-          "bytes": 66865253
+          "bytes": 66866801
         },
         {
           "target": "python",
           "status": "ok",
-          "bytes": 77089215
+          "bytes": 77092586
         },
         {
           "target": "perl",
           "status": "ok",
-          "bytes": 134793054
+          "bytes": 197873676
         },
         {
           "target": "bash",
           "status": "ok",
-          "bytes": 310735142
+          "bytes": 310761636
         },
         {
           "target": "go",
           "status": "ok",
-          "bytes": 130493423
+          "bytes": 130494534
         },
         {
           "target": "java",
           "status": "ok",
-          "bytes": 143356273
+          "bytes": 143357371
         }
       ]
     }

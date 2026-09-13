@@ -408,7 +408,6 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wardite-yjit", WARDITE_SQLITE_EXCLUSION),
     ("dewasm-perl", DEWASM_PERL_SQLITE_EXCLUSION),
     ("dewasm-python", DEWASM_PYTHON_SQLITE_EXCLUSION),
-    ("dewasm-monoruby", MONORUBY_SQLITE_EXCLUSION),
     ("dewasm-jruby", JRUBY_SQLITE_EXCLUSION),
     ("dewasm-graalpy", GRAALPY_SQLITE_EXCLUSION),
     ("dewasm-python-jit", PYTHON_JIT_SQLITE_EXCLUSION),
@@ -417,11 +416,6 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wasm3-python", CONVERTED_WASM3_SQLITE_EXCLUSION),
     ("wasm3-pypy", CONVERTED_WASM3_SQLITE_EXCLUSION),
 ];
-
-const MONORUBY_SQLITE_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason: "monoruby aborts while JIT-compiling the sqlite3 shell's largest generated methods (monoasm panics with `ADR displacement out of range`, measured on master 9c32041f, arm64 macOS), so the query never completes; remeasure when that panic is fixed upstream",
-};
 
 const JRUBY_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
