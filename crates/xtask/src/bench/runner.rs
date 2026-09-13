@@ -50,6 +50,7 @@ pub enum Target {
     Go,
     TinyGo,
     Java,
+    Codon,
 }
 
 /// Which third-party wasm interpreter a driver runner drives, and on which host interpreter.
@@ -148,6 +149,7 @@ pub fn runners() -> Vec<Runner> {
         r("dewasm-go", Kind::Dewasm(Target::Go)),
         r("dewasm-tinygo", Kind::Dewasm(Target::TinyGo)),
         r("dewasm-java", Kind::Dewasm(Target::Java)),
+        r("dewasm-codon", Kind::Dewasm(Target::Codon)),
         r("dewasm-bash", Kind::Dewasm(Target::Bash)),
         r(
             "wasm3-ruby",
@@ -314,6 +316,11 @@ impl Target {
                             .to_string()
                     })
             }
+            Target::Codon => dewasm_backend_codon::find_codon()
+                .map(|_| ())
+                .ok_or_else(|| {
+                    "codon not found on PATH (or $DEWASM_CODON): see docs/testing.md".to_string()
+                }),
         }
     }
 
@@ -337,6 +344,7 @@ impl Target {
             Target::TinyGo => capture_version(&tinygo_bin()?, &["version"]),
             // `java -version` writes to stderr on every JDK that predates the `--version` spelling; `capture_version` reads both streams for exactly this reason.
             Target::Java => capture_version(&dewasm_backend_java::find_java()?, &["-version"]),
+            Target::Codon => capture_version(&dewasm_backend_codon::find_codon()?, &["--version"]),
         }
     }
 
@@ -361,6 +369,7 @@ impl Target {
             Target::Bash => &dewasm_backend_bash::BashBackend,
             Target::Go | Target::TinyGo => &dewasm_backend_go::GoBackend,
             Target::Java => &dewasm_backend_java::JavaBackend,
+            Target::Codon => &dewasm_backend_codon::CodonBackend,
         }
     }
 }
@@ -596,6 +605,22 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
             env: Vec::new(),
         },
+        // The built binary links Codon's runtime dylibs (libcodonrt, libomp), so the toolchain's lib directory goes on the loader path (docs/backends/codon.md).
+        (Target::Codon, Artifact::Binary(bin)) => {
+            let codon = dewasm_backend_codon::find_codon().context("codon not found")?;
+            let loader_var = if cfg!(target_os = "macos") {
+                "DYLD_LIBRARY_PATH"
+            } else {
+                "LD_LIBRARY_PATH"
+            };
+            Launch {
+                program: bin,
+                args: Vec::new(),
+                env: dewasm_backend_codon::codon_lib_dir(&codon)
+                    .map(|dir| vec![(loader_var.to_string(), path_arg(&dir))])
+                    .unwrap_or_default(),
+            }
+        }
         _ => bail!("internal: artifact kind does not match the target"),
     })
 }
@@ -654,6 +679,33 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     );
                 }
                 std::fs::rename(&tmp, &bin).context("install the built tinygo binary")?;
+            }
+            Ok(Artifact::Binary(bin))
+        }
+        Target::Codon => {
+            let bin = cache.join(format!("{stem}.bin"));
+            if !bin.is_file() {
+                let src = cache.join(format!("{stem}.codon"));
+                write_if_absent(&src, &source)?;
+                let codon = dewasm_backend_codon::find_codon()
+                    .context("codon not found on PATH (or $DEWASM_CODON)")?;
+                let tmp = cache.join(format!("{stem}.bin.tmp"));
+                // -release: the benchmarks are the one place the release optimizer runs (the test suites build debug); the cost is paid once per artifact into this cache.
+                let out = Command::new(codon)
+                    .arg("build")
+                    .arg("-release")
+                    .arg("-o")
+                    .arg(&tmp)
+                    .arg(&src)
+                    .output()
+                    .context("spawn codon build")?;
+                if !out.status.success() {
+                    bail!(
+                        "codon build failed:\n{}",
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+                std::fs::rename(&tmp, &bin).context("install the built codon binary")?;
             }
             Ok(Artifact::Binary(bin))
         }
