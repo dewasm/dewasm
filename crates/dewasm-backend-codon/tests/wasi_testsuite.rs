@@ -25,19 +25,14 @@ const FAST_TRIALS: &[&str] = &[
     "rust/stdio",
 ];
 
-/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): one representative per filesystem area (open, stat, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
-/// Sized against the ~5-minute slow lane: each trial is a codon build (measured ~5 seconds each there), so breadth beyond one representative per area belongs to the ultra sweep.
+/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): the trials pinning the layout-decode paths (stat and dirent, this backend's platform-conditional risk area), the open/read/write core, and the `sock_shutdown` rows so the failure ledger stays exercised.
+/// Sized against the ~5-minute slow lane: each trial is a codon build (measured ~7 seconds each there), so breadth beyond that belongs to the ultra sweep.
 const SLOW_EXTRA_TRIALS: &[&str] = &[
-    "c/fopen-with-access",
     "c/sock_shutdown-invalid_fd",
     "c/sock_shutdown-not_sock",
     "c/stat-dev-ino",
-    "rust/clock_time_get",
     "rust/fd_readdir",
     "rust/path_open_read_write",
-    "rust/path_rename",
-    "rust/poll_oneoff_stdio",
-    "rust/symlink_create",
 ];
 
 struct CodonWasi;

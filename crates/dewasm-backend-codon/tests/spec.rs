@@ -52,21 +52,19 @@ const FAST_SPEC_FILES: &[&str] = &[
     "traps",
 ];
 
-/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow tier is a superset by construction): the files covering this backend's own risk areas.
-/// Native unsigned arithmetic (`i32`/`i64`), the float bit and quieting paths (`f32`/`f64`/`conversions`), funcref tables and the element literal (`elem`/`call_indirect`), the memmove-backed copy (`memory_copy`), grow, globals, the branch-register loop shape, and the boxed import boundary with its failure-ledger rows (`imports`).
+/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow tier is a superset by construction): the files covering this backend's own risk areas, sized by measured fresh-build cost.
+/// Native unsigned arithmetic (`i32`/`i64`), the float conversion and bit paths (`conversions`/`f32_bitwise`), funcref tables and the element literal (`elem`/`call_indirect`), bulk memory (`memory_fill`), globals, and the boxed import boundary with its failure-ledger rows (`imports`).
+/// The float arithmetic files (`f32`/`f64`, ~17 s each) and `memory_copy` (~27 s, the memmove overlap coverage) measured as the three heaviest builds in the suite and run only in the ultra sweep; `memory_grow` is multi-memory-first upstream, so nearly all of it skips and it covers nothing here.
 const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
     "call_indirect",
     "conversions",
     "elem",
-    "f32",
-    "f64",
+    "f32_bitwise",
     "global",
     "i32",
     "i64",
     "imports",
-    "loop",
-    "memory_copy",
-    "memory_grow",
+    "memory_fill",
 ];
 
 /// Thunk names must be unique per assembled file; a process-wide counter is unique across every file, which is enough.

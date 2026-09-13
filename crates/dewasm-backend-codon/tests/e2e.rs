@@ -829,14 +829,14 @@ dewasm_test_helper::standalone_dir_e2e!(Codon);
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 
-// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the whole slow lane targets ~5 minutes, so only cases whose artifacts build in seconds (nes 5k lines, minigzip 18.5k, treesitter 22.5k) stay `slow`; everything from the cowsay class (72k lines) upward is `ultra`, run locally.
+// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the whole slow lane targets ~5 minutes, so only the cheapest app case (nes, 5k lines) stays `slow` as the one converted-app run in the lane; everything else, minigzip (18.5k) and treesitter (22.5k) included, is `ultra`, run locally, while the convert suite still converts every app there.
 // Every `ultra` case still runs at slow on the interpreted backends, so CI keeps covering the cases themselves.
 dewasm_test_helper::mruby_eh_e2e!(Codon, ultra);
 dewasm_test_helper::cowsay_args_e2e!(Codon, ultra);
 dewasm_test_helper::cowsay_stdin_e2e!(Codon, ultra);
 dewasm_test_helper::qjs_eval_e2e!(Codon, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Codon, ultra);
-dewasm_test_helper::gzip_e2e!(Codon);
+dewasm_test_helper::gzip_e2e!(Codon, ultra);
 
 dewasm_test_helper::qjs_file_io_e2e!(Codon, CODON_QJS_FILE_IO_GLUE, ultra);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Codon, CODON_SQLITE3_SHELL_GLUE, ultra);
@@ -854,12 +854,12 @@ dewasm_test_helper::libsqlite3_c_api_e2e!(Codon, CODON_LIBSQLITE3_MEM, ultra);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Codon, CODON_LIBSQLITE3_FILE, ultra);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Codon, CODON_SQLITE3_CALLBACK, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Codon, CODON_PCAP_COMPILE, ultra);
-dewasm_test_helper::treesitter_parse_e2e!(Codon, CODON_TREESITTER_PARSE);
+dewasm_test_helper::treesitter_parse_e2e!(Codon, CODON_TREESITTER_PARSE, ultra);
 // Ultra-slow category (the Python backend's issue #139 criterion, translated: the 25 MB zeroperl reactor's generated source is the biggest single `codon build` in the suite, and the two cases share the one oversized module).
 dewasm_test_helper::zeroperl_eval_e2e!(Codon, CODON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Codon, CODON_EXIFTOOL, ultra);
 
-// Ultra-slow category: DOOM's generated code is megafunction-heavy enough that even the debug build measured over 20 minutes on the dev host (see the reclassification note above); NES builds in seconds and stays slow.
+// Ultra-slow category: DOOM's generated code is megafunction-heavy enough that even the debug build measured over 20 minutes on the dev host (see the reclassification note above); NES builds in seconds and stays slow as the lane's one converted-app run.
 dewasm_test_helper::doom_frame_e2e!(Codon, CODON_DOOM_FRAME_GLUE, ultra);
 dewasm_test_helper::nes_frame_e2e!(Codon, CODON_NES_FRAME_GLUE);
 
