@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_load16(p: Ptr[byte]) -> UInt[16]:
+    %r = load i16, ptr %p, align 1
+    ret i16 %r

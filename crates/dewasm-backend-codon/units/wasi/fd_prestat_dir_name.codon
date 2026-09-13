@@ -1,0 +1,12 @@
+# requires: memory/i32_store8, wasi/fd_entry
+def wasi_fd_prestat_dir_name(self, fd: UInt[32], path_ptr: UInt[32], path_len: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind != 2 or not f.has_preopen_name:
+        return UInt[32](self.ERRNO_BADF)
+    name = f.preopen_name
+    if len(name) > int(path_len):
+        return UInt[32](self.ERRNO_NAMETOOLONG)
+    m = self.memory
+    for k in range(len(name)):
+        m.i32_store8(int(path_ptr) + k, UInt[32](int(name[k])))
+    return UInt[32](self.ERRNO_SUCCESS)

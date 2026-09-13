@@ -1,0 +1,21 @@
+# requires: memory/i64_store, wasi/fd_entry, rt/cerr
+def wasi_fd_seek(self, fd: UInt[32], offset: UInt[64], whence: UInt[32], out_ptr: UInt[32]) -> UInt[32]:
+    from C import lseek(int, int, int) -> int
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.kind == 3:
+        return UInt[32](self.ERRNO_SPIPE)
+    if f.base & self.RIGHTS_FD_SEEK == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    w = int(whence)
+    if w > 2:
+        return UInt[32](self.ERRNO_INVAL)
+    r = lseek(f.host_fd, int(Int[64](offset)), w)
+    if r < 0:
+        # A negative resulting offset is EINVAL, which WASI reports as INVAL (not the generic IO used for other seek failures).
+        if Rt.cerr() == 22:
+            return UInt[32](self.ERRNO_INVAL)
+        return UInt[32](self.ERRNO_IO)
+    self.memory.i64_store(int(out_ptr), UInt[64](r))
+    return UInt[32](self.ERRNO_SUCCESS)

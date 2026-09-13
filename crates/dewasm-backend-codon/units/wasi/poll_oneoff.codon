@@ -1,0 +1,98 @@
+# requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store, wasi/fd_entry, rt/clock_ns, rt/fstat, rt/raw_store32, rt/raw_store16, rt/raw_load16, rt/raw_store64
+# poll_oneoff waits until at least one subscription is ready, then writes one event per ready subscription (WASI p1 layout: 48-byte subscriptions in, 32-byte events out).
+# Only fd_read on stdin actually blocks (via poll(2)); regular files, stdout/stderr, and every fd_write are treated as immediately ready, and unknown fds report EBADF.
+# Clock subscriptions set the wait deadline; if it elapses with no fd ready, the due clock subs fire.
+def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32], nevents_ptr: UInt[32]) -> UInt[32]:
+    from C import poll(Ptr[byte], int, int) -> int
+    from C import nanosleep(Ptr[byte], Ptr[byte]) -> int
+    from C import lseek(int, int, int) -> int
+    if int(nsubs) == 0:
+        return UInt[32](self.ERRNO_INVAL)
+    m = self.memory
+    events = List[Tuple[UInt[64], int, int, int]]()  # (userdata, error, type, nbytes)
+    stdin_waiters = List[UInt[64]]()                 # userdata of fd_read-on-stdin subscriptions
+    clocks = List[Tuple[UInt[64], int]]()            # (userdata, rel_ns)
+    for i in range(int(nsubs)):
+        base = int(in_ptr) + i * 48
+        userdata = m.i64_load(base)
+        tag = int(m.i32_load8_u(base + 8))
+        if tag == 0:  # clock
+            clock_id = int(m.i32_load(base + 16))
+            # The timeout field is unsigned; a deadline at or above 2^63 ns (the common infinite-wait sentinel included) clamps to 2^62 ns so the signed arithmetic below cannot wrap.
+            timeout = int(Int[64](m.i64_load(base + 24)))
+            if timeout < 0:
+                timeout = 0x4000000000000000
+            cflags = int(m.i32_load16_u(base + 40))
+            now = Rt.clock_ns(clock_id == 0)
+            rel = timeout
+            if cflags & 1 != 0:
+                rel = timeout - now
+                if rel < 0:
+                    rel = 0
+            clocks.append((userdata, rel))
+        elif tag == 1 or tag == 2:  # fd_read / fd_write
+            fd = int(m.i32_load(base + 16))
+            f = self.fd_entry(fd)
+            if f is None or f.kind == 2:
+                events.append((userdata, self.ERRNO_BADF, tag, 0))
+            elif tag == 1 and f.kind == 3 and f.host_fd == 0:
+                stdin_waiters.append(userdata)
+            else:
+                nbytes = 1
+                if tag == 1 and f.kind == 1:
+                    st = Rt.fstat(f.host_fd)
+                    if st is not None:
+                        pos = lseek(f.host_fd, 0, 1)
+                        nbytes = st.size - pos if st.size > pos else 0
+                events.append((userdata, 0, tag, nbytes))
+        else:
+            return UInt[32](self.ERRNO_INVAL)
+
+    if len(events) == 0:
+        if len(stdin_waiters) > 0:
+            timeout_ms = -1
+            if len(clocks) > 0:
+                best = clocks[0][1]
+                for c in clocks:
+                    if c[1] < best:
+                        best = c[1]
+                timeout_ms = best // 1000000
+                # poll(2) takes a C int of milliseconds; cap what cannot fit.
+                if timeout_ms > 2147483647:
+                    timeout_ms = 2147483647
+            pfd = Ptr[byte](8)
+            Rt.raw_store32(pfd, UInt[32](0))          # fd 0
+            Rt.raw_store16(pfd + 4, UInt[16](1))      # events = POLLIN
+            Rt.raw_store16(pfd + 6, UInt[16](0))
+            r = poll(pfd, 1, timeout_ms)
+            if r > 0 and int(Rt.raw_load16(pfd + 6)) != 0:
+                for u in stdin_waiters:
+                    events.append((u, 0, 1, 1))
+        elif len(clocks) > 0:
+            best = clocks[0][1]
+            for c in clocks:
+                if c[1] < best:
+                    best = c[1]
+            ts = Ptr[byte](16)
+            Rt.raw_store64(ts, UInt[64](best // 1000000000))
+            Rt.raw_store64(ts + 8, UInt[64](best % 1000000000))
+            nanosleep(ts, Ptr[byte]())
+        if len(events) == 0 and len(clocks) > 0:
+            due = clocks[0][1]
+            for c in clocks:
+                if c[1] < due:
+                    due = c[1]
+            for c in clocks:
+                if c[1] <= due:
+                    events.append((c[0], 0, 0, 0))
+
+    for i in range(len(events)):
+        userdata, error, type_, nbytes = events[i]
+        ev = int(out_ptr) + i * 32
+        m.fill(UInt[32](ev), UInt[32](0), UInt[32](32))
+        m.i64_store(ev, userdata)
+        m.i32_store16(ev + 8, UInt[32](error))
+        m.i32_store8(ev + 10, UInt[32](type_))
+        m.i64_store(ev + 16, UInt[64](nbytes))
+    m.i32_store(int(nevents_ptr), UInt[32](len(events)))
+    return UInt[32](self.ERRNO_SUCCESS)

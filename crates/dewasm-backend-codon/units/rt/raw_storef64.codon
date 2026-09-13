@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_storef64(p: Ptr[byte], v: float) -> None:
+    store double %v, ptr %p, align 1
+    ret {} {}

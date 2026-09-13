@@ -1,0 +1,15 @@
+# Returns the old page count, or 0xFFFFFFFF when the request exceeds max_pages.
+def grow(self, delta: UInt[32]) -> UInt[32]:
+    old_pages = self.n // 65536
+    new_pages = old_pages + int(delta)
+    if new_pages > self.max_pages or new_pages > 65536:
+        return UInt[32](0xFFFFFFFF)
+    if int(delta) == 0:
+        return UInt[32](old_pages)
+    new_n = new_pages * 65536
+    p = Ptr[byte](new_n)
+    str.memcpy(p, self.data, self.n)
+    str.memset(p + self.n, byte(0), new_n - self.n)
+    self.data = p
+    self.n = new_n
+    return UInt[32](old_pages)

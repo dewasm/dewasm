@@ -1,0 +1,7 @@
+# requires: wasi/fd_entry
+def wasi_fd_advise(self, fd: UInt[32], offset: UInt[64], length: UInt[64], advice: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    # posix_fadvise is purely advisory; validating the fd and succeeding is a faithful no-op.
+    return UInt[32](self.ERRNO_SUCCESS)

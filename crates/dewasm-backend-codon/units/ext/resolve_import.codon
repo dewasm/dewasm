@@ -1,0 +1,10 @@
+# requires: ext/extern
+# Resolve one import from the embedder's imports dict; None means missing (the caller decides between a link error and the WASI fallback).
+@staticmethod
+def resolve_import(imports: Dict[str, Dict[str, Rt.Extern]], mod: str, name: str) -> Optional[Rt.Extern]:
+    if mod not in imports:
+        return None
+    m = imports[mod]
+    if name not in m:
+        return None
+    return m[name]

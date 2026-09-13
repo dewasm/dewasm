@@ -66,6 +66,14 @@ $ javac Main.java && java Main
 Hello, WASI!
 ```
 
+Codon compiles a statically typed Python dialect ahead of time; `codon run` builds and runs in one step:
+
+```console
+$ dewasm examples/wat/hello.wat --target codon --mode standalone -o hello.codon
+$ codon run -release hello.codon
+Hello, WASI!
+```
+
 A real binary works the same way.
 If you have run `examples/apps/setup.sh`, try the cowsay showpiece:
 

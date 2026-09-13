@@ -18,6 +18,7 @@ dewasm-backend-python = { path = "crates/dewasm-backend-python", version = "0.1.
 dewasm-backend-perl = { path = "crates/dewasm-backend-perl", version = "0.1.0" }
 dewasm-backend-go = { path = "crates/dewasm-backend-go", version = "0.1.0" }
 dewasm-backend-java = { path = "crates/dewasm-backend-java", version = "0.1.0" }
+dewasm-backend-codon = { path = "crates/dewasm-backend-codon", version = "0.1.0" }
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 anyhow = "1"
 wasmparser = "0.254"

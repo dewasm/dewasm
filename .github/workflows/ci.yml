@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [ruby, bash, python, go, java, perl]
+        backend: [ruby, bash, python, go, java, perl, codon]
     runs-on: ubuntu-latest
     # The slow_test run (full spec suites + slow apps) has unmeasured wall time; give it generous headroom and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
@@ -112,6 +112,15 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      # Codon comes from the pinned upstream release; keep in sync with local dev (docs/backends/codon.md names the floor).
+      - if: matrix.backend == 'codon'
+        name: Install Codon
+        run: |
+          curl -fsSL --retry 5 -o /tmp/codon.tar.gz \
+            https://github.com/exaloop/codon/releases/download/v0.20.1/codon-linux-x86_64.tar.gz
+          echo "3fa970c476acf1056a2460e309ac41557956a1adf499e3e46e8db98ae78a2659  /tmp/codon.tar.gz" | shasum -a 256 -c -
+          sudo tar -xzf /tmp/codon.tar.gz -C /opt
+          echo "DEWASM_CODON=/opt/codon-deploy-linux-x86_64/bin/codon" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}

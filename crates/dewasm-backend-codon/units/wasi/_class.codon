@@ -1,0 +1,91 @@
+# requires: memory/_class, rt/wasi_fd, rt/realpath, rt/lexists, rt/host_check
+# The bundled WASI preview 1 host, built on libc via Codon's C interop.
+# args and env are pre-encoded to UTF-8 so the sizes reported to the guest are byte lengths.
+# `memory` is bound by the generated constructor once the instance's memory exists.
+#
+# WASI errno values used across the units.
+ERRNO_SUCCESS = 0
+ERRNO_ACCES = 2
+ERRNO_BADF = 8
+ERRNO_EXIST = 20
+ERRNO_INVAL = 28
+ERRNO_IO = 29
+ERRNO_ISDIR = 31
+ERRNO_LOOP = 32
+ERRNO_NAMETOOLONG = 37
+ERRNO_NOENT = 44
+ERRNO_NOSYS = 52
+ERRNO_NOTDIR = 54
+ERRNO_NOTEMPTY = 55
+ERRNO_PERM = 63
+ERRNO_SPIPE = 70
+ERRNO_NOTCAPABLE = 76
+
+# WASI rights bits (fs_rights_base / fs_rights_inheriting).
+# Per-fd capabilities are modelled after wasmtime's wasi-common: a directory and a file each carry a different default set, path_open narrows the requested rights against the parent's inheriting set (then per-filetype), and fd_fdstat_set_rights can only drop bits.
+RIGHTS_FD_DATASYNC = 1 << 0
+RIGHTS_FD_READ = 1 << 1
+RIGHTS_FD_SEEK = 1 << 2
+RIGHTS_FD_FDSTAT_SET_FLAGS = 1 << 3
+RIGHTS_FD_SYNC = 1 << 4
+RIGHTS_FD_TELL = 1 << 5
+RIGHTS_FD_WRITE = 1 << 6
+RIGHTS_FD_ADVISE = 1 << 7
+RIGHTS_FD_ALLOCATE = 1 << 8
+RIGHTS_PATH_CREATE_DIRECTORY = 1 << 9
+RIGHTS_PATH_CREATE_FILE = 1 << 10
+RIGHTS_PATH_LINK_SOURCE = 1 << 11
+RIGHTS_PATH_LINK_TARGET = 1 << 12
+RIGHTS_PATH_OPEN = 1 << 13
+RIGHTS_FD_READDIR = 1 << 14
+RIGHTS_PATH_READLINK = 1 << 15
+RIGHTS_PATH_RENAME_SOURCE = 1 << 16
+RIGHTS_PATH_RENAME_TARGET = 1 << 17
+RIGHTS_PATH_FILESTAT_GET = 1 << 18
+RIGHTS_PATH_FILESTAT_SET_SIZE = 1 << 19
+RIGHTS_PATH_FILESTAT_SET_TIMES = 1 << 20
+RIGHTS_FD_FILESTAT_GET = 1 << 21
+RIGHTS_FD_FILESTAT_SET_SIZE = 1 << 22
+RIGHTS_FD_FILESTAT_SET_TIMES = 1 << 23
+RIGHTS_PATH_SYMLINK = 1 << 24
+RIGHTS_PATH_REMOVE_DIRECTORY = 1 << 25
+RIGHTS_PATH_UNLINK_FILE = 1 << 26
+RIGHTS_POLL_FD_READWRITE = 1 << 27
+
+# The rights a directory descriptor carries (base) and the rights it may pass to things opened beneath it (inheriting = directory rights plus every file right).
+# Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
+DIR_RIGHTS_BASE = ((1 << 3) | (1 << 4) | (1 << 7) | (1 << 9) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 17) | (1 << 18) | (1 << 19) | (1 << 20) | (1 << 21) | (1 << 23) | (1 << 24) | (1 << 25) | (1 << 26) | (1 << 27))
+FILE_RIGHTS_BASE = ((1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 21) | (1 << 22) | (1 << 23) | (1 << 27))
+DIR_RIGHTS_INHERITING = DIR_RIGHTS_BASE | FILE_RIGHTS_BASE
+
+args: List[bytes]
+env: List[bytes]
+memory: Optional[Rt.Memory]
+fds: Dict[int, Rt.WasiFd]
+next_fd: int
+
+def __init__(self, args: List[str], env: Dict[str, str], preopens: Dict[str, str]):
+    Rt.host_check()
+    self.args = List[bytes]()
+    for a in args:
+        self.args.append(a.encode())
+    self.env = List[bytes]()
+    for k in env:
+        self.env.append((k + "=" + env[k]).encode())
+    self.memory = None
+    self.fds = Dict[int, Rt.WasiFd]()
+    for i in range(3):
+        self.fds[i] = Rt.WasiFd(3, i, "", self.FILE_RIGHTS_BASE, 0)
+    nfd = 3
+    for guest in preopens:
+        host = preopens[guest]
+        # The host path must resolve, but need not be a directory: a single-file preopen (e.g. '/dev/null' for a reactor's init probe) is accepted, resolved as the preopen root itself.
+        real = Rt.realpath(host)
+        if real == "" or not Rt.lexists(real):
+            raise ValueError("preopen " + guest + " => " + host + ": does not exist")
+        d = Rt.WasiFd(2, -1, real, self.DIR_RIGHTS_BASE, self.DIR_RIGHTS_INHERITING)
+        d.preopen_name = guest.encode()
+        d.has_preopen_name = True
+        self.fds[nfd] = d
+        nfd += 1
+    self.next_fd = nfd

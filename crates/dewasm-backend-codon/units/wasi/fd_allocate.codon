@@ -1,0 +1,20 @@
+# requires: wasi/fd_entry, wasi/fs_errno, rt/fstat
+def wasi_fd_allocate(self, fd: UInt[32], offset: UInt[64], length: UInt[64]) -> UInt[32]:
+    from C import ftruncate(int, int) -> int
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    st = Rt.fstat(f.host_fd)
+    if st is None:
+        return self.fs_errno()
+    # fallocate never shrinks: grow the file to offset+len when that exceeds the current size, otherwise leave it untouched.
+    # Either operand at or above 2^63, or a sum that wraps, cannot be a valid file size: refuse it instead of comparing a wrapped negative.
+    off = int(Int[64](offset))
+    ln = int(Int[64](length))
+    want = off + ln
+    if off < 0 or ln < 0 or want < 0:
+        return UInt[32](self.ERRNO_INVAL)
+    if want > st.size:
+        if ftruncate(f.host_fd, want) != 0:
+            return self.fs_errno()
+    return UInt[32](self.ERRNO_SUCCESS)

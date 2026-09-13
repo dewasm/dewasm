@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_store16(p: Ptr[byte], v: UInt[16]) -> None:
+    store i16 %v, ptr %p, align 1
+    ret {} {}

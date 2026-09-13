@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/link_error
+# A missing non-function import is a link error at instantiation, not a deferred failure.
+@staticmethod
+def require(e: Optional[Rt.Extern], mod: str, name: str) -> Rt.Extern:
+    if e is None:
+        raise Rt.LinkError("missing import " + mod + "." + name)
+    return e

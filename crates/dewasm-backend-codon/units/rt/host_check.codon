@@ -1,0 +1,16 @@
+# requires: rt/trap
+# The libc struct layouts decoded by stat_read and readdir_entries are verified on darwin arm64 and linux x86_64, the two CI host shapes.
+# On darwin x86_64 the un-suffixed stat/readdir symbols are the legacy 32-bit-inode variants, and linux aarch64 glibc lays struct stat out differently, so any other machine must refuse loudly instead of decoding garbage.
+@staticmethod
+def host_check() -> None:
+    from C import uname(Ptr[byte]) -> int
+    from C import strlen(cobj) -> int
+    # struct utsname: fixed-size fields; machine is the fifth (256 bytes each on darwin, 65 on linux glibc).
+    buf = Ptr[byte](1536)
+    if uname(buf) != 0:
+        return
+    mp = buf + (1024 if __apple__ else 260)
+    machine = str(mp, strlen(mp))
+    expected = "arm64" if __apple__ else "x86_64"
+    if machine != expected:
+        Rt.trap("unsupported host for the bundled WASI filesystem: " + machine + " (verified hosts: darwin arm64, linux x86_64)")

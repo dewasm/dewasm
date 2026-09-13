@@ -1,0 +1,18 @@
+# requires: rt/trap, rt/boxed
+# table.copy: overlap-safe (backward loop when the ranges overlap forward).
+def copy(self, d: UInt[32], src_table: Rt.Table, s: UInt[32], ln: UInt[32]) -> None:
+    dst = int(d)
+    src = int(s)
+    n = int(ln)
+    if src + n > len(src_table.slots) or dst + n > len(self.slots):
+        Rt.trap("out of bounds table access")
+    if n == 0:
+        return
+    if dst <= src:
+        for k in range(n):
+            self.slots[dst + k] = src_table.slots[src + k]
+    else:
+        k = n - 1
+        while k >= 0:
+            self.slots[dst + k] = src_table.slots[src + k]
+            k -= 1

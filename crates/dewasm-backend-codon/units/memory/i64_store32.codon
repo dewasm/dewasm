@@ -1,0 +1,5 @@
+# requires: rt/trap, rt/raw_store32
+def i64_store32(self, a: int, v: UInt[64]):
+    if a + 4 > self.n:
+        Rt.trap("out of bounds memory access")
+    Rt.raw_store32(self.data + a, UInt[32](v))

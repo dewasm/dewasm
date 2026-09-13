@@ -1,0 +1,12 @@
+# requires: rt/trap
+# memory.copy requires memmove semantics; llvm.memcpy (str.memcpy) forbids any overlap, so the copy goes through libc memmove.
+def copy(self, d: UInt[32], s: UInt[32], ln: UInt[32]) -> None:
+    from C import memmove(Ptr[byte], Ptr[byte], int) -> Ptr[byte]
+    dst = int(d)
+    src = int(s)
+    n = int(ln)
+    if dst + n > self.n or src + n > self.n:
+        Rt.trap("out of bounds memory access")
+    if n == 0:
+        return
+    memmove(self.data + dst, self.data + src, n)

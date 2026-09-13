@@ -1,0 +1,14 @@
+# requires: rt/trap
+# C-style remainder (the sign of the dividend); the INT_MIN % -1 case is 0, not an overflow.
+@staticmethod
+def i32_rem_s(a: UInt[32], b: UInt[32]) -> UInt[32]:
+    if b == UInt[32](0):
+        Rt.trap("integer divide by zero")
+    if b == UInt[32](0xFFFFFFFF):
+        return UInt[32](0)
+    sa = Int[32](a)
+    sb = Int[32](b)
+    r = sa % sb
+    if r != Int[32](0) and (r < Int[32](0)) != (sa < Int[32](0)):
+        r = r - sb
+    return UInt[32](r)

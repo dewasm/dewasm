@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f32_floor(x: float32) -> float32:
+    %r = call float @llvm.floor.f32(float %x)
+    ret float %r

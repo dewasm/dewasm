@@ -1,0 +1,10 @@
+# requires: wasi/fd_entry, wasi/pack_filestat, wasi/fs_errno, rt/fstat, rt/path_stat
+def wasi_fd_filestat_get(self, fd: UInt[32], buf_ptr: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None:
+        return UInt[32](self.ERRNO_BADF)
+    st = Rt.path_stat(f.host_path, True) if f.kind == 2 else Rt.fstat(f.host_fd)
+    if st is None:
+        return UInt[32](self.ERRNO_IO)
+    self.pack_filestat(st, int(buf_ptr))
+    return UInt[32](self.ERRNO_SUCCESS)

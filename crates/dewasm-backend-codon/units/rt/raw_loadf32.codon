@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def raw_loadf32(p: Ptr[byte]) -> float32:
+    %r = load float, ptr %p, align 1
+    ret float %r

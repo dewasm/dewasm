@@ -1,0 +1,14 @@
+# requires: rt/f32_from_bits, rt/f32_bits
+@staticmethod
+def f32_max(a: float32, b: float32) -> float32:
+    if a != a or b != b:
+        return Rt.f32_from_bits(UInt[32](0x7FC00000))
+    if a > b:
+        return a
+    if b > a:
+        return b
+    if a == float32(0.0):
+        if Rt.f32_bits(a) >> UInt[32](31) == UInt[32](0) or Rt.f32_bits(b) >> UInt[32](31) == UInt[32](0):
+            return float32(0.0)
+        return Rt.f32_from_bits(UInt[32](0x80000000))
+    return a

@@ -1,0 +1,7 @@
+# open(2) is variadic, and calling it through a fixed three-argument prototype passes the mode where the callee's va_arg does not look (measured on darwin arm64: files created with a garbage mode, then EACCES on reopen), so the call goes through an explicit variadic declaration.
+@llvm
+@staticmethod
+def c_open(p: Ptr[byte], flags: Int[32], mode: Int[32]) -> Int[32]:
+    declare i32 @open(ptr, i32, ...)
+    %r = call i32 (ptr, i32, ...) @open(ptr %p, i32 %flags, i32 %mode)
+    ret i32 %r

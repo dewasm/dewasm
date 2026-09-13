@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_nearest(x: float) -> float:
+    %r = call double @llvm.roundeven.f64(double %x)
+    ret double %r

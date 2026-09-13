@@ -1,0 +1,3 @@
+# requires: rt/exit
+def wasi_proc_exit(self, code: UInt[32]) -> None:
+    raise Rt.Exit(int(code))

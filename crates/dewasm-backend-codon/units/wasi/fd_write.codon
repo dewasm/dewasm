@@ -1,0 +1,29 @@
+# requires: memory/i32_load, memory/i32_store, wasi/fd_entry, rt/trap
+def wasi_fd_write(self, fd: UInt[32], iovs_ptr: UInt[32], iovs_len: UInt[32], nwritten_ptr: UInt[32]) -> UInt[32]:
+    from C import write(int, Ptr[byte], int) -> int
+    from C import lseek(int, int, int) -> int
+    m = self.memory
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.base & self.RIGHTS_FD_WRITE == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    # fdflags::APPEND is honoured here (not via O_APPEND on the OS handle) so fd_fdstat_set_flags(0) can turn it back off.
+    if f.fdflags & 1 != 0 and f.kind == 1:
+        lseek(f.host_fd, 0, 2)
+    written = 0
+    for i in range(int(iovs_len)):
+        ptr = int(m.i32_load(int(iovs_ptr) + i * 8))
+        ln = int(m.i32_load(int(iovs_ptr) + i * 8 + 4))
+        if ptr + ln > m.n:
+            Rt.trap("out of bounds memory access")
+        if ln == 0:
+            continue
+        r = write(f.host_fd, m.data + ptr, ln)
+        if r < 0:
+            return UInt[32](self.ERRNO_IO)
+        written += r
+        if r < ln:
+            break
+    m.i32_store(int(nwritten_ptr), UInt[32](written))
+    return UInt[32](self.ERRNO_SUCCESS)

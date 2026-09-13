@@ -1,0 +1,13 @@
+# The canonicalized absolute host path, or "" on failure.
+@staticmethod
+def realpath(path: str) -> str:
+    from C import realpath(cobj, Ptr[byte]) -> cobj
+    from C import strlen(cobj) -> int
+    buf = Ptr[byte](4096)
+    r = realpath(path.c_str(), buf)
+    if r == cobj():
+        return ""
+    n = strlen(buf.as_byte())
+    q = Ptr[UInt[8]](n if n > 0 else 1)
+    str.memcpy(Ptr[byte](q.as_byte()), buf, n)
+    return str(q, n)

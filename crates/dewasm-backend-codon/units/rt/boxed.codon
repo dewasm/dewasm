@@ -1,0 +1,77 @@
+# requires: rt/trap
+# The boxed dynamic boundary, one unit because the classes are inseparable and Codon resolves field annotations in definition order: the tag and exception classes first (a boxed value can carry an exnref), then the boxed value, the boxed function generated code subclasses per function, and the table slot pairing a structural type key with one.
+class Tag:
+    def __init__(self):
+        pass
+
+# A thrown wasm exception, which doubles as the exnref value.
+# The payload is stored per representation (kind 0 i32 / 1 i64 in `bits`, 2 f32 in `ss`, 3 f64 in `fs`; every list has one slot per tag parameter), so no field annotation has to name the boxed Val defined below.
+# Tag parameters of exnref type are not carried (no in-scope module uses them).
+class WasmException(Exception):
+    tag: Rt.Tag
+    ks: List[int]
+    bits: List[UInt[64]]
+    fs: List[float]
+    ss: List[float32]
+    def __init__(self, tag: Rt.Tag, ks: List[int], bits: List[UInt[64]], fs: List[float], ss: List[float32]):
+        self.tag = tag
+        self.ks = ks
+        self.bits = bits
+        self.fs = fs
+        self.ss = ss
+        super().__init__("wasm exception")
+
+class Val:
+    k: int
+    i: UInt[64]
+    f: float
+    s: float32
+    x: Optional[Rt.WasmException]
+    def __init__(self, k: int, i: UInt[64], f: float, s: float32):
+        self.k = k
+        self.i = i
+        self.f = f
+        self.s = s
+        self.x = None
+    @staticmethod
+    def of_i32(x: UInt[32]) -> Rt.Val:
+        return Rt.Val(0, UInt[64](x), 0.0, float32(0.0))
+    @staticmethod
+    def of_i64(x: UInt[64]) -> Rt.Val:
+        return Rt.Val(1, x, 0.0, float32(0.0))
+    @staticmethod
+    def of_f32(x: float32) -> Rt.Val:
+        return Rt.Val(2, UInt[64](0), 0.0, x)
+    @staticmethod
+    def of_f64(x: float) -> Rt.Val:
+        return Rt.Val(3, UInt[64](0), x, float32(0.0))
+    @staticmethod
+    def of_exn(x: Optional[Rt.WasmException]) -> Rt.Val:
+        v = Rt.Val(4, UInt[64](0), 0.0, float32(0.0))
+        v.x = x
+        return v
+    def i32(self) -> UInt[32]:
+        return UInt[32](self.i)
+    def i64(self) -> UInt[64]:
+        return self.i
+    def f32(self) -> float32:
+        return self.s
+    def f64(self) -> float:
+        return self.f
+    def exn(self) -> Optional[Rt.WasmException]:
+        return self.x
+
+class Fn:
+    def invoke(self, a: List[Rt.Val]) -> List[Rt.Val]:
+        raise Rt.Trap("uncallable function")
+
+class Funcref:
+    ty: str
+    fn: Rt.Fn
+    owner: int
+    tail_slot: int
+    def __init__(self, ty: str, fn: Rt.Fn, owner: int = 0, tail_slot: int = -1):
+        self.ty = ty
+        self.fn = fn
+        self.owner = owner
+        self.tail_slot = tail_slot

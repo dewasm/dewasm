@@ -1,0 +1,8 @@
+# requires: ext/extern, rt/boxed, rt/link_error
+# The structural type key is compared here, so a function import of the wrong signature is a link error at instantiation (the boxed invoke itself could not tell).
+@staticmethod
+def import_fn(e: Rt.Extern, ty: str, mod: str, name: str) -> Rt.Fn:
+    f = e.fn
+    if f is not None and e.fn_ty == ty:
+        return f
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

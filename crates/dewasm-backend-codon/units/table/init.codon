@@ -1,0 +1,10 @@
+# requires: rt/trap, rt/boxed
+# Also used to initialize active element segments at instantiation time.
+def init(self, d: UInt[32], items: List[Optional[Rt.Funcref]], s: UInt[32], ln: UInt[32]) -> None:
+    dst = int(d)
+    src = int(s)
+    n = int(ln)
+    if src + n > len(items) or dst + n > len(self.slots):
+        Rt.trap("out of bounds table access")
+    for k in range(n):
+        self.slots[dst + k] = items[src + k]

@@ -1,0 +1,30 @@
+# requires: memory/i32_load, memory/i32_store, wasi/fd_entry, rt/trap
+def wasi_fd_pread(self, fd: UInt[32], iovs_ptr: UInt[32], iovs_len: UInt[32], offset: UInt[64], nread_ptr: UInt[32]) -> UInt[32]:
+    from C import pread(int, Ptr[byte], int, int) -> int
+    m = self.memory
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind == 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.kind == 3:
+        return UInt[32](self.ERRNO_SPIPE)
+    if f.base & self.RIGHTS_FD_READ == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    nread = 0
+    off = int(Int[64](offset))
+    for i in range(int(iovs_len)):
+        ptr = int(m.i32_load(int(iovs_ptr) + i * 8))
+        ln = int(m.i32_load(int(iovs_ptr) + i * 8 + 4))
+        if ptr + ln > m.n:
+            Rt.trap("out of bounds memory access")
+        if ln == 0:
+            continue
+        r = pread(f.host_fd, m.data + ptr, ln, off + nread)
+        if r < 0:
+            return UInt[32](self.ERRNO_IO)
+        if r == 0:
+            break
+        nread += r
+        if r < ln:
+            break
+    m.i32_store(int(nread_ptr), UInt[32](nread))
+    return UInt[32](self.ERRNO_SUCCESS)

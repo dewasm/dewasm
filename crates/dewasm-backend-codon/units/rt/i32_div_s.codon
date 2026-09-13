@@ -1,0 +1,14 @@
+# requires: rt/trap
+# Truncating signed division: the host floor division is adjusted toward zero.
+@staticmethod
+def i32_div_s(a: UInt[32], b: UInt[32]) -> UInt[32]:
+    if b == UInt[32](0):
+        Rt.trap("integer divide by zero")
+    if a == UInt[32](0x80000000) and b == UInt[32](0xFFFFFFFF):
+        Rt.trap("integer overflow")
+    sa = Int[32](a)
+    sb = Int[32](b)
+    q = sa // sb
+    if q < Int[32](0) and q * sb != sa:
+        q = q + Int[32](1)
+    return UInt[32](q)

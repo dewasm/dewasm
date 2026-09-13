@@ -1,0 +1,11 @@
+# requires: memory/i64_store, rt/clock_ns
+def wasi_clock_time_get(self, id: UInt[32], precision: UInt[64], out_ptr: UInt[32]) -> UInt[32]:
+    cid = int(id)
+    if cid == 0:  # realtime
+        ns = Rt.clock_ns(True)
+    elif cid == 1 or cid == 2 or cid == 3:  # monotonic / process / thread cputime
+        ns = Rt.clock_ns(False)
+    else:
+        return UInt[32](self.ERRNO_INVAL)
+    self.memory.i64_store(int(out_ptr), UInt[64](ns))
+    return UInt[32](self.ERRNO_SUCCESS)

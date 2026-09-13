@@ -1,0 +1,14 @@
+# requires: memory/i32_store, rt/trap
+def write_string_list(self, strings: List[bytes], list_ptr: UInt[32], buf_ptr: UInt[32]) -> UInt[32]:
+    m = self.memory
+    lp = int(list_ptr)
+    bp = int(buf_ptr)
+    for s in strings:
+        m.i32_store(lp, UInt[32](bp))
+        if bp + len(s) + 1 > m.n:
+            Rt.trap("out of bounds memory access")
+        str.memcpy(m.data + bp, s._ptr.as_byte(), len(s))
+        m.data[bp + len(s)] = byte(0)
+        lp += 4
+        bp += len(s) + 1
+    return UInt[32](0)

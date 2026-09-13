@@ -1,0 +1,11 @@
+# requires: rt/trap, rt/data
+# Also used to initialize active data segments at instantiation time.
+def init(self, d: UInt[32], data: Rt.Data, s: UInt[32], ln: UInt[32]) -> None:
+    dst = int(d)
+    src = int(s)
+    n = int(ln)
+    if src + n > data.n or dst + n > self.n:
+        Rt.trap("out of bounds memory access")
+    if n == 0:
+        return
+    str.memcpy(self.data + dst, data.p + src, n)

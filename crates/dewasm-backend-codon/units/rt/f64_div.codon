@@ -1,0 +1,6 @@
+# IEEE division without the host language's zero-divisor exception (wasm float division never traps).
+@llvm
+@staticmethod
+def f64_div(a: float, b: float) -> float:
+    %r = fdiv double %a, %b
+    ret double %r

@@ -1,0 +1,3 @@
+# requires: table/slot, rt/boxed
+def call(self, i: UInt[32], ty: str) -> Rt.Fn:
+    return self.slot(i, ty).fn

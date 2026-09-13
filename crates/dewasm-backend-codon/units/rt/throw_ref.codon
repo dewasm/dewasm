@@ -1,0 +1,7 @@
+# requires: rt/boxed, rt/trap
+@staticmethod
+def throw_ref(e: Optional[Rt.WasmException]):
+    if e is None:
+        Rt.trap("null reference")
+    ee: Rt.WasmException = e
+    raise ee

@@ -1,0 +1,6 @@
+# requires: rt/trap
+@staticmethod
+def i64_div_u(a: UInt[64], b: UInt[64]) -> UInt[64]:
+    if b == UInt[64](0):
+        Rt.trap("integer divide by zero")
+    return a // b

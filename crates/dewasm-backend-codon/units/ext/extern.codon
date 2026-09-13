@@ -1,0 +1,73 @@
+# requires: rt/boxed, global/_class, table/_class, memory/_class
+# One import/export value: the kind tag says which typed field is set.
+# A typed field per global value type is what lets import resolution check the value type, not just the kind, without a dynamic cast.
+class Extern:
+    kind: str
+    fn: Optional[Rt.Fn]
+    fn_ty: str
+    g_i32: Optional[Rt.Global[UInt[32]]]
+    g_i64: Optional[Rt.Global[UInt[64]]]
+    g_f32: Optional[Rt.Global[float32]]
+    g_f64: Optional[Rt.Global[float]]
+    g_exn: Optional[Rt.Global[Optional[Rt.WasmException]]]
+    table: Optional[Rt.Table]
+    memory: Optional[Rt.Memory]
+    tag: Optional[Rt.Tag]
+    def __init__(self, kind: str):
+        self.kind = kind
+        self.fn = None
+        self.fn_ty = ""
+        self.g_i32 = None
+        self.g_i64 = None
+        self.g_f32 = None
+        self.g_f64 = None
+        self.g_exn = None
+        self.table = None
+        self.memory = None
+        self.tag = None
+    @staticmethod
+    def of_fn(f: Rt.Fn, ty: str) -> Rt.Extern:
+        e = Rt.Extern("func")
+        e.fn = f
+        e.fn_ty = ty
+        return e
+    @staticmethod
+    def of_global_i32(g: Rt.Global[UInt[32]]) -> Rt.Extern:
+        e = Rt.Extern("global_i32")
+        e.g_i32 = g
+        return e
+    @staticmethod
+    def of_global_i64(g: Rt.Global[UInt[64]]) -> Rt.Extern:
+        e = Rt.Extern("global_i64")
+        e.g_i64 = g
+        return e
+    @staticmethod
+    def of_global_f32(g: Rt.Global[float32]) -> Rt.Extern:
+        e = Rt.Extern("global_f32")
+        e.g_f32 = g
+        return e
+    @staticmethod
+    def of_global_f64(g: Rt.Global[float]) -> Rt.Extern:
+        e = Rt.Extern("global_f64")
+        e.g_f64 = g
+        return e
+    @staticmethod
+    def of_global_exn(g: Rt.Global[Optional[Rt.WasmException]]) -> Rt.Extern:
+        e = Rt.Extern("global_exn")
+        e.g_exn = g
+        return e
+    @staticmethod
+    def of_table(t: Rt.Table) -> Rt.Extern:
+        e = Rt.Extern("table")
+        e.table = t
+        return e
+    @staticmethod
+    def of_memory(m: Rt.Memory) -> Rt.Extern:
+        e = Rt.Extern("memory")
+        e.memory = m
+        return e
+    @staticmethod
+    def of_tag(t: Rt.Tag) -> Rt.Extern:
+        e = Rt.Extern("tag")
+        e.tag = t
+        return e

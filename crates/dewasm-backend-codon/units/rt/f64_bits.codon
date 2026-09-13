@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_bits(x: float) -> UInt[64]:
+    %r = bitcast double %x to i64
+    ret i64 %r

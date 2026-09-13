@@ -41,6 +41,12 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
+
+    /// The trials to run outside the full sweep, the same contract as `SpecBackend::curated_files`: `None` runs every trial, `Some(list)` marks every trial not in the list as ignored.
+    /// For a backend whose per-trial cost is a compile, this is what keeps the conformance suite inside a CI lane's time budget; the full sweep still runs in the backend's slowest tier.
+    fn curated_trials(&self) -> Option<&'static [&'static str]> {
+        None
+    }
 }
 
 /// The three prebuilt suites we drive, all `wasm32-wasip1` (the standard goal for a dewasm backend: wasm 1.0 + full WASI p1).
@@ -138,11 +144,14 @@ pub fn wasi_testsuite_trials(lang: &'static dyn WasiTestsuiteBackend) -> Vec<Tri
         list.extend_from_slice(lang.expected_failures_linux());
     }
     let list: &'static [(&'static str, &'static str)] = Vec::leak(list);
+    let curated = lang.curated_trials();
     cases
         .into_iter()
         .map(|case| {
             let name = case.trial_name.clone();
+            let ignored = curated.is_some_and(|list| !list.contains(&name.as_str()));
             Trial::test(name.clone(), move || run_trial(lang, list, &name, &case))
+                .with_ignored_flag(ignored)
         })
         .collect()
 }

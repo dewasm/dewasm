@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_trunc(x: float) -> float:
+    %r = call double @llvm.trunc.f64(double %x)
+    ret double %r

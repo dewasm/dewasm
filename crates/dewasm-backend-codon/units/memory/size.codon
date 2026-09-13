@@ -1,0 +1,2 @@
+def size(self) -> UInt[32]:
+    return UInt[32](self.n // 65536)

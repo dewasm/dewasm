@@ -502,6 +502,7 @@ dependencies = [
  "clap",
  "dewasm-backend",
  "dewasm-backend-bash",
+ "dewasm-backend-codon",
  "dewasm-backend-go",
  "dewasm-backend-java",
  "dewasm-backend-perl",
@@ -521,6 +522,19 @@ dependencies = [
 
 [[package]]
 name = "dewasm-backend-bash"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-core",
+ "dewasm-test-helper",
+ "regex",
+ "wast 254.0.0",
+ "wat",
+]
+
+[[package]]
+name = "dewasm-backend-codon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2414,6 +2428,7 @@ dependencies = [
  "anyhow",
  "dewasm-backend",
  "dewasm-backend-bash",
+ "dewasm-backend-codon",
  "dewasm-backend-go",
  "dewasm-backend-java",
  "dewasm-backend-perl",

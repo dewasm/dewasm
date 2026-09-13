@@ -1,0 +1,11 @@
+# The linear memory: a raw byte buffer (Codon's GC does not zero atomic allocations, so every fresh region is memset here).
+# `n` is the byte size; `max_pages` caps grow (65536 when the module declares none).
+data: Ptr[byte]
+n: int
+max_pages: int
+
+def __init__(self, min_pages: int, max_pages: int):
+    self.n = min_pages * 65536
+    self.data = Ptr[byte](self.n if self.n > 0 else 1)
+    str.memset(self.data, byte(0), self.n)
+    self.max_pages = max_pages

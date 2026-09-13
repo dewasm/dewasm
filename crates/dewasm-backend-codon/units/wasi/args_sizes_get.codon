@@ -1,0 +1,9 @@
+# requires: memory/i32_store
+def wasi_args_sizes_get(self, argc_ptr: UInt[32], buf_size_ptr: UInt[32]) -> UInt[32]:
+    m = self.memory
+    total = 0
+    for a in self.args:
+        total += len(a) + 1
+    m.i32_store(int(argc_ptr), UInt[32](len(self.args)))
+    m.i32_store(int(buf_size_ptr), UInt[32](total))
+    return UInt[32](0)

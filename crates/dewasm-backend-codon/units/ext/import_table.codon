@@ -1,0 +1,7 @@
+# requires: ext/extern, rt/link_error
+@staticmethod
+def import_table(e: Rt.Extern, mod: str, name: str) -> Rt.Table:
+    t = e.table
+    if t is not None:
+        return t
+    raise Rt.LinkError("incompatible import type for " + mod + "." + name)

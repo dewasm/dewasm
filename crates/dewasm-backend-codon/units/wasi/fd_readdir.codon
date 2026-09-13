@@ -1,0 +1,41 @@
+# requires: memory/i32_store, wasi/fd_entry, wasi/readdir_entries, rt/raw_store64, rt/raw_store32, rt/raw_store8, rt/trap
+def wasi_fd_readdir(self, fd: UInt[32], buf_ptr: UInt[32], buf_len: UInt[32], cookie: UInt[64], bufused_ptr: UInt[32]) -> UInt[32]:
+    m = self.memory
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind != 2:
+        return UInt[32](self.ERRNO_BADF)
+    if f.base & self.RIGHTS_FD_READDIR == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    # cookie 0 starts a fresh enumeration, so re-scan the directory then; a non-zero cookie resumes the snapshot cached from that start (the opaque-resume-point contract).
+    if not f.entries_valid or cookie == UInt[64](0):
+        f.entries = self.readdir_entries(f.host_path)
+        f.entries_valid = True
+    entries = f.entries
+    cap = int(buf_len)
+    if int(buf_ptr) + cap > m.n:
+        Rt.trap("out of bounds memory access")
+    # The cookie is an unsigned resume position; one past any snapshot's end reports bufused 0.
+    # Held as u64 so a high-bit cookie (2^63) never indexes negatively.
+    used = 0
+    i = cookie
+    while i < UInt[64](len(entries)) and used < cap:
+        name, ft, ino = entries[int(i)]
+        # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad, followed by the (unpadded) name; legally truncated at the tail once buf_len runs out.
+        scratch = Ptr[byte](24 + len(name))
+        Rt.raw_store64(scratch, i + UInt[64](1))
+        Rt.raw_store64(scratch + 8, UInt[64](ino))
+        Rt.raw_store32(scratch + 16, UInt[32](len(name)))
+        Rt.raw_store8(scratch + 20, UInt[8](ft))
+        Rt.raw_store8(scratch + 21, UInt[8](0))
+        Rt.raw_store8(scratch + 22, UInt[8](0))
+        Rt.raw_store8(scratch + 23, UInt[8](0))
+        for k in range(len(name)):
+            scratch[24 + k] = byte(int(name[k]))
+        n = 24 + len(name)
+        if n > cap - used:
+            n = cap - used
+        str.memcpy(m.data + int(buf_ptr) + used, scratch, n)
+        used += n
+        i += UInt[64](1)
+    m.i32_store(int(bufused_ptr), UInt[32](used))
+    return UInt[32](self.ERRNO_SUCCESS)

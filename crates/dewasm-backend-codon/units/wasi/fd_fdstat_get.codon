@@ -1,0 +1,21 @@
+# requires: memory/fill, memory/i32_store8, memory/i32_store16, memory/i64_store, wasi/fd_entry
+def wasi_fd_fdstat_get(self, fd: UInt[32], out_ptr: UInt[32]) -> UInt[32]:
+    from C import isatty(int) -> int
+    m = self.memory
+    f = self.fd_entry(int(fd))
+    if f is None:
+        return UInt[32](self.ERRNO_BADF)
+    # isatty() is a host syscall, and an open descriptor's filetype cannot change while it is open, so it runs at most once per fd: a guest polling isatty in a loop would otherwise pay one syscall per call.
+    if f.filetype < 0:
+        if f.kind == 2:
+            f.filetype = 3  # directory
+        else:
+            f.filetype = 2 if isatty(f.host_fd) != 0 else 4  # char device / regular file
+    # fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base (u64) + fs_rights_inheriting (u64) = 24 bytes.
+    out = int(out_ptr)
+    m.fill(out_ptr, UInt[32](0), UInt[32](24))
+    m.i32_store8(out, UInt[32](f.filetype))
+    m.i32_store16(out + 2, UInt[32](f.fdflags))
+    m.i64_store(out + 8, UInt[64](f.base))
+    m.i64_store(out + 16, UInt[64](f.inheriting))
+    return UInt[32](self.ERRNO_SUCCESS)

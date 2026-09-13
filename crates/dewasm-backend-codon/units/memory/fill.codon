@@ -1,0 +1,9 @@
+# requires: rt/trap
+def fill(self, d: UInt[32], v: UInt[32], ln: UInt[32]) -> None:
+    dst = int(d)
+    n = int(ln)
+    if dst + n > self.n:
+        Rt.trap("out of bounds memory access")
+    if n == 0:
+        return
+    str.memset(self.data + dst, byte(int(v & UInt[32](0xFF))), n)

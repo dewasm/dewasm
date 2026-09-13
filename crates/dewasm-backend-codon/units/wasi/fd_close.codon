@@ -1,0 +1,10 @@
+# requires: wasi/fd_entry
+def wasi_fd_close(self, fd: UInt[32]) -> UInt[32]:
+    from C import close(int) -> int
+    f = self.fd_entry(int(fd))
+    if f is None:
+        return UInt[32](self.ERRNO_BADF)
+    if f.kind == 1:
+        close(f.host_fd)
+    del self.fds[int(fd)]
+    return UInt[32](self.ERRNO_SUCCESS)

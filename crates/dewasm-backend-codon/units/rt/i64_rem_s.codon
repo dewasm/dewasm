@@ -1,0 +1,13 @@
+# requires: rt/trap
+@staticmethod
+def i64_rem_s(a: UInt[64], b: UInt[64]) -> UInt[64]:
+    if b == UInt[64](0):
+        Rt.trap("integer divide by zero")
+    if b == UInt[64](0xFFFFFFFFFFFFFFFF):
+        return UInt[64](0)
+    sa = Int[64](a)
+    sb = Int[64](b)
+    r = sa % sb
+    if r != Int[64](0) and (r < Int[64](0)) != (sa < Int[64](0)):
+        r = r - sb
+    return UInt[64](r)

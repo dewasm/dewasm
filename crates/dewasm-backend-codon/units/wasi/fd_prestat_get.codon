@@ -1,0 +1,10 @@
+# requires: memory/fill, memory/i32_store8, memory/i32_store, wasi/fd_entry
+def wasi_fd_prestat_get(self, fd: UInt[32], out_ptr: UInt[32]) -> UInt[32]:
+    f = self.fd_entry(int(fd))
+    if f is None or f.kind != 2 or not f.has_preopen_name:
+        return UInt[32](self.ERRNO_BADF)
+    # prestat: tag (u8, 0 = dir) + 3 pad + pr_name_len (u32).
+    m = self.memory
+    m.fill(out_ptr, UInt[32](0), UInt[32](8))
+    m.i32_store(int(out_ptr) + 4, UInt[32](len(f.preopen_name)))
+    return UInt[32](self.ERRNO_SUCCESS)

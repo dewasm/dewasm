@@ -1,0 +1,8 @@
+# requires: rt/f32_bits, rt/f64_from_bits
+# A NaN input promotes to a quiet NaN keeping its sign and payload (shifted into the double's mantissa).
+@staticmethod
+def f64_promote(x: float32) -> float:
+    if x != x:
+        b = Rt.f32_bits(x)
+        return Rt.f64_from_bits((UInt[64](b >> UInt[32](31)) << UInt[64](63)) | UInt[64](0x7FF8000000000000) | (UInt[64](b & UInt[32](0x7FFFFF)) << UInt[64](29)))
+    return float(x)

@@ -1,0 +1,60 @@
+# requires: memory/read_path, memory/i32_store, wasi/resolve_path, wasi/fd_entry, wasi/fs_errno, rt/wasi_fd, rt/fstat, rt/realpath, rt/lexists, rt/c_open
+def wasi_path_open(self, dirfd: UInt[32], dirflags: UInt[32], path_ptr: UInt[32], path_len: UInt[32], oflags: UInt[32], fs_rights_base: UInt[64], fs_rights_inheriting: UInt[64], fdflags: UInt[32], opened_fd_ptr: UInt[32]) -> UInt[32]:
+    from C import close(int) -> int
+    rel = self.memory.read_path(int(path_ptr), int(path_len))
+    follow = int(dirflags) & 0x1 != 0  # lookupflags::SYMLINK_FOLLOW
+    host, err = self.resolve_path(int(dirfd), rel, follow)
+    if err != 0:
+        return UInt[32](err)
+    dm = self.fd_entry(int(dirfd))
+    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir fd that dropped it can no longer open beneath itself.
+    if dm.base & self.RIGHTS_PATH_OPEN == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    ofl = int(oflags)
+    # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd.
+    if ofl & 0x8 != 0 and dm.base & self.RIGHTS_PATH_FILESTAT_SET_SIZE == 0:
+        return UInt[32](self.ERRNO_NOTCAPABLE)
+    rbase = int(Int[64](fs_rights_base))
+    rinherit = int(Int[64](fs_rights_inheriting))
+    want_read = rbase & self.RIGHTS_FD_READ != 0
+    want_write = rbase & self.RIGHTS_FD_WRITE != 0
+    if want_read and want_write:
+        flags = 2  # O_RDWR
+    elif want_write:
+        flags = 1  # O_WRONLY
+    else:
+        flags = 0  # O_RDONLY
+    # Without SYMLINK_FOLLOW a final symlink must not be traversed: O_NOFOLLOW turns that into ELOOP, matching wasmtime's O_NOFOLLOW default.
+    if not follow:
+        flags |= 0x100 if __apple__ else 0x20000  # O_NOFOLLOW
+    if ofl & 0x2 != 0:  # oflags::DIRECTORY
+        flags |= 0x100000 if __apple__ else 0x10000  # O_DIRECTORY
+    if ofl & 0x1 != 0:  # oflags::CREAT
+        flags |= 0x200 if __apple__ else 0x40  # O_CREAT
+    if ofl & 0x4 != 0:  # oflags::EXCL
+        flags |= 0x800 if __apple__ else 0x80  # O_EXCL
+    if ofl & 0x8 != 0:  # oflags::TRUNC
+        flags |= 0x400 if __apple__ else 0x200  # O_TRUNC
+    # O_CREAT must not create through a trailing slash; per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+    if host.endswith("/") and not Rt.lexists(host[:len(host) - 1]):
+        if ofl & 0x1 == 0:
+            return UInt[32](self.ERRNO_NOENT)
+        return UInt[32](self.ERRNO_INVAL if __apple__ else self.ERRNO_ISDIR)
+    fd = int(Rt.c_open(Ptr[byte](host.c_str().as_byte()), Int[32](flags), Int[32](0o644)))
+    if fd < 0:
+        return self.fs_errno()
+    st = Rt.fstat(fd)
+    if st is None:
+        close(fd)
+        return UInt[32](self.ERRNO_IO)
+    if (st.mode & 0o170000) == 0o040000:  # a directory
+        # The directory travels as a sandboxed path, not an OS handle.
+        close(fd)
+        entry = Rt.WasiFd(2, -1, Rt.realpath(host), rbase & dm.inheriting & self.DIR_RIGHTS_BASE, rinherit & dm.inheriting & self.DIR_RIGHTS_INHERITING)
+    else:
+        entry = Rt.WasiFd(1, fd, "", rbase & dm.inheriting & self.FILE_RIGHTS_BASE, rinherit & dm.inheriting & self.FILE_RIGHTS_BASE)
+    entry.fdflags = int(fdflags) & 0xFFFF
+    self.fds[self.next_fd] = entry
+    self.memory.i32_store(int(opened_fd_ptr), UInt[32](self.next_fd))
+    self.next_fd += 1
+    return UInt[32](self.ERRNO_SUCCESS)

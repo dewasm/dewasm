@@ -1,0 +1,40 @@
+# requires: rt/path_stat, wasi/wasi_filetype
+# The sorted (name, filetype, inode) listing of a directory, "." and ".." first.
+# The dirent layouts differ per platform, so the name is read as the C string readdir hands back and everything else comes from lstat.
+def readdir_entries(self, host_path: str) -> List[Tuple[bytes, int, int]]:
+    from C import opendir(cobj) -> cobj
+    from C import readdir(cobj) -> Ptr[byte]
+    from C import closedir(cobj) -> int
+    from C import strlen(cobj) -> int
+    entries = List[Tuple[bytes, int, int]]()
+    st = Rt.path_stat(host_path, False)
+    ino_self = st.ino if st is not None else 0
+    stp = Rt.path_stat(host_path + "/..", False)
+    ino_parent = stp.ino if stp is not None else 0
+    entries.append((".".encode(), 3, ino_self))
+    entries.append(("..".encode(), 3, ino_parent))
+    d = opendir(host_path.c_str())
+    if d == cobj():
+        return entries
+    names = List[str]()
+    while True:
+        e = readdir(d)
+        if e == Ptr[byte]():
+            break
+        name_off = 21 if __apple__ else 19
+        np = e + name_off
+        n = strlen(np.as_byte())
+        q = Ptr[UInt[8]](n if n > 0 else 1)
+        str.memcpy(Ptr[byte](q.as_byte()), np, n)
+        name = str(q, n)
+        if name == "." or name == "..":
+            continue
+        names.append(name)
+    closedir(d)
+    names.sort()
+    for name in names:
+        est = Rt.path_stat(host_path + "/" + name, False)
+        ft = self.wasi_filetype(est.mode) if est is not None else 0
+        ino = est.ino if est is not None else 0
+        entries.append((name.encode(), ft, ino))
+    return entries

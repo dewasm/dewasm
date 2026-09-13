@@ -1,0 +1,9 @@
+# requires: rt/stat, rt/stat_read
+# fstat into a decoded Stat; None on failure (the caller maps errno).
+@staticmethod
+def fstat(fd: int) -> Optional[Rt.Stat]:
+    from C import fstat(int, Ptr[byte]) -> int
+    buf = Ptr[byte](160)
+    if fstat(fd, buf) != 0:
+        return None
+    return Rt.stat_read(buf)

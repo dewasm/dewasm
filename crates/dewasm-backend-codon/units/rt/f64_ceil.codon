@@ -1,0 +1,5 @@
+@llvm
+@staticmethod
+def f64_ceil(x: float) -> float:
+    %r = call double @llvm.ceil.f64(double %x)
+    ret double %r

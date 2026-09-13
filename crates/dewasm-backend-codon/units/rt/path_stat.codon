@@ -1,0 +1,11 @@
+# requires: rt/stat, rt/stat_read
+# stat/lstat into a decoded Stat; None on failure (the caller maps errno).
+@staticmethod
+def path_stat(path: str, follow: bool) -> Optional[Rt.Stat]:
+    from C import stat(cobj, Ptr[byte]) -> int
+    from C import lstat(cobj, Ptr[byte]) -> int
+    buf = Ptr[byte](160)
+    r = stat(path.c_str(), buf) if follow else lstat(path.c_str(), buf)
+    if r != 0:
+        return None
+    return Rt.stat_read(buf)
