@@ -14,7 +14,9 @@ use std::process::Output;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use dewasm_backend::Backend;
-use dewasm_backend_codon::{codon_string, CodonBackend};
+use dewasm_backend_codon::{
+    codon_string, i32_const as u32_lit, i64_const as u64_lit, CodonBackend,
+};
 use dewasm_core::ir;
 use dewasm_test_helper::BackendUnderTest;
 use wast::core::{AbstractHeapType, HeapType, NanPattern, WastArgCore, WastRetCore};
@@ -60,20 +62,6 @@ impl BackendUnderTest for CodonSpec {
             Err(build) => build,
             Ok(bin) => common::run_codon_binary(&bin, args, stdin),
         }
-    }
-}
-
-/// A `UInt[32]` literal.
-fn u32_lit(v: u32) -> String {
-    format!("UInt[32]({v})")
-}
-
-/// A `UInt[64]` literal (hex above `i64::MAX`, which Codon's decimal literals cannot spell).
-fn u64_lit(v: u64) -> String {
-    if v > i64::MAX as u64 {
-        format!("UInt[64](0x{v:X})")
-    } else {
-        format!("UInt[64]({v})")
     }
 }
 
@@ -179,7 +167,7 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program, and even the shared curated list costs minutes of compile latency, which the pull-request tier (target: ~3 minutes) cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), and the full testsuite runs under `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in).
+    /// Codon compiles each `.wast` file to one program, and even the shared curated list costs minutes of compile latency, which the pull-request tier (target: ~3 minutes) cannot afford; a plain `cargo test` therefore runs only a small cross-section of cheap files (a semantic area each), `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in) runs the shared curated list plus the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         if cfg!(feature = "slow_test") {
             Some(dewasm_test_helper::curated_with(&[

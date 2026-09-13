@@ -1,6 +1,6 @@
 # requires: rt/stat, rt/raw_load16, rt/raw_load32, rt/raw_load64
 # Decode a raw struct stat buffer at the platform's field offsets.
-# Layouts covered: darwin arm64 (the plain symbols are the 64-bit-inode variants there) and linux x86_64 glibc, the two host shapes decision 49 measures on; other host arches are unverified.
+# Layouts covered: darwin arm64 (the plain symbols are the 64-bit-inode variants there) and linux x86_64 glibc, the two CI host shapes; host_check refuses the darwin hosts where the plain symbols are the legacy 32-bit-inode variants.
 @staticmethod
 def stat_read(p: Ptr[byte]) -> Rt.Stat:
     if __apple__:

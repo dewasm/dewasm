@@ -28,26 +28,16 @@ const LOADER_PATH_VAR: &str = if cfg!(target_os = "macos") {
 ///
 /// Every suite builds *debug*: `-release` costs ~8x the compile time (superlinearly worse on huge single generated functions), CI pays every codon build fresh, and the build is semantically identical (the one optimizer-sensitive path, identity-fold NaN quieting, is handled at emission via the quiet-if-NaN wrappers, so no release-mode verification pass is kept either).
 pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
-    build_codon_with(source, false)
-}
-
-/// An alias kept for the e2e suites' call sites; same policy as [`build_codon`].
-pub fn build_codon_debug(source: &str) -> Result<PathBuf, Output> {
-    build_codon(source)
-}
-
-fn build_codon_with(source: &str, release: bool) -> Result<PathBuf, Output> {
     let codon = find_codon()
         .expect("codon toolchain not found on PATH (or $DEWASM_CODON): see docs/testing.md");
 
     let mut hasher = DefaultHasher::new();
     source.hash(&mut hasher);
     let hash = hasher.finish();
-    let tag = if release { "" } else { "-dbg" };
 
     let cache = std::env::temp_dir().join("dewasm-codon-cache");
     std::fs::create_dir_all(&cache).unwrap();
-    let bin = cache.join(format!("prog{tag}-{hash:016x}"));
+    let bin = cache.join(format!("prog-dbg-{hash:016x}"));
     if bin.exists() {
         return Ok(bin);
     }
@@ -59,15 +49,11 @@ fn build_codon_with(source: &str, release: bool) -> Result<PathBuf, Output> {
         std::process::id(),
         COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let tmp_bin = cache.join(format!("prog{tag}-{unique}"));
+    let tmp_bin = cache.join(format!("prog-dbg-{unique}"));
     let src = cache.join(format!("src-{unique}.codon"));
     std::fs::write(&src, source).unwrap();
-    let mut cmd = Command::new(&codon);
-    cmd.arg("build");
-    if release {
-        cmd.arg("-release");
-    }
-    let build = cmd
+    let build = Command::new(&codon)
+        .arg("build")
         .arg("-o")
         .arg(&tmp_bin)
         .arg(&src)

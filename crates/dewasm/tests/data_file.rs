@@ -1,6 +1,6 @@
 //! End-to-end coverage for `--data-file` data-segment externalization.
 //! For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a data file, run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
-//! Also pins the loud rejections (the bash target, `-o -`).
+//! Also pins the loud rejections (the bash and codon targets, `-o -`).
 //!
 //! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the data-file form provably shrinks the source.
 //! The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
@@ -510,25 +510,27 @@ fn rejects_unsupported_targets_and_stdout() {
     let data_file = dir.join("d.bin");
     let df = data_file.to_str().unwrap();
 
-    // Bash is the sole target that rejects `--data-file` (its data lives in the runtime); the error names the target.
-    let out = dir.join("out.bash");
-    let r = run_dewasm(&[
-        watp,
-        "-t",
-        "bash",
-        "-m",
-        "library",
-        "-o",
-        out.to_str().unwrap(),
-        "--data-file",
-        df,
-    ]);
-    assert!(!r.status.success(), "bash: expected rejection");
-    assert!(
-        String::from_utf8_lossy(&r.stderr).contains("bash"),
-        "bash: error should mention the target, got: {}",
-        String::from_utf8_lossy(&r.stderr)
-    );
+    // Bash and codon reject `--data-file` (bash keeps its data in the runtime; codon has no externalization support); the error names the target.
+    for target in ["bash", "codon"] {
+        let out = dir.join(format!("out.{target}"));
+        let r = run_dewasm(&[
+            watp,
+            "-t",
+            target,
+            "-m",
+            "library",
+            "-o",
+            out.to_str().unwrap(),
+            "--data-file",
+            df,
+        ]);
+        assert!(!r.status.success(), "{target}: expected rejection");
+        assert!(
+            String::from_utf8_lossy(&r.stderr).contains(target),
+            "{target}: error should mention the target, got: {}",
+            String::from_utf8_lossy(&r.stderr)
+        );
+    }
 
     // --data-file with stdout output is rejected even for a supported target.
     let r = run_dewasm(&[

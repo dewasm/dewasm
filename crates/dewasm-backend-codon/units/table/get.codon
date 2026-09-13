@@ -1,6 +1,0 @@
-# requires: rt/trap, rt/boxed
-def get(self, i: UInt[32]) -> Optional[Rt.Funcref]:
-    idx = int(i)
-    if idx >= len(self.slots):
-        Rt.trap("out of bounds table access")
-    return self.slots[idx]

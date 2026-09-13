@@ -6,6 +6,9 @@ def wasi_fd_renumber(self, fd: UInt[32], to: UInt[32]) -> UInt[32]:
     dst = int(to)
     if src not in self.fds or dst not in self.fds:
         return UInt[32](self.ERRNO_BADF)
+    # Renumbering onto itself must leave the fd open; falling through would close the host fd and then delete the entry it just stored.
+    if src == dst:
+        return UInt[32](self.ERRNO_SUCCESS)
     old = self.fds[dst]
     if old.kind == 1:
         close(old.host_fd)

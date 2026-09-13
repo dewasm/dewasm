@@ -6,6 +6,7 @@
 
 use std::path::Path;
 use std::process::{Command, Output};
+use std::sync::LazyLock;
 
 use dewasm_backend::{Backend, RuntimeLinkage};
 use dewasm_backend_codon::{find_codon, CodonBackend};
@@ -26,7 +27,7 @@ impl BackendUnderTest for Codon {
 
     /// Compile `source` to the crate's shared cache binary (debug; see the module docs) and run it with the Codon runtime dylibs beside it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
-        match common::build_codon_debug(source) {
+        match common::build_codon(source) {
             Err(build) => build,
             Ok(bin) => common::run_codon_binary(&bin, args, stdin),
         }
@@ -34,7 +35,7 @@ impl BackendUnderTest for Codon {
 
     /// Build `source` (debug) and return the run recipe for a pty (the QuickJS REPL case).
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
-        let bin = common::build_codon_debug(source).unwrap_or_else(|build| {
+        let bin = common::build_codon(source).unwrap_or_else(|build| {
             panic!(
                 "codon build failed:\n{}",
                 String::from_utf8_lossy(&build.stderr)
@@ -107,17 +108,14 @@ impl BackendUnderTest for Codon {
     }
 
     /// `codon run` executes in-process, so no dylib copies or prebuilt binary are needed; the working directory holds the module files the driver imports.
+    /// Debug like every other suite build (tests/common/mod.rs).
     fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
         let path = dir.join("driver.codon");
         std::fs::write(&path, driver).unwrap();
         let codon = find_codon()
             .expect("codon toolchain not found on PATH (or $DEWASM_CODON): see docs/testing.md");
         dewasm_test_helper::run_command_bytes(
-            Command::new(codon)
-                .arg("run")
-                .arg("-release")
-                .arg(&path)
-                .current_dir(dir),
+            Command::new(codon).arg("run").arg(&path).current_dir(dir),
             b"",
         )
     }
@@ -130,9 +128,8 @@ print(_i.exports["add"].fn.invoke([AddRt.Val.of_i32(UInt[32](4294967295)), AddRt
 print(_i.exports["fib"].fn.invoke([AddRt.Val.of_i32(UInt[32](10))])[0].i32())
 "#;
 
-/// The override/fallback glue: fd_write intercepted by a boxed `Fn` (memory bound after construction), random_get falls back to the bundled WASI.
-/// Prints the actual bytes written.
-const CODON_OVERRIDE_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
+/// The boxed fd_write interceptor the three override glues share (identical in each; only the driver code after it differs): captures the written bytes, memory bound after construction.
+const CAP_FD_CLASS: &str = r#"from C import write(int, Ptr[byte], int) -> int
 
 class _CapFd(ProgRt.Fn):
     m: Optional[ProgRt.Memory]
@@ -149,7 +146,14 @@ class _CapFd(ProgRt.Fn):
             self.out.append(int(m.data[ptr + k]))
         m.i32_store(int(a[3].i32()), UInt[32](ln))
         return [ProgRt.Val.of_i32(UInt[32](0))]
+"#;
 
+/// The override/fallback glue: fd_write intercepted by a boxed `Fn`, random_get falls back to the bundled WASI.
+/// Prints the actual bytes written.
+static CODON_OVERRIDE_GLUE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{CAP_FD_CLASS}{}",
+        r#"
 _cap = _CapFd()
 _w = Dict[str, ProgRt.Extern]()
 _w["fd_write"] = ProgRt.Extern.of_fn(_cap, "i32,i32,i32,i32->i32")
@@ -162,27 +166,15 @@ _buf = Ptr[byte](len(_cap.out) if len(_cap.out) > 0 else 1)
 for _k in range(len(_cap.out)):
     _buf[_k] = byte(_cap.out[_k])
 write(1, _buf, len(_cap.out))
-"#;
+"#
+    )
+});
 
 /// The `custom_wasi_provider` glue: the imports dict *is* the provider contract for Codon (the dynamic backends' duck-typed provider objects have no equivalent), so a dict covering every WASI import stands in for the provider object, and the bundled WASI (`_wasi`) is never lazily constructed.
-const CODON_CUSTOM_PROVIDER_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
-
-class _CapFd(ProgRt.Fn):
-    m: Optional[ProgRt.Memory]
-    out: List[int]
-    def __init__(self):
-        self.m = None
-        self.out = List[int]()
-    def invoke(self, a: List[ProgRt.Val]) -> List[ProgRt.Val]:
-        m = self.m
-        iovs = int(a[1].i32())
-        ptr = int(m.i32_load(iovs))
-        ln = int(m.i32_load(iovs + 4))
-        for k in range(ln):
-            self.out.append(int(m.data[ptr + k]))
-        m.i32_store(int(a[3].i32()), UInt[32](ln))
-        return [ProgRt.Val.of_i32(UInt[32](0))]
-
+static CODON_CUSTOM_PROVIDER_GLUE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{CAP_FD_CLASS}{}",
+        r#"
 class _RandZero(ProgRt.Fn):
     def __init__(self):
         pass
@@ -203,27 +195,15 @@ for _k in range(len(_cap.out)):
     _buf[_k] = byte(_cap.out[_k])
 write(1, _buf, len(_cap.out))
 print("bundled wasi constructed:", "true" if _inst._wasi is not None else "false")
-"#;
+"#
+    )
+});
 
 /// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
-const CODON_PARTIAL_OVERRIDE_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
-
-class _CapFd(ProgRt.Fn):
-    m: Optional[ProgRt.Memory]
-    out: List[int]
-    def __init__(self):
-        self.m = None
-        self.out = List[int]()
-    def invoke(self, a: List[ProgRt.Val]) -> List[ProgRt.Val]:
-        m = self.m
-        iovs = int(a[1].i32())
-        ptr = int(m.i32_load(iovs))
-        ln = int(m.i32_load(iovs + 4))
-        for k in range(ln):
-            self.out.append(int(m.data[ptr + k]))
-        m.i32_store(int(a[3].i32()), UInt[32](ln))
-        return [ProgRt.Val.of_i32(UInt[32](0))]
-
+static CODON_PARTIAL_OVERRIDE_GLUE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{CAP_FD_CLASS}{}",
+        r#"
 _cap = _CapFd()
 _w = Dict[str, ProgRt.Extern]()
 _w["fd_write"] = ProgRt.Extern.of_fn(_cap, "i32,i32,i32,i32->i32")
@@ -237,7 +217,9 @@ for _k in range(len(_cap.out)):
     _buf[_k] = byte(_cap.out[_k])
 write(1, _buf, len(_cap.out))
 print("bundled wasi constructed:", "true" if _inst._wasi is not None else "false")
-"#;
+"#
+    )
+});
 
 /// The `wasi_stdio_capture` glue: the bundled WASI writes straight to the process fd 1, so the capture is an fd-level pipe redirect (dup/dup2), the Go backend's `os.Pipe` idiom on libc.
 const CODON_STDIO_CAPTURE_GLUE: &str = r#"from C import pipe(Ptr[byte]) -> int
@@ -831,9 +813,9 @@ write(1, _rgb, _w * _h * 3)
 "#;
 
 dewasm_test_helper::library_add_e2e!(Codon, CODON_ADD_GLUE);
-dewasm_test_helper::wasi_import_override_e2e!(Codon, CODON_OVERRIDE_GLUE);
-dewasm_test_helper::custom_wasi_provider_e2e!(Codon, CODON_CUSTOM_PROVIDER_GLUE);
-dewasm_test_helper::partial_override_e2e!(Codon, CODON_PARTIAL_OVERRIDE_GLUE);
+dewasm_test_helper::wasi_import_override_e2e!(Codon, CODON_OVERRIDE_GLUE.as_str());
+dewasm_test_helper::custom_wasi_provider_e2e!(Codon, CODON_CUSTOM_PROVIDER_GLUE.as_str());
+dewasm_test_helper::partial_override_e2e!(Codon, CODON_PARTIAL_OVERRIDE_GLUE.as_str());
 dewasm_test_helper::stdio_capture_e2e!(Codon, CODON_STDIO_CAPTURE_GLUE);
 
 dewasm_test_helper::wasi_suite!(Codon, Stdio);

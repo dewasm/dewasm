@@ -32,7 +32,7 @@ There are some features for testing:
 
 | Feature | Description |
 | --- | --- |
-| `slow_test` | CI's main run: the slow app cases and the full spec testsuite. |
+| `slow_test` | CI's main run: the slow app cases and the full spec testsuite (codon, whose per-file cost is a compile, runs a curated spec list here and its full sweep only under `ultra_slow_test`). |
 | `ultra_slow_test` | Implies `slow_test`; the cases CI cannot afford by wall time or memory, run in local pre-release verification. |
 | `wasmtime_test` | The snapshot freshness checks, which need the `xtask` binary built; see below. |
 

@@ -21,9 +21,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use dewasm_backend::{
     check_module_support, comparison, hex_string, is_boolean, is_ident, is_wasi_module,
-    load_method, module_name_error, stmts_use_tail_calls, store_method, type_key, wasi_bundled,
-    Backend, CodeWriter, CompareOperands, GenOptions, Mode, OutputFile, RuntimeBundler,
-    RuntimeLinkage, RuntimeScope, SupportStatus,
+    load_method, local_runs, module_name_error, stmts_use_tail_calls, store_method, type_key,
+    wasi_bundled, Backend, CodeWriter, CompareOperands, GenOptions, Mode, OutputFile,
+    RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
@@ -370,21 +370,51 @@ fn generate_class_inner(
     seeds.insert("rt/trap".to_string());
     seeds.insert("rt/exit".to_string());
     let mut tail_entry_set = tail_callers.clone();
+    let mut tail_sig_set: BTreeSet<Vec<ValType>> = BTreeSet::new();
+    let mut boxed_sig_set: BTreeSet<Vec<ValType>> = BTreeSet::new();
+    let mut tail_slot_set: BTreeSet<(usize, ValType)> = BTreeSet::new();
     for f in &module.funcs {
         Stmt::any(&f.body, &mut |st| {
-            if let Stmt::ReturnCall { func, .. } = st {
-                if *func >= module.num_imported_funcs() {
-                    tail_entry_set.insert(*func);
+            match st {
+                Stmt::ReturnCall { func, .. } => {
+                    if *func >= module.num_imported_funcs() {
+                        tail_entry_set.insert(*func);
+                    } else {
+                        // An imported direct target parks boxed.
+                        let results = module.func_type(*func).results.clone();
+                        tail_sig_set.insert(results.clone());
+                        boxed_sig_set.insert(results);
+                    }
                 }
+                Stmt::ReturnCallIndirect { type_idx, .. } => {
+                    // An indirect site can park boxed (a foreign funcref) and needs every param slot of its signature.
+                    let ty = &module.types[*type_idx as usize];
+                    tail_sig_set.insert(ty.results.clone());
+                    boxed_sig_set.insert(ty.results.clone());
+                    for (i, t) in ty.params.iter().enumerate() {
+                        tail_slot_set.insert((i, *t));
+                    }
+                }
+                _ => {}
             }
             false
         });
+    }
+    for idx in &tail_entry_set {
+        let ty = module.func_type(*idx);
+        tail_sig_set.insert(ty.results.clone());
+        for (i, t) in ty.params.iter().enumerate() {
+            tail_slot_set.insert((i, *t));
+        }
     }
     let gen = Gen {
         module,
         default_wasi,
         tail_callers,
         tail_entry_set,
+        tail_sigs: tail_sig_set.into_iter().collect(),
+        boxed_tail_sigs: boxed_sig_set.into_iter().collect(),
+        tail_slots: tail_slot_set.into_iter().collect(),
         uses: RefCell::new(seeds),
         rt_name: rt_name.clone(),
         class_name: class_name.to_string(),
@@ -522,13 +552,13 @@ fn temp(t: Temp) -> String {
 }
 
 /// A `UInt[32]` constant expression.
-fn i32_const(v: u32) -> String {
+pub fn i32_const(v: u32) -> String {
     format!("UInt[32]({v})")
 }
 
 /// A `UInt[64]` constant expression.
 /// Values above `i64::MAX` are spelled in hex: Codon rejects a decimal literal outside the signed 64-bit range but parses the hex form (wrapping), and `UInt[64]` reinterprets the bits.
-fn i64_const(v: u64) -> String {
+pub fn i64_const(v: u64) -> String {
     if v > i64::MAX as u64 {
         format!("UInt[64](0x{v:X})")
     } else {
@@ -605,6 +635,12 @@ struct Gen<'a> {
     tail_callers: BTreeSet<u32>,
     /// [`Gen::tail_entries`]'s value, computed once: it scans every function body, and `tail_slot` consults it per element item and per `return_call`.
     tail_entry_set: BTreeSet<u32>,
+    /// [`Gen::tail_signatures`]'s value, computed once alongside `tail_entry_set` for the same reason.
+    tail_sigs: Vec<Vec<ValType>>,
+    /// The subset of `tail_sigs` a *boxed* parked target can carry (an indirect tail call site or an imported direct target): only these need a `_X` entry subclass.
+    boxed_tail_sigs: Vec<Vec<ValType>>,
+    /// [`Gen::tail_arg_slots`]'s value, computed once alongside `tail_entry_set`.
+    tail_slots: Vec<(usize, ValType)>,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
@@ -672,50 +708,15 @@ impl<'a> Gen<'a> {
             .position(|f| *f == func_idx)
     }
 
-    /// The distinct result signatures a parked tail call can carry: the entries' own, every indirect tail call site's, and every imported direct target's.
-    /// Each needs one parked-target field, one entry table, one entry base class, and one boxed entry subclass.
-    fn tail_signatures(&self) -> Vec<Vec<ValType>> {
-        let mut seen: BTreeSet<Vec<ValType>> = BTreeSet::new();
-        for idx in self.tail_entries() {
-            seen.insert(self.module.func_type(*idx).results.clone());
-        }
-        for f in &self.module.funcs {
-            Stmt::any(&f.body, &mut |st| {
-                match st {
-                    Stmt::ReturnCallIndirect { type_idx, .. } => {
-                        seen.insert(self.module.types[*type_idx as usize].results.clone());
-                    }
-                    Stmt::ReturnCall { func, .. } if *func < self.module.num_imported_funcs() => {
-                        seen.insert(self.module.func_type(*func).results.clone());
-                    }
-                    _ => {}
-                }
-                false
-            });
-        }
-        seen.into_iter().collect()
+    /// The distinct result signatures a parked tail call can carry: the entries' own, every indirect tail call site's, and every imported direct target's (computed once into `tail_sigs`).
+    /// Each needs one parked-target field, one entry table, and one entry base class; the boxed subset (`boxed_tail_sigs`) additionally gets a boxed entry subclass.
+    fn tail_signatures(&self) -> &[Vec<ValType>] {
+        &self.tail_sigs
     }
 
-    /// Every argument slot the module's tail calls park into: one per position and type a tail-calling function's own parameters need (its entry reads them back out), plus every signature reachable through an indirect tail call site.
-    fn tail_arg_slots(&self) -> Vec<(usize, ValType)> {
-        let mut seen: BTreeSet<(usize, ValType)> = BTreeSet::new();
-        let note = |params: &[ValType], seen: &mut BTreeSet<(usize, ValType)>| {
-            for (i, ty) in params.iter().enumerate() {
-                seen.insert((i, *ty));
-            }
-        };
-        for idx in self.tail_entries() {
-            note(&self.module.func_type(*idx).params, &mut seen);
-        }
-        for f in &self.module.funcs {
-            Stmt::any(&f.body, &mut |st| {
-                if let Stmt::ReturnCallIndirect { type_idx, .. } = st {
-                    note(&self.module.types[*type_idx as usize].params, &mut seen);
-                }
-                false
-            });
-        }
-        seen.into_iter().collect()
+    /// Every argument slot the module's tail calls park into: one per position and type a tail-calling function's own parameters need (its entry reads them back out), plus every signature reachable through an indirect tail call site (computed once into `tail_slots`).
+    fn tail_arg_slots(&self) -> &[(usize, ValType)] {
+        &self.tail_slots
     }
 
     /// The return clause of a tail entry's `run` for a result signature.
@@ -775,14 +776,14 @@ impl<'a> Gen<'a> {
     fn tail_bases(&self, w: &mut CodeWriter) {
         let class = &self.class_name;
         for sig in self.tail_signatures() {
-            let id = sig_id(&sig);
+            let id = sig_id(sig);
             w.line(format!("class {class}_TB_{id}:"));
             w.indent();
             w.line("def __init__(self):");
             w.indent();
             w.line("pass");
             w.dedent();
-            w.line(format!("def run(self){}:", self.tail_ret(&sig)));
+            w.line(format!("def run(self){}:", self.tail_ret(sig)));
             w.indent();
             w.line(format!("{}(\"uncallable tail entry\")", self.rt("trap")));
             match sig.as_slice() {
@@ -839,9 +840,10 @@ impl<'a> Gen<'a> {
             w.line("");
         }
         // The boxed entry: an indirect tail call to another instance's function (or a direct one to an import) parks the boxed callee with its boxed arguments.
-        for sig in self.tail_signatures() {
+        // Only the signatures those two sites can carry get one; an entry-only signature has no construction site for it.
+        for sig in &self.boxed_tail_sigs {
             self.use_unit("rt/boxed");
-            let id = sig_id(&sig);
+            let id = sig_id(sig);
             w.line(format!("class {class}_TB_{id}_X({class}_TB_{id}):"));
             w.indent();
             w.line(format!("f: {rt}.Fn"));
@@ -853,7 +855,7 @@ impl<'a> Gen<'a> {
             w.line("self.f = f");
             w.line("self.a = a");
             w.dedent();
-            w.line(format!("def run(self){}:", self.tail_ret(&sig)));
+            w.line(format!("def run(self){}:", self.tail_ret(sig)));
             w.indent();
             match sig.as_slice() {
                 [] => {
@@ -878,7 +880,6 @@ impl<'a> Gen<'a> {
             w.line("");
         }
         for idx in self.boxed_funcs() {
-            self.use_unit("rt/boxed");
             self.use_unit("rt/boxed");
             let ty = m.func_type(idx).clone();
             w.line(format!("class {class}_W{idx}({rt}.Fn):"));
@@ -910,7 +911,6 @@ impl<'a> Gen<'a> {
             match self.import_fallback(i) {
                 ImportFallback::Wasi => {
                     self.use_unit("rt/boxed");
-                    self.use_unit("rt/boxed");
                     self.use_unit("wasi/_class");
                     self.use_unit(&format!("wasi/{}", import.name));
                     w.line(format!("class {class}_WW{i}({rt}.Fn):"));
@@ -938,7 +938,6 @@ impl<'a> Gen<'a> {
                     w.line("");
                 }
                 ImportFallback::Enosys => {
-                    self.use_unit("rt/boxed");
                     self.use_unit("rt/boxed");
                     w.line(format!("class {class}_WS{i}({rt}.Fn):"));
                     w.indent();
@@ -1066,11 +1065,11 @@ impl<'a> Gen<'a> {
             self.use_unit("rt/data");
             w.line(format!("data{i}: {rt}.Data"));
         }
-        for (i, ty) in self.tail_arg_slots() {
+        for &(i, ty) in self.tail_arg_slots() {
             w.line(format!("{}: {}", tail_arg_slot(i, ty), self.ty_str(ty)));
         }
         for sig in self.tail_signatures() {
-            let id = sig_id(&sig);
+            let id = sig_id(sig);
             let class = &self.class_name;
             w.line(format!("_tf_{id}: Optional[{class}_TB_{id}]"));
             w.line(format!("_tb_{id}: List[{class}_TB_{id}]"));
@@ -1094,7 +1093,7 @@ impl<'a> Gen<'a> {
             "def __init__(self, imports: Dict[str, Dict[str, {rt}.Extern]], args: List[str], env: Dict[str, str], preopens: Dict[str, str]):"
         ));
         w.indent();
-        for (i, ty) in self.tail_arg_slots() {
+        for &(i, ty) in self.tail_arg_slots() {
             w.line(format!(
                 "self.{} = {}",
                 tail_arg_slot(i, ty),
@@ -1103,14 +1102,14 @@ impl<'a> Gen<'a> {
         }
         // Entry tables are built before anything that parks a target or stores a funcref in a table: a tail call reads its target out of here rather than building a closure per hop.
         for sig in self.tail_signatures() {
-            let id = sig_id(&sig);
+            let id = sig_id(sig);
             let class = self.class_name.clone();
             w.line(format!("self._tf_{id} = None"));
             w.line(format!("self._tb_{id} = List[{class}_TB_{id}]()"));
             for f in self
                 .tail_entries()
                 .iter()
-                .filter(|f| self.module.func_type(**f).results == sig)
+                .filter(|f| self.module.func_type(**f).results == *sig)
             {
                 w.line(format!("self._tb_{id}.append({class}_TB_{id}_F{f}(self))"));
             }
@@ -1237,9 +1236,20 @@ impl<'a> Gen<'a> {
                     w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
                 }
                 ElemKind::Passive | ElemKind::Active { .. } => {
-                    w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
-                    for item in &elem.items {
-                        w.line(format!("self.elem{i}.append({})", self.elem_item(item)));
+                    // One list literal, not one append per item: `__init__`'s statement count is what the optimizer's compile time is superlinear in.
+                    // Funcref items are wrapped in `Optional[...](...)` explicitly: Codon types the literal from its elements alone, and `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`.
+                    if elem.items.is_empty() {
+                        w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
+                    } else {
+                        let items: Vec<String> = elem
+                            .items
+                            .iter()
+                            .map(|item| match item {
+                                ElemItem::Null => self.elem_item(item),
+                                _ => format!("Optional[{rt}.Funcref]({})", self.elem_item(item)),
+                            })
+                            .collect();
+                        w.line(format!("self.elem{i} = [{}]", items.join(", ")));
                     }
                     if let ElemKind::Active {
                         table_index,
@@ -1265,17 +1275,18 @@ impl<'a> Gen<'a> {
                 Some(offset) => {
                     self.use_unit("memory/init");
                     w.line(format!(
-                        "self.m.init({}, {rt}.unhex({}), UInt[32](0), UInt[32]({}))",
+                        "self.m.init({}, {rt}.unhex(\"{}\"), UInt[32](0), UInt[32]({}))",
                         self.expr(offset),
-                        codon_string(&hex_string(&data.data)),
+                        hex_string(&data.data),
                         data.data.len()
                     ));
                     w.line(format!("self.data{i} = {rt}.Data(Ptr[byte](1), 0)"));
                 }
                 None => {
+                    // The hex alphabet needs no escaping, so the segment skips `codon_string`'s per-character scan (segments run to megabytes).
                     w.line(format!(
-                        "self.data{i} = {rt}.unhex({})",
-                        codon_string(&hex_string(&data.data))
+                        "self.data{i} = {rt}.unhex(\"{}\")",
+                        hex_string(&data.data)
                     ));
                 }
             }
@@ -1401,16 +1412,11 @@ impl<'a> Gen<'a> {
             "def global_get(self, name: str) -> List[{rt}.Val]:"
         ));
         w.indent();
-        let num_imported = m.imported_globals.len();
         for export in &m.exports {
             let ExportKind::Global(idx) = export.kind else {
                 continue;
             };
-            let ty = if (idx as usize) < num_imported {
-                m.imported_globals[idx as usize].ty
-            } else {
-                m.globals[idx as usize - num_imported].ty
-            };
+            let ty = m.global_type(idx);
             w.line(format!("if name == {}:", codon_string(&export.name)));
             w.indent();
             w.line(format!(
@@ -1532,11 +1538,20 @@ impl<'a> Gen<'a> {
             w.indent();
         }
 
-        for (i, t) in func.locals.iter().enumerate() {
-            w.line(format!("l{} = {}", ty.params.len() + i, zero_value(*t)));
+        for run in local_runs(&func.locals, zero_value) {
+            let targets: String = run
+                .clone()
+                .map(|i| format!("l{} = ", ty.params.len() + i))
+                .collect();
+            w.line(format!("{targets}{}", zero_value(func.locals[run.start])));
         }
-        for t in &func.temps {
-            w.line(format!("{} = {}", temp(*t), zero_value(t.ty)));
+        let temp_tys: Vec<ValType> = func.temps.iter().map(|t| t.ty).collect();
+        for run in local_runs(&temp_tys, zero_value) {
+            let targets: String = run
+                .clone()
+                .map(|i| format!("{} = ", temp(func.temps[i])))
+                .collect();
+            w.line(format!("{targets}{}", zero_value(temp_tys[run.start])));
         }
         if self.seq_has_relay_branch(&func.body) {
             w.line("_br = 0");

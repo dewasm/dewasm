@@ -25,13 +25,8 @@ const FAST_TRIALS: &[&str] = &[
     "rust/stdio",
 ];
 
-/// The `slow_test` tier: the fast trials plus one representative per filesystem area (open/seek/stat, positioned io, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
-const SLOW_TRIALS: &[&str] = &[
-    "assemblyscript/args_get-multiple-arguments",
-    "assemblyscript/environ_get-multiple-variables",
-    "assemblyscript/fd_write-to-stdout",
-    "assemblyscript/proc_exit-failure",
-    "assemblyscript/random_get-non-zero-length",
+/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): one representative per filesystem area (open/seek/stat, positioned io, directories, paths, symlinks, rename, poll, clocks) and the `sock_shutdown` rows so the failure ledger stays exercised.
+const SLOW_EXTRA_TRIALS: &[&str] = &[
     "c/clock_gettime-monotonic",
     "c/fdopendir-with-access",
     "c/fopen-with-access",
@@ -49,7 +44,6 @@ const SLOW_TRIALS: &[&str] = &[
     "rust/path_rename",
     "rust/poll_oneoff_stdio",
     "rust/readlink",
-    "rust/stdio",
     "rust/symlink_create",
 ];
 
@@ -109,7 +103,14 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
         if cfg!(feature = "ultra_slow_test") {
             None
         } else if cfg!(feature = "slow_test") {
-            Some(SLOW_TRIALS)
+            static SLOW: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+            Some(SLOW.get_or_init(|| {
+                FAST_TRIALS
+                    .iter()
+                    .chain(SLOW_EXTRA_TRIALS)
+                    .copied()
+                    .collect()
+            }))
         } else {
             Some(FAST_TRIALS)
         }

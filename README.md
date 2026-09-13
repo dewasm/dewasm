@@ -78,7 +78,7 @@ $ cargo build --release
 $ dewasm input.<wasm|wat>
     --target <ruby|bash|python|perl|go|java|codon>
     --mode <standalone|library>
-    -o output.<rb|sh|py|pl|go|java>
+    -o output.<rb|sh|py|pl|go|java|codon>
 ```
 
 - `input` is a WebAssembly binary to be translated.

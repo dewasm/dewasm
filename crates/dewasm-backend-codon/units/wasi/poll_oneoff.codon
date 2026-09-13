@@ -18,7 +18,10 @@ def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32],
         tag = int(m.i32_load8_u(base + 8))
         if tag == 0:  # clock
             clock_id = int(m.i32_load(base + 16))
+            # The timeout field is unsigned; a deadline at or above 2^63 ns (the common infinite-wait sentinel included) clamps to 2^62 ns so the signed arithmetic below cannot wrap.
             timeout = int(Int[64](m.i64_load(base + 24)))
+            if timeout < 0:
+                timeout = 0x4000000000000000
             cflags = int(m.i32_load16_u(base + 40))
             now = Rt.clock_ns(clock_id == 0)
             rel = timeout
@@ -54,6 +57,9 @@ def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32],
                     if c[1] < best:
                         best = c[1]
                 timeout_ms = best // 1000000
+                # poll(2) takes a C int of milliseconds; cap what cannot fit.
+                if timeout_ms > 2147483647:
+                    timeout_ms = 2147483647
             pfd = Ptr[byte](8)
             Rt.raw_store32(pfd, UInt[32](0))          # fd 0
             Rt.raw_store16(pfd + 4, UInt[16](1))      # events = POLLIN
