@@ -5,7 +5,7 @@ Status: **Accepted, 2026-09-13.** Implemented in `crates/dewasm-backend-codon/sr
 ## Context
 
 Codon compiles a statically typed Python dialect through LLVM.
-Decision 93 rejected it as a speed-suite engine runner because it cannot run the Python backend's unmodified output; the 2026-09-13 feasibility investigation (issue #310) measured the dedicated-backend path instead: `UInt[32]`/`UInt[64]` arithmetic is correct where the masked-unsigned convention is silently wrong (Codon's `int` is signed 64-bit), hand-ported kernels of the generated-code shape run at wasmtime-class speed, and compile time is seconds at microbenchmark size but superlinear on huge single functions.
+Decision 93 rejected it as a speed-suite engine runner because it cannot run the Python backend's unmodified output; the 2026-09-13 feasibility investigation (issue #310) measured the dedicated-backend path instead: `UInt[32]`/`UInt[64]` arithmetic is correct where the masked-unsigned convention is silently wrong (Codon's `int` is signed 64-bit), hand-ported kernels of the generated-code shape run at wasmtime-class speed, and compile time is seconds at microbenchmark size but grows steeply on the biggest artifacts (attributed here to huge single functions; the issue #319 investigation later split the cost into a parser term quadratic in a single literal's length and a `-release`-only capture-analysis term on the largest functions).
 Codon's semantics sit between the dynamic and the compiled targets, so each lowering choice below names which existing backend's shape it takes and where Codon forced a different one.
 
 ## Decision
@@ -36,7 +36,7 @@ Codon's semantics sit between the dynamic and the compiled targets, so each lowe
   Codon's `Ptr[T]` indexing would emit naturally-aligned access; the explicit `align 1` units make unaligned access defined and cost nothing on the target hosts.
   Allocations are memset-zeroed explicitly (Codon's GC does not clear atomic allocations).
 - **The spec harness phrases each assertion as a named thunk, and spec builds carry the Go backend's recursion guard.**
-  One flat module-level run of thousands of assertions would be the megafunction shape whose `-release` compile time is superlinear (measured: 30 s at 10k statements, unfinished at 394 s for 50k); thousands of small functions compile linearly.
+  One flat module-level run of thousands of assertions would be one huge function, the shape whose `-release` compile time collapses in Codon's capture analysis (issue #319); thousands of small functions compile linearly.
   A native stack overflow is fatal and uncatchable, so spec builds count frame slots into a module-level `_rt_stack` and trap at the same budget as Go's (decision 29's `SPEC_STACK_LIMIT` reasoning); shipped output carries no guard, and the standalone entrypoint has no depth mitigation yet.
 
 ## Rejected alternatives
@@ -55,7 +55,7 @@ Codon's semantics sit between the dynamic and the compiled targets, so each lowe
 ## Consequences
 
 - Positive: the curated spec harness passes with the failure ledger matching Go's surface (import mutability/limit checks, multi-memory-downstream linking rows); every `wat/` and `c/` microbenchmark output is byte-identical to the Python backend's, and the standalone artifacts run the microbenchmark speed contract.
-- Negative: imported-function calls and `call_indirect` allocate a boxed value list per call; huge single generated functions (sqlite-class, 10k+ statements) push `codon build -release` from seconds into minutes, unsettled until measured against the extraction pass (decision 81).
+- Negative: imported-function calls and `call_indirect` allocate a boxed value list per call; a data segment is emitted as adjacent chunk literals because Codon's parser cost is quadratic in a single literal's length (issue #319); `codon build -release` does not finish on artifacts with sqlite-class functions (Codon's capture analysis, superlinear in function size), which keeps the sqlite cases out of the speed suite, unsettled until measured against the extraction pass (decision 81).
 - Carry-over: the shared perf passes (decisions 81-83, 90), the deep-crossing flat dispatch (decision 60's criterion), an unboxed same-module `call_indirect` fast path, and the giant-artifact `-release` compile cost are tracked in issue #311.
   The test suites build debug throughout and no release-mode verification pass exists in any category: the emission-level NaN quieting keeps the generated code's semantics optimizer-independent, so a divergence that only appears at `-release` would be a Codon miscompilation, the compiler's bug to fix rather than this backend's to test for; only the benchmarks build `-release`.
   WASI p1 rests on libc via C interop with `__apple__`-conditional layouts verified on darwin arm64 and linux x86_64; any other machine is refused when the bundled WASI is constructed (`rt/host_check`: on darwin x86_64 the un-suffixed stat/readdir symbols are the legacy 32-bit-inode variants, and linux aarch64 glibc lays `struct stat` out differently).
