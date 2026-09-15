@@ -57,7 +57,7 @@ fn cowsay_standalone_artifact_is_vet_clean() {
 }
 
 /// mruby is the exception-handling app (its setjmp/longjmp lowering uses `try_table`/`throw`), and the artifact issue #214 measured.
-/// No speed token: this file measured 5.0 s against a cold `go` build cache and 0.8 s against a warm one, cowsay-class like the `mruby_eh` e2e case.
+/// No category token: cowsay-class, like the `mruby_eh` e2e case.
 #[test]
 fn mruby_standalone_artifact_is_vet_clean() {
     assert_vet_clean("mruby", &standalone_app("mruby"));

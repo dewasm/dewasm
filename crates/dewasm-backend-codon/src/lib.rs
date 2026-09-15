@@ -20,7 +20,7 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, comparison, hex_string, is_boolean, is_ident, is_wasi_module,
+    check_module_support, comparison, hex_literals, is_boolean, is_ident, is_wasi_module,
     load_method, local_runs, module_name_error, stmts_use_tail_calls, store_method, type_key,
     wasi_bundled, Backend, CodeWriter, CompareOperands, GenOptions, Mode, OutputFile,
     RuntimeBundler, RuntimeLinkage, RuntimeScope, SupportStatus,
@@ -627,6 +627,8 @@ fn tail_arg_slot(i: usize, ty: ValType) -> String {
 
 /// The recursion-guard budget (spec builds only), the Go backend's model: each generated function adds its frame's slot count to a shared counter on entry and traps once the running total exceeds this, turning an otherwise-fatal native stack overflow into a catchable "call stack exhausted" trap.
 const SPEC_STACK_LIMIT: usize = 1024;
+
+const DATA_LITERAL_HEX_DIGITS: usize = 8192;
 
 struct Gen<'a> {
     module: &'a Module,
@@ -1271,23 +1273,20 @@ impl<'a> Gen<'a> {
         for (i, data) in m.datas.iter().enumerate() {
             self.use_unit("rt/data");
             self.use_unit("rt/unhex");
+            // The hex alphabet needs no escaping, so the segment skips `codon_string`'s per-character scan (segments run to megabytes).
+            let payload = hex_literals(&data.data, DATA_LITERAL_HEX_DIGITS);
             match &data.offset {
                 Some(offset) => {
                     self.use_unit("memory/init");
                     w.line(format!(
-                        "self.m.init({}, {rt}.unhex(\"{}\"), UInt[32](0), UInt[32]({}))",
+                        "self.m.init({}, {rt}.unhex({payload}), UInt[32](0), UInt[32]({}))",
                         self.expr(offset),
-                        hex_string(&data.data),
                         data.data.len()
                     ));
                     w.line(format!("self.data{i} = {rt}.Data(Ptr[byte](1), 0)"));
                 }
                 None => {
-                    // The hex alphabet needs no escaping, so the segment skips `codon_string`'s per-character scan (segments run to megabytes).
-                    w.line(format!(
-                        "self.data{i} = {rt}.unhex(\"{}\")",
-                        hex_string(&data.data)
-                    ));
+                    w.line(format!("self.data{i} = {rt}.unhex({payload})"));
                 }
             }
         }

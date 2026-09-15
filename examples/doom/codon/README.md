@@ -14,16 +14,11 @@ Codon also has no import path for a sibling source file, so `build.sh` links the
 
 ## Build time
 
-**This frontend has not been built to completion here, and the compile is the reason.**
-The concatenated source is about 53,000 lines, nearly all of it generated, and DOOM's generated code is megafunction-heavy in a way the other demo apps are not.
-A debug `codon build` of it ran for over an hour on an Apple Silicon laptop without finishing.
-`-release` was not attempted: the optimized compile costs considerably more again on the same source, so there is no prospect of it finishing sooner.
+The concatenated source is about 53,000 lines, nearly all of it generated.
+A debug `codon build` of it takes about 26 seconds on an Apple Silicon laptop (8 of them the parse), and produces a 17MB binary.
 
-Compare `../../nes/codon/`, where the same toolchain compiles a 5,500-line generated source in about 7 seconds (debug) or 13 (`-release`).
-The difference is the artifact, not the backend: the cross-backend DOOM tests classify the Codon `codon build` of this module in the same ultra-slow tier as ripgrep, CPython and CRuby for exactly this reason.
-
-`build.sh` therefore prints a warning before it starts a compile, and caches aggressively: the concatenated source is compared byte for byte against the one the existing binary was built from, and an unchanged source skips the compile entirely.
-The default is the cheaper debug build; `CODON_BUILD=release ./build.sh` selects the optimized one for anyone willing to pay it.
+`build.sh` caches the result: the concatenated source is compared byte for byte against the one the existing binary was built from, and an unchanged source skips the compile entirely.
+The default is the cheaper debug build; `CODON_BUILD=release ./build.sh` selects the optimized one, which costs about 4.5 minutes on the same source (almost all of it Codon's IR capture analysis, run once per folding round).
 
 ## Run
 
@@ -32,7 +27,7 @@ The default is the cheaper debug build; `CODON_BUILD=release ./build.sh` selects
 ```
 
 builds and takes over the terminal (alternate screen, hidden cursor, raw input) until you quit.
-Read the section above first: on a clean checkout that first line is a compile that did not finish within an hour here, not the seconds the sibling frontends take.
+On a clean checkout that first line converts the module and compiles the result, about half a minute once dewasm itself is built.
 `./run.sh --smoke` instead runs a headless self-check: it inits the game, ticks it 15 times with no terminal takeover, sanity-checks the last frame, writes it to `screenshot.ppm` (binary P6, the same format the cross-backend frame snapshot is pinned in), and exits non-zero on failure.
 
 `codon` 0.20 or newer has to be on `PATH`; `DEWASM_CODON` names it explicitly.
@@ -41,7 +36,7 @@ Read the section above first: on a clean checkout that first line is a compile t
 ## Honest performance
 
 **The tick rate is unmeasured.**
-No number is quoted here because none was taken: the binary this frontend needs has not been produced (see above), so there is nothing to time.
+The binary builds and plays, but no rate is quoted here because none was taken under a method worth quoting: the `--smoke` self-check times 15 ticks, and how much the game simulates per tick depends on the wall clock it reads, so the same binary reports anywhere from 9 to 66 ticks/sec across consecutive runs.
 Nothing about the other frontends' rates transfers: `../python/`'s ~45 ticks/sec under PyPy and `../../nes/codon/`'s ~400 frames/sec are different interpreters on different modules, and extrapolating either to this one would be a guess dressed as a measurement.
 
 What was verified is the frontend's own logic, by compiling `main.codon` against a hand-written stub exposing the same `Doom`/`DoomRt` API surface as the generated library (the same boxed `Extern`/`Val`/`Fn` boundary, the same `KEY_*` globals, the same `B,G,R,A` framebuffer in linear memory) and driving that:
@@ -52,6 +47,8 @@ What was verified is the frontend's own logic, by compiling `main.codon` against
 - both quit paths (`q` and Ctrl-C) exit cleanly, with the alternate screen and cursor visibility restored and nothing emitted after the terminal is handed back
 
 That covers everything this directory owns. It does not cover the generated library, which is what the cross-backend spec and framebuffer-snapshot tests cover instead.
+
+The assembled binary passes the same `--smoke` check against the real generated library: the game inits, ticks, and hands over a 640x400 frame with 240 distinct colors.
 
 ## Rendering
 

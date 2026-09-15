@@ -821,7 +821,7 @@ dewasm_test_helper::stdio_capture_e2e!(Codon, CODON_STDIO_CAPTURE_GLUE);
 dewasm_test_helper::wasi_suite!(Codon, Stdio);
 dewasm_test_helper::wasi_suite!(Codon, ArgsEnv);
 dewasm_test_helper::wasi_suite!(Codon, Poll);
-// The eight filesystem fixtures each pay a codon build (measured: over a minute of the slow lane), and the WASI conformance suite's slow tier already covers the filesystem paths, so the fixture suite runs only in the local ultra pass.
+// The eight filesystem fixtures each pay a codon build, and the WASI conformance suite's slow category already covers the filesystem paths, so the fixture suite runs only in the local ultra pass.
 dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE, ultra);
 dewasm_test_helper::wasi_root_containment_e2e!(Codon, CODON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Codon);
@@ -829,7 +829,7 @@ dewasm_test_helper::standalone_dir_e2e!(Codon);
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 
-// The codon speed-token criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): the whole slow lane targets ~5 minutes, so only the cheapest app case (nes, 5k lines) stays `slow` as the one converted-app run in the lane; everything else, minigzip (18.5k) and treesitter (22.5k) included, is `ultra`, run locally, while the convert suite still converts every app there.
+// The codon category criterion, per the build cost the case's own artifact pays (CI has no persistent codon build cache, so every run pays it fresh): only the cheapest app case (nes) stays `slow` as the slow category's one converted-app run; everything else, minigzip and treesitter included, is `ultra`, run locally, while the convert suite still converts every app there.
 // Every `ultra` case still runs at slow on the interpreted backends, so CI keeps covering the cases themselves.
 dewasm_test_helper::mruby_eh_e2e!(Codon, ultra);
 dewasm_test_helper::cowsay_args_e2e!(Codon, ultra);
@@ -840,7 +840,7 @@ dewasm_test_helper::gzip_e2e!(Codon, ultra);
 
 dewasm_test_helper::qjs_file_io_e2e!(Codon, CODON_QJS_FILE_IO_GLUE, ultra);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Codon, CODON_SQLITE3_SHELL_GLUE, ultra);
-// The giant tier of the same criterion: these debug builds measured in the tens of minutes (rg 474k lines, CPython 1.25M, CRuby larger, DOOM megafunction-heavy).
+// The giant category of the same criterion: these builds are far past the slow category's budget.
 dewasm_test_helper::rg_search_e2e!(Codon, CODON_RG_SEARCH_GLUE, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Codon, CODON_CPYTHON_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Codon, CODON_CRUBY_GLUE, ultra);
@@ -859,7 +859,7 @@ dewasm_test_helper::treesitter_parse_e2e!(Codon, CODON_TREESITTER_PARSE, ultra);
 dewasm_test_helper::zeroperl_eval_e2e!(Codon, CODON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Codon, CODON_EXIFTOOL, ultra);
 
-// Ultra-slow category: DOOM's generated code is megafunction-heavy enough that even the debug build measured over 20 minutes on the dev host (see the reclassification note above); NES builds in seconds and stays slow as the lane's one converted-app run.
+// Ultra-slow category: the DOOM build does not fit the slow category's budget; NES stays its one converted-app run.
 dewasm_test_helper::doom_frame_e2e!(Codon, CODON_DOOM_FRAME_GLUE, ultra);
 dewasm_test_helper::nes_frame_e2e!(Codon, CODON_NES_FRAME_GLUE);
 

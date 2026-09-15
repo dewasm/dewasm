@@ -14,8 +14,8 @@ mod flat {
     pub use dewasm_backend::flat::*;
 
     /// Crossing depth from which a branch is worth a dispatch.
-    /// A relay costs one compare per crossed frame (measured at 0.82 ns/level under `--yjit`, flat from depth 2 to 32), while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states, measured at 0.9 ns for 3 hot states, 4.1 ns for 20 and 25 ns for 80.
-    /// So the break-even sits somewhere between 5 and 30 crossed frames depending on how large the state machine ends up, and any threshold inside that band is a judgement call rather than a derived constant. 16 is the value picked, since it puts the two measured workloads on the side each was measured to prefer: `nes.wasm` crosses at most 12 frames anywhere in the module and is 1.18x faster fully cascaded, `sqlite3-shell` reaches 278 and is 2.08x faster flattened.
+    /// A relay costs one compare per crossed frame (flat in the depth under `--yjit`), while a dispatch is a `case`-over-integers chain whose cost grows with the number of *hot* states.
+    /// The break-even is a band depending on how large the state machine ends up, not a derived constant; 16 puts the two measured workloads (`nes.wasm`, fully cascaded; `sqlite3-shell`, flattened) each on the side it prefers.
     pub const DEEP_CROSSING: usize = 16;
 }
 
@@ -516,10 +516,10 @@ const MAX_FIXED_ARITY: usize = 8;
 pub use dewasm_backend::WASI_PREVIEW1_FUNCTIONS;
 
 /// Loop-body extraction thresholds (see [`dewasm_backend::extract`]).
-/// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize a ~12 ns call per iteration is worth extracting into one.
+/// Ruby-specific values: YJIT/ZJIT compile a method only at a call, so a hot loop body large enough to amortize the per-iteration call cost is worth extracting into one.
 /// Tuned against the benchmark suite and the DOOM/NES examples; other backends would pick their own values.
 /// `max_params` 34 is the smallest budget that admits the NES frame loop (30 parameters), whose extraction measures +3.4% under YJIT.
-/// YJIT compiles high-arity methods without a cliff (~0.26 ns per extra parameter, no side exits up to 64), so the budget is bounded by the per-call marshalling cost, not by compilability; above 34 only sqlite3-shell's span set changes, with no measured gain.
+/// YJIT compiles high-arity methods without a cliff, so the budget is bounded by the per-call marshalling cost, not by compilability; above 34 only sqlite3-shell's span set changes, with no measured gain.
 const EXTRACT_PARAMS: extract::Params = extract::Params {
     min_weight: 40,
     max_params: 34,

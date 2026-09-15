@@ -599,7 +599,7 @@ dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
 // The packed variant is the same interpreter plus the wizer-embedded stdlib, so it inherits the category.
 dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
-// Slow, like the other filesystem app cases: measured 8.8 s (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Perl, PERL_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Perl, PERL_WASM3_GLUE);

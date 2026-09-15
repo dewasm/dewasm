@@ -38,7 +38,7 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "linking"),
 ];
 
-/// The pull-request tier: a small cross-section of cheap files, a semantic area each.
+/// The pull-request category: a small cross-section of cheap files, a semantic area each.
 const FAST_SPEC_FILES: &[&str] = &[
     "block",
     "br_if",
@@ -52,9 +52,9 @@ const FAST_SPEC_FILES: &[&str] = &[
     "traps",
 ];
 
-/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow tier is a superset by construction): the files covering this backend's own risk areas, sized by measured fresh-build cost.
+/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow category is a superset by construction): the files covering this backend's own risk areas, sized by measured fresh-build cost.
 /// Native unsigned arithmetic (`i32`/`i64`), the float conversion and bit paths (`conversions`/`f32_bitwise`), funcref tables and the element literal (`elem`/`call_indirect`), bulk memory (`memory_fill`), globals, and the boxed import boundary with its failure-ledger rows (`imports`).
-/// The float arithmetic files (`f32`/`f64`, ~17 s each) and `memory_copy` (~27 s, the memmove overlap coverage) measured as the three heaviest builds in the suite and run only in the ultra sweep; `memory_grow` is multi-memory-first upstream, so nearly all of it skips and it covers nothing here.
+/// The float arithmetic files (`f32`/`f64`) and `memory_copy` (the memmove overlap coverage) measured as the three heaviest builds in the suite and run only in the ultra sweep; `memory_grow` is multi-memory-first upstream, so nearly all of it skips and it covers nothing here.
 const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
     "call_indirect",
     "conversions",
@@ -196,7 +196,7 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program, so the tier sizes are set by compile latency, not run time: a plain `cargo test` (the pull-request tier, target: ~3 minutes) runs [`FAST_SPEC_FILES`], `--features slow_test` (CI's main-branch lane, target: ~5 minutes all in; the shared curated list measured 268 seconds there, over half the lane) adds [`SLOW_EXTRA_SPEC_FILES`] and the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
+    /// Codon compiles each `.wast` file to one program, so the category sizes are set by compile latency, not run time: a plain `cargo test` (the pull-request category) runs [`FAST_SPEC_FILES`], `--features slow_test` (CI's main-branch run) adds [`SLOW_EXTRA_SPEC_FILES`] and the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         if cfg!(feature = "ultra_slow_test") {
             None

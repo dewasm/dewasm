@@ -18,7 +18,7 @@ mod flat {
     /// Crossing depth from which a branch is worth a dispatch.
     ///
     /// Ruby's calibrated constant, kept after measuring it against the binary-tree dispatch this backend emits (`emit_dispatch_tree`): a transition costs O(log2 states) compares (~11 for the largest machine here, 1463 states), against ~16+ region checks for the relay it replaces.
-    /// Measured on converted apps (CPython 3.14, 2 runs each, ±0.2 s): the sqlite3 shell's query-heavy workload runs 1.42x faster than the relay-only lowering (23.4 s → 16.5 s) and the packed CRuby boot is at parity (17.0 s → 16.6 s).
+    /// Measured on converted apps (CPython 3.14): the sqlite3 shell's query-heavy workload runs faster than under the relay-only lowering, and the packed CRuby boot is at parity.
     /// A *linear* dispatch at this threshold measured 1.22x *slower* than the relay on the same boot (largest machine ~700 compares per transition), which is why the tree shape, not the Ruby `case`'s O(1) probe or an `elif`/`match` chain, carries this constant's calibration.
     pub const DEEP_CROSSING: usize = 16;
 }

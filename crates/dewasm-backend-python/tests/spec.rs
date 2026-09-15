@@ -50,7 +50,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Python executes wasm several times slower than Ruby (the full 257-file run takes ~9 s versus Ruby's ~4 s, spread thinly over per-file `python3` startup and the pure-Python numeric runtime with no single dominant file), so, like Bash, a plain `cargo test` runs only the shared curated list, plus the exception-handling files this backend now supports.
+    /// Python executes wasm several times slower than Ruby (the cost spreads thinly over per-file `python3` startup and the pure-Python numeric runtime, with no single dominant file), so, like Bash, a plain `cargo test` runs only the shared curated list, plus the exception-handling files this backend now supports.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
             dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,

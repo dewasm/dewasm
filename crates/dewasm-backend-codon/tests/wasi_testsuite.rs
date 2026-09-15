@@ -15,7 +15,7 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
-/// The pull-request tier: no filesystem fixture, one trial per always-on interface (args, environ, stdout, exit, random, stdio round-trip).
+/// The pull-request category: no filesystem fixture, one trial per always-on interface (args, environ, stdout, exit, random, stdio round-trip).
 const FAST_TRIALS: &[&str] = &[
     "assemblyscript/args_get-multiple-arguments",
     "assemblyscript/environ_get-multiple-variables",
@@ -25,8 +25,8 @@ const FAST_TRIALS: &[&str] = &[
     "rust/stdio",
 ];
 
-/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow tier is a superset by construction): the trials pinning the layout-decode paths (stat and dirent, this backend's platform-conditional risk area), the open/read/write core, and the `sock_shutdown` rows so the failure ledger stays exercised.
-/// Sized against the ~5-minute slow lane: each trial is a codon build (measured ~7 seconds each there), so breadth beyond that belongs to the ultra sweep.
+/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow category is a superset by construction): the trials pinning the layout-decode paths (stat and dirent, this backend's platform-conditional risk area), the open/read/write core, and the `sock_shutdown` rows so the failure ledger stays exercised.
+/// Sized against the slow category's budget: each trial pays a codon build, so breadth beyond this list belongs to the ultra sweep.
 const SLOW_EXTRA_TRIALS: &[&str] = &[
     "c/sock_shutdown-invalid_fd",
     "c/sock_shutdown-not_sock",

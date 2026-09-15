@@ -193,7 +193,7 @@ pub fn repeat(
 
 /// Pick the iteration count for one (workload, runner) pair: ramp from 1 until `t(N) - t_zero` reaches `target`, never exceeding `cap`.
 ///
-/// `t_zero` is the already-measured `<iterations> = 0` time, so the ramp reasons about compute alone and is not fooled by a runner whose startup dwarfs its work (loading the generated SQLite Ruby costs 0.7 s before anything runs).
+/// `t_zero` is the already-measured `<iterations> = 0` time, so the ramp reasons about compute alone and is not fooled by a runner whose startup dwarfs its work.
 /// The growth factor is clamped to 256x per round so one noisy sample cannot overshoot into a multi-minute run; eight rounds is enough to cross the ~30 million iterations the fastest runner needs.
 pub fn calibrate(
     mut run: impl FnMut(u64) -> Result<RunOutcome>,

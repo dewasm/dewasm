@@ -286,7 +286,7 @@ exit 0
 /// CPython reading its stdlib from the cache-preopened tree at `/lib`; `WASI_ENV` carries `PYTHONHOME`/`PYTHONPATH` as the `NAME=value` strings the standalone main also builds.
 ///
 /// The leading `ulimit` is the one thing these two interpreters need that the smaller filesystem apps do not.
-/// Each wasm call nests one native bash call, and CPython's boot recurses far enough to exhaust the 8 MB default process stack: a real SIGSEGV, not a trappable wasm stack overflow (measured: without this line the trial dies of signal 11 partway through the boot, ~90 s in).
+/// Each wasm call nests one native bash call, and CPython's boot recurses far enough to exhaust the 8 MB default process stack: a real SIGSEGV, not a trappable wasm stack overflow (measured: without this line the trial dies of signal 11 partway through the boot).
 /// The generated *standalone* entrypoint raises the soft rlimit for exactly this reason; a library-mode embedder has to do it itself, and the glue is that embedder, so it repeats the line, with the same `unlimited`-then-hard-limit fallback and the same silent degradation if a sandbox refuses both.
 const BASH_CPYTHON_GLUE: &str = r#"ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -Hs)" 2>/dev/null || true
 WASI_ARGS=(python -c "print('hello from cpython', 6 * 7)")
@@ -750,18 +750,18 @@ dewasm_test_helper::gzip_e2e!(Bash);
 // Filesystem app cases: Bash's WASI filesystem now covers preopens, path_open, and positioned I/O, so the small-fixture fs apps are wired (all slow, softfloat-bound QuickJS/SQLite, see qjs_eval_e2e! above).
 dewasm_test_helper::qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
-// ripgrep: an 18 MB wasm becomes a 70 MB script, which bash parses in 1.7 s and then walks the fixture tree in the rest of a 22 s run: the slowest of the Bash `slow` cases but the same cluster as qjs_eval (13.6 s) and sqlite3_shell_dbfile (10.0 s), not the ~1-minute `ultra` line.
+// ripgrep: bash parses the generated script and then walks the fixture tree: the slowest of the Bash `slow` cases, but the same cluster as qjs_eval and sqlite3_shell_dbfile, short of the `ultra` cases.
 dewasm_test_helper::rg_search_e2e!(Bash, BASH_RG_SEARCH_GLUE);
 // qjs_repl_pty is wired here because it shares the filesystem cases' standalone QuickJS conversion, though it has no preopens.
-// Ultra: every keystroke re-enters QuickJS's interactive line editor, and each successive evaluation is slower than the last (~135s to the first prompt, ~330s for `[3,1,2].sort()`), which exceeds the shared 180s per-prompt `PTY_TIMEOUT` and timed out on CI (#22).
+// Ultra: every keystroke re-enters QuickJS's interactive line editor, and each successive evaluation is slower than the last, which exceeds the shared per-prompt `PTY_TIMEOUT` and timed out on CI (#22).
 dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
-// The two language-runtime giants and the packed CRuby run under Bash too (issue #143), all three ultra: CPython's 30 MB wasm becomes a 226 MB script whose one-liner measured ~9.5 min, and CRuby's measured 71 min: a single arithmetic op costs a bash function call under Bash's softfloat.
+// The two language-runtime giants and the packed CRuby run under Bash too (issue #143), all three ultra: a single arithmetic op costs a bash function call under Bash's softfloat.
 // The wasi-vfs-packed CRuby serves its stdlib from guest memory, so it needs no preopens.
 // All three run at `slow` on the other backends, so the apps stay CI-covered.
 dewasm_test_helper::cpython_hello_e2e!(Bash, BASH_CPYTHON_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Bash, BASH_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Bash, ultra);
-// Ultra: interpreting the cowsay guest through the converted interpreter measured 697 s, the same order as the language-runtime giants above (an interpreter's dispatch loop is one bash function call per executed guest instruction).
+// Ultra: interpreting the cowsay guest through the converted interpreter costs the same order as the language-runtime giants above (an interpreter's dispatch loop is one bash function call per executed guest instruction).
 // It runs at `slow` on every other backend, so the case itself stays CI-covered.
 dewasm_test_helper::toywasm_cowsay_e2e!(Bash, BASH_TOYWASM_GLUE, ultra);
 // Ultra for the same reason as the toywasm case above; wasm3 interprets the same cowsay guest one bash function call at a time.
@@ -774,15 +774,15 @@ dewasm_test_helper::nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
 dewasm_test_helper::shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
 // The C-API cases run under Bash too: a pointer is a decimal in `R0` and guest memory is the `${P}mem` array, which is all the plumbing these drives need, and the NES glue above already does the same in the other direction.
-// The artifacts are within reach as well (41.6 MB libsqlite3, 18.1 MB libpcap, 3.0 MB tree-sitter scripts, all at or below the 45 MB sqlite3-shell script Bash already runs), and all five stay in the `slow` category: 0.7 s tree-sitter, 1.4 s libpcap, 4.0/4.2 s the in-memory sqlite drives, 7.7 s the file-backed one.
+// The artifacts are within reach as well (all at or below the size of the sqlite3-shell script Bash already runs), and all five stay in the `slow` category.
 dewasm_test_helper::libsqlite3_c_api_e2e!(Bash, BASH_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Bash, BASH_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Bash, BASH_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Bash, BASH_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Bash, BASH_TREESITTER_PARSE);
 // The two zeroperl reactor cases (issue #143) are ultra instead.
-// The 25 MB reactor becomes a 229 MB script whose module init alone (the SFS blob carrying the whole Perl core into `zeroperl_mem`) runs 1 m 39 s at ~6 GB of host RSS; the eval case measured 1 m 55 s end to end.
-// ExifTool has no completion evidence at all: a hand-run was still inside `zeroperl_eval` at 69 minutes when it was cut, so its wall time is unknown rather than merely long.
+// The reactor's module init alone (the SFS blob carrying the whole Perl core into `zeroperl_mem`) dominates the eval case's run.
+// ExifTool has no completion evidence at all: a hand-run was cut while still inside `zeroperl_eval`, so its wall time is unknown rather than merely long.
 // Ruby covers it in CI at `slow`.
 dewasm_test_helper::zeroperl_eval_e2e!(Bash, BASH_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Bash, BASH_EXIFTOOL, ultra);
