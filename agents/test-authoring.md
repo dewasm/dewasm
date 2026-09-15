@@ -39,9 +39,9 @@ At present every backend invokes every filesystem and C-API case, some of them a
 
 The committed driver fixtures (the `.js` scripts) live in `examples/apps/fixtures/`; the filesystem-app snapshots are still captured from `wasmtime`, while the C-API drives have none (their results live in guest memory), so each of those pins a fixed string.
 
-### Speed tokens
+### Category tokens
 
-A slow case carries a trailing speed token, `slow` by default or `ultra`, which decides whether the expanding crate's `slow_test` or `ultra_slow_test` feature un-ignores the generated `#[test]`.
+A slow case carries a trailing category token, `slow` by default or `ultra`, which decides whether the expanding crate's `slow_test` or `ultra_slow_test` feature un-ignores the generated `#[test]`.
 
 Every `ultra` case is pinned at its callsite, with a comment giving the reason and, where there is one, the issue number.
 No case is lost this way: each `ultra` case runs at `slow` on at least one other backend, so CI still covers the case itself; what the token withholds is that one backend's run of it.

@@ -43,7 +43,7 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     }
 
     /// The trials to run outside the full sweep, the same contract as `SpecBackend::curated_files`: `None` runs every trial, `Some(list)` marks every trial not in the list as ignored.
-    /// For a backend whose per-trial cost is a compile, this is what keeps the conformance suite inside a CI lane's time budget; the full sweep still runs in the backend's slowest tier.
+    /// For a backend whose per-trial cost is a compile, this is what keeps the conformance suite inside CI's time budget; the full sweep still runs in the backend's slowest category.
     fn curated_trials(&self) -> Option<&'static [&'static str]> {
         None
     }

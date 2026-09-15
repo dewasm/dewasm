@@ -314,7 +314,7 @@ macro_rules! wasi_suite {
             $crate::run_wasi_fs(&$lang, $template);
         }
     };
-    // The speed-token form of the Fs kind, for a backend whose eight fixture builds are expensive (a compiled backend paying a per-artifact build).
+    // The category-token form of the Fs kind, for a backend whose eight fixture builds are expensive (a compiled backend paying a per-artifact build).
     ($lang:expr, Fs, $template:expr, $speed:tt) => {
         $crate::test_speed! { $speed,
             #[test]
@@ -379,7 +379,7 @@ macro_rules! wasi_root_containment_e2e {
 /// Per-case app macros: each expands to one `#[test] fn <case>()` running the named [`AppCase`] const for `$lang` (a [`BackendUnderTest`]).
 /// No glue argument: these are standalone-mode stdin/args cases, so no host-language glue is needed.
 /// `cowsay_args_e2e!` and `cowsay_stdin_e2e!` always run; `qjs_eval_e2e!` and `sqlite3_shell_e2e!` are slow: their generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (run with `--features slow_test`).
-/// A callsite may pass a trailing speed token (`slow`, the default, or `ultra`); see [`test_speed!`].
+/// A callsite may pass a trailing category token (`slow`, the default, or `ultra`); see [`test_speed!`].
 ///
 /// [`AppCase`]: crate::AppCase
 #[macro_export]
@@ -390,7 +390,7 @@ macro_rules! cowsay_args_e2e {
             $crate::run_app_case(&$lang, &$crate::COWSAY_ARGS);
         }
     };
-    // The speed-token form, for a backend whose run of this case is expensive (a compiled backend paying a per-artifact build).
+    // The category-token form, for a backend whose run of this case is expensive (a compiled backend paying a per-artifact build).
     ($lang:expr, $speed:tt) => {
         $crate::test_speed! { $speed,
             #[test]
@@ -411,7 +411,7 @@ macro_rules! cowsay_stdin_e2e {
             $crate::run_app_case(&$lang, &$crate::COWSAY_STDIN);
         }
     };
-    // See [`cowsay_args_e2e!`]'s speed-token form.
+    // See [`cowsay_args_e2e!`]'s category-token form.
     ($lang:expr, $speed:tt) => {
         $crate::test_speed! { $speed,
             #[test]
@@ -443,7 +443,7 @@ macro_rules! qjs_eval_e2e {
 
 /// See [`cowsay_args_e2e!`].
 /// Runs the slow [`SQLITE3_SHELL`](crate::SQLITE3_SHELL) case.
-/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing category token.
 #[macro_export]
 macro_rules! sqlite3_shell_e2e {
     ($lang:expr) => {
@@ -461,7 +461,7 @@ macro_rules! sqlite3_shell_e2e {
 
 /// See [`cowsay_args_e2e!`].
 /// Runs the slow [`SQLITE3_MOD_SHELL`](crate::SQLITE3_MOD_SHELL) case: the opcode-split shell against the stock shell's snapshot, so a patch or a build-flag change that alters behavior fails here.
-/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing category token.
 #[macro_export]
 macro_rules! sqlite3_mod_shell_e2e {
     ($lang:expr) => {
@@ -479,7 +479,7 @@ macro_rules! sqlite3_mod_shell_e2e {
 
 /// See [`cowsay_args_e2e!`].
 /// Runs [`MRUBY_EH`](crate::MRUBY_EH): raise/rescue/ensure/retry through the converted mruby interpreter, the execution proof for the exception-handling lowering beyond the spec harness.
-/// Fast by default (the module is 735 kB and the program is tiny); a backend whose measured run crosses the slow line passes a trailing `slow`/`ultra` speed token, pinned at the callsite like every other case.
+/// Fast by default (the module is small and the program is tiny); a backend whose measured run is too expensive for the fast category passes a trailing `slow`/`ultra` category token, pinned at the callsite like every other case.
 #[macro_export]
 macro_rules! mruby_eh_e2e {
     ($lang:expr) => {
@@ -500,7 +500,7 @@ macro_rules! mruby_eh_e2e {
 
 /// See [`cowsay_args_e2e!`].
 /// Runs the slow [`CRUBY_PACKED_HELLO`](crate::CRUBY_PACKED_HELLO) case: the wasi-vfs-packed CRuby, a plain no-preopen app case unlike [`cruby_hello_e2e!`]'s filesystem case.
-/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing category token.
 #[macro_export]
 macro_rules! cruby_packed_hello_e2e {
     ($lang:expr) => {
@@ -537,7 +537,7 @@ macro_rules! gzip_e2e {
 }
 
 /// One `#[test]` driving the bare QuickJS interactive REPL under a real pty for `$lang` and comparing the transcript byte-for-byte to the wasmtime snapshot.
-/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing speed token.
+/// Slow: see [`qjs_eval_e2e!`] for the `#[ignore]`/`slow_test` feature test and the trailing category token.
 #[macro_export]
 macro_rules! qjs_repl_pty_e2e {
     ($lang:expr) => {
@@ -555,7 +555,7 @@ macro_rules! qjs_repl_pty_e2e {
 
 /// Per-case filesystem-app macros: each expands to one `#[test] fn <case>()` running the named [`FsAppCase`] const for `$lang` with `$glue` (a named `&str` const in the backend crate whose `{scratch}`/`{cache}` placeholders the runner fills).
 /// A backend declares participation by invoking the macro and drops it (with a REASON comment) for a case it cannot run.
-/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing speed token after `$glue` promotes a case to the ultra-slow category ([`test_speed!`]).
+/// Slow: the generated `#[test]` is `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled (see [`qjs_eval_e2e!`]); a trailing category token after `$glue` promotes a case to the ultra-slow category ([`test_speed!`]).
 ///
 /// [`FsAppCase`]: crate::FsAppCase
 #[macro_export]
