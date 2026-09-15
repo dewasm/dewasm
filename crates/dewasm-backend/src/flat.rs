@@ -17,7 +17,7 @@
 //! **Only crossed frames are dissolved.** A `next`/`continue` binds to the innermost enclosing native loop, so any frame a branch escapes that is one must stop being one: in Ruby both `begin … end while false` and `while true` count, in Python blocks are already spliced inline but dissolve with the rest of the path anyway, because the path closure below is what guarantees the jump reaches the dispatch.
 //! Frames no branch escapes are left exactly as they were, and `if` is never a loop so it never needs splitting.
 //!
-//! Keeping uncrossed loops structured is not just economy, it is required for performance: a back-edge turned into a state transition replaces one `next`/`continue` with an assignment, a jump and a dispatch probe, and measured against a tight Ruby inner loop it loses to the cascade outright once the loop runs ~100 trips per entry.
+//! Keeping uncrossed loops structured is not just economy, it is required for performance: a back-edge turned into a state transition replaces one `next`/`continue` with an assignment, a jump and a dispatch probe, and measured against a tight Ruby inner loop it loses to the cascade outright once the loop runs enough trips per entry.
 //! Flatten branches, not loops.
 //!
 //! **Only *deep* branches pay for a dispatch.** The relay this replaces is linear in the frames a branch crosses and each level is cheap; the dispatch is a constant that is not.

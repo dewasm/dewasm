@@ -888,7 +888,7 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Java);
 
 dewasm_test_helper::cowsay_args_e2e!(Java);
 dewasm_test_helper::cowsay_stdin_e2e!(Java);
-// Slow: measured 5.6 s end to end (javac on the generated interpreter dominates; cowsay is 0.4 s in this suite).
+// Slow: `javac` on the generated interpreter dominates.
 dewasm_test_helper::mruby_eh_e2e!(Java, slow);
 dewasm_test_helper::qjs_eval_e2e!(Java);
 dewasm_test_helper::sqlite3_shell_e2e!(Java);
@@ -898,11 +898,11 @@ dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
 // The three interpreter giants (issue #142), excluded until the splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, one statement with no boundary to split at) and to spread funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool).
-// Ultra: measured 42 s (CPython), 132 s (CRuby) and 137 s (packed CRuby), at up to ~8 GB of `javac` heap.
+// Ultra: the giant `javac` builds cost both wall time and `javac` heap.
 dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
-// Slow, like the other filesystem app cases: measured 7.6 s including `javac` (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest; `javac` dominates).
 dewasm_test_helper::toywasm_cowsay_e2e!(Java, JAVA_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Java, JAVA_WASM3_GLUE);
@@ -911,7 +911,7 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the 25 MB reactor becomes ~99 MB of Java, measured 43 s (zeroperl_eval) and 51 s (exiftool_extract).
+// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the reactor's `javac` dominates the run.
 // They also drove `FN_PARTITION_THRESHOLD` down to 2000: zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);

@@ -604,12 +604,12 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Ruby);
 
 dewasm_test_helper::cowsay_args_e2e!(Ruby);
 dewasm_test_helper::cowsay_stdin_e2e!(Ruby);
-// Fast: measured 0.4 s end to end (the 735 kB mruby converts and runs well under the cowsay-class budget).
+// Fast: mruby converts and runs well under the cowsay-class budget.
 dewasm_test_helper::mruby_eh_e2e!(Ruby);
 dewasm_test_helper::qjs_eval_e2e!(Ruby);
 dewasm_test_helper::sqlite3_shell_e2e!(Ruby);
 // Ruby only: the opcode-split shell exists for the benchmark suite's YJIT numbers, and every other backend converts it through the whole-cache convert suite.
-// Slow, the stock shell case's class: same program on a same-sized module, measured 3.1 s against that case's 3.1 s.
+// Slow, the stock shell case's class: same program on a same-sized module, same cost.
 dewasm_test_helper::sqlite3_mod_shell_e2e!(Ruby);
 dewasm_test_helper::gzip_e2e!(Ruby);
 
@@ -619,7 +619,7 @@ dewasm_test_helper::rg_search_e2e!(Ruby, RUBY_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Ruby, RUBY_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Ruby, RUBY_CRUBY_GLUE);
 dewasm_test_helper::cruby_packed_hello_e2e!(Ruby);
-// Slow, like the other filesystem app cases: measured 1.7 s (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Ruby, RUBY_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Ruby, RUBY_WASM3_GLUE);

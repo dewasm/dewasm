@@ -923,9 +923,9 @@ dewasm_test_helper::folded_temp_reuse_e2e!(Go);
 
 dewasm_test_helper::cowsay_args_e2e!(Go);
 dewasm_test_helper::cowsay_stdin_e2e!(Go);
-// Fast: cowsay-class (measured 7.6 s cold / 0.55 s warm against cowsay's own 4.2 s cold; the go build cache dominates both).
+// Fast: cowsay-class (the go build cache dominates).
 dewasm_test_helper::mruby_eh_e2e!(Go);
-// The `ultra` cases are the giant-generated-program `go build`s that individually ran ~1 min+ and collectively exhausted a 4-core CI runner's memory (SIGTERM, #23).
+// The `ultra` cases are the giant-generated-program `go build`s that collectively exhausted a CI runner's memory (SIGTERM, #23).
 // The other giant builds (`qjs_repl_pty`, `sqlite3_shell_dbfile`, `pcap_compile`, `treesitter_parse`) stayed under the ~1-min bar and remain at `slow`.
 dewasm_test_helper::qjs_eval_e2e!(Go, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Go, ultra);
@@ -935,11 +935,11 @@ dewasm_test_helper::qjs_file_io_e2e!(Go, GO_QJS_FILE_IO_GLUE, ultra);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Go, GO_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Go, GO_RG_SEARCH_GLUE, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Go, GO_CPYTHON_GLUE, ultra);
-// Ultra: the ~35 MB CRuby wasm becomes ~242 MB of Go, measured ~14m54s end to end: wall time is the cost, not feasibility.
-// The 49 MB wasi-vfs-packed variant is the same interpreter plus embedded stdlib (~14m13s).
+// Ultra: the CRuby wasm's `go build` is the longest in the suite: wall time is the cost, not feasibility.
+// The wasi-vfs-packed variant is the same interpreter plus embedded stdlib, the same cost class.
 dewasm_test_helper::cruby_hello_e2e!(Go, GO_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Go, ultra);
-// Slow, like the other filesystem app cases: measured 7.6 s including the `go build` (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest; the `go build` dominates).
 dewasm_test_helper::toywasm_cowsay_e2e!(Go, GO_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Go, GO_WASM3_GLUE);
@@ -950,7 +950,7 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Go, GO_LIBSQLITE3_FILE, ultra);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Go, GO_SQLITE3_CALLBACK, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Go, GO_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Go, GO_TREESITTER_PARSE);
-// The zeroperl reactor cases (issue #139) join the `ultra` giants above: the 25 MB reactor becomes a ~90 MB Go program whose `go build` dominates the run: measured 71 s (zeroperl_eval) and 92 s (exiftool_extract).
+// The zeroperl reactor cases (issue #139) join the `ultra` giants above: the reactor's `go build` dominates the run.
 dewasm_test_helper::zeroperl_eval_e2e!(Go, GO_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Go, GO_EXIFTOOL, ultra);
 

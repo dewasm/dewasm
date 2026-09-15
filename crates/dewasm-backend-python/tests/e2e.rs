@@ -654,10 +654,10 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-// Ultra-slow category (issue #126): a CRuby-class program peaks at ~12 GB host-CPython RSS, and the e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on concurrent threads: three of them exhausted the 16 GB CI runner (SIGTERM, the #23 signature), where the pre-existing two fit.
+// Ultra-slow category (issue #126): host-CPython memory, not time, and the e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on concurrent threads: three of them exhausted the CI runner (SIGTERM, the #23 signature), where the pre-existing two fit.
 // The packed case is the newcomer, so it leaves the CI run; it still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
-// Slow, like the other filesystem app cases: measured 6.7 s (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest).
 dewasm_test_helper::toywasm_cowsay_e2e!(Python, PYTHON_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Python, PYTHON_WASM3_GLUE);
@@ -668,9 +668,8 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
-// Ultra-slow category (issue #139): the 25 MB zeroperl reactor becomes a ~97 MB / ~930k-line
-// Python module, and host CPython peaks at ~4.9 GB RSS compiling it, the memory criterion that put the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
-// Wall times are 12 s (zeroperl_eval) and 42-67 s (exiftool_extract), so memory, not the clock, is what puts the eval case here; the two share the one oversized module.
+// Ultra-slow category (issue #139): compiling the zeroperl reactor's generated module costs host-CPython memory, the criterion that put the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
+// Memory, not the clock, is what puts the eval case here; the two share the one oversized module.
 dewasm_test_helper::zeroperl_eval_e2e!(Python, PYTHON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Python, PYTHON_EXIFTOOL, ultra);
 
