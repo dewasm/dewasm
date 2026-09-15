@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library and compile it together with the terminal frontend into one native binary.
 # Codon has no import path for a sibling source file, so the two are linked by concatenation into doom_app.codon, the same way the backend's own test and benchmark runners do; both generated files are gitignored, so this step has to run before ./run.sh from a clean checkout.
-# The default is a debug build, the cheaper of the two, and even that has not been run to completion on this source (README.md is explicit about what was and was not measured). CODON_BUILD=release selects the optimized compile, which costs considerably more again.
+# The default is a debug build, the cheaper of the two; CODON_BUILD=release selects the optimized compile (README.md has the measured times).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -38,16 +38,7 @@ mv doom_app.codon.tmp doom_app.codon
 
 # Removed first so that a failed compile leaves no binary behind for the check above to accept.
 rm -f doom
-cat >&2 <<'WARNING'
-=========================================================================
- compiling the DOOM library with codon: expect to wait HOURS. A debug
- compile of this source ran for over an hour on an Apple Silicon laptop
- without finishing, and `-release` costs more again (see README.md).
- The result is cached: a later build whose concatenated source is
- unchanged skips the compile entirely.
-=========================================================================
-WARNING
-echo "compiling doom_app.codon ($(wc -l <doom_app.codon | tr -d ' ') lines)"
+echo "compiling doom_app.codon; the result is cached, an unchanged source skips this step"
 "$codon" build $build_flags -o doom doom_app.codon
 
 echo "built $(pwd)/doom (run with ./run.sh)"

@@ -482,6 +482,28 @@ pub fn hex_string(data: &[u8]) -> String {
     out
 }
 
+/// `hex_string(data)` as space-separated double-quoted literals of at most `chunk` hex digits each.
+pub fn hex_literals(data: &[u8], chunk: usize) -> String {
+    assert!(
+        chunk > 0 && chunk.is_multiple_of(2),
+        "chunk must be a positive even number of hex digits"
+    );
+    let hex = hex_string(data);
+    let mut out = String::with_capacity(hex.len() + 3 * hex.len().div_ceil(chunk) + 2);
+    let mut rest = hex.as_str();
+    loop {
+        let (head, tail) = rest.split_at(rest.len().min(chunk));
+        out.push('"');
+        out.push_str(head);
+        out.push('"');
+        if tail.is_empty() {
+            return out;
+        }
+        out.push(' ');
+        rest = tail;
+    }
+}
+
 /// WASI import module names a bundled runtime answers for.
 /// `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here except `fd_seek`'s whence encoding: a snapshot 0 module that actually seeks may misbehave, accepted until snapshot 0 gets its own units.
 pub const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
@@ -843,5 +865,21 @@ impl CodeWriter {
 
     pub fn finish(self) -> String {
         self.buf
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hex_literals;
+
+    #[test]
+    fn hex_literals_splits_on_chunk_boundaries() {
+        assert_eq!(hex_literals(&[], 4), "\"\"");
+        assert_eq!(hex_literals(&[0x01, 0x02], 4), "\"0102\"");
+        assert_eq!(hex_literals(&[0x01, 0x02, 0x03], 4), "\"0102\" \"03\"");
+        assert_eq!(
+            hex_literals(&[0x01, 0x02, 0x03, 0x04], 4),
+            "\"0102\" \"0304\""
+        );
     }
 }
