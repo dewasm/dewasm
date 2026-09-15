@@ -1,0 +1,7 @@
+/doom_gen.codon
+/doom_app.codon
+/doom
+# codon build leaves the debug-info bundle beside the binary on macOS.
+/doom.dSYM/
+/screenshot.ppm
+/.savegame/

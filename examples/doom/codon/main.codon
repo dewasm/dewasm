@@ -1,0 +1,677 @@
+"""Interactive frontend for the dewasm-generated DOOM library (doom_gen.codon,
+produced from jacobenget/doom.wasm by build.sh). It wires the wasm module's ten
+host imports to real OS facilities (raw-terminal stdio, save-game files, a
+monotonic clock) and renders the framebuffer straight into the terminal as
+24-bit-color half-blocks: no window, no GPU, just ANSI escapes.
+
+This is the Python DOOM frontend (../python/) compiled ahead of time instead of
+interpreted. Codon is a statically typed Python dialect, not CPython: there is
+no `termios`, `select`, `tty` or `os.get_terminal_size`, so the terminal is
+driven through libc directly, and a host import is a `DoomRt.Fn` subclass rather
+than a closure.
+
+Unlike the NES module (../../nes/codon/), doom.wasm keeps its own tic schedule:
+it reads the wall clock through runtimeControl.timeInMilliseconds and advances
+game time at 35Hz from there, so the host loop does no pacing of its own and
+just ticks as fast as it can, the same as the Python frontend.
+
+Run with --smoke for a headless self-check (no terminal takeover): it inits the
+game, ticks it 15 times, and writes the last frame to screenshot.ppm.
+"""
+import os
+import sys
+import time
+
+from C import read(int, Ptr[byte], int) -> int
+from C import write(int, Ptr[byte], int) -> int
+from C import poll(Ptr[byte], int, int) -> int
+from C import tcgetattr(int, Ptr[byte]) -> int
+from C import tcsetattr(int, int, Ptr[byte]) -> int
+from C import cfmakeraw(Ptr[byte])
+
+# Resolved against the working directory, which run.sh sets to this frontend's own directory.
+SAVE_DIR = ".savegame"
+
+# A pressed key is held reportKeyDown-active until this many seconds pass without seeing it again.
+# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# This matches the Python DOOM frontend's window; it has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+RELEASE_TIMEOUT = 0.4
+
+SMOKE_TICKS = 15
+
+
+def emit(s: str):
+    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes, so len(s) is not the byte count write() needs.
+    b = s.encode()
+    write(1, Ptr[byte](b._ptr.as_byte()), b._len)
+
+
+# --- Terminal control ----------------------------------------------------
+
+# `ioctl` is variadic, and on darwin arm64 a variadic argument is passed on the stack rather than in a register, so the call has to be spelled as variadic for the buffer pointer to reach the kernel.
+@llvm
+def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
+    declare i32 @ioctl(i32, i64, ...)
+    %f = trunc i64 %fd to i32
+    %r = call i32 (i32, i64, ...) @ioctl(i32 %f, i64 %request, ptr %arg)
+    %x = sext i32 %r to i64
+    ret i64 %x
+
+
+TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
+# struct termios has a different layout on darwin and linux (72 and 60 bytes), so the saved state is only ever copied as opaque bytes and edited through cfmakeraw; this covers both.
+TERMIOS_SIZE = 128
+TCSADRAIN = 1
+POLLIN = 1
+FALLBACK_COLS = 80
+FALLBACK_ROWS = 24
+
+
+def term_size() -> Tuple[int, int]:
+    """Terminal size as (columns, rows), falling back to 80x24 when it cannot be read."""
+    # struct winsize starts with ws_row then ws_col, both unsigned short, on both platforms.
+    ws = Ptr[byte](8)
+    if _ioctl_ptr(1, TIOCGWINSZ, ws) != 0:
+        return (FALLBACK_COLS, FALLBACK_ROWS)
+    fields = Ptr[UInt[16]](ws.as_byte())
+    rows = int(fields[0])
+    cols = int(fields[1])
+    if rows <= 0 or cols <= 0:
+        return (FALLBACK_COLS, FALLBACK_ROWS)
+    return (cols, rows)
+
+
+class Terminal:
+    """Raw mode plus the alternate screen, restoring the terminal's exact entry
+    state on exit."""
+
+    saved: Ptr[byte]
+
+    def __init__(self):
+        self.saved = Ptr[byte](TERMIOS_SIZE)
+        if tcgetattr(0, self.saved) != 0:
+            print("error: stdin is not a terminal; use --smoke for the headless self-check", file=sys.stderr)
+            sys.exit(1)
+
+    def enter(self):
+        raw = Ptr[byte](TERMIOS_SIZE)
+        str.memcpy(raw, self.saved, TERMIOS_SIZE)
+        cfmakeraw(raw)
+        tcsetattr(0, TCSADRAIN, raw)
+        emit("\x1b[?1049h\x1b[?25l")
+
+    def leave(self):
+        # SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+        emit("\x1b[0m\x1b[?25h\x1b[?1049l")
+        tcsetattr(0, TCSADRAIN, self.saved)
+
+
+# --- Host imports --------------------------------------------------------
+#
+# The ten imports all need to reach the module's memory or record state for the host loop, but they have to exist before Doom(...) returns the instance that owns that memory, so they share this one object and the instance fills its `mem` in afterwards.
+# `mem` holds the DoomRt.Memory rather than its `data` pointer: memory.grow reallocates the buffer, so a cached pointer would go stale mid-tick.
+
+
+class Host:
+    mem: Optional[DoomRt.Memory]
+    # Frame geometry comes from loading.onGameInit (640x400 for this binary) and the offset from every ui.drawFrame call during a tick; neither is hardcoded.
+    frame_w: int
+    frame_h: int
+    frame_off: int
+    frame_seen: bool
+    start: float
+
+    def __init__(self):
+        self.mem = None
+        self.frame_w = 0
+        self.frame_h = 0
+        self.frame_off = 0
+        self.frame_seen = False
+        self.start = time.monotonic()
+
+    def data(self) -> Ptr[byte]:
+        return self.mem.data
+
+
+def save_game_path(id_: int) -> str:
+    return SAVE_DIR + "/doomsav" + str(id_) + ".dsg"
+
+
+class Message(DoomRt.Fn):
+    """console.onErrorMessage / console.onInfoMessage.
+
+    In interactive mode the alternate screen owns the whole terminal, so a
+    message printed to stdout would corrupt the frame; both message kinds go to
+    stderr instead, where they stay visible without touching the game's own
+    screen. DOOM's info messages carry no trailing newline, so one is added,
+    matching the Go/Java/Python frontends."""
+
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        off = int(a[0].i32())
+        length = int(a[1].i32())
+        write(2, self.host.data() + off, length)
+        write(2, Ptr[byte]("\n".c_str().as_byte()), 1)
+        return List[DoomRt.Val]()
+
+
+class SizeOfSaveGame(DoomRt.Fn):
+    def __init__(self):
+        pass
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        size = 0
+        try:
+            with open(save_game_path(int(a[0].i32())), "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+        except IOError:
+            size = 0
+        return [DoomRt.Val.of_i32(UInt[32](size))]
+
+
+class ReadSaveGame(DoomRt.Fn):
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        dst = int(a[1].i32())
+        n = 0
+        try:
+            with open(save_game_path(int(a[0].i32())), "rb") as f:
+                blob = f.read()
+                n = len(blob)
+                if n > 0:
+                    str.memcpy(self.host.data() + dst, Ptr[byte](blob._ptr.as_byte()), n)
+        except IOError:
+            n = 0
+        return [DoomRt.Val.of_i32(UInt[32](n))]
+
+
+class WriteSaveGame(DoomRt.Fn):
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        src = int(a[1].i32())
+        length = int(a[2].i32())
+        # Codon's os.mkdir raises when the directory is already there, which is the normal case after the first save.
+        try:
+            os.mkdir(SAVE_DIR)
+        except OSError:
+            pass
+        with open(save_game_path(int(a[0].i32())), "wb") as f:
+            f.write(bytes(Ptr[UInt[8]]((self.host.data() + src).as_byte()), length))
+        return [DoomRt.Val.of_i32(UInt[32](length))]
+
+
+class Clock(DoomRt.Fn):
+    """runtimeControl.timeInMilliseconds: the module's own 35Hz tic pacing reads
+    this, so it has to be a real monotonic clock, not the synthetic counter the
+    deterministic frame test uses."""
+
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        ms = int((time.monotonic() - self.host.start) * 1000.0)
+        return [DoomRt.Val.of_i64(UInt[64](ms))]
+
+
+class DrawFrame(DoomRt.Fn):
+    """ui.drawFrame: only records where the frame landed. drawFrame can be
+    called mid-tick and memory can grow later in the same tick, so the pixels
+    are always read afterwards, through Host.data()."""
+
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        self.host.frame_off = int(a[0].i32())
+        self.host.frame_seen = True
+        return List[DoomRt.Val]()
+
+
+class OnGameInit(DoomRt.Fn):
+    host: Host
+
+    def __init__(self, host: Host):
+        self.host = host
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        self.host.frame_w = int(a[0].i32())
+        self.host.frame_h = int(a[1].i32())
+        return List[DoomRt.Val]()
+
+
+class Sink(DoomRt.Fn):
+    """loading.wadSizes / loading.readWads: leaving wadSizes' two output slots at
+    their pre-zeroed 0 tells the module to fall back to its embedded shareware
+    WAD, and readWads is then never called at all."""
+
+    def __init__(self):
+        pass
+
+    def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
+        return List[DoomRt.Val]()
+
+
+def instantiate() -> Tuple[Doom, Host]:
+    host = Host()
+    imports = Dict[str, Dict[str, DoomRt.Extern]]()
+
+    console = Dict[str, DoomRt.Extern]()
+    console["onErrorMessage"] = DoomRt.Extern.of_fn(Message(host), "i32,i32->")
+    console["onInfoMessage"] = DoomRt.Extern.of_fn(Message(host), "i32,i32->")
+    imports["console"] = console
+
+    saving = Dict[str, DoomRt.Extern]()
+    saving["sizeOfSaveGame"] = DoomRt.Extern.of_fn(SizeOfSaveGame(), "i32->i32")
+    saving["readSaveGame"] = DoomRt.Extern.of_fn(ReadSaveGame(host), "i32,i32->i32")
+    saving["writeSaveGame"] = DoomRt.Extern.of_fn(WriteSaveGame(host), "i32,i32,i32->i32")
+    imports["gameSaving"] = saving
+
+    runtime_control = Dict[str, DoomRt.Extern]()
+    runtime_control["timeInMilliseconds"] = DoomRt.Extern.of_fn(Clock(host), "->i64")
+    imports["runtimeControl"] = runtime_control
+
+    ui = Dict[str, DoomRt.Extern]()
+    ui["drawFrame"] = DoomRt.Extern.of_fn(DrawFrame(host), "i32->")
+    imports["ui"] = ui
+
+    loading = Dict[str, DoomRt.Extern]()
+    loading["onGameInit"] = DoomRt.Extern.of_fn(OnGameInit(host), "i32,i32->")
+    loading["wadSizes"] = DoomRt.Extern.of_fn(Sink(), "i32,i32->")
+    loading["readWads"] = DoomRt.Extern.of_fn(Sink(), "i32,i32->")
+    imports["loading"] = loading
+
+    doom = Doom(imports, List[str](), Dict[str, str](), Dict[str, str]())
+    host.mem = doom.m
+    # initGame triggers loading.onGameInit, which sizes the frame.
+    doom.exports["initGame"].fn.invoke(List[DoomRt.Val]())
+    return (doom, host)
+
+
+def tick(doom: Doom):
+    doom.exports["tickGame"].fn.invoke(List[DoomRt.Val]())
+
+
+# --- Terminal rendering --------------------------------------------------
+#
+# Each character cell shows two vertically-stacked pixels via the upper-half block character, foreground = top pixel, background = bottom pixel.
+# The 640x400 framebuffer is a 2x upscale of DOOM's native 320x200, so pixels are read at even (x, y) on the logical 320x200 grid and nearest-neighbor sampled from there down to however many columns/rows actually fit.
+
+UPPER_HALF_BLOCK = "▀"
+
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
+
+# A cell packs its two 24-bit colors as `top * RGB_SPAN + bottom` so that comparing it against the previous frame's is a single integer comparison.
+RGB_SPAN = 1 << 24
+
+
+def pixel(data: Ptr[byte], off: int, buf_w: int, lx: int, ly: int) -> int:
+    # Memory byte order is B, G, R, A (see loading/drawFrame host contract).
+    o = off + (ly * 2 * buf_w + lx * 2) * 4
+    return (int(data[o + 2]) << 16) | (int(data[o + 1]) << 8) | int(data[o])
+
+
+def sgr(prefix: str, rgb: int) -> str:
+    return prefix + str(rgb >> 16) + ";" + str((rgb >> 8) & 0xFF) + ";" + str(rgb & 0xFF) + "m"
+
+
+def fit(logical_w: int, logical_h: int, term_cols: int, term_rows: int) -> Tuple[int, int]:
+    """Returns (width, rows) of terminal cells to render into: width in
+    character columns (== pixel columns, 1 pixel per column), rows in character
+    rows (== pixel-row-pairs, 2 pixels per row), leaving one line for the status
+    line, never upscaling past the logical resolution."""
+    avail_rows = max(term_rows - 1, 1)
+    width = max(min(term_cols, logical_w), 1)
+    height_px = max(width * logical_h // logical_w, 2)
+    rows = height_px // 2
+    if rows > avail_rows:
+        rows = avail_rows
+        height_px = rows * 2
+        width = max(min(height_px * logical_w // logical_h, term_cols, logical_w), 1)
+    return (width, rows)
+
+
+def build_cells(data: Ptr[byte], off: int, buf_w: int, buf_h: int, width: int, rows: int) -> List[int]:
+    """The frame as one cell per terminal character, row-major."""
+    logical_w = buf_w // 2
+    logical_h = buf_h // 2
+    height_px = rows * 2
+    cells = [0] * (width * rows)
+    for row in range(rows):
+        ly_top = row * 2 * logical_h // height_px
+        ly_bot = (row * 2 + 1) * logical_h // height_px
+        base = row * width
+        for col in range(width):
+            lx = col * logical_w // width
+            top = pixel(data, off, buf_w, lx, ly_top)
+            bot = pixel(data, off, buf_w, lx, ly_bot)
+            cells[base + col] = top * RGB_SPAN + bot
+    return cells
+
+
+def diff_escapes(cells: List[int], prev: List[int], rows: int, width: int) -> str:
+    """Builds one escape-code string covering only the cells that changed since
+    prev (an empty prev means: everything is new, no cells are skipped). Cursor
+    moves skip unchanged runs; repeated foreground/background colors within a
+    changed run are not re-emitted as SGR codes."""
+    fresh = len(prev) == 0
+    out = List[str]()
+    for row in range(rows):
+        base = row * width
+        col = 0
+        while col < width:
+            if not fresh and cells[base + col] == prev[base + col]:
+                col += 1
+                continue
+            out.append("\x1b[" + str(row + 1) + ";" + str(col + 1) + "H")
+            last_fg = -1
+            last_bg = -1
+            while col < width and (fresh or cells[base + col] != prev[base + col]):
+                cell = cells[base + col]
+                fg = cell // RGB_SPAN
+                bg = cell % RGB_SPAN
+                if fg != last_fg:
+                    out.append(sgr("\x1b[38;2;", fg))
+                    last_fg = fg
+                if bg != last_bg:
+                    out.append(sgr("\x1b[48;2;", bg))
+                    last_bg = bg
+                out.append(UPPER_HALF_BLOCK)
+                col += 1
+        out.append("\x1b[0m")
+    return "".join(out)
+
+
+class Renderer:
+    """Keeps the previous frame's cells so render() can emit a diff instead of
+    repainting the whole screen every tick."""
+
+    prev: List[int]
+    width: int
+    rows: int
+
+    def __init__(self):
+        self.prev = List[int]()
+        self.width = 0
+        self.rows = 0
+
+    def render(self, host: Host, status_line: str):
+        term_cols, term_rows = term_size()
+        width, rows = fit(host.frame_w // 2, host.frame_h // 2, term_cols, term_rows)
+        cells = build_cells(host.data(), host.frame_off, host.frame_w, host.frame_h, width, rows)
+
+        resized = width != self.width or rows != self.rows
+        out = "\x1b[2J" if resized else ""
+        out += diff_escapes(cells, List[int]() if resized else self.prev, rows, width)
+        # Status line always redrawn: it's one line, and its own text changes tick to tick.
+        out += "\x1b[" + str(rows + 1) + ";1H\x1b[0m" + STATUS_SGR + "\x1b[K" + status_line
+        emit(out)
+
+        self.prev = cells
+        self.width = width
+        self.rows = rows
+
+
+# --- Input ---------------------------------------------------------------
+#
+# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow keys as 3-byte escape sequences, everything else as 1 byte.
+# A lone ESC keypress is indistinguishable from the first byte of an escape sequence until either more bytes show up (they arrive together, already buffered, for a real escape sequence) or a short timeout passes with nothing more arriving (a real ESC keypress).
+ESC_TIMEOUT_MS = 10
+
+# read_key's out-of-band results; every DOOM key code is positive.
+QUIT = -1
+NO_KEY = 0
+
+
+class Keys:
+    """The module's KEY_* global values, read once after instantiation (they are
+    fixed constants, not globals the game changes at runtime). reportKeyDown and
+    reportKeyUp expect these codes, never the raw terminal bytes."""
+
+    up: int
+    down: int
+    left: int
+    right: int
+    fire: int
+    use: int
+    tab: int
+    escape: int
+    enter: int
+    backspace: int
+    strafe_l: int
+    strafe_r: int
+
+    def __init__(self, doom: Doom):
+        self.up = Keys._get(doom, "KEY_UPARROW")
+        self.down = Keys._get(doom, "KEY_DOWNARROW")
+        self.left = Keys._get(doom, "KEY_LEFTARROW")
+        self.right = Keys._get(doom, "KEY_RIGHTARROW")
+        self.fire = Keys._get(doom, "KEY_FIRE")
+        self.use = Keys._get(doom, "KEY_USE")
+        self.tab = Keys._get(doom, "KEY_TAB")
+        self.escape = Keys._get(doom, "KEY_ESCAPE")
+        self.enter = Keys._get(doom, "KEY_ENTER")
+        self.backspace = Keys._get(doom, "KEY_BACKSPACE")
+        self.strafe_l = Keys._get(doom, "KEY_STRAFE_L")
+        self.strafe_r = Keys._get(doom, "KEY_STRAFE_R")
+
+    @staticmethod
+    def _get(doom: Doom, name: str) -> int:
+        return int(doom.exports[name].g_i32.value)
+
+
+class Keyboard:
+    """Decodes key events from stdin, which raw mode leaves unbuffered and
+    uninterpreted."""
+
+    keys: Keys
+    pollfd: Ptr[byte]
+    byte_buf: Ptr[byte]
+
+    def __init__(self, keys: Keys):
+        self.keys = keys
+        # struct pollfd is { int fd; short events; short revents } on both platforms.
+        self.pollfd = Ptr[byte](8)
+        self.byte_buf = Ptr[byte](1)
+        Ptr[Int[32]](self.pollfd.as_byte())[0] = Int[32](0)
+        Ptr[Int[16]]((self.pollfd + 4).as_byte())[0] = Int[16](POLLIN)
+
+    def ready(self, timeout_ms: int) -> bool:
+        Ptr[Int[16]]((self.pollfd + 6).as_byte())[0] = Int[16](0)
+        return poll(self.pollfd, 1, timeout_ms) > 0
+
+    def _next_byte(self) -> int:
+        if read(0, self.byte_buf, 1) != 1:
+            return -1
+        return int(self.byte_buf[0])
+
+    def _arrow(self, b: int) -> int:
+        if b == 0x41:
+            return self.keys.up
+        if b == 0x42:
+            return self.keys.down
+        if b == 0x43:
+            return self.keys.right
+        if b == 0x44:
+            return self.keys.left
+        return NO_KEY
+
+    def read_key(self) -> int:
+        """Reads and decodes one key event. Returns a DOOM key code (letters and
+        digits at their face-value lowercase ASCII code), QUIT, or NO_KEY for
+        anything unrecognized."""
+        b = self._next_byte()
+        if b < 0:
+            return NO_KEY
+        if b == 0x1B:
+            if self.ready(ESC_TIMEOUT_MS) and self._next_byte() == 0x5B and self.ready(ESC_TIMEOUT_MS):
+                return self._arrow(self._next_byte())
+            return self.keys.escape
+        if b == 0x03 or b == ord("q"):
+            return QUIT
+        if b == ord("\r"):
+            return self.keys.enter
+        if b == ord("\t"):
+            return self.keys.tab
+        if b == 0x7F:
+            return self.keys.backspace
+        if b == ord(","):
+            return self.keys.strafe_l
+        if b == ord("."):
+            return self.keys.strafe_r
+        if b == ord("f"):
+            return self.keys.fire
+        if b == ord(" "):
+            return self.keys.use
+        if (b >= ord("a") and b <= ord("z")) or (b >= ord("0") and b <= ord("9")):
+            return b
+        if b >= ord("A") and b <= ord("Z"):
+            return b + 32
+        return NO_KEY
+
+
+def run_interactive():
+    terminal = Terminal()
+    doom, host = instantiate()
+    keyboard = Keyboard(Keys(doom))
+    renderer = Renderer()
+
+    down = Dict[int, float]()  # key code -> release deadline (time.monotonic() seconds)
+    tick_count = 0
+    ticks_start = time.monotonic()
+
+    terminal.enter()
+    try:
+        # No pacing here, matching the Python frontend: the module advances game time at 35Hz off the clock import, so the host loop just ticks as fast as it can.
+        while True:
+            events = List[int]()
+            while keyboard.ready(0):
+                event = keyboard.read_key()
+                if event != NO_KEY:
+                    events.append(event)
+
+            now = time.monotonic()
+            quit_requested = False
+            for event in events:
+                if event == QUIT:
+                    quit_requested = True
+                    continue
+                if event not in down:
+                    doom.exports["reportKeyDown"].fn.invoke([DoomRt.Val.of_i32(UInt[32](event))])
+                down[event] = now + RELEASE_TIMEOUT  # (re-)arm/extend the release deadline
+
+            for code in list(down.keys()):
+                if now >= down[code]:
+                    doom.exports["reportKeyUp"].fn.invoke([DoomRt.Val.of_i32(UInt[32](code))])
+                    del down[code]
+
+            if quit_requested:
+                break
+
+            tick(doom)
+            tick_count += 1
+            elapsed = time.monotonic() - ticks_start
+            rate = "{:.2f}".format(tick_count / elapsed) if elapsed > 0 else "0.00"
+            renderer.render(host, "dewasm DOOM (Codon) | " + rate + " ticks/sec | q: quit")
+    finally:
+        terminal.leave()
+
+
+# --- Headless self-check -------------------------------------------------
+
+
+def write_ppm_and_count_colors(path: str, host: Host) -> int:
+    """Writes the framebuffer as a binary P6 PPM and returns the number of
+    distinct RGB colors counted in the same pass."""
+    w = host.frame_w
+    h = host.frame_h
+    data = host.data()
+    buf = Ptr[byte](w * h * 3)
+    distinct = Set[int]()
+    for i in range(w * h):
+        o = host.frame_off + i * 4
+        b = data[o]
+        g = data[o + 1]
+        r = data[o + 2]
+        j = i * 3
+        buf[j] = r
+        buf[j + 1] = g
+        buf[j + 2] = b
+        distinct.add((int(r) << 16) | (int(g) << 8) | int(b))
+    with open(path, "wb") as f:
+        f.write(("P6\n" + str(w) + " " + str(h) + "\n255\n").encode())
+        f.write(bytes(Ptr[UInt[8]](buf.as_byte()), w * h * 3))
+    return len(distinct)
+
+
+def run_smoke():
+    doom, host = instantiate()
+
+    start = time.monotonic()
+    for _ in range(SMOKE_TICKS):
+        tick(doom)
+    elapsed = time.monotonic() - start
+    rate = "{:.2f}".format(SMOKE_TICKS / elapsed) if elapsed > 0 else "inf"
+    print("smoke: ran", SMOKE_TICKS, "ticks in", "{:.3f}".format(elapsed) + "s (" + rate + " ticks/sec)")
+
+    if not host.frame_seen:
+        print("smoke: FAIL: no frame was ever captured", file=sys.stderr)
+        sys.exit(1)
+
+    # Measure render cost without a real terminal: build the escape string for a representative fixed size and throw it away instead of writing it to a screen.
+    render_start = time.monotonic()
+    width, rows = fit(host.frame_w // 2, host.frame_h // 2, FALLBACK_COLS, FALLBACK_ROWS)
+    cells = build_cells(host.data(), host.frame_off, host.frame_w, host.frame_h, width, rows)
+    diff_escapes(cells, List[int](), rows, width)
+    render_elapsed = time.monotonic() - render_start
+    print(
+        "smoke: terminal-render (to a string) took",
+        "{:.2f}".format(render_elapsed * 1000) + "ms",
+        "for a " + str(width) + "x" + str(rows) + "-cell frame",
+    )
+
+    distinct = write_ppm_and_count_colors("screenshot.ppm", host)
+    print(
+        "smoke: final frame is " + str(host.frame_w) + "x" + str(host.frame_h) + ",",
+        "wrote screenshot.ppm (" + str(distinct) + " distinct colors)",
+    )
+
+    # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors), so a healthy frame tops out in the low hundreds, not the thousands a truecolor renderer would produce.
+    # A degenerate frame (blank/solid) instead lands in the single digits.
+    if distinct <= 50:
+        print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)
+        sys.exit(1)
+    print("smoke: OK")
+
+
+def main():
+    smoke = False
+    for arg in sys.argv[1:]:
+        if arg == "--smoke":
+            smoke = True
+
+    if smoke:
+        run_smoke()
+    else:
+        run_interactive()
+
+
+main()

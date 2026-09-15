@@ -1,0 +1,529 @@
+"""Interactive frontend for the dewasm-generated NES emulator (nes_gen.codon,
+produced from examples/apps/src/nes_demo.c's agnes wrapper by build.sh).
+Unlike DOOM, nes.wasm has zero wasm imports (no console/save-game/clock host
+surface to wire up), just `_initialize` plus the demo exports
+(allocRom/initGame/setInput/tickGame/screenOffset/paletteOffset/frameWidth/
+frameHeight), so this program's whole job is to load a ROM into the module's
+linear memory and drive the game loop itself: pacing, input polling, and
+rendering are entirely the host's job (the module has no clock import of its
+own, unlike DOOM's internal 35Hz timer).
+
+The guest hands over agnes's own frame representation (one palette *index* per
+pixel plus the fixed 64-entry palette) rather than a rendered image, so
+composing pixels is the host's job too. That suits a terminal frontend: a cell
+samples one pixel out of several, so only the sampled indices are ever looked
+up (and the SGR escape per index is precomputed once).
+
+Rendering reuses the Python NES frontend's half-block truecolor renderer
+(../python/) and its key-hold heuristic for terminals that only deliver key
+presses; the controller is level-triggered (one `setInput(bitmask)` call per
+tick, not DOOM's edge-triggered reportKeyDown/reportKeyUp pair).
+
+Codon is a statically typed Python dialect, not CPython: there is no `termios`,
+`select`, `tty` or `os.get_terminal_size`, so the terminal is driven through
+libc directly.
+
+Run with --smoke for a headless self-check (no terminal takeover): it loads the
+ROM, ticks the emulator a fixed number of frames, and writes the last frame to
+screenshot.ppm.
+"""
+import sys
+import time
+
+from C import read(int, Ptr[byte], int) -> int
+from C import write(int, Ptr[byte], int) -> int
+from C import close(int) -> int
+from C import poll(Ptr[byte], int, int) -> int
+from C import tcgetattr(int, Ptr[byte]) -> int
+from C import tcsetattr(int, int, Ptr[byte]) -> int
+from C import cfmakeraw(Ptr[byte])
+# Codon's own `open` builds the PPM file below, so the libc one keeps a separate name.
+from C import open(cobj, int) -> int as c_open
+
+# Resolved against the working directory, which run.sh sets to this frontend's own directory.
+DEFAULT_ROM = "../../apps/cache/alter_ego.nes"
+
+# Controller bit layout, fixed by nes_demo.c's setInput contract.
+BIT_A = 1
+BIT_B = 2
+BIT_SELECT = 4
+BIT_START = 8
+BIT_UP = 16
+BIT_DOWN = 32
+BIT_LEFT = 64
+BIT_RIGHT = 128
+
+# A pressed key is held down-active until this many seconds pass without seeing it again.
+# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# This matches the Python NES frontend's window; it has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+RELEASE_TIMEOUT = 0.4
+
+FRAME_W = 256
+FRAME_H = 240
+
+# The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no separate calibration is needed (unlike DOOM's internal 35Hz pacing, which the host has no say over at all).
+# Here pacing is entirely the host's job.
+TARGET_FPS = 60
+FRAME_SECONDS = 1.0 / TARGET_FPS
+
+# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs: the smallest input-free tick count that clears Alter Ego's boot into its stable credits screen, which also lets a smoke run's screenshot.ppm be diffed directly against examples/apps/snapshots/nes_frame.ppm.
+SMOKE_FRAMES = 40
+
+
+def emit(s: str):
+    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes, so len(s) is not the byte count write() needs.
+    b = s.encode()
+    write(1, Ptr[byte](b._ptr.as_byte()), b._len)
+
+
+# --- Terminal control ----------------------------------------------------
+
+# `ioctl` is variadic, and on darwin arm64 a variadic argument is passed on the stack rather than in a register, so the call has to be spelled as variadic for the buffer pointer to reach the kernel.
+@llvm
+def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
+    declare i32 @ioctl(i32, i64, ...)
+    %f = trunc i64 %fd to i32
+    %r = call i32 (i32, i64, ...) @ioctl(i32 %f, i64 %request, ptr %arg)
+    %x = sext i32 %r to i64
+    ret i64 %x
+
+
+TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
+# struct termios has a different layout on darwin and linux (72 and 60 bytes), so the saved state is only ever copied as opaque bytes and edited through cfmakeraw; this covers both.
+TERMIOS_SIZE = 128
+TCSADRAIN = 1
+POLLIN = 1
+FALLBACK_COLS = 80
+FALLBACK_ROWS = 24
+
+
+def term_size() -> Tuple[int, int]:
+    """Terminal size as (columns, rows), falling back to 80x24 when it cannot be read."""
+    # struct winsize starts with ws_row then ws_col, both unsigned short, on both platforms.
+    ws = Ptr[byte](8)
+    if _ioctl_ptr(1, TIOCGWINSZ, ws) != 0:
+        return (FALLBACK_COLS, FALLBACK_ROWS)
+    fields = Ptr[UInt[16]](ws.as_byte())
+    rows = int(fields[0])
+    cols = int(fields[1])
+    if rows <= 0 or cols <= 0:
+        return (FALLBACK_COLS, FALLBACK_ROWS)
+    return (cols, rows)
+
+
+class Terminal:
+    """Raw mode plus the alternate screen, restoring the terminal's exact entry
+    state on exit."""
+
+    saved: Ptr[byte]
+
+    def __init__(self):
+        self.saved = Ptr[byte](TERMIOS_SIZE)
+        if tcgetattr(0, self.saved) != 0:
+            print("error: stdin is not a terminal; use --smoke for the headless self-check", file=sys.stderr)
+            sys.exit(1)
+
+    def enter(self):
+        raw = Ptr[byte](TERMIOS_SIZE)
+        str.memcpy(raw, self.saved, TERMIOS_SIZE)
+        cfmakeraw(raw)
+        tcsetattr(0, TCSADRAIN, raw)
+        emit("\x1b[?1049h\x1b[?25l")
+
+    def leave(self):
+        # SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+        emit("\x1b[0m\x1b[?25h\x1b[?1049l")
+        tcsetattr(0, TCSADRAIN, self.saved)
+
+
+# --- Emulator ------------------------------------------------------------
+
+
+class Emulator:
+    """The converted module plus the data that is fixed for its lifetime: the
+    screen buffer's offset, the 64-entry palette, and the SGR escape each
+    palette index renders as."""
+
+    module: Nes
+    screen_off: int
+    palette: List[Tuple[int, int, int]]
+    fg_sgr: List[str]
+    bg_sgr: List[str]
+
+    def __init__(self, rom_path: str):
+        self.module = Nes(
+            Dict[str, Dict[str, NesRt.Extern]](),
+            List[str](),
+            Dict[str, str](),
+            Dict[str, str](),
+        )
+        self.palette = List[Tuple[int, int, int]]()
+        self.fg_sgr = List[str]()
+        self.bg_sgr = List[str]()
+        self.screen_off = 0
+        self.module.exports["_initialize"].fn.invoke(List[NesRt.Val]())
+        self._load_rom(rom_path)
+        self._load_palette()
+        self.screen_off = self._call("screenOffset")
+
+    def _call(self, name: str) -> int:
+        return int(self.module.exports[name].fn.invoke(List[NesRt.Val]())[0].i32())
+
+    def data(self) -> Ptr[byte]:
+        return self.module.m.data
+
+    def tick(self, buttons: int):
+        boxed = [NesRt.Val.of_i32(UInt[32](buttons))]
+        self.module.exports["setInput"].fn.invoke(boxed)
+        self.module.exports["tickGame"].fn.invoke(List[NesRt.Val]())
+
+    def _load_rom(self, path: str):
+        fd = c_open(path.c_str(), 0)
+        if fd < 0:
+            print("error: cannot open ROM:", path, file=sys.stderr)
+            sys.exit(1)
+        # agnes's mappers (NROM/UxROM/MMC1/MMC3) top out well under this.
+        cap = 4 * 1024 * 1024
+        buf = Ptr[byte](cap)
+        size = 0
+        while size < cap:
+            got = read(fd, buf + size, cap - size)
+            if got <= 0:
+                break
+            size += got
+        close(fd)
+
+        boxed = [NesRt.Val.of_i32(UInt[32](size))]
+        ptr = int(self.module.exports["allocRom"].fn.invoke(boxed)[0].i32())
+        str.memcpy(self.data() + ptr, buf, size)
+        ok = self._call("initGame")
+        if ok != 1:
+            print("error: initGame failed (ROM:", path + ")", file=sys.stderr)
+            sys.exit(1)
+
+    def _load_palette(self):
+        """Caches paletteOffset's 64 R,G,B,A entries (alpha is padding) and the
+        per-index SGR escapes. Fixed data: reading it once is enough."""
+        off = self._call("paletteOffset")
+        data = self.data()
+        for i in range(64):
+            r = int(data[off + i * 4])
+            g = int(data[off + i * 4 + 1])
+            b = int(data[off + i * 4 + 2])
+            rgb = str(r) + ";" + str(g) + ";" + str(b) + "m"
+            self.palette.append((r, g, b))
+            self.fg_sgr.append("\x1b[38;2;" + rgb)
+            self.bg_sgr.append("\x1b[48;2;" + rgb)
+
+
+# --- Terminal rendering --------------------------------------------------
+#
+# Each character cell shows two vertically-stacked pixels via the upper-half block character, foreground = top pixel, background = bottom pixel.
+# Unlike DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200), agnes's 256x240 framebuffer already is the native NES resolution, so pixels are read 1:1 and nearest-neighbor sampled down to however many columns/rows actually fit.
+
+UPPER_HALF_BLOCK = "▀"
+
+# Fixed status-line colors (white on black), independent of the game's own palette.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
+
+
+def pixel_index(data: Ptr[byte], off: int, buf_w: int, x: int, y: int) -> int:
+    # One byte per pixel, a palette index; the & 0x3F mask is load-bearing (see nes_demo.c).
+    return int(data[off + y * buf_w + x]) & 0x3F
+
+
+def fit(logical_w: int, logical_h: int, term_cols: int, term_rows: int) -> Tuple[int, int]:
+    """Returns (width, rows) of terminal cells to render into: width in
+    character columns (== pixel columns, 1 pixel per column), rows in character
+    rows (== pixel-row-pairs, 2 pixels per row), leaving one line for the status
+    line, never upscaling past the logical resolution."""
+    avail_rows = max(term_rows - 1, 1)
+    width = max(min(term_cols, logical_w), 1)
+    height_px = max(width * logical_h // logical_w, 2)
+    rows = height_px // 2
+    if rows > avail_rows:
+        rows = avail_rows
+        height_px = rows * 2
+        width = max(min(height_px * logical_w // logical_h, term_cols, logical_w), 1)
+    return (width, rows)
+
+
+def build_cells(data: Ptr[byte], off: int, buf_w: int, buf_h: int, width: int, rows: int) -> List[int]:
+    """The frame as one cell per terminal character, row-major. A cell packs its
+    two palette indices as `top * 64 + bottom` so that comparing it against the
+    previous frame's is a single integer comparison."""
+    height_px = rows * 2
+    cells = [0] * (width * rows)
+    for row in range(rows):
+        ly_top = row * 2 * buf_h // height_px
+        ly_bot = (row * 2 + 1) * buf_h // height_px
+        base = row * width
+        for col in range(width):
+            lx = col * buf_w // width
+            top = pixel_index(data, off, buf_w, lx, ly_top)
+            bot = pixel_index(data, off, buf_w, lx, ly_bot)
+            cells[base + col] = top * 64 + bot
+    return cells
+
+
+def diff_escapes(emu: Emulator, cells: List[int], prev: List[int], rows: int, width: int) -> str:
+    """Builds one escape-code string covering only the cells that changed since
+    prev (an empty prev means: everything is new, no cells are skipped). Cursor
+    moves skip unchanged runs; repeated foreground/background colors within a
+    changed run are not re-emitted as SGR codes."""
+    fresh = len(prev) == 0
+    out = List[str]()
+    for row in range(rows):
+        base = row * width
+        col = 0
+        while col < width:
+            if not fresh and cells[base + col] == prev[base + col]:
+                col += 1
+                continue
+            out.append("\x1b[" + str(row + 1) + ";" + str(col + 1) + "H")
+            last_fg = -1
+            last_bg = -1
+            while col < width and (fresh or cells[base + col] != prev[base + col]):
+                cell = cells[base + col]
+                fg = cell // 64
+                bg = cell % 64
+                if fg != last_fg:
+                    out.append(emu.fg_sgr[fg])
+                    last_fg = fg
+                if bg != last_bg:
+                    out.append(emu.bg_sgr[bg])
+                    last_bg = bg
+                out.append(UPPER_HALF_BLOCK)
+                col += 1
+        out.append("\x1b[0m")
+    return "".join(out)
+
+
+class Renderer:
+    """Keeps the previous frame's cells so render() can emit a diff instead of
+    repainting the whole screen every tick."""
+
+    prev: List[int]
+    width: int
+    rows: int
+
+    def __init__(self):
+        self.prev = List[int]()
+        self.width = 0
+        self.rows = 0
+
+    def render(self, emu: Emulator, status_line: str):
+        term_cols, term_rows = term_size()
+        width, rows = fit(FRAME_W, FRAME_H, term_cols, term_rows)
+        cells = build_cells(emu.data(), emu.screen_off, FRAME_W, FRAME_H, width, rows)
+
+        resized = width != self.width or rows != self.rows
+        out = "\x1b[2J" if resized else ""
+        out += diff_escapes(emu, cells, List[int]() if resized else self.prev, rows, width)
+        # Status line always redrawn: it's one line, and its own text changes tick to tick.
+        out += "\x1b[" + str(rows + 1) + ";1H\x1b[0m" + STATUS_SGR + "\x1b[K" + status_line
+        emit(out)
+
+        self.prev = cells
+        self.width = width
+        self.rows = rows
+
+
+# --- Input ---------------------------------------------------------------
+#
+# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow keys as 3-byte escape sequences, everything else as 1 byte.
+# A lone ESC keypress is indistinguishable from the first byte of an escape sequence until either more bytes show up (they arrive together, already buffered, for a real escape sequence) or a short timeout passes with nothing more arriving (a real ESC keypress).
+ESC_TIMEOUT_MS = 10
+
+# read_key's out-of-band results; every controller bit is positive.
+QUIT = -1
+NO_KEY = 0
+
+ARROW_BITS = {0x41: BIT_UP, 0x42: BIT_DOWN, 0x43: BIT_RIGHT, 0x44: BIT_LEFT}
+
+
+class Keyboard:
+    """Decodes key events from stdin, which raw mode leaves unbuffered and
+    uninterpreted."""
+
+    pollfd: Ptr[byte]
+    byte_buf: Ptr[byte]
+
+    def __init__(self):
+        # struct pollfd is { int fd; short events; short revents } on both platforms.
+        self.pollfd = Ptr[byte](8)
+        self.byte_buf = Ptr[byte](1)
+        Ptr[Int[32]](self.pollfd.as_byte())[0] = Int[32](0)
+        Ptr[Int[16]]((self.pollfd + 4).as_byte())[0] = Int[16](POLLIN)
+
+    def ready(self, timeout_ms: int) -> bool:
+        Ptr[Int[16]]((self.pollfd + 6).as_byte())[0] = Int[16](0)
+        return poll(self.pollfd, 1, timeout_ms) > 0
+
+    def _next_byte(self) -> int:
+        if read(0, self.byte_buf, 1) != 1:
+            return -1
+        return int(self.byte_buf[0])
+
+    def read_key(self) -> int:
+        """Reads and decodes one key event. Returns a controller bit, QUIT, or
+        NO_KEY for anything unrecognized/unmapped."""
+        b = self._next_byte()
+        if b < 0:
+            return NO_KEY
+        if b == 0x1B:
+            if self.ready(ESC_TIMEOUT_MS) and self._next_byte() == 0x5B and self.ready(ESC_TIMEOUT_MS):
+                return ARROW_BITS.get(self._next_byte(), NO_KEY)
+            return NO_KEY
+        if b == 0x03 or b == ord("q"):
+            return QUIT
+        if b == ord("x") or b == ord("X"):
+            return BIT_A
+        if b == ord("z") or b == ord("Z"):
+            return BIT_B
+        if b == ord("\r"):
+            return BIT_START
+        if b == ord(" "):
+            return BIT_SELECT
+        return NO_KEY
+
+
+def run_interactive(rom_path: str):
+    terminal = Terminal()
+    emu = Emulator(rom_path)
+    keyboard = Keyboard()
+    renderer = Renderer()
+
+    held = Dict[int, float]()  # controller bit -> release deadline (time.monotonic() seconds)
+    status_ticks = 0
+    status_window_start = time.monotonic()
+    status = "dewasm NES (Codon) | starting... | q: quit"
+
+    terminal.enter()
+    try:
+        # Fixed-timestep pacing: sleep when running ahead of schedule; when the host can't keep up, never sleep and just resync the schedule to "now" instead of trying to burn through a backlog of missed frames.
+        next_frame_at = time.monotonic()
+        while True:
+            events = List[int]()
+            while keyboard.ready(0):
+                event = keyboard.read_key()
+                if event != NO_KEY:
+                    events.append(event)
+
+            now = time.monotonic()
+            quit_requested = False
+            for event in events:
+                if event == QUIT:
+                    quit_requested = True
+                    continue
+                held[event] = now + RELEASE_TIMEOUT  # (re-)arm/extend the release deadline
+
+            for bit in list(held.keys()):
+                if now >= held[bit]:
+                    del held[bit]
+
+            if quit_requested:
+                break
+
+            mask = 0
+            for bit in held.keys():
+                mask |= bit
+            emu.tick(mask)
+
+            status_ticks += 1
+            elapsed = now - status_window_start
+            if elapsed >= 0.5:
+                rate = "{:.2f}".format(status_ticks / elapsed)
+                status = "dewasm NES (Codon) | " + rate + " frames/sec | q: quit"
+                status_ticks = 0
+                status_window_start = now
+            renderer.render(emu, status)
+
+            next_frame_at += FRAME_SECONDS
+            after_render = time.monotonic()
+            if next_frame_at > after_render:
+                time.sleep(next_frame_at - after_render)
+            else:
+                next_frame_at = after_render
+    finally:
+        terminal.leave()
+
+
+# --- Headless self-check -------------------------------------------------
+
+
+def write_ppm_and_count_colors(path: str, emu: Emulator, w: int, h: int) -> int:
+    """Writes the frame as a binary P6 PPM, composing each pixel from its
+    palette index, and returns the number of distinct RGB colors counted in the
+    same pass."""
+    data = emu.data()
+    buf = Ptr[byte](w * h * 3)
+    distinct = Set[int]()
+    for i in range(w * h):
+        r, g, b = emu.palette[int(data[emu.screen_off + i]) & 0x3F]
+        j = i * 3
+        buf[j] = byte(r)
+        buf[j + 1] = byte(g)
+        buf[j + 2] = byte(b)
+        distinct.add(r * 65536 + g * 256 + b)
+    with open(path, "wb") as f:
+        f.write(("P6\n" + str(w) + " " + str(h) + "\n255\n").encode())
+        f.write(bytes(Ptr[UInt[8]](buf.as_byte()), w * h * 3))
+    return len(distinct)
+
+
+def run_smoke(rom_path: str):
+    emu = Emulator(rom_path)
+
+    start = time.monotonic()
+    for _ in range(SMOKE_FRAMES):
+        emu.tick(0)
+    elapsed = time.monotonic() - start
+    rate = "{:.2f}".format(SMOKE_FRAMES / elapsed) if elapsed > 0 else "inf"
+    print("smoke: ran", SMOKE_FRAMES, "frames in", "{:.3f}".format(elapsed) + "s (" + rate + " frames/sec)")
+
+    # Measure render cost without a real terminal: build the escape string for a representative fixed size and throw it away instead of writing it to a screen.
+    render_start = time.monotonic()
+    width, rows = fit(FRAME_W, FRAME_H, FALLBACK_COLS, FALLBACK_ROWS)
+    cells = build_cells(emu.data(), emu.screen_off, FRAME_W, FRAME_H, width, rows)
+    diff_escapes(emu, cells, List[int](), rows, width)
+    render_elapsed = time.monotonic() - render_start
+    print(
+        "smoke: terminal-render (to a string) took",
+        "{:.2f}".format(render_elapsed * 1000) + "ms",
+        "for a " + str(width) + "x" + str(rows) + "-cell frame",
+    )
+
+    distinct = write_ppm_and_count_colors("screenshot.ppm", emu, FRAME_W, FRAME_H)
+    print(
+        "smoke: final frame is " + str(FRAME_W) + "x" + str(FRAME_H) + ",",
+        "wrote screenshot.ppm (" + str(distinct) + " distinct colors)",
+    )
+
+    # The NES PPU palette tops out at 64 colors, and agnes's frame is a small, mostly-flat subset of it (Alter Ego's title screen settles at 7, per NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs), so a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce; a degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
+    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs) and the sibling frontends.
+    if distinct <= 4:
+        print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)
+        sys.exit(1)
+    print("smoke: OK")
+
+
+def main():
+    smoke = False
+    rom_path = DEFAULT_ROM
+    seen_rom = False
+    for arg in sys.argv[1:]:
+        if arg == "--smoke":
+            smoke = True
+        elif not seen_rom:
+            rom_path = arg
+            seen_rom = True
+
+    if smoke:
+        run_smoke(rom_path)
+    else:
+        run_interactive(rom_path)
+
+
+main()

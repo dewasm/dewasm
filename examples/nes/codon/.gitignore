@@ -1,0 +1,6 @@
+/nes_gen.codon
+/nes_app.codon
+/nes
+# codon build leaves the debug-info bundle beside the binary on macOS.
+/nes.dSYM/
+/screenshot.ppm
