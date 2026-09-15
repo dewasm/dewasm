@@ -1,11 +1,12 @@
 # NES on dewasm
 
-One NES, six languages: [agnes](https://github.com/kgabis/agnes) (a dependency-free C NES emulation library, MIT) plus a thin wrapper ([`../apps/src/nes_demo.c`](../apps/src/nes_demo.c)) compiled to a single 19KB wasm module with an **empty import section**, converted by `dewasm --mode library` and played through seven native frontends across six languages:
+One NES, seven languages: [agnes](https://github.com/kgabis/agnes) (a dependency-free C NES emulation library, MIT) plus a thin wrapper ([`../apps/src/nes_demo.c`](../apps/src/nes_demo.c)) compiled to a single 19KB wasm module with an **empty import section**, converted by `dewasm --mode library` and played through eight native frontends across seven languages:
 
 - [`go/`](go/): Go, rendering with [ebiten](https://github.com/hajimehoshi/ebiten)
 - [`java/`](java/): Java, rendering with Swing (plain JDK, zero dependencies)
 - [`ruby/`](ruby/): Ruby, rendering *into the terminal* as 24-bit-color ANSI half-blocks (stdlib only, run with `--yjit`)
 - [`ruby/gui/`](ruby/gui/): the same generated Ruby library in a window, with [gosu](https://www.libgosu.org/), in the shape of the DOOM demo's [`ruby/gui`](../doom/ruby/gui); real key releases feed `setInput`'s held-button bitmask directly
+- [`codon/`](codon/): [Codon](https://github.com/exaloop/codon) (a statically typed Python dialect compiled ahead of time), the same terminal renderer with the tty driven through libc; ~400 frames/sec, the only terminal frontend here with headroom over the NES's 60Hz
 - [`python/`](python/): Python, the same terminal renderer (stdlib only, ~11 frames/sec under PyPy, ~2.2 under CPython)
 - [`perl/`](perl/): Perl, the same terminal renderer (core modules only, ~0.9 frames/sec)
 - [`bash/`](bash/): pure Bash, same terminal renderer; ~20-40 seconds per frame, an existence proof in the bash-DOOM tradition
