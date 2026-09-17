@@ -14,7 +14,7 @@ The same verdict covers an app with no artifact to run the audit tool on at all:
 
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
-| cowsay 0.3.0 | pinned in `setup.sh` | none | ✅ in scope (shipping) |
+| cowsay.wasm 0.1.0 (cowsay 3.03 in C) | our own release, pinned in `setup.sh` | none | ✅ in scope (shipping) |
 | quickjs-ng v0.15.1 | pinned in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | pinned in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
 | CPython 3.14.6 | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
@@ -117,7 +117,8 @@ The C-API case (`treesitter_parse`, `treesitter_parse_e2e!`) parses the fixed sn
 
 ¹¹ **`wasm-opt` preprocessing.**
 Every module `setup.sh` builds from source (the three sqlite3 shapes, minigzip, libpcap, tree-sitter, ripgrep, but not the DWARF fixture, which keeps its debug info) is run through `wasm-opt -O2` before caching, baseline features only and no ctor-eval.
-Besides shrinking them, `wasm-opt` re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹ the downloaded artifacts (cowsay, qjs, CPython, CRuby) still carry.
+Besides shrinking them, `wasm-opt` re-encodes the overlong `call_indirect` immediates the LLVM toolchain emits, so these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹ the downloaded artifacts (qjs, CPython, CRuby) still carry.
+cowsay is downloaded but audits as pure baseline too: its own release workflow runs the same `wasm-opt` pass before publishing.
 
 ¹² **zeroperl retraction (audited 2026-08-01).**
 This entry was previously *deferred* on three presumed host-environment blockers; converting and running the module proved all three were misreadings, so the verdict is retracted.

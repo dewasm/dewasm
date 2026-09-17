@@ -12,7 +12,7 @@ Run `./setup.sh` first.
 
 | App | Source | What it demonstrates |
 | --- | --- | --- |
-| cowsay | [syrusakbary/cowsay@0.3.0](https://wasmer.io/syrusakbary/cowsay) (Wasmer registry) | args + stdout, the classic demo |
+| cowsay | [dewasm/cowsay.wasm v0.1.0](https://github.com/dewasm/cowsay.wasm/releases/tag/v0.1.0), our own C reimplementation of cowsay 3.03 | args + stdout, the classic demo |
 | qjs | [quickjs-ng v0.15.1](https://github.com/quickjs-ng/quickjs/releases/tag/v0.15.1) `qjs-wasi.wasm` (official WASI CLI release asset) | a complete JavaScript engine (1.5 MB wasm) running on plain Ruby; deepened with file-I/O and REPL fixtures (Phase 5a) |
 | sqlite3 | [sqlite 3.53.3 amalgamation](https://sqlite.org/2026/sqlite-amalgamation-3530300.zip), built from source with `wasi-sdk` | the full SQLite engine in four shapes: the CLI shell, the same shell with the hot VDBE opcode bodies split into their own functions (`src/sqlite3-vdbe-split.patch`, measured by the `app/sqlite3_mod_query` benchmark), the C-API library, and a guest→host callback binding; the build patches a `-wasm` suffix into the reported version (`3.53.3-wasm`) so converted output identifies itself |
 | minigzip | [zlib 1.3.1](https://github.com/madler/zlib/releases/tag/v1.3.1), built from source with `wasi-sdk` | binary-stdio (de)compression, the byte-exact gzip stress that runs under **all five backends** (Phase 5b) |

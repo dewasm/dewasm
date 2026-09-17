@@ -80,13 +80,13 @@ If you have run `examples/apps/setup.sh`, try the cowsay showpiece:
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
 $ echo "moo" | bash cowsay.sh
- _____
+ _____ 
 < moo >
- -----
+ ----- 
         \   ^__^
          \  (oo)\_______
             (__)\       )\/\
-               ||----w |
+                ||----w |
                 ||     ||
 ```
 

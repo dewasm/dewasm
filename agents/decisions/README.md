@@ -114,6 +114,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 92 | [wasi-sdk as the C Toolchain for the Locally-Built Modules](92-wasi-sdk-c-toolchain.md) | Accepted |
 | 93 | [Alternative Engines as Speed-Suite Runners](93-engine-runners-in-speed-suite.md) | Accepted |
 | 94 | [Codon Backend Lowering Conventions](94-codon-backend-lowering.md) | Accepted |
+| 95 | [cowsay Comes From Our Own Implementation, Published Upstream](95-cowsay-own-implementation.md) | Accepted |
 
 ## Adding a new decision
 
