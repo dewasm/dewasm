@@ -337,7 +337,7 @@ fn discovered_micro_ids() -> Vec<String> {
         .collect()
 }
 
-/// The declared app cases: `cowsay`, a startup-dominated real program on a mid-sized module where every runner in the matrix competes, `sqlite3_query` for sustained real work, `sqlite3_mod_query`, the same script on the opcode-split build of the same engine, and `minigzip`, a byte-granular compression workload the other three do not exercise.
+/// The declared app cases: `cowsay`, a startup-dominated real program on a small module where every runner in the matrix competes, `sqlite3_query` for sustained real work, `sqlite3_mod_query`, the same script on the opcode-split build of the same engine, and `minigzip`, a byte-granular compression workload the other three do not exercise.
 /// All are timed as whole wall time: an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
 fn app_workloads() -> Vec<Workload> {
     let cache = apps_cache_dir();

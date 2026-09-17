@@ -8,18 +8,18 @@
 No WebAssembly runtime is *required*.
 The output runs anywhere plain `ruby`, `bash`, or `go` does.
 
-Here is [`cowsay`](https://wasmer.io/syrusakbary/cowsay), a WebAssembly binary, converted to a **pure Bash script** and run with *nothing but* `bash`:
+Here is [`cowsay`](https://github.com/dewasm/cowsay.wasm), a WebAssembly binary, converted to a **pure Bash script** and run with *nothing but* `bash`:
 
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
 $ echo "Hello from Bash" | bash cowsay.sh
- _________________
+ _________________ 
 < Hello from Bash >
- -----------------
+ ----------------- 
         \   ^__^
          \  (oo)\_______
             (__)\       )\/\
-               ||----w |
+                ||----w |
                 ||     ||
 ```
 
