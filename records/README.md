@@ -20,6 +20,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-30T05-11-20Z-speed.json`: the converted-wasm3 runners (#279, #278).
 - `2026-08-31T09-49-13Z-speed.json`: the official wasm3 asset (#291) and tail calls (#288-#297).
 - `2026-09-13T08-39-51Z-speed.json`: the full 28-runner matrix (#309, #316); monoruby sqlite unexcluded.
+- `2026-09-17T18-28-43Z-speed.json`: cowsay replaced by our own build (#322).
 
 ## Size records
 
@@ -29,3 +30,4 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-08-11T18-27-09Z-size.json`: re-baseline beside the same day's speed record.
 - `2026-08-16T09-23-36Z-size.json`: the #164 reductions: Ruby and Python outputs shrink.
 - `2026-09-13T09-06-26Z-size.json`: re-baseline beside the 28-runner speed record.
+- `2026-09-17T18-31-02Z-size.json`: re-baseline beside the cowsay replacement (#322).

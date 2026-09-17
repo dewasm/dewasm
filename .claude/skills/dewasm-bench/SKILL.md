@@ -27,4 +27,4 @@ This skill carries only the checklist around a run.
 ## Update records/README.md
 
 - The run appends a `TODO: describe the occasion.` line for its record; fill it when committing, ten words or fewer.
-- Engines whose version string carries no revision get their build commit named in the record's commit message (decision 93 records why).
+- Every runner reports its own build in its version string, so the record's `runtimes` block identifies them; nothing goes into the commit message by hand (decision 93 records why).

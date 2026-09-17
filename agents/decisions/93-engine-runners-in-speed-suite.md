@@ -35,6 +35,6 @@ An alternative engine joins the matrix when it runs the backend's unmodified out
 ## Consequences
 
 - Positive: the suite shows what the generated code costs on engines whose JITs are shaped unlike the incumbents', against the same byte-for-byte wasmtime oracle; a wrong engine result fails the run instead of publishing.
-- Negative: `monoruby -v` carries no build revision, so a record's monoruby version identifies a release, not a commit; until upstream includes one, a published record should name the built revision alongside.
+- Resolved: `monoruby -v` carried no build revision, so a published record had to name the built commit alongside; upstream now prints one (`monoruby 0.3.0 (revision 22a4f78ab7)`), and every other host-provided engine already did, so a record's `runtimes` block identifies each build on its own.
   TinyGo's 90 s sqlite build lands on the first full run after a module or backend change; later runs reuse the cached binary.
 - Carry-over: the sqlite exclusions cite upstream states and are remeasured, not kept, when those move (monoruby's already was); the jvm-ruby-runtimes experiment entry records the JRuby half as partially invalidated.
