@@ -7,7 +7,7 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-09-13T09:06:26Z.
+Measured 2026-09-17T18:31:02Z.
 
 | | |
 | --- | --- |
@@ -22,7 +22,7 @@ A runtime missing from this table was not installed on this host; it appears und
 | Runtime | Version |
 | --- | --- |
 | `wasmtime` | wasmtime 48.0.2 (e9f1ea232 2026-09-10) |
-| `wasmer` | wasmer 7.4.1 |
+| `wasmer` | wasmer 7.4.2 |
 | `wasmedge` | wasmedge version 0.17.1 |
 | `wazero` | 1.12.0 |
 | `wasm3` | Wasm3 v0.9.1-beta.1 on arm64-v8a |
@@ -36,13 +36,13 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/runtimes-dark.svg">
-  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.41 MB; wasmer is largest at 63.6 MB, a span of 257x. The table below carries every number." src="figs/runtimes.svg">
+  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.41 MB; wasmer is largest at 63.7 MB, a span of 257x. The table below carries every number." src="figs/runtimes.svg">
 </picture>
 
 | Runtime | Size |
 | --- | --- |
 | `wasmtime` | 48.5 MB |
-| `wasmer` | 63.6 MB |
+| `wasmer` | 63.7 MB |
 | `wasmedge` | 2.41 MB |
 | `wazero` | 5.50 MB |
 | `wasm3` | 248 kB |
@@ -51,18 +51,18 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 772 kB, then python at 1.83 MB; bash is largest at 7.73 MB, a span of 10x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 67.9 kB, then python at 353 kB; bash is largest at 1.13 MB, a span of 17x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
-| wasm binary | 772 kB |
-| `ruby` | 1.91 MB |
-| `python` | 1.83 MB |
-| `perl` | 4.35 MB |
-| `bash` | 7.73 MB |
-| `go` | 2.38 MB |
-| `java` | 3.05 MB |
+| wasm binary | 67.9 kB |
+| `ruby` | 361 kB |
+| `python` | 353 kB |
+| `perl` | 677 kB |
+| `bash` | 1.13 MB |
+| `go` | 457 kB |
+| `java` | 553 kB |
 
 ### `sqlite3-shell.wasm`
 
