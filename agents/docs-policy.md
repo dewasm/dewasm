@@ -20,6 +20,7 @@ A document a user would never open, but an agent must consult before changing so
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
 | [agents/test-authoring.md](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and contributors writing tests | By hand |
 | [agents/apps-audit.md](apps-audit.md) | The real-world app test record and feature verdicts | Agents and contributors adding an app target | By hand |
+| [agents/measurement-records.md](measurement-records.md) | The checklist around a speed or size run, and what makes a result suspect | Agents taking a record | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
 | [docs/standalone-interface.md](../docs/standalone-interface.md) | The standalone runtime interface (argv, `--dir`, env, exit/trap), uniform across backends | Users running standalone output | By hand |
@@ -60,6 +61,7 @@ A document a user would never open, but an agent must consult before changing so
 - An experiment's outcome with no decision attached → its Issue/PR, plus an entry in `agents/experiments.md` when it changes what a future agent would do.
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
 - A new real-world app target → an audited row in `agents/apps-audit.md`.
+- A trap that misleads whoever takes a measurement → `agents/measurement-records.md`; the commands and the methodology stay in `docs/benchmarks/` and `docs/sizes/`.
 - A downstream project shipping dewasm output → an entry in [docs/users.md](../docs/users.md).
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask record-speed`.
   Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.

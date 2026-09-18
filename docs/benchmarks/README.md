@@ -42,12 +42,3 @@ Useful options:
   The charts plot the median.
 - Every runner's stdout is compared byte for byte against wasmtime at the same iteration count.
   A mismatch fails the run; a wrong answer is never reported as a fast one.
-
-## Pitfalls when measuring by hand
-
-- Measure on mains power.
-  On battery an Apple silicon host runs the whole suite roughly 25% slower, with extra variance early in a run.
-- `wasmtime` keeps an on-disk compilation cache by default.
-  Warm and cold runs differ by an order of ten; `-C cache=n` disables it.
-- Ruby's YJIT has no on-stack replacement.
-  A single long-running loop is never JIT-compiled, so results swing on whether work is split across method calls.
