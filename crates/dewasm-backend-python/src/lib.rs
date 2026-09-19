@@ -301,8 +301,8 @@ impl Backend for PythonBackend {
             let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
             w.line("");
-            w.line("if __name__ == \"__main__\":");
-            w.indent();
+            // Standalone output is a program, not a library: it runs on load, behind no main guard.
+            // An artifact other code loads is what `--mode library` produces.
             if wasi_kwargs {
                 // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
                 w.line("_pre = {}");
@@ -392,7 +392,6 @@ impl Backend for PythonBackend {
             w.indent();
             w.line("sys.stderr.write(\"trap: %s\\n\" % _e)");
             w.line("sys.exit(134)");
-            w.dedent();
             w.dedent();
         }
 

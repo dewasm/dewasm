@@ -85,8 +85,30 @@ pub fn bundler() -> &'static RuntimeBundler {
             ],
             UNIT_SOURCES,
         )
+        .and_then(|b| b.with_scope_member("wasi", wasi_import_dispatch))
         .expect("runtime units are well-formed")
     })
+}
+
+/// The WASI import-provider protocol's dispatch (`Rt::WASI#import`), generated from the bundle instead of written as a unit source.
+/// The syscalls to dispatch are exactly the `wasi/*` units the bundle carries, which a fixed unit source cannot name.
+/// Resolving `method(:"wasi_#{name}")` at run time instead would need a method table an ahead-of-time Ruby compiler has no equivalent of.
+fn wasi_import_dispatch(units: &BTreeSet<String>) -> String {
+    let mut arms = String::new();
+    for (name, _) in WASI_PREVIEW1_FUNCTIONS {
+        if units.contains(&format!("wasi/{name}")) {
+            arms.push_str(&format!(
+                "  when {} then method(:wasi_{name})\n",
+                ruby_string(name)
+            ));
+        }
+    }
+    let body = if arms.is_empty() {
+        "  nil\n".to_string()
+    } else {
+        format!("  case name\n{arms}  else nil\n  end\n")
+    };
+    format!("# Import-provider protocol: a custom WASI runtime replaces this class wholesale by implementing this method and `attach`.\ndef import(name)\n{body}end")
 }
 
 /// Emit a top-level shared runtime (`module Rt ... end`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("::Rt")`.
@@ -293,59 +315,59 @@ impl Backend for RubyBackend {
         if opts.mode == Mode::Standalone {
             let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
-            w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
-                if wasi_kwargs {
-                    // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
-                    w.line("preopens = {}");
-                    w.line("argv = ARGV.dup");
-                    w.line("while (a = argv.first)");
-                    w.indent();
-                    w.line("if a == \"--\"");
-                    w.indent();
-                    w.line("argv.shift");
-                    w.line("break");
-                    w.dedent();
-                    w.line("elsif a == \"--dir\"");
-                    w.indent();
-                    w.line("argv.shift");
-                    w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
-                    w.line("host, guest = spec.split(\"::\", 2)");
-                    w.line("preopens[guest || host] = host");
-                    w.dedent();
-                    w.line("elsif a.start_with?(\"--dir=\")");
-                    w.indent();
-                    w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
-                    w.line("preopens[guest || host] = host");
-                    w.dedent();
-                    w.line("else");
-                    w.indent();
-                    w.line("break");
-                    w.dedent();
-                    w.line("end");
-                    w.dedent();
-                    w.line("end");
-                    w.line(format!(
-                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
-                    ));
-                } else {
-                    w.line(format!("inst = {class_name}.new"));
-                }
-                w.line("begin");
+            // Standalone output is a program, not a library: it runs on load, behind no main guard.
+            // An artifact other code loads is what `--mode library` produces.
+            if wasi_kwargs {
+                // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                w.line("preopens = {}");
+                w.line("argv = ARGV.dup");
+                w.line("while (a = argv.first)");
                 w.indent();
-                w.line("inst.invoke(\"_start\")");
-                w.line("exit 0");
+                w.line("if a == \"--\"");
+                w.indent();
+                w.line("argv.shift");
+                w.line("break");
                 w.dedent();
-                w.line(format!("rescue {class_name}::Rt::Exit => e"));
+                w.line("elsif a == \"--dir\"");
                 w.indent();
-                w.line("exit e.code");
+                w.line("argv.shift");
+                w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
+                w.line("host, guest = spec.split(\"::\", 2)");
+                w.line("preopens[guest || host] = host");
                 w.dedent();
-                w.line(format!("rescue {class_name}::Rt::Trap => e"));
+                w.line("elsif a.start_with?(\"--dir=\")");
                 w.indent();
-                w.line("warn \"trap: #{e.message}\"");
-                w.line("exit 134");
+                w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
+                w.line("preopens[guest || host] = host");
+                w.dedent();
+                w.line("else");
+                w.indent();
+                w.line("break");
                 w.dedent();
                 w.line("end");
-            });
+                w.dedent();
+                w.line("end");
+                w.line(format!(
+                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
+                ));
+            } else {
+                w.line(format!("inst = {class_name}.new"));
+            }
+            w.line("begin");
+            w.indent();
+            w.line("inst.invoke(\"_start\")");
+            w.line("exit 0");
+            w.dedent();
+            w.line(format!("rescue {class_name}::Rt::Exit => e"));
+            w.indent();
+            w.line("exit e.code");
+            w.dedent();
+            w.line(format!("rescue {class_name}::Rt::Trap => e"));
+            w.indent();
+            w.line("warn \"trap: #{e.message}\"");
+            w.line("exit 134");
+            w.dedent();
+            w.line("end");
         }
 
         let mut files = vec![OutputFile {
@@ -507,6 +529,34 @@ fn emits_br_read(stmts: &[Stmt], frames: &flat::Frames, dissolved: &HashSet<u32>
         };
         frames.crossed.contains(&label.id) && !dissolved.contains(&label.id)
     })
+}
+
+/// The exports that are not functions, grouped by kind: an export name paired with the instance variable holding it (the memories, all naming the one `@m`, keep names alone).
+#[derive(Default)]
+struct NonFuncExports {
+    globals: Vec<(String, String)>,
+    tables: Vec<(String, String)>,
+    tags: Vec<(String, String)>,
+    memories: Vec<String>,
+}
+
+/// One export accessor, dispatching on the export name literally: the export table is fixed at generation time, so the name-to-instance-variable step is resolved here rather than at run time through `instance_variable_get`, which an ahead-of-time Ruby compiler has no run-time equivalent of.
+/// `suffix` is appended to the instance variable (`.value` to read a boxed global rather than hand out the box).
+/// A name that is not exported raises the `KeyError` the `Hash#fetch` this replaces raised.
+fn export_accessor(w: &mut CodeWriter, header: &str, entries: &[(String, String)], suffix: &str) {
+    const MISSING: &str = "raise KeyError, \"key not found: #{name.inspect}\"";
+    w.block(header, "end", |w| {
+        if entries.is_empty() {
+            w.line(MISSING);
+            return;
+        }
+        w.line("case name");
+        for (name, ivar) in entries {
+            w.line(format!("when {} then {ivar}{suffix}", ruby_string(name)));
+        }
+        w.line(format!("else {MISSING}"));
+        w.line("end");
+    });
 }
 
 /// Widest `call_indirect` signature that gets a fixed-arity `Table#callN` dispatch method; wider signatures fall back to the splat `call`.
@@ -685,6 +735,7 @@ impl<'a> Gen<'a> {
 
     /// Class body members, written at indent level 1.
     fn body(&self, w: &mut CodeWriter) {
+        let exports = self.non_func_exports();
         self.initialize(w);
         w.line("");
         // The memory is named at every load and store, so the ivar is short; the accessor keeps the name the provider protocol and embedders use.
@@ -696,29 +747,21 @@ impl<'a> Gen<'a> {
             w.line("@exports.fetch(name).call(*args)");
         });
         w.line("");
-        w.block("def global_get(name)", "end", |w| {
-            w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name)).value");
-        });
+        export_accessor(w, "def global_get(name)", &exports.globals, ".value");
         w.line("");
         // The boxed Rt::Global itself (not its current value), for a host embedder or another dewasm instance to import as a shared mutable cell.
-        w.block("def global_export(name)", "end", |w| {
-            w.line("instance_variable_get(GLOBAL_EXPORTS.fetch(name))");
-        });
+        export_accessor(w, "def global_export(name)", &exports.globals, "");
         w.line("");
-        w.block("def table_export(name)", "end", |w| {
-            w.line("instance_variable_get(TABLE_EXPORTS.fetch(name))");
-        });
+        export_accessor(w, "def table_export(name)", &exports.tables, "");
         w.line("");
-        w.block("def tag_export(name)", "end", |w| {
-            w.line("instance_variable_get(TAG_EXPORTS.fetch(name))");
-        });
+        export_accessor(w, "def tag_export(name)", &exports.tags, "");
         w.line("");
         // Provider protocol: an instance of a generated class is itself a valid value in another instance's `imports` table, exposing every export regardless of kind under its one (per-module) namespace, the mechanism the spec harness's `register` support (and any real cross-module linking) uses.
         w.block("def import(name)", "end", |w| {
             w.line("return @exports[name] if @exports.key?(name)");
-            w.line("return global_export(name) if GLOBAL_EXPORTS.key?(name)");
-            w.line("return table_export(name) if TABLE_EXPORTS.key?(name)");
-            w.line("return tag_export(name) if TAG_EXPORTS.key?(name)");
+            w.line("return global_export(name) if GLOBAL_EXPORTS.include?(name)");
+            w.line("return table_export(name) if TABLE_EXPORTS.include?(name)");
+            w.line("return tag_export(name) if TAG_EXPORTS.include?(name)");
             w.line("return @m if MEMORY_EXPORTS.include?(name)");
             w.line("nil");
         });
@@ -731,41 +774,49 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn initialize(&self, w: &mut CodeWriter) {
-        let m = self.module;
-
-        let mut global_exports: Vec<(String, u32)> = Vec::new();
-        let mut table_exports: Vec<(String, u32)> = Vec::new();
-        let mut tag_exports: Vec<(String, u32)> = Vec::new();
-        let mut memory_export_names: Vec<String> = Vec::new();
-        for export in &m.exports {
+    /// The exports that are not functions, each paired with the instance variable holding it.
+    /// Both halves of the export surface read from this: the accessors dispatch on the name, and `import` tests membership.
+    fn non_func_exports(&self) -> NonFuncExports {
+        let mut exports = NonFuncExports::default();
+        for export in &self.module.exports {
+            let name = export.name.clone();
             match export.kind {
-                ExportKind::Global(idx) => global_exports.push((export.name.clone(), idx)),
-                ExportKind::Table(idx) => table_exports.push((export.name.clone(), idx)),
-                ExportKind::Tag(idx) => tag_exports.push((export.name.clone(), idx)),
-                ExportKind::Memory => memory_export_names.push(export.name.clone()),
+                ExportKind::Global(idx) => exports.globals.push((name, format!("@g{idx}"))),
+                ExportKind::Table(idx) => exports.tables.push((name, format!("@t{idx}"))),
+                ExportKind::Tag(idx) => exports.tags.push((name, format!("@tag{idx}"))),
+                ExportKind::Memory => exports.memories.push(name),
                 ExportKind::Func(_) => {}
             }
         }
-        let global_entries = global_exports
-            .iter()
-            .map(|(name, idx)| format!("{} => :@g{}", ruby_string(name), idx))
-            .collect::<Vec<_>>()
-            .join(", ");
-        w.line(format!("GLOBAL_EXPORTS = {{ {global_entries} }}.freeze"));
-        let table_entries = table_exports
-            .iter()
-            .map(|(name, idx)| format!("{} => :@t{}", ruby_string(name), idx))
-            .collect::<Vec<_>>()
-            .join(", ");
-        w.line(format!("TABLE_EXPORTS = {{ {table_entries} }}.freeze"));
-        let tag_entries = tag_exports
-            .iter()
-            .map(|(name, idx)| format!("{} => :@tag{}", ruby_string(name), idx))
-            .collect::<Vec<_>>()
-            .join(", ");
-        w.line(format!("TAG_EXPORTS = {{ {tag_entries} }}.freeze"));
-        let memory_entries = memory_export_names
+        exports
+    }
+
+    fn initialize(&self, w: &mut CodeWriter) {
+        let m = self.module;
+
+        let exports = self.non_func_exports();
+        let name_list = |entries: &[(String, String)]| {
+            entries
+                .iter()
+                .map(|(name, _)| ruby_string(name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        // The exported names of each kind, for `import` to recognize; the accessors resolve a name to its instance variable themselves.
+        w.line(format!(
+            "GLOBAL_EXPORTS = [{}].freeze",
+            name_list(&exports.globals)
+        ));
+        w.line(format!(
+            "TABLE_EXPORTS = [{}].freeze",
+            name_list(&exports.tables)
+        ));
+        w.line(format!(
+            "TAG_EXPORTS = [{}].freeze",
+            name_list(&exports.tags)
+        ));
+        let memory_entries = exports
+            .memories
             .iter()
             .map(|name| ruby_string(name))
             .collect::<Vec<_>>()
@@ -2169,6 +2220,34 @@ mod units {
     #[test]
     fn all_units_bundle() {
         bundler().bundle_all(0).expect("full bundle resolves");
+    }
+
+    /// The generated `Rt::WASI#import` dispatch names exactly the syscalls the bundle carries: a syscall that is bundled but not dispatched is invisible to the provider protocol, and one dispatched but not bundled is a NameError.
+    #[test]
+    fn wasi_import_dispatches_the_bundled_syscalls() {
+        let b = bundler();
+        let seeds: BTreeSet<String> = ["wasi/fd_write", "wasi/proc_exit"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let minimal = b.bundle(&seeds, 0).expect("minimal bundle resolves");
+        assert!(minimal.contains("when \"fd_write\" then method(:wasi_fd_write)"));
+        assert!(minimal.contains("when \"proc_exit\" then method(:wasi_proc_exit)"));
+        assert!(
+            !minimal.contains("method(:wasi_random_get)"),
+            "a syscall the bundle does not carry must not be dispatched"
+        );
+
+        let full = b.bundle_all(0).expect("full bundle resolves");
+        for (name, _) in WASI_PREVIEW1_FUNCTIONS {
+            if !b.has_unit(&format!("wasi/{name}")) {
+                continue;
+            }
+            assert!(
+                full.contains(&format!("when \"{name}\" then method(:wasi_{name})")),
+                "{name} is bundled but `import` does not dispatch it"
+            );
+        }
     }
 
     #[test]

@@ -310,10 +310,9 @@ fn standalone_main(
     w.dedent();
     w.line("");
     w.line("");
-    w.line("if __name__ == \"__main__\":");
-    w.indent();
+    // Standalone output is a program, not a library: it runs on load, behind no main guard.
+    // An artifact other code loads is what `--mode library` produces.
     w.line("_run_main()");
-    w.dedent();
 }
 
 /// Returns the class source (runtime bundle included for `Embedded`, wrapper classes appended) and the set of runtime units it needs.

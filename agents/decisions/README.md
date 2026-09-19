@@ -115,6 +115,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 93 | [Alternative Engines as Speed-Suite Runners](93-engine-runners-in-speed-suite.md) | Accepted |
 | 94 | [Codon Backend Lowering Conventions](94-codon-backend-lowering.md) | Accepted |
 | 95 | [cowsay Comes From Our Own Implementation, Published Upstream](95-cowsay-own-implementation.md) | Accepted |
+| 96 | [Generated Output Must Survive Ahead-of-Time Compilation](96-generated-code-compiles-ahead-of-time.md) | Accepted |
 
 ## Adding a new decision
 

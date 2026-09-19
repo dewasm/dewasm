@@ -273,8 +273,9 @@ impl Backend for BashBackend {
         if opts.mode == Mode::Standalone {
             let mut w = CodeWriter::new("\t");
             w.line("");
-            w.line("if [[ ${BASH_SOURCE[0]} == \"$0\" ]]; then");
-            w.indent();
+            // Standalone output is a program, not a library: it runs on load, behind no main guard.
+            // An artifact other code loads is what `--mode library` produces.
+
             // Each wasm call nests one native bash function call, and a deeply recursive guest (e.g. QuickJS's interactive REPL, whose startup alone reaches tens of thousands of frames) can exhaust the *process's* C stack, not the bounded, trappable wasm one (FUNCNEST), and crash with a real SIGSEGV rather than a caught wasm trap.
             // Raise the soft rlimit to the max this process is allowed before running any guest code; both attempts degrade silently (`|| true`) since a sandboxed environment may refuse both, in which case behavior is unchanged from before this line existed.
             w.line("ulimit -s unlimited 2>/dev/null || ulimit -s \"$(ulimit -Hs)\" 2>/dev/null || true");
@@ -301,8 +302,6 @@ impl Backend for BashBackend {
             w.line("if (( __st == 133 )); then exit $(( EXIT_CODE & 0xff )); fi");
             w.line("if (( __st == 134 )); then echo \"trap: $TRAP_MSG\" >&2; exit 134; fi");
             w.line("exit $__st");
-            w.dedent();
-            w.line("fi");
             out.push_str(&w.finish());
         }
         Ok(vec![OutputFile {
