@@ -622,11 +622,16 @@ pub struct RuntimeScope {
     pub prelude: Option<&'static str>,
 }
 
+/// A scope member rendered from the bundle's own contents (the unit ids it carries) instead of being written as a unit.
+/// For a member a fixed unit source cannot express, because its body has to name the units that ended up in the bundle.
+pub type ScopeMember = fn(&BTreeSet<String>) -> String;
+
 /// Resolves `requires:` closures over runtime units and emits the bundle, grouped by scope in declaration order, deterministically sorted within a scope.
 /// Language-agnostic: syntax comes from the scopes and the caller-provided wrapper around the whole bundle.
 pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
     units: BTreeMap<String, RuntimeUnit>,
+    members: BTreeMap<&'static str, ScopeMember>,
     indent_str: &'static str,
     unit_indent: usize,
 }
@@ -679,6 +684,7 @@ impl RuntimeBundler {
         let bundler = RuntimeBundler {
             scopes,
             units,
+            members: BTreeMap::new(),
             indent_str,
             unit_indent,
         };
@@ -699,6 +705,15 @@ impl RuntimeBundler {
             .iter()
             .find(|s| s.prefix == prefix)
             .ok_or_else(|| anyhow::anyhow!("unit {id} has unknown scope {prefix}"))
+    }
+
+    /// Attach a [`ScopeMember`] to the scope `prefix`, emitted after that scope's units whenever the bundle carries any.
+    pub fn with_scope_member(mut self, prefix: &'static str, render: ScopeMember) -> Result<Self> {
+        if !self.scopes.iter().any(|s| s.prefix == prefix) {
+            bail!("scope member for unknown scope {prefix}");
+        }
+        self.members.insert(prefix, render);
+        Ok(self)
     }
 
     pub fn has_unit(&self, id: &str) -> bool {
@@ -767,6 +782,12 @@ impl RuntimeBundler {
                 }
                 first = false;
                 for line in self.units[id.as_str()].body.lines() {
+                    self.push_line(&mut out, body_indent, line);
+                }
+            }
+            if let Some(render) = self.members.get(scope.prefix) {
+                out.push('\n');
+                for line in render(&closure).lines() {
                     self.push_line(&mut out, body_indent, line);
                 }
             }

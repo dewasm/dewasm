@@ -54,12 +54,6 @@ def initialize(args: [], env: {}, preopens: {})
   $stdin.binmode
 end
 
-# Import-provider protocol: a custom WASI runtime replaces this class wholesale by implementing these two methods.
-def import(name)
-  meth = :"wasi_#{name}"
-  respond_to?(meth) ? method(meth) : nil
-end
-
 def attach(instance)
   @memory = instance.memory
 end
