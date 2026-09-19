@@ -315,59 +315,59 @@ impl Backend for RubyBackend {
         if opts.mode == Mode::Standalone {
             let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
-            w.block("if __FILE__ == $PROGRAM_NAME", "end", |w| {
-                if wasi_kwargs {
-                    // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
-                    w.line("preopens = {}");
-                    w.line("argv = ARGV.dup");
-                    w.line("while (a = argv.first)");
-                    w.indent();
-                    w.line("if a == \"--\"");
-                    w.indent();
-                    w.line("argv.shift");
-                    w.line("break");
-                    w.dedent();
-                    w.line("elsif a == \"--dir\"");
-                    w.indent();
-                    w.line("argv.shift");
-                    w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
-                    w.line("host, guest = spec.split(\"::\", 2)");
-                    w.line("preopens[guest || host] = host");
-                    w.dedent();
-                    w.line("elsif a.start_with?(\"--dir=\")");
-                    w.indent();
-                    w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
-                    w.line("preopens[guest || host] = host");
-                    w.dedent();
-                    w.line("else");
-                    w.indent();
-                    w.line("break");
-                    w.dedent();
-                    w.line("end");
-                    w.dedent();
-                    w.line("end");
-                    w.line(format!(
-                        "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
-                    ));
-                } else {
-                    w.line(format!("inst = {class_name}.new"));
-                }
-                w.line("begin");
+            // Standalone output is a program, not a library: it runs on load, behind no main guard.
+            // An artifact other code loads is what `--mode library` produces.
+            if wasi_kwargs {
+                // Parse the standalone runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..].
+                w.line("preopens = {}");
+                w.line("argv = ARGV.dup");
+                w.line("while (a = argv.first)");
                 w.indent();
-                w.line("inst.invoke(\"_start\")");
-                w.line("exit 0");
+                w.line("if a == \"--\"");
+                w.indent();
+                w.line("argv.shift");
+                w.line("break");
                 w.dedent();
-                w.line(format!("rescue {class_name}::Rt::Exit => e"));
+                w.line("elsif a == \"--dir\"");
                 w.indent();
-                w.line("exit e.code");
+                w.line("argv.shift");
+                w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
+                w.line("host, guest = spec.split(\"::\", 2)");
+                w.line("preopens[guest || host] = host");
                 w.dedent();
-                w.line(format!("rescue {class_name}::Rt::Trap => e"));
+                w.line("elsif a.start_with?(\"--dir=\")");
                 w.indent();
-                w.line("warn \"trap: #{e.message}\"");
-                w.line("exit 134");
+                w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
+                w.line("preopens[guest || host] = host");
+                w.dedent();
+                w.line("else");
+                w.indent();
+                w.line("break");
                 w.dedent();
                 w.line("end");
-            });
+                w.dedent();
+                w.line("end");
+                w.line(format!(
+                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
+                ));
+            } else {
+                w.line(format!("inst = {class_name}.new"));
+            }
+            w.line("begin");
+            w.indent();
+            w.line("inst.invoke(\"_start\")");
+            w.line("exit 0");
+            w.dedent();
+            w.line(format!("rescue {class_name}::Rt::Exit => e"));
+            w.indent();
+            w.line("exit e.code");
+            w.dedent();
+            w.line(format!("rescue {class_name}::Rt::Trap => e"));
+            w.indent();
+            w.line("warn \"trap: #{e.message}\"");
+            w.line("exit 134");
+            w.dedent();
+            w.line("end");
         }
 
         let mut files = vec![OutputFile {

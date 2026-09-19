@@ -3,6 +3,9 @@
 A program converted with `--mode standalone` is a self-contained CLI: the generated `main` supplies the WASI guest its argv, environment, and filesystem preopens, and translates the guest's exit/trap into a process exit code.
 That interface is uniform across every backend and modelled on wasmtime's CLI, so a converted program behaves like the `.wasm` it came from.
 
+The guest runs as soon as the file is loaded: no `__main__`-style guard stands between loading the artifact and running it, so a standalone artifact is for executing, never for loading from other code.
+An artifact to require, import, or source is what `--mode library` produces.
+
 Because the artifact is self-contained, its **internal** name is not part of any interface and is therefore fixed: the module class is `Program` (Ruby, Python, Perl, Java; Perl as `package Program`, Go as type `Program` in `package main`) and the Bash function prefix is `program_`.
 `--module-name` is a library-mode flag and is rejected together with `--mode standalone`.
 
