@@ -24,9 +24,12 @@ The commands and the methodology are in [docs/benchmarks/README.md](../docs/benc
 
 - Ruby's YJIT has no on-stack replacement.
   A single long-running loop is never JIT-compiled, so results swing on whether work is split across method calls.
-- A fast runner's app cell should batch several runs per sample, since the harness calibrates until a sample reaches the target compute time.
-  A cell that reports `runs_per_sample` of 1 while its median is far below that target was calibrated against a cold artifact, and its figure carries a whole process start that its neighbours amortize.
-  Re-measure that pair: `app/cowsay` on `dewasm-go` read 10.6 ms at one run per sample on 2026-09-17, and 3.0 ms at 64 once the artifact was warm.
+- The test of a suspect cell is whether it reproduces, not what it looks like.
+  Re-measure the pair with a filtered run and compare; the figure that repeats is the figure.
+  `app/cowsay` on `dewasm-jruby` read 6.15 s once and 3.7 s on each re-measurement, so the first was dropped.
+- `runs_per_sample` of 1 on a fast cell is a hint to check, not a verdict.
+  The harness batches runs until a sample reaches the target compute time, so a calibration against a cold artifact can settle on 1 and leave a whole process start in the figure: `dewasm-go` read 10.6 ms that way on 2026-09-17, and 3.0 ms at 64 runs per sample once warm.
+  A compiled backend also reports 1 with figures that reproduce exactly, so compare before concluding.
 - A workload whose program changed is a new baseline, not a regression or an improvement.
   Records are dated snapshots, so say which records a comparison spans.
 
