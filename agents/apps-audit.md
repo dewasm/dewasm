@@ -14,7 +14,7 @@ The same verdict covers an app with no artifact to run the audit tool on at all:
 
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
-| cowsay.wasm 0.1.0 (cowsay 3.03 in C) | our own release, pinned in `setup.sh` | none | ✅ in scope (shipping) |
+| cowsay.wasm 0.2.0 (cowsay 3.03 in C) | our own release, pinned in `setup.sh` | none | ✅ in scope (shipping) |
 | quickjs-ng v0.15.1 | pinned in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | pinned in `setup.sh` | none (baseline after the wasm-opt pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
 | CPython 3.14.6 | pinned in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |

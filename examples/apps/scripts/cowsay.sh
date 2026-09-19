@@ -8,5 +8,5 @@
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_app cowsay \
-  "https://github.com/dewasm/cowsay.wasm/releases/download/v0.1.0/cowsay.wasm" \
-  e7c54f5959605d509344b6793bbaaab4cfa6b240fbcbf266c6dc83597b10411d
+  "https://github.com/dewasm/cowsay.wasm/releases/download/v0.2.0/cowsay.wasm" \
+  97ff518a9e005edc3a008754f282c77b459e30e3c2c59609db95af380fdfad50

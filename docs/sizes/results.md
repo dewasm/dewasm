@@ -7,7 +7,7 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-09-17T18:31:02Z.
+Measured 2026-09-19T02:25:54Z.
 
 | | |
 | --- | --- |
@@ -51,18 +51,18 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 67.9 kB, then python at 353 kB; bash is largest at 1.13 MB, a span of 17x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 87.0 kB, then python at 404 kB; bash is largest at 1.22 MB, a span of 14x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
-| wasm binary | 67.9 kB |
-| `ruby` | 361 kB |
-| `python` | 353 kB |
-| `perl` | 677 kB |
-| `bash` | 1.13 MB |
-| `go` | 457 kB |
-| `java` | 553 kB |
+| wasm binary | 87.0 kB |
+| `ruby` | 412 kB |
+| `python` | 404 kB |
+| `perl` | 744 kB |
+| `bash` | 1.22 MB |
+| `go` | 511 kB |
+| `java` | 605 kB |
 
 ### `sqlite3-shell.wasm`
 
