@@ -77,4 +77,6 @@ A single-import override (capturing `fd_write`, everything else falling back to 
 - Maturity: this is the most exercised backend, but the whole project is early development.
   Treat generated output as tested, not battle-hardened.
 - Numeric conventions: i32/i64 are masked-unsigned `Integer`s; signed views appear only where an instruction needs them, so reading the output requires knowing this.
+- `path_link` on a Ruby without Fiddle: hardlinking a *symlink itself* needs `linkat(2)`, which only Fiddle can reach, so on macOS (whose `link(2)` follows symlinks) that one request answers `ENOTSUP` instead.
+  Every other hardlink, and everything on Linux, is unaffected; CRuby has Fiddle, so this is about runtimes that do not, such as an ahead-of-time compiler's.
 - Large modules produce large files: a large interpreter converts to hundreds of megabytes of Ruby (measured in [docs/sizes/results.md](../sizes/results.md)), and loading and running one costs proportional time and memory.
