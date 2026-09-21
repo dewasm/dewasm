@@ -79,7 +79,7 @@ Measured 2026-09-20 and 2026-09-21 against one ahead-of-time Ruby compiler, on t
 | Suite | Start | After the compiler's fixes |
 | --- | --- | --- |
 | spec, files matching CRuby | 68 of 97 | 86 of 97 |
-| WASI p1 trials passing | 34 of 72 | 66 of 72 |
+| WASI p1 trials passing | 34 of 72 | 68 of 72 |
 
 Two changes landed on the dewasm side, both of them shapes that were no better under an interpreter: decision 96 (resolve at conversion time what conversion time knows, and prefer the spelling that compiles) and decision 97 (a host library the runtime may lack is optional, and its absence is refused rather than faked).
 Everything else was the other project's, reported as a minimal pure-Ruby reproduction per class.
