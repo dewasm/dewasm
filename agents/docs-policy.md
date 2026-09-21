@@ -20,6 +20,7 @@ A document a user would never open, but an agent must consult before changing so
 | [agents/docs-policy.md](docs-policy.md) | This file: which document each kind of content belongs in | Agents writing documents | By hand |
 | [agents/test-authoring.md](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and contributors writing tests | By hand |
 | [agents/apps-audit.md](apps-audit.md) | The real-world app test record and feature verdicts | Agents and contributors adding an app target | By hand |
+| [agents/alternative-ruby-runtimes.md](alternative-ruby-runtimes.md) | How to run the Ruby suites on a Ruby other than CRuby, and how to read and narrow what fails | Agents measuring another Ruby implementation | By hand |
 | [agents/measurement-records.md](measurement-records.md) | The checklist around a speed or size run, and what makes a result suspect | Agents taking a record | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
