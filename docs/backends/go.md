@@ -25,7 +25,8 @@ The package is also what isolates one artifact from another: each carries its ow
 
 ## Requirements
 
-`go` on `PATH`, **1.18 or newer** (the runtime uses generics).
+`go` on `PATH`, **1.20 or newer** (the runtime uses generics and `unsafe.SliceData`).
+A little-endian target, which is every `GOARCH` except `mips`, `mips64`, `ppc64` and `s390x`: the linear-memory accessors read memory in host byte order, and a big-endian build fails at compile time rather than computing wrong values.
 Standalone output is a normal Go program: `go run` or `go build` it.
 Library output is a package to import (see below).
 
