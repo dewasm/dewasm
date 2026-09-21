@@ -535,6 +535,12 @@ fn int_const(expr: &Expr) -> bool {
     matches!(expr, Expr::I32Const(_) | Expr::I64Const(_))
 }
 
+/// Whether `expr` is a float constant.
+/// It is not constant to Go (see `int_const`), but the compiler folds the `from_bits` intrinsic to a machine constant, which is what Go's identity rewrites over a multiply or a divide match on.
+fn float_const(expr: &Expr) -> bool {
+    matches!(expr, Expr::F32Const(_) | Expr::F64Const(_))
+}
+
 /// The suffix naming a tail-call thunk type for a given result signature.
 fn tail_suffix(results: &[ValType]) -> String {
     if results.is_empty() {
@@ -2060,12 +2066,7 @@ impl<'a> Gen<'a> {
             Expr::LocalGet(idx) => format!("l{idx}"),
             Expr::GlobalGet(idx) => format!("p.g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
-            // Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps; laundering one operand makes the operation a runtime one, which wraps.
-            // Applied to every operator rather than the ones known to overflow today (`+`, `-`, `*`, `<<`), because the rule is about the operands being constants at all, and `bin` is free to lower an operator into arithmetic that overflows where the operator itself would not.
-            Expr::Bin(op, a, b) if int_const(a) && int_const(b) => {
-                self.bin(*op, &self.laundered_const(a), &self.expr(b))
-            }
-            Expr::Bin(op, a, b) => self.bin(*op, &self.expr(a), &self.expr(b)),
+            Expr::Bin(op, a, b) => self.bin(*op, a, b),
             Expr::Load { op, addr, offset } => {
                 format!(
                     "p.memory.{}({})",
@@ -2154,9 +2155,24 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
+    fn bin(&self, op: BinOp, a: &Expr, b: &Expr) -> String {
         use BinOp::*;
-        match op {
+        // Go rewrites `x * 1.0` and `x / 1.0` to `x` and `x * -1.0` to `-x`, dropping the signaling-NaN quieting wasm requires of an arithmetic result; quieting afterwards restores it, and is correct whether or not the rewrite fired.
+        // Only a constant operand can match those rewrites, so only such a site pays for the wrapper.
+        let quiet = match op {
+            F32Mul | F32Div if float_const(a) || float_const(b) => Some("f32_q"),
+            F64Mul | F64Div if float_const(a) || float_const(b) => Some("f64_q"),
+            _ => None,
+        };
+        // Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps; laundering one operand makes the operation a runtime one, which wraps.
+        // Applied to every operator rather than the ones known to overflow today (`+`, `-`, `*`, `<<`), because the rule is about the operands being constants at all, and the lowering below is free to turn an operator into arithmetic that overflows where the operator itself would not.
+        let (a, b) = if int_const(a) && int_const(b) {
+            (self.laundered_const(a), self.expr(b))
+        } else {
+            (self.expr(a), self.expr(b))
+        };
+        let (a, b) = (a.as_str(), b.as_str());
+        let raw = match op {
             I32Add | I64Add => format!("({a} + {b})"),
             I32Sub | I64Sub => format!("({a} - {b})"),
             I32Mul | I64Mul => format!("({a} * {b})"),
@@ -2197,17 +2213,21 @@ impl<'a> Gen<'a> {
             I64GeS => format!("{}(int64({a}) >= int64({b}))", self.rt("b2i")),
             F32Add | F64Add => format!("({a} + {b})"),
             F32Sub | F64Sub => format!("({a} - {b})"),
-            // mul/div route through //go:noinline helpers so Go's compiler cannot fuse a following add/sub into an FMA, nor fold `x * 1.0` / `x / 1.0` to `x` (which would skip the sNaN quieting wasm mandates): see the units.
-            F32Mul => format!("{}({a}, {b})", self.rt("f32_mul")),
-            F64Mul => format!("{}({a}, {b})", self.rt("f64_mul")),
-            F32Div => format!("{}({a}, {b})", self.rt("f32_div")),
-            F64Div => format!("{}({a}, {b})", self.rt("f64_div")),
+            // The conversion is what keeps a following add or subtract from fusing into a hardware FMA, which wasm forbids: an explicit float conversion rounds to the target precision, so Go compiles it to a rounding step the fusion rewrite does not match through.
+            F32Mul => format!("float32({a} * {b})"),
+            F64Mul => format!("float64({a} * {b})"),
+            F32Div => format!("float32({a} / {b})"),
+            F64Div => format!("float64({a} / {b})"),
             F32Min => format!("{}({a}, {b})", self.rt("f32_min")),
             F64Min => format!("{}({a}, {b})", self.rt("f64_min")),
             F32Max => format!("{}({a}, {b})", self.rt("f32_max")),
             F64Max => format!("{}({a}, {b})", self.rt("f64_max")),
             F32Copysign => format!("{}({a}, {b})", self.rt("f32_copysign")),
             F64Copysign => format!("{}({a}, {b})", self.rt("f64_copysign")),
+        };
+        match quiet {
+            Some(name) => format!("{}({raw})", self.rt(name)),
+            None => raw,
         }
     }
 }

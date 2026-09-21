@@ -41,8 +41,11 @@ Go adds two problems they never face: **unused variables, labels, and imports ar
   Each function adds its frame's slot count to a global `rtStack`, `defer`-decrements it, and traps `"call stack exhausted"` past 1024 slots.
   Sizing by slot cost rather than depth also trips `skip-stack-guard-page.wast`'s 1056-local function at shallow depth, so that file needs no list entry.
   The guard is **off** in shipped output, whose deep but valid recursions must not falsely trap.
-- **Two Go-compiler float hazards** the spec suite exposed: Go fuses `x*y+z` into an arm64 FMA, which `float_exprs.wast` forbids, and folds `x*1.0` / `x/1.0` to `x`, skipping the signaling-NaN quieting `no_fold_*` demands.
-  Both are defeated by routing f32/f64 **mul and div through `//go:noinline` helpers**, so a constant operand never reaches the op and no add fuses across the call boundary.
+- **Two Go-compiler float hazards** the spec suite exposed, each with its own fix.
+  Go fuses `x*y+z` into an arm64 FMA, which `float_exprs.wast` forbids: every f32/f64 mul and div is emitted **inside an explicit conversion**, `float64(a * b)`, which the Go spec defines as rounding to the target type's precision and the compiler realizes as a `Round32F`/`Round64F` value the fusion rewrite does not match through.
+  Go also rewrites `x * 1.0` and `x / 1.0` to `x` and `x * -1.0` to `-x`, which skips the signaling-NaN quieting `no_fold_*` demands.
+  The conversion does not stop that: `float64` of an already-`float64` value is a no-op, and the compiler folds the `from_bits` intrinsic to a machine constant the rewrite matches on.
+  So a mul or div **with a constant operand** is wrapped in `Rt.f32_q`/`Rt.f64_q`, [decision 94](94-codon-backend-lowering.md)'s quiet-if-NaN helper, correct whether or not the rewrite fired and emitted at no other site.
   `math.NaN()` is also not bit-canonical, so min/max build wasm's pattern explicitly, and f32 `sqrt` through float64 was validated correctly rounded against `f32.wast`.
 - **Feature scope**: wasm 1.0 and full WASI preview 1; `Floats` is `Supported`.
 
@@ -65,6 +68,10 @@ Go-specific:
 - **Reflection-based `invoke`**: `map[string]any` exports plus a type assertion at the glue site avoid pulling in `reflect` and its cost.
 - **Blanket `_ = x` for every local and temp**: correct, but it bloats cowsay's already large file and its compile time.
 - **Lowering `debug.SetMaxStack`, or a subprocess per exhaustion assertion**: the former is still process-fatal, the latter costs a process per check.
+- **`//go:noinline` helpers for mul and div**, the shape until 2026-09-21: one call defeats both hazards at once, a constant operand never reaching the op and no add fusing across the call boundary, but a non-inlinable call per multiply is the whole cost of a float loop.
+  Measured on darwin arm64 against wasmtime at the same iteration count, minimum of three, helper shape against conversion shape: `wat/f32_alu` 3.59x against 0.97x, `wat/f64_alu` 3.73x against 1.04x, `c/mandelbrot` 2.43x against 0.97x.
+  What the call bought and the conversion does not is a constant the optimizer propagates into the op from outside the expression: a local first assigned `f64.const 1.0` and then multiplied folds the same way, and the operand check does not see it, so such a multiply leaves a signaling NaN signaling.
+  The spec suite writes the constant at the operator, where the check does see it, and decision 94's Codon wrapper has the same shape and the same gap.
 
 ## Consequences
 
