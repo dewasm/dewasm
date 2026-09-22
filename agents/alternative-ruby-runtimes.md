@@ -74,13 +74,15 @@ Record the compiler's version string with each run: the same path can hold a dif
 
 ## What the first campaign found
 
-Measured 2026-09-20 and 2026-09-21 against one ahead-of-time Ruby compiler, on the same dewasm output throughout:
+Measured 2026-09-20 to 2026-09-22 against one ahead-of-time Ruby compiler, on the same dewasm output throughout, over twelve measured builds:
 
-| Suite | Start | After the compiler's fixes |
+| Suite | Start | End |
 | --- | --- | --- |
-| spec, files matching CRuby | 68 of 97 | 86 of 97 |
-| WASI p1 trials passing | 34 of 72 | 68 of 72 |
+| spec, files matching CRuby | 68 of 97 | 97 of 97 |
+| spec, assertions passing | — | 29396 of 29396 |
+| WASI p1 trials passing | 34 of 72 | 71 of 72 |
 
 Two changes landed on the dewasm side, both of them shapes that were no better under an interpreter: decision 96 (resolve at conversion time what conversion time knows, and prefer the spelling that compiles) and decision 97 (a host library the runtime may lack is optional, and its absence is refused rather than faked).
 Everything else was the other project's, reported as a minimal pure-Ruby reproduction per class.
-One remaining WASI trial is a deliberate dewasm answer rather than a defect: `path_link` of a symlink on a macOS host without Fiddle refuses with `ENOTSUP` (decision 97).
+
+The one trial still failing is **WASI `rust/path_link`**, and it is a deliberate dewasm answer rather than a defect. Hardlinking a symlink itself needs `linkat(2)`, which only Fiddle reaches, so on a macOS host without Fiddle that one request answers `ENOTSUP` (decision 97). On a Linux host `File.link` is already nofollow, so the same build is expected to pass all 72.
