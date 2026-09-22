@@ -25,7 +25,10 @@ AGNES_C_SHA256="2a8ff8770cc4fd1dacaa17b4841e7344fc1e458aba66351ee46e8423e7af618f
 
 # The demo ROM: Alter Ego by Shiru, released into the public domain.
 # The zip carries the .nes alongside label art / a manual; only the ROM is extracted.
+# shiru.untergrund.net stopped answering (the whole untergrund.net host refuses connections), so the fetch falls back to the Wayback snapshot below, whose bytes match ROM_SHA256.
+# The author's page has no other live home; keep the original first, so a returning host is used again.
 ROM_URL="https://shiru.untergrund.net/files/nes/alter_ego.zip"
+ROM_MIRROR_URL="https://web.archive.org/web/20241206185447id_/http://shiru.untergrund.net/files/nes/alter_ego.zip"
 ROM_SHA256="c7dc651d06aa7aee830d7c1d4563c9347bd724ad9de44dde7f459090b466cdc8"
 ROM_MEMBER="alter_ego/Alter_Ego.nes"
 
@@ -51,7 +54,7 @@ require_tool nes wasm-dis "install binaryen (e.g. brew install binaryen) to veri
 
 echo "nes: fetching $ROM_URL"
 new_tmpdir
-fetch_verified "$ROM_URL" "$ROM_SHA256" "$tmp/alter_ego.zip"
+fetch_verified "$ROM_URL" "$ROM_SHA256" "$tmp/alter_ego.zip" "$ROM_MIRROR_URL"
 archive_extract_file "$tmp/alter_ego.zip" zip "$ROM_MEMBER" cache/alter_ego.nes
 
 echo "nes: fetching agnes ($AGNES_COMMIT)"

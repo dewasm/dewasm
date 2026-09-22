@@ -17,10 +17,21 @@ fetch_url() {
   curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused -o "$2" "$1"
 }
 
-# fetch_verified <url> <sha256> <out>: download and fail unless the bytes match the pin.
+# fetch_verified <url> <sha256> <out> [mirror...]: download and fail unless the bytes match the pin.
+# A mirror is tried only when the preceding source fails to download at all (the host is gone, not merely flaky: fetch_url has already retried).
+# The sha256 pin is what makes a mirror safe to accept, so bytes that download but do not match fail here instead of falling through: that is a re-pin, not an outage.
 fetch_verified() {
-  fetch_url "$1" "$3"
-  echo "$2  $3" | shasum -a 256 -c - >/dev/null
+  local url="$1" sha256="$2" out="$3"
+  shift 3
+  local src
+  for src in "$url" "$@"; do
+    [ "$src" = "$url" ] || echo "fetch: $url failed, trying $src"
+    fetch_url "$src" "$out" || continue
+    echo "$sha256  $out" | shasum -a 256 -c - >/dev/null
+    return
+  done
+  echo "fetch: failed to download $url" >&2
+  exit 1
 }
 
 # require_tool <app> <cmd> [install-hint]: fail loudly when a build prerequisite is missing, naming the app and, when given, how to install it.
