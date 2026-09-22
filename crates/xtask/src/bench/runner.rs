@@ -18,8 +18,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
@@ -735,13 +737,12 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     spinel_bin().context("spinel not found on PATH (or $DEWASM_SPINEL)")?;
                 let tmp = cache.join(format!("{stem}.bin.tmp"));
                 // -O 2 for the same reason the codon build takes -release, and as two arguments: a joined -O2 is silently ignored.
-                let out = Command::new(spinel)
-                    .args(["-O", "2", "--int-overflow=promote"])
+                let mut cmd = Command::new(spinel);
+                cmd.args(["-O", "2", "--int-overflow=promote"])
                     .arg(&src)
                     .arg("-o")
-                    .arg(&tmp)
-                    .output()
-                    .context("spawn spinel")?;
+                    .arg(&tmp);
+                let out = build_under_ceiling(cmd, spinel_build_timeout(), "spinel")?;
                 if !out.status.success() {
                     bail!(
                         "spinel build failed:\n{}{}",
@@ -959,6 +960,69 @@ fn spinel_bin() -> Option<PathBuf> {
             .find(|candidate| probe(candidate, &["--version"]))
     })
     .clone()
+}
+
+/// How long one Spinel build may take before the run gives up on that artifact.
+/// `$DEWASM_SPINEL_BUILD_TIMEOUT` in seconds; one hour by default.
+fn spinel_build_timeout() -> Duration {
+    std::env::var("DEWASM_SPINEL_BUILD_TIMEOUT")
+        .ok()
+        .and_then(|raw| raw.parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(3600))
+}
+
+/// Run a compiler under a hard ceiling and collect its output.
+///
+/// Only the Spinel build uses this: its cost grows with the size of the generated program, and the
+/// largest app workload converts to a third of a million lines of Ruby, so one artifact can stall a
+/// whole unattended run. A build that hits the ceiling fails that one cell, with the flag that
+/// raises it named in the message, and the rest of the matrix still gets measured.
+fn build_under_ceiling(
+    cmd: Command,
+    timeout: Duration,
+    what: &str,
+) -> Result<std::process::Output> {
+    let mut cmd = cmd;
+    let child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("spawn {what}"))?;
+    let pid = child.id();
+    let done = Arc::new(AtomicBool::new(false));
+    let killed = Arc::new(AtomicBool::new(false));
+    let watchdog = {
+        let (done, killed) = (Arc::clone(&done), Arc::clone(&killed));
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + timeout;
+            loop {
+                if done.load(Ordering::Relaxed) {
+                    return;
+                }
+                let now = Instant::now();
+                if now >= deadline {
+                    killed.store(true, Ordering::Relaxed);
+                    let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
+                    return;
+                }
+                std::thread::park_timeout(deadline - now);
+            }
+        })
+    };
+    let out = child
+        .wait_with_output()
+        .with_context(|| format!("wait for {what}"))?;
+    done.store(true, Ordering::Relaxed);
+    watchdog.thread().unpark();
+    let _ = watchdog.join();
+    if killed.load(Ordering::Relaxed) {
+        bail!(
+            "{what} build exceeded {}s (raise it with $DEWASM_SPINEL_BUILD_TIMEOUT)",
+            timeout.as_secs()
+        );
+    }
+    Ok(out)
 }
 
 fn tinygo_bin() -> Option<PathBuf> {
