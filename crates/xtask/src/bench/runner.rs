@@ -944,6 +944,21 @@ fn graalpy_bin() -> Option<PathBuf> {
 }
 
 /// A host TinyGo, same policy as [`pypy_bin`]: host-provided, reported skip when missing.
+fn tinygo_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_TINYGO") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("tinygo"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["version"]))
+    })
+    .clone()
+}
+
 /// The Spinel compiler: `$DEWASM_SPINEL` when set, otherwise `spinel` on PATH.
 /// It is built from its own source tree rather than installed, so there is no setup script to point at.
 fn spinel_bin() -> Option<PathBuf> {
@@ -957,21 +972,6 @@ fn spinel_bin() -> Option<PathBuf> {
         candidates
             .into_iter()
             .find(|candidate| probe(candidate, &["--version"]))
-    })
-    .clone()
-}
-
-fn tinygo_bin() -> Option<PathBuf> {
-    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
-    BIN.get_or_init(|| {
-        let mut candidates: Vec<PathBuf> = Vec::new();
-        if let Some(env) = std::env::var_os("DEWASM_TINYGO") {
-            candidates.push(PathBuf::from(env));
-        }
-        candidates.push(PathBuf::from("tinygo"));
-        candidates
-            .into_iter()
-            .find(|candidate| probe(candidate, &["version"]))
     })
     .clone()
 }
