@@ -1,4 +1,6 @@
 func (m *Memory) i32_load8_u(a uint64) uint32 {
-    m.check(a, 1)
-    return uint32(m.data[a])
+    if a+1 > m.n {
+        panic(oobTrap)
+    }
+    return uint32(*(*uint8)(unsafe.Add(m.base, a)))
 }

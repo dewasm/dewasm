@@ -274,6 +274,8 @@ fn scan_imports(text: &str) -> Vec<String> {
         ("binary.", "encoding/binary"),
         ("rand.", "crypto/rand"),
         ("strings.", "strings"),
+        ("runtime.", "runtime"),
+        ("unsafe.", "unsafe"),
     ];
     let mut set: BTreeSet<&'static str> = BTreeSet::new();
     for (sel, path) in candidates {

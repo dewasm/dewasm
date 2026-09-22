@@ -22,14 +22,14 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use dewasm_backend::{
-    check_module_support, hex_string, is_ident, is_wasi_module, load_method, module_name_error,
-    stmts_use_tail_calls, store_method, type_key, wasi_bundled, Backend, CodeWriter, GenOptions,
-    Mode, OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
+    check_module_support, hex_string, is_ident, is_wasi_module, module_name_error,
+    stmts_use_tail_calls, type_key, wasi_bundled, Backend, CodeWriter, GenOptions, Mode,
+    OutputFile, RuntimeBundler, RuntimeScope, SupportStatus,
 };
 use dewasm_core::feature::Feature;
 use dewasm_core::ir::{
-    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Label, Module, Stmt,
-    Temp, UnOp, ValType,
+    BinOp, BrTarget, CatchClause, ElemItem, ElemKind, ExportKind, Expr, Func, Label, LoadOp,
+    Module, Stmt, StoreOp, Temp, UnOp, ValType,
 };
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
@@ -1732,12 +1732,7 @@ impl<'a> Gen<'a> {
                 value,
                 offset,
             } => {
-                w.line(format!(
-                    "p.memory.{}({}, {})",
-                    self.mem(store_method(*op)),
-                    self.addr(addr, *offset),
-                    self.expr(value)
-                ));
+                w.line(self.store(*op, &self.addr(addr, *offset), &self.expr(value)));
             }
             Stmt::Br(target) => self.branch(w, target),
             Stmt::BrIf { cond, target } => {
@@ -2033,6 +2028,46 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// A load as a cast around one of the raw-width memory units.
+    /// The sign extensions and the float reinterpretations are spelled at the site because a memory unit that calls another unit does not fit the inline budget of a large function (see `memory/_class`).
+    fn load(&self, op: LoadOp, addr: &str) -> String {
+        use LoadOp::*;
+        let raw = |name: &str| format!("p.memory.{}({addr})", self.mem(name));
+        match op {
+            I32Load => raw("i32_load"),
+            I64Load => raw("i64_load"),
+            F32Load => format!("{}({})", self.rt("f32_from_bits"), raw("i32_load")),
+            F64Load => format!("{}({})", self.rt("f64_from_bits"), raw("i64_load")),
+            I32Load8U => raw("i32_load8_u"),
+            I32Load8S => format!("uint32(int32(int8({})))", raw("i32_load8_u")),
+            I32Load16U => raw("i32_load16_u"),
+            I32Load16S => format!("uint32(int32(int16({})))", raw("i32_load16_u")),
+            I64Load8U => format!("uint64({})", raw("i32_load8_u")),
+            I64Load8S => format!("uint64(int64(int8({})))", raw("i32_load8_u")),
+            I64Load16U => format!("uint64({})", raw("i32_load16_u")),
+            I64Load16S => format!("uint64(int64(int16({})))", raw("i32_load16_u")),
+            I64Load32U => format!("uint64({})", raw("i32_load")),
+            I64Load32S => format!("uint64(int64(int32({})))", raw("i32_load")),
+        }
+    }
+
+    /// A store through one of the raw-width memory units, the [`Self::load`] counterpart: a narrowing i64 store truncates at the site and a float store reinterprets at the site.
+    fn store(&self, op: StoreOp, addr: &str, value: &str) -> String {
+        use StoreOp::*;
+        let raw = |name: &str, v: String| format!("p.memory.{}({addr}, {v})", self.mem(name));
+        match op {
+            I32Store => raw("i32_store", value.to_string()),
+            I64Store => raw("i64_store", value.to_string()),
+            F32Store => raw("i32_store", format!("{}({value})", self.rt("f32_bits"))),
+            F64Store => raw("i64_store", format!("{}({value})", self.rt("f64_bits"))),
+            I32Store8 => raw("i32_store8", value.to_string()),
+            I32Store16 => raw("i32_store16", value.to_string()),
+            I64Store8 => raw("i32_store8", format!("uint32({value})")),
+            I64Store16 => raw("i32_store16", format!("uint32({value})")),
+            I64Store32 => raw("i32_store", format!("uint32({value})")),
+        }
+    }
+
     /// The same constant, always laundered through the identity call, so the expression holding it is not a Go constant expression.
     fn laundered_const(&self, expr: &Expr) -> String {
         match expr {
@@ -2067,13 +2102,7 @@ impl<'a> Gen<'a> {
             Expr::GlobalGet(idx) => format!("p.g{idx}.value"),
             Expr::Un(op, a) => self.un(*op, &self.expr(a)),
             Expr::Bin(op, a, b) => self.bin(*op, a, b),
-            Expr::Load { op, addr, offset } => {
-                format!(
-                    "p.memory.{}({})",
-                    self.mem(load_method(*op)),
-                    self.addr(addr, *offset)
-                )
-            }
+            Expr::Load { op, addr, offset } => self.load(*op, &self.addr(addr, *offset)),
             Expr::Select { cond, then, els } => {
                 self.use_unit("rt/select");
                 format!(
@@ -2654,5 +2683,60 @@ mod units {
             String::from_utf8_lossy(&out.stderr)
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+    /// The eight load/store units must fit Go's inline budget for callees of a large function: a function over 5000 AST nodes, which every large wasm function becomes, only inlines a callee costing at most `inlineBigFunctionMaxCost` (20 in go1.27), and an out-of-line call per memory access was measured as half of sqlite3's run time.
+    /// Compile the full bundle with the inliner's report and assert each unit's reported cost.
+    #[test]
+    fn memory_units_fit_the_big_function_inline_budget() {
+        const BUDGET: u32 = 20;
+        const UNITS: [&str; 8] = [
+            "i32_load",
+            "i32_load8_u",
+            "i32_load16_u",
+            "i64_load",
+            "i32_store",
+            "i32_store8",
+            "i32_store16",
+            "i64_store",
+        ];
+        let go =
+            find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
+        let source = full_bundle_go().expect("full bundle assembles");
+        let dir = std::env::temp_dir().join(format!("dewasm-go-inline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("main.go");
+        std::fs::write(&src, &source).unwrap();
+        let out = std::process::Command::new(&go)
+            .arg("build")
+            .arg("-gcflags=-m=2")
+            .arg("-o")
+            .arg(dir.join("bundle_bin"))
+            .arg(&src)
+            .output()
+            .expect("spawn go build");
+        let _ = std::fs::remove_dir_all(&dir);
+        let report = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success(),
+            "full runtime bundle failed to compile:\n{report}"
+        );
+        let cost = Regex::new(r"can inline \(\*Memory\)\.([a-z0-9_]+) with cost ([0-9]+)").unwrap();
+        let costs: std::collections::BTreeMap<&str, u32> = cost
+            .captures_iter(&report)
+            .map(|c| (c.get(1).unwrap().as_str(), c[2].parse().unwrap()))
+            .collect();
+        let problems: Vec<String> = UNITS
+            .iter()
+            .filter_map(|unit| match costs.get(unit) {
+                Some(c) if *c <= BUDGET => None,
+                Some(c) => Some(format!("memory/{unit}: inline cost {c} exceeds {BUDGET}")),
+                None => Some(format!("memory/{unit}: not reported as inlinable")),
+            })
+            .collect();
+        assert!(
+            problems.is_empty(),
+            "memory units over the inline budget:\n{}",
+            problems.join("\n")
+        );
     }
 }

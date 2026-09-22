@@ -1,4 +1,6 @@
 func (m *Memory) i32_store(a uint64, v uint32) {
-    m.check(a, 4)
-    binary.LittleEndian.PutUint32(m.data[a:a+4], v)
+    if a+4 > m.n {
+        panic(oobTrap)
+    }
+    *(*uint32)(unsafe.Add(m.base, a)) = v
 }
