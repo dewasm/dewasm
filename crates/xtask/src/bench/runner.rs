@@ -7,7 +7,7 @@
 //!   Cross-checked like everything else.
 //! * **dewasm-\***: generated source on the host language.
 //!   Codegen goes through the [`Backend`] trait, never the CLI binary.
-//!   Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`).
+//!   Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`), and so do Codon and Spinel, which are compilers for a language another runner interprets.
 //! * **wasm3-\***: the meta-WASI wasm3 build from the app cache, converted to host-language source by a dewasm backend, interpreting the workload module at run time.
 //!   The runtime-loading counterpart the pure-source interpreters below are compared against.
 //! * **pywasm / wardite**: third-party interpreters, driven via `benchmarks/drivers/`, provisioned by `benchmarks/setup.sh`.
@@ -51,6 +51,9 @@ pub enum Target {
     TinyGo,
     Java,
     Codon,
+    /// The Ruby backend's output compiled ahead of time by Spinel.
+    /// `--int-overflow=promote` is not a choice: dewasm holds i64 as a masked-unsigned Integer up to 2**64-1, which the wrapping mode refuses ("shift width too big for a 64-bit Integer").
+    Spinel,
 }
 
 /// Which third-party wasm interpreter a driver runner drives, and on which host interpreter.
@@ -141,6 +144,7 @@ pub fn runners() -> Vec<Runner> {
         r("dewasm-ruby-zjit", Kind::Dewasm(Target::Ruby("--zjit"))),
         r("dewasm-monoruby", Kind::Dewasm(Target::Monoruby)),
         r("dewasm-jruby", Kind::Dewasm(Target::JRuby)),
+        r("dewasm-spinel", Kind::Dewasm(Target::Spinel)),
         r("dewasm-python", Kind::Dewasm(Target::Python)),
         r("dewasm-python-jit", Kind::Dewasm(Target::PythonJit)),
         r("dewasm-pypy", Kind::Dewasm(Target::PyPy)),
@@ -321,6 +325,10 @@ impl Target {
                 .ok_or_else(|| {
                     "codon not found on PATH (or $DEWASM_CODON): see docs/testing.md".to_string()
                 }),
+            Target::Spinel => spinel_bin().map(|_| ()).ok_or_else(|| {
+                "spinel not found on PATH (or $DEWASM_SPINEL); benchmarks/setup.sh does not install it"
+                    .to_string()
+            }),
         }
     }
 
@@ -345,6 +353,7 @@ impl Target {
             // `java -version` writes to stderr on every JDK that predates the `--version` spelling; `capture_version` reads both streams for exactly this reason.
             Target::Java => capture_version(&dewasm_backend_java::find_java()?, &["-version"]),
             Target::Codon => capture_version(&dewasm_backend_codon::find_codon()?, &["--version"]),
+            Target::Spinel => capture_version(&spinel_bin()?, &["--version"]),
         }
     }
 
@@ -353,6 +362,7 @@ impl Target {
     fn artifact_tag(&self) -> &'static str {
         match self {
             Target::TinyGo => "tinygo",
+            Target::Spinel => "spinel",
             _ => self.backend().name(),
         }
     }
@@ -361,7 +371,9 @@ impl Target {
     /// Ruby's three JIT modes with monoruby and JRuby, and Python with PyPy, each share one backend, so they also share one generated artifact.
     fn backend(&self) -> &'static (dyn Backend + Sync) {
         match self {
-            Target::Ruby(_) | Target::Monoruby | Target::JRuby => &dewasm_backend_ruby::RubyBackend,
+            Target::Ruby(_) | Target::Monoruby | Target::JRuby | Target::Spinel => {
+                &dewasm_backend_ruby::RubyBackend
+            }
             Target::Python | Target::PythonJit | Target::PyPy | Target::GraalPy => {
                 &dewasm_backend_python::PythonBackend
             }
@@ -600,6 +612,11 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             args: Vec::new(),
             env: Vec::new(),
         },
+        (Target::Spinel, Artifact::Binary(bin)) => Launch {
+            program: bin,
+            args: Vec::new(),
+            env: Vec::new(),
+        },
         (Target::Java, Artifact::ClassDir(dir)) => Launch {
             program: dewasm_backend_java::find_java().context("java not found")?,
             args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
@@ -706,6 +723,33 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     );
                 }
                 std::fs::rename(&tmp, &bin).context("install the built codon binary")?;
+            }
+            Ok(Artifact::Binary(bin))
+        }
+        Target::Spinel => {
+            let bin = cache.join(format!("{stem}.bin"));
+            if !bin.is_file() {
+                let src = cache.join(format!("{stem}.rb"));
+                write_if_absent(&src, &source)?;
+                let spinel =
+                    spinel_bin().context("spinel not found on PATH (or $DEWASM_SPINEL)")?;
+                let tmp = cache.join(format!("{stem}.bin.tmp"));
+                // -O 2 for the same reason the codon build takes -release, and as two arguments: a joined -O2 is silently ignored.
+                let out = Command::new(spinel)
+                    .args(["-O", "2", "--int-overflow=promote"])
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&tmp)
+                    .output()
+                    .context("spawn spinel")?;
+                if !out.status.success() {
+                    bail!(
+                        "spinel build failed:\n{}{}",
+                        String::from_utf8_lossy(&out.stdout),
+                        String::from_utf8_lossy(&out.stderr)
+                    );
+                }
+                std::fs::rename(&tmp, &bin).context("install the built spinel binary")?;
             }
             Ok(Artifact::Binary(bin))
         }
@@ -900,6 +944,23 @@ fn graalpy_bin() -> Option<PathBuf> {
 }
 
 /// A host TinyGo, same policy as [`pypy_bin`]: host-provided, reported skip when missing.
+/// The Spinel compiler: `$DEWASM_SPINEL` when set, otherwise `spinel` on PATH.
+/// It is built from its own source tree rather than installed, so there is no setup script to point at.
+fn spinel_bin() -> Option<PathBuf> {
+    static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
+    BIN.get_or_init(|| {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        if let Some(env) = std::env::var_os("DEWASM_SPINEL") {
+            candidates.push(PathBuf::from(env));
+        }
+        candidates.push(PathBuf::from("spinel"));
+        candidates
+            .into_iter()
+            .find(|candidate| probe(candidate, &["--version"]))
+    })
+    .clone()
+}
+
 fn tinygo_bin() -> Option<PathBuf> {
     static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
     BIN.get_or_init(|| {
