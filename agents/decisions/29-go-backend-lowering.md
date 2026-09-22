@@ -48,6 +48,12 @@ Go adds two problems they never face: **unused variables, labels, and imports ar
   So a mul or div **with a constant operand** is wrapped in `Rt.f32_q`/`Rt.f64_q`, [decision 94](94-codon-backend-lowering.md)'s quiet-if-NaN helper, correct whether or not the rewrite fired and emitted at no other site.
   `math.NaN()` is also not bit-canonical, so min/max build wasm's pattern explicitly, and f32 `sqrt` through float64 was validated correctly rounded against `f32.wast`.
 - **Feature scope**: wasm 1.0 and full WASI preview 1; `Floats` is `Supported`.
+- **Memory units are shaped for Go's inline budget in large functions.**
+  Go inlines into a function over 5000 AST nodes, which every large wasm function becomes, only a callee costing at most 20 (`inlineBigFunctionMaxCost`), and the original units cost 29 to 32, so sqlite3's 13,910-line VDBE function paid an out-of-line call at each of its 4,216 memory accesses and spent half its run time in them.
+  The eight units (`i32_load`, `i32_load8_u`, `i32_load16_u`, `i64_load` and the four stores) each check the address against a length mirrored into a field, dereference the mirrored base pointer once in host byte order, and raise the trap as a prebuilt value, for a cost of 16 to 18.
+  A unit that calls another unit costs 24 to 27, so the sign extensions, the i64 narrow forms, and the float reinterpretations are casts the emitter spells around the raw accessor, and the units lint asserts the budget so a Go release that changes the cost model fails loudly rather than silently losing the inlining.
+  Host byte order restricts the output to little-endian targets, which is every `GOARCH` but `mips`, `mips64`, `ppc64` and `s390x`; the memory prelude carries a compile-time assertion on `runtime.GOARCH` so a big-endian build fails instead of computing wrong values.
+  Measured on `app/sqlite3_query` (darwin arm64, output identical to wasmtime's): the shipped units take the run from 0.268 s to 0.153 s of CPU time (minimum of nine, wasmtime 0.124 s; taken on a loaded machine, so CPU time rather than wall time), and the prototype of the same shape measured idle went from 0.167 s to 0.092 s of wall time against wasmtime's 0.080 s.
 
 ### WASI: where Go's standard library forced a different shape
 
@@ -72,6 +78,11 @@ Go-specific:
   Measured on darwin arm64 against wasmtime at the same iteration count, minimum of three, helper shape against conversion shape: `wat/f32_alu` 3.59x against 0.97x, `wat/f64_alu` 3.73x against 1.04x, `c/mandelbrot` 2.43x against 0.97x.
   What the call bought and the conversion does not is a constant the optimizer propagates into the op from outside the expression: a local first assigned `f64.const 1.0` and then multiplied folds the same way, and the operand check does not see it, so such a multiply leaves a signaling NaN signaling.
   The spec suite writes the constant at the operator, where the check does see it, and decision 94's Codon wrapper has the same shape and the same gap.
+
+- **Dropping the memory bounds check**, which is what goccy/wasm2go does and how it reaches 0.064 s on the same workload: a check-free access is 3 instructions against 6, but an out-of-bounds guest access then reads or writes the host heap, and `memory_trap.wast` binds ([decision 3](3-testing-strategy.md)).
+  The remaining gap to a check-free translator is the price of keeping the trap; a guard-page scheme (a reserved mapping with `debug.SetPanicOnFault`) could remove the check while keeping the trap, but that is runtime engineering with a per-platform mapping layer, not a unit change.
+- **Hoisting the base pointer into a function local**, refreshed after every call and `memory.grow` as goccy/wasm2go does: measured at 3 ms on `app/sqlite3_query` once the units inline, not worth the emitter change.
+- **`binary.LittleEndian` over a `(*[N]byte)` or `unsafe.Slice` view of the base pointer**, portable to any byte order at a cost of 18 to 19 and one instruction when inlined into a small function: inside a large function the `binary` method is a second inline decision under the same budget of 20 and stays a call, and the artifact measured no faster than the original units (`app/sqlite3_query` under load: 0.32 s against 0.29 s for the original and 0.15 s for the dereference).
 
 ## Consequences
 
