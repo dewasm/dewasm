@@ -7,7 +7,7 @@
 //!   Cross-checked like everything else.
 //! * **dewasm-\***: generated source on the host language.
 //!   Codegen goes through the [`Backend`] trait, never the CLI binary.
-//!   Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`), and so do Codon and Spinel, which are compilers for a language another runner interprets.
+//!   Go and Java build first, mirroring their e2e suites (`go run` swallows the guest exit code; generated Java requires the file to be named `Main.java`).
 //! * **wasm3-\***: the meta-WASI wasm3 build from the app cache, converted to host-language source by a dewasm backend, interpreting the workload module at run time.
 //!   The runtime-loading counterpart the pure-source interpreters below are compared against.
 //! * **pywasm / wardite**: third-party interpreters, driven via `benchmarks/drivers/`, provisioned by `benchmarks/setup.sh`.
@@ -51,8 +51,6 @@ pub enum Target {
     TinyGo,
     Java,
     Codon,
-    /// The Ruby backend's output compiled ahead of time by Spinel.
-    /// `--int-overflow=promote` is not a choice: dewasm holds i64 as a masked-unsigned Integer up to 2**64-1, which the wrapping mode refuses ("shift width too big for a 64-bit Integer").
     Spinel,
 }
 
@@ -734,7 +732,7 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 let spinel =
                     spinel_bin().context("spinel not found on PATH (or $DEWASM_SPINEL)")?;
                 let tmp = cache.join(format!("{stem}.bin.tmp"));
-                // -O 2 for the same reason the codon build takes -release, and as two arguments: a joined -O2 is silently ignored.
+                // -O 2 is two arguments: a joined -O2 is silently ignored. Wrapping i64 overflow is refused for a masked-unsigned Integer up to 2**64-1, so the promoting mode is the only one that runs.
                 let out = Command::new(spinel)
                     .args(["-O", "2", "--int-overflow=promote"])
                     .arg(&src)
@@ -959,8 +957,7 @@ fn tinygo_bin() -> Option<PathBuf> {
     .clone()
 }
 
-/// The Spinel compiler: `$DEWASM_SPINEL` when set, otherwise `spinel` on PATH.
-/// It is built from its own source tree rather than installed, so there is no setup script to point at.
+/// A host Spinel, same policy as [`pypy_bin`]: host-provided, reported skip when missing.
 fn spinel_bin() -> Option<PathBuf> {
     static BIN: OnceLock<Option<PathBuf>> = OnceLock::new();
     BIN.get_or_init(|| {
