@@ -22,6 +22,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 - `2026-09-13T08-39-51Z-speed.json`: the full 28-runner matrix (#309, #316); monoruby sqlite unexcluded.
 - `2026-09-17T18-28-43Z-speed.json`: cowsay replaced by our own build (#322).
 - `2026-09-19T04-41-52Z-speed.json`: cowsay.wasm v0.2.0, which measures columns (#326).
+- `2026-09-25T05-34-26Z-speed.json`: the Spinel runner joins, making 29 (#335).
 
 ## Size records
 

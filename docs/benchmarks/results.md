@@ -7,12 +7,12 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-09-19T04:41:52Z.
+Measured 2026-09-25T05:34:26Z.
 
 | | |
 | --- | --- |
-| OS | macOS 26.6.2 |
-| Kernel | Darwin 25.6.0 |
+| OS | macOS 27.0 |
+| Kernel | Darwin 27.0.0 |
 | CPU | Apple M1 Pro |
 | Arch | aarch64 |
 
@@ -21,7 +21,7 @@ A runner missing from this table was unavailable on this host; its cells appear 
 
 | Runner | Version |
 | --- | --- |
-| `wasmtime` | wasmtime 48.0.2 (e9f1ea232 2026-09-10) |
+| `wasmtime` | wasmtime 49.0.1 (46c23a87d 2026-09-24) |
 | `wasmer` | wasmer 7.4.2 |
 | `wasmedge` | wasmedge version 0.17.1 |
 | `wazero` | 1.12.0 |
@@ -31,9 +31,10 @@ A runner missing from this table was unavailable on this host; its cells appear 
 | `dewasm-ruby-zjit` | ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25] |
 | `dewasm-monoruby` | monoruby 0.3.0 (revision 22a4f78ab7) [arm64-darwin25] |
 | `dewasm-jruby` | jruby 10.1.2.0-SNAPSHOT (4.0.0) 2026-09-12 336fd7701b OpenJDK 64-Bit Server VM 25.0.2+10-69 on 25.0.2+10-69 +indy +jit [arm64-darwin] |
+| `dewasm-spinel` | spinel 2026.09.12+893 (e25c617d) [apple clang 21.0.0 (cc)] |
 | `dewasm-python` | Python 3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)] |
 | `dewasm-python-jit` | Python 3.14.7 (main, Sep 12 2026, 18:45:02) [Clang 19.1.7 ] |
-| `dewasm-pypy` | Python 3.11.15 (194f9f44b505, Aug 22 2026, 08:59:40) |
+| `dewasm-pypy` | Python 3.11.16 (78565394c9b5, Sep 21 2026, 11:18:20) |
 | `dewasm-graalpy` | GraalPy 3.12.8 (Oracle GraalVM Native 25.0.3) |
 | `dewasm-perl` | v5.44.0 |
 | `dewasm-go` | go version go1.27.1 darwin/arm64 |
@@ -64,7 +65,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-br-table-dark.svg">
-  <img alt="wat/br_table: seconds per iteration for 27 runners on a log scale, fastest first. dewasm-go is fastest at 7.82 ns, then dewasm-codon at 7.89 ns; pywasm-cpython is slowest at 59.4 µs, a span of 7600x. The table below carries every number." src="figs/wat-br-table.svg">
+  <img alt="wat/br_table: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-codon is fastest at 7.49 ns, then dewasm-tinygo at 7.55 ns; pywasm-cpython is slowest at 50.3 µs, a span of 6720x. The table below carries every number." src="figs/wat-br-table.svg">
 </picture>
 
 <details>
@@ -72,34 +73,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 34 104 162 | 8.76 | 8.77 | 5.0 ms | 303.8 ms | 1.00x | — |
-| `wasmer` | 33 945 245 | 8.77 | 8.81 | 8.4 ms | 305.9 ms | 1.00x | — |
-| `wasmedge` | 1 275 681 | 226.8 | 229.2 | 15.3 ms | 304.7 ms | 26x | — |
-| `wazero` | 33 554 432 | 9.04 | 9.11 | 4.2 ms | 307.4 ms | 1.03x | — |
-| `wasm3` | 14 017 912 | 24.5 | 24.5 | 6.0 ms | 349.3 ms | 2.80x | — |
-| `dewasm-ruby` | 862 290 | 229.6 | 229.2 | 39.5 ms | 237.4 ms | 26x | — |
-| `dewasm-ruby-yjit` | 1 168 708 | 227.5 | 227.7 | 40.1 ms | 306.0 ms | 26x | — |
-| `dewasm-ruby-zjit` | 1 259 496 | 227.3 | 228.5 | 38.4 ms | 324.7 ms | 26x | — |
-| `dewasm-monoruby` | 6 972 531 | 34.6 | 34.6 | 34.7 ms | 276.1 ms | 3.95x | — |
-| `dewasm-jruby` | 2 048 | 31612 | — | 3.36 s | 3.43 s | 3608x | — |
-| `dewasm-python` | 688 450 | 412.7 | 414.4 | 28.7 ms | 312.8 ms | 47x | — |
-| `dewasm-python-jit` | 578 890 | 620.6 | 622.6 | 19.9 ms | 379.2 ms | 71x | — |
-| `dewasm-pypy` | 3 070 807 | 66.2 | 65.8 | 39.2 ms | 242.5 ms | 7.56x | — |
-| `dewasm-graalpy` | 179 048 | 1363 | 1345 | 124.6 ms | 368.6 ms | 156x | — |
-| `dewasm-perl` | 334 179 | 895.9 | 900.9 | 10.8 ms | 310.2 ms | 102x | — |
-| `dewasm-go` | 37 896 472 | 7.80 | 7.82 | 3.2 ms | 298.9 ms | 0.89x | — |
-| `dewasm-tinygo` | 37 342 900 | 7.91 | 7.92 | 2.1 ms | 297.5 ms | 0.90x | — |
-| `dewasm-java` | 26 940 073 | 10.2 | 10.2 | 60.7 ms | 335.7 ms | 1.17x | — |
-| `dewasm-codon` | 38 089 906 | 7.91 | 7.89 | 14.1 ms | 315.3 ms | 0.90x | — |
-| `dewasm-bash` | 6 870 | 37423 | 37469 | 11.9 ms | 269.0 ms | 4271x | — |
-| `wasm3-ruby` | 26 598 | 10994 | 10958 | 129.8 ms | 422.2 ms | 1255x | — |
-| `wasm3-ruby-yjit` | 48 211 | 3987 | 3926 | 317.4 ms | 509.7 ms | 455x | — |
-| `wasm3-python` | 12 975 | 24215 | 24516 | 344.5 ms | 658.7 ms | 2764x | — |
-| `wasm3-pypy` | 19 122 | 9229 | 9373 | 529.6 ms | 706.1 ms | 1053x | — |
-| `pywasm-cpython` | 4 284 | 59380 | 59398 | 42.8 ms | 297.2 ms | 6778x | 1.1 ms |
-| `pywasm-pypy` | 3 271 | 58971 | 59012 | 79.4 ms | 272.3 ms | 6731x | 5.9 ms |
-| `wardite` | 11 454 | 22043 | 21901 | 54.7 ms | 307.2 ms | 2516x | 4.5 ms |
-| `wardite-yjit` | 22 552 | 9679 | 9925 | 103.4 ms | 321.7 ms | 1105x | 9.9 ms |
+| `wasmtime` | 34 964 177 | 8.47 | 8.53 | 4.4 ms | 300.6 ms | 1.00x | — |
+| `wasmer` | 35 094 903 | 8.43 | 8.50 | 7.0 ms | 302.8 ms | 0.99x | — |
+| `wasmedge` | 1 333 361 | 222.8 | 222.9 | 17.9 ms | 315.0 ms | 26x | — |
+| `wazero` | 34 079 242 | 8.81 | 8.86 | 3.7 ms | 304.0 ms | 1.04x | — |
+| `wasm3` | 12 548 450 | 24.0 | 24.1 | 5.8 ms | 306.7 ms | 2.83x | — |
+| `dewasm-ruby` | 1 246 836 | 219.1 | 221.5 | 35.5 ms | 308.6 ms | 26x | — |
+| `dewasm-ruby-yjit` | 1 103 616 | 219.2 | 220.5 | 35.9 ms | 277.8 ms | 26x | — |
+| `dewasm-ruby-zjit` | 1 254 754 | 219.2 | 219.1 | 36.0 ms | 311.0 ms | 26x | — |
+| `dewasm-monoruby` | 7 346 514 | 33.5 | 33.8 | 30.2 ms | 276.5 ms | 3.96x | — |
+| `dewasm-jruby` | 102 994 | 1175 | 1707 | 1.36 s | 1.48 s | 139x | — |
+| `dewasm-spinel` | 4 287 095 | 47.0 | 47.0 | 6.4 ms | 208.1 ms | 5.55x | — |
+| `dewasm-python` | 721 291 | 396.9 | 401.9 | 25.8 ms | 312.1 ms | 47x | — |
+| `dewasm-python-jit` | 594 312 | 596.8 | 604.6 | 19.5 ms | 374.1 ms | 70x | — |
+| `dewasm-pypy` | 4 321 217 | 65.4 | 66.1 | 36.5 ms | 319.2 ms | 7.72x | — |
+| `dewasm-graalpy` | 195 857 | 1226 | 1217 | 103.9 ms | 344.1 ms | 145x | — |
+| `dewasm-perl` | 345 694 | 870.7 | 874.3 | 9.7 ms | 310.7 ms | 103x | — |
+| `dewasm-go` | 39 429 427 | 7.49 | 7.56 | 3.8 ms | 299.2 ms | 0.88x | — |
+| `dewasm-tinygo` | 36 628 321 | 7.52 | 7.55 | 4.8 ms | 280.1 ms | 0.89x | — |
+| `dewasm-java` | 24 427 684 | 9.89 | 9.98 | 52.2 ms | 293.8 ms | 1.17x | — |
+| `dewasm-codon` | 39 822 636 | 7.54 | 7.49 | 14.0 ms | 314.3 ms | 0.89x | — |
+| `dewasm-bash` | 8 609 | 33363 | 33525 | 11.5 ms | 298.7 ms | 3939x | — |
+| `wasm3-ruby` | 27 763 | 10673 | 10682 | 116.3 ms | 412.6 ms | 1260x | — |
+| `wasm3-ruby-yjit` | 76 557 | 3489 | 3501 | 288.9 ms | 556.1 ms | 412x | — |
+| `wasm3-python` | 11 837 | 23319 | 23584 | 314.9 ms | 591.0 ms | 2753x | — |
+| `wasm3-pypy` | 22 885 | 8116 | 8175 | 454.1 ms | 639.9 ms | 958x | — |
+| `pywasm-cpython` | 5 754 | 50270 | 50334 | 39.4 ms | 328.7 ms | 5935x | 0.9 ms |
+| `pywasm-pypy` | 23 611 | 8272 | 8327 | 71.1 ms | 266.4 ms | 977x | 4.4 ms |
+| `wardite` | 14 552 | 20862 | 20862 | 48.4 ms | 352.0 ms | 2463x | 3.5 ms |
+| `wardite-yjit` | 29 457 | 9290 | 9349 | 93.4 ms | 367.1 ms | 1097x | 8.4 ms |
 
 </details>
 
@@ -107,7 +109,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-call-direct-dark.svg">
-  <img alt="wat/call_direct: seconds per iteration for 28 runners on a log scale, fastest first. dewasm-codon is fastest at 3.57 ns, then wasmtime at 3.60 ns; dewasm-jruby is slowest at 2.20 s, a span of 617000000x. The table below carries every number." src="figs/wat-call-direct.svg">
+  <img alt="wat/call_direct: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-tinygo is fastest at 3.38 ns, then dewasm-codon at 3.39 ns; wasm3-python is slowest at 56.9 µs, a span of 16900x. The table below carries every number." src="figs/wat-call-direct.svg">
 </picture>
 
 <details>
@@ -115,34 +117,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 83 736 516 | 3.60 | 3.60 | 5.0 ms | 306.3 ms | 1.00x | — |
-| `wasmer` | 84 174 260 | 3.61 | 3.61 | 8.6 ms | 312.2 ms | 1.00x | — |
-| `wasmedge` | 1 502 166 | 207.1 | 207.0 | 15.8 ms | 326.8 ms | 58x | — |
-| `wazero` | 48 138 056 | 6.16 | 6.20 | 4.1 ms | 300.4 ms | 1.71x | — |
-| `wasm3` | 6 486 214 | 41.8 | 42.1 | 5.4 ms | 276.2 ms | 12x | — |
-| `dewasm-ruby` | 971 440 | 228.2 | 231.9 | 39.7 ms | 261.3 ms | 63x | — |
-| `dewasm-ruby-yjit` | 1 931 166 | 121.0 | 121.1 | 40.2 ms | 273.9 ms | 34x | — |
-| `dewasm-ruby-zjit` | 1 568 639 | 140.8 | 140.5 | 39.2 ms | 260.0 ms | 39x | — |
-| `dewasm-monoruby` | 3 996 780 | 54.6 | 55.0 | 33.7 ms | 251.9 ms | 15x | — |
-| `dewasm-jruby` | 1 | 2120422375 | 2202189416 | 3.48 s | 5.60 s | 589133490x | — |
-| `dewasm-python` | 687 127 | 430.7 | 429.6 | 27.7 ms | 323.6 ms | 120x | — |
-| `dewasm-python-jit` | 584 300 | 468.9 | 468.8 | 21.4 ms | 295.3 ms | 130x | — |
-| `dewasm-pypy` | 3 635 092 | 90.7 | 91.6 | 38.8 ms | 368.5 ms | 25x | — |
-| `dewasm-graalpy` | 187 501 | 682.5 | 726.0 | 121.4 ms | 249.3 ms | 190x | — |
-| `dewasm-perl` | 265 015 | 1134 | 1143 | 10.0 ms | 310.5 ms | 315x | — |
-| `dewasm-go` | 70 386 365 | 4.27 | 4.27 | 2.6 ms | 303.1 ms | 1.19x | — |
-| `dewasm-tinygo` | 83 921 804 | 3.60 | 3.68 | 2.2 ms | 304.6 ms | 1.00x | — |
-| `dewasm-java` | 81 727 552 | 3.64 | 3.68 | 64.3 ms | 361.7 ms | 1.01x | — |
-| `dewasm-codon` | 83 873 616 | 3.57 | 3.57 | 14.2 ms | 313.5 ms | 0.99x | — |
-| `dewasm-bash` | 4 753 | 55990 | 56708 | 11.7 ms | 277.8 ms | 15556x | — |
-| `wasm3-ruby` | 12 534 | 25234 | 25116 | 125.5 ms | 441.8 ms | 7011x | — |
-| `wasm3-ruby-yjit` | 17 428 | 10739 | 10679 | 216.8 ms | 404.0 ms | 2984x | — |
-| `wasm3-python` | 5 066 | 58087 | 57732 | 324.5 ms | 618.7 ms | 16139x | — |
-| `wasm3-pypy` | 12 091 | 20140 | 20328 | 504.1 ms | 747.6 ms | 5596x | — |
-| `pywasm-cpython` | 3 663 | 55984 | 55987 | 40.0 ms | 245.1 ms | 15555x | 0.7 ms |
-| `pywasm-pypy` | 17 870 | 11489 | 11355 | 78.0 ms | 283.4 ms | 3192x | 3.6 ms |
-| `wardite` | 12 038 | 18852 | 18761 | 52.3 ms | 279.2 ms | 5238x | 3.1 ms |
-| `wardite-yjit` | 23 486 | 9233 | 9291 | 101.0 ms | 317.9 ms | 2565x | 8.7 ms |
+| `wasmtime` | 86 173 077 | 3.49 | 3.49 | 4.4 ms | 305.4 ms | 1.00x | — |
+| `wasmer` | 87 370 870 | 3.43 | 3.43 | 7.0 ms | 306.6 ms | 0.98x | — |
+| `wasmedge` | 1 461 262 | 197.8 | 198.5 | 17.8 ms | 306.9 ms | 57x | — |
+| `wazero` | 49 785 090 | 5.97 | 5.98 | 3.9 ms | 300.9 ms | 1.71x | — |
+| `wasm3` | 7 457 982 | 40.5 | 40.5 | 5.3 ms | 307.5 ms | 12x | — |
+| `dewasm-ruby` | 1 349 267 | 220.8 | 220.8 | 36.7 ms | 334.6 ms | 63x | — |
+| `dewasm-ruby-yjit` | 2 118 754 | 115.3 | 115.2 | 35.9 ms | 280.1 ms | 33x | — |
+| `dewasm-ruby-zjit` | 1 921 391 | 133.6 | 133.5 | 36.0 ms | 292.7 ms | 38x | — |
+| `dewasm-monoruby` | 5 128 459 | 52.6 | 53.1 | 30.0 ms | 299.6 ms | 15x | — |
+| `dewasm-jruby` | 483 537 | 520.8 | 514.8 | 1.34 s | 1.59 s | 149x | — |
+| `dewasm-spinel` | 5 316 183 | 42.3 | 42.3 | 5.2 ms | 230.2 ms | 12x | — |
+| `dewasm-python` | 683 753 | 414.8 | 415.1 | 25.4 ms | 309.0 ms | 119x | — |
+| `dewasm-python-jit` | 634 538 | 459.0 | 458.8 | 18.7 ms | 309.9 ms | 131x | — |
+| `dewasm-pypy` | 2 294 164 | 99.7 | 99.7 | 36.3 ms | 265.0 ms | 29x | — |
+| `dewasm-graalpy` | 797 874 | 215.6 | 221.4 | 104.6 ms | 276.6 ms | 62x | — |
+| `dewasm-perl` | 274 780 | 1093 | 1095 | 9.6 ms | 310.0 ms | 313x | — |
+| `dewasm-go` | 74 408 870 | 4.04 | 4.07 | 2.9 ms | 303.5 ms | 1.16x | — |
+| `dewasm-tinygo` | 75 067 243 | 3.38 | 3.38 | 5.0 ms | 259.1 ms | 0.97x | — |
+| `dewasm-java` | 76 487 229 | 3.52 | 3.52 | 54.6 ms | 324.1 ms | 1.01x | — |
+| `dewasm-codon` | 90 013 834 | 3.41 | 3.39 | 13.5 ms | 320.3 ms | 0.98x | — |
+| `dewasm-bash` | 5 314 | 50087 | 50096 | 11.3 ms | 277.4 ms | 14340x | — |
+| `wasm3-ruby` | 11 185 | 24491 | 24670 | 115.0 ms | 389.0 ms | 7012x | — |
+| `wasm3-ruby-yjit` | 22 637 | 9420 | 9424 | 199.9 ms | 413.1 ms | 2697x | — |
+| `wasm3-python` | 4 144 | 56631 | 56911 | 307.8 ms | 542.5 ms | 16213x | — |
+| `wasm3-pypy` | 12 269 | 19190 | 19133 | 445.4 ms | 680.8 ms | 5494x | — |
+| `pywasm-cpython` | 5 872 | 48421 | 48621 | 38.9 ms | 323.2 ms | 13863x | 0.6 ms |
+| `pywasm-pypy` | 33 402 | 6915 | 6959 | 69.4 ms | 300.4 ms | 1980x | 2.8 ms |
+| `wardite` | 12 664 | 17915 | 17984 | 47.5 ms | 274.4 ms | 5129x | 2.7 ms |
+| `wardite-yjit` | 28 910 | 8689 | 8874 | 91.8 ms | 343.0 ms | 2488x | 7.9 ms |
 
 </details>
 
@@ -150,7 +153,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-call-indirect-dark.svg">
-  <img alt="wat/call_indirect: seconds per iteration for 28 runners on a log scale, fastest first. wasmer is fastest at 10.7 ns, then wasmtime at 10.8 ns; dewasm-jruby is slowest at 281 ms, a span of 26200000x. The table below carries every number." src="figs/wat-call-indirect.svg">
+  <img alt="wat/call_indirect: seconds per iteration for 29 runners on a log scale, fastest first. wasmer is fastest at 10.4 ns, then wasmtime at 10.4 ns; wasm3-python is slowest at 88.0 µs, a span of 8440x. The table below carries every number." src="figs/wat-call-indirect.svg">
 </picture>
 
 <details>
@@ -158,34 +161,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 16 777 216 | 10.7 | 10.8 | 4.9 ms | 185.3 ms | 1.00x | — |
-| `wasmer` | 30 929 920 | 10.7 | 10.7 | 7.9 ms | 339.6 ms | 1.00x | — |
-| `wasmedge` | 695 117 | 416.7 | 417.8 | 15.1 ms | 304.8 ms | 39x | — |
-| `wazero` | 16 777 216 | 12.0 | 12.1 | 4.4 ms | 205.3 ms | 1.11x | — |
-| `wasm3` | 4 848 981 | 64.8 | 65.8 | 5.8 ms | 320.1 ms | 6.03x | — |
-| `dewasm-ruby` | 357 928 | 757.9 | 755.5 | 38.5 ms | 309.8 ms | 71x | — |
-| `dewasm-ruby-yjit` | 599 848 | 444.2 | 445.0 | 40.0 ms | 306.4 ms | 41x | — |
-| `dewasm-ruby-zjit` | 473 378 | 505.2 | 507.7 | 39.3 ms | 278.4 ms | 47x | — |
-| `dewasm-monoruby` | 1 917 136 | 117.3 | 117.6 | 33.7 ms | 258.6 ms | 11x | — |
-| `dewasm-jruby` | 1 | 290447917 | 280887084 | 5.34 s | 5.63 s | 27025002x | — |
-| `dewasm-python` | 370 218 | 800.5 | 803.7 | 29.6 ms | 326.0 ms | 74x | — |
-| `dewasm-python-jit` | 257 722 | 1168 | 1174 | 20.8 ms | 321.9 ms | 109x | — |
-| `dewasm-pypy` | 1 582 282 | 147.2 | 149.0 | 38.5 ms | 271.5 ms | 14x | — |
-| `dewasm-graalpy` | 71 743 | 2453 | 2462 | 117.3 ms | 293.2 ms | 228x | — |
-| `dewasm-perl` | 131 072 | 2503 | 2509 | 10.1 ms | 338.3 ms | 233x | — |
-| `dewasm-go` | 16 777 216 | 11.1 | 11.2 | 2.9 ms | 189.3 ms | 1.03x | — |
-| `dewasm-tinygo` | 14 385 516 | 16.0 | 16.0 | 2.1 ms | 231.7 ms | 1.49x | — |
-| `dewasm-java` | 3 315 406 | 57.0 | 59.0 | 56.6 ms | 245.6 ms | 5.30x | — |
-| `dewasm-codon` | 1 010 532 | 310.3 | 313.7 | 14.5 ms | 328.1 ms | 29x | — |
-| `dewasm-bash` | 3 502 | 76540 | 76488 | 12.0 ms | 280.0 ms | 7122x | — |
-| `wasm3-ruby` | 7 990 | 37277 | 37075 | 124.5 ms | 422.3 ms | 3469x | — |
-| `wasm3-ruby-yjit` | 17 190 | 13552 | 13661 | 259.1 ms | 492.0 ms | 1261x | — |
-| `wasm3-python` | 2 664 | 89806 | 88465 | 330.9 ms | 570.2 ms | 8356x | — |
-| `wasm3-pypy` | 4 390 | 46838 | 47125 | 510.1 ms | 715.7 ms | 4358x | — |
-| `pywasm-cpython` | 2 881 | 93250 | 93066 | 40.1 ms | 308.8 ms | 8677x | 0.9 ms |
-| `pywasm-pypy` | 4 872 | 38877 | 39211 | 78.3 ms | 267.7 ms | 3617x | 4.3 ms |
-| `wardite` | 8 784 | 29224 | 29508 | 54.9 ms | 311.6 ms | 2719x | 3.1 ms |
-| `wardite-yjit` | 21 282 | 15694 | 15790 | 106.1 ms | 440.1 ms | 1460x | 10.9 ms |
+| `wasmtime` | 33 554 432 | 10.4 | 10.4 | 4.4 ms | 352.7 ms | 1.00x | — |
+| `wasmer` | 31 309 074 | 10.3 | 10.4 | 7.2 ms | 331.0 ms | 1.00x | — |
+| `wasmedge` | 676 924 | 444.6 | 446.0 | 17.9 ms | 318.8 ms | 43x | — |
+| `wazero` | 16 777 216 | 11.8 | 11.8 | 3.8 ms | 201.4 ms | 1.13x | — |
+| `wasm3` | 4 567 321 | 63.5 | 63.9 | 5.2 ms | 295.2 ms | 6.12x | — |
+| `dewasm-ruby` | 404 533 | 729.7 | 731.6 | 35.2 ms | 330.3 ms | 70x | — |
+| `dewasm-ruby-yjit` | 595 862 | 418.5 | 430.7 | 35.3 ms | 284.7 ms | 40x | — |
+| `dewasm-ruby-zjit` | 550 469 | 487.2 | 496.2 | 35.5 ms | 303.7 ms | 47x | — |
+| `dewasm-monoruby` | 2 271 065 | 114.1 | 114.9 | 30.1 ms | 289.2 ms | 11x | — |
+| `dewasm-jruby` | 155 629 | 1326 | 1343 | 1.35 s | 1.55 s | 128x | — |
+| `dewasm-spinel` | 2 019 288 | 103.7 | 103.2 | 6.5 ms | 215.8 ms | 9.99x | — |
+| `dewasm-python` | 389 717 | 780.1 | 781.8 | 25.7 ms | 329.7 ms | 75x | — |
+| `dewasm-python-jit` | 262 577 | 1140 | 1143 | 18.8 ms | 318.0 ms | 110x | — |
+| `dewasm-pypy` | 1 761 666 | 147.2 | 148.6 | 36.7 ms | 296.1 ms | 14x | — |
+| `dewasm-graalpy` | 124 549 | 1839 | 1866 | 106.3 ms | 335.3 ms | 177x | — |
+| `dewasm-perl` | 124 294 | 2429 | 2435 | 9.5 ms | 311.5 ms | 234x | — |
+| `dewasm-go` | 16 777 216 | 10.8 | 10.7 | 7.1 ms | 188.5 ms | 1.04x | — |
+| `dewasm-tinygo` | 16 777 216 | 15.2 | 15.2 | 7.2 ms | 262.6 ms | 1.47x | — |
+| `dewasm-java` | 4 324 685 | 47.3 | 47.4 | 53.7 ms | 258.1 ms | 4.55x | — |
+| `dewasm-codon` | 690 138 | 299.6 | 298.7 | 13.6 ms | 220.3 ms | 29x | — |
+| `dewasm-bash` | 4 067 | 67872 | 68222 | 11.8 ms | 287.8 ms | 6539x | — |
+| `wasm3-ruby` | 8 503 | 35031 | 34928 | 118.4 ms | 416.2 ms | 3375x | — |
+| `wasm3-ruby-yjit` | 20 674 | 12713 | 12682 | 236.0 ms | 498.9 ms | 1225x | — |
+| `wasm3-python` | 3 645 | 86695 | 88023 | 308.3 ms | 624.3 ms | 8353x | — |
+| `wasm3-pypy` | 4 334 | 43417 | 42674 | 446.1 ms | 634.3 ms | 4183x | — |
+| `pywasm-cpython` | 3 651 | 81720 | 81653 | 39.2 ms | 337.6 ms | 7874x | 0.7 ms |
+| `pywasm-pypy` | 9 296 | 20412 | 20544 | 69.7 ms | 259.5 ms | 1967x | 3.3 ms |
+| `wardite` | 10 184 | 27986 | 28009 | 48.2 ms | 333.2 ms | 2696x | 2.7 ms |
+| `wardite-yjit` | 11 711 | 15223 | 15040 | 93.5 ms | 271.8 ms | 1467x | 7.5 ms |
 
 </details>
 
@@ -193,7 +197,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-conv-dark.svg">
-  <img alt="wat/conv: seconds per iteration for 28 runners on a log scale, fastest first. wasmer is fastest at 7.89 ns, then wasmtime at 8.35 ns; pywasm-pypy is slowest at 801 µs, a span of 102000x. The table below carries every number." src="figs/wat-conv.svg">
+  <img alt="wat/conv: seconds per iteration for 29 runners on a log scale, fastest first. wasmtime is fastest at 7.55 ns, then wasmer at 7.56 ns; pywasm-pypy is slowest at 633 µs, a span of 83800x. The table below carries every number." src="figs/wat-conv.svg">
 </picture>
 
 <details>
@@ -201,34 +205,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 37 898 339 | 7.87 | 8.35 | 5.3 ms | 303.7 ms | 1.00x | — |
-| `wasmer` | 37 485 319 | 7.89 | 7.89 | 8.6 ms | 304.3 ms | 1.00x | — |
-| `wasmedge` | 1 242 957 | 231.6 | 233.7 | 15.8 ms | 303.7 ms | 29x | — |
-| `wazero` | 4 886 896 | 58.5 | 58.8 | 4.2 ms | 290.1 ms | 7.43x | — |
-| `wasm3` | 16 777 216 | 17.6 | 17.6 | 5.8 ms | 300.5 ms | 2.23x | — |
-| `dewasm-ruby` | 195 621 | 1527 | 1545 | 38.8 ms | 337.6 ms | 194x | — |
-| `dewasm-ruby-yjit` | 260 201 | 962.6 | 960.9 | 39.1 ms | 289.5 ms | 122x | — |
-| `dewasm-ruby-zjit` | 208 474 | 1130 | 1259 | 39.1 ms | 274.5 ms | 143x | — |
-| `dewasm-monoruby` | 406 492 | 760.2 | 778.1 | 37.8 ms | 346.8 ms | 97x | — |
-| `dewasm-jruby` | 402 944 | 4135 | 6017 | 6.08 s | 7.74 s | 525x | — |
-| `dewasm-python` | 218 397 | 1482 | 1688 | 33.4 ms | 357.0 ms | 188x | — |
-| `dewasm-python-jit` | 179 326 | 1614 | 1620 | 20.6 ms | 310.0 ms | 205x | — |
-| `dewasm-pypy` | 1 005 204 | 258.3 | 260.4 | 40.2 ms | 299.9 ms | 33x | — |
-| `dewasm-graalpy` | 20 160 | 7100 | 7731 | 118.1 ms | 261.2 ms | 902x | — |
-| `dewasm-perl` | 146 787 | 2022 | 2022 | 14.6 ms | 311.4 ms | 257x | — |
-| `dewasm-go` | 16 777 216 | 10.9 | 10.9 | 2.8 ms | 185.5 ms | 1.38x | — |
-| `dewasm-tinygo` | 33 554 432 | 9.44 | 9.47 | 2.0 ms | 318.8 ms | 1.20x | — |
-| `dewasm-java` | 9 280 381 | 19.4 | 19.1 | 57.0 ms | 236.6 ms | 2.46x | — |
-| `dewasm-codon` | 33 842 330 | 8.86 | 8.89 | 13.7 ms | 313.6 ms | 1.13x | — |
-| `dewasm-bash` | 567 | 532356 | 531808 | 12.1 ms | 313.9 ms | 67604x | — |
-| `wasm3-ruby` | 13 183 | 21032 | 21210 | 126.3 ms | 403.5 ms | 2671x | — |
-| `wasm3-ruby-yjit` | 35 284 | 8723 | 8858 | 262.9 ms | 570.7 ms | 1108x | — |
-| `wasm3-python` | 5 150 | 41949 | 41801 | 329.5 ms | 545.5 ms | 5327x | — |
-| `wasm3-pypy` | 2 263 | 79128 | 77054 | 503.7 ms | 682.8 ms | 10049x | — |
-| `pywasm-cpython` | 1 843 | 107359 | 107552 | 40.0 ms | 237.8 ms | 13634x | 0.8 ms |
-| `pywasm-pypy` | 317 | 802191 | 801421 | 78.7 ms | 333.0 ms | 101871x | 4.0 ms |
-| `wardite` | 7 606 | 26891 | 26707 | 50.6 ms | 255.1 ms | 3415x | 2.8 ms |
-| `wardite-yjit` | 12 751 | 16736 | 16844 | 102.6 ms | 316.0 ms | 2125x | 9.2 ms |
+| `wasmtime` | 39 466 477 | 7.53 | 7.55 | 4.3 ms | 301.7 ms | 1.00x | — |
+| `wasmer` | 38 866 212 | 7.53 | 7.56 | 7.0 ms | 299.5 ms | 1.00x | — |
+| `wasmedge` | 1 304 693 | 225.4 | 225.9 | 17.5 ms | 311.7 ms | 30x | — |
+| `wazero` | 4 987 519 | 56.0 | 56.0 | 3.6 ms | 282.8 ms | 7.43x | — |
+| `wasm3` | 16 777 216 | 17.1 | 17.2 | 5.2 ms | 291.8 ms | 2.27x | — |
+| `dewasm-ruby` | 199 740 | 1471 | 1480 | 35.2 ms | 328.9 ms | 195x | — |
+| `dewasm-ruby-yjit` | 267 976 | 908.2 | 913.0 | 38.5 ms | 281.9 ms | 121x | — |
+| `dewasm-ruby-zjit` | 230 634 | 1056 | 1060 | 36.0 ms | 279.7 ms | 140x | — |
+| `dewasm-monoruby` | 409 735 | 715.7 | 719.1 | 30.1 ms | 323.3 ms | 95x | — |
+| `dewasm-jruby` | 18 198 | 12498 | 12447 | 1.34 s | 1.57 s | 1659x | — |
+| `dewasm-spinel` | 312 032 | 790.3 | 783.2 | 5.5 ms | 252.0 ms | 105x | — |
+| `dewasm-python` | 215 283 | 1386 | 1395 | 25.5 ms | 323.9 ms | 184x | — |
+| `dewasm-python-jit` | 190 331 | 1567 | 1570 | 18.9 ms | 317.2 ms | 208x | — |
+| `dewasm-pypy` | 734 551 | 279.2 | 280.2 | 36.6 ms | 241.7 ms | 37x | — |
+| `dewasm-graalpy` | 65 536 | 4698 | 4782 | 105.3 ms | 413.1 ms | 624x | — |
+| `dewasm-perl` | 154 343 | 1953 | 1958 | 13.4 ms | 314.9 ms | 259x | — |
+| `dewasm-go` | 33 554 432 | 8.69 | 8.71 | 5.1 ms | 296.8 ms | 1.15x | — |
+| `dewasm-tinygo` | 33 554 432 | 9.09 | 9.10 | 5.0 ms | 310.2 ms | 1.21x | — |
+| `dewasm-java` | 10 026 059 | 18.7 | 19.1 | 53.4 ms | 241.2 ms | 2.49x | — |
+| `dewasm-codon` | 35 737 718 | 8.44 | 8.52 | 14.8 ms | 316.5 ms | 1.12x | — |
+| `dewasm-bash` | 658 | 457770 | 458517 | 11.5 ms | 312.7 ms | 60755x | — |
+| `wasm3-ruby` | 16 417 | 20305 | 20312 | 115.3 ms | 448.7 ms | 2695x | — |
+| `wasm3-ruby-yjit` | 25 486 | 8663 | 8713 | 240.0 ms | 460.8 ms | 1150x | — |
+| `wasm3-python` | 7 238 | 40971 | 40948 | 305.6 ms | 602.2 ms | 5438x | — |
+| `wasm3-pypy` | 3 956 | 53721 | 55945 | 444.2 ms | 656.8 ms | 7130x | — |
+| `pywasm-cpython` | 2 961 | 102083 | 105315 | 39.5 ms | 341.8 ms | 13548x | 0.7 ms |
+| `pywasm-pypy` | 387 | 631925 | 632954 | 69.6 ms | 314.1 ms | 83868x | 2.9 ms |
+| `wardite` | 10 137 | 25928 | 26103 | 47.4 ms | 310.2 ms | 3441x | 2.7 ms |
+| `wardite-yjit` | 12 550 | 16160 | 16175 | 90.9 ms | 293.7 ms | 2145x | 7.5 ms |
 
 </details>
 
@@ -236,7 +241,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-eh-throw-dark.svg">
-  <img alt="wat/eh_throw: seconds per iteration for 16 runners on a log scale, fastest first. dewasm-pypy is fastest at 4.68 ns, then wasmedge at 116 ns; wasmer is slowest at 10.5 µs, a span of 2250x. The table below carries every number." src="figs/wat-eh-throw.svg">
+  <img alt="wat/eh_throw: seconds per iteration for 18 runners on a log scale, fastest first. dewasm-pypy is fastest at 4.28 ns, then dewasm-tinygo at 92.2 ns; dewasm-jruby is slowest at 35.9 µs, a span of 8370x. The table below carries every number." src="figs/wat-eh-throw.svg">
 </picture>
 
 <details>
@@ -244,23 +249,24 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 1 329 735 | 228.7 | 228.4 | 4.6 ms | 308.7 ms | 1.00x | — |
-| `wasmer` | 23 232 | 10511 | 10505 | 8.4 ms | 252.6 ms | 46x | — |
-| `wasmedge` | 2 351 184 | 116.0 | 116.3 | 15.5 ms | 288.3 ms | 0.51x | — |
-| `dewasm-ruby` | 321 769 | 742.9 | 760.7 | 38.0 ms | 277.0 ms | 3.25x | — |
-| `dewasm-ruby-yjit` | 539 525 | 542.0 | 547.5 | 39.0 ms | 331.5 ms | 2.37x | — |
-| `dewasm-ruby-zjit` | 297 855 | 726.1 | 724.5 | 37.7 ms | 254.0 ms | 3.17x | — |
-| `dewasm-monoruby` | 397 574 | 753.3 | 755.0 | 33.9 ms | 333.4 ms | 3.29x | — |
-| `dewasm-jruby` | 1 | 234158750 | — | 5.37 s | 5.61 s | 1023817x | — |
-| `dewasm-python` | 446 734 | 684.6 | 685.0 | 29.0 ms | 334.9 ms | 2.99x | — |
-| `dewasm-python-jit` | 368 032 | 803.7 | 820.1 | 20.1 ms | 315.9 ms | 3.51x | — |
-| `dewasm-pypy` | 4 000 000 | 4.65 | 4.68 | 39.3 ms | 57.9 ms | 0.02x | — |
-| `dewasm-graalpy` | 165 416 | 1677 | 1702 | 121.9 ms | 399.4 ms | 7.33x | — |
-| `dewasm-perl` | 241 219 | 1214 | 1215 | 10.1 ms | 303.0 ms | 5.31x | — |
-| `dewasm-go` | 1 510 785 | 193.4 | 196.3 | 2.7 ms | 294.9 ms | 0.85x | — |
-| `dewasm-tinygo` | 3 055 964 | 97.0 | 135.7 | 2.0 ms | 298.3 ms | 0.42x | — |
-| `dewasm-java` | 474 968 | 521.9 | 518.2 | 55.0 ms | 302.9 ms | 2.28x | — |
-| `dewasm-codon` | 109 880 | 2932 | 2931 | 14.2 ms | 336.3 ms | 13x | — |
+| `wasmtime` | 1 411 931 | 212.0 | 215.0 | 4.6 ms | 303.9 ms | 1.00x | — |
+| `wasmer` | 19 192 | 13257 | 13294 | 6.9 ms | 261.4 ms | 63x | — |
+| `wasmedge` | 2 073 869 | 111.4 | 111.4 | 17.8 ms | 248.8 ms | 0.53x | — |
+| `dewasm-ruby` | 413 375 | 703.8 | 706.0 | 35.1 ms | 326.1 ms | 3.32x | — |
+| `dewasm-ruby-yjit` | 393 168 | 522.2 | 522.2 | 35.3 ms | 240.6 ms | 2.46x | — |
+| `dewasm-ruby-zjit` | 392 935 | 681.6 | 682.1 | 35.3 ms | 303.1 ms | 3.22x | — |
+| `dewasm-monoruby` | 436 453 | 684.9 | 689.3 | 29.9 ms | 328.8 ms | 3.23x | — |
+| `dewasm-jruby` | 4 328 | 36005 | 35851 | 1.35 s | 1.50 s | 170x | — |
+| `dewasm-spinel` | 351 460 | 680.0 | 677.4 | 5.1 ms | 244.1 ms | 3.21x | — |
+| `dewasm-python` | 451 339 | 660.4 | 663.3 | 25.3 ms | 323.3 ms | 3.12x | — |
+| `dewasm-python-jit` | 364 559 | 783.4 | 788.8 | 18.9 ms | 304.5 ms | 3.70x | — |
+| `dewasm-pypy` | 4 000 000 | 4.35 | 4.28 | 36.4 ms | 53.8 ms | 0.02x | — |
+| `dewasm-graalpy` | 171 746 | 1598 | 1590 | 104.5 ms | 379.0 ms | 7.54x | — |
+| `dewasm-perl` | 260 962 | 1164 | 1167 | 9.6 ms | 313.4 ms | 5.49x | — |
+| `dewasm-go` | 965 006 | 179.2 | 179.1 | 6.6 ms | 179.5 ms | 0.85x | — |
+| `dewasm-tinygo` | 1 805 959 | 92.4 | 92.2 | 5.1 ms | 171.9 ms | 0.44x | — |
+| `dewasm-java` | 382 851 | 521.7 | 524.3 | 53.7 ms | 253.4 ms | 2.46x | — |
+| `dewasm-codon` | 65 536 | 4296 | 4271 | 13.8 ms | 295.4 ms | 20x | — |
 
 </details>
 
@@ -268,7 +274,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-eh-try-dark.svg">
-  <img alt="wat/eh_try: seconds per iteration for 17 runners on a log scale, fastest first. dewasm-codon is fastest at 0.97 ns, then wasmer at 1.30 ns; dewasm-perl is slowest at 531 ns, a span of 545x. The table below carries every number." src="figs/wat-eh-try.svg">
+  <img alt="wat/eh_try: seconds per iteration for 18 runners on a log scale, fastest first. dewasm-codon is fastest at 0.92 ns, then wasmer at 1.25 ns; dewasm-jruby is slowest at 180 µs, a span of 195000x. The table below carries every number." src="figs/wat-eh-try.svg">
 </picture>
 
 <details>
@@ -276,23 +282,24 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 104 891 834 | 2.86 | 2.86 | 4.9 ms | 304.6 ms | 1.00x | — |
-| `wasmer` | 218 558 660 | 1.30 | 1.30 | 7.8 ms | 292.6 ms | 0.46x | — |
-| `wasmedge` | 2 498 830 | 117.5 | 118.6 | 16.2 ms | 309.8 ms | 41x | — |
-| `dewasm-ruby` | 1 544 095 | 132.0 | 131.3 | 38.2 ms | 242.0 ms | 46x | — |
-| `dewasm-ruby-yjit` | 2 316 168 | 130.0 | 130.3 | 38.5 ms | 339.6 ms | 45x | — |
-| `dewasm-ruby-zjit` | 2 259 697 | 129.5 | 130.0 | 38.6 ms | 331.2 ms | 45x | — |
-| `dewasm-monoruby` | 16 777 216 | 13.7 | 13.9 | 33.9 ms | 264.3 ms | 4.81x | — |
-| `dewasm-jruby` | 96 583 | — | 365.6 | 5.64 s | 5.61 s | — | — |
-| `dewasm-python` | 1 407 536 | 201.4 | 201.7 | 28.4 ms | 311.9 ms | 70x | — |
-| `dewasm-python-jit` | 1 352 276 | 209.7 | 209.4 | 21.0 ms | 304.6 ms | 73x | — |
-| `dewasm-pypy` | 92 273 970 | 2.68 | 2.73 | 38.8 ms | 285.9 ms | 0.94x | — |
-| `dewasm-graalpy` | 376 263 | 447.4 | 463.3 | 121.4 ms | 289.8 ms | 157x | — |
-| `dewasm-perl` | 554 024 | 528.6 | 530.6 | 10.0 ms | 302.9 ms | 185x | — |
-| `dewasm-go` | 67 694 762 | 4.36 | 4.37 | 2.6 ms | 298.0 ms | 1.53x | — |
-| `dewasm-tinygo` | 5 163 815 | 78.2 | 78.4 | 2.0 ms | 405.8 ms | 27x | — |
-| `dewasm-java` | 168 282 317 | 1.47 | 1.45 | 58.0 ms | 305.7 ms | 0.52x | — |
-| `dewasm-codon` | 283 113 987 | 0.97 | 0.97 | 14.1 ms | 288.5 ms | 0.34x | — |
+| `wasmtime` | 103 631 742 | 2.79 | 2.80 | 4.5 ms | 293.7 ms | 1.00x | — |
+| `wasmer` | 238 070 846 | 1.25 | 1.25 | 7.1 ms | 304.7 ms | 0.45x | — |
+| `wasmedge` | 2 907 076 | 112.6 | 112.5 | 18.6 ms | 345.8 ms | 40x | — |
+| `dewasm-ruby` | 2 346 542 | 127.0 | 127.0 | 35.0 ms | 333.1 ms | 46x | — |
+| `dewasm-ruby-yjit` | 1 883 075 | 125.0 | 125.1 | 35.5 ms | 270.8 ms | 45x | — |
+| `dewasm-ruby-zjit` | 2 304 652 | 125.6 | 125.9 | 35.4 ms | 324.9 ms | 45x | — |
+| `dewasm-monoruby` | 22 220 198 | 13.5 | 13.6 | 29.8 ms | 329.8 ms | 4.84x | — |
+| `dewasm-jruby` | 135 | 152549 | 180055 | 1.33 s | 1.35 s | 54656x | — |
+| `dewasm-spinel` | 862 361 | 305.7 | 306.2 | 3.0 ms | 266.7 ms | 110x | — |
+| `dewasm-python` | 1 547 094 | 198.7 | 200.0 | 25.5 ms | 333.0 ms | 71x | — |
+| `dewasm-python-jit` | 1 402 039 | 202.2 | 202.1 | 18.7 ms | 302.3 ms | 72x | — |
+| `dewasm-pypy` | 110 157 711 | 2.64 | 2.64 | 36.3 ms | 326.6 ms | 0.94x | — |
+| `dewasm-graalpy` | 10 317 336 | 21.2 | 20.8 | 106.1 ms | 324.7 ms | 7.59x | — |
+| `dewasm-perl` | 578 008 | 511.2 | 512.7 | 10.8 ms | 306.3 ms | 183x | — |
+| `dewasm-go` | 64 201 737 | 4.18 | 4.18 | 7.1 ms | 275.7 ms | 1.50x | — |
+| `dewasm-tinygo` | 4 151 863 | 53.3 | 52.8 | 6.1 ms | 227.3 ms | 19x | — |
+| `dewasm-java` | 228 039 112 | 1.42 | 1.42 | 54.1 ms | 377.0 ms | 0.51x | — |
+| `dewasm-codon` | 330 000 000 | 0.93 | 0.92 | 13.7 ms | 320.3 ms | 0.33x | — |
 
 </details>
 
@@ -300,7 +307,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-f32-alu-dark.svg">
-  <img alt="wat/f32_alu: seconds per iteration for 25 runners on a log scale, fastest first. wazero is fastest at 0.98 ns, then dewasm-tinygo at 0.99 ns; dewasm-bash is slowest at 1.24 ms, a span of 1260000x. The table below carries every number." src="figs/wat-f32-alu.svg">
+  <img alt="wat/f32_alu: seconds per iteration for 27 runners on a log scale, fastest first. dewasm-go is fastest at 0.94 ns, then dewasm-tinygo at 0.94 ns; dewasm-bash is slowest at 1.06 ms, a span of 1130000x. The table below carries every number." src="figs/wat-f32-alu.svg">
 </picture>
 
 <details>
@@ -308,32 +315,33 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 301 857 070 | 1.02 | 1.03 | 5.2 ms | 313.6 ms | 1.00x | — |
-| `wasmer` | 295 905 334 | 1.02 | 1.02 | 7.9 ms | 310.7 ms | 1.00x | — |
-| `wasmedge` | 3 538 183 | 80.5 | 80.7 | 15.7 ms | 300.4 ms | 79x | — |
-| `wazero` | 294 153 629 | 0.98 | 0.98 | 4.0 ms | 293.1 ms | 0.96x | — |
-| `wasm3` | 64 263 730 | 4.66 | 4.67 | 5.8 ms | 305.5 ms | 4.56x | — |
-| `dewasm-ruby` | 677 756 | 433.3 | 434.1 | 39.5 ms | 333.1 ms | 424x | — |
-| `dewasm-ruby-yjit` | 1 423 200 | 224.9 | 236.8 | 41.5 ms | 361.6 ms | 220x | — |
-| `dewasm-ruby-zjit` | 707 891 | 292.8 | 291.2 | 38.8 ms | 246.1 ms | 287x | — |
-| `dewasm-monoruby` | 3 524 679 | 67.6 | 68.0 | 33.6 ms | 271.9 ms | 66x | — |
-| `dewasm-jruby` | 5 | 5646342 | — | 5.61 s | 5.64 s | 5526190x | — |
-| `dewasm-python` | 483 401 | 550.5 | 554.8 | 27.3 ms | 293.4 ms | 539x | — |
-| `dewasm-python-jit` | 469 954 | 584.3 | 584.7 | 19.9 ms | 294.4 ms | 572x | — |
-| `dewasm-pypy` | 46 647 917 | 5.72 | 5.77 | 38.8 ms | 305.4 ms | 5.59x | — |
-| `dewasm-graalpy` | 156 006 | 1927 | 1774 | 118.5 ms | 419.2 ms | 1886x | — |
-| `dewasm-perl` | 336 872 | 876.4 | 886.1 | 10.0 ms | 305.2 ms | 858x | — |
-| `dewasm-go` | 80 816 565 | 3.57 | 3.57 | 2.8 ms | 291.5 ms | 3.50x | — |
-| `dewasm-tinygo` | 306 517 948 | 0.99 | 0.99 | 2.4 ms | 304.8 ms | 0.97x | — |
-| `dewasm-java` | 132 501 167 | 1.72 | 1.69 | 57.6 ms | 285.8 ms | 1.69x | — |
-| `dewasm-codon` | 60 801 027 | 4.87 | 4.87 | 14.4 ms | 310.4 ms | 4.77x | — |
-| `dewasm-bash` | 149 | 1230806 | 1240859 | 11.9 ms | 195.3 ms | 1204615x | — |
-| `wasm3-ruby` | 42 392 | 7276 | 7275 | 125.3 ms | 433.7 ms | 7121x | — |
-| `wasm3-ruby-yjit` | 123 289 | 2228 | 2200 | 244.1 ms | 518.8 ms | 2181x | — |
-| `wasm3-python` | 23 608 | 15044 | 15193 | 334.1 ms | 689.3 ms | 14724x | — |
-| `wasm3-pypy` | 78 193 | 2856 | 2867 | 507.5 ms | 730.9 ms | 2795x | — |
-| `pywasm-cpython` | 7 535 | 31493 | 31799 | 41.0 ms | 278.3 ms | 30823x | 0.6 ms |
-| `pywasm-pypy` | 33 568 | 6646 | 6750 | 76.9 ms | 300.0 ms | 6504x | 3.4 ms |
+| `wasmtime` | 310 150 729 | 0.98 | 0.98 | 4.7 ms | 309.6 ms | 1.00x | — |
+| `wasmer` | 303 358 800 | 0.98 | 0.99 | 7.3 ms | 305.2 ms | 1.00x | — |
+| `wasmedge` | 2 732 340 | 78.6 | 78.6 | 17.9 ms | 232.6 ms | 80x | — |
+| `wazero` | 313 344 723 | 0.94 | 0.95 | 3.8 ms | 298.7 ms | 0.96x | — |
+| `wasm3` | 65 585 781 | 4.59 | 4.59 | 5.7 ms | 306.5 ms | 4.67x | — |
+| `dewasm-ruby` | 719 408 | 417.8 | 419.7 | 35.1 ms | 335.6 ms | 425x | — |
+| `dewasm-ruby-yjit` | 1 258 710 | 233.6 | 233.7 | 35.5 ms | 329.5 ms | 238x | — |
+| `dewasm-ruby-zjit` | 1 026 883 | 279.9 | 280.4 | 35.5 ms | 322.8 ms | 285x | — |
+| `dewasm-monoruby` | 4 195 944 | 65.4 | 65.5 | 29.7 ms | 304.0 ms | 66x | — |
+| `dewasm-jruby` | 338 607 | 458.6 | 446.5 | 1.33 s | 1.49 s | 467x | — |
+| `dewasm-spinel` | 12 589 962 | 26.2 | 26.2 | 6.2 ms | 336.3 ms | 27x | — |
+| `dewasm-python` | 549 985 | 540.0 | 541.2 | 25.4 ms | 322.4 ms | 549x | — |
+| `dewasm-python-jit` | 505 383 | 567.4 | 569.3 | 18.7 ms | 305.5 ms | 577x | — |
+| `dewasm-pypy` | 42 019 101 | 5.58 | 5.60 | 36.5 ms | 270.8 ms | 5.67x | — |
+| `dewasm-graalpy` | 109 871 | 1752 | 1772 | 105.4 ms | 297.9 ms | 1782x | — |
+| `dewasm-perl` | 346 589 | 865.4 | 872.2 | 9.5 ms | 309.5 ms | 880x | — |
+| `dewasm-go` | 289 222 186 | 0.94 | 0.94 | 4.1 ms | 274.8 ms | 0.95x | — |
+| `dewasm-tinygo` | 210 100 015 | 0.95 | 0.94 | 5.1 ms | 204.1 ms | 0.96x | — |
+| `dewasm-java` | 172 806 407 | 1.63 | 1.65 | 53.8 ms | 334.7 ms | 1.65x | — |
+| `dewasm-codon` | 65 794 186 | 4.64 | 4.60 | 14.2 ms | 319.4 ms | 4.72x | — |
+| `dewasm-bash` | 225 | 1067970 | 1064773 | 11.7 ms | 252.0 ms | 1086335x | — |
+| `wasm3-ruby` | 39 181 | 7067 | 7072 | 114.4 ms | 391.3 ms | 7189x | — |
+| `wasm3-ruby-yjit` | 127 596 | 2180 | 2171 | 220.1 ms | 498.3 ms | 2218x | — |
+| `wasm3-python` | 17 461 | 14886 | 14851 | 305.0 ms | 564.9 ms | 15142x | — |
+| `wasm3-pypy` | 66 591 | 2929 | 2952 | 444.8 ms | 639.9 ms | 2979x | — |
+| `pywasm-cpython` | 10 101 | 28965 | 28988 | 39.0 ms | 331.6 ms | 29463x | 0.6 ms |
+| `pywasm-pypy` | 44 035 | 4664 | 4661 | 69.5 ms | 274.8 ms | 4744x | 2.6 ms |
 
 </details>
 
@@ -341,7 +349,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-f64-alu-dark.svg">
-  <img alt="wat/f64_alu: seconds per iteration for 28 runners on a log scale, fastest first. wazero is fastest at 0.99 ns, then wasmer at 1.01 ns; dewasm-bash is slowest at 592 µs, a span of 598000x. The table below carries every number." src="figs/wat-f64-alu.svg">
+  <img alt="wat/f64_alu: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-go is fastest at 0.93 ns, then dewasm-tinygo at 0.95 ns; dewasm-bash is slowest at 519 µs, a span of 556000x. The table below carries every number." src="figs/wat-f64-alu.svg">
 </picture>
 
 <details>
@@ -349,34 +357,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 287 227 126 | 1.00 | 1.01 | 4.4 ms | 292.9 ms | 1.00x | — |
-| `wasmer` | 304 170 712 | 1.00 | 1.01 | 8.5 ms | 313.3 ms | 1.00x | — |
-| `wasmedge` | 3 423 263 | 80.7 | 80.5 | 15.4 ms | 291.6 ms | 80x | — |
-| `wazero` | 294 068 419 | 0.99 | 0.99 | 4.1 ms | 295.0 ms | 0.98x | — |
-| `wasm3` | 64 595 006 | 4.60 | 4.58 | 5.9 ms | 302.9 ms | 4.58x | — |
-| `dewasm-ruby` | 2 171 504 | 119.3 | 119.8 | 40.0 ms | 299.1 ms | 119x | — |
-| `dewasm-ruby-yjit` | 4 021 196 | 78.2 | 78.3 | 41.2 ms | 355.7 ms | 78x | — |
-| `dewasm-ruby-zjit` | 2 682 969 | 87.4 | 87.7 | 38.8 ms | 273.3 ms | 87x | — |
-| `dewasm-monoruby` | 16 777 216 | 13.2 | 13.3 | 34.4 ms | 256.2 ms | 13x | — |
-| `dewasm-jruby` | 3 179 272 | 105.4 | 131.1 | 5.60 s | 5.93 s | 105x | — |
-| `dewasm-python` | 1 447 802 | 155.4 | 159.8 | 27.9 ms | 252.9 ms | 155x | — |
-| `dewasm-python-jit` | 1 527 087 | 142.3 | 142.1 | 20.6 ms | 238.0 ms | 142x | — |
-| `dewasm-pypy` | 99 806 335 | 2.22 | 2.24 | 38.3 ms | 260.0 ms | 2.21x | — |
-| `dewasm-graalpy` | 330 908 | 589.1 | 617.9 | 121.0 ms | 315.9 ms | 586x | — |
-| `dewasm-perl` | 490 119 | 585.4 | 587.0 | 15.2 ms | 302.1 ms | 583x | — |
-| `dewasm-go` | 83 581 125 | 3.60 | 3.60 | 2.9 ms | 303.4 ms | 3.58x | — |
-| `dewasm-tinygo` | 289 080 274 | 1.00 | 1.01 | 2.0 ms | 292.0 ms | 1.00x | — |
-| `dewasm-java` | 154 015 174 | 1.69 | 1.67 | 57.4 ms | 317.3 ms | 1.68x | — |
-| `dewasm-codon` | 60 007 130 | 4.86 | 4.88 | 13.5 ms | 305.2 ms | 4.84x | — |
-| `dewasm-bash` | 512 | 590933 | 592028 | 12.3 ms | 314.8 ms | 588298x | — |
-| `wasm3-ruby` | 37 968 | 6171 | 6208 | 126.2 ms | 360.5 ms | 6144x | — |
-| `wasm3-ruby-yjit` | 121 158 | 1840 | 1866 | 242.5 ms | 465.4 ms | 1832x | — |
-| `wasm3-python` | 22 016 | 13761 | 13881 | 327.5 ms | 630.5 ms | 13699x | — |
-| `wasm3-pypy` | 56 883 | 2642 | 2692 | 505.3 ms | 655.6 ms | 2630x | — |
-| `pywasm-cpython` | 8 002 | 32060 | 32125 | 41.0 ms | 297.6 ms | 31917x | 0.8 ms |
-| `pywasm-pypy` | 20 896 | 8883 | 9007 | 76.1 ms | 261.7 ms | 8844x | 3.6 ms |
-| `wardite` | 36 624 | 7966 | 8001 | 52.2 ms | 344.0 ms | 7931x | 3.4 ms |
-| `wardite-yjit` | 74 320 | 3745 | 3844 | 107.5 ms | 385.8 ms | 3728x | 8.3 ms |
+| `wasmtime` | 308 786 280 | 0.96 | 0.97 | 4.5 ms | 301.4 ms | 1.00x | — |
+| `wasmer` | 309 637 945 | 0.96 | 0.96 | 7.2 ms | 305.1 ms | 1.00x | — |
+| `wasmedge` | 3 793 690 | 78.7 | 79.0 | 17.7 ms | 316.4 ms | 82x | — |
+| `wazero` | 304 754 006 | 0.95 | 0.96 | 3.7 ms | 294.5 ms | 0.99x | — |
+| `wasm3` | 65 346 681 | 4.53 | 4.56 | 5.3 ms | 301.4 ms | 4.71x | — |
+| `dewasm-ruby` | 2 490 468 | 116.6 | 117.8 | 35.5 ms | 325.9 ms | 121x | — |
+| `dewasm-ruby-yjit` | 3 435 625 | 76.8 | 77.1 | 35.5 ms | 299.2 ms | 80x | — |
+| `dewasm-ruby-zjit` | 3 088 771 | 85.2 | 85.3 | 34.8 ms | 298.0 ms | 89x | — |
+| `dewasm-monoruby` | 16 777 216 | 12.9 | 13.0 | 30.4 ms | 246.8 ms | 13x | — |
+| `dewasm-jruby` | 8 061 035 | 24.9 | 24.8 | 1.35 s | 1.55 s | 26x | — |
+| `dewasm-spinel` | 46 104 692 | 5.95 | 5.92 | 5.5 ms | 279.8 ms | 6.19x | — |
+| `dewasm-python` | 1 979 034 | 151.1 | 151.2 | 25.6 ms | 324.5 ms | 157x | — |
+| `dewasm-python-jit` | 2 142 448 | 138.3 | 138.3 | 18.9 ms | 315.1 ms | 144x | — |
+| `dewasm-pypy` | 112 760 847 | 2.20 | 2.19 | 36.3 ms | 284.0 ms | 2.28x | — |
+| `dewasm-graalpy` | 630 738 | 301.7 | 297.2 | 107.3 ms | 297.7 ms | 314x | — |
+| `dewasm-perl` | 522 107 | 573.7 | 574.3 | 13.3 ms | 312.8 ms | 597x | — |
+| `dewasm-go` | 224 889 798 | 0.93 | 0.93 | 5.5 ms | 214.1 ms | 0.96x | — |
+| `dewasm-tinygo` | 223 945 878 | 0.95 | 0.95 | 5.0 ms | 217.5 ms | 0.99x | — |
+| `dewasm-java` | 164 611 418 | 1.62 | 1.62 | 54.3 ms | 321.4 ms | 1.69x | — |
+| `dewasm-codon` | 65 778 959 | 4.65 | 4.61 | 14.1 ms | 319.9 ms | 4.83x | — |
+| `dewasm-bash` | 580 | 517612 | 519060 | 11.5 ms | 311.7 ms | 538308x | — |
+| `wasm3-ruby` | 55 103 | 5970 | 6011 | 114.0 ms | 443.0 ms | 6209x | — |
+| `wasm3-ruby-yjit` | 175 308 | 1802 | 1806 | 221.3 ms | 537.1 ms | 1874x | — |
+| `wasm3-python` | 22 071 | 13174 | 13272 | 305.8 ms | 596.5 ms | 13701x | — |
+| `wasm3-pypy` | 77 482 | 2400 | 2429 | 444.1 ms | 630.1 ms | 2496x | — |
+| `pywasm-cpython` | 7 678 | 28992 | 29087 | 39.4 ms | 262.0 ms | 30151x | 0.6 ms |
+| `pywasm-pypy` | 57 872 | 3933 | 3973 | 69.7 ms | 297.3 ms | 4090x | 2.5 ms |
+| `wardite` | 38 671 | 7645 | 7691 | 47.3 ms | 343.0 ms | 7951x | 2.7 ms |
+| `wardite-yjit` | 77 001 | 3655 | 3668 | 94.7 ms | 376.1 ms | 3801x | 7.4 ms |
 
 </details>
 
@@ -384,7 +393,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-i32-alu-dark.svg">
-  <img alt="wat/i32_alu: seconds per iteration for 27 runners on a log scale, fastest first. wasmtime is fastest at 2.38 ns, then wasmer at 2.38 ns; pywasm-cpython is slowest at 61.5 µs, a span of 25800x. The table below carries every number." src="figs/wat-i32-alu.svg">
+  <img alt="wat/i32_alu: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-codon is fastest at 2.27 ns, then wasmer at 2.29 ns; pywasm-cpython is slowest at 53.6 µs, a span of 23600x. The table below carries every number." src="figs/wat-i32-alu.svg">
 </picture>
 
 <details>
@@ -392,34 +401,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 125 848 912 | 2.38 | 2.38 | 4.8 ms | 304.0 ms | 1.00x | — |
-| `wasmer` | 124 471 598 | 2.38 | 2.38 | 8.7 ms | 305.5 ms | 1.00x | — |
-| `wasmedge` | 1 882 639 | 153.3 | 155.3 | 15.6 ms | 304.3 ms | 64x | — |
-| `wazero` | 108 602 698 | 2.74 | 2.75 | 4.5 ms | 302.4 ms | 1.15x | — |
-| `wasm3` | 34 444 349 | 8.52 | 8.57 | 5.9 ms | 299.4 ms | 3.58x | — |
-| `dewasm-ruby` | 1 281 480 | 208.9 | 210.8 | 38.8 ms | 306.6 ms | 88x | — |
-| `dewasm-ruby-yjit` | 1 674 899 | 156.1 | 157.2 | 39.2 ms | 300.7 ms | 66x | — |
-| `dewasm-ruby-zjit` | 1 523 033 | 164.9 | 165.7 | 40.5 ms | 291.7 ms | 69x | — |
-| `dewasm-monoruby` | 13 111 203 | 17.0 | 17.1 | 34.1 ms | 257.5 ms | 7.17x | — |
-| `dewasm-jruby` | 23 808 | 120.0 | — | 5.63 s | 5.63 s | 50x | — |
-| `dewasm-python` | 488 685 | 579.8 | 588.1 | 28.6 ms | 311.9 ms | 244x | — |
-| `dewasm-python-jit` | 432 188 | 647.4 | 646.4 | 19.0 ms | 298.8 ms | 272x | — |
-| `dewasm-pypy` | 23 041 806 | 10.0 | 10.1 | 38.1 ms | 268.8 ms | 4.21x | — |
-| `dewasm-graalpy` | 240 950 | 884.8 | 1021 | 117.8 ms | 331.0 ms | 372x | — |
-| `dewasm-perl` | 418 911 | 707.4 | 707.7 | 10.1 ms | 306.5 ms | 298x | — |
-| `dewasm-go` | 92 880 598 | 3.15 | 3.18 | 2.7 ms | 295.0 ms | 1.32x | — |
-| `dewasm-tinygo` | 123 854 544 | 2.37 | 2.40 | 2.4 ms | 296.4 ms | 1.00x | — |
-| `dewasm-java` | 104 350 462 | 2.40 | 2.41 | 59.4 ms | 309.3 ms | 1.01x | — |
-| `dewasm-codon` | 122 745 399 | 2.38 | 2.39 | 14.3 ms | 306.4 ms | 1.00x | — |
-| `dewasm-bash` | 12 400 | 25920 | 25940 | 13.2 ms | 334.7 ms | 10900x | — |
-| `wasm3-ruby` | 29 066 | 12354 | 12446 | 125.5 ms | 484.6 ms | 5196x | — |
-| `wasm3-ruby-yjit` | 58 982 | 4352 | 4364 | 258.9 ms | 515.6 ms | 1830x | — |
-| `wasm3-python` | 10 643 | 26971 | 27295 | 331.3 ms | 618.4 ms | 11343x | — |
-| `wasm3-pypy` | 22 314 | 9427 | 9379 | 500.7 ms | 711.1 ms | 3965x | — |
-| `pywasm-cpython` | 4 029 | 61294 | 61477 | 42.5 ms | 289.4 ms | 25777x | 0.8 ms |
-| `pywasm-pypy` | 6 120 | 29743 | 30037 | 86.6 ms | 268.7 ms | 12508x | 3.9 ms |
-| `wardite` | 25 088 | 16347 | 16378 | 55.9 ms | 466.0 ms | 6875x | 3.1 ms |
-| `wardite-yjit` | 23 606 | 8083 | 8223 | 107.0 ms | 297.8 ms | 3399x | 8.7 ms |
+| `wasmtime` | 132 658 841 | 2.28 | 2.30 | 4.6 ms | 307.6 ms | 1.00x | — |
+| `wasmer` | 132 240 583 | 2.29 | 2.29 | 7.1 ms | 309.4 ms | 1.00x | — |
+| `wasmedge` | 1 982 918 | 150.5 | 150.8 | 17.7 ms | 316.2 ms | 66x | — |
+| `wazero` | 115 074 562 | 2.61 | 2.62 | 3.8 ms | 304.5 ms | 1.14x | — |
+| `wasm3` | 36 461 166 | 8.29 | 8.29 | 5.4 ms | 307.5 ms | 3.63x | — |
+| `dewasm-ruby` | 1 420 090 | 203.2 | 203.7 | 34.8 ms | 323.3 ms | 89x | — |
+| `dewasm-ruby-yjit` | 1 711 307 | 151.2 | 151.3 | 35.4 ms | 294.1 ms | 66x | — |
+| `dewasm-ruby-zjit` | 1 646 506 | 161.5 | 162.4 | 35.5 ms | 301.3 ms | 71x | — |
+| `dewasm-monoruby` | 15 336 539 | 16.7 | 16.7 | 30.0 ms | 286.2 ms | 7.31x | — |
+| `dewasm-jruby` | 160 973 | 1524 | 1644 | 1.33 s | 1.58 s | 667x | — |
+| `dewasm-spinel` | 3 794 392 | 55.3 | 54.8 | 6.3 ms | 216.3 ms | 24x | — |
+| `dewasm-python` | 542 113 | 560.8 | 561.7 | 25.3 ms | 329.3 ms | 246x | — |
+| `dewasm-python-jit` | 459 233 | 624.2 | 627.3 | 19.2 ms | 305.8 ms | 273x | — |
+| `dewasm-pypy` | 29 616 766 | 9.40 | 9.45 | 36.5 ms | 314.9 ms | 4.11x | — |
+| `dewasm-graalpy` | 201 002 | 986.3 | 1028 | 104.1 ms | 302.3 ms | 432x | — |
+| `dewasm-perl` | 437 254 | 685.7 | 688.0 | 9.5 ms | 309.3 ms | 300x | — |
+| `dewasm-go` | 85 390 857 | 2.98 | 2.97 | 5.9 ms | 260.7 ms | 1.31x | — |
+| `dewasm-tinygo` | 127 091 561 | 2.29 | 2.30 | 2.6 ms | 294.2 ms | 1.00x | — |
+| `dewasm-java` | 126 953 645 | 2.31 | 2.31 | 53.4 ms | 346.1 ms | 1.01x | — |
+| `dewasm-codon` | 132 026 382 | 2.27 | 2.27 | 12.2 ms | 312.0 ms | 0.99x | — |
+| `dewasm-bash` | 12 959 | 22948 | 23123 | 11.5 ms | 308.9 ms | 10045x | — |
+| `wasm3-ruby` | 30 564 | 11974 | 12066 | 114.5 ms | 480.5 ms | 5242x | — |
+| `wasm3-ruby-yjit` | 65 827 | 3946 | 3943 | 242.9 ms | 502.7 ms | 1727x | — |
+| `wasm3-python` | 7 594 | 27001 | 27189 | 306.0 ms | 511.1 ms | 11820x | — |
+| `wasm3-pypy` | 34 922 | 6641 | 6606 | 444.8 ms | 676.7 ms | 2907x | — |
+| `pywasm-cpython` | 4 566 | 53494 | 53607 | 39.1 ms | 283.4 ms | 23417x | 0.6 ms |
+| `pywasm-pypy` | 19 066 | 11676 | 11583 | 70.8 ms | 293.4 ms | 5111x | 2.8 ms |
+| `wardite` | 19 206 | 15238 | 15282 | 48.0 ms | 340.7 ms | 6670x | 2.7 ms |
+| `wardite-yjit` | 24 808 | 7564 | 7579 | 91.6 ms | 279.3 ms | 3311x | 7.3 ms |
 
 </details>
 
@@ -427,7 +437,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-i32-div-dark.svg">
-  <img alt="wat/i32_div: seconds per iteration for 27 runners on a log scale, fastest first. wasmtime is fastest at 7.89 ns, then wasmer at 7.91 ns; pywasm-pypy is slowest at 225 µs, a span of 28500x. The table below carries every number." src="figs/wat-i32-div.svg">
+  <img alt="wat/i32_div: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-go is fastest at 7.44 ns, then wasmer at 7.52 ns; dewasm-bash is slowest at 61.5 µs, a span of 8260x. The table below carries every number." src="figs/wat-i32-div.svg">
 </picture>
 
 <details>
@@ -435,34 +445,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 37 238 005 | 7.87 | 7.89 | 4.8 ms | 297.9 ms | 1.00x | — |
-| `wasmer` | 38 274 180 | 7.89 | 7.91 | 8.7 ms | 310.6 ms | 1.00x | — |
-| `wasmedge` | 1 519 650 | 186.7 | 187.6 | 16.0 ms | 299.8 ms | 24x | — |
-| `wazero` | 37 358 040 | 7.94 | 7.96 | 4.4 ms | 300.9 ms | 1.01x | — |
-| `wasm3` | 14 043 007 | 19.4 | 19.5 | 5.8 ms | 278.8 ms | 2.47x | — |
-| `dewasm-ruby` | 537 096 | 488.6 | 490.3 | 39.5 ms | 301.9 ms | 62x | — |
-| `dewasm-ruby-yjit` | 1 283 411 | 214.5 | 214.5 | 40.7 ms | 316.0 ms | 27x | — |
-| `dewasm-ruby-zjit` | 1 249 138 | 262.0 | 265.0 | 38.8 ms | 366.2 ms | 33x | — |
-| `dewasm-monoruby` | 3 866 257 | 69.8 | 69.7 | 33.3 ms | 303.0 ms | 8.86x | — |
-| `dewasm-jruby` | 1 | — | — | 3.32 s | 3.27 s | — | — |
-| `dewasm-python` | 294 091 | 1025 | 1034 | 27.7 ms | 329.2 ms | 130x | — |
-| `dewasm-python-jit` | 222 072 | 1240 | 1248 | 19.8 ms | 295.1 ms | 158x | — |
-| `dewasm-pypy` | 15 908 759 | 14.7 | 14.6 | 38.4 ms | 271.7 ms | 1.86x | — |
-| `dewasm-graalpy` | 80 162 | 2251 | 3302 | 118.8 ms | 299.3 ms | 286x | — |
-| `dewasm-perl` | 223 075 | 1311 | 1326 | 11.2 ms | 303.6 ms | 167x | — |
-| `dewasm-go` | 35 964 179 | 8.10 | 8.96 | 3.3 ms | 294.7 ms | 1.03x | — |
-| `dewasm-tinygo` | 38 237 748 | 8.02 | 8.06 | 1.9 ms | 308.6 ms | 1.02x | — |
-| `dewasm-java` | 33 931 678 | 8.04 | 7.95 | 60.5 ms | 333.3 ms | 1.02x | — |
-| `dewasm-codon` | 31 845 331 | 8.05 | 8.01 | 19.3 ms | 275.5 ms | 1.02x | — |
-| `dewasm-bash` | 4 067 | 70052 | 70166 | 12.2 ms | 297.1 ms | 8901x | — |
-| `wasm3-ruby` | 18 516 | 15764 | 16081 | 124.7 ms | 416.6 ms | 2003x | — |
-| `wasm3-ruby-yjit` | 23 264 | 7792 | 9051 | 274.0 ms | 455.3 ms | 990x | — |
-| `wasm3-python` | 8 195 | 43698 | 48087 | 370.8 ms | 728.9 ms | 5552x | — |
-| `wasm3-pypy` | 25 180 | 9179 | 8277 | 508.9 ms | 740.0 ms | 1166x | — |
-| `pywasm-cpython` | 4 739 | 67622 | 68278 | 43.0 ms | 363.5 ms | 8592x | 0.9 ms |
-| `pywasm-pypy` | 810 | 227332 | 225099 | 76.7 ms | 260.8 ms | 28885x | 3.7 ms |
-| `wardite` | 15 576 | 19293 | 19417 | 52.4 ms | 352.9 ms | 2451x | 3.4 ms |
-| `wardite-yjit` | 21 024 | 9347 | 9436 | 104.2 ms | 300.7 ms | 1188x | 7.9 ms |
+| `wasmtime` | 40 060 768 | 7.53 | 7.57 | 4.4 ms | 306.1 ms | 1.00x | — |
+| `wasmer` | 40 056 198 | 7.53 | 7.52 | 7.1 ms | 308.6 ms | 1.00x | — |
+| `wasmedge` | 1 696 712 | 180.6 | 180.6 | 17.6 ms | 324.1 ms | 24x | — |
+| `wazero` | 40 011 445 | 7.52 | 7.53 | 3.8 ms | 304.8 ms | 1.00x | — |
+| `wasm3` | 13 803 910 | 18.3 | 18.3 | 5.5 ms | 258.0 ms | 2.43x | — |
+| `dewasm-ruby` | 638 594 | 466.6 | 469.8 | 34.9 ms | 332.9 ms | 62x | — |
+| `dewasm-ruby-yjit` | 1 271 831 | 207.0 | 207.4 | 35.5 ms | 298.7 ms | 27x | — |
+| `dewasm-ruby-zjit` | 1 022 411 | 255.5 | 259.0 | 35.5 ms | 296.7 ms | 34x | — |
+| `dewasm-monoruby` | 3 752 061 | 67.8 | 67.9 | 30.3 ms | 284.8 ms | 9.00x | — |
+| `dewasm-jruby` | 16 008 | 12709 | 12130 | 1.34 s | 1.54 s | 1688x | — |
+| `dewasm-spinel` | 3 643 868 | 81.2 | 81.3 | 2.1 ms | 298.1 ms | 11x | — |
+| `dewasm-python` | 299 049 | 981.8 | 982.9 | 25.5 ms | 319.1 ms | 130x | — |
+| `dewasm-python-jit` | 244 990 | 1208 | 1208 | 18.8 ms | 314.7 ms | 160x | — |
+| `dewasm-pypy` | 17 687 839 | 14.0 | 14.2 | 36.5 ms | 284.0 ms | 1.86x | — |
+| `dewasm-graalpy` | 141 328 | 1791 | 1823 | 106.9 ms | 360.0 ms | 238x | — |
+| `dewasm-perl` | 244 716 | 1192 | 1196 | 9.6 ms | 301.3 ms | 158x | — |
+| `dewasm-go` | 37 267 657 | 7.47 | 7.44 | 6.4 ms | 284.9 ms | 0.99x | — |
+| `dewasm-tinygo` | 39 236 307 | 7.55 | 7.56 | 2.6 ms | 298.7 ms | 1.00x | — |
+| `dewasm-java` | 26 723 536 | 7.80 | 7.84 | 54.2 ms | 262.7 ms | 1.04x | — |
+| `dewasm-codon` | 39 232 764 | 7.85 | 7.82 | 15.4 ms | 323.6 ms | 1.04x | — |
+| `dewasm-bash` | 4 873 | 61271 | 61488 | 11.2 ms | 309.8 ms | 8136x | — |
+| `wasm3-ruby` | 17 724 | 15144 | 15043 | 113.8 ms | 382.2 ms | 2011x | — |
+| `wasm3-ruby-yjit` | 46 273 | 5556 | 5544 | 229.3 ms | 486.4 ms | 738x | — |
+| `wasm3-python` | 6 662 | 32975 | 33237 | 304.6 ms | 524.3 ms | 4379x | — |
+| `wasm3-pypy` | 31 388 | 8132 | 8187 | 443.9 ms | 699.2 ms | 1080x | — |
+| `pywasm-cpython` | 4 099 | 60759 | 60823 | 38.8 ms | 287.8 ms | 8068x | 0.6 ms |
+| `pywasm-pypy` | 11 256 | 17925 | 18136 | 69.4 ms | 271.1 ms | 2380x | 2.8 ms |
+| `wardite` | 13 227 | 18934 | 19152 | 47.4 ms | 297.8 ms | 2514x | 3.5 ms |
+| `wardite-yjit` | 32 072 | 8970 | 8874 | 93.2 ms | 380.9 ms | 1191x | 7.1 ms |
 
 </details>
 
@@ -470,7 +481,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-i64-alu-dark.svg">
-  <img alt="wat/i64_alu: seconds per iteration for 28 runners on a log scale, fastest first. dewasm-codon is fastest at 2.36 ns, then wasmtime at 2.39 ns; pywasm-pypy is slowest at 353 µs, a span of 149000x. The table below carries every number." src="figs/wat-i64-alu.svg">
+  <img alt="wat/i64_alu: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-tinygo is fastest at 2.24 ns, then dewasm-codon at 2.24 ns; pywasm-cpython is slowest at 57.5 µs, a span of 25700x. The table below carries every number." src="figs/wat-i64-alu.svg">
 </picture>
 
 <details>
@@ -478,34 +489,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 125 150 699 | 2.39 | 2.39 | 4.7 ms | 303.5 ms | 1.00x | — |
-| `wasmer` | 122 594 536 | 2.39 | 2.40 | 8.0 ms | 301.0 ms | 1.00x | — |
-| `wasmedge` | 2 083 438 | 153.4 | 154.0 | 16.7 ms | 336.4 ms | 64x | — |
-| `wazero` | 107 782 221 | 2.74 | 2.74 | 3.8 ms | 298.7 ms | 1.15x | — |
-| `wasm3` | 36 080 961 | 8.23 | 8.29 | 6.3 ms | 303.2 ms | 3.45x | — |
-| `dewasm-ruby` | 212 184 | 1360 | 1388 | 39.3 ms | 328.0 ms | 570x | — |
-| `dewasm-ruby-yjit` | 278 157 | 1063 | 1070 | 39.8 ms | 335.6 ms | 445x | — |
-| `dewasm-ruby-zjit` | 217 092 | 1154 | 1159 | 39.4 ms | 290.0 ms | 483x | — |
-| `dewasm-monoruby` | 350 863 | 825.8 | 826.4 | 33.9 ms | 323.6 ms | 346x | — |
-| `dewasm-jruby` | 97 475 | — | 3122 | 5.67 s | 5.57 s | — | — |
-| `dewasm-python` | 476 326 | 648.9 | 654.3 | 28.9 ms | 338.0 ms | 272x | — |
-| `dewasm-python-jit` | 394 100 | 704.0 | 705.6 | 20.0 ms | 297.5 ms | 295x | — |
-| `dewasm-pypy` | 913 214 | 228.6 | 228.5 | 38.6 ms | 247.4 ms | 96x | — |
-| `dewasm-graalpy` | 66 896 | 3093 | 3057 | 117.4 ms | 324.3 ms | 1295x | — |
-| `dewasm-perl` | 291 432 | 1032 | 1030 | 10.2 ms | 310.9 ms | 432x | — |
-| `dewasm-go` | 109 572 648 | 2.70 | 2.71 | 3.1 ms | 298.6 ms | 1.13x | — |
-| `dewasm-tinygo` | 125 532 940 | 2.39 | 2.41 | 2.1 ms | 302.6 ms | 1.00x | — |
-| `dewasm-java` | 105 437 565 | 2.45 | 2.47 | 55.6 ms | 313.5 ms | 1.02x | — |
-| `dewasm-codon` | 120 933 092 | 2.36 | 2.36 | 14.8 ms | 300.2 ms | 0.99x | — |
-| `dewasm-bash` | 9 977 | 28123 | 28228 | 12.8 ms | 293.4 ms | 11777x | — |
-| `wasm3-ruby` | 14 592 | 14062 | 13975 | 125.6 ms | 330.8 ms | 5889x | — |
-| `wasm3-ruby-yjit` | 45 093 | 5820 | 5807 | 258.7 ms | 521.1 ms | 2437x | — |
-| `wasm3-python` | 11 557 | 26793 | 26900 | 329.7 ms | 639.4 ms | 11220x | — |
-| `wasm3-pypy` | 14 836 | 13537 | 13332 | 504.8 ms | 705.6 ms | 5669x | — |
-| `pywasm-cpython` | 4 992 | 63506 | 63522 | 40.9 ms | 357.9 ms | 26593x | 0.7 ms |
-| `pywasm-pypy` | 572 | 346725 | 352881 | 84.2 ms | 282.6 ms | 145193x | 3.8 ms |
-| `wardite` | 12 165 | 17234 | 17298 | 55.0 ms | 264.6 ms | 7217x | 3.4 ms |
-| `wardite-yjit` | 34 360 | 9815 | 10050 | 103.1 ms | 440.3 ms | 4110x | 8.9 ms |
+| `wasmtime` | 131 463 137 | 2.29 | 2.30 | 4.8 ms | 306.4 ms | 1.00x | — |
+| `wasmer` | 132 006 471 | 2.29 | 2.30 | 7.3 ms | 310.0 ms | 1.00x | — |
+| `wasmedge` | 1 957 548 | 150.3 | 151.0 | 17.7 ms | 312.0 ms | 66x | — |
+| `wazero` | 114 198 914 | 2.61 | 2.61 | 3.7 ms | 302.2 ms | 1.14x | — |
+| `wasm3` | 37 351 214 | 8.07 | 8.10 | 5.2 ms | 306.5 ms | 3.52x | — |
+| `dewasm-ruby` | 224 432 | 1304 | 1310 | 35.2 ms | 327.9 ms | 569x | — |
+| `dewasm-ruby-yjit` | 284 641 | 1003 | 1014 | 35.9 ms | 321.5 ms | 437x | — |
+| `dewasm-ruby-zjit` | 253 452 | 1094 | 1097 | 35.5 ms | 312.8 ms | 477x | — |
+| `dewasm-monoruby` | 377 606 | 785.3 | 784.6 | 30.0 ms | 326.5 ms | 342x | — |
+| `dewasm-jruby` | 891 | 29043 | 27595 | 1.34 s | 1.36 s | 12661x | — |
+| `dewasm-spinel` | 224 317 | 1246 | 1252 | 3.8 ms | 283.2 ms | 543x | — |
+| `dewasm-python` | 495 626 | 613.7 | 614.9 | 25.8 ms | 330.0 ms | 268x | — |
+| `dewasm-python-jit` | 381 010 | 680.0 | 683.2 | 18.7 ms | 277.8 ms | 296x | — |
+| `dewasm-pypy` | 997 592 | 250.4 | 252.1 | 36.2 ms | 286.1 ms | 109x | — |
+| `dewasm-graalpy` | 85 634 | 2604 | 2608 | 104.1 ms | 327.1 ms | 1135x | — |
+| `dewasm-perl` | 300 125 | 993.5 | 995.5 | 9.6 ms | 307.7 ms | 433x | — |
+| `dewasm-go` | 90 483 454 | 2.56 | 2.58 | 4.6 ms | 236.6 ms | 1.12x | — |
+| `dewasm-tinygo` | 102 273 074 | 2.26 | 2.24 | 5.7 ms | 236.8 ms | 0.99x | — |
+| `dewasm-java` | 80 721 464 | 2.33 | 2.33 | 54.9 ms | 243.1 ms | 1.02x | — |
+| `dewasm-codon` | 139 173 064 | 2.26 | 2.24 | 13.8 ms | 328.2 ms | 0.98x | — |
+| `dewasm-bash` | 12 057 | 24991 | 25130 | 12.1 ms | 313.4 ms | 10895x | — |
+| `wasm3-ruby` | 16 990 | 13442 | 13429 | 113.7 ms | 342.1 ms | 5860x | — |
+| `wasm3-ruby-yjit` | 58 808 | 5431 | 5417 | 234.6 ms | 554.0 ms | 2368x | — |
+| `wasm3-python` | 7 738 | 26366 | 27113 | 306.5 ms | 510.5 ms | 11494x | — |
+| `wasm3-pypy` | 17 142 | 11444 | 11467 | 446.8 ms | 643.0 ms | 4989x | — |
+| `pywasm-cpython` | 4 457 | 57180 | 57534 | 39.3 ms | 294.1 ms | 24928x | 0.6 ms |
+| `pywasm-pypy` | 5 568 | 32995 | 33460 | 72.7 ms | 256.4 ms | 14384x | 2.8 ms |
+| `wardite` | 17 880 | 16570 | 16586 | 48.3 ms | 344.6 ms | 7223x | 2.7 ms |
+| `wardite-yjit` | 20 411 | 9779 | 9816 | 91.8 ms | 291.4 ms | 4263x | 7.8 ms |
 
 </details>
 
@@ -513,7 +525,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-i64-div-dark.svg">
-  <img alt="wat/i64_div: seconds per iteration for 25 runners on a log scale, fastest first. wasmtime is fastest at 8.49 ns, then dewasm-tinygo at 8.50 ns; pywasm-pypy is slowest at 519 µs, a span of 61100x. The table below carries every number." src="figs/wat-i64-div.svg">
+  <img alt="wat/i64_div: seconds per iteration for 27 runners on a log scale, fastest first. dewasm-go is fastest at 8.03 ns, then dewasm-tinygo at 8.11 ns; pywasm-pypy is slowest at 102 µs, a span of 12700x. The table below carries every number." src="figs/wat-i64-div.svg">
 </picture>
 
 <details>
@@ -521,32 +533,33 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 34 754 284 | 8.49 | 8.49 | 4.7 ms | 299.7 ms | 1.00x | — |
-| `wasmer` | 34 779 939 | 8.50 | 8.54 | 8.6 ms | 304.2 ms | 1.00x | — |
-| `wasmedge` | 1 056 516 | 183.9 | 183.9 | 15.9 ms | 210.2 ms | 22x | — |
-| `wazero` | 34 880 471 | 8.45 | 8.60 | 4.2 ms | 299.1 ms | 1.00x | — |
-| `wasm3` | 12 308 516 | 19.8 | 19.8 | 5.7 ms | 249.8 ms | 2.34x | — |
-| `dewasm-ruby` | 138 466 | 1933 | 1973 | 39.0 ms | 306.7 ms | 228x | — |
-| `dewasm-ruby-yjit` | 200 991 | 1220 | 1278 | 40.8 ms | 286.1 ms | 144x | — |
-| `dewasm-ruby-zjit` | 148 917 | 1547 | 1557 | 39.6 ms | 270.0 ms | 182x | — |
-| `dewasm-monoruby` | 282 814 | 946.5 | 943.9 | 33.4 ms | 301.1 ms | 112x | — |
-| `dewasm-jruby` | 1 | — | — | 5.65 s | 5.64 s | — | — |
-| `dewasm-python` | 270 889 | 1063 | 1063 | 29.3 ms | 317.2 ms | 125x | — |
-| `dewasm-python-jit` | 239 303 | 1255 | 1254 | 20.4 ms | 320.8 ms | 148x | — |
-| `dewasm-pypy` | 1 068 580 | 274.6 | 277.7 | 39.2 ms | 332.6 ms | 32x | — |
-| `dewasm-graalpy` | 65 536 | 4802 | 4943 | 125.9 ms | 440.5 ms | 566x | — |
-| `dewasm-perl` | 192 138 | 1541 | 1565 | 10.8 ms | 306.9 ms | 182x | — |
-| `dewasm-go` | 34 888 560 | 8.50 | 8.51 | 2.8 ms | 299.3 ms | 1.00x | — |
-| `dewasm-tinygo` | 35 041 790 | 8.48 | 8.50 | 2.3 ms | 299.6 ms | 1.00x | — |
-| `dewasm-java` | 24 515 823 | 8.72 | 8.90 | 58.9 ms | 272.7 ms | 1.03x | — |
-| `dewasm-codon` | 32 939 815 | 8.88 | 8.88 | 13.6 ms | 306.0 ms | 1.05x | — |
-| `dewasm-bash` | 3 678 | 78022 | 78628 | 12.4 ms | 299.4 ms | 9191x | — |
-| `wasm3-ruby` | 13 930 | 17563 | 17699 | 124.7 ms | 369.3 ms | 2069x | — |
-| `wasm3-ruby-yjit` | 28 537 | 7789 | 7608 | 251.7 ms | 474.0 ms | 918x | — |
-| `wasm3-python` | 12 519 | 32935 | 33018 | 328.3 ms | 740.6 ms | 3880x | — |
-| `wasm3-pypy` | 4 464 | 41979 | 42277 | 508.9 ms | 696.3 ms | 4945x | — |
-| `pywasm-cpython` | 3 775 | 72601 | 72681 | 40.6 ms | 314.7 ms | 8553x | 0.7 ms |
-| `pywasm-pypy` | 372 | 500203 | 518939 | 76.0 ms | 262.1 ms | 58927x | 3.8 ms |
+| `wasmtime` | 37 006 126 | 8.17 | 8.20 | 4.4 ms | 306.9 ms | 1.00x | — |
+| `wasmer` | 36 347 844 | 8.14 | 8.16 | 7.1 ms | 303.2 ms | 1.00x | — |
+| `wasmedge` | 1 686 476 | 180.7 | 182.3 | 17.6 ms | 322.4 ms | 22x | — |
+| `wazero` | 36 877 482 | 8.16 | 8.17 | 3.7 ms | 304.7 ms | 1.00x | — |
+| `wasm3` | 16 651 097 | 18.9 | 19.0 | 5.3 ms | 319.3 ms | 2.31x | — |
+| `dewasm-ruby` | 152 567 | 1857 | 1862 | 34.8 ms | 318.1 ms | 227x | — |
+| `dewasm-ruby-yjit` | 202 733 | 1170 | 1188 | 36.7 ms | 273.9 ms | 143x | — |
+| `dewasm-ruby-zjit` | 172 562 | 1462 | 1464 | 35.5 ms | 287.8 ms | 179x | — |
+| `dewasm-monoruby` | 313 059 | 898.2 | 899.3 | 30.6 ms | 311.8 ms | 110x | — |
+| `dewasm-jruby` | 17 770 | 10722 | 11843 | 1.34 s | 1.53 s | 1312x | — |
+| `dewasm-spinel` | 169 025 | 1604 | 1595 | 5.4 ms | 276.6 ms | 196x | — |
+| `dewasm-python` | 291 706 | 1029 | 1041 | 26.1 ms | 326.2 ms | 126x | — |
+| `dewasm-python-jit` | 247 315 | 1212 | 1217 | 18.7 ms | 318.3 ms | 148x | — |
+| `dewasm-pypy` | 716 288 | 291.9 | 291.9 | 36.6 ms | 245.7 ms | 36x | — |
+| `dewasm-graalpy` | 43 764 | 4463 | 4410 | 100.9 ms | 296.3 ms | 546x | — |
+| `dewasm-perl` | 198 901 | 1487 | 1498 | 9.5 ms | 305.2 ms | 182x | — |
+| `dewasm-go` | 34 725 790 | 8.03 | 8.03 | 6.6 ms | 285.4 ms | 0.98x | — |
+| `dewasm-tinygo` | 35 527 020 | 8.09 | 8.11 | 3.7 ms | 291.1 ms | 0.99x | — |
+| `dewasm-java` | 28 872 560 | 8.60 | 8.51 | 49.9 ms | 298.1 ms | 1.05x | — |
+| `dewasm-codon` | 35 308 148 | 8.50 | 8.58 | 12.1 ms | 312.3 ms | 1.04x | — |
+| `dewasm-bash` | 4 388 | 67753 | 67766 | 11.6 ms | 308.9 ms | 8289x | — |
+| `wasm3-ruby` | 18 101 | 16710 | 16709 | 114.5 ms | 417.0 ms | 2044x | — |
+| `wasm3-ruby-yjit` | 43 408 | 6992 | 6978 | 228.3 ms | 531.8 ms | 855x | — |
+| `wasm3-python` | 10 443 | 31599 | 32179 | 306.9 ms | 636.9 ms | 3866x | — |
+| `wasm3-pypy` | 7 838 | 24315 | 24468 | 446.1 ms | 636.7 ms | 2975x | — |
+| `pywasm-cpython` | 3 088 | 66015 | 66059 | 38.8 ms | 242.6 ms | 8077x | 0.6 ms |
+| `pywasm-pypy` | 1 800 | 102011 | 102280 | 69.0 ms | 252.6 ms | 12481x | 2.8 ms |
 
 </details>
 
@@ -554,7 +567,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-mem-narrow-dark.svg">
-  <img alt="wat/mem_narrow: seconds per iteration for 28 runners on a log scale, fastest first. wasmtime is fastest at 1.55 ns, then wasmer at 1.63 ns; pywasm-cpython is slowest at 96.0 µs, a span of 62100x. The table below carries every number." src="figs/wat-mem-narrow.svg">
+  <img alt="wat/mem_narrow: seconds per iteration for 29 runners on a log scale, fastest first. wasmtime is fastest at 1.49 ns, then wasmer at 1.57 ns; pywasm-cpython is slowest at 85.8 µs, a span of 57600x. The table below carries every number." src="figs/wat-mem-narrow.svg">
 </picture>
 
 <details>
@@ -562,34 +575,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 182 879 261 | 1.54 | 1.55 | 4.8 ms | 285.7 ms | 1.00x | — |
-| `wasmer` | 186 114 239 | 1.62 | 1.63 | 8.5 ms | 309.5 ms | 1.05x | — |
-| `wasmedge` | 1 088 961 | 261.2 | 262.3 | 15.5 ms | 299.9 ms | 170x | — |
-| `wazero` | 116 090 127 | 2.58 | 2.58 | 4.2 ms | 303.7 ms | 1.68x | — |
-| `wasm3` | 14 199 798 | 16.4 | 16.6 | 5.7 ms | 239.2 ms | 11x | — |
-| `dewasm-ruby` | 516 845 | 571.9 | 576.8 | 39.4 ms | 335.0 ms | 372x | — |
-| `dewasm-ruby-yjit` | 510 690 | 366.9 | 371.0 | 38.6 ms | 226.0 ms | 239x | — |
-| `dewasm-ruby-zjit` | 458 415 | 392.4 | 392.8 | 38.6 ms | 218.4 ms | 256x | — |
-| `dewasm-monoruby` | 7 139 490 | 46.4 | 47.7 | 33.1 ms | 364.3 ms | 30x | — |
-| `dewasm-jruby` | 65 536 | 2709 | 3413 | 5.68 s | 5.85 s | 1764x | — |
-| `dewasm-python` | 153 404 | 1919 | 1931 | 28.2 ms | 322.6 ms | 1250x | — |
-| `dewasm-python-jit` | 131 072 | 2545 | 2547 | 20.4 ms | 353.9 ms | 1657x | — |
-| `dewasm-pypy` | 3 403 642 | 74.2 | 74.4 | 40.9 ms | 293.4 ms | 48x | — |
-| `dewasm-graalpy` | 40 558 | 6231 | 6939 | 119.9 ms | 372.6 ms | 4057x | — |
-| `dewasm-perl` | 182 519 | 1591 | 1599 | 10.9 ms | 301.4 ms | 1036x | — |
-| `dewasm-go` | 114 644 802 | 2.59 | 2.64 | 2.6 ms | 299.0 ms | 1.68x | — |
-| `dewasm-tinygo` | 103 742 100 | 2.82 | 2.84 | 2.2 ms | 294.5 ms | 1.83x | — |
-| `dewasm-java` | 44 889 568 | 4.59 | 4.54 | 56.0 ms | 262.0 ms | 2.99x | — |
-| `dewasm-codon` | 112 105 428 | 2.66 | 2.68 | 13.8 ms | 311.5 ms | 1.73x | — |
-| `dewasm-bash` | 5 674 | 51180 | 51601 | 12.3 ms | 302.7 ms | 33325x | — |
-| `wasm3-ruby` | 16 054 | 21186 | 21142 | 127.1 ms | 467.2 ms | 13795x | — |
-| `wasm3-ruby-yjit` | 32 400 | 7991 | 8027 | 266.8 ms | 525.7 ms | 5203x | — |
-| `wasm3-python` | 6 730 | 49668 | 48870 | 327.8 ms | 662.1 ms | 32341x | — |
-| `wasm3-pypy` | 3 426 | 47905 | 47588 | 510.9 ms | 675.0 ms | 31193x | — |
-| `pywasm-cpython` | 3 001 | 95879 | 96020 | 40.4 ms | 328.1 ms | 62431x | 0.8 ms |
-| `pywasm-pypy` | 3 264 | 57454 | 57258 | 78.9 ms | 266.4 ms | 37411x | 5.0 ms |
-| `wardite` | 7 932 | 29205 | 29404 | 52.4 ms | 284.1 ms | 19016x | 3.2 ms |
-| `wardite-yjit` | 17 230 | 15585 | 15758 | 102.8 ms | 371.4 ms | 10148x | 8.9 ms |
+| `wasmtime` | 198 134 315 | 1.48 | 1.49 | 4.4 ms | 298.6 ms | 1.00x | — |
+| `wasmer` | 192 948 143 | 1.57 | 1.57 | 7.3 ms | 309.5 ms | 1.05x | — |
+| `wasmedge` | 1 218 031 | 250.1 | 249.7 | 17.9 ms | 322.5 ms | 168x | — |
+| `wazero` | 120 153 495 | 2.50 | 2.50 | 3.9 ms | 304.0 ms | 1.68x | — |
+| `wasm3` | 16 777 216 | 15.9 | 15.9 | 5.3 ms | 272.6 ms | 11x | — |
+| `dewasm-ruby` | 532 395 | 549.8 | 551.3 | 35.0 ms | 327.7 ms | 370x | — |
+| `dewasm-ruby-yjit` | 761 228 | 350.0 | 350.6 | 35.8 ms | 302.3 ms | 236x | — |
+| `dewasm-ruby-zjit` | 714 814 | 371.7 | 374.2 | 35.5 ms | 301.2 ms | 250x | — |
+| `dewasm-monoruby` | 5 567 593 | 45.9 | 46.1 | 29.7 ms | 285.4 ms | 31x | — |
+| `dewasm-jruby` | 43 127 | 4271 | 4249 | 1.34 s | 1.52 s | 2877x | — |
+| `dewasm-spinel` | 1 803 984 | 106.3 | 105.3 | 7.1 ms | 198.8 ms | 72x | — |
+| `dewasm-python` | 166 867 | 1838 | 1843 | 25.8 ms | 332.4 ms | 1238x | — |
+| `dewasm-python-jit` | 131 072 | 2465 | 2469 | 18.8 ms | 341.9 ms | 1660x | — |
+| `dewasm-pypy` | 4 030 785 | 71.0 | 70.7 | 36.4 ms | 322.7 ms | 48x | — |
+| `dewasm-graalpy` | 48 463 | 4162 | 4137 | 104.3 ms | 306.0 ms | 2803x | — |
+| `dewasm-perl` | 197 943 | 1503 | 1517 | 9.6 ms | 307.1 ms | 1012x | — |
+| `dewasm-go` | 103 453 879 | 2.38 | 2.39 | 6.9 ms | 252.9 ms | 1.60x | — |
+| `dewasm-tinygo` | 110 227 454 | 2.08 | 2.09 | 5.4 ms | 234.2 ms | 1.40x | — |
+| `dewasm-java` | 52 030 145 | 4.43 | 4.44 | 54.0 ms | 284.4 ms | 2.98x | — |
+| `dewasm-codon` | 120 761 296 | 2.59 | 2.58 | 14.4 ms | 327.0 ms | 1.74x | — |
+| `dewasm-bash` | 7 117 | 45117 | 45231 | 12.5 ms | 333.6 ms | 30387x | — |
+| `wasm3-ruby` | 10 371 | 20437 | 20868 | 113.8 ms | 325.7 ms | 13765x | — |
+| `wasm3-ruby-yjit` | 32 356 | 7403 | 7658 | 241.2 ms | 480.7 ms | 4986x | — |
+| `wasm3-python` | 6 555 | 46319 | 46852 | 309.2 ms | 612.8 ms | 31196x | — |
+| `wasm3-pypy` | 7 808 | 24036 | 24044 | 445.0 ms | 632.6 ms | 16189x | — |
+| `pywasm-cpython` | 3 532 | 85774 | 85831 | 39.0 ms | 341.9 ms | 57770x | 0.7 ms |
+| `pywasm-pypy` | 7 860 | 23961 | 24143 | 69.7 ms | 258.0 ms | 16138x | 3.1 ms |
+| `wardite` | 8 417 | 27578 | 27639 | 47.3 ms | 279.4 ms | 18574x | 2.8 ms |
+| `wardite-yjit` | 22 882 | 14844 | 14833 | 91.8 ms | 431.4 ms | 9998x | 7.3 ms |
 
 </details>
 
@@ -597,7 +611,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-mem-rw-dark.svg">
-  <img alt="wat/mem_rw: seconds per iteration for 27 runners on a log scale, fastest first. wasmer is fastest at 1.03 ns, then wasmtime at 1.04 ns; wasm3-pypy is slowest at 79.5 ms, a span of 76800000x. The table below carries every number." src="figs/wat-mem-rw.svg">
+  <img alt="wat/mem_rw: seconds per iteration for 29 runners on a log scale, fastest first. wasmer is fastest at 1.00 ns, then wasmtime at 1.01 ns; pywasm-cpython is slowest at 39.2 µs, a span of 39200x. The table below carries every number." src="figs/wat-mem-rw.svg">
 </picture>
 
 <details>
@@ -605,34 +619,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 287 056 497 | 1.04 | 1.04 | 4.9 ms | 302.5 ms | 1.00x | — |
-| `wasmer` | 279 414 586 | 1.03 | 1.03 | 8.0 ms | 297.1 ms | 1.00x | — |
-| `wasmedge` | 2 114 945 | 126.7 | 127.3 | 15.5 ms | 283.4 ms | 122x | — |
-| `wazero` | 186 912 810 | 1.59 | 1.60 | 4.0 ms | 302.1 ms | 1.54x | — |
-| `wasm3` | 39 662 318 | 7.55 | 7.61 | 5.7 ms | 305.0 ms | 7.28x | — |
-| `dewasm-ruby` | 1 093 950 | 227.7 | 228.6 | 38.8 ms | 287.8 ms | 220x | — |
-| `dewasm-ruby-yjit` | 1 573 753 | 148.6 | 150.7 | 39.2 ms | 273.1 ms | 143x | — |
-| `dewasm-ruby-zjit` | 1 391 991 | 158.6 | 159.3 | 38.8 ms | 259.6 ms | 153x | — |
-| `dewasm-monoruby` | 16 777 216 | 17.1 | 17.2 | 34.5 ms | 321.0 ms | 16x | — |
-| `dewasm-jruby` | 1 | 363992917 | — | 5.30 s | 5.67 s | 351064383x | — |
-| `dewasm-python` | 394 056 | 771.4 | 773.5 | 28.8 ms | 332.7 ms | 744x | — |
-| `dewasm-python-jit` | 296 382 | 1003 | 1011 | 20.1 ms | 317.3 ms | 967x | — |
-| `dewasm-pypy` | 5 211 469 | 55.5 | 55.7 | 41.0 ms | 330.5 ms | 54x | — |
-| `dewasm-graalpy` | 91 244 | 2063 | 2168 | 113.7 ms | 301.9 ms | 1989x | — |
-| `dewasm-perl` | 568 684 | 521.9 | 523.3 | 10.8 ms | 307.6 ms | 503x | — |
-| `dewasm-go` | 189 208 420 | 1.53 | 1.54 | 3.0 ms | 293.2 ms | 1.48x | — |
-| `dewasm-tinygo` | 246 861 922 | 1.19 | 1.20 | 2.1 ms | 296.7 ms | 1.15x | — |
-| `dewasm-java` | 140 382 956 | 1.83 | 1.82 | 58.3 ms | 314.6 ms | 1.76x | — |
-| `dewasm-codon` | 184 269 663 | 1.63 | 1.64 | 14.0 ms | 314.7 ms | 1.57x | — |
-| `dewasm-bash` | 9 302 | 31697 | 31713 | 12.2 ms | 307.1 ms | 30571x | — |
-| `wasm3-ruby` | 18 872 | 10379 | 10409 | 126.2 ms | 322.1 ms | 10010x | — |
-| `wasm3-ruby-yjit` | 86 758 | 3355 | 3375 | 248.9 ms | 540.0 ms | 3236x | — |
-| `wasm3-python` | 13 312 | 22432 | 22468 | 331.0 ms | 629.6 ms | 21636x | — |
-| `wasm3-pypy` | 1 | 80228749 | 79502791 | 507.0 ms | 587.3 ms | 77379133x | — |
-| `pywasm-cpython` | 12 419 | 43141 | 43382 | 52.6 ms | 588.3 ms | 41609x | 0.8 ms |
-| `pywasm-pypy` | 28 302 | 8369 | 8516 | 78.7 ms | 315.5 ms | 8072x | 4.8 ms |
-| `wardite` | 18 218 | 13647 | 13719 | 53.1 ms | 301.7 ms | 13162x | 3.1 ms |
-| `wardite-yjit` | 33 612 | 6908 | 6866 | 102.7 ms | 334.9 ms | 6663x | 8.4 ms |
+| `wasmtime` | 291 932 097 | 1.01 | 1.01 | 4.5 ms | 298.7 ms | 1.00x | — |
+| `wasmer` | 312 622 989 | 0.99 | 1.00 | 7.8 ms | 318.5 ms | 0.99x | — |
+| `wasmedge` | 2 416 482 | 121.7 | 121.8 | 17.8 ms | 311.8 ms | 121x | — |
+| `wazero` | 197 064 095 | 1.53 | 1.54 | 3.8 ms | 304.4 ms | 1.51x | — |
+| `wasm3` | 41 030 969 | 7.28 | 7.28 | 5.7 ms | 304.3 ms | 7.22x | — |
+| `dewasm-ruby` | 1 349 758 | 218.5 | 218.8 | 35.4 ms | 330.3 ms | 217x | — |
+| `dewasm-ruby-yjit` | 1 911 839 | 143.4 | 143.5 | 35.4 ms | 309.5 ms | 142x | — |
+| `dewasm-ruby-zjit` | 1 600 078 | 151.7 | 151.5 | 35.3 ms | 277.9 ms | 150x | — |
+| `dewasm-monoruby` | 11 212 586 | 16.6 | 16.6 | 29.5 ms | 215.9 ms | 16x | — |
+| `dewasm-jruby` | 282 674 | 725.8 | 710.5 | 1.34 s | 1.54 s | 720x | — |
+| `dewasm-spinel` | 4 830 960 | 47.3 | 47.2 | 4.8 ms | 233.3 ms | 47x | — |
+| `dewasm-python` | 405 668 | 739.2 | 748.6 | 25.5 ms | 325.3 ms | 733x | — |
+| `dewasm-python-jit` | 318 610 | 955.7 | 963.3 | 19.5 ms | 324.0 ms | 948x | — |
+| `dewasm-pypy` | 5 542 352 | 54.7 | 55.0 | 36.4 ms | 339.5 ms | 54x | — |
+| `dewasm-graalpy` | 133 259 | 1487 | 1458 | 102.0 ms | 300.1 ms | 1476x | — |
+| `dewasm-perl` | 593 934 | 499.4 | 501.7 | 9.5 ms | 306.0 ms | 496x | — |
+| `dewasm-go` | 151 117 164 | 1.47 | 1.47 | 6.4 ms | 228.7 ms | 1.46x | — |
+| `dewasm-tinygo` | 187 468 018 | 1.09 | 1.08 | 5.7 ms | 209.4 ms | 1.08x | — |
+| `dewasm-java` | 155 326 608 | 1.77 | 1.77 | 54.0 ms | 328.4 ms | 1.75x | — |
+| `dewasm-codon` | 203 914 949 | 1.57 | 1.56 | 14.0 ms | 335.1 ms | 1.56x | — |
+| `dewasm-bash` | 10 693 | 28154 | 28229 | 11.3 ms | 312.3 ms | 27938x | — |
+| `wasm3-ruby` | 28 844 | 10077 | 10038 | 112.9 ms | 403.6 ms | 10000x | — |
+| `wasm3-ruby-yjit` | 73 524 | 3237 | 3224 | 224.9 ms | 462.9 ms | 3213x | — |
+| `wasm3-python` | 9 157 | 23378 | 23305 | 307.3 ms | 521.4 ms | 23199x | — |
+| `wasm3-pypy` | 33 909 | 5488 | 5424 | 447.3 ms | 633.4 ms | 5446x | — |
+| `pywasm-cpython` | 7 630 | 39040 | 39188 | 39.1 ms | 337.0 ms | 38740x | 0.7 ms |
+| `pywasm-pypy` | 51 808 | 5188 | 5189 | 69.3 ms | 338.1 ms | 5148x | 2.8 ms |
+| `wardite` | 16 263 | 13014 | 13056 | 47.6 ms | 259.2 ms | 12914x | 2.8 ms |
+| `wardite-yjit` | 41 469 | 6397 | 6417 | 94.0 ms | 359.3 ms | 6348x | 7.3 ms |
 
 </details>
 
@@ -640,7 +655,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/wat-tail-call-dark.svg">
-  <img alt="wat/tail_call: seconds per iteration for 21 runners on a log scale, fastest first. wasmtime is fastest at 3.63 ns, then dewasm-go at 9.90 ns; dewasm-bash is slowest at 81.0 µs, a span of 22300x. The table below carries every number." src="figs/wat-tail-call.svg">
+  <img alt="wat/tail_call: seconds per iteration for 23 runners on a log scale, fastest first. wasmtime is fastest at 3.50 ns, then dewasm-go at 9.05 ns; dewasm-bash is slowest at 71.4 µs, a span of 20400x. The table below carries every number." src="figs/wat-tail-call.svg">
 </picture>
 
 <details>
@@ -648,28 +663,29 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 83 891 440 | 3.62 | 3.63 | 4.6 ms | 308.1 ms | 1.00x | — |
-| `wasmedge` | 1 517 916 | 194.4 | 194.7 | 15.4 ms | 310.5 ms | 54x | — |
-| `wasm3` | 6 344 751 | 46.0 | 46.1 | 5.8 ms | 297.5 ms | 13x | — |
-| `dewasm-ruby` | 407 374 | 666.2 | 683.1 | 38.7 ms | 310.1 ms | 184x | — |
-| `dewasm-ruby-yjit` | 830 969 | 312.0 | 312.6 | 39.2 ms | 298.4 ms | 86x | — |
-| `dewasm-ruby-zjit` | 704 535 | 421.1 | 420.2 | 39.0 ms | 335.7 ms | 116x | — |
-| `dewasm-monoruby` | 2 009 990 | 150.0 | 151.0 | 33.6 ms | 335.0 ms | 41x | — |
-| `dewasm-jruby` | 29 | — | — | 5.62 s | 5.36 s | — | — |
-| `dewasm-python` | 417 175 | 706.9 | 707.5 | 27.6 ms | 322.5 ms | 195x | — |
-| `dewasm-python-jit` | 365 336 | 790.8 | 793.5 | 19.8 ms | 308.7 ms | 219x | — |
-| `dewasm-pypy` | 2 047 426 | 142.8 | 142.9 | 38.7 ms | 331.1 ms | 39x | — |
-| `dewasm-graalpy` | 372 934 | 811.6 | 819.5 | 123.9 ms | 426.6 ms | 224x | — |
-| `dewasm-perl` | 114 806 | 2578 | 2573 | 10.0 ms | 306.0 ms | 713x | — |
-| `dewasm-go` | 33 121 291 | 8.72 | 9.90 | 3.0 ms | 292.0 ms | 2.41x | — |
-| `dewasm-tinygo` | 16 777 216 | 12.6 | 12.6 | 2.0 ms | 213.1 ms | 3.48x | — |
-| `dewasm-java` | 12 284 058 | 18.3 | 19.5 | 57.6 ms | 281.8 ms | 5.05x | — |
-| `dewasm-codon` | 8 127 514 | 24.5 | 24.5 | 13.8 ms | 213.0 ms | 6.78x | — |
-| `dewasm-bash` | 3 607 | 80726 | 80962 | 12.1 ms | 303.3 ms | 22314x | — |
-| `wasm3-ruby` | 14 215 | 21520 | 21608 | 125.1 ms | 431.0 ms | 5949x | — |
-| `wasm3-ruby-yjit` | 18 033 | 9647 | 9689 | 218.1 ms | 392.1 ms | 2667x | — |
-| `wasm3-python` | 5 906 | 49534 | 49503 | 337.6 ms | 630.1 ms | 13692x | — |
-| `wasm3-pypy` | 6 250 | 29654 | 29063 | 513.7 ms | 699.0 ms | 8197x | — |
+| `wasmtime` | 84 935 923 | 3.49 | 3.50 | 4.6 ms | 301.4 ms | 1.00x | — |
+| `wasmedge` | 1 644 962 | 187.4 | 188.8 | 18.6 ms | 326.9 ms | 54x | — |
+| `wasm3` | 6 666 185 | 44.5 | 44.7 | 5.3 ms | 301.9 ms | 13x | — |
+| `dewasm-ruby` | 454 312 | 643.7 | 649.7 | 35.4 ms | 327.8 ms | 184x | — |
+| `dewasm-ruby-yjit` | 864 359 | 299.0 | 299.3 | 35.6 ms | 294.1 ms | 86x | — |
+| `dewasm-ruby-zjit` | 586 310 | 401.6 | 401.6 | 35.5 ms | 271.0 ms | 115x | — |
+| `dewasm-monoruby` | 1 996 738 | 144.7 | 144.7 | 29.7 ms | 318.6 ms | 41x | — |
+| `dewasm-jruby` | 520 330 | 541.2 | 507.7 | 1.33 s | 1.61 s | 155x | — |
+| `dewasm-spinel` | 2 831 965 | 67.8 | 67.5 | 5.4 ms | 197.5 ms | 19x | — |
+| `dewasm-python` | 439 380 | 683.1 | 688.6 | 25.5 ms | 325.7 ms | 195x | — |
+| `dewasm-python-jit` | 386 657 | 765.5 | 766.2 | 18.9 ms | 314.8 ms | 219x | — |
+| `dewasm-pypy` | 1 288 454 | 151.0 | 151.6 | 36.4 ms | 231.0 ms | 43x | — |
+| `dewasm-graalpy` | 308 341 | 655.9 | 677.1 | 105.1 ms | 307.3 ms | 188x | — |
+| `dewasm-perl` | 131 072 | 2439 | 2450 | 9.7 ms | 329.3 ms | 698x | — |
+| `dewasm-go` | 33 554 432 | 8.74 | 9.05 | 6.7 ms | 299.8 ms | 2.50x | — |
+| `dewasm-tinygo` | 16 777 216 | 11.8 | 11.8 | 5.8 ms | 203.9 ms | 3.38x | — |
+| `dewasm-java` | 13 120 214 | 18.4 | 18.6 | 53.7 ms | 294.5 ms | 5.25x | — |
+| `dewasm-codon` | 12 395 492 | 23.6 | 23.6 | 12.1 ms | 304.9 ms | 6.76x | — |
+| `dewasm-bash` | 4 112 | 71170 | 71397 | 11.2 ms | 303.9 ms | 20367x | — |
+| `wasm3-ruby` | 14 391 | 20628 | 20787 | 113.4 ms | 410.3 ms | 5903x | — |
+| `wasm3-ruby-yjit` | 26 391 | 8310 | 8293 | 197.6 ms | 416.9 ms | 2378x | — |
+| `wasm3-python` | 5 324 | 48860 | 49522 | 306.4 ms | 566.5 ms | 13982x | — |
+| `wasm3-pypy` | 14 960 | 17433 | 17625 | 446.4 ms | 707.2 ms | 4989x | — |
 
 </details>
 
@@ -677,7 +693,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/c-mandelbrot-dark.svg">
-  <img alt="c/mandelbrot: seconds per iteration for 28 runners on a log scale, fastest first. wasmer is fastest at 98.9 ns, then wasmtime at 99.4 ns; dewasm-bash is slowest at 20.8 ms, a span of 210000x. The table below carries every number." src="figs/c-mandelbrot.svg">
+  <img alt="c/mandelbrot: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-tinygo is fastest at 87.2 ns, then dewasm-codon at 88.6 ns; dewasm-bash is slowest at 17.7 ms, a span of 203000x. The table below carries every number." src="figs/c-mandelbrot.svg">
 </picture>
 
 <details>
@@ -685,34 +701,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 2 772 006 | 98.9 | 99.4 | 4.7 ms | 278.8 ms | 1.00x | — |
-| `wasmer` | 2 917 536 | 98.8 | 98.9 | 8.2 ms | 296.4 ms | 1.00x | — |
-| `wasmedge` | 76 380 | 3759 | 3761 | 15.9 ms | 303.0 ms | 38x | — |
-| `wazero` | 2 809 087 | 110.8 | 111.3 | 4.1 ms | 315.3 ms | 1.12x | — |
-| `wasm3` | 730 133 | 398.3 | 398.3 | 5.8 ms | 296.5 ms | 4.03x | — |
-| `dewasm-ruby` | 58 349 | 4871 | 4903 | 38.5 ms | 322.7 ms | 49x | — |
-| `dewasm-ruby-yjit` | 240 444 | 1282 | 1400 | 38.4 ms | 346.6 ms | 13x | — |
-| `dewasm-ruby-zjit` | 76 724 | 3521 | 3519 | 39.1 ms | 309.2 ms | 36x | — |
-| `dewasm-monoruby` | 709 609 | 398.6 | 398.4 | 33.6 ms | 316.4 ms | 4.03x | — |
-| `dewasm-jruby` | 2 816 | 48898 | 43049 | 5.64 s | 5.78 s | 494x | — |
-| `dewasm-python` | 80 542 | 3638 | 3678 | 28.1 ms | 321.1 ms | 37x | — |
-| `dewasm-python-jit` | 89 370 | 3298 | 3311 | 20.6 ms | 315.4 ms | 33x | — |
-| `dewasm-pypy` | 1 969 991 | 145.1 | 146.4 | 39.5 ms | 325.4 ms | 1.47x | — |
-| `dewasm-graalpy` | 13 671 | 13109 | 12515 | 122.5 ms | 301.7 ms | 133x | — |
-| `dewasm-perl` | 7 143 | 37594 | 37609 | 9.7 ms | 278.2 ms | 380x | — |
-| `dewasm-go` | 1 236 580 | 240.2 | 241.1 | 2.8 ms | 299.8 ms | 2.43x | — |
-| `dewasm-tinygo` | 2 227 673 | 129.0 | 129.1 | 1.8 ms | 289.2 ms | 1.30x | — |
-| `dewasm-java` | 2 333 033 | 99.6 | 100.6 | 58.7 ms | 291.1 ms | 1.01x | — |
-| `dewasm-codon` | 2 705 288 | 99.1 | 106.4 | 13.7 ms | 281.9 ms | 1.00x | — |
-| `dewasm-bash` | 148 | 20700251 | 20771480 | 12.3 ms | 3.08 s | 209331x | — |
-| `wasm3-ruby` | 996 | 301824 | 304045 | 127.3 ms | 427.9 ms | 3052x | — |
-| `wasm3-ruby-yjit` | 2 802 | 105850 | 105616 | 288.1 ms | 584.7 ms | 1070x | — |
-| `wasm3-python` | 419 | 675504 | 701415 | 336.4 ms | 619.4 ms | 6831x | — |
-| `wasm3-pypy` | 602 | 325685 | 319340 | 516.7 ms | 712.7 ms | 3293x | — |
-| `pywasm-cpython` | 256 | 1608515 | 1610016 | 41.1 ms | 452.9 ms | 16266x | 1.0 ms |
-| `pywasm-pypy` | 117 | 1857150 | 1842628 | 79.0 ms | 296.3 ms | 18780x | 5.1 ms |
-| `wardite` | 710 | 404230 | 404236 | 54.0 ms | 341.0 ms | 4088x | 3.7 ms |
-| `wardite-yjit` | 1 208 | 203332 | 202054 | 104.4 ms | 350.0 ms | 2056x | 10.8 ms |
+| `wasmtime` | 3 149 864 | 95.1 | 95.1 | 4.4 ms | 304.0 ms | 1.00x | — |
+| `wasmer` | 3 107 382 | 94.7 | 94.7 | 7.4 ms | 301.7 ms | 1.00x | — |
+| `wasmedge` | 65 536 | 3667 | 3667 | 17.9 ms | 258.2 ms | 39x | — |
+| `wazero` | 2 601 036 | 105.5 | 105.5 | 3.7 ms | 278.0 ms | 1.11x | — |
+| `wasm3` | 779 403 | 381.8 | 386.5 | 5.2 ms | 302.8 ms | 4.01x | — |
+| `dewasm-ruby` | 59 716 | 4650 | 4677 | 35.4 ms | 313.0 ms | 49x | — |
+| `dewasm-ruby-yjit` | 205 960 | 1357 | 1359 | 35.7 ms | 315.2 ms | 14x | — |
+| `dewasm-ruby-zjit` | 82 039 | 3435 | 3450 | 35.4 ms | 317.3 ms | 36x | — |
+| `dewasm-monoruby` | 754 218 | 378.8 | 379.5 | 29.9 ms | 315.7 ms | 3.98x | — |
+| `dewasm-jruby` | 2 586 | 70744 | 75531 | 1.33 s | 1.52 s | 744x | — |
+| `dewasm-spinel` | 773 865 | 379.9 | 369.6 | 3.9 ms | 297.9 ms | 3.99x | — |
+| `dewasm-python` | 63 730 | 3570 | 3570 | 26.0 ms | 253.5 ms | 38x | — |
+| `dewasm-python-jit` | 65 536 | 3214 | 3211 | 20.3 ms | 230.9 ms | 34x | — |
+| `dewasm-pypy` | 2 062 684 | 144.8 | 145.3 | 37.0 ms | 335.8 ms | 1.52x | — |
+| `dewasm-graalpy` | 25 173 | 9329 | 9334 | 107.1 ms | 342.0 ms | 98x | — |
+| `dewasm-perl` | 8 222 | 36603 | 36789 | 9.8 ms | 310.8 ms | 385x | — |
+| `dewasm-go` | 2 612 773 | 91.3 | 91.6 | 4.0 ms | 242.4 ms | 0.96x | — |
+| `dewasm-tinygo` | 1 967 850 | 88.3 | 87.2 | 5.6 ms | 179.4 ms | 0.93x | — |
+| `dewasm-java` | 2 821 850 | 95.5 | 96.4 | 54.8 ms | 324.3 ms | 1.00x | — |
+| `dewasm-codon` | 4 812 727 | 89.0 | 88.6 | 14.1 ms | 442.5 ms | 0.94x | — |
+| `dewasm-bash` | 219 | 17677226 | 17692226 | 11.6 ms | 3.88 s | 185863x | — |
+| `wasm3-ruby` | 980 | 293354 | 293540 | 115.0 ms | 402.5 ms | 3084x | — |
+| `wasm3-ruby-yjit` | 1 774 | 108738 | 109095 | 257.1 ms | 450.0 ms | 1143x | — |
+| `wasm3-python` | 512 | 658229 | 662930 | 309.4 ms | 646.4 ms | 6921x | — |
+| `wasm3-pypy` | 620 | 294923 | 294357 | 449.8 ms | 632.7 ms | 3101x | — |
+| `pywasm-cpython` | 256 | 1473844 | 1486680 | 38.9 ms | 416.3 ms | 15496x | 0.9 ms |
+| `pywasm-pypy` | 131 | 1373554 | 1389077 | 70.5 ms | 250.4 ms | 14442x | 4.0 ms |
+| `wardite` | 757 | 384010 | 384119 | 48.1 ms | 338.8 ms | 4038x | 3.5 ms |
+| `wardite-yjit` | 1 352 | 190986 | 192568 | 92.9 ms | 351.1 ms | 2008x | 9.3 ms |
 
 </details>
 
@@ -720,7 +737,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/c-sha256-dark.svg">
-  <img alt="c/sha256: seconds per iteration for 28 runners on a log scale, fastest first. wasmer is fastest at 306 ns, then wasmtime at 307 ns; dewasm-bash is slowest at 17.0 ms, a span of 55700x. The table below carries every number." src="figs/c-sha256.svg">
+  <img alt="c/sha256: seconds per iteration for 29 runners on a log scale, fastest first. wasmtime is fastest at 293 ns, then wasmer at 295 ns; dewasm-bash is slowest at 15.0 ms, a span of 51000x. The table below carries every number." src="figs/c-sha256.svg">
 </picture>
 
 <details>
@@ -728,34 +745,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 1 014 637 | 305.1 | 307.2 | 5.1 ms | 314.7 ms | 1.00x | — |
-| `wasmer` | 961 194 | 305.0 | 305.8 | 8.2 ms | 301.4 ms | 1.00x | — |
-| `wasmedge` | 7 146 | 40172 | 40408 | 16.1 ms | 303.2 ms | 132x | — |
-| `wazero` | 742 243 | 402.7 | 405.7 | 4.2 ms | 303.1 ms | 1.32x | — |
-| `wasm3` | 72 586 | 4130 | 4138 | 5.4 ms | 305.2 ms | 14x | — |
-| `dewasm-ruby` | 3 225 | 94494 | 94502 | 40.3 ms | 345.1 ms | 310x | — |
-| `dewasm-ruby-yjit` | 7 111 | 38437 | 38519 | 39.9 ms | 313.2 ms | 126x | — |
-| `dewasm-ruby-zjit` | 4 881 | 58590 | 58910 | 39.7 ms | 325.7 ms | 192x | — |
-| `dewasm-monoruby` | 30 458 | 9623 | 9775 | 33.7 ms | 326.8 ms | 32x | — |
-| `dewasm-jruby` | 17 | — | 76025 | 5.68 s | 5.63 s | — | — |
-| `dewasm-python` | 1 000 | 296224 | 297494 | 29.2 ms | 325.4 ms | 971x | — |
-| `dewasm-python-jit` | 771 | 374327 | 375200 | 19.9 ms | 308.5 ms | 1227x | — |
-| `dewasm-pypy` | 14 733 | 16577 | 16603 | 38.9 ms | 283.2 ms | 54x | — |
-| `dewasm-graalpy` | 268 | 676990 | 735685 | 120.3 ms | 301.8 ms | 2219x | — |
-| `dewasm-perl` | 1 256 | 238758 | 241664 | 10.7 ms | 310.6 ms | 782x | — |
-| `dewasm-go` | 857 006 | 349.3 | 349.4 | 2.6 ms | 301.9 ms | 1.14x | — |
-| `dewasm-tinygo` | 796 119 | 372.0 | 389.9 | 2.2 ms | 298.4 ms | 1.22x | — |
-| `dewasm-java` | 402 384 | 517.4 | 570.9 | 58.8 ms | 267.0 ms | 1.70x | — |
-| `dewasm-codon` | 734 724 | 377.9 | 379.3 | 14.5 ms | 292.1 ms | 1.24x | — |
-| `dewasm-bash` | 16 | 17005518 | 17031518 | 14.5 ms | 286.6 ms | 55729x | — |
-| `wasm3-ruby` | 50 | 4154969 | 4111062 | 129.1 ms | 336.8 ms | 13616x | — |
-| `wasm3-ruby-yjit` | 154 | 1462906 | 1502856 | 306.3 ms | 531.6 ms | 4794x | — |
-| `wasm3-python` | 34 | 9538055 | 9456695 | 344.7 ms | 669.0 ms | 31258x | — |
-| `wasm3-pypy` | 18 | 10100150 | 10429440 | 545.8 ms | 727.6 ms | 33100x | — |
-| `pywasm-cpython` | 22 | 15716182 | 15768691 | 44.5 ms | 390.2 ms | 51504x | 1.5 ms |
-| `pywasm-pypy` | 40 | 5223114 | 5342953 | 87.9 ms | 296.8 ms | 17117x | 8.0 ms |
-| `wardite` | 59 | 4327528 | 4346235 | 53.9 ms | 309.2 ms | 14182x | 4.4 ms |
-| `wardite-yjit` | 103 | 2123242 | 2139006 | 103.1 ms | 321.8 ms | 6958x | 11.0 ms |
+| `wasmtime` | 1 019 471 | 292.6 | 293.3 | 4.4 ms | 302.7 ms | 1.00x | — |
+| `wasmer` | 1 013 486 | 293.2 | 294.5 | 7.1 ms | 304.2 ms | 1.00x | — |
+| `wasmedge` | 7 434 | 39364 | 39372 | 17.6 ms | 310.2 ms | 135x | — |
+| `wazero` | 772 922 | 385.2 | 385.6 | 3.9 ms | 301.6 ms | 1.32x | — |
+| `wasm3` | 65 536 | 3969 | 3999 | 5.2 ms | 265.3 ms | 14x | — |
+| `dewasm-ruby` | 3 154 | 91841 | 92027 | 35.4 ms | 325.1 ms | 314x | — |
+| `dewasm-ruby-yjit` | 8 041 | 36787 | 36810 | 35.8 ms | 331.6 ms | 126x | — |
+| `dewasm-ruby-zjit` | 5 042 | 56768 | 57084 | 35.8 ms | 322.0 ms | 194x | — |
+| `dewasm-monoruby` | 31 680 | 9372 | 9423 | 29.9 ms | 326.8 ms | 32x | — |
+| `dewasm-jruby` | 118 | 2497231 | 2484805 | 1.35 s | 1.65 s | 8535x | — |
+| `dewasm-spinel` | 13 678 | 24178 | 24185 | 6.3 ms | 337.0 ms | 83x | — |
+| `dewasm-python` | 1 032 | 284248 | 285057 | 26.5 ms | 319.8 ms | 971x | — |
+| `dewasm-python-jit` | 820 | 362696 | 363268 | 19.8 ms | 317.3 ms | 1240x | — |
+| `dewasm-pypy` | 11 928 | 16403 | 16429 | 37.9 ms | 233.5 ms | 56x | — |
+| `dewasm-graalpy` | 350 | 567811 | 570657 | 103.4 ms | 302.1 ms | 1941x | — |
+| `dewasm-perl` | 1 287 | 233881 | 235618 | 9.9 ms | 310.9 ms | 799x | — |
+| `dewasm-go` | 637 211 | 319.4 | 318.7 | 6.6 ms | 210.1 ms | 1.09x | — |
+| `dewasm-tinygo` | 584 302 | 344.0 | 339.8 | 5.6 ms | 206.6 ms | 1.18x | — |
+| `dewasm-java` | 455 503 | 496.6 | 608.3 | 54.6 ms | 280.8 ms | 1.70x | — |
+| `dewasm-codon` | 905 438 | 362.9 | 360.5 | 14.0 ms | 342.6 ms | 1.24x | — |
+| `dewasm-bash` | 20 | 14919600 | 14962794 | 13.5 ms | 311.9 ms | 50992x | — |
+| `wasm3-ruby` | 82 | 3919255 | 3941284 | 118.6 ms | 440.0 ms | 13395x | — |
+| `wasm3-ruby-yjit` | 188 | 1344781 | 1350222 | 274.8 ms | 527.6 ms | 4596x | — |
+| `wasm3-python` | 31 | 9150167 | 9216574 | 317.6 ms | 601.2 ms | 31273x | — |
+| `wasm3-pypy` | 19 | 9488007 | 9406243 | 466.0 ms | 646.3 ms | 32428x | — |
+| `pywasm-cpython` | 17 | 14136880 | 14311230 | 40.1 ms | 280.4 ms | 48317x | 1.2 ms |
+| `pywasm-pypy` | 96 | 2538878 | 2559365 | 77.2 ms | 321.0 ms | 8677x | 6.2 ms |
+| `wardite` | 67 | 4115228 | 4131597 | 48.2 ms | 323.9 ms | 14065x | 3.5 ms |
+| `wardite-yjit` | 134 | 1991271 | 1988285 | 94.4 ms | 361.3 ms | 6806x | 9.0 ms |
 
 </details>
 
@@ -763,7 +781,7 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/c-wordcount-dark.svg">
-  <img alt="c/wordcount: seconds per iteration for 28 runners on a log scale, fastest first. wasmer is fastest at 1.61 ns, then wasmtime at 1.62 ns; pywasm-cpython is slowest at 67.4 µs, a span of 41900x. The table below carries every number." src="figs/c-wordcount.svg">
+  <img alt="c/wordcount: seconds per iteration for 29 runners on a log scale, fastest first. dewasm-tinygo is fastest at 1.53 ns, then wasmtime at 1.53 ns; pywasm-cpython is slowest at 58.8 µs, a span of 38400x. The table below carries every number." src="figs/c-wordcount.svg">
 </picture>
 
 <details>
@@ -771,34 +789,35 @@ Iteration counts are calibrated per runner, so compare the per-iteration figures
 
 | Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 182 459 935 | 1.62 | 1.62 | 5.2 ms | 300.0 ms | 1.00x | — |
-| `wasmer` | 181 612 499 | 1.61 | 1.61 | 8.4 ms | 300.5 ms | 1.00x | — |
-| `wasmedge` | 1 403 762 | 199.7 | 200.0 | 16.2 ms | 296.6 ms | 124x | — |
-| `wazero` | 95 811 329 | 3.10 | 3.10 | 4.4 ms | 301.4 ms | 1.92x | — |
-| `wasm3` | 16 777 216 | 14.5 | 14.6 | 5.8 ms | 249.5 ms | 8.99x | — |
-| `dewasm-ruby` | 654 739 | 478.8 | 478.1 | 41.3 ms | 354.8 ms | 296x | — |
-| `dewasm-ruby-yjit` | 823 030 | 320.2 | 321.8 | 42.2 ms | 305.8 ms | 198x | — |
-| `dewasm-ruby-zjit` | 790 757 | 344.4 | 344.4 | 42.1 ms | 314.4 ms | 213x | — |
-| `dewasm-monoruby` | 8 139 449 | 35.1 | 35.0 | 33.7 ms | 319.6 ms | 22x | — |
-| `dewasm-jruby` | 131 072 | 2413 | 1996 | 5.84 s | 6.16 s | 1493x | — |
-| `dewasm-python` | 330 880 | 914.8 | 921.6 | 32.6 ms | 335.3 ms | 566x | — |
-| `dewasm-python-jit` | 274 343 | 1071 | 1071 | 25.6 ms | 319.4 ms | 663x | — |
-| `dewasm-pypy` | 4 790 433 | 58.0 | 58.1 | 45.8 ms | 323.9 ms | 36x | — |
-| `dewasm-graalpy` | 94 296 | 2392 | 2446 | 173.9 ms | 399.5 ms | 1480x | — |
-| `dewasm-perl` | 324 220 | 896.6 | 900.1 | 14.2 ms | 305.0 ms | 555x | — |
-| `dewasm-go` | 124 137 614 | 2.42 | 2.44 | 3.0 ms | 304.0 ms | 1.50x | — |
-| `dewasm-tinygo` | 179 393 625 | 1.62 | 1.63 | 2.4 ms | 292.9 ms | 1.00x | — |
-| `dewasm-java` | 47 549 747 | 3.81 | 3.76 | 57.9 ms | 238.9 ms | 2.36x | — |
-| `dewasm-codon` | 83 413 237 | 3.58 | 3.61 | 14.0 ms | 312.4 ms | 2.21x | — |
-| `dewasm-bash` | 5 564 | 43312 | 43599 | 124.4 ms | 365.4 ms | 26804x | — |
-| `wasm3-ruby` | 19 743 | 14967 | 15025 | 193.2 ms | 488.7 ms | 9263x | — |
-| `wasm3-ruby-yjit` | 53 720 | 4973 | 5019 | 342.0 ms | 609.1 ms | 3078x | — |
-| `wasm3-python` | 8 521 | 34510 | 33967 | 478.8 ms | 772.9 ms | 21357x | — |
-| `wasm3-pypy` | 19 062 | 12490 | 12753 | 650.3 ms | 888.4 ms | 7730x | — |
-| `pywasm-cpython` | 3 278 | 67202 | 67374 | 301.8 ms | 522.1 ms | 41589x | 1.6 ms |
-| `pywasm-pypy` | 13 176 | 17012 | 16922 | 201.4 ms | 425.6 ms | 10528x | 8.2 ms |
-| `wardite` | 11 815 | 21797 | 21955 | 130.2 ms | 387.8 ms | 13490x | 4.2 ms |
-| `wardite-yjit` | 24 117 | 10841 | 11027 | 149.3 ms | 410.8 ms | 6709x | 11.3 ms |
+| `wasmtime` | 190 969 969 | 1.51 | 1.53 | 4.5 ms | 293.3 ms | 1.00x | — |
+| `wasmer` | 187 970 272 | 1.50 | 1.54 | 7.1 ms | 289.8 ms | 0.99x | — |
+| `wasmedge` | 1 543 976 | 194.6 | 195.2 | 18.4 ms | 318.8 ms | 129x | — |
+| `wazero` | 100 625 645 | 2.95 | 2.98 | 4.0 ms | 301.0 ms | 1.95x | — |
+| `wasm3` | 16 777 216 | 14.1 | 14.2 | 5.3 ms | 242.2 ms | 9.34x | — |
+| `dewasm-ruby` | 657 725 | 463.4 | 463.6 | 37.4 ms | 342.2 ms | 306x | — |
+| `dewasm-ruby-yjit` | 891 956 | 310.1 | 312.0 | 36.5 ms | 313.1 ms | 205x | — |
+| `dewasm-ruby-zjit` | 879 956 | 329.5 | 331.0 | 37.8 ms | 327.7 ms | 218x | — |
+| `dewasm-monoruby` | 5 593 479 | 34.3 | 34.3 | 30.2 ms | 222.2 ms | 23x | — |
+| `dewasm-jruby` | 88 088 | 2441 | 2311 | 1.39 s | 1.61 s | 1614x | — |
+| `dewasm-spinel` | 1 908 660 | 115.0 | 114.2 | 6.0 ms | 225.4 ms | 76x | — |
+| `dewasm-python` | 341 391 | 893.5 | 893.0 | 29.6 ms | 334.6 ms | 591x | — |
+| `dewasm-python-jit` | 281 848 | 1058 | 1063 | 24.3 ms | 322.4 ms | 699x | — |
+| `dewasm-pypy` | 4 795 241 | 57.3 | 58.0 | 42.1 ms | 316.9 ms | 38x | — |
+| `dewasm-graalpy` | 86 832 | 2192 | 2197 | 150.7 ms | 341.0 ms | 1449x | — |
+| `dewasm-perl` | 340 810 | 865.9 | 863.8 | 14.2 ms | 309.3 ms | 573x | — |
+| `dewasm-go` | 97 070 417 | 2.22 | 2.23 | 3.7 ms | 219.1 ms | 1.47x | — |
+| `dewasm-tinygo` | 168 731 590 | 1.52 | 1.53 | 3.4 ms | 259.4 ms | 1.00x | — |
+| `dewasm-java` | 54 263 945 | 3.38 | 3.42 | 56.0 ms | 239.5 ms | 2.24x | — |
+| `dewasm-codon` | 87 560 266 | 3.42 | 3.40 | 14.1 ms | 313.4 ms | 2.26x | — |
+| `dewasm-bash` | 6 496 | 38603 | 38650 | 110.9 ms | 361.7 ms | 25525x | — |
+| `wasm3-ruby` | 23 046 | 14657 | 14667 | 175.1 ms | 512.9 ms | 9691x | — |
+| `wasm3-ruby-yjit` | 58 682 | 4867 | 4887 | 306.2 ms | 591.8 ms | 3218x | — |
+| `wasm3-python` | 6 063 | 33352 | 33557 | 441.8 ms | 644.1 ms | 22053x | — |
+| `wasm3-pypy` | 21 410 | 10162 | 10134 | 576.1 ms | 793.6 ms | 6719x | — |
+| `pywasm-cpython` | 4 654 | 58818 | 58812 | 274.0 ms | 547.7 ms | 38891x | 1.3 ms |
+| `pywasm-pypy` | 21 506 | 9518 | 9507 | 169.1 ms | 373.8 ms | 6293x | 6.2 ms |
+| `wardite` | 16 322 | 20639 | 20649 | 116.6 ms | 453.5 ms | 13646x | 3.6 ms |
+| `wardite-yjit` | 25 607 | 10104 | 10249 | 130.9 ms | 389.7 ms | 6681x | 9.1 ms |
 
 </details>
 
@@ -811,7 +830,7 @@ Every runner executes the same work, so wall times compare directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="app/cowsay: seconds per run for 28 runners on a log scale, fastest first. dewasm-tinygo is fastest at 2.24 ms, then dewasm-go at 3.18 ms; dewasm-jruby is slowest at 3.69 s, a span of 1640x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="app/cowsay: seconds per run for 29 runners on a log scale, fastest first. dewasm-tinygo is fastest at 4.85 ms, then wasmtime at 5.14 ms; dewasm-jruby is slowest at 1.56 s, a span of 323x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 <details>
@@ -819,34 +838,35 @@ Every runner executes the same work, so wall times compare directly.
 
 | Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 51 | 5.9 ms | 6.2 ms | 1.00x | — |
-| `wasmer` | 31 | 9.8 ms | 10.0 ms | 1.66x | — |
-| `wasmedge` | 17 | 18.3 ms | 18.4 ms | 3.11x | — |
-| `wazero` | 10 | 27.5 ms | 27.9 ms | 4.66x | — |
-| `wasm3` | 45 | 7.1 ms | 7.1 ms | 1.20x | — |
-| `dewasm-ruby` | 5 | 62.0 ms | 63.9 ms | 11x | — |
-| `dewasm-ruby-yjit` | 4 | 92.7 ms | 93.6 ms | 16x | — |
-| `dewasm-ruby-zjit` | 2 | 209.7 ms | 210.4 ms | 36x | — |
-| `dewasm-monoruby` | 3 | 135.8 ms | 137.8 ms | 23x | — |
-| `dewasm-jruby` | 1 | 3.55 s | 3.69 s | 603x | — |
-| `dewasm-python` | 4 | 96.0 ms | 96.6 ms | 16x | — |
-| `dewasm-python-jit` | 3 | 103.2 ms | 103.5 ms | 18x | — |
-| `dewasm-pypy` | 3 | 133.3 ms | 134.2 ms | 23x | — |
-| `dewasm-graalpy` | 1 | 469.0 ms | 480.7 ms | 80x | — |
-| `dewasm-perl` | 6 | 42.3 ms | 42.4 ms | 7.17x | — |
-| `dewasm-go` | 13 | 3.1 ms | 3.2 ms | 0.53x | — |
-| `dewasm-tinygo` | 17 | 2.2 ms | 2.2 ms | 0.37x | — |
-| `dewasm-java` | 4 | 71.0 ms | 71.4 ms | 12x | — |
-| `dewasm-codon` | 20 | 14.4 ms | 14.6 ms | 2.44x | — |
-| `dewasm-bash` | 1 | 647.6 ms | 648.3 ms | 110x | — |
-| `wasm3-ruby` | 1 | 389.9 ms | 391.0 ms | 66x | — |
-| `wasm3-ruby-yjit` | 1 | 1.02 s | 1.02 s | 173x | — |
-| `wasm3-python` | 1 | 993.6 ms | 995.1 ms | 169x | — |
-| `wasm3-pypy` | 1 | 1.40 s | 1.40 s | 238x | — |
-| `pywasm-cpython` | 2 | 254.2 ms | 255.8 ms | 43x | 49.7 ms |
-| `pywasm-pypy` | 1 | 586.8 ms | 595.1 ms | 100x | 199.8 ms |
-| `wardite` | 2 | 143.9 ms | 144.1 ms | 24x | 23.9 ms |
-| `wardite-yjit` | 2 | 218.9 ms | 219.8 ms | 37x | 43.6 ms |
+| `wasmtime` | 19 | 5.1 ms | 5.1 ms | 1.00x | — |
+| `wasmer` | 31 | 8.3 ms | 8.3 ms | 1.61x | — |
+| `wasmedge` | 15 | 20.0 ms | 20.0 ms | 3.89x | — |
+| `wazero` | 12 | 25.7 ms | 25.7 ms | 5.01x | — |
+| `wasm3` | 44 | 6.3 ms | 6.3 ms | 1.23x | — |
+| `dewasm-ruby` | 6 | 55.0 ms | 55.2 ms | 11x | — |
+| `dewasm-ruby-yjit` | 4 | 81.0 ms | 81.2 ms | 16x | — |
+| `dewasm-ruby-zjit` | 2 | 181.7 ms | 181.8 ms | 35x | — |
+| `dewasm-monoruby` | 3 | 120.3 ms | 122.9 ms | 23x | — |
+| `dewasm-jruby` | 1 | 1.56 s | 1.56 s | 304x | — |
+| `dewasm-spinel` | 2 | 5.1 ms | 5.7 ms | 0.99x | — |
+| `dewasm-python` | 4 | 86.9 ms | 87.0 ms | 17x | — |
+| `dewasm-python-jit` | 4 | 95.1 ms | 95.7 ms | 19x | — |
+| `dewasm-pypy` | 3 | 122.6 ms | 123.3 ms | 24x | — |
+| `dewasm-graalpy` | 1 | 414.8 ms | 423.8 ms | 81x | — |
+| `dewasm-perl` | 4 | 38.8 ms | 38.9 ms | 7.55x | — |
+| `dewasm-go` | 2 | 5.0 ms | 6.2 ms | 0.97x | — |
+| `dewasm-tinygo` | 2 | 4.0 ms | 4.8 ms | 0.77x | — |
+| `dewasm-java` | 5 | 64.6 ms | 64.8 ms | 13x | — |
+| `dewasm-codon` | 2 | 12.1 ms | 12.3 ms | 2.36x | — |
+| `dewasm-bash` | 1 | 567.4 ms | 570.7 ms | 110x | — |
+| `wasm3-ruby` | 1 | 367.0 ms | 369.2 ms | 71x | — |
+| `wasm3-ruby-yjit` | 1 | 930.7 ms | 932.8 ms | 181x | — |
+| `wasm3-python` | 1 | 931.0 ms | 931.1 ms | 181x | — |
+| `wasm3-pypy` | 1 | 1.18 s | 1.18 s | 230x | — |
+| `pywasm-cpython` | 2 | 221.0 ms | 221.5 ms | 43x | 42.9 ms |
+| `pywasm-pypy` | 1 | 481.9 ms | 486.8 ms | 94x | 171.8 ms |
+| `wardite` | 3 | 131.5 ms | 132.6 ms | 26x | 21.4 ms |
+| `wardite-yjit` | 2 | 196.6 ms | 196.8 ms | 38x | 38.0 ms |
 
 </details>
 
@@ -854,7 +874,7 @@ Every runner executes the same work, so wall times compare directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-query-dark.svg">
-  <img alt="app/sqlite3_query: seconds per run for 13 runners on a log scale, fastest first. wasmtime is fastest at 80.0 ms, then wasmer at 90.8 ms; dewasm-ruby is slowest at 22.5 s, a span of 281x. The table below carries every number." src="figs/app-sqlite3-query.svg">
+  <img alt="app/sqlite3_query: seconds per run for 14 runners on a log scale, fastest first. wasmtime is fastest at 76.0 ms, then wasmer at 85.6 ms; dewasm-ruby is slowest at 21.5 s, a span of 284x. The table below carries every number." src="figs/app-sqlite3-query.svg">
 </picture>
 
 <details>
@@ -862,19 +882,20 @@ Every runner executes the same work, so wall times compare directly.
 
 | Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 4 | 78.2 ms | 80.0 ms | 1.00x | — |
-| `wasmer` | 4 | 90.7 ms | 90.8 ms | 1.16x | — |
-| `wasmedge` | 1 | 9.75 s | 10.17 s | 125x | — |
-| `wazero` | 1 | 642.0 ms | 650.5 ms | 8.21x | — |
-| `wasm3` | 1 | 838.2 ms | 860.8 ms | 11x | — |
-| `dewasm-ruby` | 1 | 22.52 s | 22.52 s | 288x | — |
-| `dewasm-ruby-yjit` | 1 | 10.77 s | 10.85 s | 138x | — |
-| `dewasm-ruby-zjit` | 1 | 15.78 s | 15.91 s | 202x | — |
-| `dewasm-monoruby` | 1 | 7.61 s | 7.71 s | 97x | — |
-| `dewasm-pypy` | 1 | 12.54 s | 12.63 s | 160x | — |
-| `dewasm-go` | 2 | 168.7 ms | 169.4 ms | 2.16x | — |
-| `dewasm-tinygo` | 3 | 121.4 ms | 121.7 ms | 1.55x | — |
-| `dewasm-java` | 1 | 2.43 s | 2.45 s | 31x | — |
+| `wasmtime` | 2 | 75.9 ms | 76.0 ms | 1.00x | — |
+| `wasmer` | 2 | 85.0 ms | 85.6 ms | 1.12x | — |
+| `wasmedge` | 1 | 9.40 s | 9.42 s | 124x | — |
+| `wazero` | 1 | 606.5 ms | 608.5 ms | 7.99x | — |
+| `wasm3` | 1 | 804.9 ms | 819.2 ms | 11x | — |
+| `dewasm-ruby` | 1 | 21.44 s | 21.55 s | 282x | — |
+| `dewasm-ruby-yjit` | 1 | 10.04 s | 10.05 s | 132x | — |
+| `dewasm-ruby-zjit` | 1 | 14.43 s | 14.45 s | 190x | — |
+| `dewasm-monoruby` | 1 | 6.84 s | 6.88 s | 90x | — |
+| `dewasm-spinel` | 1 | 4.75 s | 4.75 s | 63x | — |
+| `dewasm-pypy` | 1 | 11.15 s | 11.24 s | 147x | — |
+| `dewasm-go` | 1 | 88.2 ms | 89.1 ms | 1.16x | — |
+| `dewasm-tinygo` | 1 | 103.6 ms | 104.5 ms | 1.37x | — |
+| `dewasm-java` | 1 | 2.22 s | 2.23 s | 29x | — |
 
 </details>
 
@@ -882,7 +903,7 @@ Every runner executes the same work, so wall times compare directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-mod-query-dark.svg">
-  <img alt="app/sqlite3_mod_query: seconds per run for 13 runners on a log scale, fastest first. wasmtime is fastest at 86.2 ms, then wasmer at 95.8 ms; dewasm-ruby is slowest at 23.8 s, a span of 276x. The table below carries every number." src="figs/app-sqlite3-mod-query.svg">
+  <img alt="app/sqlite3_mod_query: seconds per run for 14 runners on a log scale, fastest first. wasmtime is fastest at 81.8 ms, then dewasm-tinygo at 87.7 ms; dewasm-ruby is slowest at 22.5 s, a span of 275x. The table below carries every number." src="figs/app-sqlite3-mod-query.svg">
 </picture>
 
 <details>
@@ -890,19 +911,20 @@ Every runner executes the same work, so wall times compare directly.
 
 | Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 4 | 86.0 ms | 86.2 ms | 1.00x | — |
-| `wasmer` | 3 | 94.1 ms | 95.8 ms | 1.09x | — |
-| `wasmedge` | 1 | 10.04 s | 10.12 s | 117x | — |
-| `wazero` | 1 | 637.0 ms | 642.5 ms | 7.40x | — |
-| `wasm3` | 1 | 867.2 ms | 868.3 ms | 10x | — |
-| `dewasm-ruby` | 1 | 23.65 s | 23.79 s | 275x | — |
-| `dewasm-ruby-yjit` | 1 | 10.11 s | 10.18 s | 117x | — |
-| `dewasm-ruby-zjit` | 1 | 16.32 s | 16.34 s | 190x | — |
-| `dewasm-monoruby` | 1 | 7.00 s | 7.07 s | 81x | — |
-| `dewasm-pypy` | 1 | 14.16 s | 14.26 s | 165x | — |
-| `dewasm-go` | 2 | 121.7 ms | 122.0 ms | 1.41x | — |
-| `dewasm-tinygo` | 3 | 105.9 ms | 106.1 ms | 1.23x | — |
-| `dewasm-java` | 1 | 2.37 s | 2.37 s | 28x | — |
+| `wasmtime` | 2 | 81.6 ms | 81.8 ms | 1.00x | — |
+| `wasmer` | 2 | 89.2 ms | 89.6 ms | 1.09x | — |
+| `wasmedge` | 1 | 9.68 s | 9.70 s | 119x | — |
+| `wazero` | 1 | 591.5 ms | 596.6 ms | 7.25x | — |
+| `wasm3` | 1 | 821.0 ms | 826.7 ms | 10x | — |
+| `dewasm-ruby` | 1 | 22.45 s | 22.53 s | 275x | — |
+| `dewasm-ruby-yjit` | 1 | 9.38 s | 9.42 s | 115x | — |
+| `dewasm-ruby-zjit` | 1 | 14.88 s | 14.90 s | 182x | — |
+| `dewasm-monoruby` | 1 | 6.29 s | 6.37 s | 77x | — |
+| `dewasm-spinel` | 1 | 4.94 s | 4.95 s | 61x | — |
+| `dewasm-pypy` | 1 | 12.72 s | 12.76 s | 156x | — |
+| `dewasm-go` | 1 | 89.9 ms | 90.7 ms | 1.10x | — |
+| `dewasm-tinygo` | 1 | 87.2 ms | 87.7 ms | 1.07x | — |
+| `dewasm-java` | 1 | 2.16 s | 2.16 s | 26x | — |
 
 </details>
 
@@ -910,7 +932,7 @@ Every runner executes the same work, so wall times compare directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-minigzip-dark.svg">
-  <img alt="app/minigzip: seconds per run for 21 runners on a log scale, fastest first. wasmtime is fastest at 45.3 ms, then dewasm-tinygo at 48.1 ms; pywasm-pypy is slowest at 84.7 s, a span of 1870x. The table below carries every number." src="figs/app-minigzip.svg">
+  <img alt="app/minigzip: seconds per run for 22 runners on a log scale, fastest first. wasmtime is fastest at 42.2 ms, then dewasm-tinygo at 44.4 ms; pywasm-pypy is slowest at 63.1 s, a span of 1490x. The table below carries every number." src="figs/app-minigzip.svg">
 </picture>
 
 <details>
@@ -918,27 +940,28 @@ Every runner executes the same work, so wall times compare directly.
 
 | Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
 | --- | --- | --- | --- | --- | --- |
-| `wasmtime` | 7 | 44.9 ms | 45.3 ms | 1.00x | — |
-| `wasmer` | 3 | 53.2 ms | 57.2 ms | 1.19x | — |
-| `wasmedge` | 1 | 2.23 s | 2.23 s | 50x | — |
-| `wazero` | 4 | 86.8 ms | 87.4 ms | 1.93x | — |
-| `wasm3` | 2 | 174.5 ms | 174.6 ms | 3.89x | — |
-| `dewasm-ruby` | 1 | 6.54 s | 6.90 s | 146x | — |
-| `dewasm-ruby-yjit` | 1 | 1.84 s | 1.85 s | 41x | — |
-| `dewasm-ruby-zjit` | 1 | 3.57 s | 3.58 s | 80x | — |
-| `dewasm-monoruby` | 1 | 705.5 ms | 715.5 ms | 16x | — |
-| `dewasm-jruby` | 1 | 36.06 s | 37.88 s | 804x | — |
-| `dewasm-python` | 1 | 15.63 s | 15.73 s | 348x | — |
-| `dewasm-python-jit` | 1 | 19.29 s | 20.48 s | 430x | — |
-| `dewasm-pypy` | 1 | 2.86 s | 2.86 s | 64x | — |
-| `dewasm-graalpy` | 1 | 7.53 s | 7.61 s | 168x | — |
-| `dewasm-perl` | 1 | 10.54 s | 10.55 s | 235x | — |
-| `dewasm-go` | 4 | 54.9 ms | 55.0 ms | 1.22x | — |
-| `dewasm-tinygo` | 5 | 48.0 ms | 48.1 ms | 1.07x | — |
-| `dewasm-java` | 1 | 486.0 ms | 495.9 ms | 11x | — |
-| `dewasm-codon` | 3 | 65.8 ms | 66.4 ms | 1.47x | — |
-| `wasm3-ruby-yjit` | 1 | 58.96 s | 59.01 s | 1314x | — |
-| `pywasm-pypy` | 1 | 84.48 s | 84.66 s | 1883x | 273.7 ms |
+| `wasmtime` | 5 | 42.1 ms | 42.2 ms | 1.00x | — |
+| `wasmer` | 6 | 48.2 ms | 48.3 ms | 1.14x | — |
+| `wasmedge` | 1 | 2.16 s | 2.16 s | 51x | — |
+| `wazero` | 4 | 81.9 ms | 82.6 ms | 1.94x | — |
+| `wasm3` | 2 | 167.5 ms | 168.9 ms | 3.98x | — |
+| `dewasm-ruby` | 1 | 6.22 s | 6.23 s | 148x | — |
+| `dewasm-ruby-yjit` | 1 | 1.73 s | 1.74 s | 41x | — |
+| `dewasm-ruby-zjit` | 1 | 3.37 s | 3.39 s | 80x | — |
+| `dewasm-monoruby` | 1 | 669.1 ms | 670.4 ms | 16x | — |
+| `dewasm-jruby` | 1 | 30.91 s | 31.75 s | 734x | — |
+| `dewasm-spinel` | 1 | 1.18 s | 1.18 s | 28x | — |
+| `dewasm-python` | 1 | 14.94 s | 14.98 s | 355x | — |
+| `dewasm-python-jit` | 1 | 18.66 s | 18.69 s | 443x | — |
+| `dewasm-pypy` | 1 | 2.46 s | 2.46 s | 58x | — |
+| `dewasm-graalpy` | 1 | 7.01 s | 7.22 s | 166x | — |
+| `dewasm-perl` | 1 | 10.18 s | 10.18 s | 242x | — |
+| `dewasm-go` | 1 | 51.2 ms | 51.4 ms | 1.22x | — |
+| `dewasm-tinygo` | 1 | 44.2 ms | 44.4 ms | 1.05x | — |
+| `dewasm-java` | 1 | 463.4 ms | 471.6 ms | 11x | — |
+| `dewasm-codon` | 1 | 61.6 ms | 62.1 ms | 1.46x | — |
+| `wasm3-ruby-yjit` | 1 | 56.32 s | 56.34 s | 1337x | — |
+| `pywasm-pypy` | 1 | 63.04 s | 63.06 s | 1496x | 226.3 ms |
 
 </details>
 
