@@ -37,7 +37,7 @@ pub(crate) fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
 
 /// Each line of Markdown `text` that holds text a reader sees.
 /// Table rows are read only with `read_tables`.
-/// The length bound exempts them, and the vocabulary does not.
+/// The length bound does not apply to them, and the vocabulary does.
 pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
     let line_starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
@@ -63,7 +63,7 @@ pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
             // Cells are separate, so a word never runs across a cell border.
             Event::End(TagEnd::TableCell) => append(&mut lines[line_of(range.start)], "", " "),
             Event::Start(Tag::MetadataBlock(_)) => {
-                // A metadata block is YAML, so each of its lines is read as written.
+                // A `MetadataBlock` is YAML, so each of its lines is read as written.
                 let block = &text[range.clone()];
                 let first = line_of(range.start);
                 for (index, raw) in block.lines().enumerate().skip(1) {
@@ -99,6 +99,28 @@ fn append(line: &mut TextLine, read: &str, masked: &str) {
     line.text.push_str(masked);
 }
 
+/// Whether `content` is a Markdown link definition, as in "[`Backend`]: dewasm_backend::Backend".
+fn is_link_definition(content: &str) -> bool {
+    content.starts_with('[') && content.contains("]: ")
+}
+
+/// `text` without the target of each Markdown link, which a reader does not see.
+fn without_link_targets(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == ']' && chars.peek() == Some(&'(') {
+            for inner in chars.by_ref() {
+                if inner == ')' {
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Directives are comments a program reads, not a person, so they are not text.
 /// A unit's `# requires:` header is one, as are the lint, encoding, and build directives.
 fn is_directive(content: &str) -> bool {
@@ -121,18 +143,41 @@ fn is_directive(content: &str) -> bool {
 
 pub(crate) fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
     let mut in_fence = false;
+    // Inside a `/* ... */` block, where a line may start with `*` instead of a marker.
+    let mut in_block = false;
     let mut out = Vec::new();
     for (index, line) in text.lines().enumerate() {
         let trimmed = line.trim_start();
+        let was_in_block = in_block;
+        if markers.contains(&"/*") {
+            if was_in_block {
+                in_block = !trimmed.contains("*/");
+            } else if let Some(after) = trimmed.strip_prefix("/*") {
+                in_block = !after.contains("*/");
+            }
+        }
         if trimmed.starts_with("#!") || trimmed.starts_with("#[") {
             continue;
         }
-        let Some(rest) = markers.iter().find_map(|m| trimmed.strip_prefix(m)) else {
+        // A line that starts with `*` outside a block is code, such as a pointer dereference.
+        let rest = if was_in_block {
+            Some(trimmed)
+        } else {
+            markers
+                .iter()
+                .filter(|m| **m != "*")
+                .find_map(|m| trimmed.strip_prefix(m))
+        };
+        let Some(rest) = rest else {
             continue;
         };
         let content = rest
             .trim_start_matches(['/', '!', '*', '#', ';'])
             .trim_start();
+        let content = content.trim_end().trim_end_matches("*/").trim_end();
+        if content.is_empty() {
+            continue;
+        }
         if is_directive(content) {
             continue;
         }
@@ -140,13 +185,14 @@ pub(crate) fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
             in_fence = !in_fence;
             continue;
         }
-        if in_fence || content.starts_with('|') {
+        // A doc comment is Markdown, so a link definition names a target, not a sentence.
+        if in_fence || content.starts_with('|') || is_link_definition(content) {
             continue;
         }
         out.push(TextLine {
             number: index + 1,
             length: line.chars().count(),
-            text: mask_code_spans(content),
+            text: without_link_targets(&mask_code_spans(content)),
         });
     }
     out
@@ -170,7 +216,7 @@ fn mask_code_spans(content: &str) -> String {
 }
 
 /// Whether a sentence ends mid-line and another starts after it.
-/// An abbreviation such as "e.g." and a leading ordered-list number do not end a sentence.
+/// A short form such as "e.g." and a leading ordered-list number do not end a sentence.
 fn holds_two_sentences(text: &str) -> bool {
     let text = strip_list_number(text);
     let chars: Vec<char> = text.chars().collect();
@@ -282,8 +328,8 @@ mod tests {
         );
     }
 
-    /// Files whose comments predate the vocabulary rules, which the check skips until rewritten.
-    /// A listed file that already passes fails the check, so the list only shrinks.
+    /// Files with comments written before the vocabulary rules, skipped until rewritten.
+    /// A listed file that already passes fails the check, so the list only gets shorter.
     const VOCABULARY_UNCHECKED: &str = include_str!("vocabulary_unchecked.txt");
 
     #[test]
@@ -352,6 +398,36 @@ mod tests {
             (2, 21, "Item with with_units.".to_owned()),
         ];
         assert_eq!(texts(markdown_lines(md, false)), expected);
+    }
+
+    #[test]
+    fn doc_comment_link_targets_are_not_text() {
+        let rust = "/// See [`run`](crate::run_all).\n/// [`Backend`]: dewasm_backend::Backend\n";
+        let texts: Vec<String> = comment_lines(&["//"], rust)
+            .into_iter()
+            .map(|l| l.text)
+            .collect();
+        assert_eq!(texts, ["See [`xxx`]."]);
+    }
+
+    #[test]
+    fn block_comments_are_read_and_code_is_not() {
+        let c = "/* One sentence. */\n/*\n * Inside a block.\n */\n*--p = (char)v;\n";
+        let texts: Vec<String> = comment_lines(&["//", "/*", "*"], c)
+            .into_iter()
+            .map(|l| l.text)
+            .collect();
+        assert_eq!(texts, ["One sentence.", "Inside a block."]);
+    }
+
+    #[test]
+    fn a_shell_glob_opens_no_block() {
+        let sh = "case $p in\n  /*) echo abs ;;\n  # A comment.\nesac\n";
+        let texts: Vec<String> = comment_lines(&["#"], sh)
+            .into_iter()
+            .map(|l| l.text)
+            .collect();
+        assert_eq!(texts, ["A comment."]);
     }
 
     #[test]

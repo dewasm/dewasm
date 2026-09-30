@@ -1,5 +1,8 @@
+# Files whose comments were written before the vocabulary rules, one path per line.
+# The vocabulary check skips them; remove a path when its comments use only allowed words.
 .github/actions/apps-cache-tools/action.yml
 .github/workflows/ci.yml
+Cargo.toml
 benchmarks/c/build.sh
 benchmarks/drivers/wardite.rb
 benchmarks/setup.sh
@@ -19,7 +22,6 @@ benchmarks/wat/i64_div.wat
 benchmarks/wat/mem_narrow.wat
 benchmarks/wat/mem_rw.wat
 benchmarks/wat/tail_call.wat
-Cargo.toml
 crates/dewasm-backend-bash/Cargo.toml
 crates/dewasm-backend-bash/src/lib.rs
 crates/dewasm-backend-bash/tests/e2e.rs
@@ -65,7 +67,6 @@ crates/dewasm-backend-bash/units/rt/f64_trunc.sh
 crates/dewasm-backend-bash/units/rt/i32_rotl.sh
 crates/dewasm-backend-bash/units/rt/i32_rotr.sh
 crates/dewasm-backend-bash/units/rt/i64_div_s.sh
-crates/dewasm-backend-bash/units/rt/i64_div_u.sh
 crates/dewasm-backend-bash/units/rt/i64_rem_s.sh
 crates/dewasm-backend-bash/units/rt/i64_rem_u.sh
 crates/dewasm-backend-bash/units/rt/i64_rotl.sh
@@ -139,17 +140,15 @@ crates/dewasm-backend-codon/units/rt/c_open.codon
 crates/dewasm-backend-codon/units/rt/cerr.codon
 crates/dewasm-backend-codon/units/rt/clock_ns.codon
 crates/dewasm-backend-codon/units/rt/f32_demote.codon
-crates/dewasm-backend-codon/units/rt/f32_div.codon
 crates/dewasm-backend-codon/units/rt/f32_min.codon
-crates/dewasm-backend-codon/units/rt/f64_div.codon
 crates/dewasm-backend-codon/units/rt/f64_promote.codon
 crates/dewasm-backend-codon/units/rt/fstat.codon
 crates/dewasm-backend-codon/units/rt/host_check.codon
 crates/dewasm-backend-codon/units/rt/lexists.codon
 crates/dewasm-backend-codon/units/rt/path_stat.codon
 crates/dewasm-backend-codon/units/rt/realpath_ns.codon
-crates/dewasm-backend-codon/units/rt/stat_read.codon
 crates/dewasm-backend-codon/units/rt/stat.codon
+crates/dewasm-backend-codon/units/rt/stat_read.codon
 crates/dewasm-backend-codon/units/rt/wasi_fd.codon
 crates/dewasm-backend-codon/units/table/slot.codon
 crates/dewasm-backend-codon/units/wasi/_class.codon
@@ -247,7 +246,6 @@ crates/dewasm-backend-java/units/memory/_class.java
 crates/dewasm-backend-java/units/memory/copy.java
 crates/dewasm-backend-java/units/memory/grow.java
 crates/dewasm-backend-java/units/rt/_prelude.java
-crates/dewasm-backend-java/units/rt/data_from_b64.java
 crates/dewasm-backend-java/units/rt/exit.java
 crates/dewasm-backend-java/units/rt/f32_canon.java
 crates/dewasm-backend-java/units/rt/f32_max.java
@@ -367,7 +365,6 @@ crates/dewasm-backend-python/tests/spec.rs
 crates/dewasm-backend-python/tests/wasi_testsuite.rs
 crates/dewasm-backend-python/units/rt/check_import_kind.py
 crates/dewasm-backend-python/units/rt/cvt_f64_i.py
-crates/dewasm-backend-python/units/rt/f32_from_bits.py
 crates/dewasm-backend-python/units/rt/fdiv.py
 crates/dewasm-backend-python/units/rt/resolve_import.py
 crates/dewasm-backend-python/units/rt/wasm_exception.py
@@ -406,8 +403,6 @@ crates/dewasm-backend-ruby/tests/e2e.rs
 crates/dewasm-backend-ruby/tests/module_name.rs
 crates/dewasm-backend-ruby/tests/spec.rs
 crates/dewasm-backend-ruby/tests/wasi_testsuite.rs
-crates/dewasm-backend-ruby/units/memory/_class.rb
-crates/dewasm-backend-ruby/units/memory/grow.rb
 crates/dewasm-backend-ruby/units/rt/check_import_kind.rb
 crates/dewasm-backend-ruby/units/rt/cvt_f64_i.rb
 crates/dewasm-backend-ruby/units/rt/low_mask.rb
@@ -459,14 +454,13 @@ crates/dewasm-core/tests/data_merge.rs
 crates/dewasm-core/tests/debug_line.rs
 crates/dewasm-core/tests/folding.rs
 crates/dewasm-test-helper/Cargo.toml
+crates/dewasm-test-helper/src/apps.rs
 crates/dewasm-test-helper/src/apps_capi.rs
 crates/dewasm-test-helper/src/apps_convert.rs
 crates/dewasm-test-helper/src/apps_fs.rs
-crates/dewasm-test-helper/src/apps.rs
 crates/dewasm-test-helper/src/backend.rs
 crates/dewasm-test-helper/src/doom.rs
 crates/dewasm-test-helper/src/fixtures.rs
-crates/dewasm-test-helper/src/folding.rs
 crates/dewasm-test-helper/src/glue.rs
 crates/dewasm-test-helper/src/lib.rs
 crates/dewasm-test-helper/src/library.rs
@@ -476,8 +470,8 @@ crates/dewasm-test-helper/src/pty.rs
 crates/dewasm-test-helper/src/qjs_repl.rs
 crates/dewasm-test-helper/src/snapshots.rs
 crates/dewasm-test-helper/src/spec.rs
-crates/dewasm-test-helper/src/wasi_testsuite.rs
 crates/dewasm-test-helper/src/wasi.rs
+crates/dewasm-test-helper/src/wasi_testsuite.rs
 crates/dewasm-test-helper/src/wasmtime_backend.rs
 crates/dewasm-test-helper/tests/apps_cache_pins.rs
 crates/dewasm-test-helper/tests/apps_wasmtime.rs
@@ -486,9 +480,6 @@ crates/dewasm/src/main.rs
 crates/dewasm/tests/data_file.rs
 crates/dewasm/tests/dwarf_line.rs
 crates/dewasm/tests/module_name.rs
-crates/text-check/setup.sh
-crates/text-check/src/lib.rs
-crates/text-check/src/vocabulary.rs
 crates/xtask/Cargo.toml
 crates/xtask/src/bench/chart.rs
 crates/xtask/src/bench/measure.rs
@@ -528,8 +519,8 @@ examples/apps/scripts/treesitter.sh
 examples/apps/scripts/wasm3.sh
 examples/apps/scripts/zeroperl.sh
 examples/apps/setup.sh
-examples/apps/src/mruby_build_config.rb
 examples/apps/src/mruby-wasi-puts/mrblib/puts.rb
+examples/apps/src/mruby_build_config.rb
 examples/doom/bash/build.sh
 examples/doom/bash/dist.sh
 examples/doom/bash/main.sh
@@ -541,8 +532,8 @@ examples/doom/go/build.sh
 examples/doom/go/doom/host.go
 examples/doom/go/main.go
 examples/doom/go/run.sh
-examples/doom/java/build.sh
 examples/doom/java/Main.java
+examples/doom/java/build.sh
 examples/doom/perl/build.sh
 examples/doom/perl/main.pl
 examples/doom/perl/run.sh
@@ -564,8 +555,8 @@ examples/nes/go/build.sh
 examples/nes/go/main.go
 examples/nes/go/nes/host.go
 examples/nes/go/run.sh
-examples/nes/java/build.sh
 examples/nes/java/Main.java
+examples/nes/java/build.sh
 examples/nes/java/run.sh
 examples/nes/perl/build.sh
 examples/nes/perl/main.pl
@@ -602,5 +593,5 @@ examples/wat/wasi_poll_oneoff.wat
 examples/wat/wasi_readdir_high_cookie.wat
 examples/wat/wasi_rights_notcapable.wat
 examples/wat/wasi_standalone_dir.wat
-examples/wat/wasi_trailing_slash_symlink.wat
 examples/wat/wasi_trailing_slash.wat
+examples/wat/wasi_trailing_slash_symlink.wat

@@ -2,9 +2,9 @@
 
 # Populate crates/text-check/cache/ with the word lists the vocabulary check reads.
 # They are NGSL 1.2 and NAWL 1.2 by Browne, Culligan, and Phillips.
-# The official source is https://www.newgeneralservicelist.com.
+# The official source is `https://www.newgeneralservicelist.com`.
 # Both lists are licensed under CC BY-SA 4.0, so they are fetched, never committed.
-# The vocabulary check fails loudly when the cache is absent.
+# The vocabulary check fails loudly when the cache is missing.
 
 # `--check` verifies instead of fetching.
 # It names every list whose cached copy does not match its sha256, and exits nonzero.
@@ -31,7 +31,7 @@ lists=(
   "NAWL_12_lemmatized_for_research c28ef95623d79c08a4060d6d6d51d3331115e75a18ee247caa4cc3ae5506b92e"
 )
 origin=https://www.newgeneralservicelist.com/s
-# The Wayback Machine copy is tried only when the official host fails to download at all.
+# The Wayback Machine copy is tried only when fetching from the official host fails at all.
 # The sha256 is what makes it safe to accept.
 mirror=https://web.archive.org/web/2025id_/https://www.newgeneralservicelist.com/s
 
