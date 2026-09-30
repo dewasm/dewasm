@@ -103,6 +103,11 @@ What remains is to remove words that carry nothing, or to split.
   Nearly every comment would keep the full 100 characters, and would run 20 columns past the code.
 - **A clause rule alone**, as Simple English Wikipedia has.
   Nothing in it can be checked, and a check is what kept the length rule alive.
+- **An existing prose linter for the checks**, Vale or textlint.
+  Each splits text into sentences itself, and each split wrongly on text that meets the rules.
+  Vale joined two lines at `docs/testing.md.`, and textlint at a bold label that ends in a period.
+  Here a line is a sentence, so a check that counts lines has nothing to split.
+  A count of connectives per sentence, tried in Vale for the clause rule, gave only false positives.
 
 ## Consequences
 
@@ -114,7 +119,9 @@ What remains is to remove words that carry nothing, or to split.
   Bringing it under is a pass over every document, checking each sentence's meaning as it shortens.
 - Negative: counting characters as read needs a Markdown parser in the check.
   A plain substitution miscounts a `*` or `_` inside a code span.
-- Carry-over: that pass adds two checks to `cargo test -p xtask`.
+- Carry-over: that pass adds three checks to `cargo test -p xtask`.
   One counts a Markdown sentence as read, with table rows and fenced code exempt.
-  The other counts the columns of a comment line in source code.
+  Another counts the columns of a comment line in source code.
+  The third reports a use of a word listed in [`agents/vocabulary.md`](../vocabulary.md).
+  That list is a table, so a linter's rule files can be generated from it later.
   Before they land, only edited text is brought under the rules.

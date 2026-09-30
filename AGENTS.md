@@ -89,6 +89,8 @@ A sentence has a length bound, and the other rules remove every way to meet it e
   Do not vary wording for style, and do not swap in a shorter word that means less.
 - State facts, not intensifiers: a size, a count, a version.
   "Byte for byte" and "fully" add nothing a reader can check.
+- [`agents/vocabulary.md`](agents/vocabulary.md) lists the words these three rules exclude so far.
+  Add a word there when a review finds a new one.
 - Do not use dashes (`—`, `–`, or a spaced `--`) as punctuation.
   Use a colon, a comma, parentheses, or a new sentence instead.
   Hyphens in words and ranges, `--` in command lines, and `—` as a table placeholder stay.

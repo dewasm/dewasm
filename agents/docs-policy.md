@@ -22,6 +22,7 @@ A document a user would never open, but an agent must consult before changing so
 | [agents/apps-audit.md](apps-audit.md) | The real-world app test record and feature verdicts | Agents and contributors adding an app target | By hand |
 | [agents/alternative-ruby-runtimes.md](alternative-ruby-runtimes.md) | How to run the Ruby suites on a Ruby other than CRuby, and how to read and narrow what fails | Agents measuring another Ruby implementation | By hand |
 | [agents/measurement-records.md](measurement-records.md) | The checklist around a speed or size run, and what makes a result suspect | Agents taking a record | By hand |
+| [agents/vocabulary.md](vocabulary.md) | The words the writing rules exclude, with what to write in their place | Agents writing prose | By hand |
 | [docs/getting-started.md](../docs/getting-started.md) | Tutorial: a verified end-to-end walkthrough | New users | By hand (verify every command) |
 | [docs/backends/](../docs/backends/) | Per-target reference: output shape, requirements, caveats, provider usage | Users of a specific target | By hand |
 | [docs/standalone-interface.md](../docs/standalone-interface.md) | The standalone runtime interface (argv, `--dir`, env, exit/trap), uniform across backends | Users running standalone output | By hand |
@@ -63,6 +64,7 @@ A document a user would never open, but an agent must consult before changing so
 - A rule that binds every change → a line in `AGENTS.md`, citing the record that holds its rationale.
 - A new real-world app target → an audited row in `agents/apps-audit.md`.
 - A trap that misleads whoever takes a measurement → `agents/measurement-records.md`; the commands and the methodology stay in `docs/benchmarks/` and `docs/sizes/`.
+- A word the writing rules exclude → `agents/vocabulary.md`.
 - A downstream project shipping dewasm output → an entry in [docs/users.md](../docs/users.md).
 - A performance number → a workload under `benchmarks/`, measured by `cargo xtask record-speed`.
   Never a hand-written figure in prose: numbers drift silently, and the ratio a benchmark reports depends on the workload.
