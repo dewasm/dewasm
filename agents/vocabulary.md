@@ -21,6 +21,15 @@ That is why a short form such as `spec` or `docs` needs no entry.
 It names a command or a directory, and a sentence says "specification" or "documents".
 A word inside double quotes is a mention, not a use, and is not checked.
 
+### Not derived forms
+
+A word that only looks derived needs another source, as `siren` is not `sir` with `-en`.
+The derivation rules skip a stem shorter than three letters and the words in the table below.
+
+| Not a derived form |
+| --- |
+| `arity`, `binaryen`, `fatal`, `flattering`, `outlier`, `paren`, `parity`, `refactor`, `relay`, `resume`, `retention`, `retract`, `siren`, `unwasm`, `virtual`, `wasmer` |
+
 A word from none of these sources is a question, not an error in itself.
 Either a plainer word says the same, or the word is a term of the field.
 A reader who looks up a term of the field reaches an official document.
@@ -34,8 +43,16 @@ Add such a term to a table below; write the plainer word otherwise.
 | --- | --- |
 | Programs and builds | `app`, `backend`, `baseline`, `cache`, `compatible`, `compile`, `crate`, `directory`, `fetch`, `linkage`, `repository`, `runtime`, `standalone`, `submodule`, `toolchain`, `upstream` |
 | Code | `alias`, `arithmetic`, `byte`, `callsite`, `dataflow`, `dispatch`, `exhaustive`, `fuse`, `hash`, `header`, `hoist`, `identifier`, `integer`, `invariant`, `iteration`, `literal`, `lookup`, `macro`, `mask`, `namespace`, `numeric`, `operand`, `precondition`, `recursion`, `token`, `unsigned`, `wildcard` |
-| Tests and tools | `benchmark`, `conformance`, `diff`, `harness`, `lint`, `linter`, `parse`, `parser`, `snapshot`, `suite`, `testsuite`, `verify` |
+| Tests and tools | `benchmark`, `conformance`, `diff`, `glue`, `harness`, `lint`, `linter`, `oracle`, `parse`, `parser`, `shim`, `snapshot`, `suite`, `testsuite`, `verify` |
 | Text and markup | `indentation`, `markup`, `placeholder`, `prefix`, `template` |
+
+### Abbreviations
+
+An abbreviation below is written in this one form, and no other.
+
+| Abbreviation |
+| --- |
+| `e.g.`, `i.e.`, `etc.`, `vs.` |
 
 ### Terms with one meaning
 
@@ -112,6 +129,8 @@ The lists do not apply to this file.
 | --- | --- | --- |
 | `status quo` | the current state | — |
 | `verbatim` | unchanged | — |
+| `cf`, `cf.` | see, refer to | — |
+| `v.s.`, `vs`, `etc` | `vs.`, `etc.` | `vs.`, `etc.` |
 
 ### Intensifiers
 

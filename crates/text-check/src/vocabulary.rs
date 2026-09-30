@@ -88,6 +88,8 @@ pub struct Vocabulary {
     names: HashSet<String>,
     terms: HashSet<String>,
     writing_terms: HashSet<String>,
+    /// Words that only look derived, which the derivation rules skip.
+    not_derived: HashSet<String>,
     exclusions: Vec<Exclusion>,
 }
 
@@ -130,6 +132,13 @@ impl Vocabulary {
             .collect();
         terms.extend(one_meaning);
         let writing_terms = spans_of("Terms for writing");
+        let not_derived = spans_of("Not derived forms");
+        // An abbreviation's period ends a token, so the word the check sees has none.
+        terms.extend(
+            spans_of("Abbreviations")
+                .iter()
+                .map(|a| a.trim_end_matches('.').to_owned()),
+        );
         let writing_documents: HashSet<String> = sections
             .iter()
             .filter(|(t, _)| t == "Terms for writing")
@@ -189,6 +198,7 @@ impl Vocabulary {
             names,
             terms,
             writing_terms,
+            not_derived,
             exclusions,
         })
     }
@@ -284,13 +294,22 @@ impl Vocabulary {
     fn allowed_word(&self, word: &str, writing: bool) -> bool {
         inflections(word).any(|w| {
             self.known(&w, writing)
-                || derivations(&w).any(|b| {
+                || self.derivations(&w).any(|b| {
                     inflections(&b).any(|b1| {
                         self.known(&b1, writing)
-                            || derivations(&b1).any(|b2| self.known(&b2, writing))
+                            || self.derivations(&b1).any(|b2| self.known(&b2, writing))
                     })
                 })
         })
+    }
+
+    /// The words `word` could be derived from, unless the vocabulary says it is not derived.
+    fn derivations<'a>(&self, word: &'a str) -> Box<dyn Iterator<Item = String> + 'a> {
+        if self.not_derived.contains(word) {
+            Box::new(std::iter::empty())
+        } else {
+            Box::new(derivations(word))
+        }
     }
 }
 
@@ -513,6 +532,7 @@ fn derivations(word: &str) -> impl Iterator<Item = String> + '_ {
             .iter()
             .filter_map(move |stem| base.as_ref().map(|b| format!("{b}{stem}")))
             .chain(undoubled)
+            .filter(|stem| stem.len() >= 3)
     });
     prefixed.chain(suffixed)
 }
@@ -526,12 +546,13 @@ mod tests {
         Vocabulary {
             base: set(&[
                 "run", "check", "fast", "use", "happy", "a", "the", "is", "gate", "wrap", "wide",
-                "rely", "verify", "trivial", "do", "list",
+                "rely", "verify", "trivial", "do", "list", "sir", "go", "corn",
             ]),
             writing_documents: set(&["AGENTS.md"]),
             names: set(&["Wasmtime"]),
             terms: set(&["backend", "wasi-sdk"]),
             writing_terms: set(&["idiom"]),
+            not_derived: set(&["siren"]),
             exclusions: vec![
                 Exclusion {
                     forms: vec!["gate".to_owned(), "gates".to_owned()],
@@ -575,7 +596,7 @@ mod tests {
         ] {
             assert!(v.allowed(word, false), "{word}");
         }
-        for word in ["gizmo", "idiom", "fd_read", "gizmo-sdk"] {
+        for word in ["gizmo", "idiom", "fd_read", "gizmo-sdk", "siren", "goer"] {
             assert!(!v.allowed(word, false), "{word}");
         }
         assert!(v.allowed("idiom", true));

@@ -225,8 +225,7 @@ fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
     if paths.is_empty() {
         paths = text_check::tracked_files(&root);
     }
-    let vocabulary =
-        text_check::vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
+    let vocabulary = text_check::vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
     let mut count = 0;
     for path in &paths {
         if !text_check::is_checked_text(path) {
