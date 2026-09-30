@@ -2,11 +2,14 @@
 
 <!-- AUTO-GENERATED from the backend declarations; do not edit by hand. Regenerate: cargo xtask update-support-docs -->
 
-The spec harness only tolerates test skips attributable to a feature that is not `Supported` here; an unattributable failure is treated as a bug. Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.
+The spec harness only tolerates test skips attributable to a feature that is not `Supported` here.
+An unattributable failure is treated as a bug.
+Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.
 
 ## Features
 
-The features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.
+These are the features a backend can meaningfully differ on.
+The core rejects every other `Feature` variant for every backend.
 
 | Feature | ruby | bash | python | perl | go | java | codon |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -21,7 +24,9 @@ The features a backend can meaningfully differ on; every other `Feature` variant
 
 ## WASI preview 1
 
-Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS stub. `—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.
+The table is derived from the runtime units.
+Unimplemented syscalls resolve to an ENOSYS stub.
+`—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.
 
 | Function | ruby | bash | python | perl | go | java | codon |
 | --- | --- | --- | --- | --- | --- | --- | --- |

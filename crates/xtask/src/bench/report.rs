@@ -1,8 +1,14 @@
-//! The two ends of the speed record: the machine-readable file `cargo xtask record-speed` writes under `records/` and the `docs/benchmarks/results.md` `cargo xtask render-speed` generates from it.
+//! The two ends of the speed record.
+//! One is the machine-readable file `cargo xtask record-speed` writes under `records/`.
+//! The other is the `docs/benchmarks/results.md` `cargo xtask render-speed` generates from it.
 //!
-//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot and no freshness test guards them, unlike `docs/support.md` (`cargo xtask update-support-docs`) or the execution snapshots.
-//! The JSON is the record: host, every runtime's version string *as captured by executing it*, the date, and every sample.
-//! The markdown is a rendering of that same record, and it is required to state the losses as plainly as the wins.
+//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot.
+//! No freshness test guards them.
+//! `docs/support.md` (`cargo xtask update-support-docs`) and the execution snapshots have one.
+//! The JSON is the record: host, the date, and every sample.
+//! It also holds every runtime's version string *as captured by executing it*.
+//! The markdown is a rendering of that same record.
+//! It is required to state the losses as plainly as the wins.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -13,7 +19,9 @@ use serde::{Deserialize, Serialize};
 use crate::bench::chart::Chart;
 
 /// The current speed-record schema.
-/// A bump means `cargo xtask migrate-records` learns the upgrade; every reader supports only this version and names that command when it meets an older record, so cross-version handling lives in the migration alone.
+/// A bump means `cargo xtask migrate-records` learns the upgrade.
+/// Every reader supports only this version and names that command when it meets an older record.
+/// So cross-version handling lives in the migration alone.
 pub const SCHEMA: u32 = 2;
 
 /// The full result record.
@@ -76,13 +84,15 @@ pub enum Outcome {
         reason: String,
     },
     /// Attempted and broke.
-    /// A stdout mismatch against wasmtime lands here too: a wrong answer is a hard failure, not a slow pass.
+    /// A stdout mismatch against wasmtime lands here too.
+    /// A wrong answer is a hard failure, not a slow pass.
     Failed {
         reason: String,
     },
 }
 
-/// Why a skipped cell is not measured, as a class; the reason string carries the specifics without restating the class.
+/// Why a skipped cell is not measured, as a class.
+/// The reason string carries the specifics without restating the class.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SkipKind {
@@ -108,17 +118,21 @@ impl SkipKind {
 pub struct Measurement {
     /// The calibrated `<iterations>`; `null` for an app workload, which has no iteration parameter.
     pub iterations: Option<u64>,
-    /// For apps: executions averaged into one sample ([`crate::bench::measure::repeat_app`]); `null` for microbenchmarks.
+    /// For apps: executions averaged into one sample ([`crate::bench::measure::repeat_app`]).
+    /// `null` for microbenchmarks.
     #[serde(default)]
     pub runs_per_sample: Option<u64>,
     pub reps: usize,
-    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run: process startup plus module load, the cold-start metric that gets subtracted from `t(N)`.
+    /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run.
+    /// That is process startup plus module load, the cold-start metric subtracted from `t(N)`.
     /// `null` for an app, which is timed as whole wall time.
     pub cold_start: Option<Samples>,
     /// `t(N)`: the full run.
     pub total: Samples,
     /// `t(N) - t(0)` on the minima.
-    /// `null` when there is no `t(0)` to subtract, or when the difference came out non-positive (pure noise: the workload is too small to see on this runner).
+    /// `null` when there is no `t(0)` to subtract.
+    /// Also `null` when the difference came out non-positive.
+    /// That is pure noise: the workload is too small to see on this runner.
     pub compute_s: Option<f64>,
     pub ns_per_op_min: Option<f64>,
     pub ns_per_op_median: Option<f64>,
@@ -155,7 +169,8 @@ impl Report {
 }
 
 /// Read the speed record at `path`, accepting only the current [`SCHEMA`].
-/// Every command that consumes a record loads it through here; an older record is not parsed further, it is redirected to `cargo xtask migrate-records`.
+/// Every command that consumes a record loads it through here.
+/// An older record is not parsed further; it is redirected to `cargo xtask migrate-records`.
 pub fn load(path: &Path) -> anyhow::Result<Report> {
     #[derive(Deserialize)]
     struct SchemaProbe {
@@ -176,10 +191,14 @@ pub fn load(path: &Path) -> anyhow::Result<Report> {
         .with_context(|| format!("{} is not a schema-{SCHEMA} speed record", path.display()))
 }
 
-/// Render `docs/benchmarks/results.md`: the house style of `docs/related-work.md` and `docs/backends/*.md` (no front matter, plain `##` headings, markdown tables), plus the generated-file marker `docs/support.md` carries.
+/// Render `docs/benchmarks/results.md` in the house style of `docs/related-work.md`.
+/// `docs/backends/*.md` use the same style: no front matter, plain `##` headings, markdown tables.
+/// The doc adds the generated-file marker `docs/support.md` carries.
 ///
-/// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`; each one is embedded above the table for its own workload.
-/// Passing an empty slice renders the doc unchanged, which is what makes the charts additive rather than load-bearing.
+/// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`.
+/// Each one is embedded above the table for its own workload.
+/// Passing an empty slice renders the doc unchanged.
+/// That is what makes the charts additive rather than required.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
     out.push_str("# Benchmarks\n\n");
@@ -187,7 +206,7 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
 
     let _ = writeln!(
         out,
-        "Measured performance of dewasm-generated code against wasm runtimes and same-language wasm interpreters, taken on one host on one day.\nHow to run and read these measurements is [README.md](README.md)."
+        "Measured performance of dewasm-generated code, taken on one host on one day.\nIt is compared against wasm runtimes and same-language wasm interpreters.\nHow to run and read these measurements is [README.md](README.md)."
     );
     out.push('\n');
 
@@ -197,7 +216,9 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     out
 }
 
-/// The quantity the tables and the charts both compare on, taken on the minima: normalized throughput (ns/op) for a microbenchmark, whole wall time for an app, which has no iteration parameter.
+/// The quantity the tables and the charts both compare on, taken on the minima.
+/// It is normalized throughput (ns/op) for a microbenchmark.
+/// It is whole wall time for an app, which has no iteration parameter.
 fn comparable(m: &Measurement, is_app: bool) -> Option<f64> {
     if is_app {
         Some(m.total.min_s)
@@ -228,9 +249,10 @@ fn render_environment(out: &mut String, report: &Report) {
 fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
     out.push_str("## Results\n\n");
     if !charts.is_empty() {
-        out.push_str("Each workload has a chart (log axis, seconds; the title states the unit) with its full numbers folded underneath.\nColor is the runner family.\n\n");
+        out.push_str("Each workload has a chart with its full numbers folded underneath.\nA chart has a log axis in seconds, and its title states the unit.\nColor is the runner family.\n\n");
     }
-    // The two groups measure different quantities (per iteration vs per run), so they get separate subsections.
+    // The two groups measure different quantities (per iteration vs per run).
+    // So they get separate subsections.
     // Grouping derives from the label prefix; an empty group emits no heading.
     let workloads = ordered_workloads(report);
     let mut group_open: Option<bool> = None;
@@ -251,7 +273,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
             out.push_str(if in_app_group {
                 "### Application benchmarks\n\nSeconds per **run** of a real cached program on fixed input.\nEvery runner executes the same work, so wall times compare directly.\n\n"
             } else {
-                "### Microbenchmarks\n\nSeconds per **iteration**.\nIteration counts are calibrated per runner, so compare the per-iteration figures, not the raw wall times.\n\n"
+                "### Microbenchmarks\n\nSeconds per **iteration**.\nIteration counts are calibrated per runner.\nSo compare the per-iteration figures, not the raw wall times.\n\n"
             });
             group_open = Some(in_app_group);
         }
@@ -268,8 +290,10 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                 _ => None,
             });
 
-        // The table is the reference, not the finding, so it goes behind a disclosure: chart visible, numbers one click away.
-        // The blank line after </summary> is load-bearing: GitHub will not render a markdown table inside <details> without it.
+        // The table is the reference, not the finding, so it goes behind a disclosure.
+        // The chart is visible, and the numbers are one click away.
+        // The blank line after </summary> is required.
+        // GitHub will not render a markdown table inside <details> without it.
         let _ = writeln!(
             out,
             "<details>\n<summary>Full numbers for <code>{workload}</code></summary>\n"
@@ -286,7 +310,8 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
             match &cell.outcome {
                 Outcome::Ok(m) => render_ok_row(out, cell, m, baseline, is_app),
                 Outcome::Failed { reason } => {
-                    // One empty cell per column but the last, which carries the reason: apps have 6 columns, microbenchmarks 8.
+                    // One empty cell per column but the last, which carries the reason.
+                    // Apps have 6 columns, microbenchmarks 8.
                     let span = if is_app { 5 } else { 7 };
                     let _ = writeln!(
                         out,
@@ -304,8 +329,11 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
 }
 
 /// A chart, above the table it summarizes.
-/// `<picture>` rather than a bare `<img>` because dark mode is a *selected* variant with its own file: GitHub honours the `prefers-color-scheme` source, and a renderer that does not falls back to the light `<img>`.
-/// Paths are relative to `docs/benchmarks/results.md`, which sits beside the `figs/` directory the SVGs are written into.
+/// `<picture>` rather than a bare `<img>`: dark mode is a *selected* variant with its own file.
+/// GitHub honours the `prefers-color-scheme` source.
+/// A renderer that does not falls back to the light `<img>`.
+/// Paths are relative to `docs/benchmarks/results.md`.
+/// That file sits beside the `figs/` directory the SVGs are written into.
 fn render_chart(out: &mut String, chart: &Chart) {
     out.push_str("<picture>\n");
     let _ = writeln!(
@@ -375,7 +403,7 @@ fn render_gaps(out: &mut String, report: &Report) {
         out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
         return;
     }
-    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap: *cost* (runs correctly, but too slowly to keep in the suite), *capability* (the runner cannot execute the workload), *setup* (this host lacks the runner or the built module).\n\n");
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap:\n\n- *cost*: runs correctly, but too slowly to keep in the suite;\n- *capability*: the runner cannot execute the workload;\n- *setup*: this host lacks the runner or the built module.\n\n");
     out.push_str("| Workload | Runner | Kind | Reason |\n| --- | --- | --- | --- |\n");
     for cell in skipped {
         if let Outcome::Skipped { kind, reason } = &cell.outcome {
@@ -392,8 +420,9 @@ fn render_gaps(out: &mut String, report: &Report) {
     out.push('\n');
 }
 
-/// Workload labels in the order they first appear in `results`, which is the order the suite ran them.
-/// Shared with [`crate::bench::chart`] so a chart and its table can never end up in different orders.
+/// Workload labels in the order they first appear in `results`.
+/// That is the order the suite ran them.
+/// Shared with [`crate::bench::chart`], so a chart and its table can never differ in order.
 pub fn ordered_workloads(report: &Report) -> Vec<String> {
     let mut seen: Vec<String> = Vec::new();
     for cell in &report.results {
@@ -402,7 +431,9 @@ pub fn ordered_workloads(report: &Report) -> Vec<String> {
         }
     }
     // Microbenchmarks before apps, each keeping the record's own order.
-    // The doc emits one heading per group as it walks this list, so a record that happened to interleave the two families would otherwise produce a repeated heading rather than a reordered one.
+    // The doc emits one heading per group as it walks this list.
+    // A record could happen to interleave the two families.
+    // Without this, it would produce a repeated heading rather than a reordered one.
     let (micro, apps): (Vec<String>, Vec<String>) = seen
         .into_iter()
         .partition(|label| !label.starts_with("app/"));
@@ -455,7 +486,8 @@ fn md_cell(text: &str) -> String {
     text.replace('|', "\\|")
 }
 
-/// Escape text going into a double-quoted HTML attribute (the chart alt text, which is generated from runner labels and numbers).
+/// Escape text going into a double-quoted HTML attribute.
+/// That is the chart alt text, which is generated from runner labels and numbers.
 fn html_attr(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

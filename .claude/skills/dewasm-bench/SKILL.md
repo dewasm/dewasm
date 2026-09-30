@@ -1,9 +1,10 @@
 ---
 name: dewasm-bench
 description: |
-  Run and publish the benchmark measurements (cargo xtask record-speed / record-size). Use when
-  asked to run the benchmarks, take a speed or size record, or publish one. The commands live in
-  docs/benchmarks/README.md, the checklist and the traps in agents/measurement-records.md.
+  Run and publish the benchmark measurements (cargo xtask record-speed / record-size).
+  Use when asked to run the benchmarks, take a speed or size record, or publish one.
+  The commands live in docs/benchmarks/README.md.
+  The checklist and the traps live in agents/measurement-records.md.
 ---
 
 # Run a benchmark record

@@ -5,10 +5,18 @@ A plain importable module with the full WASI preview 1 surface.
 
 ## Output shape
 
-A single `.py` module: the generated module as a class, with the runtime at **module top level** under the name `<Class>Rt`, so `Add` gets `AddRt` (Python method scopes cannot see an enclosing class scope, so the runtime cannot nest inside the class as it does for Ruby; naming it after the class is what lets two artifacts share one namespace).
-Only wasm loops become real `while True`; forward branches use a per-function branch register `_br` to stay within Python's static-nesting limits.
+A single `.py` module holds the generated module as a class.
+The runtime sits at **module top level** under the name `<Class>Rt`, so `Add` gets `AddRt`.
+Python method scopes cannot see an enclosing class scope.
+So the runtime cannot nest inside the class as it does for Ruby.
+Naming it after the class is what lets two artifacts share one namespace.
+Only wasm loops become real `while True`.
+Forward branches use a per-function branch register `_br`.
+That keeps them within Python's static-nesting limits.
 
-In **library** mode the class name is `--module-name` (required in library mode) taken verbatim, one identifier matching `[A-Za-z_][A-Za-z0-9_]*`; anything else is a conversion-time error, nothing is sanitized.
+In **library** mode, `--module-name` is required and is taken verbatim as the class name.
+It is one identifier matching `[A-Za-z_][A-Za-z0-9_]*`.
+Anything else is a conversion-time error, nothing is sanitized.
 In **standalone** mode the class is always `Program` and `--module-name` is rejected.
 
 ## Requirements
@@ -18,7 +26,8 @@ No third-party packages: the output uses only the standard library.
 
 > [!WARNING]
 > Avoid CPython 3.12.0 through 3.12.3.
-> A static-block limit in those releases breaks large generated modules with deeply nested loops (issue #21).
+> A static-block limit in those releases breaks large generated modules with deeply nested loops.
+> See issue #21.
 > 3.12.4 and newer are unaffected.
 
 ## Running it
@@ -28,7 +37,8 @@ $ dewasm prog.wasm --target python --mode standalone -o prog.py
 $ python3 prog.py --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs follow the shared runtime interface (argv, `--dir` preopens, env, exit/trap): [docs/standalone-interface.md](../standalone-interface.md).
+Standalone programs follow the shared runtime interface: [docs/standalone-interface.md](../standalone-interface.md).
+It covers argv, `--dir` preopens, env, and exit/trap.
 
 Library mode:
 
@@ -39,19 +49,27 @@ print(inst.invoke("add", 2, 3))   # 5
 inst.memory                       # linear memory
 ```
 
-`proc_exit` raises `<Class>Rt.Exit` (with `.code`), spelled `AddRt.Exit` here; catch it around `invoke("_start")` in library mode.
+`proc_exit` raises `<Class>Rt.Exit` (with `.code`), spelled `AddRt.Exit` here.
+In library mode, catch it around `invoke("_start")`.
 
 ## Capabilities
 
-Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 including the filesystem** (adopting the Ruby fs model).
+Full wasm core 1.0 plus the universal baseline.
+**Full WASI preview 1 including the filesystem**, adopting the Ruby fs model.
 Non-function imports, multiple tables, and table bulk ops are supported.
-The final exception-handling proposal is supported: a thrown wasm exception is a native exception carrying its tag, catch_all cannot observe traps, and setjmp/longjmp-based C programs (mruby is the covered app case) convert and run.
+The final exception-handling proposal is supported:
+
+- A thrown wasm exception is a native exception carrying its tag.
+- catch_all cannot observe traps.
+- C programs based on setjmp/longjmp convert and run; mruby is the covered app case.
+
 Authoritative matrix: [docs/support.md](../support.md).
 
 ## Providers and library usage
 
 Any unprovided WASI import falls back to a bundled WASI (disable with `--no-default-wasi`).
-Override an import by passing an imports table to the constructor; unprovided entries still fall back:
+Override an import by passing an imports table to the constructor.
+Unprovided entries still fall back:
 
 ```python
 _captured = bytearray()
@@ -76,6 +94,7 @@ The e2e glue in `crates/dewasm-backend-python/tests/e2e.rs` is the worked refere
 ## Caveats
 
 - **Recursion / thread-stack depth.**
-  Deeply recursive wasm (or deep call chains) can hit Python's recursion limit; raising it (`sys.setrecursionlimit`) and the thread stack size may be necessary for heavy programs.
+  Deeply recursive wasm (or deep call chains) can hit Python's recursion limit.
+  Heavy programs may need to raise it (`sys.setrecursionlimit`) and the thread stack size.
 - Float division goes through the runtime's `fdiv` because Python raises on `x / 0.0`.
 - Numeric conventions are the shared masked-unsigned model.

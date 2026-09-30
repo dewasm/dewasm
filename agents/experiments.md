@@ -1,13 +1,17 @@
 # Experiments
 
 Past experiments: what was tried, what came of it, and where the full record lives.
-The full record (logs, measurements, discussion) stays in the experiment's Issue or PR; each entry here carries the conclusion itself, so reading this index needs no network access.
-An entry earns its place only if it changes what a future agent would do: it stops a re-proposal, or records a measured limit of an approach.
+The full record (logs, measurements, discussion) stays in the experiment's Issue or PR.
+Each entry here carries the conclusion itself, so reading this index needs no network access.
+An entry earns its place only if it changes what a future agent would do.
+Such an entry stops a re-proposal, or it records a measured limit of an approach.
 
 Each entry is one section in this shape:
 
 ```markdown
-## <slug>: <one-line conclusion> (<date>)
+## <slug> (<date>)
+
+<The conclusion, in one sentence.>
 
 - **Tried**: what was attempted, in one or two sentences.
 - **Verdict**: the outcome in one sentence, with the deciding number.
@@ -15,136 +19,405 @@ Each entry is one section in this shape:
 - **Details**: #<issue> / PR #<pr>.
 ```
 
-## lua-php-guests: neither interpreter builds for wasm 1.0 (2026-08-02)
+## lua-php-guests (2026-08-02)
+
+Neither interpreter builds for wasm 1.0.
 
 - **Tried**: lua.wasm and php.wasm as example guests.
-- **Verdict**: rejected; Lua's setjmp/longjmp needs the exception-handling proposal (out of scope) and still hits a wasm-ld bug when enabled, while PHP's wasm build line stopped in 2023-07 with setjmp removed.
+- **Verdict**: rejected; Lua's setjmp/longjmp needs the exception-handling proposal (out of scope).
+  With that proposal enabled, Lua still hits a wasm-ld bug.
+  PHP's wasm build line stopped in 2023-07 with setjmp removed.
 - **Invalidated when**: a Lua or PHP build appears that targets plain wasm 1.0 + WASI p1 without setjmp.
 - **Details**: #204.
 
-## br-table-dispatch: Ruby's case/when on integer literals is already O(1) (2026-08-02)
+## br-table-dispatch (2026-08-02)
+
+Ruby's case/when on integer literals is already O(1).
 
 - **Tried**: replacing br_table's case/when with a binary if tree, suspecting linear when-matching.
-- **Verdict**: rejected; YARV compiles integer-literal when clauses to opt_case_dispatch (a hash), and the tree measured slower (0.149 s vs 0.118 s over 2M dispatches).
+- **Verdict**: rejected; YARV compiles integer-literal when clauses to opt_case_dispatch (a hash).
+  The tree measured slower (0.149 s vs 0.118 s over 2M dispatches).
 - **Invalidated when**: the dispatch arms stop being integer literals, which falls off opt_case_dispatch.
 - **Details**: #203.
 
-## i64-signed: signed two's-complement i64 loses to masked-unsigned in Ruby (2026-08-03)
+## i64-signed (2026-08-03)
 
-- **Tried**: representing i64 as signed two's complement instead of the shared masked-unsigned convention; full spec pass on the preserved `i64-signed` branch.
-- **Verdict**: rejected; i64_alu regressed to 0.86-0.93x (rest 0.97-1.03x), because hot i64 values in real apps are almost all non-negative, so masked-unsigned rarely boxes while the signed form pays its wrap branch everywhere.
-- **Invalidated when**: a negative-value-heavy workload matters (the signed form won 2.2x on synthetic negative-heavy code), or Ruby's integer boxing boundary changes.
+Signed two's-complement i64 loses to masked-unsigned in Ruby.
+
+- **Tried**: representing i64 as signed two's complement instead of the shared masked-unsigned convention.
+  A full spec pass exists on the preserved `i64-signed` branch.
+- **Verdict**: rejected; i64_alu regressed to 0.86-0.93x (rest 0.97-1.03x).
+  The reason is that hot i64 values in real apps are almost all non-negative.
+  So masked-unsigned rarely boxes, while the signed form pays its wrap branch everywhere.
+- **Invalidated when**: a negative-value-heavy workload matters.
+  The signed form won 2.2x on synthetic negative-heavy code.
+  Or Ruby's integer boxing boundary changes.
 - **Details**: #107.
 
-## mem-inline: inlining Ruby's memory wrappers regresses (2026-08-03)
+## mem-inline (2026-08-03)
 
-- **Tried**: emitting linear-memory loads and stores inline instead of through the wrapper methods; preserved on the `mem-inline` branch.
-- **Verdict**: rejected; mem_rw under YJIT measured 0.79x, because the cost is the bounds check and `IO::Buffer#get_value` itself, not method dispatch.
-- **Invalidated when**: bounds-check removal becomes robust (PR #109's commit 4 shape; blocked on brittle `ArgumentError#message` matching across Ruby versions).
+Inlining Ruby's memory wrappers regresses.
+
+- **Tried**: emitting linear-memory loads and stores inline instead of through the wrapper methods.
+  The attempt is preserved on the `mem-inline` branch.
+- **Verdict**: rejected; mem_rw under YJIT measured 0.79x.
+  It loses because the cost is the bounds check and `IO::Buffer#get_value` itself, not method dispatch.
+- **Invalidated when**: bounds-check removal becomes robust (PR #109's commit 4 shape).
+  That shape is blocked on brittle `ArgumentError#message` matching across Ruby versions.
 - **Details**: #108 / PR #109.
 
-## function-dedup: identical generated functions are already merged upstream (2026-08-06)
+## function-dedup (2026-08-06)
 
-- **Tried**: deduplicating identical Ruby function bodies to shrink the resident ISeq, sized on the 30 MB merman output.
+Identical generated functions are already merged upstream.
+
+- **Tried**: deduplicating identical Ruby function bodies to shrink the resident ISeq.
+  The win was sized on the 30 MB merman output.
 - **Verdict**: no win; wasm-opt preprocessing already merges duplicates, leaving 2 among 7,475 functions.
 - **Invalidated when**: modules reach the emitter without wasm-opt preprocessing.
 - **Details**: #202.
 
-## memory-delegate: bare delegated memory calls slow the hot path (2026-08-06)
+## memory-delegate (2026-08-06)
 
-- **Tried**: `@memory.i32_load` to a bare delegated `i32_load` at 246k call sites, to cut the receiver read.
-- **Verdict**: rejected; a microbenchmark measured +27% (getivar+send becomes putself+send+send) for an ISeq saving of ~1.5%.
-- **Invalidated when**: the unmeasured bmethod variant (`define_method(:i32_load, @memory.method(:i32_load))`, one frame) gets measured and wins.
+Bare delegated memory calls slow the hot path.
+
+- **Tried**: rewriting `@memory.i32_load` to a bare delegated `i32_load` at 246k call sites.
+  The aim was to cut the receiver read.
+- **Verdict**: rejected; a microbenchmark measured +27% (getivar+send becomes putself+send+send).
+  The ISeq saving was only ~1.5%.
+- **Invalidated when**: the unmeasured bmethod variant gets measured and wins.
+  That variant is `define_method(:i32_load, @memory.method(:i32_load))`, which costs one frame.
 - **Details**: #202.
 
-## mask-omission-ceiling: dropping provable i32 masks caps near -5% of ISeq (2026-08-06)
+## mask-omission-ceiling (2026-08-06)
 
-- **Tried**: sizing the win from omitting `& 0xffffffff` where the result provably fits i32, on the merman output.
-- **Verdict**: low ceiling; of 131.6k masks only ~12% are droppable at the expression site, the rest need per-local dataflow, and masks are ~6% of all instructions, so the ISeq ceiling is about -5 to -6%.
-- **Invalidated when**: an IR-level range analysis lands (it would also serve Perl and Python), or the always-masked invariant is relaxed to observation-point masking.
+Dropping provable i32 masks caps near -5% of ISeq.
+
+- **Tried**: sizing the win from omitting `& 0xffffffff` where the result provably fits i32.
+  The sizing ran on the merman output.
+- **Verdict**: low ceiling; of 131.6k masks only ~12% are droppable at the expression site.
+  The rest need per-local dataflow.
+  Masks are ~6% of all instructions, so the ISeq ceiling is about -5 to -6%.
+- **Invalidated when**: an IR-level range analysis lands; it would also serve Perl and Python.
+  Or the always-masked invariant is relaxed to observation-point masking.
 - **Details**: #202.
 
-## spinel-aot: bigint-typed i64 and compile-time scaling defeat Spinel today (2026-08-13)
+## spinel-aot (2026-08-13)
 
-- **Tried**: compiling the Ruby backend's output with Spinel (matz's AOT Ruby-to-C compiler), probing its subset and scaling with generated-code shapes.
-- **Verdict**: premature; any value or literal at or above 2^63 (the M64 mask constant included) types as bigint and erases the win (a masked u64 loop measured 1.0x vs CRuby, signed int64 under `--int-overflow=wrap` is effectively free), and the front end scales worse than quadratically (391 KB of Ruby: 12 s front end, 113 s total at `-O2`), putting sqlite3-shell's 7.9 MB out of reach.
-- **Invalidated when**: Spinel's compile-time scaling improves (it is pre-0.1 and moving fast) and a Spinel output profile exists: signed i64 (the `i64-signed` branch) plus an `IO::Buffer` replacement.
+Bigint-typed i64 and compile-time scaling defeat Spinel today.
+
+- **Tried**: compiling the Ruby backend's output with Spinel (matz's AOT Ruby-to-C compiler).
+  The run probed Spinel's subset, and its scaling with generated-code shapes.
+- **Verdict**: premature; any value or literal at or above 2^63 types as bigint.
+  That includes the M64 mask constant, and the bigint typing erases the win.
+  A masked u64 loop measured 1.0x vs CRuby.
+  Signed int64 under `--int-overflow=wrap` is effectively free.
+  The front end also scales worse than quadratically.
+  391 KB of Ruby took 12 s in the front end and 113 s in total at `-O2`.
+  That puts sqlite3-shell's 7.9 MB out of reach.
+- **Invalidated when**: Spinel's compile-time scaling improves, and a Spinel output profile exists.
+  Spinel is pre-0.1 and moving fast.
+  That profile is signed i64 (the `i64-signed` branch) plus an `IO::Buffer` replacement.
 - **Details**: #205.
 
-## jvm-ruby-runtimes: generated methods exceed method-granularity JIT limits (2026-08-13)
+## jvm-ruby-runtimes (2026-08-13)
 
-- **Tried**: running the Ruby backend's output on TruffleRuby 33.0.1 (pure-Ruby `IO::Buffer` polyfill) and JRuby 10.0.3.0 (an `IO::Buffer` arity shim), microbenchmarks and apps.
-- **Verdict**: rejected as suite runners; both beat YJIT on microbenchmarks (TruffleRuby's f64_alu at 4x wasmtime vs YJIT's 78x) yet lose on real apps (sqlite3_query: JRuby 58-70 s vs YJIT 9.4 s; TruffleRuby unfinished after 48 min), because the largest generated methods (~13k lines) exceed the JVM's 64 KB per-method bytecode limit (JRuby raises MethodTooLargeException once `-Xjit.maxsize` allows the attempt), so the hottest functions stay interpreted.
-- **Invalidated when**: a pass caps generated method size by splitting functions (also relevant to the Java backend's 64 KB constraint), or JRuby's `IO::Buffer` gains the four-argument `copy`/`set_string` forms and TruffleRuby gains `IO::Buffer` at all.
-  Partially invalidated 2026-09-12: the JRuby arity gap is fixed upstream (jruby/jruby#9588, merged, release pending), and the suite now carries a `dewasm-jruby` runner whose availability probe checks those forms by behavior (decision 93); the method-size finding stands and keeps the sqlite pair excluded for it.
+Generated methods exceed method-granularity JIT limits.
+
+- **Tried**: running the Ruby backend's output on TruffleRuby 33.0.1 and JRuby 10.0.3.0.
+  TruffleRuby used a pure-Ruby `IO::Buffer` polyfill, and JRuby used an `IO::Buffer` arity shim.
+  The runs covered microbenchmarks and apps.
+- **Verdict**: rejected as suite runners; both beat YJIT on microbenchmarks yet lose on real apps.
+  On microbenchmarks, TruffleRuby's f64_alu ran at 4x wasmtime vs YJIT's 78x.
+  On real apps, sqlite3_query took 58-70 s on JRuby vs 9.4 s on YJIT.
+  TruffleRuby was unfinished after 48 min.
+  The loss comes from the largest generated methods (~13k lines).
+  They exceed the JVM's 64 KB per-method bytecode limit, so the hottest functions stay interpreted.
+  JRuby raises MethodTooLargeException once `-Xjit.maxsize` allows the attempt.
+- **Invalidated when**: a pass caps generated method size by splitting functions.
+  Such a pass is also relevant to the Java backend's 64 KB constraint.
+  The other case needs both runtimes to change.
+  JRuby's `IO::Buffer` must gain the four-argument `copy`/`set_string` forms.
+  TruffleRuby must gain `IO::Buffer` at all.
+  Partially invalidated 2026-09-12: the JRuby arity gap is fixed upstream (jruby/jruby#9588).
+  That fix is merged, and its release is pending.
+  The suite now carries a `dewasm-jruby` runner.
+  Its availability probe checks those forms by behavior (decision 93).
+  The method-size finding stands, and it keeps the sqlite pair excluded for that runner.
 - **Details**: #206.
 
-## step-lambda-dispatch: wrapping a flat dispatch loop in a per-batch lambda loses under every JIT configuration (2026-08-21)
+## step-lambda-dispatch (2026-08-21)
 
-- **Tried**: emitting a flat-dispatch function's `case state` inside `__step = lambda do ... end` so the states run in a closure invoked repeatedly (once per transition, then batched at 1024 transitions per call), which YJIT compiles even though the enclosing function is entered once; measured on sqlite3-shell's interpreter function (453 states, 34.6% self time in the query workload profile).
-- **Verdict**: rejected; per-transition calls measured 83 M JIT-boundary crossings and 9.51 s to 10.21 s under `--yjit`, and batching only recovered to 9.96 s (interpreter 19.63 s to 20.67 s), because the surviving costs are closure-environment variable access (every local becomes a heap-environment slot with a write barrier) and the compiled size of a 453-state method (12.4 MB of generated machine code), the same large-compiled-method loss optcarrot's generated core shows against its small-method core.
-- **Invalidated when**: YJIT gains on-stack replacement (the whole workaround becomes unnecessary), or compiled closure-environment access stops costing more than the interpreter saves.
-- **Details**: measurements in this experiment predate an issue; the step emission itself was reverted and only this entry records it.
+A lambda-wrapped flat dispatch loses in every JIT configuration.
 
-## jit-coverage-per-case: only sqlite's interpreter function still misses compilation (2026-08-21)
+- **Tried**: emitting a flat-dispatch function's `case state` inside `__step = lambda do ... end`.
+  The states then run in a closure invoked repeatedly.
+  The first variant invoked it once per transition, and the second batched 1024 transitions per call.
+  YJIT compiles that closure even though the enclosing function is entered once.
+  The measurement used sqlite3-shell's interpreter function, which has 453 states.
+  That function takes 34.6% self time in the query workload profile.
+- **Verdict**: rejected; per-transition calls measured 83 M JIT-boundary crossings.
+  They measured 9.51 s to 10.21 s under `--yjit`, and batching only recovered to 9.96 s.
+  The interpreter measured 19.63 s to 20.67 s.
+  It loses because two costs survive.
+  One is closure-environment variable access.
+  Every local becomes a heap-environment slot with a write barrier.
+  The other is the compiled size of a 453-state method (12.4 MB of generated machine code).
+  Optcarrot's generated core shows the same large-compiled-method loss against its small-method core.
+- **Invalidated when**: YJIT gains on-stack replacement, which makes the whole workaround unnecessary.
+  Or compiled closure-environment access stops costing more than the interpreter saves.
+- **Details**: measurements in this experiment predate an issue.
+  The step emission itself was reverted, and only this entry records it.
 
-- **Tried**: per-case verification (after loop-body extraction, decision 81) of whether hot generated code actually gets compiled, by crossing stackprof wall profiles under `--yjit` with measured call counts against YJIT's default call threshold of 30.
-- **Verdict**: `app/sqlite3_query`'s dominant frame `_f157` (the 453-state flat dispatch, 34.6% self time) is called 13 times and is never compiled, so sqlite is the one case where "hot code is not compiled" holds; DOOM's dominant `_f406` (58 lines, 29.8% self) runs 26,400 calls per 60 ticks and the NES frame function `_f9` (1,072 lines, 69.5% self) runs once per tick with YJIT measured 3.7x over the interpreter (14.9 vs 4.0 ticks/sec), so both are compiled and their remaining cost is the byte-granular linear-memory path (`IO::Buffer` get/set plus the unit wrappers: 52% of DOOM's samples, 24% of NES's, 16.9% of sqlite's) and, for NES, the compiled quality of one huge method.
-- **Invalidated when**: YJIT gains on-stack replacement or raises what a once-called method can get compiled to; or the memory units change shape enough to shift the profile.
-- **Details**: measured in-session (stackprof + method-alias call counting on the smoke/query workloads); no issue yet.
+## jit-coverage-per-case (2026-08-21)
 
-## byte-memory-strategies: a software cache line loses to direct access; preloading a span wins (2026-08-21)
+Only sqlite's interpreter function still misses compilation.
 
-- **Tried**: two byte-read strategies against the current unit shape (bounds-checked wrapper method + `IO::Buffer#get_value(:U8)`, 28.7M ops/s under `--yjit`): a 64-byte software cache line (tag check per access, `get_string` refill on miss) and preloading a whole span once with `get_string` then reading with `String#getbyte`.
-- **Verdict**: the cache line loses everywhere, 20.2M ops/s sequential (its best case, one miss per 64 accesses) and 8.7M random versus 26.9M for direct `get_value`, because a Ruby-level tag check plus offset masking costs more than the C call it tries to avoid; span preloading wins clearly, 43.6M ops/s (1.5x the wrapper shape under `--yjit`, 2.5x under the interpreter), with the win independent of the JIT since the cost is C calls, not Ruby dispatch.
-- **Invalidated when**: `IO::Buffer` gains a byte accessor as cheap as `String#getbyte`, or the preload's applicability conditions (provable in-bounds range, no aliasing store or call between preload and use, reads only) stop matching the hot loops.
-- **Details**: measured in-session (20M-access loop microbenchmarks, Ruby 4.0.4 arm64); preloading is assessed, not implemented.
+- **Tried**: verifying per case whether hot generated code actually gets compiled.
+  This ran after loop-body extraction (decision 81).
+  The method crossed stackprof wall profiles under `--yjit` with measured call counts.
+  Those counts were compared against YJIT's default call threshold of 30.
+- **Verdict**: `app/sqlite3_query`'s dominant frame `_f157` is the 453-state flat dispatch.
+  That frame takes 34.6% self time, is called 13 times, and is never compiled.
+  So sqlite is the one case where "hot code is not compiled" holds.
+  DOOM's dominant `_f406` (58 lines, 29.8% self) runs 26,400 calls per 60 ticks.
+  The NES frame function `_f9` (1,072 lines, 69.5% self) runs once per tick.
+  On NES, YJIT measured 3.7x over the interpreter (14.9 vs 4.0 ticks/sec).
+  So both are compiled, and their remaining cost is the byte-granular linear-memory path.
+  That path is `IO::Buffer` get/set plus the unit wrappers.
+  It takes 52% of DOOM's samples, 24% of NES's, and 16.9% of sqlite's.
+  For NES, the compiled quality of one huge method adds to the remaining cost.
+- **Invalidated when**: YJIT gains on-stack replacement.
+  Or YJIT raises what a once-called method can get compiled to.
+  Or the memory units change shape enough to shift the profile.
+- **Details**: measured in-session; no issue yet.
+  The tools were stackprof and method-alias call counting on the smoke/query workloads.
 
-## f406-hand-optimization: DOOM's hot loop is dominated by rehoistable loads and a decomposed 32-bit store (2026-08-21)
+## byte-memory-strategies (2026-08-21)
 
-- **Tried**: hand-editing the DOOM module's hottest function (`_f406`, 29.8% self time: the per-pixel blit) in the generated Ruby to decompose where its 13 memory accesses per pixel go: seven loop-invariant constant-address loads (six format flags plus one word) re-read every iteration, one data-dependent palette word load, one sequential source byte read, and four byte stores that are one 32-bit little-endian store written out byte by byte.
-- **Verdict**: hoisting the seven invariant loads to the function entry alone took the 300-tick smoke run from 13.5 to 23 ticks/sec (1.7x), and additionally fusing the four byte stores into one `iws` reached 33 to 37 ticks/sec (2.5x, frame-identical at the static 60-tick point); the sequential-read span preload prototype was abandoned mid-way after demonstrating its own hazard (the loop skips its reads when a memory-resident count is below one, so preloading the full range read past what the program reads and trapped), and its ceiling is small here anyway (one access of the thirteen).
-- **Invalidated when**: the hoisting is implemented soundly (it needs either a store-alias proof or a no-store restriction, and the hand edit assumed no aliasing), or the store-fusion peephole lands, either of which makes the hand numbers obsolete; note the 300-tick frames legitimately differ across speeds because the frontend feeds DOOM a real monotonic clock, so correctness comparisons belong at the static 60-tick frame or the deterministic snapshot harness.
-- **Details**: measured in-session on the extracted artifact (Ruby 4.0.4, `--yjit`, 300-tick smoke, alternating runs); no issue yet.
+A software cache line loses to direct access; preloading a span wins.
 
-## call-crossing-licm-ceiling: extending load hoisting across calls would gain nothing on NES or sqlite (2026-08-21)
+- **Tried**: two byte-read strategies against the current unit shape.
+  That shape is a bounds-checked wrapper method + `IO::Buffer#get_value(:U8)`.
+  It runs at 28.7M ops/s under `--yjit`.
+  One strategy is a 64-byte software cache line with a tag check per access.
+  The cache line refills with `get_string` on a miss.
+  The other preloads a whole span once with `get_string`, then reads it with `String#getbyte`.
+- **Verdict**: the cache line loses everywhere against 26.9M ops/s for direct `get_value`.
+  It measured 20.2M ops/s sequential (its best case, one miss per 64 accesses) and 8.7M random.
+  The cause is the Ruby-level tag check plus offset masking.
+  Together they cost more than the C call they try to avoid.
+  Span preloading wins clearly at 43.6M ops/s.
+  That is 1.5x the wrapper shape under `--yjit` and 2.5x under the interpreter.
+  The win is independent of the JIT, since the cost is C calls, not Ruby dispatch.
+- **Invalidated when**: `IO::Buffer` gains a byte accessor as cheap as `String#getbyte`.
+  Or the preload's applicability conditions stop matching the hot loops.
+  Those conditions are:
+  - a provable in-bounds range;
+  - no aliasing store or call between preload and use;
+  - reads only.
+- **Details**: measured in-session (20M-access loop microbenchmarks, Ruby 4.0.4 arm64).
+  Preloading is assessed, not implemented.
 
-- **Tried**: measuring the ceiling of a call-crossing extension of the load hoisting in decision 82, by counting constant-address loads in the profiled hot functions and, for sqlite, hand-hoisting every one of them (30 distinct addresses, 124 sites in the interpreter function) to the function entry with no guards and no aliasing checks, an oracle no real pass could beat.
-- **Verdict**: nothing to gain; the NES hot path has almost no targets (one constant-address load site in the 69.5%-self frame function, zero in the helpers it calls 10.5 M times per smoke run), and sqlite's 124 sites are dynamically cold (the oracle measured 9.34 s to 9.31 s under `--yjit` and 19.41 s to 19.48 s interpreted, both inside noise, output exact); both programs' memory time is dynamic-address traffic (emulator state, record and page decoding) whose values genuinely change, which no invariant-load transform touches.
-- **Invalidated when**: a profiled hot loop appears whose constant-address (or invariant-address) loads are dynamically hot and separated from the loop only by calls; the DOOM blit was exactly that shape minus the calls, so the shape exists.
-- **Details**: measured in-session (site counts from generated code, oracle hand-edit on the query workload); no issue.
+## f406-hand-optimization (2026-08-21)
 
-## ivar-localization: caching instance variables in locals is worth under 1% on modern Ruby (2026-08-21)
+DOOM's hot loop is dominated by rehoistable loads and a decomposed 32-bit store.
 
-- **Tried**: the optcarrot playbook's second-largest lever (its ablation measured 21 to 38%), applied to the generated code's dominant instance variable: `@m` copied to a local at the entry of every method that touches memory (1,767 methods in sqlite3-shell, 748 in DOOM), plus isolated-process microbenchmarks of the per-reference delta.
-- **Verdict**: rejected as a pass; on Ruby 4.0.4 an instance-variable read costs only 0.3 to 0.6 ns more than a local under `--yjit` (1.7 to 2.5 ns interpreted, writes similar since fixnum stores skip the write barrier), so the whole-program transforms moved sqlite3_query, `c/sha256`, and the DOOM smoke run by under 1%, inside noise; object shapes and warm inline caches have already collected what optcarrot's technique collected on the Ruby of its era, and the arithmetic says a method needs instance-variable references to be a dominant fraction of all executed operations before the delta becomes visible, a density the generated code (one `@m` read per memory access, itself 12 to 30 ns) never reaches.
-- **Invalidated when**: a Ruby release regresses instance-variable access, or generated code starts reading many distinct instance variables per operation (nothing emits that today).
-- **Details**: measured in-session (microbenchmarks in isolated processes after a same-process harness mis-measured, whole-program hand transforms with output equality checks); no issue.
+- **Tried**: hand-editing the DOOM module's hottest function in the generated Ruby.
+  That function is `_f406`, the per-pixel blit, at 29.8% self time.
+  The aim was to decompose where its 13 memory accesses per pixel go:
+  - seven loop-invariant constant-address loads (six format flags and one word) re-read every iteration;
+  - one data-dependent palette word load;
+  - one sequential source byte read;
+  - four byte stores that are one 32-bit little-endian store written out byte by byte.
+- **Verdict**: hoisting the seven invariant loads to the function entry alone gave 1.7x.
+  It took the 300-tick smoke run from 13.5 to 23 ticks/sec.
+  Additionally fusing the four byte stores into one `iws` reached 33 to 37 ticks/sec (2.5x).
+  That result was frame-identical at the static 60-tick point.
+  The sequential-read span preload prototype was abandoned mid-way after demonstrating its own hazard.
+  The loop skips its reads when a memory-resident count is below one.
+  So preloading the full range read past what the program reads, and it trapped.
+  The preload's ceiling is small here anyway: one access of the thirteen.
+- **Invalidated when**: the hoisting is implemented soundly, or the store-fusion peephole lands.
+  Either makes the hand numbers obsolete.
+  Sound hoisting needs either a store-alias proof or a no-store restriction.
+  The hand edit assumed no aliasing.
+  Note that the 300-tick frames legitimately differ across speeds.
+  They differ because the frontend feeds DOOM a real monotonic clock.
+  So correctness comparisons belong at the static 60-tick frame or the deterministic snapshot harness.
+- **Details**: measured in-session on the extracted artifact; no issue yet.
+  The setup was Ruby 4.0.4 with `--yjit`, the 300-tick smoke run, and alternating runs.
 
-## vdbe-forced-compilation: forcing YJIT to compile sqlite's interpreter function loses at every measured scale (2026-08-21)
+## call-crossing-licm-ceiling (2026-08-21)
 
-- **Tried**: answering whether the 453-state interpreter function can be JIT-compiled at all and whether that helps, by prepending 60 `SELECT 0;` statements to the query workload so the function passes YJIT's 30-call threshold (about 120 calls) before the heavy statements run; the interpreter-mode control confirmed the extra statements themselves cost 0.1 s.
-- **Verdict**: it compiles completely (47 k additional blocks, 14.5 MB additional machine code, compile time 1.0 s to 4.4 s, no code collection, four invalidations) and still loses: 9.40 s to 11.73 s on the 100 k-row workload and 26.71 s to 29.50 s at 300 k rows, because the compile cost is fixed (about 3.4 s of user time plus 1.7 s of system time in code-memory churn) while the execution saving stays flat instead of scaling (2.7 s at 100 k, 2.4 s at 300 k: fast early, converging toward interpreted speed as the 23 MB code region's working set grows), so tripling the workload does not close the gap and amortization never arrives.
-- **Invalidated when**: YJIT's generated-code density or instruction-cache behavior on multi-megabyte methods improves materially, or the function stops being one method (the split-with-exit-protocol route), either of which deserves a re-measurement.
-- **Details**: measured in-session (warmup statements in the SQL input, `--yjit-stats` for compile counters, interpreter runs as the added-statement control); third independent confirmation of the large-compiled-method wall after the step-lambda experiment and optcarrot's own core comparison.
+Load hoisting across calls gains nothing on NES or sqlite.
 
-## vdbe-opcode-splitting: splitting hot opcodes out of sqlite's interpreter in the C source wins 9.4% under YJIT (2026-08-21)
+- **Tried**: measuring the ceiling of a call-crossing extension of the load hoisting in decision 82.
+  The measurement counted constant-address loads in the profiled hot functions.
+  For sqlite, every one of those loads was hoisted by hand to the function entry.
+  Those are 30 distinct addresses, at 124 sites in the interpreter function.
+  The hoist had no guards and no aliasing checks, an oracle no real pass could beat.
+- **Verdict**: nothing to gain; the NES hot path has almost no targets.
+  The 69.5%-self frame function has one constant-address load site.
+  The helpers it calls 10.5 M times per smoke run have zero.
+  The 124 sqlite sites are dynamically cold.
+  The oracle measured 9.34 s to 9.31 s under `--yjit` and 19.41 s to 19.48 s interpreted.
+  Both changes are inside noise, and the output was exact.
+  Both programs' memory time is dynamic-address traffic (emulator state, record and page decoding).
+  The values of that traffic genuinely change, which no invariant-load transform touches.
+- **Invalidated when**: a profiled hot loop appears whose constant-address loads are dynamically hot.
+  Invariant-address loads count as well.
+  Those loads must be separated from the loop only by calls.
+  The DOOM blit was exactly that shape minus the calls, so the shape exists.
+- **Details**: measured in-session; no issue.
+  The site counts come from generated code, and the oracle hand-edit ran on the query workload.
 
-- **Tried**: patching the pinned sqlite 3.53.3 amalgamation to extract the 13 hot opcode bodies of `sqlite3VdbeExec` (Column, MakeRecord, Insert, Yield, Copy, NewRowid, Concat, the arithmetic and comparison families, Rewind, Next/Prev/SorterNext, the AggStep pair) into `static SQLITE_NOINLINE` functions (mechanical generator, 1413 insertions over the 269k-line file; case exits become return codes, dispatcher locals like `rc`/`iCompare` pass by pointer), then rebuilding, converting, and measuring the query workload against a same-recipe stock control.
-- **Verdict**: it works, but only after stopping Binaryen from undoing it: `wasm-opt -O2`'s default single-caller inlining pulled all 13 functions straight back in (the converted interpreter method *grew*), and with `--no-inline=vdbeOp*` (which needs the name section, so strip via `wasm-opt --strip-dwarf` instead of `-Wl,--strip-debug`) the interpreter method shrinks 12,516 to 10,380 lines, twelve of the new methods get hot enough for YJIT to compile (+12 iseqs, +170 ms compile time), and the workload runs 9.37 s to **8.48 s (9.4% faster)** under `--yjit`, at a 6.0% cost without a JIT; outputs are byte-identical across a 41-statement sanity file and a 30-statement stress file, native and converted.
-- **Invalidated when**: the interpreter function stops being too cold for YJIT to compile (the win exists precisely because the containing method never compiles; force-compiling it via warmup statements is still a net loss for both builds), or the app pins move to a sqlite whose `sqlite3VdbeExec` shape changed.
-- **Details**: measured in-session by a subagent; patch generator and diff at `/tmp/vdbe_exp/` (volatile), artifacts `/tmp/vdbe_{stock,split}*.rb`; the pinned build recipe is untouched, and adopting this needs both the C patch and the `wasm-opt --no-inline` change plus a decision about what the benchmark then claims to measure.
+## ivar-localization (2026-08-21)
 
-## float-bits-scratch: the race-free IO::Buffer scratch loses pack's wall time on real apps (2026-08-21)
+Caching instance variables in locals gains under 1% on modern Ruby.
 
-- **Tried**: replacing `pack`/`unpack1` in the five float bit-conversion units (`f32`, `f32_bits`, `f32_from_bits`, `f64_bits`, `f64_from_bits`) with `set_value`/`get_value` on a reusable 8-byte `IO::Buffer`, placed per receiver (`@scratch`) after the module-level constant placement measurably corrupted floats across threads (29 of 480 runs, four threads on four instances); the buffer path also propagates NaN payloads where `pack` canonicalizes, recorded in the PR's decision draft.
-- **Verdict**: rejected; a tight conversion micro benchmark gains 25% wall and drops 93% of its allocations, but on an f32-heavy app (sghtmltopdf's receipt render, where these units produce 1.09M of its 1.10M String allocations) the safe placement measures +2.5 to +3.5% wall despite 36 to 80% fewer allocations, because the instance-variable read plus the `IO::Buffer` call pair costs more than the `pack` pair once the conversions sit inside mixed work, and the benchmark suite does not move (no suite workload leans on these units).
-- **Invalidated when**: Ruby gains a cheaper bit-reinterpretation primitive than `IO::Buffer#get_value`/`set_value`, a workload appears where allocation churn outweighs the per-call cost, or the thread-sharing constraint changes so the constant placement becomes admissible.
-- **Details**: #261 / PR #263 (closed unmerged; the unit diff, the placement measurements, and the decision draft live there).
+- **Tried**: the optcarrot playbook's second-largest lever (its ablation measured 21 to 38%).
+  It was applied to the generated code's dominant instance variable, `@m`.
+  `@m` was copied to a local at the entry of every method that touches memory.
+  That covers 1,767 methods in sqlite3-shell and 748 in DOOM.
+  Isolated-process microbenchmarks measured the per-reference delta as well.
+- **Verdict**: rejected as a pass.
+  On Ruby 4.0.4 an instance-variable read costs only 0.3 to 0.6 ns more than a local under `--yjit`.
+  Interpreted, the delta is 1.7 to 2.5 ns.
+  Writes are similar, since fixnum stores skip the write barrier.
+  So the whole-program transforms moved sqlite3_query, `c/sha256`, and the DOOM smoke run by under 1%.
+  That change is inside noise.
+  On the Ruby of its era, optcarrot's technique collected a real gain.
+  Object shapes and warm inline caches have already collected that gain.
+  The arithmetic sets a density a method must reach before the delta becomes visible.
+  Its instance-variable references must be a dominant fraction of all executed operations.
+  The generated code never reaches that density.
+  It does one `@m` read per memory access, and that access itself costs 12 to 30 ns.
+- **Invalidated when**: a Ruby release regresses instance-variable access.
+  Or generated code starts reading many distinct instance variables per operation.
+  Nothing emits that today.
+- **Details**: measured in-session; no issue.
+  The microbenchmarks ran in isolated processes after a same-process harness mis-measured.
+  The whole-program hand transforms ran with output equality checks.
 
-## jruby-script-precompile: JRuby's cowsay time tracks whether its script compiles at all (2026-09-18)
+## vdbe-forced-compilation (2026-08-21)
 
-- **Tried**: chasing `app/cowsay` on `dewasm-jruby` reading 1.97 s before the cowsay replacement (#322) and 3.52 s after, on a module that shrank 772 kB to 68 kB and a generated source that shrank 1.91 MB to 361 kB.
-- **Verdict**: not a regression in the generated code; JRuby precompiles the whole script at startup (`Ruby.precompileCLI`), and the old artifact's precompile *aborted* on a data segment emitted as a 136.5 kB string literal, over the JVM's 64 kB constant limit (`IndyValueCompiler.pushString` throws, and JRuby falls back to the interpreter), while the new artifact's largest literal is 47.3 kB, so the compile succeeds and costs 1.9 s for a program whose own work is 0.29 s. The program phase is unchanged (0.28 s old, 0.29 s new); with `-X-C` both interpret and the new artifact is the faster one (1.41 s against 1.68 s); splitting the old artifact's literals under the limit makes it compile and takes **131 s**, so the old figure was never a cheap compile but an absent one. Method-level JIT settings (`jit.maxsize`, `jit.threshold`) and `compile.invokedynamic` move none of it.
-- **Invalidated when**: the Ruby backend stops emitting a data segment as one literal (chunking it, as the codon backend does per #320, would make every artifact compile and could cost minutes on a large module), JRuby raises or removes the eager script precompile, or a JRuby workload appears whose run is long enough to earn the compile back.
-- **Details**: measured in-session against the pre-#322 registry build; the phase split, the 60/70 kB literal probe, and the split-literal reversal are in the PR that adds this entry. Related: #206 (the largest generated methods never JIT).
+Forcing YJIT to compile sqlite's interpreter function loses at every measured scale.
+
+- **Tried**: answering whether the 453-state interpreter function can be JIT-compiled at all.
+  The experiment also asked whether that helps.
+  It prepended 60 `SELECT 0;` statements to the query workload.
+  The function then passes YJIT's 30-call threshold (about 120 calls) before the heavy statements run.
+  The interpreter-mode control confirmed the extra statements themselves cost 0.1 s.
+- **Verdict**: it compiles completely and still loses.
+  Compilation added 47 k blocks and 14.5 MB of machine code.
+  Compile time went from 1.0 s to 4.4 s, with no code collection and four invalidations.
+  The 100 k-row workload measured 9.40 s to 11.73 s.
+  At 300 k rows, it measured 26.71 s to 29.50 s.
+  It loses because the compile cost is fixed.
+  The execution saving meanwhile stays flat instead of scaling.
+  The fixed cost is about 3.4 s of user time plus 1.7 s of system time in code-memory churn.
+  The saving is 2.7 s at 100 k and 2.4 s at 300 k.
+  Execution is fast early.
+  It then converges toward interpreted speed as the 23 MB code region's working set grows.
+  So tripling the workload does not close the gap, and amortization never arrives.
+- **Invalidated when**: YJIT improves materially on multi-megabyte methods.
+  The improvement can be in generated-code density or in instruction-cache behavior.
+  Or the function stops being one method (the split-with-exit-protocol route).
+  Either change deserves a re-measurement.
+- **Details**: measured in-session.
+  The warmup statements went into the SQL input, and `--yjit-stats` supplied the compile counters.
+  Interpreter runs served as the added-statement control.
+  This is the third independent confirmation of the large-compiled-method wall.
+  The first two are the step-lambda experiment and optcarrot's own core comparison.
+
+## vdbe-opcode-splitting (2026-08-21)
+
+Splitting hot opcodes out of sqlite's interpreter in the C source wins 9.4% under YJIT.
+
+- **Tried**: patching the pinned sqlite 3.53.3 amalgamation.
+  The patch extracts the 13 hot opcode bodies of `sqlite3VdbeExec` into new functions.
+  Each of those functions is `static SQLITE_NOINLINE`.
+  A mechanical generator made the patch: 1413 insertions over the 269k-line file.
+  Case exits become return codes, and dispatcher locals like `rc`/`iCompare` pass by pointer.
+  The patched source was then rebuilt, converted, and measured on the query workload.
+  The control was a stock build made with the same recipe.
+  The opcodes are:
+  - Column, MakeRecord, Insert, Yield, Copy, NewRowid, Concat;
+  - the arithmetic and comparison families;
+  - Rewind, Next/Prev/SorterNext, and the AggStep pair.
+- **Verdict**: it works, but only after stopping Binaryen from undoing it.
+  `wasm-opt -O2`'s default single-caller inlining pulled all 13 functions straight back in.
+  The converted interpreter method *grew*.
+  The fix is `--no-inline=vdbeOp*`, which needs the name section.
+  So strip via `wasm-opt --strip-dwarf` instead of `-Wl,--strip-debug`.
+  With that fix, the interpreter method shrinks from 12,516 to 10,380 lines.
+  Twelve of the new methods get hot enough for YJIT to compile (+12 iseqs, +170 ms compile time).
+  The workload runs 9.37 s to **8.48 s (9.4% faster)** under `--yjit`, at a 6.0% cost without a JIT.
+  Outputs are byte-identical across a 41-statement sanity file and a 30-statement stress file.
+  That holds for both the native and the converted build.
+- **Invalidated when**: the interpreter function stops being too cold for YJIT to compile.
+  The win exists precisely because the containing method never compiles.
+  Force-compiling it via warmup statements is still a net loss for both builds.
+  Or the app pins move to a sqlite whose `sqlite3VdbeExec` shape changed.
+- **Details**: measured in-session by a subagent.
+  The patch generator and diff are at `/tmp/vdbe_exp/` (volatile).
+  The artifacts are at `/tmp/vdbe_{stock,split}*.rb`.
+  The pinned build recipe is untouched.
+  Adopting this needs both the C patch and the `wasm-opt --no-inline` change.
+  It also needs a decision about what the benchmark then claims to measure.
+
+## float-bits-scratch (2026-08-21)
+
+Race-free IO::Buffer scratch loses pack's wall time on real apps.
+
+- **Tried**: replacing `pack`/`unpack1` in the five float bit-conversion units.
+  Those units are `f32`, `f32_bits`, `f32_from_bits`, `f64_bits`, and `f64_from_bits`.
+  The replacement is `set_value`/`get_value` on a reusable 8-byte `IO::Buffer`.
+  The buffer is placed per receiver (`@scratch`).
+  A module-level constant placement had measurably corrupted floats across threads.
+  The corruption hit 29 of 480 runs, with four threads on four instances.
+  The buffer path also propagates NaN payloads where `pack` canonicalizes.
+  The PR's decision draft records that.
+- **Verdict**: rejected; a tight conversion micro benchmark gains 25% wall.
+  It also drops 93% of its allocations.
+  The f32-heavy app measured is sghtmltopdf's receipt render.
+  There these units produce 1.09M of its 1.10M String allocations.
+  On it, the safe placement measures +2.5 to +3.5% wall despite 36 to 80% fewer allocations.
+  The reason is that the instance-variable read plus the `IO::Buffer` call pair costs more.
+  It costs more than the `pack` pair once the conversions sit inside mixed work.
+  The benchmark suite does not move, since no suite workload leans on these units.
+- **Invalidated when**: Ruby gains a cheaper bit-reinterpretation primitive.
+  The primitive to beat is `IO::Buffer#get_value`/`set_value`.
+  Or a workload appears where allocation churn outweighs the per-call cost.
+  Or the thread-sharing constraint changes so the constant placement becomes admissible.
+- **Details**: #261 / PR #263 (closed unmerged).
+  The unit diff, the placement measurements, and the decision draft live there.
+
+## jruby-script-precompile (2026-09-18)
+
+JRuby's cowsay time tracks whether its script compiles at all.
+
+- **Tried**: chasing `app/cowsay` on `dewasm-jruby`, which read 1.97 s before the cowsay replacement (#322).
+  It read 3.52 s after.
+  Across that change the module shrank 772 kB to 68 kB, and the generated source 1.91 MB to 361 kB.
+- **Verdict**: not a regression in the generated code.
+  JRuby precompiles the whole script at startup (`Ruby.precompileCLI`).
+  The old artifact's precompile *aborted* on a data segment emitted as a 136.5 kB string literal.
+  That literal is over the JVM's 64 kB constant limit.
+  `IndyValueCompiler.pushString` throws, and JRuby falls back to the interpreter.
+  The new artifact's largest literal is 47.3 kB, so the compile succeeds.
+  It costs 1.9 s for a program whose own work is 0.29 s.
+  The program phase is unchanged (0.28 s old, 0.29 s new).
+  With `-X-C` both interpret, and the new artifact is the faster one (1.41 s against 1.68 s).
+  Splitting the old artifact's literals under the limit makes it compile, and it takes **131 s**.
+  So the old figure was never a cheap compile but an absent one.
+  Method-level JIT settings (`jit.maxsize`, `jit.threshold`) and `compile.invokedynamic` move none of it.
+- **Invalidated when**: the Ruby backend stops emitting a data segment as one literal.
+  Chunking it, as the codon backend does per #320, would make every artifact compile.
+  That could cost minutes on a large module.
+  Or JRuby raises or removes the eager script precompile.
+  Or a JRuby workload appears whose run is long enough to earn the compile back.
+- **Details**: measured in-session against the pre-#322 registry build.
+  The phase split and the 60/70 kB literal probe are in the PR that adds this entry.
+  The split-literal reversal is in that PR too.
+  Related: #206 (the largest generated methods never JIT).

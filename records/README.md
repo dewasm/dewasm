@@ -1,10 +1,18 @@
 # Measurement records
 
-Every measurement dewasm keeps: the dated JSON records `cargo xtask record-speed` and `cargo xtask record-size` write, one file per run.
+This directory holds every measurement dewasm keeps, one file per run.
+Each is a dated JSON record that `cargo xtask record-speed` or `cargo xtask record-size` writes.
 A record's suffix names its kind, `-speed.json` or `-size.json`.
-The generated documents, [docs/benchmarks/results.md](../docs/benchmarks/results.md) and [docs/sizes/results.md](../docs/sizes/results.md), are rendered from the newest record of each kind by `cargo xtask render-speed` and `cargo xtask render-size`; an older record is measurement history, re-renderable by naming it (`cargo xtask render-speed records/<file>-speed.json`).
+The generated documents are [docs/benchmarks/results.md](../docs/benchmarks/results.md) and [docs/sizes/results.md](../docs/sizes/results.md).
+Each is rendered from the newest record of its kind.
+`cargo xtask render-speed` renders the first, and `cargo xtask render-size` the second.
+An older record is measurement history.
+Naming it re-renders it, as in `cargo xtask render-speed records/<file>-speed.json`.
 
-A record names its schema version; a schema bump ships with a `cargo xtask migrate-records` upgrade that rewrites every stored record in place, and the commands that read records support only the current schema.
+A record names its schema version.
+A schema bump ships with a `cargo xtask migrate-records` upgrade.
+That upgrade rewrites every stored record in place.
+The commands that read records support only the current schema.
 
 Every record file has one line here saying why it was taken.
 A run appends its line with a `TODO`; fill it in when committing the record.
@@ -13,7 +21,7 @@ A run appends its line with a `TODO`; fill it in when committing the record.
 
 - `2026-08-02T02-41-22Z-speed.json`: the first record (#106).
 - `2026-08-03T16-23-15Z-speed.json`: value-addressed branches and the halved generated source (#113).
-- `2026-08-11T18-25-24Z-speed.json`: re-baseline after #176, #167/#168, and #195's unit-comment rewrites.
+- `2026-08-11T18-25-24Z-speed.json`: re-baseline after #176, #167/#168 and #195's unit-comment rewrites.
 - `2026-08-16T09-22-02Z-speed.json`: re-baseline after the #164 mask elision (#224 to #245).
 - `2026-08-22T06-26-23Z-speed.json`: the shortened suite and eight new wat cases (#266).
 - `2026-08-22T08-27-05Z-speed.json`: re-baseline after the f32 rounding change (#268).

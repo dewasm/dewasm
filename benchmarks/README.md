@@ -5,7 +5,10 @@ How to run it and read the numbers is [docs/benchmarks/README.md](../docs/benchm
 
 - `wat/` hand-written microbenchmarks, each isolating one instruction axis.
 - `c/` microbenchmarks compiled from C with wasi-sdk clang, for workloads with realistic shape.
-- `drivers/` scripts that run a module under the two pure-source wasm interpreters, [wardite](https://github.com/udzura/wardite) (Ruby) and [pywasm](https://github.com/mohanson/pywasm) (Python), with the same command line every other runner gets.
-- `cache/` gitignored build output: the compiled modules and the pinned interpreter installs, produced by `setup.sh`.
+- `drivers/` scripts that run a module under the two pure-source wasm interpreters.
+  These are [wardite](https://github.com/udzura/wardite) (Ruby) and [pywasm](https://github.com/mohanson/pywasm) (Python).
+  A driver takes the same command line every other runner gets.
+- `cache/` gitignored build output that `setup.sh` produces.
+  It holds the compiled modules and the pinned interpreter installs.
 
 The dated JSON record a full run writes lives in [`records/`](../records/README.md), with every other measurement record.

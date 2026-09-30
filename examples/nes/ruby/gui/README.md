@@ -1,14 +1,21 @@
 # NES (Ruby, gosu window)
 
-An interactive NES frontend that renders into a window with [gosu](https://www.libgosu.org/), the SDL2-backed 2D game library for Ruby.
+An interactive NES frontend that renders into a window with [gosu](https://www.libgosu.org/).
+gosu is the SDL2-backed 2D game library for Ruby.
 The parent [`../`](../) frontend draws the same emulator into a terminal; this one takes a real window.
-It is the NES counterpart of [`../../../doom/ruby/gui`](../../../doom/ruby/gui), in the same shape: the generated library is shared with the terminal frontend (`../build.sh` regenerates `../nes_gen.rb`, which both require), and gosu is scoped to this directory with bundler.
+It is the NES counterpart of [`../../../doom/ruby/gui`](../../../doom/ruby/gui), in the same shape.
+The generated library is shared with the terminal frontend.
+`../build.sh` regenerates `../nes_gen.rb`, which both require.
+gosu is scoped to this directory with bundler.
 
 ## Requirements
 
-gosu is installed by `run.sh` with bundler, into the gitignored `vendor/bundle` of this directory, at the version pinned by `Gemfile.lock`.
+`run.sh` installs gosu with bundler, into the gitignored `vendor/bundle` of this directory.
+The version is pinned by `Gemfile.lock`.
 Nothing is installed globally, and the parent terminal frontend stays stdlib-only.
-The gem builds a native extension against SDL2; the development-header packages and the current macOS sdl2-compat caveat are in the [DOOM gui frontend's README](../../../doom/ruby/gui/README.md#requirements).
+The gem builds a native extension against SDL2.
+The development-header packages are in the [DOOM gui frontend's README](../../../doom/ruby/gui/README.md#requirements).
+The current macOS sdl2-compat caveat is there too.
 
 ## Run
 
@@ -18,7 +25,9 @@ The gem builds a native extension against SDL2; the development-header packages 
 ```
 
 builds and opens a window.
-The window is resizable: the frame keeps its ratio and is centered, with black bars on whichever axis runs out first.
+The window is resizable.
+The frame keeps its ratio and is centered.
+Black bars appear on whichever axis runs out first.
 
 | Option | Effect |
 | --- | --- |
@@ -27,20 +36,36 @@ The window is resizable: the frame keeps its ratio and is centered, with black b
 | `--smooth` | Scale the frame with interpolation instead of nearest-neighbor. |
 | `--smoke` | Headless self-check, described below. |
 
-`./run.sh --smoke` needs no display: it inits the emulator, ticks it 300 times with no input, reports the tick rate and the per-frame conversion cost, sanity-checks the last frame, writes it to `screenshot.png`, and exits non-zero on failure.
+`./run.sh --smoke` needs no display.
+It inits the emulator and ticks it 300 times with no input.
+It reports the tick rate and the per-frame conversion cost.
+It sanity-checks the last frame, writes it to `screenshot.png`, and exits non-zero on failure.
 
 ## Rendering
 
-The module hands over agnes's own frame representation: one palette *index* per pixel at `screenOffset()`, against the fixed 64-entry palette at `paletteOffset()`.
-That keeps the per-pixel conversion to one Array lookup: each of the 256 possible index bytes maps to a precomputed 32-bit RGBA word (the module's `& 0x3f` mask folded into the table), so a frame is one `unpack`, one `map!` over the table and one `pack`, all at C level except the lookups.
-The 256x240 result is uploaded once per frame and the GPU does the scaling, so the render cost does not grow with the window; nearest-neighbor versus interpolated scaling works exactly as in the DOOM gui frontend (`retro: true` render target, `--smooth` to opt out).
+The module hands over agnes's own frame representation.
+That is one palette *index* per pixel at `screenOffset()`.
+The indices resolve against the fixed 64-entry palette at `paletteOffset()`.
+That keeps the per-pixel conversion to one Array lookup.
+Each of the 256 possible index bytes maps to a precomputed 32-bit RGBA word.
+The table folds in the module's `& 0x3f` mask.
+So a frame is one `unpack`, one `map!` over the table and one `pack`.
+All of it runs at C level except the lookups.
+The 256x240 result is uploaded once per frame, and the GPU does the scaling.
+So the render cost does not grow with the window.
+Nearest-neighbor versus interpolated scaling works exactly as in the DOOM gui frontend.
+That is a `retro: true` render target, with `--smooth` to opt out.
 
-Pacing is gosu's own 60Hz update interval (the NTSC NES's real rate is ~60.0988Hz: close enough that no calibration is needed).
-When the interpreter cannot sustain 60 ticks/sec, updates simply run late, which is the same fastest-sustainable-rate behavior the terminal frontend implements by hand.
+Pacing is gosu's own 60Hz update interval.
+The NTSC NES's real rate is ~60.0988Hz, close enough that no calibration is needed.
+When the interpreter cannot sustain 60 ticks/sec, updates simply run late.
+That is the same fastest-sustainable-rate behavior the terminal frontend implements by hand.
 
 ## Controls
 
-Where the terminal frontend has to synthesize key releases after a hold window, gosu reports real `button_down`/`button_up` events, and the held-button bitmask `setInput` wants every tick falls out of them directly.
+The terminal frontend has to synthesize key releases after a hold window.
+gosu instead reports real `button_down`/`button_up` events.
+The held-button bitmask `setInput` wants every tick falls out of them directly.
 
 | Key | Action |
 | --- | --- |
