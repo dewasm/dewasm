@@ -125,6 +125,7 @@ impl Vocabulary {
                 .collect()
         };
         let mut terms = spans_of("Terms of the field");
+        terms.extend(spans_of("Plain words outside the base list"));
         terms.extend(spans_of("Names"));
         let one_meaning: HashSet<String> = sections
             .iter()

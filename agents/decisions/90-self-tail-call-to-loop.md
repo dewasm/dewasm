@@ -49,7 +49,7 @@ Code this governs: `crates/dewasm-backend/src/selfcall.rs`, and each backend's d
   So it belongs with the other optimizing passes.
   A backend that has some better way to lower a self tail call is then free not to run it.
 - **Extend it to a cycle of two or three functions by inlining them into one loop.**
-  That merges several functions into one dispatch loop on a small scale, and it was measured.
+  That is defunctionalization on a small scale, and it was measured.
   It is worth having only under a size threshold.
   It is worth its own decision if it is ever taken.
   Issue 295 holds the measurements.

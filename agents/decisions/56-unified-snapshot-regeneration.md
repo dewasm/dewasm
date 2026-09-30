@@ -77,7 +77,7 @@ Remove the two commands made for one snapshot each.
   The other is a `doom_frame.png` rendering of the same frame for a human to look at (the DOOM README).
   No test ever compares the PNG.
 
-- **Optional text filter, fail-loud.**
+- **Optional substring filter, fail-loud.**
   No filter regenerates all ten.
   A filter limits to snapshots whose label, relative to the repository, contains it.
   Examples are `update-snapshots doom` and `update-snapshots cowsay`.

@@ -177,7 +177,7 @@ Go-specific:
   It does not use `filepath.Base(filepath.Join(base, rel))`.
   `Join` *Cleans*, folding a trailing `.` or `..` away, so `Base` returns the parent's own name.
   Then the AT_SYMLINK_NOFOLLOW branch would wrongly resolve it and reject it with ERRNO_NOTCAPABLE.
-  Taking the text after the final `/` restores what Python's non-cleaning join gives for free.
+  Taking the substring after the final `/` restores what Python's non-cleaning join gives for free.
 - Library-mode WASI output always seeds `rt/exit`.
   Host glue catches `*rtExit` for the exit code, and Go asserts the concrete type at compile time.
   So it must exist even for a fixture that never imports `proc_exit`.
