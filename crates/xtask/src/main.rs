@@ -20,6 +20,7 @@ mod doom_snapshot;
 mod feature_audit;
 mod migrate;
 mod nes_snapshot;
+mod prose_check;
 mod size;
 mod snapshot_engine;
 mod support_docs;
@@ -58,6 +59,8 @@ Commands:
         Regenerate docs/sizes/results.md and its figures from the named size record, or from the newest one.
     feature-audit <file.wasm>...
         Report each binary's post-baseline feature needs and WASI p1 import surface; fails when one needs a proposal outside the 0.1 scope (verdicts are recorded in agents/apps-audit.md).
+    check-prose [path]...
+        Report the prose lines that break the AGENTS.md writing style, in the named files or in all.
     migrate-records
         Upgrade every record under records/ to its kind's current schema, in place; the render commands read only the current schema.
 ";
@@ -76,6 +79,7 @@ fn main() -> Result<()> {
         Some("render-size") => size::render(args),
         Some("feature-audit") => feature_audit::main(args),
         Some("migrate-records") => migrate::run(),
+        Some("check-prose") => prose_check::main(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
