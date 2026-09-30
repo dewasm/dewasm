@@ -3,20 +3,20 @@
 Status: **Accepted, 2026-09-28.**
 Landed: [`AGENTS.md`](../../AGENTS.md) states the rules in its Writing style section and meets them.
 The measure and the clause rule were settled on 2026-09-30.
-The rest of the prose predates the bound.
-That is `agents/`, `docs/`, the README, the comments in source code, and the xtask templates.
+The rest of the text was written before the bound.
+That is `agents/`, `docs/`, the README, the comments in source code, and the `xtask` templates.
 A dedicated pass brings them under the bound, and a mechanical check then keeps them there.
 
 ## Context
 
-Prose here is written one sentence per line, with no line wrapping.
+Text here is written one sentence per line, with no line wrapping.
 That made sentence length visible, and nothing bounded it.
 `awk` counted `agents/`, `docs/` and the README, excluding table rows and generated results.
 2,826 lines ran past 100 columns, and 2,102 of them past 140.
 Only 25 lines held two sentences.
 The rule was followed, and the sentences were long.
 
-The sibling project dewasm/cowsay.wasm used the same rules plus a 100-column bound.
+The related project dewasm/cowsay.wasm used the same rules plus a 100-column bound.
 It applied them to its README, its specification, and its C comments.
 The bound changed what survived a rewrite.
 Modifiers and idioms went ("byte for byte", "in plain sight"), and a two-thing sentence was split.
@@ -28,7 +28,7 @@ The rules are not new, and the norms below show what a complete set holds.
 | Kernighan, [UNIX for Beginners](https://rhodesmill.org/brandon/2012/one-sentence-per-line/) (1974) | Start each sentence on a new line; break at commas and semicolons. |
 | [Semantic Line Breaks](https://sembr.org/) | Break after a sentence; 80 characters recommended; a line may pass it for links, code, or markup. |
 | [ASD-STE100](https://www.asd-europe.org/standards-specifications/simplified-technical-english/), Simplified Technical English | 20 words in a procedure, 25 in a description; one meaning per word. |
-| [GOV.UK](https://insidegovuk.blog.gov.uk/2014/08/04/sentence-length-why-25-words-is-our-limit/) content guidance | Split a sentence over 25 words. |
+| [GOV.UK](https://insidegovuk.blog.gov.uk/2014/08/04/sentence-length-why-25-words-is-our-limit/) writing guide | Split a sentence over 25 words. |
 | Oxford Guide to Plain English | 15 to 20 words a sentence on average. |
 | [Simple English Wikipedia](https://simple.wikipedia.org/wiki/Wikipedia:How_to_write_Simple_English_pages) | At most one subordinate clause; no idioms; no length in numbers. |
 
@@ -47,11 +47,11 @@ The prefix is at most 8 columns for 82% of the 4,408 comment lines, and more tha
 
 A sentence is at most 100 characters as read.
 Markup, link targets, indentation, and list markers do not count, since none of them is a word.
-In source code the line also fits in 100 columns, prefix included, which is rustfmt's `max_width`.
+In source code the line also fits in 100 columns, prefix included: the `max_width` of `rustfmt`.
 A comment then never runs wider than the code around it, and a deeper comment is a shorter sentence.
 Markdown has no line bound.
 Its lines were never bounded, and a long target sits at the end of one.
-A table row is exempt, since Markdown puts a row on one line.
+The bound does not apply to a table row, since Markdown puts a row on one line.
 
 The norms count words, and this bound counts characters.
 A check counts characters without defining a word, and source code already measures in columns.
@@ -60,7 +60,7 @@ The aim is still the norms' aim, a sentence of about 16 words.
 That is the Plain English average and under STE's 20, and an identifier lowers the count further.
 A sentence that fits by an abbreviation or a dropped article has missed the aim.
 
-A sentence holds at most two clauses, joined once by a connective, a `;`, or a `:`.
+A sentence holds at most two clauses, joined once by a linking word, a `;`, or a `:`.
 A third clause starts a new sentence.
 A clause that only identifies a noun ("the spelling that compiles") does not count.
 This is Simple English Wikipedia's limit on subordinate clauses, extended to every joint.
@@ -68,21 +68,21 @@ The length bound cannot replace it: 100 characters are room enough for three nes
 No check parses clauses, so this rule is kept by reading.
 The length bound is kept by the check.
 
-The remedies for a long sentence come in a fixed order.
+The fixes for a long sentence come in a fixed order.
 First remove words that add no information.
 A sentence still too long states two things: split it at a sentence or at a `;`.
-Connectives stay.
+Linking words stay.
 
 The bound works with the vocabulary rules, and only with them.
 Under a bound, a writer has four ways out that do not improve the sentence.
-They are: wrap the line, reach for a metaphor, swap in a weaker word, drop the connectives.
+They are: wrap the line, reach for a metaphor, swap in a weaker word, drop the linking words.
 Sentence-per-line blocks the first, and the ban on coined metaphors the second.
-One term per concept blocks the third, and the connectives rule the fourth.
+One term per concept blocks the third, and the rule on linking words the fourth.
 What remains is to remove words that carry nothing, or to split.
 
 ## Rejected alternatives
 
-- **No bound**, the status quo.
+- **No bound**, the current state.
   Sentence-per-line makes length visible but applies no pressure; the count above is the result.
 - **Wrap at a fixed column.**
   A wrap hides sentence length inside a paragraph, which is why sentence-per-line was adopted.
@@ -103,6 +103,11 @@ What remains is to remove words that carry nothing, or to split.
   Nearly every comment would keep the full 100 characters, and would run 20 columns past the code.
 - **A clause rule alone**, as Simple English Wikipedia has.
   Nothing in it can be checked, and a check is what kept the length rule alive.
+- **An existing text linter for the checks**, Vale or textlint.
+  Each splits text into sentences itself, and each split wrongly on text that meets the rules.
+  Vale joined two lines at `docs/testing.md.`, and textlint at a bold label that ends in a period.
+  Here a line is a sentence, so a check that counts lines has nothing to split.
+  A count of linking words per sentence, tried in Vale for the clause rule, gave only false positives.
 
 ## Consequences
 
@@ -110,11 +115,13 @@ What remains is to remove words that carry nothing, or to split.
   The rules select for the sentences worth keeping.
 - Positive: the rules rest on norms written for readers of English as a second language.
   A future change can be weighed against those norms, not against taste.
-- Negative: existing prose does not meet the bound.
+- Negative: existing text does not meet the bound.
   Bringing it under is a pass over every document, checking each sentence's meaning as it shortens.
 - Negative: counting characters as read needs a Markdown parser in the check.
   A plain substitution miscounts a `*` or `_` inside a code span.
-- Carry-over: that pass adds two checks to `cargo test -p xtask`.
-  One counts a Markdown sentence as read, with table rows and fenced code exempt.
-  The other counts the columns of a comment line in source code.
+- Carry-over: that pass adds three checks to `cargo test -p xtask`.
+  One counts a Markdown sentence as read, and skips table rows and fenced code.
+  Another counts the columns of a comment line in source code.
+  The third reports a use of a word listed in [`agents/vocabulary.md`](../vocabulary.md).
+  That list is a table, so a linter's rule files can be generated from it later.
   Before they land, only edited text is brought under the rules.
