@@ -3,7 +3,8 @@ Block-level HTML comments are stripped before this file enters an agent's contex
 
 - Claude Code reads CLAUDE.md, not AGENTS.md; CLAUDE.md pulls this file in with `@AGENTS.md`.
 - Everything here loads into every session.
-  Keep it short and keep it INSTRUCTIONS; explain a why only when it changes what you do.
+  Keep it short and keep it INSTRUCTIONS.
+  Explain a why only when it changes what you do.
 - Material needed only inside one area belongs in agents/ or docs/, never here.
   A .claude/skills/ entry only routes to it.
 -->
@@ -72,9 +73,13 @@ A sentence has a length bound, and the other rules remove every way to meet it e
 - A sentence is at most 100 characters as read (decision 98).
   Markup, link targets, indentation, and list markers do not count.
   In source code, its line also fits in 100 columns, indentation and comment marker included.
+  Characters are what a check counts; the aim is a sentence of about 16 words.
   Shorten a sentence by removing words that add no information.
-  If it is still too long, it states two things: split it at a sentence or at a `;`.
+  A sentence still too long states two things: split it at a sentence or at a `;`.
   A table row is one line by syntax, so the bound does not apply to it.
+- A sentence holds at most two clauses, joined once.
+  The joint is one connective, a `;`, or a `:`; a third clause starts a new sentence.
+  A clause that only identifies a noun ("the spelling that compiles") does not count.
 - Remove words, not connectives.
   "So", "since" and "then" make short sentences read as prose rather than as a list.
 - Do not coin metaphor-based vocabulary.
@@ -152,7 +157,8 @@ Each rule is stated here in full; the cited decision holds its rationale and rej
   `--mode library` is the mode for output other code loads.
 - Runtime code is per-method units under `crates/dewasm-backend-<lang>/units/` (decisions 6/85).
   A unit carries a `# requires:` header, and the runtime is referenced as `Rt`.
-  Keep the headers in sync when editing a unit; the units lint enforces most of it.
+  Keep the headers in sync when editing a unit.
+  The units lint enforces most of it.
 - `Embedded` linkage isolates the runtime per artifact (decision 62).
   Two artifacts then coexist in one namespace.
   `embedded_coexist_e2e!` is the check.
