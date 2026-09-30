@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library and syntax-check the frontend.
-# doom_gen.pl is ~12MB of generated code and is gitignored.
+# `doom_gen.pl` is ~12MB of generated code and is ignored by Git.
 # So this step has to run before main.pl can require it from a clean checkout.
 # There's no compile step for Perl; `perl -c` stands in for one.
 set -euo pipefail

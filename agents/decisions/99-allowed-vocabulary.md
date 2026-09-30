@@ -2,9 +2,10 @@
 
 Status: **Accepted, 2026-09-30.**
 Landed: [`agents/vocabulary.md`](../vocabulary.md) holds the sources of allowed words and the excluded words.
-`cargo test -p text-check` applies the lists to every tracked Markdown file, and all of them pass.
-The pass in #341 rewrote the Markdown written before the lists.
-Comments in source code are not checked for vocabulary yet.
+`cargo test -p text-check` applies the lists to every tracked Markdown file and source comment.
+All of them pass.
+The pass in #341 rewrote the Markdown written before the lists, and the pass in #355 the comments.
+A comment a program reads, such as a unit's `# requires:` header, is not text and is not checked.
 
 ## Context
 
@@ -89,8 +90,9 @@ The two kinds of list catch different things: one the known metaphors, the other
 - Positive: a general word outside the base list is a reason to look for a plainer one.
 - Negative: the project terms are a list to keep, and it grows with the text it covers.
 - Negative: a check needs the base word of each word, so it needs the rules of derived forms in code.
-- Carry-over: the pass of decision 98 adds the check after the text is rewritten.
-  Before that pass, 1,679 base words of the whole text fall outside NGSL and NAWL.
+- Carry-over: the passes of decision 98 added the check after the text was rewritten.
+  Before them, 1,679 base words of the Markdown fell outside NGSL and NAWL.
+  The comments held 1,635 more distinct words outside the lists.
   The repository does not store the two base lists, which are under CC BY-SA 4.0.
   `crates/text-check/setup.sh` fetches them by sha256 and names their authors.
   The `lint` job keeps them in its cache.

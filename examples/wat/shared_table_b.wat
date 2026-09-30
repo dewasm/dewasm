@@ -1,4 +1,4 @@
-;; Counterpart of shared_table_a.wat: imports its table and call_indirects through it.
+;; Counterpart of `shared_table_a.wat`: imports its table and runs `call_indirect` through it.
 ;; It declares the shared type at a different index.
 (module
   (type (func (result i32)))

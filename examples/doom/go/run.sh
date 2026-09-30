@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build (if needed) and run the DOOM frontend, forwarding any arguments
-# (e.g. `./run.sh -smoke` for the headless self-check).
+# Build (if needed) and run the DOOM frontend, forwarding any arguments.
+# For example, `./run.sh -smoke` runs the headless self-check.
 set -euo pipefail
 cd "$(dirname "$0")"
 

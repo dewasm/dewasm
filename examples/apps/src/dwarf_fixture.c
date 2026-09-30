@@ -1,21 +1,21 @@
-// dwarf_fixture.c — first-party DWARF fixture for the --dwarf-line source
-// back-mapping test. Built by examples/apps/scripts/dwarf-fixture.sh with
-//   wasi-sdk clang -g -O1 -o cache/dwarf-fixture.wasm
+// dwarf_fixture.c: first-party DWARF fixture for the `--dwarf-line` source back-mapping test.
+// `examples/apps/scripts/dwarf-fixture.sh` builds it with this command:
+//   `wasi-sdk clang -g -O1 -o cache/dwarf-fixture.wasm`
 //
-// The two worker functions are exported and marked noinline so that -O1 keeps
-// them as distinct, addressable bodies with their own DWARF line-table rows
-// (an inlined or dead-code-eliminated body would leave nothing to pin). The
-// core test pins the DWARF address-base calibration by asserting a known
-// function's first source line, so the line numbers below are load-bearing:
-// keep add_mul's body starting where the test expects it. main() drives them
-// with fixed inputs and prints one deterministic number, so the Go/Ruby e2e
-// runs are byte-comparable with and without the flag.
+// The two worker functions are exported and marked `noinline`.
+// So `-O1` keeps them as distinct, addressable bodies with their own DWARF line-table rows.
+// An inlined body or one removed as dead code would leave nothing for the test to check.
+// The core test checks the DWARF address-base calibration by the known first line of a function.
+// So the line numbers below matter to that test.
+// Keep the body of `add_mul` starting where the test expects it.
+// `main()` drives both functions with fixed inputs and prints one deterministic number.
+// So the Go/Ruby e2e runs can compare their output with and without the flag.
 
 #include <stdint.h>
 #include <stdio.h>
 
-// Integer arithmetic on two parameters. First statement (the multiply) is the
-// row the core test calibrates against.
+// Integer arithmetic on two parameters.
+// Its first statement (the multiply) is the row the core test calibrates against.
 __attribute__((noinline, export_name("add_mul"))) int add_mul(int a, int b) {
     int product = a * b;
     int sum = a + b;

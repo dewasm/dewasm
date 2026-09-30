@@ -4,19 +4,20 @@
 # That is the two pure-source wasm interpreters we compare against.
 # It is also the built microbenchmark modules.
 #
-# cache/venv/    a Python venv with pywasm pinned to PYWASM_VERSION
-# cache/gems/    a GEM_HOME with wardite pinned to WARDITE_VERSION
-# cache/wat/*.wasm  the hand-written microbenchmarks, via wat/build.sh
-# cache/c/*.wasm    the C microbenchmarks, via c/build.sh
+# `cache/venv/`       a Python virtual environment with `pywasm` at version `PYWASM_VERSION`
+# `cache/gems/`       a `GEM_HOME` with `wardite` at version `WARDITE_VERSION`
+# `cache/wat/*.wasm`  the hand-written microbenchmarks, via `wat/build.sh`
+# `cache/c/*.wasm`    the C microbenchmarks, via `c/build.sh`
 #
-# Third-party artifacts are never committed, and the cache is gitignored.
-# Idempotent: re-running is a no-op beyond re-checking the pins and rebuilding the microbenchmarks.
+# Third-party artifacts are never committed, and the cache is ignored by Git.
+# Idempotent: re-running is a no-op beyond re-checking versions and rebuilding microbenchmarks.
 #
 # PyPy is deliberately not set up here.
-# The harness drives the host's own pypy3 install.
-# benchmarks/drivers/pywasm.py runs under it unmodified, but pywasm has to be importable there, e.g.
+# The harness drives the host's own `pypy3` install.
+# `benchmarks/drivers/pywasm.py` runs under it unmodified.
+# But `pywasm` has to be importable there, for example:
 #
-# pypy3 -m pip install pywasm==2.2.3
+# `pypy3 -m pip install pywasm==2.2.3`
 #
 
 set -euo pipefail
@@ -41,12 +42,12 @@ require_tool gem "install Ruby (brew install ruby)"
 venv=cache/venv
 gems=cache/gems
 
-# --- pywasm: pure Python, so the same install works under CPython and PyPy.
+# --- `pywasm`: pure Python, so the same install works under CPython and PyPy.
 [ -x "$venv/bin/python" ] || python3 -m venv "$venv"
 "$venv/bin/pip" install --quiet --disable-pip-version-check \
   "pywasm==$PYWASM_VERSION"
 
-# --- wardite: pure Ruby.
+# --- `wardite`: pure Ruby.
 # A private GEM_HOME keeps it out of the user's gems;
 # the drivers are run with GEM_HOME pointed here.
 GEM_HOME="$PWD/$gems" gem install wardite \

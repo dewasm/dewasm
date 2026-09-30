@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 # Interactive terminal frontend for the dewasm-generated NES library.
 # build.sh produces that library (nes_gen.sh) from examples/apps/cache/nes.wasm.
-# That module is our nes_demo.c wrapping the agnes emulator.
-# Renders into any ANSI truecolor terminal with half-block characters.
-# This is the same trick as the DOOM Bash frontend (../../doom/bash) and the other NES frontends.
+# That module is our `nes_demo.c` wrapping the `agnes` emulator.
+# Renders into any ANSI 24-bit color terminal with half-block characters.
+# This is the same trick as the DOOM Bash frontend (`../../doom/bash`) and the other NES frontends.
 #
 # The whole point of this frontend, like DOOM's, is that it needs no pixel window.
-# The bash backend interprets a full NES frame's worth of emulation (CPU + PPU) per tickGame call.
+# The Bash backend interprets a full NES frame's worth of emulation (CPU + PPU) per `tickGame` call.
 # It has no JIT.
-# So this is an existence-proof demo ("it runs at all"), not a game anyone will play at speed.
+# So this is an existence-proof example ("it runs at all"), not a game anyone will play at speed.
 # See README.md for the measured, honest framing.
 #
-# Run with --smoke for a headless self-check (no tty needed).
-# It loads the ROM, inits the game, ticks it a few frames, and renders one frame to a string.
+# Run with `--smoke` for a headless self-check (no terminal needed).
+# It loads the ROM, initializes the game, ticks it a few frames, and renders one frame to a string.
 # The frame is verified, never drawn.
 # Then it sanity-checks the frame and writes screenshot.ppm.
 #
-# nes_mem (the module's linear memory) is a global associative array, declared by nes_init.
-# This script never uses `set -u`, because sparse reads of nes_mem default to 0.
-# That matches the rest of the bash backend.
-# The script also never leans on `set -e` around a nes_* call.
+# `nes_mem` (the module's linear memory) is a global associative array, declared by `nes_init`.
+# This script never uses `set -u`, because sparse reads of `nes_mem` default to 0.
+# That matches the rest of the Bash backend.
+# The script also never leans on `set -e` around a `nes_*` call.
 # A generated function routinely computes an intermediate value of exactly 0.
-# bash treats that as a "failed" command.
-# The backend's status-cascade convention has every generated function return its real status.
+# Bash treats that as a "failed" command.
+# The backend's status chain protocol has every generated function return its real status.
 # It does so explicitly.
 # So this script checks *that* after each call.
 set -o pipefail
@@ -38,11 +38,11 @@ readonly ESC=$'\e'
 readonly DEFAULT_ROM=../../apps/cache/alter_ego.nes
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
 
-# NES controller button bits, matching src/nes_demo.c's setInput().
+# NES controller button bits, matching `setInput()` in `src/nes_demo.c`.
 readonly BTN_A=1 BTN_B=2 BTN_SELECT=4 BTN_START=8
 readonly BTN_UP=16 BTN_DOWN=32 BTN_LEFT=64 BTN_RIGHT=128
 
@@ -60,17 +60,17 @@ FRAME_H=0
 # Guest pointer to the palette-index screen buffer (one byte per pixel).
 # Also the module's fixed 64-entry palette, decoded into ready-made SGR escapes.
 # The palette is also decoded into R/G/B components.
-# All of it is read once in load_rom.
+# All of it is read once in `load_rom`.
 # The offsets are stable for the emulator's lifetime, and the palette never changes.
-# So per-frame work is one nes_mem read and one array lookup per sampled pixel.
+# So per-frame work is one `nes_mem` read and one array lookup per sampled pixel.
 SCREEN_OFF=0
 declare -a FG_SGR BG_SGR PAL_R PAL_G PAL_B
 
-# Overridden by run_interactive once the terminal is in raw/alternate-screen mode.
+# Redefined by `run_interactive` once the terminal is in raw mode on the alternate screen.
 # Otherwise it is a global no-op, so the die paths can call it unconditionally.
 restore_terminal() { :; }
 
-# ms-resolution monotonic-ish timestamp for phase/tick timing; no subshell, unlike `date`.
+# Millisecond timestamp, nearly monotonic, for phase/tick timing; no subshell, unlike `date`.
 # `10#` forces base-10.
 # So a leading-zero microseconds field isn't parsed as an (invalid) octal literal.
 epoch_ms() {
@@ -84,9 +84,9 @@ fmt_secs() {
   printf '%d.%03d' $(( ms / 1000 )) $(( ms % 1000 ))
 }
 
-# Calls a nes_* export and exits on anything but success.
+# Calls a `nes_*` export and exits on anything but success.
 # Before exiting it restores the terminal, a no-op outside interactive mode.
-# TRAP_MSG is the only place the actual reason lives (the status-cascade convention).
+# `TRAP_MSG` is the only place the actual reason lives (the status chain protocol).
 invoke_or_die() {
   local name=$1
   shift
@@ -104,12 +104,12 @@ invoke_or_die() {
 #
 # Unlike DOOM, the NES module has zero imports.
 # DOOM's WAD is embedded in its wasm module and delivered through a host import.
-# Here the host allocates a buffer with allocRom(size).
-# It copies the iNES ROM bytes straight into the module's linear memory (nes_mem).
-# The bytes go at the guest pointer allocRom returned.
-# Then it calls initGame(), which hands that buffer to agnes.
+# Here the host allocates a buffer with `allocRom(size)`.
+# It copies the iNES ROM bytes straight into the module's linear memory (`nes_mem`).
+# The bytes go at the guest pointer `allocRom` returned.
+# Then it calls `initGame()`, which hands that buffer to `agnes`.
 # `od -An -v -tu1` decodes the file to one unsigned decimal byte per token in a single pass.
-# A ~42KB ROM is ~42K array assignments, a few seconds once at startup.
+# A ~42KB ROM is ~42K array assignments, a few seconds once at start.
 # That is irrelevant next to the per-frame emulation cost below.
 load_rom() {
   local path=$1
@@ -139,7 +139,7 @@ load_rom() {
     exit 1
   fi
   local i
-  # nes_mem is associative, so the subscript is NOT an arithmetic context and must be pre-evaluated.
+  # `nes_mem` is associative: the subscript is NOT an arithmetic context and must be pre-evaluated.
   # SC2321's "remove the $((" assumes an indexed array.
   # It would store under the literal key "ptr + i".
   # shellcheck disable=SC2321
@@ -201,9 +201,9 @@ compute_grid() {
 
 # Builds one frame's worth of ANSI half-block cells into RENDER_OUT.
 # Deliberately flat inside the nested loops: no helper calls, no command substitution.
-# It also has no per-cell printf: string concatenation and arithmetic only.
+# It also has no per-cell `printf`: string concatenation and arithmetic only.
 # An SGR code is skipped when it repeats the previous cell's.
-# That is cheap and shrinks the string a lot on the NES's large flat-color areas.
+# That is cheap and makes the string a lot shorter on the NES's large flat-color areas.
 # Its PPU has a fixed 64-entry palette, with <=25 colors on screen at once.
 render_frame() {
   local buf="" cy cx top_base bot_base src_x ti bi
@@ -219,7 +219,7 @@ render_frame() {
       # Associative-array subscripts are literal strings, not arithmetic expressions.
       # Inside `$(( ))` it is different.
       # So every subscript needs an explicit `$`/`$(( ))`.
-      # A bare `nes_mem[o]` would look up the key "o", not the address.
+      # `nes_mem[o]` without a `$` would look up the key "o", not the address.
       ti=$(( ${nes_mem[$(( off + top_base + src_x ))]-0} & 0x3f ))
       bi=$(( ${nes_mem[$(( off + bot_base + src_x ))]-0} & 0x3f ))
       if (( ti != last_fg )); then
@@ -236,8 +236,8 @@ render_frame() {
   printf -v RENDER_OUT '%s' "$buf"
 }
 
-# Dumps the same sampled grid render_frame uses as an ASCII PPM (P3).
-# P3 is text, so there's no risk of a stray NUL confusing anything downstream.
+# Dumps the same sampled grid `render_frame` uses as an ASCII PPM (P3).
+# P3 is text, so there's no risk of a NUL byte confusing anything downstream.
 write_ppm() {
   local path=$1
   local w=$FRAME_W h=$FRAME_H off=$SCREEN_OFF
@@ -263,14 +263,14 @@ write_ppm() {
 # Terminals deliver key *presses* only, never releases.
 # There is no meaningful "held key" at this frame rate.
 # So a press is held for exactly the tick it was seen before.
-# Just before tickGame, setInput() gets the bitmask of everything seen since the previous tick.
-# Then the next frame's drain starts from an empty set again (setInput(0) unless re-pressed).
+# Just before `tickGame`, `setInput()` gets the bit mask of everything seen since the previous tick.
+# Then the next frame's drain starts from an empty set again (`setInput(0)` unless re-pressed).
 # That is one tick of "held down," as fine-grained as input can get here.
 DOWN_MASK=0
 QUIT=0
 
-# Key map (see README): arrows = D-pad, x = A, z = B, Enter = Start,
-# Space = Select, q / Ctrl-C = quit.
+# Key map (see README): arrows = D-pad, x = A, z = B, Enter = Start, Space = Select.
+# q / Ctrl-C = quit.
 handle_char() {
   local c=$1
   case "$c" in
@@ -283,10 +283,10 @@ handle_char() {
   esac
 }
 
-# Drains whatever bytes queued on stdin since the last call and folds them into DOWN_MASK.
+# Drains whatever bytes queued on `stdin` since the last call and folds them into `DOWN_MASK`.
 # Arrow keys arrive as ESC [ A/B/C/D; a lone ESC is dropped (the NES has no Escape).
 # Reads are raw single bytes with a tiny timeout, so the poll is non-blocking.
-# This matches DOOM's drain_input.
+# This matches DOOM's `drain_input`.
 drain_input() {
   DOWN_MASK=0
   local ch c2 c3
@@ -303,7 +303,7 @@ drain_input() {
           esac
         fi
       elif [[ -n $c2 ]]; then
-        # Not a CSI sequence: the ESC was spurious, c2 is a fresh byte.
+        # Not a CSI sequence: the ESC was a lone key press, `c2` is a fresh byte.
         handle_char "$c2"
       fi
     else
@@ -330,13 +330,13 @@ run_smoke() {
 
   # Tick to SMOKE_FRAMES with no input.
   # That is the same driving contract as the cross-backend framebuffer snapshot.
-  # The snapshot is in crates/dewasm-test-helper/src/nes.rs.
+  # The snapshot is in `crates/dewasm-test-helper/src/nes.rs`.
   # Alter Ego opens on a near-black boot frame (1 color at ~15 ticks).
   # It only fades in its final, stable credits screen (7 distinct colors) by frame ~37.
-  # So a shorter run would only ever screenshot black.
+  # So a shorter run would only ever capture a black frame.
   # At tens of seconds per frame this is ~20 minutes.
   # A progress line per tick keeps the silence from ever looking like a hang.
-  # Set SMOKE_FRAMES=N for a shorter pipeline check.
+  # Set `SMOKE_FRAMES=N` for a shorter end-to-end check.
   # Fewer than ~37 frames will legitimately be near-black.
   local frames=${SMOKE_FRAMES:-40}
   local total_ms=0 i
@@ -394,29 +394,29 @@ run_interactive() {
     exit 1
   fi
 
-  # Enter the alternate screen before ROM load/initGame even start, as DOOM does.
-  # Boot alone is not instant.
+  # Enter the alternate screen before ROM load/`initGame` even start, as DOOM does.
+  # Boot alone is not immediate.
   # Ctrl-C/kill during boot then exercises the same restore path as quitting the game loop.
   ORIG_STTY=$(stty -g)
   restore_terminal() {
     stty "$ORIG_STTY" 2>/dev/null || true
     # SGR reset first.
     # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-    # They would tint the shell prompt underneath.
+    # They would color the shell prompt underneath.
     printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
-  # Ctrl-C is handled as a byte in drain_input, since raw mode disables the terminal's own SIGINT.
-  # The INT/TERM traps are a backstop for `kill` or a signal during boot.
+  # Ctrl-C is handled as a byte in `drain_input`, since raw mode disables the terminal's own SIGINT.
+  # The INT/TERM traps are a fallback for `kill` or a signal during boot.
   # A custom INT/TERM trap does not itself end the process.
   # So these must call exit explicitly, and EXIT then also fires.
-  # restore_terminal is idempotent, so running it twice is harmless.
+  # `restore_terminal` is idempotent, so running it twice does no harm.
   trap restore_terminal EXIT
   trap 'restore_terminal; exit 130' INT
   trap 'restore_terminal; exit 143' TERM
   stty raw -echo
   printf '%s' "${ESC}[?1049h${ESC}[?25l${ESC}[2J${ESC}[H"
-  # -echo means a plain printf won't return to column 1 on its own; \r\n
-  # (not bare \n) keeps boot progress readable.
+  # `-echo` means a plain `printf` won't return to column 1 on its own.
+  # `\r\n` (not `\n` alone) keeps boot progress readable.
   boot_msg() { printf '%s\r\n' "$1"; }
 
   boot_msg "dewasm NES (bash): loading ROM $ROM_PATH and booting agnes; this is not instant."

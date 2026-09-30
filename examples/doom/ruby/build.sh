@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library and syntax-check the frontend.
-# doom_gen.rb is ~11MB of generated code and is gitignored.
+# `doom_gen.rb` is ~11MB of generated code and is ignored by Git.
 # So this step has to run before main.rb can require it from a clean checkout.
 # There's no compile step for Ruby; `ruby -c` stands in for one.
 set -euo pipefail

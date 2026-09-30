@@ -1,12 +1,12 @@
-/* wordcount: memory- and branch-heavy scanning over a generated buffer.
+/* `wordcount`: memory- and branch-heavy scanning over a generated buffer.
  *
  * One iteration consumes one byte of text.
- * It does a load, a handful of unpredictable branches, and a scattered histogram update.
- * sha256 is a straight-line arithmetic pipeline.
+ * It does a load, a few unpredictable branches, and a scattered update of `histogram`.
+ * `sha256` is a straight-line chain of arithmetic.
  * This microbenchmark instead shows what a backend's branch and array lowering actually costs.
- * The buffer is pseudo-random, so no branch here predicts and no histogram slot stays hot.
+ * The buffer is pseudo-random, so no branch here predicts and no slot of `histogram` stays hot.
  *
- * The text buffer is generated once at startup, before the iteration count is even consulted.
+ * The text buffer is generated once at start, before the iteration count is even consulted.
  * So its cost lands in the <iterations> = 0 baseline run the harness subtracts.
  * Per-iteration numbers stay pure scanning as a result.
  * <iterations> may exceed the buffer size; the scan wraps.
@@ -25,7 +25,7 @@ static const char ALPHABET[] = "abcdefghijklmnopqrstuvwxyz    \n\n";
 
 static char text[TEXT_SIZE];
 
-/* Runs before _start reads argv, so the generation cost is in the baseline. */
+/* Runs before `_start` reads `argv`, so the generation cost is in the baseline. */
 static void bench_setup(void) {
   u32 h = 0x9e3779b9u;
   for (u32 i = 0; i < TEXT_SIZE; i++) {
@@ -34,9 +34,9 @@ static void bench_setup(void) {
   }
 }
 
-/* Static, not a zero-initialized local: -nostdlib leaves no memset to call.
- * clang lowers a local `= {0}` of this size to a memset call.
- * Statics live in bss, which the engine zeroes at instantiation for free. */
+/* Static, not a zero-initialized local: `-nostdlib` leaves no `memset` to call.
+ * Clang lowers a local `= {0}` of this size to a `memset` call.
+ * Statics live in `bss`, which the engine zeroes at instantiation for free. */
 static u32 histogram[26];
 
 static u64 bench_run(u32 iterations) {

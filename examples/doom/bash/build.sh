@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library and syntax-check the frontend.
-# doom_gen.sh is ~19MB of generated code and is gitignored.
+# `doom_gen.sh` is ~19MB of generated code and is ignored by Git.
 # So this step has to run before main.sh can source it from a clean checkout.
-# There's no compile step for bash; `bash -n` stands in for one.
+# There's no compile step for Bash; `bash -n` stands in for one.
 set -euo pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then

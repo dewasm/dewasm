@@ -35,9 +35,9 @@ module SQLite3
         end
       @readonly = (flags & Constants::Open::READONLY) != 0
 
-      # The wasm guest sees the host filesystem 1:1 (the driver preopens "/").
-      # But its cwd is not the Ruby process's cwd.
-      # So absolutize relative paths, and both agree on where the database lives.
+      # The wasm guest sees the host file system 1:1 (the driver preopens "/").
+      # But its working directory is not the one of the Ruby process.
+      # So make relative paths absolute, and both agree on where the database lives.
       @path =
         if file.empty? || file == ":memory:" || file.start_with?("file:")
           file
@@ -52,7 +52,7 @@ module SQLite3
         raise NotImplementedError, "sqlite extensions are not supported by the dewasm shim"
       end
       # `strict:` (double-quoted-string rejection) needs sqlite3_db_config.
-      # That is a varargs API we don't export; ignore it rather than fail closed.
+      # That is a variadic API we don't export; ignore it rather than fail closed.
 
       if block
         begin
@@ -128,8 +128,8 @@ module SQLite3
     end
 
     # Rails' multi-statement path (fixtures, structure load).
-    # The real gem routes this through sqlite3_exec; the return value is discarded by
-    # Rails, so plain sequential execution is enough.
+    # The real gem routes this through `sqlite3_exec`.
+    # Rails ignores the return value, so running the statements one after another is enough.
     def execute_batch2(sql)
       execute_batch(sql)
       []
@@ -203,10 +203,10 @@ module SQLite3
     end
     alias busy_timeout= busy_timeout
 
-    # The real gem implements this as a Ruby busy_handler retry loop.
-    # A guest->host callback is not available here, so sqlite's built-in timeout handler stands in.
+    # The real gem implements this as a Ruby `busy_handler` retry loop.
+    # A guest->host callback is not available here, so SQLite's built-in timeout handler stands in.
     # The observable outcome is the same:
-    # SQLITE_BUSY after ~ms milliseconds → BusyException → ActiveRecord::StatementTimeout.
+    # SQLITE_BUSY after about `ms` milliseconds → BusyException → ActiveRecord::StatementTimeout.
     def busy_handler_timeout=(ms)
       busy_timeout(ms)
     end

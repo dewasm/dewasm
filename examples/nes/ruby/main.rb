@@ -2,20 +2,20 @@
 # frozen_string_literal: true
 
 # Interactive terminal frontend for the dewasm-generated NES library.
-# build.sh produces that library (nes_gen.rb) from the agnes-based cache/nes.wasm.
-# Unlike ../../doom, nes.wasm has zero host imports, so there's nothing to connect.
+# `build.sh` produces that library (`nes_gen.rb`) from `cache/nes.wasm`, which is built on `agnes`.
+# Unlike `../../doom`, `nes.wasm` has zero host imports, so there's nothing to connect.
 # This frontend only has to load a ROM into the module's linear memory.
 # Then it drives the game loop itself.
 # Pacing, input polling, and rendering all belong wholly to the host.
 # In DOOM, the module paces itself off a `timeInMilliseconds` import instead.
 #
-# Rendering reuses ../../doom/ruby's half-block truecolor trick.
-# This is not a downgrade even from a pixel window.
+# Rendering reuses the half-block 24-bit color trick of `../../doom/ruby`.
+# This is not a step down even from a pixel window.
 # A terminal has orders of magnitude fewer cells to redraw than a window has pixels.
 # It also reuses the key-hold heuristic for terminals delivering only key presses.
 #
-# Run with --smoke for a headless self-check (no tty needed).
-# It inits the game and ticks it a few hundred times with no input.
+# Run with `--smoke` for a headless self-check (no terminal needed).
+# It initializes the game and ticks it a few hundred times with no input.
 # It measures tick rate and render cost.
 # Then it writes the final frame to screenshot.ppm.
 
@@ -23,14 +23,14 @@ require_relative "nes_gen"
 require "io/console"
 
 # Terminals deliver only key *presses*.
-# So a press is held "down" for this long after the last matching press/autorepeat.
-# Then it drops out of the setInput bitmask.
-# The hold is comfortably above a terminal's own autorepeat interval.
+# So a press is held "down" for this long after the last matching press/key repeat.
+# Then it drops out of the `setInput` bit mask.
+# The hold is comfortably above a terminal's own key repeat interval.
 KEY_HOLD_SECONDS = 0.18
 
 DEFAULT_ROM_PATH = File.join(__dir__, "..", "..", "apps", "cache", "alter_ego.nes")
 
-# Button bits accepted by the module's setInput export (examples/apps/src/nes_demo.c).
+# Button bits accepted by the module's `setInput` export (`examples/apps/src/nes_demo.c`).
 BUTTON_BITS = {
   a: 0x01,
   b: 0x02,
@@ -42,9 +42,9 @@ BUTTON_BITS = {
   right: 0x80,
 }.freeze
 
-# Read the ROM file, copy it into the module's linear memory via allocRom.
+# Read the ROM file, copy it into the module's linear memory via `allocRom`.
 # Then initialize the emulator.
-# Raises if the ROM is rejected (unsupported mapper or corrupt file).
+# Raises if the ROM is rejected (unsupported mapper or damaged file).
 # That is the module's own way of signalling failure.
 def load_rom(nes, path)
   rom = File.binread(path)
@@ -56,12 +56,12 @@ end
 
 # Renders the frame into ANSI half-block terminal cells.
 # Each character cell shows two vertically-stacked source pixels via "▀".
-# The foreground is the top pixel and the background the bottom pixel, both 24-bit truecolor SGR.
-# This is the same trick as ../../doom/ruby's Renderer, ported here with one difference.
+# The foreground is the top pixel and the background the bottom pixel, both 24-bit color SGR.
+# This is the same trick as the `Renderer` of `../../doom/ruby`, ported here with one difference.
 # The NES's 256x240 framebuffer is already native resolution.
 # It has no implicit 2x upscale like DOOM's 640x400.
 # So the pixel cap is the frame's own width, not half of it.
-# This diffing/escape-sequence bookkeeping is the performance-sensitive part of this frontend.
+# This diff and escape-sequence tracking is the performance-sensitive part of this frontend.
 # The wasm execution is not.
 # It diffs against the previous frame's cell contents and the terminal's own cursor position.
 # It only emits an SGR code when a cell's color actually changed.
@@ -70,10 +70,10 @@ end
 # A terminal cell samples one pixel out of several.
 # So the only palette lookups performed are the sampled ones.
 # A color is a function of its index.
-# So the whole SGR string per index is precomputed once.
+# So the whole SGR string per index is computed once.
 # The frame diff then compares indices directly.
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
 
@@ -107,7 +107,7 @@ class Renderer
 
   # Builds one frame's worth of escape sequences/characters as a single string.
   # The caller is responsible for writing it.
-  # For --smoke, the caller just times how long this took and discards it.
+  # For `--smoke`, the caller just times how long this took and drops it.
   def render(screen, frame_w, frame_h, status_text)
     buf = String.new(capacity: @cell_cols * @cell_rows * 4)
     @cell_rows.times do |cy|
@@ -116,8 +116,8 @@ class Renderer
       prev_row = @prev[cy]
       @cell_cols.times do |cx|
         src_x = cx * frame_w / @pixel_cols
-        # One byte per pixel, a palette index; the & 0x3f mask is load-bearing
-        # (examples/apps/src/nes_demo.c).
+        # One byte per pixel, a palette index.
+        # The `& 0x3f` mask is load-bearing (`examples/apps/src/nes_demo.c`).
         top = screen.getbyte(top_row_base + src_x) & 0x3f
         bot = screen.getbyte(bot_row_base + src_x) & 0x3f
         key = (top << 6) | bot
@@ -140,7 +140,7 @@ class Renderer
     end
     if status_text != @last_status
       # Reset SGR first.
-      # Otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active.
+      # Otherwise the status line inherits whichever colors the last-drawn pixel cell left active.
       # Its background would then flicker with the game's own colors.
       # With the reset it stays the terminal default.
       buf << "\e[#{@cell_rows + 1};1H\e[0m#{STATUS_SGR}\e[K#{status_text}"
@@ -155,10 +155,10 @@ end
 
 # Terminals deliver only key *presses*, never releases.
 # So a press marks a button held until KEY_HOLD_SECONDS pass with no matching repeat.
-# Terminal autorepeat just resends the same bytes, which pushes the deadline back.
-# DOOM has discrete reportKeyDown/reportKeyUp events.
-# Unlike those, setInput wants the full held-button state on every tick.
-# So this hands back a bitmask rather than invoking anything on the module itself.
+# Terminal key repeat just resends the same bytes, which pushes the deadline back.
+# DOOM has discrete `reportKeyDown`/`reportKeyUp` events.
+# Unlike those, `setInput` wants the full held-button state on every tick.
+# So this hands back a bit mask rather than calling anything on the module itself.
 class InputHandler
   ESCAPE_SEQUENCES = {
     "\e[A" => :up,
@@ -182,7 +182,7 @@ class InputHandler
     expire_held_keys(now)
   end
 
-  # The setInput bitmask for every button currently considered held.
+  # The `setInput` bit mask for every button currently considered held.
   def mask
     @held_until.keys.reduce(0) { |m, key| m | BUTTON_BITS.fetch(key) }
   end
@@ -214,8 +214,8 @@ class InputHandler
     end
   end
 
-  # Returns true if it consumed (or decided to drop) something from
-  # @pending, false if it needs more bytes and the caller should stop polling for this tick.
+  # Returns true if it consumed (or decided to drop) something from `@pending`.
+  # Returns false if it needs more bytes and the caller should stop polling for this tick.
   def process_escape(now)
     if @pending.bytesize >= 3
       seq = ESCAPE_SEQUENCES.keys.find { |s| @pending.start_with?(s) }
@@ -223,7 +223,7 @@ class InputHandler
         key_down(ESCAPE_SEQUENCES[seq], now)
         @pending = @pending.byteslice(seq.bytesize..)
       else
-        # Not one of our known arrow sequences (e.g. an F-key or Home/End CSI sequence).
+        # Not one of our known arrow sequences (for example an F-key or Home/End CSI sequence).
         # Drop just the ESC byte and reprocess the rest as ordinary bytes.
         # That way they are not lost.
         @pending = @pending.byteslice(1..)
@@ -239,15 +239,15 @@ class InputHandler
     end
 
     if @pending == "\e" && @esc_seen_at
-      # Still a bare ESC on a second poll with no growth: a real Escape key press.
+      # Still a lone ESC on a second poll with no growth: a real Escape key press.
       # It has no mapping here, so it's just dropped.
       @pending = "".b
       @esc_seen_at = nil
       return true
     end
 
-    # "\e" (seen for the first time) or "\e[" (a valid prefix so far):
-    # wait for the rest to arrive on a later poll.
+    # "\e" (seen for the first time) or "\e[" (a valid prefix so far) is not complete yet.
+    # Wait for the rest to arrive on a later poll.
     @esc_seen_at ||= now if @pending == "\e"
     false
   end
@@ -299,7 +299,8 @@ end
 
 def new_nes
   nes = Nes.new
-  # Reactor init before any other export (nes.wasm has no WASI surface to run it implicitly).
+  # Reactor initialization comes before any other export.
+  # `nes.wasm` has no WASI surface to run it implicitly.
   nes.invoke("_initialize")
   nes
 end
@@ -313,7 +314,7 @@ def run_smoke(rom_path)
   screen_off = nes.invoke("screenOffset")
   palette = read_palette(nes)
 
-  # A synthetic terminal size, so this runs in CI/anywhere with no real tty.
+  # A synthetic terminal size, so this runs in CI/anywhere with no real terminal.
   renderer = Renderer.new(160, 51, frame_w, frame_h, palette)
 
   ticks = 300
@@ -342,7 +343,7 @@ def run_smoke(rom_path)
   puts "smoke: final frame is #{frame_w}x#{frame_h} with #{distinct.size} distinct colors"
   # The NES PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens.
   # A degenerate (blank/solid) frame lands in the single digits.
-  # This mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs).
+  # This mirrors the >4 threshold the snapshot oracle uses (`crates/xtask/src/nes_snapshot.rs`).
   if distinct.size <= 4
     warn "smoke: FAIL: frame looks degenerate (too few distinct colors)"
     exit 1
@@ -355,7 +356,7 @@ end
 ENTER_ALT_SCREEN = "\e[?1049h\e[?25l\e[2J\e[H"
 # SGR reset first.
 # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-# They would tint the shell prompt underneath.
+# They would color the shell prompt underneath.
 EXIT_ALT_SCREEN = "\e[0m\e[?25h\e[?1049l"
 
 # The NTSC NES runs at ~60.0988Hz.
@@ -391,7 +392,7 @@ def run_interactive(rom_path)
   at_exit(&restore)
   # Ctrl-C is handled explicitly as a byte in InputHandler.
   # Raw mode disables the terminal's own SIGINT generation.
-  # These traps are only a backstop for termination from outside (e.g. `kill`).
+  # These traps are only a fallback for ending the process from outside (for example `kill`).
   Signal.trap("INT") { restore.call; exit(0) }
   Signal.trap("TERM") { restore.call; exit(0) }
 
@@ -402,11 +403,11 @@ def run_interactive(rom_path)
       status_window_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       status_ticks = 0
       status_text = "dewasm NES | starting... | q/^C quit  arrows d-pad  x=A z=B  enter=start  space=select"
-      # Fixed-timestep pacing: the module has no clock import of its own.
+      # Pacing with a fixed time step: the module has no clock import of its own.
       # So 60Hz is entirely the host's job.
       # Cap at 60 ticks/sec by sleeping when ahead of schedule.
       # When the interpreter can't keep up, never sleep and just resync the schedule to "now".
-      # That avoids trying to burn through a backlog of missed frames.
+      # That avoids trying to catch up on all the missed frames.
       next_frame_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       loop do
         now = Process.clock_gettime(Process::CLOCK_MONOTONIC)

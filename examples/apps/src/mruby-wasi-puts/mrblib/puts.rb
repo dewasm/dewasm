@@ -1,7 +1,7 @@
-# Real mruby-io's Kernel#puts (mrblib/kernel.rb) is `$stdout.puts`; wasi has
-# no $stdout IO object here (mruby-io is excluded, see mrbgem.rake), so this
-# reimplements the same flatten-and-add-a-trailing-newline semantics on top
-# of core Kernel#print (src/print.c), which needs no gem.
+# The real `Kernel#puts` of `mruby-io` (`mrblib/kernel.rb`) is `$stdout.puts`.
+# WASI has no `$stdout` IO object here, since `mruby-io` is excluded (see `mrbgem.rake`).
+# So this re-implements the same flatten-and-add-a-trailing-newline semantics.
+# It sits on top of core `Kernel#print` (`src/print.c`), which needs no gem.
 module Kernel
   private def puts(*args)
     if args.empty?

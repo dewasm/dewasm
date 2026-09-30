@@ -26,9 +26,9 @@ import doom_gen
 
 SAVE_DIR = ".savegame"
 
-# reportKeyDown/reportKeyUp expect the module's KEY_* global values.
+# `reportKeyDown`/`reportKeyUp` expect the module's `KEY_*` global values.
 # They are looked up once after the module is constructed.
-# They're plain ints, not globals that can change at runtime.
+# They're plain integers, not globals that can change at runtime.
 KEY_NAMES = (
     "KEY_UPARROW",
     "KEY_DOWNARROW",
@@ -44,11 +44,11 @@ KEY_NAMES = (
     "KEY_STRAFE_R",
 )
 
-# A pressed key is held reportKeyDown-active until this many seconds pass without seeing it again.
-# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# A pressed key stays down for `reportKeyDown` until this many seconds pass without seeing it again.
+# Terminals only deliver key-down events (no key-up), so releases have to be generated.
 # The window is wider than a typical "typematic" gap.
 # Under CPython this frontend manages under two ticks/sec.
-# So tickGame() calls, and therefore chances to notice a repeat, are ~700ms apart.
+# So `tickGame()` calls, and therefore chances to notice a repeat, are ~700ms apart.
 RELEASE_TIMEOUT = 0.4
 
 start_time = time.monotonic()
@@ -58,8 +58,8 @@ start_time = time.monotonic()
 # That instance owns the memory.
 doom = None
 
-# Set by loading.onGameInit (640x400 for this binary).
-# Updated by every ui.drawFrame call during a tick; never hardcoded.
+# Set by `loading.onGameInit` (640x400 for this binary).
+# Updated by every `ui.drawFrame` call during a tick; never a constant in the source.
 frame_w = frame_h = 0
 frame_off = None
 
@@ -77,10 +77,10 @@ def on_error_message(off, length):
 
 
 # In interactive mode the alternate screen owns the whole terminal.
-# So info messages would corrupt the frame if printed to stdout.
-# Doom's own messages carry no trailing newline.
+# So informational messages would break the frame if printed to `stdout`.
+# DOOM's own messages carry no trailing newline.
 # We add one, matching the Go/Java frontends.
-# Routing both message kinds to stderr keeps them visible without touching the game's own screen.
+# Routing both message kinds to `stderr` keeps them visible without touching the game's own screen.
 def on_info_message(off, length):
     print(read_string(off, length), file=sys.stderr)
 
@@ -115,9 +115,9 @@ def time_in_milliseconds():
 
 
 # Only records where the frame landed.
-# drawFrame can be called mid-tick, and memory can grow later in the same tick.
-# Growing reallocates the backing bytearray.
-# So the actual pixel read always happens afterwards against a freshly fetched memoryview.
+# `drawFrame` can be called mid-tick, and memory can grow later in the same tick.
+# Growing reallocates the backing `bytearray`.
+# So the actual pixel read always happens afterwards against a freshly fetched `memoryview`.
 # It never uses a cached one.
 def draw_frame(buf_off):
     global frame_off
@@ -126,7 +126,7 @@ def draw_frame(buf_off):
 
 # Leaving both output slots at their pre-zeroed 0 tells the module to fall back to its embedded WAD.
 # That is the shareware WAD.
-# readWads is then never called at all.
+# `readWads` is then never called at all.
 def wad_sizes(number_of_wads_off, total_bytes_off):
     pass
 
@@ -175,13 +175,13 @@ IMPORTS = {
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
 def _pixel(mv, off, buf_w, lx, ly):
-    # Memory byte order is B, G, R, A (see loading/drawFrame host contract).
+    # Memory byte order is B, G, R, A (see the `loading`/`drawFrame` host contract).
     o = off + (ly * 2 * buf_w + lx * 2) * 4
     return mv[o + 2], mv[o + 1], mv[o]
 
@@ -277,11 +277,11 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Terminals deliver key presses only, in raw mode as bytes on `stdin`.
 # Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
-# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# A lone ESC key press looks the same as an escape sequence's first byte until either:
 # - more bytes show up; they arrive together, already buffered, for a real escape sequence;
-# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
+# - a short timeout passes with nothing more arriving, which means a real ESC key press.
 _ESC_TIMEOUT = 0.01
 
 _ARROW_KEYS = {b"A": "KEY_UPARROW", b"B": "KEY_DOWNARROW", b"C": "KEY_RIGHTARROW", b"D": "KEY_LEFTARROW"}
@@ -337,7 +337,7 @@ def run_interactive():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         # SGR reset first.
         # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-        # They would tint the shell prompt underneath.
+        # They would color the shell prompt underneath.
         os.write(1, b"\x1b[0m\x1b[?25h\x1b[?1049l")
 
     def on_sigterm(signum, frame):
@@ -450,7 +450,7 @@ def run_smoke():
 
     # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
     # So a healthy frame tops out in the low hundreds.
-    # A truecolor renderer would produce thousands.
+    # A 24-bit color renderer would produce thousands.
     # A degenerate frame (blank/solid) instead lands in the single digits.
     if len(distinct) <= 50:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)

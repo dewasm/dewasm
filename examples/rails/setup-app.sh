@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generate the demo Rails app (gitignored) and graft in the few files that make it ours.
+# Generate the example Rails app (ignored by Git) and add the few files that make it ours.
 # Those are a Gemfile pointing sqlite3 at the dewasm shim, and a Post model with a JSON controller.
 # Requires the rails gem (>= 8.1).
 set -euo pipefail

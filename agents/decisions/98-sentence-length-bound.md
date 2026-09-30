@@ -6,6 +6,7 @@ The measure and the clause rule were settled on 2026-09-30.
 The pass in #341 brought the rest of the text under the bound on 2026-09-30.
 That is `agents/`, `docs/`, the README files, the comments in source code, and the `xtask` templates.
 `cargo test -p text-check` checks every tracked text file; `cargo xtask check-text` reports one.
+Since #355 it also reads the comments of `.c` and `.h` files.
 The `lint` job runs it, so a defect fails CI without waiting for the other jobs.
 
 ## Context
@@ -123,6 +124,7 @@ What remains is to remove words that carry nothing, or to split.
 - Carry-over: that pass added two checks, now in `cargo test -p text-check`.
   One counts a Markdown sentence as read, and skips table rows and fenced code.
   Another counts the columns of a comment line in source code.
-  A third, still to come, reports a use of a word listed in [`agents/vocabulary.md`](../vocabulary.md).
-  That list is a table, so a linter's rule files can be generated from it later.
+  A third, the vocabulary check of decision 99, reads the same text: Markdown and comments.
+  Its lists are tables in [`agents/vocabulary.md`](../vocabulary.md).
+  A table can later generate the rule files of a linter.
   No check detects a sentence wrapped across lines, or a third clause; a reader checks those.

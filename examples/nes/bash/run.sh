@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build (if needed) and run the NES frontend, forwarding any arguments (e.g.
-# `./run.sh --smoke` for the headless self-check, or a ROM path).
+# Build (if needed) and run the NES frontend, forwarding any arguments.
+# An example is a ROM path, or `./run.sh --smoke` for the headless self-check.
 set -euo pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then

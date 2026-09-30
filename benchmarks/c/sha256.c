@@ -1,13 +1,13 @@
-/* sha256: an i32-heavy real algorithm.
+/* `sha256`: an i32-heavy real algorithm.
  *
  * One iteration compresses one 64-byte block, so this is the compression function and nothing else.
  * There is no padding, no length encoding, and no allocation.
  * The block contents are derived from the block index.
  * So the work is self-contained, and the result depends on the iteration count.
  *
- * SHA-256 is almost entirely 32-bit add / xor / and / rotate.
- * That makes it a realistic counterpart to the hand-written wat/i32_alu microbenchmark.
- * The op mix is the same, but with a 64-word message schedule in memory.
+ * SHA-256 is almost entirely 32-bit add / `xor` / `and` / rotate.
+ * That makes it a realistic counterpart to the hand-written `wat/i32_alu` microbenchmark.
+ * The operation mix is the same, but with a 64-word message schedule in memory.
  * It also has a 64-round loop the backend cannot keep entirely in registers.
  *
  * The result is the first two state words joined into one u64.
@@ -68,7 +68,7 @@ static u64 bench_run(u32 iterations) {
   u8 block[64];
 
   for (u32 i = 0; i < iterations; i++) {
-    /* Fill the block from the index so successive blocks differ.
+    /* Fill the block from the index so adjacent blocks differ.
      * That is cheap relative to the 64 compression rounds that follow. */
     u32 h = i * 2654435761u + 1u;
     for (u32 j = 0; j < 64; j++) {

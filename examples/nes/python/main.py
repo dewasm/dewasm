@@ -38,7 +38,7 @@ import nes_gen
 
 DEFAULT_ROM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "apps", "cache", "alter_ego.nes")
 
-# Controller bit layout, fixed by nes_demo.c's setInput contract.
+# Controller bit layout, fixed by the `setInput` contract of `nes_demo.c`.
 BIT_A = 1
 BIT_B = 2
 BIT_SELECT = 4
@@ -49,12 +49,12 @@ BIT_LEFT = 64
 BIT_RIGHT = 128
 
 # A pressed key is held down-active until this many seconds pass without seeing it again.
-# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# Terminals only deliver key-down events (no key-up), so releases have to be generated here.
 # Ticks land ~90ms apart under PyPy and ~0.5s apart under CPython (README has the numbers).
-# So this reuses the DOOM Python frontend's RELEASE_TIMEOUT.
+# So this reuses `RELEASE_TIMEOUT` of the DOOM Python frontend.
 # The Ruby/Perl NES frontends use a much shorter one at their much higher tick rates.
 # Here the window has to bridge the gap between ticks.
-# A terminal's own autorepeat interval is not the only gap.
+# A terminal's own key repeat interval is not the only gap.
 RELEASE_TIMEOUT = 0.4
 
 FRAME_W = 256
@@ -62,8 +62,8 @@ FRAME_H = 240
 
 nes = None
 screen_off = 0
-# The module's fixed palette, read once after initGame: 64 (r, g, b) entries.
-# Each entry also has the truecolor SGR escape it renders as.
+# The module's fixed palette, read once after `initGame`: 64 (r, g, b) entries.
+# Each entry also has the 24-bit color SGR escape it renders as.
 palette = []
 fg_sgr = []
 bg_sgr = []
@@ -98,21 +98,21 @@ def load_palette():
 # Each character cell shows two vertically-stacked pixels via the upper-half block character.
 # Its foreground is the top pixel, and its background is the bottom pixel.
 # DOOM's 640x400 framebuffer is a 2x upscale of its native 320x200.
-# Unlike it, agnes's 256x240 framebuffer already is the native NES resolution.
+# Unlike it, the 256x240 framebuffer of `agnes` already is the native NES resolution.
 # So pixels are read 1:1.
 # They are nearest-neighbor sampled down to however many columns/rows actually fit.
 
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
 def _index(mv, off, buf_w, x, y):
-    # One byte per pixel, a palette index; the & 0x3F mask is load-bearing
-    # (see nes_demo.c).
+    # One byte per pixel, a palette index.
+    # The `& 0x3F` mask is load-bearing (see `nes_demo.c`).
     return mv[off + y * buf_w + x] & 0x3F
 
 
@@ -206,11 +206,11 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Terminals deliver key presses only, in raw mode as bytes on `stdin`.
 # Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
-# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# A lone ESC key press looks the same as an escape sequence's first byte until either:
 # - more bytes show up; they arrive together, already buffered, for a real escape sequence;
-# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
+# - a short timeout passes with nothing more arriving, which means a real ESC key press.
 _ESC_TIMEOUT = 0.01
 
 _ARROW_BITS = {b"A": BIT_UP, b"B": BIT_DOWN, b"C": BIT_RIGHT, b"D": BIT_LEFT}
@@ -267,7 +267,7 @@ def run_interactive(rom_path):
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         # SGR reset first.
         # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-        # They would tint the shell prompt underneath.
+        # They would color the shell prompt underneath.
         os.write(1, b"\x1b[0m\x1b[?25h\x1b[?1049l")
 
     renderer = Renderer()
@@ -279,9 +279,9 @@ def run_interactive(rom_path):
     tty.setraw(fd)
     os.write(1, b"\x1b[?1049h\x1b[?25l")
     try:
-        # Fixed-timestep pacing: sleep when running ahead of schedule.
+        # Pacing with a fixed time step: sleep when running ahead of schedule.
         # When the interpreter can't keep up, never sleep and just resync the schedule to "now".
-        # That avoids trying to burn through a backlog of missed frames.
+        # That avoids trying to catch up on all the missed frames.
         next_frame_at = time.monotonic()
         while True:
             events = []
@@ -350,13 +350,13 @@ def write_ppm_and_count_colors(path, mv, off, w, h):
     return distinct
 
 
-# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs.
+# Matches `NES_FRAMES` in `crates/dewasm-test-helper/src/nes.rs`.
 # It is the smallest input-free tick count that clears Alter Ego's boot.
 # That run reaches its stable credits screen.
-# It also lets a smoke run's screenshot.ppm be diffed directly against the snapshot.
-# The snapshot is examples/apps/snapshots/nes_frame.ppm.
+# It also lets a smoke run's `screenshot.ppm` be diffed directly against the snapshot.
+# The snapshot is `examples/apps/snapshots/nes_frame.ppm`.
 # Perl, the other frontend slow enough to feel every extra tick, uses the same count.
-# Ruby/Go/Java run several hundred instead, since their tick cost is negligible.
+# Ruby/Go/Java run several hundred instead, since their tick cost is too small to matter.
 SMOKE_FRAMES = 40
 
 
@@ -393,12 +393,12 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
     print(f"smoke: final frame is {FRAME_W}x{FRAME_H}, wrote screenshot.ppm ({len(distinct)} distinct colors)")
 
     # The NES PPU palette tops out at 64 colors.
-    # agnes's frame is a small, mostly-flat subset of it.
+    # The frame of `agnes` is a small, mostly-flat subset of it.
     # Alter Ego's title screen settles at 7.
-    # NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs records that.
-    # So a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce.
+    # The comment on `NES_FRAMES` in `crates/dewasm-test-helper/src/nes.rs` records that.
+    # So a healthy frame is far from the thousands of colors a 24-bit color renderer would produce.
     # A degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
-    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs).
+    # Mirrors the >4 threshold the snapshot oracle uses (`crates/xtask/src/nes_snapshot.rs`).
     # The Ruby/Perl frontends use it too.
     ok = True
     if len(distinct) <= 4:

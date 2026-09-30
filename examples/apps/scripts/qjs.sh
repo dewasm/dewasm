@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# qjs: the quickjs-ng JavaScript engine, official WASI CLI release asset.
+# `qjs`: the `quickjs-ng` JavaScript engine, official WASI CLI release asset.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

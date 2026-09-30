@@ -2,36 +2,36 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# mruby: built with wasi-sdk from the pinned 3.4.0 release source.
-# The build is mruby's own `rake` build (src/mruby_build_config.rb).
+# mruby: built with `wasi-sdk` from the 3.4.0 release source, a fixed version.
+# The build is mruby's own `rake` build (`src/mruby_build_config.rb`).
 #
 # This app exists to exercise the wasm exception-handling proposal.
-# mruby's raise/rescue/ensure lower to C setjmp/longjmp (include/mruby/throw.h).
-# wasm32 has no native setjmp/longjmp.
+# mruby's raise/rescue/ensure lower to C `setjmp`/`longjmp` (`include/mruby/throw.h`).
+# wasm32 has no native `setjmp`/`longjmp`.
 # So every object is compiled with LLVM's SJLJ lowering.
 # The lowering rewrites them into `try_table`/`throw`.
 # The lowering flags are `-mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false`.
-# The link adds `-lsetjmp`, wasi-sdk's prebuilt runtime for that lowering.
-# SetjmpLongjmp.md in the wasi-sdk repository documents it.
-# wasm-opt is never run on the result, unlike the sibling wasi-sdk-built apps.
-# common.sh's wasm_opt_inplace is pinned to a baseline feature set.
+# The link adds `-lsetjmp`, the prebuilt runtime of `wasi-sdk` for that lowering.
+# `SetjmpLongjmp.md` in the `wasi-sdk` repository documents it.
+# `wasm-opt` is never run on the result, unlike the other apps built with `wasi-sdk`.
+# `wasm_opt_inplace` in `common.sh` is fixed to a baseline feature set.
 # That set never includes exception-handling.
 # This module exists specifically to carry EH instructions.
 #
-# Gem selection: the wasi build cannot include mruby-io, mruby-dir, or mruby-socket.
-# mruby-io's src/io.c unconditionally `#include <sys/wait.h>` for IO.popen (fork+wait).
-# wasi-libc ships no such header at all, and no define works around it.
-# mruby-socket needs <sys/socket.h>/<netinet/*.h>.
-# wasi-libc likewise never provides those (WASI preview1 has no BSD sockets).
-# mruby-dir is milder: its only wasi blocker is <signal.h>.
-# wasi-libc poisons that header behind an #error unless built with -D_WASI_EMULATED_SIGNAL.
-# But mruby-dir stays out too: nothing in MRUBY_GEMS needs that emulation.
+# Gem selection: the WASI build cannot include `mruby-io`, `mruby-dir`, or `mruby-socket`.
+# `src/io.c` of `mruby-io` unconditionally `#include <sys/wait.h>` for IO.popen (fork+wait).
+# `wasi-libc` ships no such header at all, and no define works around it.
+# `mruby-socket` needs `<sys/socket.h>`/`<netinet/*.h>`.
+# `wasi-libc` likewise never provides those (WASI preview1 has no BSD sockets).
+# `mruby-dir` is an easier case: its only WASI blocker is <signal.h>.
+# `wasi-libc` guards that header with an #error unless built with -D_WASI_EMULATED_SIGNAL.
+# But `mruby-dir` stays out too: nothing in MRUBY_GEMS needs that emulation.
 # Pulling in Dir for its own sake is out of scope for this fixture.
-# MRUBY_GEMS below is the general-purpose stdlib set confirmed to compile clean on wasi.
-# mruby-print does not exist as a gem: Kernel#print/#p are core (src/print.c), always built in.
-# Losing mruby-io also loses Kernel#puts.
-# Kernel#puts is mruby-io/mrblib/kernel.rb (`$stdout.puts`), not core.
-# src/mruby-wasi-puts (listed in mruby_build_config.rb) restores it.
+# MRUBY_GEMS below is the general-purpose standard library set confirmed to compile clean on WASI.
+# `mruby-print` is not a gem: Kernel#print/#p are core (`src/print.c`), always built in.
+# Losing `mruby-io` also loses Kernel#puts.
+# `Kernel#puts` is `mruby-io/mrblib/kernel.rb` (`$stdout.puts`), not core.
+# `src/mruby-wasi-puts` (listed in mruby_build_config.rb) restores it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -45,8 +45,8 @@ MRUBY_GEMS=(
   mruby-error mruby-metaprog mruby-pack mruby-random mruby-time
 )
 
-# The stamp covers the source sha, the gem list, and the toolchain token.
-# So bumping any retriggers the build.
+# The stamp covers the source checksum, the gem list, and the toolchain token.
+# So changing any retriggers the build.
 mruby_key="$MRUBY_SHA256 gems:${MRUBY_GEMS[*]} $(wasi_sdk_stamp)"
 mruby_stamp="cache/mruby.src-sha256"
 if is_cached "$mruby_stamp" "$mruby_key" cache/mruby.wasm; then
@@ -72,9 +72,9 @@ tar xzf "$tmp/mruby.tar.gz" -C "$tmp"
 MRUBY_EH_FLAGS=(-mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false)
 
 # Compile wrapper: every object needs the SJLJ flags.
-# Link wrapper: -lsetjmp after the objects, plus --strip-debug.
+# Link wrapper: `-lsetjmp` after the objects, plus --strip-debug.
 # Otherwise mruby.wasm carries full DWARF, ~5x the stripped size.
-# wasm-opt, which strips it for the sibling apps, cannot run here.
+# `wasm-opt`, which strips it for the other apps, cannot run here.
 cc_wrapper="$tmp/mruby-cc.sh"
 {
   echo '#!/bin/sh'
@@ -84,7 +84,7 @@ cc_wrapper="$tmp/mruby-cc.sh"
 } >"$cc_wrapper"
 chmod +x "$cc_wrapper"
 
-# --no-wasm-opt for the same reason as common.sh's wasi_sdk_clang.
+# `--no-wasm-opt` for the same reason as `wasi_sdk_clang` in `common.sh`.
 # It is doubly load-bearing here, where the module must keep its EH instructions.
 ld_wrapper="$tmp/mruby-ld.sh"
 printf '#!/bin/sh\nexec "%s/bin/clang" --target=wasm32-wasip1 --no-wasm-opt -Wl,--strip-debug "$@" -lsetjmp\n' "$WASI_SDK_PATH" >"$ld_wrapper"

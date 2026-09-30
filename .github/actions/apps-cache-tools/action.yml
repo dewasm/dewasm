@@ -7,7 +7,7 @@ description: >
 runs:
   using: composite
   steps:
-    # Binaryen comes from the pinned upstream release, not apt.
+    # Binaryen comes from the upstream release at a fixed version, not from `apt`.
     # The reason is the same as for the apps-cache job, which takes it from there too.
     - shell: bash
       run: |

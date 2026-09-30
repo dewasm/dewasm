@@ -1,6 +1,6 @@
-# A deterministic exercise of mruby's exception handling: plain
-# raise/rescue, ensure, a custom exception class, and retry.
-# stdout is byte-stable: no timestamps, no randomness, no object_id.
+# A deterministic exercise of mruby's exception handling.
+# It covers plain `raise`/`rescue`, `ensure`, a custom exception class, and `retry`.
+# `stdout` is the same on every run: no timestamps, no randomness, no `object_id`.
 
 class RetryableError < StandardError
 end

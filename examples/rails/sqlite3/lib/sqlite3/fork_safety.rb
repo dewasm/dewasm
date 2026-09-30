@@ -3,7 +3,7 @@ module SQLite3
   # It closes the writable ones in the child.
   # Our connections are pure Ruby state in a copied linear memory.
   # So there is nothing process-level to protect.
-  # The module exists because Rails calls suppress_warnings! at require time.
+  # The module exists because Rails calls `suppress_warnings!` at require time.
   module ForkSafety
     def self.suppress_warnings!
     end

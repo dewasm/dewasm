@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated NES library and build the ebiten frontend.
-# nes/nes_gen.go is generated code and is gitignored.
+# Regenerate the dewasm-generated NES library and build the Ebiten frontend.
+# `nes/nes_gen.go` is generated code and is ignored by Git.
 # So this step has to run before `go build` can succeed from a clean checkout.
-# The binary goes to bin/nes: the package directory beside it is already called nes.
+# The binary goes to `bin/nes`: the package directory beside it is already called `nes`.
 set -euo pipefail
 cd "$(dirname "$0")"
 

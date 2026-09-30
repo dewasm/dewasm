@@ -1,10 +1,10 @@
-;; Two shapes in which a folded operand can be overwritten by the reuse of the temp slot it reads.
+;; Two shapes in which the reuse of the temp slot a folded operand reads can overwrite that operand.
 ;; They are a call result taking the slot, and a spill writing it.
 ;; Both are pure arithmetic, so any wrong result is a folding bug.
-;; _start reports via proc_exit: 42 when both check out, 1 or 2 for the failing one.
+;; `_start` reports through `proc_exit`: 42 when both check out, 1 or 2 for the failing one.
 (module
   (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
-  ;; Exported so wasmtime can run this fixture as ground truth.
+  ;; Exported so Wasmtime can run this fixture as ground truth.
   ;; Its WASI host functions require the guest memory to be exported.
   (memory (export "memory") 1)
   (func $one (result i32) i32.const 1)

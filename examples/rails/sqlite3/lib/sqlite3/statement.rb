@@ -5,8 +5,8 @@ module SQLite3
     ROW = Constants::ErrorCode::ROW
     DONE = Constants::ErrorCode::DONE
 
-    # SQL left uncompiled after the first statement (sqlite3_prepare_v2 tail);
-    # execute_batch2 consumes it statement by statement.
+    # SQL left uncompiled after the first statement (the tail of `sqlite3_prepare_v2`).
+    # `execute_batch2` consumes it statement by statement.
     attr_reader :remainder
 
     def initialize(db, sql)
@@ -29,7 +29,7 @@ module SQLite3
         db.check(rc, sql: sql)
         @stmt = drv.mem.iwl(pp_stmt)
         tail = drv.mem.iwl(pp_tail)
-        # The tail points into sql_ptr's buffer: read it before the ensure frees it.
+        # The tail points into the buffer of `sql_ptr`: read it before the ensure frees it.
         @remainder = tail.zero? ? "" : drv.read_cstr(tail)
       ensure
         drv.free(sql_ptr)
@@ -37,8 +37,8 @@ module SQLite3
         drv.free(pp_tail)
       end
 
-      # Whitespace/comment-only SQL compiles to no statement (@stmt == 0);
-      # such a Statement steps straight to done, like the real gem's.
+      # Whitespace/comment-only SQL compiles to no statement (`@stmt == 0`).
+      # Such a Statement steps straight to done, like the one of the real gem.
       @column_count = @stmt.zero? ? 0 : drv.call("sqlite3_column_count", @stmt)
       @db.register_statement(self)
 
@@ -65,7 +65,7 @@ module SQLite3
         nil
       else
         # Reset first (like the C gem), so the statement stays reusable.
-        # Then raise with the message sqlite left on the connection.
+        # Then raise with the message SQLite left on the connection.
         @drv.call("sqlite3_reset", @stmt)
         raise @db.error_for(rc)
       end

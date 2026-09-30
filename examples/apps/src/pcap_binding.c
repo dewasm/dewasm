@@ -1,15 +1,17 @@
 /*
- * pcap_binding.c: our own committed C source (first-party source is
- * fine to commit; only third-party *artifacts* stay out of the tree).
+ * pcap_binding.c: our own committed C source.
+ * First-party source is fine to commit; only third-party *artifacts* stay out of the tree.
  *
- * A reactor library exporting a single BPF-filter-compilation entry point on
- * top of libpcap's platform-independent compiler (gencode.c/optimize.c). No
- * capture backend is built (see src/pcap_config.h); only pcap_compile_nopcap()
- * (which turns a textual filter like "tcp port 80" into a BPF program) is
- * reachable. Built into cache/libpcap.wasm by examples/apps/scripts/libpcap.sh from the
- * pinned upstream release, with the same wasi-sdk reactor flags as the
- * sqlite3 apps. The headers and resolver stand-ins the wasi build needs
- * beyond wasi-libc live in src/pcap_wasi.
+ * A reactor library exporting a single BPF-filter-compilation entry point.
+ * It sits on top of the platform-independent compiler of `libpcap` (`gencode.c`/`optimize.c`).
+ * No capture backend is built (see `src/pcap_config.h`).
+ * Only `pcap_compile_nopcap()` is reachable.
+ * It turns a filter written as text, like "tcp port 80", into a BPF program.
+ * `examples/apps/scripts/libpcap.sh` builds this into `cache/libpcap.wasm`.
+ * It builds from the upstream release at a fixed version.
+ * It uses the same `wasi-sdk` reactor flags as the `sqlite3` apps.
+ * The WASI build needs headers and resolver stand-ins beyond `wasi-libc`.
+ * They live in `src/pcap_wasi`.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -18,21 +20,22 @@
 #include <pcap/pcap.h>
 
 /*
- * Compile the textual filter `expr` for datalink type `linktype` (e.g.
- * DLT_EN10MB == 1) with capture length `snaplen`, and serialize the resulting
- * BPF program into a freshly malloc'd buffer in guest memory. Layout (all
- * little-endian, tightly packed, no padding):
+ * Compile the filter text `expr` for the data link type `linktype`, with capture length `snaplen`.
+ * An example of `linktype` is `DLT_EN10MB == 1`.
+ * Serialize the resulting BPF program into a new `malloc`'d buffer in guest memory.
+ * Layout (all little-endian, tightly packed, no padding):
  *
- *   [u32 bf_len]:                                number of BPF instructions
- *   bf_len x { u16 code; u8 jt; u8 jf; u32 k }:  8 bytes each
+ *   `[u32 bf_len]`:                                number of BPF instructions
+ *   `bf_len x { u16 code; u8 jt; u8 jf; u32 k }`:  8 bytes each
  *
- * Returns the guest pointer to that buffer, or 0 on any error (compile
- * failure or out-of-memory). The caller reads bf_len, then that many 8-byte
- * instructions, and frees the buffer with free(). NB: an *invalid* filter
- * expression traps rather than returning 0: libpcap reports filter syntax
- * errors via longjmp, and the baseline-wasm setjmp/longjmp stand-in in
- * src/pcap_config.h turns that unwind into a trap. Valid filters, the only
- * ones this demo drives, compile and serialize normally.
+ * Returns the guest pointer to that buffer, or 0 on any error (compile failure or out-of-memory).
+ * The caller reads `bf_len`, then that many 8-byte instructions.
+ * It then frees the buffer with `free()`.
+ * Note: an *invalid* filter expression traps rather than returning 0.
+ * `libpcap` reports filter syntax errors with `longjmp`.
+ * The baseline-wasm `setjmp`/`longjmp` stand-in turns that unwind into a trap.
+ * That stand-in is in `src/pcap_config.h`.
+ * Valid filters, the only ones this example drives, compile and serialize normally.
  */
 uint8_t *compile_filter(const char *expr, int linktype, int snaplen) {
   struct bpf_program prog;

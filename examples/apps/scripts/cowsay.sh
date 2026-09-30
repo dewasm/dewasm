@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# cowsay: the classic args+stdout demo, from our own C reimplementation of cowsay 3.03.
+# `cowsay`: the classic example of arguments and `stdout`, our C reimplementation of `cowsay` 3.03.
 # Its output is byte-identical to the original Perl script.
 # The binary is a tenth of the Rust clone the Wasmer registry serves.
 

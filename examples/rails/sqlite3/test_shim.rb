@@ -1,6 +1,6 @@
-# Standalone shim smoke: exercises the sqlite3-gem-shaped API surface the
-# Rails adapter depends on, without ActiveRecord.
-# Run: ruby test_shim.rb
+# Standalone shim smoke: exercises the API surface of the `sqlite3` gem that the Rails adapter uses.
+# It does so without ActiveRecord.
+# Run: `ruby test_shim.rb`
 require_relative "lib/sqlite3"
 require "tmpdir"
 
@@ -16,7 +16,7 @@ Dir.mktmpdir do |dir|
   assert !db.closed?, "open"
   assert db.encoding == Encoding::UTF_8, "encoding"
 
-  # Pragmas (the Rails DEFAULT_PRAGMAS setters)
+  # `PRAGMA` settings (the Rails DEFAULT_PRAGMAS setters)
   db.foreign_keys = true
   db.synchronous = :normal
   db.mmap_size = 134_217_728
@@ -62,7 +62,7 @@ Dir.mktmpdir do |dir|
   assert s.step.nil? && s.done?, "step after done"
   s.close
 
-  # results_as_hash affects only the execute family
+  # `results_as_hash` affects only the `execute` family
   h = db.execute("SELECT id, name FROM users WHERE name = ?", ["alice"]).first
   assert h == { "id" => 1, "name" => "alice" }, "execute hash row"
   assert db.get_first_value("SELECT count(*) FROM users") == 2, "get_first_value"
@@ -113,12 +113,12 @@ Dir.mktmpdir do |dir|
     assert e.message == "prepare called on a closed database", "closed db message"
   end
 
-  # Reopen the same file: data persisted through the wasm WASI filesystem
+  # Reopen the same file: data persisted through the wasm WASI file system
   db2 = SQLite3::Database.new(path)
   assert db2.get_first_value("SELECT name FROM users WHERE id = ?", 1) == "alice", "reopen + read (array mode)"
   db2.close
 
-  # :memory: and readonly
+  # `:memory:` and read-only
   mem = SQLite3::Database.new(":memory:")
   mem.execute("CREATE TABLE t(a)")
   mem.close

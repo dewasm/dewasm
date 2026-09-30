@@ -2,12 +2,12 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# tree-sitter: the incremental-parsing runtime plus the tree-sitter-json grammar.
-# Both are built as one reactor library with wasi-sdk, from the pinned upstream releases.
-# The runtime is a single-TU amalgamation (lib/src/lib.c).
-# tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen).
-# Our own src/treesitter_binding.c exports parse_source().
-# It parses a source string and returns the parse tree's S-expression (ts_node_string).
+# tree-sitter: the incremental-parsing runtime plus the `tree-sitter-json` grammar.
+# Both are built as one reactor library with `wasi-sdk`, from upstream releases at fixed versions.
+# The runtime is a single-TU amalgamation (`lib/src/lib.c`).
+# `tree-sitter-json` ships a pre-generated `src/parser.c` (no grammar codegen).
+# Our own `src/treesitter_binding.c` exports `parse_source()`.
+# It parses a source string and returns the parse tree's S-expression (`ts_node_string`).
 # One combined stamp covers both source checksums.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -19,7 +19,7 @@ TSJSON_URL="https://github.com/tree-sitter/tree-sitter-json/archive/refs/tags/v0
 TSJSON_SHA256="acf6e8362457e819ed8b613f2ad9a0e1b621a77556c296f3abea58f7880a9213"
 TSJSON_DIR="tree-sitter-json-0.24.8"
 
-# One stamp covering both pinned checksums (order-fixed) plus wasm-opt version.
+# One stamp covering both fixed checksums (in a fixed order) plus the `wasm-opt` version.
 # It also covers the toolchain token.
 ts_stamp="cache/treesitter.src-sha256"
 ts_want="$(printf '%s %s\n%s\n%s' "$TS_SHA256" "$TSJSON_SHA256" "$(wasm_opt_version)" "$(wasi_sdk_stamp)")"
@@ -39,7 +39,7 @@ fetch_verified "$TSJSON_URL" "$TSJSON_SHA256" "$tmp/tsjson.tar.gz"
 tar xzf "$tmp/ts.tar.gz" -C "$tmp"
 tar xzf "$tmp/tsjson.tar.gz" -C "$tmp"
 echo "treesitter: building treesitter.wasm (wasi-sdk clang, reactor)"
-# --strip-debug drops the DWARF wasm-opt cannot process.
+# --strip-debug drops the DWARF `wasm-opt` cannot process.
 wasi_sdk_clang -mexec-model=reactor -O2 -Wl,--strip-debug \
   -I "$tmp/$TS_DIR/lib/include" -I "$tmp/$TS_DIR/lib/src" \
   -I "$tmp/$TSJSON_DIR/src" \
