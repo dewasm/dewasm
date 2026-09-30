@@ -1,4 +1,4 @@
-# Decision 40: WASI p1 Completion (Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment)
+# Decision 40: WASI p1 Completion (Symlinks, Enforced Per-Fd Rights, Conformance-Runner Environment)
 
 Status: **Accepted, 2026-07-28.**
 Implemented across all five backends (`runtime/<lang>/units/wasi/`), the wasi-testsuite runner (`crates/dewasm-test-helper/src/{backend,wasi_testsuite}.rs`), and the five per-backend expected-failures lists.
