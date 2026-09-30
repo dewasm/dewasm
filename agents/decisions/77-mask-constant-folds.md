@@ -1,4 +1,4 @@
-# Decision 77: Constant AND Operands, Identity Masks, and Pinned Constant Equalities Extend Mask Elision
+# Decision 77: Mask Elision for Constant AND Operands, Identity Masks, and Pinned Constant Equalities
 
 Status: **Accepted, 2026-08-16.** Landed in the shared analysis (`crates/dewasm-backend/src/masking.rs`) and the Ruby and Python emitters. Perl and Bash still mask every site, as under [decision 71](71-mask-elision-modular-consumers.md), and can adopt the same machinery.
 

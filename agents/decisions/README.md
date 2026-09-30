@@ -1,19 +1,26 @@
 # Decision records
 
 This directory contains dewasm's decision records.
-Each document captures a significant design decision: its context, the decision with its rationale, the rejected alternatives, and the consequences.
+Each document captures one significant design decision.
+It holds the context, the decision and rationale, the rejected alternatives, and the consequences.
 An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 
 ## How to read
 
-- **Decision 0** is the foundation document: start there for the project's goal, scope, and architecture.
+- **Decision 0** is the foundation document.
+  Start there for the project's goal, scope, and architecture.
 - Higher-numbered decisions build on it and can be read as needed.
-- Each decision opens with a **Status** paragraph: the status label, a date, and a one-paragraph "what landed / what remains" summary.
-- The status label is exactly one of two values: `Accepted`, or `Superseded (decision N)` naming what replaced it.
-  The parenthetical is required on `Superseded`; a record that does not name its successor leaves the reader with nowhere to go.
-- There is no `Proposed`: a decision is recorded once it is made, and a tentative idea lives in an issue until then.
+- Each decision opens with a **Status** paragraph.
+  It holds the status label, a date, and a one-paragraph "what landed / what remains" summary.
+- The status label is one of two values: `Accepted`, or `Superseded (decision N)`.
+  The parenthetical names what replaced it, and it is required on `Superseded`.
+  A record that does not name its successor leaves the reader with nowhere to go.
+- There is no `Proposed`: a decision is recorded once it is made.
+  A tentative idea lives in an issue until then.
 - Scope and progress qualifiers never go in the label.
-  That a decision covers one backend only, or that part of it has since been replaced, belongs in the Status paragraph, which has room to say what and why.
+  A decision may cover one backend only, or part of it may have been replaced.
+  Either fact goes in the Status paragraph.
+  That paragraph has room to say what and why.
 
 ## Index
 
@@ -35,11 +42,11 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 13 | [Bash Softfloat Conventions](13-bash-softfloat-conventions.md) | Accepted |
 | 14 | [Ruby WASI Filesystem Support](14-ruby-wasi-filesystem.md) | Accepted |
 | 15 | [Tests Fail Loud on Missing Environment, Never Skip](15-tests-fail-not-skip.md) | Accepted |
-| 16 | [Completing Wasm 1.0 for Ruby (Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking)](16-ruby-wasm1-completion.md) | Accepted |
-| 17 | [Reference Types in the Ruby Backend (funcref = the Table Pair, externref = a Raw Host Value)](17-ruby-reference-types.md) | Superseded (decision 24) |
+| 16 | [Ruby Completes Wasm 1.0: Non-Function Imports, Multiple Tables, Table Bulk Ops, Linking](16-ruby-wasm1-completion.md) | Accepted |
+| 17 | [Ruby Reference Types (funcref = the Table Pair, externref = a Raw Host Value)](17-ruby-reference-types.md) | Superseded (decision 24) |
 | 18 | [Tail Calls in the Ruby Backend (Flat Trampoline with a Body/Entry Split)](18-ruby-tail-calls.md) | Accepted |
-| 19 | [Exception Handling in the Ruby Backend (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Accepted |
-| 20 | [Component Model (Canonical-ABI Adapters Synthesized as Core IR, Host Boundary as a Fixed Vocabulary)](20-component-model-core-ir-adapters.md) | Superseded (decision 24) |
+| 19 | [Ruby Exception Handling (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Accepted |
+| 20 | [Component Model (Canonical-ABI Adapters Synthesized as Core IR, Fixed Host Vocabulary)](20-component-model-core-ir-adapters.md) | Superseded (decision 24) |
 | 21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (decision 24) |
 | 22 | [Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
 | 23 | [Backend Support Maturity Levels, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-levels.md) | Superseded (decision 25) |
@@ -59,7 +66,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 37 | [Opt-in Data-Segment Externalization (`--data-file`)](37-data-segment-externalization.md) | Accepted |
 | 38 | [Opt-in DWARF Line-Number Back-Mapping (`--dwarf-line`)](38-dwarf-line-back-mapping.md) | Accepted |
 | 39 | [wasm-opt Preprocessing of Locally-Built App Modules](39-wasm-opt-preprocessing.md) | Accepted |
-| 40 | [WASI p1 Completion (Symlink Family, Enforced Per-Fd Rights, and the Conformance-Runner Environment)](40-wasi-p1-completion.md) | Accepted |
+| 40 | [WASI p1 Completion (Symlinks, Enforced Per-Fd Rights, Conformance-Runner Environment)](40-wasi-p1-completion.md) | Accepted |
 | 41 | [Merge Adjacent Active Data Segments at Build Time](41-adjacent-data-segment-merging.md) | Accepted |
 | 42 | [Ruby Backend Label-Variable Cascade for Multi-Level `br`](42-ruby-label-variable-cascade.md) | Accepted |
 | 43 | [Ruby Backend i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
@@ -68,7 +75,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 46 | [Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness](46-host-scoped-wasi-expected-failures.md) | Accepted |
 | 47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
 | 48 | [Two-Speed Slow-Test Classification (slow_test / ultra_slow_test)](48-slow-test-speeds.md) | Accepted |
-| 49 | [Where the WASI Spec Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
+| 49 | [Where WASI Is Silent, Follow wasmtime; Host-Pinned Errno Modes for wasi-testsuite](49-spec-silent-follow-wasmtime.md) | Accepted |
 | 50 | [DOOM Demo (One Wasm Binary, Per-Language Native Frontends)](50-doom-example-shape.md) | Accepted |
 | 51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |
 | 52 | [Bash Emitter Inlines Linear-Memory Loads and Stores](52-bash-inline-memops.md) | Accepted |
@@ -96,7 +103,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 74 | [Shift-Count Reduction Folded for Constants, Dropped Only on an Exact-Value Proof](74-shift-count-reduction-elision.md) | Accepted |
 | 75 | [Pass the Static Load/Store Offset as a Second Argument](75-memory-offset-argument.md) | Accepted |
 | 76 | [Memory Units Reduce Their Address and Stored-Value Operands](76-memory-unit-operand-reduction.md) | Accepted |
-| 77 | [Constant AND Operands, Identity Masks, and Pinned Constant Equalities Extend Mask Elision](77-mask-constant-folds.md) | Accepted |
+| 77 | [Mask Elision for Constant AND Operands, Identity Masks, and Pinned Constant Equalities](77-mask-constant-folds.md) | Accepted |
 | 78 | [Wrapping-Add Memory Units for Dynamic Addresses](78-memory-dynamic-add-units.md) | Accepted |
 | 79 | [Single-Character Codes for the Memory Load/Store Unit Names](79-memory-unit-name-codes.md) | Accepted |
 | 80 | [`fd_fdstat_set_flags` Accepts Any Open Fd, a Recorded Exception to Decision 49](80-fdstat-set-flags-any-fd.md) | Accepted |
@@ -128,12 +135,15 @@ An entry records a decision with rationale and rejected alternatives, or a stand
 If no alternatives were weighed, there is nothing to record:
 
 - A mechanical change with no live alternatives → the commit message is enough.
-- Behavior the spec harness already enforces → the harness binds (decision 3), and a decision records *why*, never a normative description the harness already carries.
-- A survey or a measurement with no decision attached → leave it in the issue or the pull request; when the outcome changes what a future agent would do, add an entry to [`agents/experiments.md`](../experiments.md).
+- Behavior the spec harness already enforces → the harness binds (decision 3).
+  A decision records *why*, never a normative description the harness already carries.
+- A survey or a measurement with no decision attached → leave it in the issue or the pull request.
+  When the outcome changes what a future agent would do, add an entry to [`agents/experiments.md`](../experiments.md).
 
 ### Procedure
 
-1. Take the next free number: `ls agents/decisions/` gives the highest `N`, and yours is `N + 1`, with no zero padding.
+1. Take the next free number: `ls agents/decisions/` gives the highest `N`, and yours is `N + 1`.
+   The number has no zero padding.
    Create `agents/decisions/<N>-<slug>.md`.
 2. Follow the skeleton:
 
@@ -149,30 +159,42 @@ If no alternatives were weighed, there is nothing to record:
    ```
 
 3. Add a row to the index above, in ascending order, carrying the same status label as the file.
-4. Cross-reference: link related decisions, and link from the decision out to the code and docs it governs.
+4. Cross-reference: link related decisions.
+   Link from the decision out to the code and docs it governs.
    Files outside `agents/` never cite a decision; they state their constraint in place.
-   If the decision changes how contributors must work, add or adjust the one-line rule in `AGENTS.md` citing the decision: the rule there, the why here, never both in full.
-5. If it supersedes an earlier decision, set that one's label to `Superseded (decision N)` in both the file and the index, and link forward from its Status paragraph.
+   If the decision changes how contributors must work, add or adjust the one-line rule in `AGENTS.md`.
+   That rule cites the decision: the rule there, the why here, never both in full.
+5. If it supersedes an earlier decision, set that one's label to `Superseded (decision N)`.
+   Set it in both the file and the index, and link forward from its Status paragraph.
 
 Then verify:
 
-- The index row count matches the file count: `ls agents/decisions/*.md | grep -v README | wc -l` against the table.
+- The index row count matches the file count.
+  Compare `ls agents/decisions/*.md | grep -v README | wc -l` against the table.
 - Every relative link in the new decision resolves.
 
 ### Quality bar
 
-- State the *criterion* that discriminated between the options as a reusable rule, not just "we picked B".
+- State the *criterion* that discriminated between the options as a reusable rule.
+  "We picked B" is not enough.
 - **Length tracks stakes.**
   The common failure mode is writing too much, not too little.
-  Decision 5 is a reasonable length for a policy-sized decision, decision 0 for a foundation-sized one.
-- Move research material (surveys, comparison tables) out of the record and cite it; the record is the decision, not the research.
+  Decision 5 is a reasonable length for a policy-sized decision.
+  Decision 0 is one for a foundation-sized decision.
+- Move research material (surveys, comparison tables) out of the record and cite it.
+  The record is the decision, not the research.
 - Anchor claims to real code (`crates/.../file.rs`, `crates/dewasm-backend-<lang>/units/`) where possible.
 
 ## Relationship to other documents
 
-- **`AGENTS.md`**: the development contract for agents (and humans) working in this repository; it states each rule in full and cites the decision that holds the rationale.
-- **`agents/docs-policy.md`**: the document taxonomy, which file each kind of content belongs in, why `agents/` and `docs/` are split by audience, and why `docs/support.md` is generated, never hand-edited.
+- **`AGENTS.md`**: the development contract for agents (and humans) working in this repository.
+  It states each rule in full and cites the decision that holds the rationale.
+- **`agents/docs-policy.md`**: the document taxonomy, and which file each kind of content belongs in.
+  It says why `agents/` and `docs/` are split by audience.
+  It also says why `docs/support.md` is generated, never hand-edited.
 - **`README.md`**: user-facing overview.
-  It points onward to `docs/getting-started.md`, `docs/backends/`, and `docs/support.md`, not into this directory.
+  It points onward to `docs/getting-started.md`, `docs/backends/`, and `docs/support.md`.
+  It does not point into this directory.
 - **`docs/getting-started.md`** and **`docs/backends/`**: the user tutorial and per-target reference.
-  They state the lowering rules in place and name no decision; the rationale behind those rules lives here (decision 4, decisions 11 to 13, decisions 28 to 30, decision 55).
+  They state the lowering rules in place and name no decision.
+  The rationale behind those rules lives here: decision 4, decisions 11 to 13, 28 to 30, and 55.
