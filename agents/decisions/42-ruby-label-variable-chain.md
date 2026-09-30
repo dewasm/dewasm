@@ -90,6 +90,6 @@ The per-block dispatch loop decision 4 feared is unnecessary.
   A multi-level `br` emits one small epilogue per crossed frame, an output-size cost.
   Epilogues sit at deep indentation, so they are emitted as single lines.
   Measured on `sqlite3-shell`, the multi-line first cut grew the output by 37%.
-  The growth was mostly leading spaces.
+  The growth was mostly leading whitespace.
 - The specification harness (decision 3) binds correctness.
   It passes for the Ruby backend under this lowering, including `br_table`, `unwind`, and `labels`.

@@ -17,7 +17,7 @@ Nothing about the game itself is reimplemented.
 
 This is an existence-proof example, not a playable game, and the numbers say so plainly.
 **`initGame` takes about 103 seconds, and each `tickGame` call takes about 34 seconds.**
-Both were measured on an Apple Silicon Mac, headless.
+Both were measured on an Apple Silicon laptop, headless.
 DOOM's internal tic rate is 35Hz, 34,000x faster than what this frontend delivers.
 Rendering itself does not limit the speed.
 Sampling and drawing one frame into the terminal costs well under a second, discussed below.

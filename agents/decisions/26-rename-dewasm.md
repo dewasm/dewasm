@@ -1,6 +1,7 @@
 # Decision 26: Rename the Project (`dewasmify` → dewasm)
 
-Status: **Accepted, 2026-07-25; completed 2026-07-28.**
+Status: **Accepted, 2026-07-25.**
+The rename was completed on 2026-07-28.
 Landed 2026-07-26: crates are `dewasm-*`, and the binary is `dewasm`.
 Environment variables are `DEWASM_*`.
 Documents are updated; the bodies of replaced decisions keep the old name.

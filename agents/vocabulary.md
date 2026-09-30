@@ -53,7 +53,7 @@ That holds where a dictionary also gives it a plain sense: `compile` never means
 | Data and records | `amalgamation`, `collation`, `compress`, `compression`, `decompress`, `invalidate`, `invalidation`, `query`, `rollback`, `schema`, `verdict` |
 | Tests and tools | `benchmark`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `microbenchmark`, `oracle`, `parse`, `parser`, `shim`, `snapshot`, `suite`, `testsuite`, `workload` |
 | Graphics and games | `dot`, `emulator`, `framebuffer`, `pixel`, `shareware`, `tick` |
-| Text and markup | `kebab-case`, `markup`, `slug` |
+| Text and markup | `glob`, `kebab-case`, `markup`, `slug`, `whitespace` |
 
 Used in another sense, a term is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
 
@@ -66,7 +66,7 @@ A general word such as `bug` works better with its kind: a crash, a wrong result
 
 | Words |
 | --- |
-| `acceptance`, `align`, `alternating`, `ambient`, `ambiguous`, `archive`, `arithmetic`, `batch`, `browser`, `bug`, `calibrate`, `calibration`, `checklist`, `circular`, `circularity`, `compatible`, `console`, `copyright`, `cursor`, `decimal`, `default`, `defer`, `dependency`, `deterministic`, `digit`, `directory`, `dividend`, `exponent`, `falsifiable`, `fetch`, `font`, `generic`, `incremental`, `indentation`, `interactive`, `interleave`, `interpolate`, `interpolation`, `legacy`, `median`, `microsecond`, `milestone`, `millisecond`, `monotonic`, `nanosecond`, `numeric`, `opaque`, `optimistic`, `outward`, `palette`, `pending`, `pessimistic`, `placeholder`, `prefix`, `remainder`, `reproducible`, `roadmap`, `sanity`, `script`, `slideshow`, `sparse`, `suffix`, `template`, `texture`, `timestamp`, `verify`, `width`, `workflow` |
+| `acceptance`, `align`, `alternating`, `ambient`, `ambiguous`, `archive`, `arithmetic`, `batch`, `browser`, `bug`, `calibrate`, `calibration`, `checklist`, `circular`, `circularity`, `compatible`, `console`, `copyright`, `cursor`, `decimal`, `default`, `defer`, `dependency`, `deterministic`, `digit`, `directory`, `dividend`, `exponent`, `falsifiable`, `fetch`, `font`, `generic`, `incremental`, `indentation`, `interactive`, `interleave`, `interpolate`, `interpolation`, `laptop`, `legacy`, `median`, `microsecond`, `milestone`, `millisecond`, `monotonic`, `nanosecond`, `numeric`, `opaque`, `optimistic`, `outward`, `palette`, `pending`, `pessimistic`, `placeholder`, `prefix`, `remainder`, `reproducible`, `roadmap`, `sanity`, `script`, `slideshow`, `sparse`, `suffix`, `template`, `texture`, `timestamp`, `verify`, `width`, `workflow` |
 
 ### Terms of one context
 

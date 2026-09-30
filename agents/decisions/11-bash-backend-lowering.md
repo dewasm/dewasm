@@ -115,7 +115,7 @@ The feared fork cost never appeared, since the chain design forks only for exhau
 - Negative (resolved): float-using modules were refused (attributed `floats`, decision 8).
   That lasted until the decision 5 softfloat landed under decision 13.
   The classic control-flow files and the pure-float suite have passed since.
-- Deep recursion without `FUNCNEST` crashes Bash around 10-20k frames.
+- Deep recursion without `FUNCNEST` causes segmentation faults in Bash around 10-20k frames.
   Exhaustion checks must stay inside `( FUNCNEST=...; ... )` subshells.
 - Bulk memory operations loop per byte.
   Large `memory.copy`/`fill` will need batching before real apps run under Bash.

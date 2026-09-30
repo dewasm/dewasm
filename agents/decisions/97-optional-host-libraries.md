@@ -1,4 +1,4 @@
-# Decision 97: A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Stubbed
+# Decision 97: A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Hidden
 
 Status: **Accepted, 2026-09-20.**
 Landed: the Ruby WASI `path_link` unit ([`crates/dewasm-backend-ruby/units/wasi/path_link.rb`](../../crates/dewasm-backend-ruby/units/wasi/path_link.rb)).

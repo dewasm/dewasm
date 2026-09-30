@@ -34,7 +34,7 @@ Set `PYTHON` to pick an interpreter explicitly (`PYTHON=python3 ./run.sh --smoke
 ## Honest performance
 
 **Measured ~11 frames/sec under PyPy 7.3 and ~2.1-2.2 under CPython 3.14.**
-Both ran headless (`--smoke`) on an Apple Silicon Mac.
+Both ran headless (`--smoke`) on an Apple Silicon laptop.
 The NES frame rate is ~60Hz.
 `run.sh` prefers PyPy, but even there this is not playable.
 Movement looks like a slideshow.

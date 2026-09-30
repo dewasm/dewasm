@@ -53,8 +53,7 @@ The exceptions are these:
 - The DWARF fixture (`dwarf-fixture.sh`) is skipped.
   Its `-g` debug information is the whole point of the case (decision 38), and `wasm-opt` would strip it.
 - `mruby` (`mruby.sh`) is skipped.
-  The flag set below enables only baseline features.
-  So it cannot parse its exception-handling instructions.
+  The fixed baseline flag set below cannot parse mruby's exception-handling instructions.
   See [decision 69](69-exception-handling-accepted-input.md).
   So that build strips debug information at link time with `-Wl,--strip-debug` instead.
 

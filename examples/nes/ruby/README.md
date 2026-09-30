@@ -37,7 +37,7 @@ It comes with the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f
 The frame is drawn two source pixels per character cell with the half-block trick.
 `../../doom/ruby` uses the same trick.
 Unchanged cells are skipped.
-The render overhead measurement ran on an Apple Silicon Mac, headless.
+The render overhead measurement ran on an Apple Silicon laptop, headless.
 It used `--smoke`, 160x50 cells, under `ruby --yjit`.
 Render overhead stays well under 1ms/frame, noise against the tick cost.
 See the numbers `--smoke` prints on your machine.

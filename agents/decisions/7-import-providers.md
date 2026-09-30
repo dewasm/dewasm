@@ -78,7 +78,7 @@ Survey of how real systems break the circularity:
 ## Consequences
 
 - Positive: `Hello.new` works out of the box for WASI programs in library mode.
-  Custom runtimes replace it whole.
+  Custom WASI runtimes replace the bundled WASI whole.
   The specification harness needed no changes (Hash path untouched).
 - Negative / limit: this concerns minimal Embedded bundles.
   There, `instance.memory` only carries the typed accessors the module itself uses.

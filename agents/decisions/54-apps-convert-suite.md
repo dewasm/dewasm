@@ -26,7 +26,7 @@ That path has SQLite-class control-flow depth.
 Or it has a 30-35 MB interpreter's data segments and `call_indirect` tables.
 
 Conversion is also cheap and deterministic where running is not.
-Running CRuby under Bash is not possible.
+Running CRuby under Bash is too slow to be practical.
 *Converting* it is a couple of CPU-bound seconds with no interpreter, toolchain, or snapshot needed.
 So the coverage a convert-only assertion buys is available for every pair.
 That includes the ones no execution case will ever cover.
@@ -83,7 +83,7 @@ The suite never runs the generated program.
   The data showed no backend needs a different set.
 
 **Deciding criterion:** *conversion is worth asserting on its own.*
-*That holds wherever running is not possible or merely not set up.*
+*That holds wherever running is not practical or merely not set up.*
 *It is cheap, deterministic, and needs no oracle.*
 *So the whole cache is covered for every backend.*
 *This holds regardless of which pairs an execution suite reaches.*

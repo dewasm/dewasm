@@ -1,6 +1,7 @@
 # Decision 20: Component Model (Canonical-ABI Adapters Built as Core IR, Fixed Host Vocabulary)
 
-Status: **Superseded by [decision 24](24-01-scope-reset.md), 2026-07-26.**
+Status: **Superseded (decision 24), 2026-07-26.**
+[Decision 24](24-01-scope-reset.md) replaced it.
 Kept as a design record for a future restoration of this support.
 Git history plus this decision make the work cheap to bring back.
 The original status note and implementation pointers below are retained as history.

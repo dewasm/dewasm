@@ -127,7 +127,7 @@ Rendering is not what makes this frontend slow.
 YJIT is what moves the tick figure.
 `run.sh` always passes it, and `main.rb` warns on `stderr` if it ends up missing.
 The terminal frontend measures the same Ruby backend at 15.9 ticks/sec with YJIT.
-That figure is from an Apple Silicon Mac.
+That figure is from an Apple Silicon laptop.
 
 ## Controls
 

@@ -3,7 +3,7 @@
 An interactive NES frontend built on a library written only in Java.
 dewasm generated that library from `nes.wasm`.
 `nes.wasm` is an import-free reactor wrapping [`kgabis/agnes`](https://github.com/kgabis/agnes), built from source with `wasi-sdk`.
-Its sources are `examples/apps/scripts/nes.sh` and `examples/apps/src/nes_demo.c`.
+`examples/apps/scripts/nes.sh` builds it from `examples/apps/src/nes_demo.c`.
 `Main.java` reads the ROM and copies it into the module's linear memory via `allocRom`.
 It then drives `setInput`/`tickGame`.
 It composes each frame into a `BufferedImage` straight out of guest memory.

@@ -76,7 +76,8 @@ The snapshot is captured after 40 input-free frames.
 That is the smallest count safely inside the first stable screen.
 The credits fade-in completes at ~37.
 Every extra frame is real wall time in Bash's `ultra` category.
-The blank-frame guard in `crates/xtask/src/nes_snapshot.rs` accepts ≥5 distinct colors.
+`crates/xtask/src/nes_snapshot.rs` guards against a blank or near-blank frame.
+That guard accepts ≥5 distinct colors.
 NES palettes are small (the recorded frame has 7), so DOOM's >50 threshold does not transfer.
 
 ## Rejected alternatives

@@ -73,7 +73,7 @@ The cases stay compiled (Clippy runs `--all-features`) and visibly `ignored` in 
 - The `ultra` category's coverage now depends on the local pre-release habit the criterion implies.
   The category list is small (Bash: 1 PTY case, Go: 8 builds).
   Each entry cites the evidence that promoted it.
-- A future case is promoted (or moved back) by editing one callsite and citing a CI run.
+- A future case moves to a slower or faster category by editing one callsite and citing a CI run.
   This mirrors the evidence-driven criterion of [decision 47](47-ruby-f64-sub-quiet-guard.md).
   The DOOM framebuffer snapshot under Bash later joined the `ultra` category this way.
   That is [decision 53](53-doom-frame-snapshot.md).

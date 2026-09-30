@@ -44,7 +44,7 @@ The default is `examples/apps/cache/alter_ego.nes`.
 
 ## Honest performance
 
-**Measured ~0.87 ticks/sec, headless, on an Apple Silicon Mac.**
+**Measured ~0.87 ticks/sec, headless, on an Apple Silicon laptop.**
 That is a bit faster than DOOM's Perl frontend's ~0.7, but not playable.
 `--smoke`'s 40-tick frame is byte-identical to the stored oracle snapshot.
 The snapshot is `examples/apps/snapshots/nes_frame.ppm`.

@@ -50,7 +50,7 @@ It does so via `../apps/scripts/doom.sh`, and no other assets are needed.
 Each frontend also has a headless `-smoke`/`--smoke` mode that ticks the game without a window.
 That mode sanity-checks the rendered frame and writes it to `screenshot.png`.
 
-Measured on an Apple Silicon Mac, headless: Go ~70 ticks/sec, Java ~55.
+Measured on an Apple Silicon laptop, headless: Go ~70 ticks/sec, Java ~55.
 Both are comfortably above DOOM's native tic rate of 35Hz.
 Ruby reaches ~15 ticks/sec with YJIT, and Perl ~0.7.
 Python reaches ~45 under PyPy but ~1.2-1.8 under CPython.

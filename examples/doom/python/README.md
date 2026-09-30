@@ -30,7 +30,7 @@ Set `PYTHON` to pick an interpreter explicitly (`PYTHON=python3 ./run.sh --smoke
 ## Honest performance
 
 **Measured ~45 ticks/sec under PyPy 7.3 and ~1.2-1.8 under CPython 3.14.**
-Both ran headless on an Apple Silicon Mac.
+Both ran headless on an Apple Silicon laptop.
 DOOM's own internal tic rate is 35Hz.
 PyPy's JIT clears that tic rate, which is why `run.sh` prefers it.
 Under PyPy the game is playable.

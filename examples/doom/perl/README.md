@@ -27,7 +27,7 @@ The file is binary P6, since Perl's core modules include no PNG encoder.
 
 ## Honest performance
 
-**Measured ~0.7 ticks/sec, headless, on an Apple Silicon Mac.**
+**Measured ~0.7 ticks/sec, headless, on an Apple Silicon laptop.**
 DOOM's own internal tic rate is 35Hz, and this is below even Python's ~1.3.
 DOOM's renderer is all integer math.
 So the usual Perl-backend cost center (float operations as `sub` calls) barely applies.

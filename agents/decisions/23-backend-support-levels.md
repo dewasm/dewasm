@@ -1,6 +1,7 @@
 # Decision 23: Backend Support Maturity Levels, Specialized to Wasm 1.0 + WASI Preview 1
 
-Status: **Superseded by [decision 25](25-retire-support-levels.md), 2026-07-26.**
+Status: **Superseded (decision 25), 2026-07-26.**
+[Decision 25](25-retire-support-levels.md) replaced it.
 Originally accepted 2026-07-24 and implemented as described below.
 It is kept here as history of the maturity levels' design and reasons.
 Decision 25 removes the level machinery entirely.

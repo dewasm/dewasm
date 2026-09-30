@@ -22,7 +22,7 @@ A packed module is still an ordinary WASI command module:
 - Wizer materializes the loaded files as data segments.
 
 Conversion needed no code change: the gap was purely test coverage.
-Data segments that large are also a converter input shape nothing else in the cache exercises.
+Wizer-sized data segments are also a converter input shape nothing else in the cache exercises.
 
 ## Decision
 
@@ -34,7 +34,7 @@ wasi-vfs pack cache/ruby.wasm --dir cache/ruby-lib/usr::/usr -o cache/ruby-packe
 ```
 
 The `wasi-vfs` CLI is required on PATH like the other build tools (decision 15).
-The stamp folds the Ruby package's hash plus `wasi-vfs --version`.
+The stamp folds the SHA-256 of the `ruby.wasm` release archive plus `wasi-vfs --version`.
 That is the `wasm-opt` discipline of decision 39.
 CI installs the CLI at a fixed version and folds that version into the apps-cache key.
 

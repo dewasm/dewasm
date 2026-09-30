@@ -80,7 +80,7 @@ Also spill the pendings whose trap must fire first, per statement kind:
 **Cap.**
 `MAX_FOLD_SIZE = 32` nodes.
 When composing would exceed it, the operands are spilled first and referenced as temps.
-The cap keeps expressions shallow enough for a target language's parser stack.
+The cap keeps expressions from overflowing the stack of a target language's recursive parser.
 It also bounds the worst-case growth of the text in some backends.
 Those are backends whose inline lowerings repeat an operand.
 
@@ -140,7 +140,7 @@ Folded expressions now reach code that assumed plain-variable operands:
   The full testsuite passes for every backend.
   Targeted IR-shape unit tests in `crates/dewasm-core/tests/folding.rs` add to it.
   Generated output with folding turned off was verified identical to the previous scheme.
-  That made the rework safe before the fold was turned on.
+  That reduced the risk of the rework before the fold was turned on.
 - New invariants a backend may rely on (documented in `ir.rs`):
   - an `Expr` tree preserves wasm's left-to-right evaluation order and trap points;
   - a `Select`'s `then`/`els` expressions are pure and non-trapping;

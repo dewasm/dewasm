@@ -49,7 +49,7 @@ Every expected value is determined by the source version.
 Cost accepted: `setup.sh` now requires `zig` and `unzip`, failing loudly per decision 15 when missing.
 Only `setup.sh` requires them, never `cargo test` with a warm cache.
 Build output bytes vary across Zig versions.
-That is fine because no checksum covers the *artifact*.
+That is fine because nothing fixes the bytes of the *artifact*.
 The snapshots compare program behavior, which the source version decides.
 
 ## Rejected alternatives

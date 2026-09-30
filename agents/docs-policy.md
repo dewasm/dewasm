@@ -36,7 +36,7 @@ It belongs under `agents/` even when it describes user-facing behavior.
 | [`docs/benchmarks/results.md`](../docs/benchmarks/results.md) | Measured performance, with figures under `figs/` | Users evaluating the project | **Generated: never hand-edit** |
 | [`docs/sizes/`](../docs/sizes/README.md) | How to run the size record and read its numbers | Developers | By hand |
 | [`docs/sizes/results.md`](../docs/sizes/results.md) | Measured distribution sizes (wasm binary, converted source, runtimes) with figures under `figs/` | Users evaluating the project | **Generated: never hand-edit** |
-| [`docs/users.md`](../docs/users.md) | Projects that ship dewasm-converted code | Users | By hand |
+| [`docs/users.md`](../docs/users.md) | Projects that ship dewasm-converted code | Users, users evaluating the project | By hand |
 | [`records/README.md`](../records/README.md) | When, on what host, and on what occasion each stored measurement record was taken | Developers, users evaluating the project | By hand (`cargo xtask record-speed` and `cargo xtask record-size` add a placeholder line per record they write) |
 
 ## Rules

@@ -47,7 +47,7 @@ So the modules can run through that interface unchanged.
   Running the modules the way a user runs a converted program is what makes a pass meaningful.
 - **Scope: `c` + `rust` + `assemblyscript`, `wasm32-wasip1` only.**
   The Rust `wasm32-wasip3` tree is excluded.
-  Preview 3 is component-model territory, rejected by decision 24.
+  Preview 3 is component-model territory, rejected for every backend by decision 24.
   AssemblyScript is included: its modules convert cleanly and run.
 - **Known failures are listed with attribution, not implemented now** (decision 8).
   Each backend's `WASI_TESTSUITE_EXPECTED_FAILURES` maps a trial to a tag naming its cause.

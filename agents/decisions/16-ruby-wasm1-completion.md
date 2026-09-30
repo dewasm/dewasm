@@ -124,7 +124,8 @@ That mechanism is per-backend conditioning.
 
 ## Rejected alternatives
 
-- **Box only imported and exported mutable globals, and keep plain instance variables for the rest.**
+- **Box only imported globals and exported mutable globals.**
+  Keep plain instance variables for the rest.
   It saves an allocation and a `.value` indirection on the common case.
   The cost is two code generation paths for every global read/write/export site.
   It also needs a runtime decision that code generation can't always know locally.

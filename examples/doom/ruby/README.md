@@ -47,7 +47,7 @@ The whole frame is built as one string and written with a single `write` call.
 This diffing and escape-sequence tracking is the actual performance-sensitive part of this frontend.
 The wasm execution is not.
 
-Measurements ran on an Apple Silicon Mac, headless (`--smoke`, 160x50 cells, under `ruby --yjit`).
+Measurements ran on an Apple Silicon laptop, headless (`--smoke`, 160x50 cells, under `ruby --yjit`).
 **The frontend runs 15.9 ticks/sec without rendering, and 15.8 ticks/sec with it.**
 That is about 0.5ms/frame of render overhead against a ~63ms/frame tick budget.
 Rendering therefore costs well under 1% of the frame.

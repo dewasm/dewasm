@@ -56,7 +56,7 @@ None of the current apps seek.
 
 ## Rejected alternatives
 
-- **Committing the wasm binaries**: redistribution licensing per app, and a history that grows per binary.
+- **Committing the wasm binaries**: redistribution licensing per app, and history growth of many MB.
   Registry packages often lack license information.
 - **Building from crates.io sources at test time**: works for Rust apps.
   But it demands local toolchains (`wasi-sdk` for C apps like QuickJS) and long builds.

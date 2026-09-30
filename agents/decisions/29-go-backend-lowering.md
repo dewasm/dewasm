@@ -38,14 +38,14 @@ Go adds two problems they never face:
   A referenced block/if or loop is `L: for { … ; break L }` with back-edges as `continue L`.
   Unreferenced structures splice inline.
   `br_table` is a `switch` whose labeled breaks target the outer loop, not the switch.
-  A pre-pass drops what cannot execute before emission:
+  `go vet` rejects unreachable statements in consumers of the generated source.
+  So a pre-pass drops what cannot execute before emission:
   - sequence tails after a statement that ends unreachable;
   - the closing `break L`/default `return` after a body that always exits;
   - catch clauses after a tag-less one;
   - self-assigning local moves.
 
   The pre-pass also drops labels that no surviving branch targets.
-  That is because `go vet` rejects unreachable statements in consumers of the generated source.
 - **Unused-symbol discipline.**
   Labels are emitted only when referenced.
   A pre-pass blanks write-only locals and temps with `_ = x`.

@@ -1,6 +1,7 @@
 # Decision 34: Bash WASI File System
 
-Status: **Accepted, 2026-07-27; landed 2026-07-28.**
+Status: **Accepted, 2026-07-27.**
+It landed on 2026-07-28.
 The Bash backend has WASI Preview 1 file system support.
 It mirrors the Ruby design ([decision 14](14-ruby-wasi-file-system.md)) within Bash's constraints.
 It covers the following, all under `runtime/bash/units/wasi/`:
@@ -73,7 +74,7 @@ The WASI `errno` is derived from later `[[ -e ]]` / `[[ -d ]]` probes, not the c
 The justification is impossibility, not ease.
 Pure Bash cannot create, remove, or rename a directory entry *at all*.
 Everything else the surface needs can be expressed in it.
-That is read, write, `stat` by test builtins, and listing by pattern matching.
+That is read, write, `stat` by test builtins, and listing by globbing.
 Runtime units are bundled per import ([decision 6](6-runtime-units.md)).
 So a module that imports none of the four carries none of these commands.
 It stays a pure Bash artifact.

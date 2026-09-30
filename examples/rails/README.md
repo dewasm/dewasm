@@ -34,7 +34,7 @@ Pieces, individually:
 - `sqlite3/test_shim.rb`: the shim's own smoke.
   It covers the gem API surface: binds, column typing, error mapping, transactions, `PRAGMA` statements.
 - `ar_smoke/`: ActiveRecord without Rails.
-  It covers migration, CRUD, and type round-trips (UTF-8, BLOB, i64 boundaries, date and time).
+  It covers migration, CRUD, and type round-trips (UTF-8, BLOB, i64 boundaries, `DATETIME`).
   It also covers constraint→exception mapping, joins, and `insert_all`.
 - `setup-app.sh`: regenerates `app/` (`rails new --minimal` plus the files in `app-template/`).
 
@@ -80,7 +80,7 @@ The list is `SQLITE_EXPORTS` in `../apps/scripts/sqlite3.sh`.
   `strict:` needs a variable number of arguments to `sqlite3_db_config`.
   The shim ignores `strict:` and raises on `extensions:`.
 
-## Numbers (M-series Mac, development mode)
+## Numbers (M-series laptop, development mode)
 
 - `ruby test_shim.rb` (open + 30 statements): ~0.9 s total.
 - Rails boot (`rails runner`): ~1.6 s.

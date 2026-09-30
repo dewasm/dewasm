@@ -31,7 +31,7 @@ The backend's own test and benchmark runners build generated code the same way.
 ## Build time
 
 The joined source is about 53,000 lines, nearly all of it generated.
-A debug `codon build` of it takes about 26 seconds on an Apple Silicon Mac, 8 of them the parse.
+A debug `codon build` of it takes about 26 seconds on an Apple Silicon laptop, 8 of them the parse.
 It produces a 17MB binary.
 
 `build.sh` caches the result.
