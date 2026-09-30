@@ -3,7 +3,8 @@
 Status: **Accepted, 2026-09-30.**
 Landed: [`agents/vocabulary.md`](../vocabulary.md) holds the sources of allowed words and the excluded words.
 [`AGENTS.md`](../../AGENTS.md), that file, decision 98, and this record use only allowed words.
-No check applies the lists yet, and the rest of the text was written before them.
+`cargo test -p text-check` applies the lists to Markdown.
+The check leaves out a file written before them, until that file is rewritten.
 
 ## Context
 
@@ -90,4 +91,6 @@ The two kinds of list catch different things: one the known metaphors, the other
 - Negative: a check needs the base word of each word, so it needs the rules of derived forms in code.
 - Carry-over: the pass of decision 98 adds the check after the text is rewritten.
   Before that pass, 1,679 base words of the whole text fall outside NGSL and NAWL.
-  The check must store both lists in the repository, under CC BY-SA 4.0, with credit to their authors.
+  The repository does not store the two base lists, which are under CC BY-SA 4.0.
+  `crates/text-check/setup.sh` fetches them by sha256 and names their authors.
+  The `lint` job keeps them in its cache.

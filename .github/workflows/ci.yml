@@ -27,7 +27,13 @@ jobs:
           shared-key: lint
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
-      # The writing style rules that a program can check: text only, so it needs no other cache.
+      # The writing style rules that a program can check.
+      # The vocabulary check reads two word lists, which the setup script fetches by sha256.
+      - uses: actions/cache@v6
+        with:
+          path: crates/text-check/cache
+          key: word-lists-${{ hashFiles('crates/text-check/setup.sh') }}
+      - run: crates/text-check/setup.sh
       - run: cargo test -p text-check
       - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
 

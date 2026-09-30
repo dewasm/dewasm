@@ -225,12 +225,16 @@ fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
     if paths.is_empty() {
         paths = text_check::tracked_files(&root);
     }
+    let vocabulary =
+        text_check::vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
     let mut count = 0;
     for path in &paths {
         if !text_check::is_checked_text(path) {
             bail!("{path} is neither Markdown nor a source file with known comment markers");
         }
-        for defect in text_check::file_defects(&root, path) {
+        let mut defects = text_check::file_defects(&root, path);
+        defects.extend(vocabulary.file_defects(&root, path));
+        for defect in defects {
             println!("{defect}");
             count += 1;
         }

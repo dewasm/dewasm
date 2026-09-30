@@ -64,7 +64,7 @@ The names below are the ones their owners write in lower case.
 
 | Names |
 | --- |
-| `dewasm`, `textlint`, `wasm` |
+| `dewasm`, `spaCy`, `textlint`, `wasm` |
 
 ## Excluded words
 
