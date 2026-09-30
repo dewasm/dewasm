@@ -2,34 +2,52 @@
 
 Status: **Accepted, 2026-08-05.**
 All six backends conform (issue #141 complete).
-Ruby (lexical nesting) and Perl ([decision 55](55-perl-backend-lowering.md), textual package prefix) already did; Python conforms as of this decision: `RuntimeLinkage::Embedded` names its runtime class `<Class>Rt` (`crates/dewasm-backend-python/src/lib.rs`, `runtime_name`).
-Java nests its runtime classes in the module class, Go gets isolation from the per-package library output ([#155](https://github.com/dewasm/dewasm/pull/155)), and Bash prefixes its runtime function names per artifact.
+Ruby (lexical nesting) and Perl ([decision 55](55-perl-backend-lowering.md), textual package prefix) already did.
+Python conforms as of this decision: `RuntimeLinkage::Embedded` names its runtime class `<Class>Rt`.
+That is `runtime_name` in `crates/dewasm-backend-python/src/lib.rs`.
+Java nests its runtime classes in the module class.
+Go gets isolation from the per-package library output ([#155](https://github.com/dewasm/dewasm/pull/155)).
+Bash prefixes its runtime function names per artifact.
 Every backend invokes `embedded_coexist_e2e!`, which is the check.
 
 ## Context
 
-[Decision 6](6-runtime-units.md) put the runtime behind one name and made its location a linkage choice, explicitly rejecting *"a fixed global namespace for the embedded runtime: multi-module programs collide; version skew between artifacts goes undetected"*, and claiming coexistence as a consequence (*"generated files coexist in one process"*).
+[Decision 6](6-runtime-units.md) put the runtime behind one name and made its location a linkage choice.
+It explicitly rejected *"a fixed global namespace for the embedded runtime"*.
+Its reason: *"multi-module programs collide; version skew between artifacts goes undetected"*.
+It claimed coexistence as a consequence: *"generated files coexist in one process"*.
 Ruby got that for free from constant nesting, which is what the decision was written against.
 
 The backends since have flat runtimes, and each quietly reintroduced the rejected shape.
 Python's `Embedded` output emits a top-level `class Rt:`.
-Nesting it is impossible, because a Python method scope cannot see its enclosing class scope ([decision 28](28-python-backend-lowering.md)).
-Go and Java emit one top-level runtime; Bash has a single flat namespace of `rt_*`/`mem_*` functions ([decision 11](11-bash-backend-lowering.md)).
+Nesting it is impossible, because a Python method scope cannot see its enclosing class scope.
+That scoping rule is recorded in [decision 28](28-python-backend-lowering.md).
+Go and Java emit one top-level runtime.
+Bash has a single flat namespace of `rt_*`/`mem_*` functions ([decision 11](11-bash-backend-lowering.md)).
 Perl hit the same wall and solved it (decision 55), citing decision 6.
 
 Two Python artifacts in one namespace therefore lose one runtime silently.
 Trap identity collapses first: an embedder catching one artifact's trap catches the other's.
-Worse, the bundle is a closure over the units each module reaches ([decision 6](6-runtime-units.md)), so when the *first* artifact has the larger closure, the second `class Rt` deletes helpers the first still calls, an `AttributeError` at some later call site, nowhere near the cause.
+Worse, the bundle is a closure over the units each module reaches ([decision 6](6-runtime-units.md)).
+Suppose the *first* artifact has the larger closure.
+Then the second `class Rt` deletes helpers the first still calls.
+The result is an `AttributeError` at some later call site, nowhere near the cause.
 Nothing warns at conversion time, which decision 0 says is where such failures belong.
 
-`EMBEDDED_COEXIST` (`crates/dewasm-test-helper/src/multimodule.rs`) has covered exactly this since decision 27, and the four flat-runtime backends carried non-invocation REASON comments describing the collision as a property of the language.
+`EMBEDDED_COEXIST` has covered exactly this since decision 27.
+It is in `crates/dewasm-test-helper/src/multimodule.rs`.
+The four flat-runtime backends carried non-invocation REASON comments.
+Those comments described the collision as a property of the language.
 
 ## Decision
 
 **`RuntimeLinkage::Embedded` output must be self-isolating.**
-Two artifacts generated independently and placed in one namespace each reach their own runtime, with distinct trap, exit and link-error types.
+Consider two artifacts generated independently and placed in one namespace.
+Each reaches its own runtime, with distinct trap, exit and link-error types.
 The criterion: *an `Embedded` artifact names nothing a sibling artifact also names.*
-`Alias` is the only way to share a runtime, and sharing is then a choice made at generation time rather than an accident of the target language's namespace.
+`Alias` is the only way to share a runtime.
+Sharing is then a choice made at generation time.
+It is not an accident of the target language's namespace.
 
 The mechanism is per-backend, whatever isolation that language makes cheapest:
 
@@ -45,30 +63,56 @@ The mechanism is per-backend, whatever isolation that language makes cheapest:
 A backend is done when it invokes `embedded_coexist_e2e!`.
 Until then its REASON comment is a to-do, not a capability declaration.
 
-`Alias` output is untouched by all of this: the shared runtime keeps the plain name `Rt`, so the spec harness's generated text is byte-identical.
+`Alias` output is untouched by all of this: the shared runtime keeps the plain name `Rt`.
+So the spec harness's generated text is byte-identical.
 
 ## Rejected alternatives
 
 - **Nest the runtime for real on Python** (`class Rt` inside the generated class, Ruby's shape).
-  Python method scopes cannot see the enclosing class scope, so every helper reference would have to spell the class (`Prog.Rt.trap`), a global lookup plus two attribute lookups instead of one plus one, on every masked-integer op, every load and every store, in the slowest backend's hottest path.
-  The rename costs nothing at run time: the generated code still resolves one module-level global by one name.
+  Python method scopes cannot see the enclosing class scope.
+  So every helper reference would have to spell the class (`Prog.Rt.trap`).
+  That is a global lookup plus two attribute lookups instead of one plus one.
+  It is paid on every masked-integer op, every load and every store.
+  That is in the slowest backend's hottest path.
+  The rename costs nothing at run time.
+  The generated code still resolves one module-level global by one name.
 - **Accept flat runtimes as a permanent limitation** and keep the REASON comments.
-  The failure is silent and is not only about trap identity: a smaller sibling bundle removes helpers the other artifact calls.
-  Decision 6 rejected this shape before any of these backends existed; the deviation was drift, not a decision.
+  The failure is silent and is not only about trap identity.
+  A smaller sibling bundle removes helpers the other artifact calls.
+  Decision 6 rejected this shape before any of these backends existed.
+  The deviation was drift, not a decision.
 - **Split one artifact across files and lean on the target's module system** (Python `import`).
-  Fixes Python only, contradicts the single-file self-contained output contract ([decision 0](0-foundation.md)), and does nothing for Bash, Go or Java, where the namespace really is flat.
-  Go's landed mechanism is not this: its `package` clause is a line *inside* the one generated file, so the artifact stays a single file and the isolation costs nothing.
+  Fixes Python only, and contradicts the single-file self-contained output contract ([decision 0](0-foundation.md)).
+  It does nothing for Bash, Go or Java, where the namespace really is flat.
+  Go's landed mechanism is not this: its `package` clause is a line *inside* the one generated file.
+  So the artifact stays a single file, and the isolation costs nothing.
 - **Detect the collision at run time** (a guard that raises when a second runtime redefines the first).
   Converts a silent bug into a loud one but still refuses a program that has every right to run.
 
 ## Consequences
 
 - Positive: decision 6's coexistence promise holds where it is claimed.
-  An embedder can hold two converted libraries (two versions of the same one included) in one namespace and catch each one's traps by name.
+  An embedder can hold two converted libraries in one namespace and catch each one's traps by name.
+  This includes two versions of the same library.
   Python's latent smaller-bundle-wins helper loss disappears.
-- Negative: the runtime name is no longer the fixed literal `Rt` for `Embedded` output, so glue, docs and embedder code must derive it (Python: `<Class>Rt`).
-  Backends whose mechanism is a textual rewrite (Perl, Python) require that no runtime unit mentions the runtime prefix inside a string literal; on Python a units-lint test enforces that.
-- On Bash the per-module WASI import wrapper had to be renamed `<p>imp_wasi_<name>` ([decision 12](12-bash-wasi.md) revision): its old name, `<p>wasi_<name>`, is what the prefixed unit itself is now called, so the wrapper would have called itself.
-- The Go mechanism planned here (package-level identifier prefixing plus a header-less compose entry point, with `GenOptions.runtime` honored) was never built, and should not be: while it waited, decision 63/#155 made library output declare `package <module name>` for unrelated reasons, and a package is a real namespace.
-  Two artifacts now isolate with no renaming, no new entry point and no linkage plumbing; what was going to be the largest of the three took none of the work estimated for it.
-  The observable in `embedded_coexist_e2e!` shifts accordingly: an importer cannot name the unexported `rtTrap`, so the driver recovers each panic and compares the values' dynamic types (`%T` prints them `*alpha.rtTrap` / `*beta.rtTrap`).
+- Negative: the runtime name is no longer the fixed literal `Rt` for `Embedded` output.
+  So glue, docs and embedder code must derive it (Python: `<Class>Rt`).
+  Some backends' mechanism is a textual rewrite (Perl, Python).
+  They require that no runtime unit mentions the runtime prefix inside a string literal.
+  On Python a units-lint test enforces that.
+- On Bash the per-module WASI import wrapper had to be renamed `<p>imp_wasi_<name>`.
+  That is a [decision 12](12-bash-wasi.md) revision.
+  Its old name, `<p>wasi_<name>`, is what the prefixed unit itself is now called.
+  So the wrapper would have called itself.
+- The Go mechanism planned here was never built, and should not be.
+  It was package-level identifier prefixing plus a header-less compose entry point.
+  It also honored `GenOptions.runtime`.
+  While it waited, decision 63/#155 made library output declare `package <module name>`.
+  It did so for unrelated reasons.
+  A package is a real namespace.
+  Two artifacts now isolate with no renaming, no new entry point and no new linkage code.
+  What was going to be the largest of the three took none of the work estimated for it.
+  The observable in `embedded_coexist_e2e!` shifts accordingly.
+  An importer cannot name the unexported `rtTrap`.
+  So the driver recovers each panic and compares the values' dynamic types.
+  `%T` prints them `*alpha.rtTrap` / `*beta.rtTrap`.
