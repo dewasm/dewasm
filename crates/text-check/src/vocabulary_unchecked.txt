@@ -1,5 +1,3 @@
-# Files whose comments were written before the vocabulary rules, one path per line.
-# The vocabulary check skips them; remove a path when its comments use only allowed words.
 .github/actions/apps-cache-tools/action.yml
 .github/workflows/ci.yml
 benchmarks/c/build.sh
@@ -66,7 +64,6 @@ crates/dewasm-backend-bash/units/rt/f64_sqrt.sh
 crates/dewasm-backend-bash/units/rt/f64_trunc.sh
 crates/dewasm-backend-bash/units/rt/i32_rotl.sh
 crates/dewasm-backend-bash/units/rt/i32_rotr.sh
-crates/dewasm-backend-bash/units/rt/i32_trunc_f32_s.sh
 crates/dewasm-backend-bash/units/rt/i64_div_s.sh
 crates/dewasm-backend-bash/units/rt/i64_div_u.sh
 crates/dewasm-backend-bash/units/rt/i64_rem_s.sh
@@ -146,10 +143,8 @@ crates/dewasm-backend-codon/units/rt/f32_div.codon
 crates/dewasm-backend-codon/units/rt/f32_min.codon
 crates/dewasm-backend-codon/units/rt/f64_div.codon
 crates/dewasm-backend-codon/units/rt/f64_promote.codon
-crates/dewasm-backend-codon/units/rt/f64_q.codon
 crates/dewasm-backend-codon/units/rt/fstat.codon
 crates/dewasm-backend-codon/units/rt/host_check.codon
-crates/dewasm-backend-codon/units/rt/i32_div_s.codon
 crates/dewasm-backend-codon/units/rt/lexists.codon
 crates/dewasm-backend-codon/units/rt/path_stat.codon
 crates/dewasm-backend-codon/units/rt/realpath_ns.codon
@@ -202,8 +197,6 @@ crates/dewasm-backend-go/units/rt/exception.go
 crates/dewasm-backend-go/units/rt/exit.go
 crates/dewasm-backend-go/units/rt/f32_min.go
 crates/dewasm-backend-go/units/rt/f64_min.go
-crates/dewasm-backend-go/units/rt/f64_q.go
-crates/dewasm-backend-go/units/rt/i32c.go
 crates/dewasm-backend-go/units/rt/i64c.go
 crates/dewasm-backend-go/units/rt/resolve_import.go
 crates/dewasm-backend-go/units/rt/select.go
@@ -259,13 +252,7 @@ crates/dewasm-backend-java/units/rt/exit.java
 crates/dewasm-backend-java/units/rt/f32_canon.java
 crates/dewasm-backend-java/units/rt/f32_max.java
 crates/dewasm-backend-java/units/rt/f32_min.java
-crates/dewasm-backend-java/units/rt/f64_canon.java
-crates/dewasm-backend-java/units/rt/i32_trunc_s.java
-crates/dewasm-backend-java/units/rt/i32_trunc_sat_u.java
 crates/dewasm-backend-java/units/rt/i32_trunc_u.java
-crates/dewasm-backend-java/units/rt/i64_trunc_s.java
-crates/dewasm-backend-java/units/rt/i64_trunc_sat_u.java
-crates/dewasm-backend-java/units/rt/i64_trunc_u.java
 crates/dewasm-backend-java/units/rt/link_error.java
 crates/dewasm-backend-java/units/rt/resolve_import.java
 crates/dewasm-backend-java/units/rt/throw_ref.java
@@ -288,7 +275,6 @@ crates/dewasm-backend-java/units/wasi/fd_filestat_set_times.java
 crates/dewasm-backend-java/units/wasi/fd_prestat_get.java
 crates/dewasm-backend-java/units/wasi/fd_read.java
 crates/dewasm-backend-java/units/wasi/fd_readdir.java
-crates/dewasm-backend-java/units/wasi/fd_renumber.java
 crates/dewasm-backend-java/units/wasi/fd_seek.java
 crates/dewasm-backend-java/units/wasi/fd_write.java
 crates/dewasm-backend-java/units/wasi/pack_filestat.java
@@ -329,17 +315,14 @@ crates/dewasm-backend-perl/units/rt/i32_div_s.pl
 crates/dewasm-backend-perl/units/rt/i32_div_u.pl
 crates/dewasm-backend-perl/units/rt/i32_mul.pl
 crates/dewasm-backend-perl/units/rt/i32_rem_s.pl
-crates/dewasm-backend-perl/units/rt/i32_trunc_s.pl
 crates/dewasm-backend-perl/units/rt/i64_add.pl
 crates/dewasm-backend-perl/units/rt/i64_div_u.pl
 crates/dewasm-backend-perl/units/rt/i64_mul.pl
 crates/dewasm-backend-perl/units/rt/i64_rotl.pl
 crates/dewasm-backend-perl/units/rt/i64_sub.pl
-crates/dewasm-backend-perl/units/rt/i64_trunc_s.pl
 crates/dewasm-backend-perl/units/rt/link_error.pl
 crates/dewasm-backend-perl/units/rt/resolve_import.pl
 crates/dewasm-backend-perl/units/rt/tag.pl
-crates/dewasm-backend-perl/units/rt/tail_call.pl
 crates/dewasm-backend-perl/units/rt/trap.pl
 crates/dewasm-backend-perl/units/rt/wasm_exception.pl
 crates/dewasm-backend-perl/units/table/_package.pl
@@ -387,7 +370,6 @@ crates/dewasm-backend-python/units/rt/cvt_f64_i.py
 crates/dewasm-backend-python/units/rt/f32_from_bits.py
 crates/dewasm-backend-python/units/rt/fdiv.py
 crates/dewasm-backend-python/units/rt/resolve_import.py
-crates/dewasm-backend-python/units/rt/tail_call.py
 crates/dewasm-backend-python/units/rt/wasm_exception.py
 crates/dewasm-backend-python/units/table/_class.py
 crates/dewasm-backend-python/units/table/init.py
@@ -430,7 +412,6 @@ crates/dewasm-backend-ruby/units/rt/check_import_kind.rb
 crates/dewasm-backend-ruby/units/rt/cvt_f64_i.rb
 crates/dewasm-backend-ruby/units/rt/low_mask.rb
 crates/dewasm-backend-ruby/units/rt/resolve_import.rb
-crates/dewasm-backend-ruby/units/rt/tail_call.rb
 crates/dewasm-backend-ruby/units/rt/wasm_exception.rb
 crates/dewasm-backend-ruby/units/table/_class.rb
 crates/dewasm-backend-ruby/units/table/tail_ref.rb
