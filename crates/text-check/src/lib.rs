@@ -24,7 +24,7 @@ struct TextLine {
 }
 
 /// The comment markers of a source file, by extension; `None` for a file the check does not read.
-fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
+pub(crate) fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
     let ext = path.rsplit_once('.')?.1;
     Some(match ext {
         "rs" | "go" => &["//"],
@@ -99,7 +99,27 @@ fn append(line: &mut TextLine, read: &str, masked: &str) {
     line.text.push_str(masked);
 }
 
-fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
+/// Directives are comments a program reads, not a person, so they are not text.
+/// A unit's `# requires:` header is one, as are the lint, encoding, and build directives.
+fn is_directive(content: &str) -> bool {
+    const DIRECTIVES: &[&str] = &[
+        "requires:",
+        "shellcheck ",
+        "SPDX-",
+        "go:",
+        "frozen_string_literal:",
+        "-*-",
+        "noqa",
+        "type: ignore",
+        "pylint:",
+        "rubocop:",
+        "NOLINT",
+    ];
+    DIRECTIVES.iter().any(|d| content.starts_with(d))
+        || (content.starts_with("line ") && content.contains(':'))
+}
+
+pub(crate) fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
     let mut in_fence = false;
     let mut out = Vec::new();
     for (index, line) in text.lines().enumerate() {
@@ -113,8 +133,7 @@ fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
         let content = rest
             .trim_start_matches(['/', '!', '*', '#', ';'])
             .trim_start();
-        // A unit's `# requires:` header is read by the unit loader, not by a person.
-        if content.starts_with("requires:") {
+        if is_directive(content) {
             continue;
         }
         if content.starts_with("```") || content.starts_with("~~~") {
@@ -263,14 +282,33 @@ mod tests {
         );
     }
 
+    /// Files whose comments predate the vocabulary rules, which the check skips until rewritten.
+    /// A listed file that already passes fails the check, so the list only shrinks.
+    const VOCABULARY_UNCHECKED: &str = include_str!("vocabulary_unchecked.txt");
+
     #[test]
     fn text_uses_the_vocabulary() {
         let root = repo_root();
         let vocabulary = vocabulary::Vocabulary::load(&root).unwrap_or_else(|e| panic!("{e}"));
-        let mut report: Vec<String> = tracked_files(&root)
-            .iter()
-            .flat_map(|path| vocabulary.file_defects(&root, path))
+        let unchecked: Vec<&str> = VOCABULARY_UNCHECKED
+            .lines()
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
             .collect();
+        let mut report = Vec::new();
+        let mut stale = Vec::new();
+        for path in tracked_files(&root) {
+            let found = vocabulary.file_defects(&root, &path);
+            if !unchecked.contains(&path.as_str()) {
+                report.extend(found);
+            } else if found.is_empty() {
+                stale.push(path);
+            }
+        }
+        assert!(
+            stale.is_empty(),
+            "these files now pass; remove them from vocabulary_unchecked.txt:\n{}",
+            stale.join("\n")
+        );
         report.extend(vocabulary.table_defects());
         assert!(
             report.is_empty(),
@@ -314,6 +352,15 @@ mod tests {
             (2, 21, "Item with with_units.".to_owned()),
         ];
         assert_eq!(texts(markdown_lines(md, false)), expected);
+    }
+
+    #[test]
+    fn directives_are_not_text() {
+        let script = "# shellcheck disable=SC2034\n# requires: rt/trap\n# A comment.\n";
+        let go = "//go:build linux\n//line gen.go:3\n// A comment.\n";
+        let texts = |lines: Vec<TextLine>| lines.into_iter().map(|l| l.text).collect::<Vec<_>>();
+        assert_eq!(texts(comment_lines(&["#"], script)), ["A comment."]);
+        assert_eq!(texts(comment_lines(&["//"], go)), ["A comment."]);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! The vocabulary rules of `agents/vocabulary.md`, checked over Markdown.
+//! The vocabulary rules of `agents/vocabulary.md`, checked over Markdown and source comments.
 //! A word in a sentence comes from an allowed source, and no excluded word is used.
 //! The tables of `agents/vocabulary.md` and the fetched base lists are read as they are.
 //! The one list of words here is the number words, which the "Number" source allows.
@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::markdown_lines;
+use crate::{comment_lines, comment_markers, markdown_lines};
 
 /// The file that holds the vocabulary tables, relative to the repository root.
 pub const VOCABULARY: &str = "agents/vocabulary.md";
@@ -300,11 +300,16 @@ impl Vocabulary {
 
     /// Each vocabulary defect of the Markdown file `path` under `root`, as `path:line: what`.
     pub fn file_defects(&self, root: &Path, path: &str) -> Vec<String> {
-        if !path.ends_with(".md") || path == VOCABULARY {
+        if path == VOCABULARY {
             return Vec::new();
         }
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
+        let lines = match comment_markers(path) {
+            Some(markers) => comment_lines(markers, &text),
+            None if path.ends_with(".md") => markdown_lines(&text, true),
+            None => return Vec::new(),
+        };
         let writing = self.writing_documents.contains(path);
         let context: HashSet<&str> = self
             .context_terms
@@ -313,7 +318,7 @@ impl Vocabulary {
             .flat_map(|(terms, _)| terms.iter().map(String::as_str))
             .collect();
         let mut report = Vec::new();
-        for line in markdown_lines(&text, true) {
+        for line in lines {
             let sentence = unquoted(&line.text);
             let excluded = self.excluded_uses(&sentence);
             for form in &excluded {
