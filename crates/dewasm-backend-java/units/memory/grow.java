@@ -1,5 +1,5 @@
 // memory.grow: returns the old size in pages, or -1 when unsatisfiable.
-// The byte size is checked in long against the byte[] cap (32768 pages > max array).
+// The byte size is checked in long against the byte[] cap (32768 pages > the largest array).
 // Allocation failure is also -1: wasm lets grow fail, never crash.
 int grow(int delta) {
     int old = size / 65536;

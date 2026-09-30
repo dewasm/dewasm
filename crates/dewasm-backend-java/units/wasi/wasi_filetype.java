@@ -1,9 +1,9 @@
-// Map a file's basic attributes to a WASI filetype tag.
-// Java's portable BasicFileAttributes only distinguishes directory / symlink / regular / other.
+// Map a file's basic attributes to a WASI `filetype` tag.
+// Java's portable BasicFileAttributes only distinguishes directory/symbolic link/regular/other.
 // So block/character devices and sockets both collapse to "unknown" (0) here.
 // This differs from the Go backend, which reads FileMode bits.
 // The collapse is adequate for the files and directories our guests touch.
-// tty detection for the standard streams is handled separately in fd_fdstat_get.
+// Terminal detection for the standard streams is handled separately in `fd_fdstat_get`.
 byte wasi_filetype(java.nio.file.attribute.BasicFileAttributes a) {
     if (a.isDirectory()) {
         return 3; // directory

@@ -1,6 +1,7 @@
 # requires: wasi/wasi_filetype
-# Packs a File::Stat into a WASI filestat (64 bytes): dev, ino, filetype
-# (+7 pad), nlink, size, atim/mtim/ctim (all u64, times in nanoseconds).
+# Packs a `File::Stat` into a WASI `filestat` (64 bytes).
+# Its fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
+# All are u64, with times in nanoseconds.
 def pack_filestat(stat)
   [
     stat.dev, stat.ino, wasi_filetype(stat), stat.nlink, stat.size,

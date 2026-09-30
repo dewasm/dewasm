@@ -1,24 +1,26 @@
 # requires: mem/fill, mem/i32_load, mem/i32_load8_u, mem/i32_load16_u, mem/i64_load, mem/i32_store, mem/i32_store8, mem/i32_store16, mem/i64_store
-# poll_oneoff waits until at least one subscription is ready.
+# `poll_oneoff` waits until at least one subscription is ready.
 # It then writes one event per ready subscription.
 # WASI p1 takes 48-byte subscriptions in and gives 32-byte events out; this mirrors the Ruby unit.
 # These are immediately ready:
-# fd_write on any writable fd, a regular-file fd_read, and stdout/stderr reads.
-# An unknown or directory fd reports EBADF; only fd_read on stdin blocks.
+# `fd_write` on any writable `fd`, a regular-file `fd_read`, and `stdout`/`stderr` reads.
+# An unknown or directory `fd` reports EBADF; only `fd_read` on `stdin` blocks.
 # A clock subscription sets the wait deadline.
-# If it elapses with no fd ready, the soonest clock(s) fire, as in Ruby.
-# Ready fd events win outright, so a clock is never consulted once any fd is ready.
-# stdin blocks via `read -t <deadline>`, and the bytes that arrive are held in the pushback buffer.
-# That buffer is <p>wpush, a space-separated byte-ordinal list shared with fd_read.
-# A non-tty stdin waits for one byte with `read -d '' -n 1`.
-# A tty stdin waits for a whole canonical line with a plain `read`.
-# `-n 1` toggles ICANON per byte.
-# Each restore makes the pty line discipline re-echo the pending line (see fd_read).
-# A clock-only wait sleeps with a bash-only coproc timer.
+# If it elapses with no `fd` ready, the soonest clock(s) fire, as in Ruby.
+# Ready `fd` events win outright, so a clock is never consulted once any `fd` is ready.
+# `stdin` blocks via `read -t <deadline>`.
+# The bytes that arrive are held in the pushback buffer.
+# That buffer is `<p>wpush`, a space-separated list of byte values shared with `fd_read`.
+# A `stdin` that is not a `tty` waits for one byte with `read -d '' -n 1`.
+# A `tty` `stdin` waits for a whole canonical line with a plain `read`.
+# `-n 1` switches ICANON per byte.
+# Each restore makes the pseudo-terminal line discipline re-echo the pending line.
+# See `fd_read`.
+# A clock-only wait sleeps with a `coproc` timer, which only Bash has.
 # A process substitution opened `<>` is rejected on some hosts.
-# So a coproc that blocks on its own pipe is the portable sleep.
-# `now` comes from EPOCHREALTIME, with monotonic falling back to realtime (a documented deviation).
-# LC_ALL=C keeps the byte ordinal conversion byte-granular.
+# So a `coproc` that blocks on its own pipe is the portable sleep.
+# `now` comes from `EPOCHREALTIME`: monotonic falls back to `realtime` (a documented deviation).
+# `LC_ALL=C` makes the conversion to byte values work one byte at a time.
 wasi_poll_oneoff() {
   local __p=$1 __in=$2 __out=$3 __nsubs=$4 __nevents_ptr=$5
   if (( __nsubs == 0 )); then
@@ -85,8 +87,8 @@ wasi_poll_oneoff() {
     fi
   done
 
-  # Ready fd events win: only wait when nothing is already resolvable, mirroring Ruby.
-  # Clock and stdin subscriptions are not consulted once any fd is ready.
+  # Ready `fd` events win: only wait when nothing is already resolvable, mirroring Ruby.
+  # Clock and `stdin` subscriptions are not consulted once any `fd` is ready.
   if (( ${#__ev[@]} == 0 )); then
     local __min=0 __have_clock=0 __k __to='' __fire_clocks=0
     if (( ${#__crel[@]} > 0 )); then
@@ -117,7 +119,7 @@ wasi_poll_oneoff() {
         __line=''
       fi
       if [[ -n $__line ]] || { [[ -t 0 ]] && (( __rc == 0 )); }; then
-        # tty: buffer the whole line.
+        # `tty`: buffer the whole line.
         # The stripped newline is restored unless this was EOF (or timeout) without a delimiter.
         for (( __kk = 0; __kk < ${#__line}; __kk++ )); do
           printf -v __ord '%d' "'${__line:__kk:1}"
@@ -131,16 +133,16 @@ wasi_poll_oneoff() {
         local -a __pw2=($__push)
         for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 ${#__pw2[@]} 0"); done
       elif (( __rc == 0 )); then
-        # non-tty: one byte arrived
+        # Not a `tty`: one byte arrived.
         if [[ -z $__ch ]]; then __ord=0; else printf -v __ord '%d' "'$__ch"; fi
         __push=$__ord
         for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 1 0"); done
       elif (( __rc > 128 )); then
         __fire_clocks=1
       else
-        # EOF: report each fd_read ready with 0 bytes, so the guest's next read sees EOF.
-        # Ruby's IO.select reports the closed fd readable instead.
-        # Either way the following fd_read returns 0.
+        # EOF: report each `fd_read` ready with 0 bytes, so the guest's next read sees EOF.
+        # Ruby's `IO.select` reports the closed `fd` readable instead.
+        # Either way the following `fd_read` returns 0.
         for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 0 0"); done
       fi
     elif (( __have_clock )); then

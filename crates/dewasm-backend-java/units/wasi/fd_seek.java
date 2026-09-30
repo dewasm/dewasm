@@ -1,6 +1,6 @@
 // requires: memory/i64_store
-// WASI whence: 0=set, 1=cur, 2=end.
-// FileChannel has no whence, so compute the absolute position.
+// WASI `whence`: `0=set`, `1=cur`, `2=end`.
+// FileChannel has no `whence`, so compute the absolute position.
 // Stdio is not seekable (SPIPE).
 int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
     Object e = fds.get(fd);
@@ -32,7 +32,7 @@ int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
         // A resulting offset before byte 0 is EINVAL, not an I/O error.
         // FileChannel.position would raise IllegalArgumentException for it.
         // Seeking past the end is allowed.
-        // Check explicitly so the errno is precise.
+        // Check explicitly so the `errno` is precise.
         if (pos < 0) {
             return WASI_INVAL;
         }

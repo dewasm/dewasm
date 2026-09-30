@@ -3,8 +3,8 @@ def wasi_fd_allocate(self, fd, offset, length):
     io = self.fds.get(fd)
     if io is None or isinstance(io, self.WasiDir):
         return self.ERRNO_BADF
-    # fallocate never shrinks.
-    # Grow the file to offset+len when that exceeds the current size, otherwise leave it untouched.
+    # `fallocate` never makes a file smaller.
+    # Grow the file to `offset+len` if that exceeds the current size, otherwise leave it untouched.
     try:
         if offset + length > os.fstat(io.fileno()).st_size:
             os.ftruncate(io.fileno(), offset + length)

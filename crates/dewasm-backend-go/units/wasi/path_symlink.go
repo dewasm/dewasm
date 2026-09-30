@@ -1,9 +1,9 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Create a symlink at (fd, new_path) whose target is old_path.
-// The target is stored VERBATIM, never pre-resolved to a host path.
-// Containment is enforced later, when the link is followed.
+// Create a symbolic link at (`fd`, `new_path`) whose target is `old_path`.
+// The target is stored UNCHANGED, never pre-resolved to a host path.
+// Containment is checked later, when the link is followed.
 // An absolute target cannot be represented within a preopen sandbox, so it is rejected.
-// cap-std does the same; the suite requires "/" to fail.
+// `cap-std` does the same; the suite requires "/" to fail.
 // The link's own parent is resolved NOFOLLOW.
 func (w *WASI) wasi_path_symlink(oldPathPtr, oldPathLen, fd, newPathPtr, newPathLen uint32) uint32 {
     target := string(w.memory.read_string(uint64(oldPathPtr), uint64(oldPathLen)))
@@ -16,7 +16,7 @@ func (w *WASI) wasi_path_symlink(oldPathPtr, oldPathLen, fd, newPathPtr, newPath
         return err
     }
     // Slash-suffixed link name: EEXIST if something is there, else ENOENT.
-    // Non-directories were ENOTDIR in resolve_path.
+    // Non-directories were ENOTDIR in `resolve_path`.
     if strings.HasSuffix(newRel, "/") {
         if _, e := os.Lstat(linkHost); e == nil {
             return wasiExist

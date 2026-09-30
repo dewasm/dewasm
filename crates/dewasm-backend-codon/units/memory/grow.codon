@@ -1,4 +1,4 @@
-# Returns the old page count, or 0xFFFFFFFF when the request exceeds max_pages.
+# Returns the old page count, or 0xFFFFFFFF when the request exceeds `max_pages`.
 def grow(self, delta: UInt[32]) -> UInt[32]:
     old_pages = self.n // 65536
     new_pages = old_pages + int(delta)

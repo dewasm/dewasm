@@ -1,8 +1,8 @@
-# Resolve one import from the embedder's imports dict.
-# The value under a module name is either a dict (name -> callable) or a provider object.
-# A provider object responds to wasm_import(name).
+# Resolve one import from the embedder's imports `dict`.
+# The value under a module name is either a `dict` (name -> callable) or a provider object.
+# A provider object responds to `wasm_import(name)`.
 # Providers may also define attach(instance).
-# Generated code calls it once the instance is fully constructed.
+# Generated code calls it once the instance is constructed.
 @staticmethod
 def resolve_import(imports, mod, name):
     source = imports.get(mod)

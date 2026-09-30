@@ -1,14 +1,15 @@
 # requires: mem/check, mem/i32_store, wasi/read_path, wasi/resolve_path
-# WASI path_readlink: read the target string of the symlink named by <path> under the dirfd.
-# The string goes into the guest buffer, truncated to buf_len and never NUL-terminated.
+# WASI `path_readlink`: read the target string of a symbolic link.
+# The link is named by `<path>` under the `dirfd`.
+# The string goes into the guest buffer, truncated to `buf_len` and never NUL-terminated.
 # The call returns the number of bytes written.
 # Resolution is NOFOLLOW, since the link itself is the target of the call.
 # So only the link's parent is sandbox-contained.
 # Reading the link's own target uses a single `--`-guarded `readlink`.
-# It is a licensed external command beyond the four mkdir/rmdir/rm/mv commands.
-# It is used only for this syscall, distinct from path *resolution*.
-# Path resolution still cannot follow a file symlink in pure bash.
-# A missing path is ENOENT (44); a non-symlink is EINVAL (28).
+# It is a licensed external command beyond the four `mkdir`/`rmdir`/`rm`/`mv` commands.
+# It is used only for this system call, distinct from path *resolution*.
+# Path resolution still cannot follow a file symbolic link in pure Bash.
+# A missing path is ENOENT (44); a path that is not a symbolic link is EINVAL (28).
 wasi_path_readlink() {
   local __p=$1 __dirfd=$2 __path_ptr=$3 __path_len=$4 __buf_ptr=$5 __buf_len=$6 __bufused_ptr=$7
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?

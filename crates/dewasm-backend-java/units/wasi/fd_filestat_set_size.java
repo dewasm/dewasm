@@ -1,7 +1,7 @@
 // Truncate or extend a file to `size`.
-// FileChannel.truncate only shrinks.
+// `FileChannel.truncate` only makes a file smaller.
 // So growing is done by writing one zero byte at size-1 (the gap is a sparse hole).
-// That matches ftruncate's grow semantics.
+// That matches the grow behavior of `ftruncate`.
 int wasi_fd_filestat_set_size(int fd, long size) {
     Object e = fds.get(fd);
     if (!(e instanceof Handle)) {

@@ -1,13 +1,13 @@
-# wasi_filetype <path>: WASI filetype for <path> via the test builtins, in lstat order.
-# It is the bash analogue of crates/dewasm-backend-ruby/units/wasi/wasi_filetype.rb.
-# The Ruby helper checks a File::Stat/lstat result.
-# `-h` (symlink) must come first, since `-d`/`-c`/`-b`/`-f` dereference a symlink.
-# Testing them first would report a directory-symlink as a plain directory.
-# A FIFO (`-p`) has no dedicated WASI filetype and reports unknown (0), matching Ruby.
+# `wasi_filetype <path>`: WASI `filetype` for `<path>` via the test builtins, in `lstat` order.
+# It is the Bash counterpart of `crates/dewasm-backend-ruby/units/wasi/wasi_filetype.rb`.
+# The Ruby helper checks a `File::Stat`/`lstat` result.
+# `-h` (symbolic link) must come first, since `-d`/`-c`/`-b`/`-f` dereference a symbolic link.
+# Testing them first would report a symbolic link to a directory as a plain directory.
+# A FIFO (`-p`) has no dedicated WASI `filetype` and reports unknown (0), matching Ruby.
 # Ruby's helper has no `fifo?` branch either, so a named pipe falls through to its own `else` case.
-# A socket (`-S`) is reported as socket_stream (6).
+# A socket (`-S`) is reported as `socket_stream` (6).
 # That is the same single bucket Ruby's `socket?` branch uses.
-# Always succeeds (a nonexistent path reports unknown/0); R1 is the filetype.
+# Always succeeds (a nonexistent path reports unknown/0); R1 is the `filetype`.
 wasi_filetype() {
   local __path=$1
   if [[ -h $__path ]]; then

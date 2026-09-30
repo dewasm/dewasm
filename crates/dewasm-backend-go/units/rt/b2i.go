@@ -1,4 +1,4 @@
-// wasm comparisons yield an i32 0/1; Go comparisons yield bool.
+// wasm comparisons yield an i32 0/1; Go comparisons yield `bool`.
 func (rt) b2i(c bool) uint32 {
     if c {
         return 1

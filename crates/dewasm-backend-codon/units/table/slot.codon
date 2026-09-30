@@ -1,5 +1,5 @@
 # requires: rt/trap, rt/boxed
-# Resolve a call_indirect slot to its funcref: bounds, null, then the structural type key.
+# Resolve a `call_indirect` slot to its `funcref`: bounds, null, then the structural type key.
 def slot(self, i: UInt[32], ty: str) -> Rt.Funcref:
     idx = int(i)
     if idx >= len(self.slots):

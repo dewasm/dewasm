@@ -2,8 +2,8 @@
 def wasi_path_symlink(self, old_path_ptr: UInt[32], old_path_len: UInt[32], fd: UInt[32], new_path_ptr: UInt[32], new_path_len: UInt[32]) -> UInt[32]:
     from C import symlink(cobj, cobj) -> int
     target = self.memory.read_path(int(old_path_ptr), int(old_path_len))
-    # The symlink target is stored verbatim, never pre-resolved.
-    # Containment is enforced when the link is later followed.
+    # The symbolic link target is stored unchanged, never pre-resolved.
+    # Containment is checked when the link is later followed.
     # An absolute target can never be confined to the preopen, so it is rejected up front.
     if target.startswith("/"):
         return UInt[32](self.ERRNO_NOTCAPABLE)
@@ -11,7 +11,7 @@ def wasi_path_symlink(self, old_path_ptr: UInt[32], old_path_len: UInt[32], fd: 
     link_host, err = self.resolve_path(int(fd), new_rel, False)
     if err != 0:
         return UInt[32](err)
-    # Slash-suffixed link name, per wasmtime:
+    # Slash-suffixed link name, per Wasmtime:
     # EEXIST on a directory, ENOTDIR on a non-directory, ENOENT when missing.
     if link_host.endswith("/"):
         bare = link_host[:len(link_host) - 1]

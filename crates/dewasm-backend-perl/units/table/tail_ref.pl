@@ -1,7 +1,7 @@
 # requires: rt/trap
 # `call`'s checks, raised at the same point in execution order.
-# It returns the slot's coderef for the trampoline instead of invoking it.
-# A slot's optional third element is a coderef for the body of a tail-calling function.
+# It returns the slot's code reference for the trampoline instead of calling it.
+# A slot's optional third element is a code reference for the body of a tail-calling function.
 # A slot without one completes in a single frame anyway.
 sub tail_ref {
     my ($self, $i, $type_key) = @_;

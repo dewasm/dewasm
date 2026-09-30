@@ -11,8 +11,8 @@ def wasi_fd_pwrite(fd, iovs_ptr, iovs_len, offset, nwritten_ptr)
     chunk = @memory.read_string(ptr, len)
     n = io.pwrite(chunk, offset + written)
     written += n
-    # IO#pwrite is a single pwrite(2), which may write short.
-    # Stop so the reported nwritten stays contiguous.
+    # `IO#pwrite` is a single `pwrite(2)`, which may write short.
+    # Stop so the reported `nwritten` stays contiguous.
     break if n < chunk.bytesize
   end
   @memory.iws(nwritten_ptr, written)

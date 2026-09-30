@@ -1,5 +1,5 @@
 # requires: rt/quiet_nan, rt/f64_from_bits
-# Perl dies on sqrt of a negative; wasm wants NaN. sqrt(-0.0) is -0.0.
+# Perl dies on `sqrt` of a negative; wasm wants NaN. `sqrt(-0.0)` is -0.0.
 sub fsqrt {
     my $x = $_[0];
     return Rt::quiet_nan($x) if $x != $x;

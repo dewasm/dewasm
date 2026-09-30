@@ -1,6 +1,6 @@
-# The f32 sibling of rt/f64_round_pack: R0 = (-1)^s * m * 2^(e-24) as a u32 pattern, RNE.
+# The f32 counterpart of `rt/f64_round_pack`: `R0 = (-1)^s * m * 2^(e-24)` as a u32 pattern, RNE.
 # Same contract, except that m may be as large as 2^63-1 (integer conversions).
-# The right-normalize jam loop absorbs such an m.
+# The right-normalizing loop absorbs such an m, collecting shifted-out bits into the sticky `sk`.
 rt_f32_round_pack() {
   local s=$1 e=$2 m=$3 sk=$4 d
   if (( m == 0 && sk == 0 )); then

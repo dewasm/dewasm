@@ -20,10 +20,10 @@ func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDir
         return err
     }
     if e := os.Link(oldHost, newHost); e != nil {
-        // macOS link(2) follows a symlink source.
-        // Linux does not, and neither does the AT_SYMLINK_NOFOLLOW linkat the suite expects.
-        // std exposes no portable linkat.
-        // Emulate a NOFOLLOW hard-link-to-a-symlink by recreating the symlink at the destination.
+        // macOS `link(2)` follows a symbolic link source.
+        // Linux does not, and neither does the AT_SYMLINK_NOFOLLOW `linkat` the suite expects.
+        // The standard library exposes no portable `linkat`.
+        // Emulate a NOFOLLOW hard link to a symbolic link by recreating it at the destination.
         if fi, le := os.Lstat(oldHost); le == nil && fi.Mode()&os.ModeSymlink != 0 {
             if target, re := os.Readlink(oldHost); re == nil {
                 if se := os.Symlink(target, newHost); se != nil {

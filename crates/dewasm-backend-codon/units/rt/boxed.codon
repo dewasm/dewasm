@@ -1,18 +1,18 @@
 # requires: rt/trap
-# The boxed dynamic boundary is one unit because the classes are inseparable.
+# The boxed dynamic boundary is one unit because the classes cannot be separated.
 # Codon resolves field annotations in definition order, so the classes come in this order:
-# the tag and exception classes first, since a boxed value can carry an exnref;
+# the tag and exception classes first, since a boxed value can carry an `exnref`;
 # then the boxed value, and the boxed function that generated code subclasses per function;
 # then the table slot, which pairs a structural type key with a boxed function.
 class Tag:
     def __init__(self):
         pass
 
-# A thrown wasm exception, which doubles as the exnref value.
+# A thrown wasm exception, which doubles as the `exnref` value.
 # The payload is stored per representation; every list has one slot per tag parameter.
 # Kind 0 i32 and 1 i64 are in `bits`, 2 f32 in `ss`, 3 f64 in `fs`.
 # So no field annotation has to name the boxed Val defined below.
-# Tag parameters of exnref type are not carried (no in-scope module uses them).
+# Tag parameters of `exnref` type are not carried (no in-scope module uses them).
 class WasmException(Exception):
     tag: Rt.Tag
     ks: List[int]

@@ -1,6 +1,6 @@
 # requires: rt/trap
 # `call`'s checks, raised at the same point in execution order.
-# It returns the slot's callable for the trampoline instead of invoking it.
+# It returns the slot's callable for the trampoline instead of calling it.
 # A slot's optional third element is the body method of a tail-calling function.
 # A slot without one completes in a single frame anyway.
 def tail_ref(self, i, type_key):

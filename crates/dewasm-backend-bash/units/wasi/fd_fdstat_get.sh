@@ -1,10 +1,10 @@
 # requires: mem/fill, mem/i32_store8, mem/i32_store16, mem/i64_store
-# 24-byte fdstat layout:
-# - filetype u8 at +0 by fd kind: 3 = directory, 4 = regular file.
-#   For stdio it is 2 = char device when a tty, else 4.
-# - fdflags u16 at +2.
-# - the stored rights_base/inheriting u64 at +8/+16.
-# The rights are what path_open granted (all-ones for stdio/preopens).
+# 24-byte `fdstat` layout:
+# - `filetype` u8 at +0 by `fd` kind: 3 = directory, 4 = regular file.
+#   For stdio it is 2 = character device when it is a terminal, else 4.
+# - `fdflags` u16 at +2.
+# - the stored `fs_rights_base`/`fs_rights_inheriting` u64 at +8/+16.
+# The rights are what `path_open` granted (all-ones for stdio/preopens).
 # The rights-narrowing conformance tests check that these are reported instead of a flat all-ones.
 wasi_fd_fdstat_get() {
   local __p=$1 __fd=$2 __out=$3

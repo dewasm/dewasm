@@ -4,7 +4,7 @@
 // An ImportProvider resolves names itself.
 // The parameter is wildcarded, so it accepts both of these:
 // `Map<String, Map<String, Object>>` and a mixed `Map<String, Object>`.
-// Returns null when the module, or the name within it, is absent.
+// Returns null when the module, or the name within it, is missing.
 // So the caller falls through to its bundled-WASI / ENOSYS / link-error fallback.
 static Object resolve_import(java.util.Map<String, ?> imports, String mod, String name) {
     if (imports == null) {

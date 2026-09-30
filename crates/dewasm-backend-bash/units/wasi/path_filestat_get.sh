@@ -1,23 +1,24 @@
 # requires: wasi/read_path, wasi/resolve_path, wasi/filetype, wasi/pack_filestat, wasi/file_size
-# WASI path_filestat_get: lookupflags bit 0 = SYMLINK_FOLLOW.
-# It is passed straight through to wasi_resolve_path's <follow>.
-# So a not-followed final symlink is stat'd as itself (filetype 7).
-# This mirrors the stat/lstat split of crates/dewasm-backend-ruby/units/wasi/path_filestat_get.rb.
+# WASI `path_filestat_get`: `lookupflags` bit 0 = `SYMLINK_FOLLOW`.
+# It is passed straight through to the `<follow>` of `wasi_resolve_path`.
+# So a final symbolic link that is not followed is reported as itself (`filetype` 7).
+# This mirrors the `stat`/`lstat` split of the Ruby backend.
+# That unit is `crates/dewasm-backend-ruby/units/wasi/path_filestat_get.rb`.
 # A missing target is ENOENT (44), checked with `-e || -h` *before* `wasi_filetype`.
-# With `-h`, a dangling symlink, not followed, still counts as present.
+# With `-h`, a dangling symbolic link, not followed, still counts as present.
 # The check comes first since `wasi_filetype` always succeeds.
 # It reports "unknown" both for a missing path and for a present-but-unrecognized one (a FIFO).
 # Ruby gets this for free from `File.stat`/`lstat` raising `ENOENT`.
-# Filetype otherwise comes from the test builtins (wasi_filetype).
+# The `filetype` otherwise comes from the test builtins (`wasi_filetype`).
 # Size is only meaningful for a regular file.
-# For that case, an open file fd on the *same* resolved host path wins over the on-disk size.
-# The last fd found wins, matching the buffer's own last-flush-wins rule for two fds on one file.
-# So a write-then-stat on the same path is coherent before the buffer is flushed.
-# Otherwise the on-disk size (wasi_file_size) is used.
-# Every other filetype (directory, symlink, device, socket, fifo) reports size 0.
-# Bash cannot introspect a symlink's target-string length or a device's size.
+# For that case, an open file `fd` on the *same* resolved host path wins over the on-disk size.
+# The last `fd` found wins, matching the buffer's last-flush-wins rule for two `fd`s on one file.
+# So a `stat` after a write on the same path is coherent before the buffer is flushed.
+# Otherwise the on-disk size (`wasi_file_size`) is used.
+# Every other `filetype` (directory, symbolic link, device, socket, FIFO) reports size 0.
+# Bash cannot read a symbolic link's target-string length or a device's size.
 # A directory's size isn't tracked.
-# So this is a documented approximation, not a real stat().
+# So this is a documented approximation, not a real `stat()`.
 wasi_path_filestat_get() {
   local __p=$1 __dirfd=$2 __flags=$3 __path_ptr=$4 __path_len=$5 __buf=$6
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?

@@ -6,13 +6,13 @@ ERRNO_NOSYS = 52
 ERRNO_SPIPE = 70
 ERRNO_NOTCAPABLE = 76
 
-# WASI rights bits (fs_rights_base / fs_rights_inheriting).
-# Per-fd capabilities are modelled after wasmtime's wasi-common:
+# WASI rights bits (`fs_rights_base` / `fs_rights_inheriting`).
+# Per-descriptor capabilities are modelled after Wasmtime's `wasi-common`:
 # - a directory and a file each carry a different default set;
-# - path_open narrows the requested rights against the parent's inheriting set (then per-filetype);
-# - fd_fdstat_set_rights can only drop bits.
-# These are kept in the always-bundled prelude because of __init__.
-# It seeds the parallel fd -> [base, inheriting, fdflags] meta map for every preopen and for stdio.
+# - `path_open` narrows requested rights against the parent's inheriting set (then per file type);
+# - `fd_fdstat_set_rights` can only drop bits.
+# These are kept in the always-bundled prelude because of `__init__`.
+# It seeds the parallel `fd_meta` (`fd -> [base, inheriting, fdflags]`) for every preopen and stdio.
 # So the constants must exist whenever any WASI import is used.
 RIGHTS_FD_DATASYNC = 1 << 0
 RIGHTS_FD_READ = 1 << 1
@@ -46,7 +46,7 @@ RIGHTS_POLL_FD_READWRITE = 1 << 27
 # The rights a directory descriptor carries (base).
 # Also the rights it may pass to things opened beneath it (inheriting).
 # The inheriting set is the directory rights plus every file right.
-# Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
+# Mirrors Wasmtime's `DIR_RIGHTS` / `FILE_RIGHTS`.
 DIR_RIGHTS_BASE = (
     RIGHTS_FD_FDSTAT_SET_FLAGS | RIGHTS_FD_SYNC | RIGHTS_FD_ADVISE
     | RIGHTS_PATH_CREATE_DIRECTORY | RIGHTS_PATH_CREATE_FILE
@@ -65,13 +65,13 @@ FILE_RIGHTS_BASE = (
     | RIGHTS_FD_FILESTAT_SET_TIMES | RIGHTS_POLL_FD_READWRITE)
 DIR_RIGHTS_INHERITING = DIR_RIGHTS_BASE | FILE_RIGHTS_BASE
 
-# A directory descriptor: either a preopen or a directory the guest opened itself via path_open.
+# A directory descriptor: either a preopen or a directory the guest opened itself via `path_open`.
 # A preopen sets `preopen_name` to the guest-visible path passed in `preopens`.
 # A directory the guest opened has `preopen_name` None.
-# `entries` is the fd_readdir listing cache, populated lazily.
+# `entries` is the `fd_readdir` listing cache, populated lazily.
 # The class is nested in the WASI class, so methods reach it as `self.WasiDir`.
 # It is kept in the prelude because `__init__` builds one per preopen unconditionally.
-# So it must be available whenever any WASI import is used, not only when a filesystem syscall is.
+# So it must be available for any WASI import, not only for a system call on the file system.
 class WasiDir:
     def __init__(self, host_path, preopen_name, entries):
         self.host_path = host_path
@@ -82,29 +82,29 @@ def __init__(self, args=None, env=None, preopens=None):
     self.args = [a if isinstance(a, bytes) else str(a).encode("utf-8") for a in (args or [])]
     self.env = [("%s=%s" % (k, v)).encode("utf-8") for k, v in (env or {}).items()]
     self.fds = {0: sys.stdin.buffer, 1: sys.stdout.buffer, 2: sys.stderr.buffer}
-    # Parallel per-fd capability map: fd -> [base, inheriting, fdflags, filetype].
+    # Parallel per-descriptor capability map: `fd -> [base, inheriting, fdflags, filetype]`.
     # stdio gets the full file-right set (a stream can read/write/etc.).
     # Preopens get the directory base and the directory-plus-file inheriting set.
-    # `filetype` is what fd_fdstat_get reports, filled in on its first query and None until then.
-    # An open descriptor's filetype cannot change while it is open.
-    # This entry travels with its fd-table entry: fd_renumber moves both.
-    # Fds are never revived after close.
-    # So the memoized answer cannot outlive the descriptor it describes.
+    # `filetype` is what `fd_fdstat_get` reports, filled in on its first query and None until then.
+    # An open descriptor's file type cannot change while it is open.
+    # This entry travels with its `fds` entry: `fd_renumber` moves both.
+    # A closed descriptor is never brought back.
+    # So the memoized answer cannot live longer than the descriptor it describes.
     self.fd_meta = {
         0: [self.FILE_RIGHTS_BASE, 0, 0, None],
         1: [self.FILE_RIGHTS_BASE, 0, 0, None],
         2: [self.FILE_RIGHTS_BASE, 0, 0, None],
     }
     # The stdio special-cases key on the objects captured here.
-    # Those are SPIPE on seek/tell/pread/pwrite, and no close.
-    # The objects stay in lockstep with the fd table.
+    # Those are SPIPE on `seek`/`tell`/`pread`/`pwrite`, and no close.
+    # The objects are the ones the `fds` table holds.
     self.std_ios = (sys.stdin.buffer, sys.stdout.buffer, sys.stderr.buffer)
     self.memory = None
     next_fd = 3
     for guest, host in (preopens or {}).items():
         # The host path must resolve, but need not be a directory.
         # Like the Ruby/Perl runtimes, a single-file preopen is accepted.
-        # An example is '/dev/null' for the zeroperl reactor's init probe.
+        # An example is `/dev/null` for the `zeroperl` reactor's initialization probe.
         # The guest resolves it as the preopen root itself.
         real = os.path.realpath(host)
         if not os.path.exists(real):
@@ -117,7 +117,7 @@ def __init__(self, args=None, env=None, preopens=None):
 
 # Import-provider object.
 # A custom WASI runtime can replace this whole class.
-# It implements wasm_import(name) and attach(instance).
+# It implements `wasm_import(name)` and `attach(instance)`.
 def wasm_import(self, name):
     return getattr(self, "wasi_" + name, None)
 

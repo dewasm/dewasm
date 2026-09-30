@@ -2,7 +2,7 @@
 # 53 -> 24 bit RNE.
 # Ruby's 2^128 - 2^103 overflow boundary needs no code here.
 # It is where round-to-nearest starts mapping to infinity.
-# NaN keeps its sign and goes canonical (Ruby f32_demote parity).
+# NaN keeps its sign and goes canonical (as Ruby `f32_demote` does).
 rt_f32_demote() {
   local a=$1 pa s ma ea
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

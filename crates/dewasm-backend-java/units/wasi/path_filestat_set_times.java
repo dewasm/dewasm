@@ -1,8 +1,8 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Set the atim/mtim of a path.
-// lookupflags::SYMLINK_FOLLOW selects whether the times are set on a symlink itself or its target.
-// That is the NOFOLLOW view vs following.
-// fst_flags validation matches fd_filestat_set_times.
+// Set the `atim`/`mtim` of a path.
+// `lookupflags::SYMLINK_FOLLOW` selects whether the times are set on a symbolic link or its target.
+// That is the choice between the NOFOLLOW view and following.
+// `fst_flags` validation matches `fd_filestat_set_times`.
 // A timestamp set both explicitly and to "now" is EINVAL.
 int wasi_path_filestat_set_times(int fd, int flags, int pathPtr, int pathLen, long atim, long mtim,
                                  int fstflags) {

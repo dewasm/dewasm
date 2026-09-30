@@ -1,12 +1,12 @@
 # requires: rt/trap
-# Linear memory (<prefix>mem) is an associative array, one byte per element.
-# Assoc subscripts are literal strings, never arithmetic-evaluated.
-# So every mem unit pre-expands its key to a plain integer var (`__m[$k]`, not `__m[a+1]`).
+# Linear memory (`<prefix>mem`) is an associative array, one byte per element.
+# Associative array subscripts are literal strings, never arithmetic-evaluated.
+# So every `mem` unit pre-expands its key to a plain integer variable (`__m[$k]`, not `__m[a+1]`).
 # Keys are canonical decimal integers because they all come from $(( )).
 # Otherwise "07" and "7" would be distinct keys.
 # Missing keys read as 0 in arithmetic, since generated scripts do not use `set -u`.
-# So zero-init and grow stay free, as with the former indexed representation.
-# mem_check <prefix> <addr> <len>: trap unless [addr, addr+len) fits.
+# So zero initialization and grow stay free, as with the former indexed representation.
+# `mem_check <prefix> <addr> <len>`: trap unless `[addr, addr+len)` fits.
 mem_check() {
   local -n __pages=${1}pages
   if (( $2 + $3 > __pages * 65536 )); then

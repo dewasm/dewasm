@@ -1,5 +1,6 @@
-// A WASI proc_exit request, distinct from a trap: carries the exit code up to the public boundary.
-// `exit` is void and throws (see rt/trap).
+// A WASI `proc_exit` request, distinct from a trap.
+// It carries the exit code up to the public boundary.
+// `exit` is `void` and throws (see `rt/trap`).
 static final class Exit extends RuntimeException {
     final int code;
 

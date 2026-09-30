@@ -4,18 +4,18 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    // dirflags::SYMLINK_FOLLOW decides whether the final component is chased through a symlink.
-    // Without it (the default), a symlink final component is ELOOP.
+    // `dirflags::SYMLINK_FOLLOW` decides whether a symbolic link as final component is followed.
+    // Without it (the default), a symbolic link final component is ELOOP.
     // It is not silently opened as its target (the O_NOFOLLOW shape).
     boolean follow = (dirflags & 0x1) != 0;
     Resolved r = resolve_path(dirfd, rel, follow);
     if (r.errno != WASI_OK) {
         return r.errno;
     }
-    // The opening dirfd must itself carry PATH_OPEN.
+    // The opening directory descriptor must itself carry PATH_OPEN.
     // O_TRUNC also spends the directory's PATH_FILESTAT_SET_SIZE right.
     // Truncation is a size change.
-    // Both are enforced with NOTCAPABLE.
+    // Both are checked, and a missing one is NOTCAPABLE.
     if (lacksRight(dirfd, R_PATH_OPEN)) {
         return WASI_NOTCAPABLE;
     }
@@ -24,7 +24,7 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         return WASI_NOTCAPABLE;
     }
     java.nio.file.Path hostPath = java.nio.file.Paths.get(r.path);
-    // A symlink final component reached without SYMLINK_FOLLOW is ELOOP.
+    // A symbolic link final component reached without SYMLINK_FOLLOW is ELOOP.
     if (!follow && java.nio.file.Files.isSymbolicLink(hostPath)) {
         return WASI_LOOP;
     }
@@ -34,8 +34,8 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     boolean trailingSlash = rel.endsWith("/");
     boolean exists = java.nio.file.Files.exists(hostPath);
     boolean isDir = java.nio.file.Files.isDirectory(hostPath);
-    // The parent directory fd's inheriting rights cap what any child fd may hold.
-    // The opened fd's filetype then masks that down.
+    // The parent directory descriptor's inheriting rights cap what any child descriptor may hold.
+    // The opened descriptor's file type then masks that down.
     // A directory keeps the directory-relevant rights, and a file the file-relevant ones.
     FdMeta dm = meta.get(dirfd);
     long dirInh = (dm != null) ? dm.inheriting : (DIR_RIGHTS | FILE_RIGHTS);
@@ -54,12 +54,12 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         meta.put(nextFd, new FdMeta(base, inh, fdflags));
     } else if (wantDir) {
         // O_DIRECTORY distinguishes "missing" (ENOENT) from "not a directory"
-        // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
+        // (ENOTDIR); guests (`opendir` of `wasi-libc`) branch on the difference.
         return exists ? WASI_NOTDIR : WASI_NOENT;
     } else if (trailingSlash) {
         // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when missing.
         // O_CREAT is the exception: it must not create through the slash.
-        // Per wasmtime, that is EINVAL on macOS and EISDIR on Linux.
+        // Per Wasmtime, that is EINVAL on macOS and EISDIR on Linux.
         if (exists) {
             return WASI_NOTDIR;
         }
@@ -79,10 +79,10 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         }
         // FileChannel.open silently ignores CREATE/CREATE_NEW/TRUNCATE_EXISTING.
         // It does so unless the channel is opened for WRITE.
-        // So a create request with rights_base=0 would resolve to {READ, CREATE}.
+        // So a create request with `rights_base=0` would resolve to {READ, CREATE}.
         // It would fail to create, and then error NoSuchFileException -> NOENT.
         // Force WRITE whenever a create/truncate option is present.
-        // The fd's reported and enforced rights still come from the rights model below.
+        // The descriptor's reported and checked rights still come from the rights model below.
         if (write || create || excl || trunc) {
             opts.add(java.nio.file.StandardOpenOption.WRITE);
         }

@@ -5,8 +5,8 @@ sub wasi_fd_pread {
     return ERRNO_BADF if !defined($e) || $e->{dir};
     return ERRNO_SPIPE if defined $e->{std};
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_READ;
-    # Core perl has no pread(2): emulate it with a save/seek/read/restore.
-    # The handle is unbuffered (sysread/sysseek-only), so it stays coherent.
+    # Core Perl has no `pread(2)`: emulate it with a save, seek, read, and restore.
+    # The handle is unbuffered (`sysread` and `sysseek` only), so it stays coherent.
     my $cur = sysseek($e->{fh}, 0, 1);
     return ERRNO_IO unless defined $cur;
     my $nread = 0;

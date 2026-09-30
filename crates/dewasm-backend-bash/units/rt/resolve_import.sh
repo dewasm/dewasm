@@ -1,15 +1,16 @@
 # requires: rt/link_err
-# rt_resolve_import <mod> <name> <kind>; kind in func|global|table|memory.
-# The bash shape of the import-provider protocol.
+# `rt_resolve_import <mod> <name> <kind>`; `kind` in `func|global|table|memory`.
+# The Bash shape of the import-provider protocol.
 # Resolution order:
-# (1) For funcs only, an IMPORTS[mod.name] override set by the host wins.
-# (2) PROVIDERS[mod] names a prefix <q> that owns per-kind export maps.
-# The maps are <q>EXPORTS (funcs), <q>GLOBAL_EXPORTS, <q>TABLE_EXPORTS, and <q>MEMORY_EXPORTS.
+# (1) For functions only, an `IMPORTS[mod.name]` override set by the host wins.
+# (2) `PROVIDERS[mod]` names a prefix `<q>` that owns per-kind export maps.
+# The function map is `<q>EXPORTS`.
+# The other maps are `<q>GLOBAL_EXPORTS`, `<q>TABLE_EXPORTS`, and `<q>MEMORY_EXPORTS`.
 # A map's value under `name` is returned in the global RESOLVED.
 # The value's meaning is kind-specific, since the caller knows the kind it asked for.
-# The value is one of:
-# a func command name, a global's target variable name, a table's array base name, a memory prefix.
-# A name found only in a DIFFERENT kind's map is an incompatible-type link error.
+# For a function the value is a command name, and for a global it is its target variable name.
+# For a table it is an array base name, and for a memory it is a prefix.
+# A name found only in a DIFFERENT kind's map is a link error, since its type does not match.
 # Missing everywhere leaves RESOLVED='' and returns 0, so the caller decides.
 # The caller falls back to WASI/ENOSYS for WASI modules, else raises a link error.
 rt_resolve_import() {

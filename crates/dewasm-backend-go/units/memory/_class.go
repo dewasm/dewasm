@@ -1,6 +1,6 @@
 // requires: rt/trap
 // Linear memory: a byte slice, with its base pointer and length mirrored into fields.
-// Callers compute effective addresses in uint64 (guest addr + offset can exceed 2^32).
+// Callers compute effective addresses in uint64 (guest address + offset can exceed 2^32).
 // So every method takes a uint64 address, and the bounds check is exact.
 //
 // The load and store units are shaped for Go's inliner.
@@ -45,10 +45,10 @@ func (m *Memory) set(data []byte) {
     m.n = uint64(len(data))
 }
 
-// The explicit check is load-bearing, not redundant with Go's own slice bounds check.
-// It raises a *categorized* wasm trap before the access.
-// An out-of-range slice would instead panic with an uncategorized runtime.Error.
-// The spec harness's check_trap rejects that error.
+// The explicit check is load-bearing: Go's own slice bounds check does not replace it.
+// It raises a wasm trap of a known category before the access.
+// An out-of-range slice would instead panic with a `runtime.Error` of no category.
+// The specification harness's `check_trap` rejects that error.
 // So it cannot be dropped in favor of letting the slice access fault.
 func (m *Memory) check(addr, length uint64) {
     if addr+length > m.n {

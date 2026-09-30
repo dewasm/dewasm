@@ -4,9 +4,9 @@ sub wasi_fd_readdir {
     my $e = $self->{fds}{$fd};
     return ERRNO_BADF unless defined($e) && $e->{dir};
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_READDIR;
-    # cookie 0 starts a fresh enumeration, so re-scan the directory then.
+    # `cookie` 0 starts a new listing, so re-scan the directory then.
     # A non-zero cookie resumes the snapshot cached from that start.
-    # This is the opaque-resume-point contract.
+    # This is the contract of a cookie as an opaque point to continue from.
     if (!defined($e->{entries}) || $cookie == 0) {
         $e->{entries} = $self->readdir_entries($e->{path});
         return ERRNO_IO unless defined $e->{entries};
@@ -16,12 +16,12 @@ sub wasi_fd_readdir {
     my $i = $cookie;
     while ($i < @$entries && length($out) < $buf_len) {
         my ($name, $filetype, $ino) = @{$entries->[$i]};
-        # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen
-        # (u32) + d_type (u8) + 3 pad, followed by the (unpadded) name.
+        # `dirent`: `d_next` (u64, the cookie to continue from) + `d_ino` (u64) + `d_namlen` (u32)
+        # + `d_type` (u8) + 3 bytes of padding, followed by the name without padding.
         $out .= pack('Q<Q<VCxxx', $i + 1, $ino, length($name), $filetype) . $name;
         $i++;
     }
-    # A dirent may be legally truncated at the tail once buf_len runs out.
+    # A `dirent` may be legally truncated at the tail once `buf_len` runs out.
     $out = substr($out, 0, $buf_len) if length($out) > $buf_len;
     $self->{memory}->init($buf_ptr, $out, 0, length($out));
     $self->{memory}->i32_store($bufused_ptr, length($out));

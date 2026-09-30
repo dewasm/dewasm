@@ -4,8 +4,8 @@ sub wasi_fd_write {
     my $e = $self->{fds}{$fd};
     return ERRNO_BADF if !defined($e) || $e->{dir};
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_WRITE;
-    # fdflags::APPEND is honoured here (not via O_APPEND on the OS handle)
-    # so fd_fdstat_set_flags(0) can turn it back off.
+    # `fdflags::APPEND` is honoured here (not through `O_APPEND` on the OS handle).
+    # So `fd_fdstat_set_flags(0)` can turn it back off.
     if (($self->{meta}{$fd}[2] & 0x1) && !defined($e->{std})) {
         return ERRNO_IO unless defined sysseek($e->{fh}, 0, 2);
     }
@@ -18,7 +18,7 @@ sub wasi_fd_write {
         my $n = syswrite($e->{fh}, $chunk);
         return ERRNO_IO unless defined $n;
         $written += $n;
-        # A single write(2) may write short; stop so the reported nwritten stays contiguous.
+        # A single `write(2)` may write short; stop so the reported `nwritten` stays contiguous.
         last if $n < $len;
     }
     $self->{memory}->i32_store($nwritten_ptr, $written);

@@ -1,14 +1,14 @@
 # requires: memory/fill, memory/iwl, memory/uwlb, memory/uwlh, memory/idl, memory/iws, memory/iwsb, memory/iwsh, memory/ids
-# poll_oneoff waits until at least one subscription is ready.
+# `poll_oneoff` waits until at least one subscription is ready.
 # Then it writes one event per ready subscription.
 # The WASI p1 layout takes 48-byte subscriptions in and writes 32-byte events out.
-# Only fd_read on stdin actually blocks (via IO.select).
-# Regular files, stdout/stderr, and every fd_write are treated as immediately ready.
-# Unknown fds report EBADF.
+# Only `fd_read` on `stdin` actually blocks (via `IO.select`).
+# Regular files, `stdout`/`stderr`, and every `fd_write` are treated as immediately ready.
+# Unknown descriptors report EBADF.
 # Clock subscriptions set the wait deadline.
-# If it elapses with no fd ready, the due clock subs fire.
+# If it elapses with no descriptor ready, the due clock subs fire.
 # Motivated by event-loop guests such as the QuickJS REPL.
-# The REPL blocks here on stdin between prompts.
+# The REPL blocks here on `stdin` between prompts.
 def wasi_poll_oneoff(in_ptr, out_ptr, nsubs, nevents_ptr)
   return ERRNO_INVAL if nsubs == 0
   ready = []   # [userdata, error, type, nbytes, flags] resolvable without waiting

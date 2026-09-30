@@ -1,5 +1,5 @@
 # requires: rt/trap
-# See Rt::i32_div_u: the remainder-adjusted numerator divides exactly.
+# See `Rt::i32_div_u`: the remainder-adjusted dividend divides exactly.
 # Perl's `/` returns the exact integer for even unsigned divisions (measured).
 # NV division of the raw 64-bit operands would lose precision.
 sub i64_div_u {

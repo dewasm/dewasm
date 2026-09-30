@@ -1,5 +1,5 @@
 # Rounding toward zero on the pattern: clear the sub-integer fraction bits.
-# Negative inputs rounding to zero yield -0 (Ruby ftrunc parity).
+# Negative inputs rounding to zero yield -0 (as Ruby `ftrunc` does).
 rt_f64_trunc() {
   local a=$1 pa s e mask
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

@@ -1,6 +1,6 @@
 # open(2) is variadic, so the call goes through an explicit variadic declaration.
-# A fixed three-argument prototype passes the mode where the callee's va_arg does not look.
-# Measured on darwin arm64: files were created with a garbage mode, then EACCES on reopen.
+# A fixed three-argument signature passes the mode where the callee's `va_arg` does not look.
+# Measured on Darwin arm64: files were created with an arbitrary mode, then EACCES on reopen.
 @llvm
 @staticmethod
 def c_open(p: Ptr[byte], flags: Int[32], mode: Int[32]) -> Int[32]:

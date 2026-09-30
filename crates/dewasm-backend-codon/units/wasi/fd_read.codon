@@ -1,7 +1,7 @@
 # requires: memory/i32_load, memory/i32_store, wasi/fd_entry, rt/trap
-# A raw read(2) per iovec returns as soon as any bytes are available.
-# These are the WASI short-read semantics wasmtime uses.
-# They keep an interactive tty stdin from deadlocking a line-buffered terminal.
+# A raw read(2) per `iovec` returns as soon as any bytes are available.
+# These are the WASI short-read semantics Wasmtime uses.
+# They keep an interactive terminal `stdin` from deadlocking a line-buffered terminal.
 def wasi_fd_read(self, fd: UInt[32], iovs_ptr: UInt[32], iovs_len: UInt[32], nread_ptr: UInt[32]) -> UInt[32]:
     from C import read(int, Ptr[byte], int) -> int
     m = self.memory

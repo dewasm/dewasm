@@ -1,5 +1,5 @@
 # requires: rt/f64_bits
-# See Rt::fadd; a zero difference is negative only for (-0.0) - (+0.0).
+# See `Rt::fadd`; a zero difference is negative only for (-0.0) - (+0.0).
 sub fsub {
     my ($a, $b) = @_;
     my $r = unpack('d<', pack('d<', $a - $b));

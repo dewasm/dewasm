@@ -1,5 +1,5 @@
-# The away-branch (pa & ~mask) + mask + 1 increments the magnitude by one integral step.
-# A mantissa carry rolls into the exponent field, which is right on patterns (-1.5 -> -2.0).
+# The away-branch `(pa & ~mask) + mask + 1` raises the magnitude by one integral step.
+# A significand carry rolls into the exponent field, which is right on patterns (-1.5 -> -2.0).
 rt_f64_floor() {
   local a=$1 pa s e mask
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

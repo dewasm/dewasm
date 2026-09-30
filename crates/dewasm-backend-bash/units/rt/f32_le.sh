@@ -1,4 +1,4 @@
-# See rt/f32_lt for the order key.
+# See `rt/f32_lt` for the order key.
 rt_f32_le() {
   local a=$1 b=$2
   if (( (a & 0x7fffffff) > 0x7f800000 || (b & 0x7fffffff) > 0x7f800000 )); then

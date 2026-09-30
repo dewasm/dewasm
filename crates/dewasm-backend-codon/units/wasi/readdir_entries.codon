@@ -1,7 +1,7 @@
 # requires: rt/path_stat, wasi/wasi_filetype
-# The sorted (name, filetype, inode) listing of a directory, "." and ".." first.
-# The dirent layouts differ per platform.
-# So the name is read as the C string readdir hands back, and everything else comes from lstat.
+# The sorted (name, `filetype`, `inode`) listing of a directory, "." and ".." first.
+# The `dirent` layouts differ per platform.
+# So the name is read as the C string `readdir` hands back, and everything else comes from `lstat`.
 def readdir_entries(self, host_path: str) -> List[Tuple[bytes, int, int]]:
     from C import opendir(cobj) -> cobj
     from C import readdir(cobj) -> Ptr[byte]

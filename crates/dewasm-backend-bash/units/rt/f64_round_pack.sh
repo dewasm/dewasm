@@ -1,10 +1,10 @@
 # The f64 round-and-pack core: R0 = (-1)^s * m * 2^(e-53), rounded to nearest-even.
-# sk means "strictly more than m, by less than one unit in m's last place".
+# `sk` means "strictly more than m, by less than one unit in m's last place".
 #
-# Contract: 0 <= m < 2^63, and if m < 2^53 then sk == 0.
+# Contract: `0 <= m < 2^63`, and if `m < 2^53` then `sk == 0`.
 # Callers must never require a left normalization with sticky bits pending.
-# Add is exact in its cancellation cases; mul/div/sqrt pre-normalize operands.
-# The subnormal shift d is clamped to 54, since bash takes shift counts mod 64.
+# Add is exact in its cancellation cases; `mul`/`div`/`sqrt` pre-normalize operands.
+# The subnormal shift d is clamped to 54, since Bash takes shift counts modulo 64.
 # Unclamped, d can reach ~2100 for tiny products.
 rt_f64_round_pack() {
   local s=$1 e=$2 m=$3 sk=$4 d
@@ -36,7 +36,7 @@ rt_f64_round_pack() {
     return 0
   fi
   # (e+1022)<<52 + m packs three cases in one expression.
-  # They are normal, subnormal (e=-1022 -> 0 + m), and the rounded-up-to-min-normal case.
+  # They are normal, subnormal (e=-1022 -> 0 + m), and the case rounded up to the smallest normal.
   R0=$(( (s << 63) | (((e + 1022) << 52) + m) ))
   return 0
 }

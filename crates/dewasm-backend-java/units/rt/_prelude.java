@@ -1,13 +1,14 @@
 // Root runtime scope.
 // `Rt` holds the static wasm helpers and the function-value interface (Fn).
-// It also holds the funcref box for call_indirect and the trap/exit/link exception kinds.
+// It also holds the `funcref` box for `call_indirect` and the trap/exit/link exception kinds.
 // Generated code refers to these as `Rt.<name>` / `Rt.Fn` / `Rt.Funcref`.
 // A wasm function value uses a boxed calling convention only at the dynamic boundary.
-// That boundary is imports, call_indirect, and exports.
-// There its args/result are `Object[]`/`Object`; direct calls to defined functions stay primitive.
-// Helper method names are the snake_case wasm op ids (legal Java).
+// That boundary is imports, `call_indirect`, and exports.
+// There its arguments and result are `Object[]` and `Object`.
+// Direct calls to defined functions stay primitive.
+// Helper method names are the wasm instruction names in `snake_case` (legal Java).
 // So a unit id maps 1:1 to its reference, and the units lint stays a direct name match.
-// This mirrors Go's own deviation from idiom.
+// This matches Go, which also breaks its own naming style there.
 interface Fn {
     Object invoke(Object[] args);
 }
@@ -16,7 +17,7 @@ interface Fn {
 // So one object can stand in for a whole module in the imports map.
 // This is the Java shape of the shared import-provider protocol.
 // Ruby's is `import`, and Python's is `wasm_import`.
-// Returning null for a name leaves that import unresolved, as an absent map entry does.
+// Returning null for a name leaves that import unresolved, as a missing map entry does.
 // So the module still falls back to its bundled WASI / link error.
 // A generated constructor calls `attach` on every provider once the instance is built.
 // So a provider can reach the instance (its memory, above all).

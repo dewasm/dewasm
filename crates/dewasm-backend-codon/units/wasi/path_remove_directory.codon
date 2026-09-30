@@ -2,11 +2,11 @@
 def wasi_path_remove_directory(self, dirfd: UInt[32], path_ptr: UInt[32], path_len: UInt[32]) -> UInt[32]:
     from C import rmdir(cobj) -> int
     rel = self.memory.read_path(int(path_ptr), int(path_len))
-    # rmdir(2) never follows a trailing symlink.
+    # `rmdir(2)` never follows a trailing symbolic link.
     host, err = self.resolve_path(int(dirfd), rel, False)
     if err != 0:
         return UInt[32](err)
-    # rmdir through a trailing slash on an existing directory is EINVAL per wasmtime.
+    # `rmdir` through a trailing slash on an existing directory is EINVAL per Wasmtime.
     # Other shapes come from the host call.
     if host.endswith("/") and Rt.isdir(host[:len(host) - 1]):
         return UInt[32](self.ERRNO_INVAL)

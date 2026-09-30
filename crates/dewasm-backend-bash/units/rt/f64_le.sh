@@ -1,4 +1,4 @@
-# See rt/f64_lt for the order key.
+# See `rt/f64_lt` for the order key.
 rt_f64_le() {
   local a=$1 b=$2
   if (( (a & 0x7fffffffffffffff) > 0x7ff0000000000000 || (b & 0x7fffffffffffffff) > 0x7ff0000000000000 )); then

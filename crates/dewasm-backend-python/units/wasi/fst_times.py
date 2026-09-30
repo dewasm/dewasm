@@ -1,7 +1,7 @@
-# Validate the fstflags and compute the (atime_ns, mtime_ns) tuple for os.utime.
-# Any field not being set is filled from the current stat `st`.
-# ATIM with ATIM_NOW (or MTIM with MTIM_NOW) is a contradiction and yields
-# INVAL; returns (times, err).
+# Validate the `fstflags` and compute the `(atime_ns, mtime_ns)` tuple for `os.utime`.
+# Any field not being set is filled from the current `stat` result `st`.
+# ATIM with ATIM_NOW (or MTIM with MTIM_NOW) is a contradiction and yields INVAL.
+# Returns `(times, err)`.
 def fst_times(self, st, atim, mtim, fst_flags):
     if (fst_flags & 0x1 and fst_flags & 0x2) or (fst_flags & 0x4 and fst_flags & 0x8):
         return (None, self.ERRNO_INVAL)

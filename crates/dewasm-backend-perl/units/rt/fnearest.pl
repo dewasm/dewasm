@@ -1,5 +1,5 @@
 # requires: rt/quiet_nan
-# C99 nearbyint under the default rounding mode is round-half-to-even and preserves signed zeros.
+# C99 `nearbyint` under the default rounding mode is round-half-to-even and preserves signed zeros.
 # That is exactly wasm's nearest (measured).
 use POSIX ();
 sub fnearest {

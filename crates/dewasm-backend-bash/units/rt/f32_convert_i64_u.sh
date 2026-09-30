@@ -1,5 +1,5 @@
 # requires: rt/f32_round_pack
-# See rt/f64_convert_i64_u for the exact-halving argument.
+# See `rt/f64_convert_i64_u` for the exact-halving argument.
 rt_f32_convert_i64_u() {
   local v=$1
   if (( v < 0 )); then

@@ -1,5 +1,5 @@
 // requires: memory/i32_load, memory/i32_store, memory/init
-// Scatter read from stdin (an InputStream) or a guest-opened file (a
+// Scatter read from `stdin` (an InputStream) or a guest-opened file (a
 // FileChannel, advancing its position).
 // A short read (or EOF) ends the scatter.
 int wasi_fd_read(int fd, int iovsPtr, int iovsLen, int nreadPtr) {

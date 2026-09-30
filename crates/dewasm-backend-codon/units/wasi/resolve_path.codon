@@ -3,24 +3,24 @@ def within(self, base: str, path: str) -> bool:
     prefix = base if base.endswith("/") else base + "/"
     return path == base or path.startswith(prefix)
 
-# Resolves a guest-relative path against a directory fd to an absolute host path.
-# The result is confined to that directory fd's own (already-realpath'd) root.
-# Returns (host_path, errno), with errno 0 on success.
-# Every call re-validates against its own dirfd's root.
-# So nested path_opens can't be used to launder an escape one level cheaper.
+# Resolves a guest-relative path against a directory `fd` to an absolute host path.
+# The result is confined to the root of that directory `fd`, which `realpath` already resolved.
+# Returns (`host_path`, `errno`), with `errno` 0 on success.
+# Every call re-validates against the root of its own `dirfd`.
+# So nested `path_open` calls can't be used to launder an escape one level cheaper.
 #
-# A non-directory base fd is NOTDIR (a file used as a dirfd); an absent one is BADF.
+# A non-directory base `fd` is NOTDIR (a file used as a `dirfd`); a missing one is BADF.
 # A leading "/" is NOTCAPABLE before any join (an absolute guest path escapes the preopen).
 # A trailing slash is preserved on the returned host path.
-# So the underlying host call enforces the POSIX "must be a directory" rule.
+# So the underlying host call applies the POSIX "must be a directory" rule.
 #
 # `follow_last=False` resolves the parent but leaves the final component untouched.
-# That is the AT_SYMLINK_NOFOLLOW shape, for syscalls that operate on a symlink itself.
-# A trailing "." or ".." is never a symlink, so those fall back to full resolution.
+# That is the AT_SYMLINK_NOFOLLOW shape, for system calls that operate on a symbolic link itself.
+# A trailing "." or ".." is never a symbolic link, so those fall back to full resolution.
 #
 # Known limitation (shared with the dynamic backends): this is a check-then-open.
-# It is not an atomic openat(2)-beneath resolution.
-# This is accepted for a single-process research/demo runtime, not a multi-tenant sandbox host.
+# It is not an atomic resolution beneath the directory through `openat(2)`.
+# This is accepted for a single-process research/example runtime, not a multi-tenant sandbox host.
 def resolve_path(self, dirfd: int, rel: str, follow_last: bool) -> Tuple[str, int]:
     f = self.fd_entry(dirfd)
     if f is None:
@@ -51,7 +51,7 @@ def resolve_path(self, dirfd: int, rel: str, follow_last: bool) -> Tuple[str, in
             return ("", self.ERRNO_NOENT)
         host = real_parent + "/" + last
         return (host + "/" if trailing else host, 0)
-    # A final "." resolves to its parent: wasi-libc rewrites a path that *is* a preopen to ".".
+    # A final "." resolves to its parent: `wasi-libc` rewrites a path that *is* a preopen to ".".
     # The host call would reject "<parent>/." once that parent is a non-directory preopen.
     if last == ".":
         joined = parent
@@ -61,7 +61,7 @@ def resolve_path(self, dirfd: int, rel: str, follow_last: bool) -> Tuple[str, in
             return ("", self.ERRNO_NOTCAPABLE)
         return (real + "/" if trailing else real, 0)
     # The final component is missing: resolve the parent and re-attach it.
-    # So a create (path_open O_CREAT) still gets a sandboxed target path.
+    # So a create (`path_open` with O_CREAT) still gets a sandboxed target path.
     jsl = joined.rfind("/")
     jlast = joined[jsl + 1:]
     jparent = joined[:jsl] if jsl > 0 else "/"

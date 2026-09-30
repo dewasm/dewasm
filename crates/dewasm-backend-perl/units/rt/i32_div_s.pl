@@ -1,5 +1,5 @@
 # requires: rt/s32, rt/trap
-# `use integer` division is C division: truncating, exactly wasm's div_s.
+# `use integer` division is C division: truncating, exactly wasm's `div_s`.
 # The INT_MIN / -1 overflow would raise SIGFPE in C, so trap it first.
 sub i32_div_s {
     my $sa = Rt::s32($_[0]);

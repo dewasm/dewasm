@@ -1,5 +1,5 @@
 # requires: rt/trap, table/check_range
-# `elem` is a list of table slot values ([type_key, func] pairs, or None for a ref.null item).
+# `elem` is a list of table slot values (`[type_key, func]` pairs, or None for a ref.null item).
 # It is built once at instantiation/table.init time.
 def init(self, dst, elem, src, length):
     if src + length > len(elem):

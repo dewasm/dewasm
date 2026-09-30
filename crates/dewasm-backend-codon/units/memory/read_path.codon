@@ -1,5 +1,5 @@
 # requires: rt/trap
-# A guest path as a host string, bytes taken verbatim (no decoding).
+# A guest path as a host string, bytes taken unchanged (no decoding).
 def read_path(self, a: int, n: int) -> str:
     if a + n > self.n:
         Rt.trap("out of bounds memory access")

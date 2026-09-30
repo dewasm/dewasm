@@ -5,8 +5,8 @@ sub wasi_fd_pwrite {
     return ERRNO_BADF if !defined($e) || $e->{dir};
     return ERRNO_SPIPE if defined $e->{std};
     return ERRNO_NOTCAPABLE unless $self->{meta}{$fd}[0] & RIGHTS_FD_WRITE;
-    # Core perl has no pwrite(2): emulate it with a save/seek/write/restore.
-    # The handle is unbuffered (see fd_pread).
+    # Core Perl has no `pwrite(2)`: emulate it with a save, seek, write, and restore.
+    # The handle is unbuffered (see `fd_pread`).
     my $cur = sysseek($e->{fh}, 0, 1);
     return ERRNO_IO unless defined $cur;
     my $written = 0;
@@ -24,7 +24,7 @@ sub wasi_fd_pwrite {
             return ERRNO_IO;
         }
         $written += $n;
-        # A single pwrite(2) may write short; stop so the reported nwritten stays contiguous.
+        # A single `pwrite(2)` may write short; stop so the reported `nwritten` stays contiguous.
         last if $n < $len;
     }
     sysseek($e->{fh}, $cur, 0);

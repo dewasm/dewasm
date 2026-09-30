@@ -1,10 +1,10 @@
 # requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 def wasi_path_create_directory(dirfd, path_ptr, path_len)
   rel = @memory.read_string(path_ptr, path_len)
-  # Strip a trailing slash: mkdir names a directory anyway.
-  # EEXIST is wasmtime's answer for mkdir("file/") where the hosts split.
+  # Strip a trailing slash: `mkdir` names a directory anyway.
+  # EEXIST is Wasmtime's answer for `mkdir("file/")` where the hosts split.
   rel = rel.sub(%r{(.)/+\z}, '\1')
-  # mkdir(2) never follows a trailing symlink (an existing one is EEXIST).
+  # `mkdir(2)` never follows a trailing symbolic link (an existing one is EEXIST).
   host_path, err = resolve_path(dirfd, rel, follow_last: false)
   return err if err
   Dir.mkdir(host_path)

@@ -8,19 +8,20 @@ int wasi_fd_fdstat_get(int fd, int outPtr) {
     if (e instanceof Dir) {
         filetype = 3; // directory
     } else if (isStdio(e)) {
-        // A tty reports as a character device (2); a pipe/redirect reports as a regular file (4).
-        // So guests' isatty() stays false under piped I/O.
-        // That matches the wasmtime snapshot captured with piped stdin.
+        // A terminal reports as a character device (2).
+        // A pipe or redirect reports as a regular file (4).
+        // So guests' `isatty()` stays false under piped I/O.
+        // That matches the Wasmtime snapshot captured with piped `stdin`.
         filetype = (System.console() != null) ? 2 : 4;
     }
-    // The stored per-fd rights and open fdflags; an fd with no meta
+    // The stored per-descriptor rights and open `fdflags`; a descriptor with no `meta` entry
     // (the inherited stdio streams) reports full rights and no flags.
     FdMeta m = meta.get(fd);
     long base = (m != null) ? m.base : -1L;
     long inheriting = (m != null) ? m.inheriting : -1L;
     int fdflags = (m != null) ? m.fdflags : 0;
-    // fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base
-    // (u64) + fs_rights_inheriting (u64) = 24 bytes.
+    // `fdstat`: `fs_filetype` (u8) + padding + `fs_flags` (u16) + padding + `fs_rights_base`
+    // (u64) + `fs_rights_inheriting` (u64) = 24 bytes.
     memory.fill(Integer.toUnsignedLong(outPtr), 0, 24);
     memory.i32_store8(Integer.toUnsignedLong(outPtr), filetype);
     memory.i32_store16(Integer.toUnsignedLong(outPtr) + 2, fdflags);
