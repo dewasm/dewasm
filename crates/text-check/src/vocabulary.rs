@@ -90,6 +90,10 @@ pub struct Vocabulary {
     writing_terms: HashSet<String>,
     /// Words that only look derived, which the derivation rules skip.
     not_derived: HashSet<String>,
+    /// Units, which are allowed only right after a number.
+    units: HashSet<String>,
+    /// Terms of one context, each with the path prefixes where it is allowed.
+    context_terms: Vec<(HashSet<String>, Vec<String>)>,
     exclusions: Vec<Exclusion>,
 }
 
@@ -133,6 +137,19 @@ impl Vocabulary {
         terms.extend(one_meaning);
         let writing_terms = spans_of("Terms for writing");
         let not_derived = spans_of("Not derived forms");
+        let units = spans_of("Units");
+        let context_terms = sections
+            .iter()
+            .filter(|(t, _)| t == "Terms of one context")
+            .flat_map(|(_, body)| table_rows(body))
+            .filter_map(|row| match row.as_slice() {
+                [terms, paths] => Some((
+                    code_spans(terms).iter().map(|t| t.to_lowercase()).collect(),
+                    code_spans(paths),
+                )),
+                _ => None,
+            })
+            .collect();
         // An abbreviation's period ends a token, so the word the check sees has none.
         terms.extend(
             spans_of("Abbreviations")
@@ -159,12 +176,16 @@ impl Vocabulary {
             };
             for line in markdown_lines(&text, true) {
                 let sentence = unquoted(&line.text);
-                names.extend(
-                    words(&sentence)
-                        .into_iter()
-                        .filter(|w| !w.first && w.capitalized)
-                        .map(|w| w.text),
-                );
+                let words = words(&sentence);
+                // A title capitalizes every word, so it says nothing about which words are names.
+                if !is_title_case(&sentence, &words) {
+                    names.extend(
+                        words
+                            .into_iter()
+                            .filter(|w| !w.first && w.capitalized)
+                            .map(|w| w.text),
+                    );
+                }
             }
         }
         let mut exclusions = Vec::new();
@@ -199,6 +220,8 @@ impl Vocabulary {
             terms,
             writing_terms,
             not_derived,
+            units,
+            context_terms,
             exclusions,
         })
     }
@@ -211,6 +234,12 @@ impl Vocabulary {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
         let writing = self.writing_documents.contains(path);
+        let context: HashSet<&str> = self
+            .context_terms
+            .iter()
+            .filter(|(_, paths)| paths.iter().any(|p| path.starts_with(p.as_str())))
+            .flat_map(|(terms, _)| terms.iter().map(String::as_str))
+            .collect();
         let mut report = Vec::new();
         for line in markdown_lines(&text, true) {
             let sentence = unquoted(&line.text);
@@ -218,11 +247,13 @@ impl Vocabulary {
             for form in &excluded {
                 report.push(format!("{path}:{}: excluded \"{form}\"", line.number));
             }
-            let mut outside: Vec<String> = words(&sentence)
+            let words = words(&sentence);
+            let title = is_title_case(&sentence, &words);
+            let mut outside: Vec<String> = words
                 .into_iter()
-                .filter(|w| !self.is_name(w))
-                .map(|w| w.text.to_lowercase())
-                .filter(|w| !self.allowed(w, writing))
+                .filter(|w| !self.is_name(w, title) && !self.is_unit(w))
+                .map(|w| self.without_name_parts(&w.text).to_lowercase())
+                .filter(|w| !self.allowed(w, writing) && !context_terms_allow(&context, w))
                 .filter(|w| {
                     !excluded
                         .iter()
@@ -245,11 +276,37 @@ impl Vocabulary {
     /// A capitalized first word is one only when some tracked text uses it inside a sentence.
     /// So is a capitalized first word that the next word continues, as in "Oxford Guide".
     /// Otherwise it is an ordinary word that starts the sentence.
-    fn is_name(&self, word: &Word) -> bool {
+    /// In a title, where every word is capitalized, only a known name is one.
+    fn is_name(&self, word: &Word, title: bool) -> bool {
         let all_capitals = word.text.chars().filter(|c| c.is_alphabetic()).count() > 1
             && !word.text.chars().any(|c| c.is_lowercase());
-        let known = !word.first || word.next_capitalized || self.names.contains(&word.text);
+        let known =
+            self.names.contains(&word.text) || (!title && (!word.first || word.next_capitalized));
         all_capitals || (word.capitalized && known)
+    }
+
+    /// `word` without the parts of a hyphenated word that are names, as "ABI" in "Canonical-ABI".
+    fn without_name_parts(&self, word: &str) -> String {
+        if !word.contains('-') {
+            return word.to_owned();
+        }
+        word.split('-')
+            .map(|part| {
+                let letters = part.chars().filter(|c| c.is_alphabetic()).count();
+                let capitals = letters > 1 && !part.chars().any(|c| c.is_lowercase());
+                if capitals || self.names.contains(part) {
+                    ""
+                } else {
+                    part
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+
+    /// Whether `word` is a unit right after a number, as in "35 ms".
+    fn is_unit(&self, word: &Word) -> bool {
+        word.after_number && inflections(&word.text.to_lowercase()).any(|w| self.units.contains(&w))
     }
 
     fn excluded_uses(&self, sentence: &str) -> Vec<String> {
@@ -313,6 +370,21 @@ impl Vocabulary {
     }
 }
 
+/// Whether `sentence` reads as a title: it does not end like a sentence.
+/// Of its words of four letters or more, there are three or more, and 80% are capitalized.
+fn is_title_case(sentence: &str, words: &[Word]) -> bool {
+    if sentence.trim_end().ends_with(['.', '?', '!', ':']) {
+        return false;
+    }
+    let long: Vec<&Word> = words.iter().filter(|w| w.text.len() >= 4).collect();
+    long.len() >= 3 && long.iter().filter(|w| w.capitalized).count() * 5 >= long.len() * 4
+}
+
+/// Whether a term of the file's context allows `word` or one of its inflections.
+fn context_terms_allow(context: &HashSet<&str>, word: &str) -> bool {
+    inflections(word).any(|w| context.contains(w.as_str()))
+}
+
 /// `(title, body)` for each heading of `markdown`, at any level.
 fn sections(markdown: &str) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
@@ -370,8 +442,8 @@ fn unquoted(sentence: &str) -> String {
             }
             Some((close, start)) if c == close => {
                 out.truncate(start);
-                // A capital letter keeps a suffix after a code span, as in "`foo`ed", off the list.
-                out.push('X');
+                // A digit keeps a word joined to a code span, as in "`foo`-backed", off the list.
+                out.push('0');
                 open = None;
             }
             _ => out.push(c),
@@ -397,6 +469,8 @@ struct Word {
     capitalized: bool,
     /// The next word of the sentence is capitalized too.
     next_capitalized: bool,
+    /// The token before the word is a number.
+    after_number: bool,
 }
 
 /// The words of `sentence` that the vocabulary governs, as written.
@@ -407,12 +481,19 @@ struct Word {
 fn words(sentence: &str) -> Vec<Word> {
     let mut out: Vec<Word> = Vec::new();
     let mut first = true;
+    let mut after_number = false;
     for token in sentence.split(|c: char| !(c.is_alphanumeric() || ".'’-_".contains(c))) {
         let token = token.trim_matches(['.', '\'', '’', '-', '_']);
         if token.is_empty() {
             continue;
         }
         let was_first = std::mem::replace(&mut first, false);
+        let was_after_number = std::mem::replace(
+            &mut after_number,
+            token
+                .chars()
+                .all(|c| c.is_ascii_digit() || c == '.' || c == ','),
+        );
         if token.contains('.') || token.chars().count() < 2 {
             continue;
         }
@@ -433,6 +514,7 @@ fn words(sentence: &str) -> Vec<Word> {
             first: was_first,
             capitalized,
             next_capitalized: false,
+            after_number: was_after_number,
         });
     }
     out
@@ -553,6 +635,8 @@ mod tests {
             terms: set(&["backend", "wasi-sdk"]),
             writing_terms: set(&["idiom"]),
             not_derived: set(&["siren"]),
+            units: set(&["ms"]),
+            context_terms: vec![],
             exclusions: vec![
                 Exclusion {
                     forms: vec!["gate".to_owned(), "gates".to_owned()],
@@ -576,7 +660,9 @@ mod tests {
     fn outside(v: &Vocabulary, sentence: &str) -> Vec<String> {
         words(&unquoted(sentence))
             .into_iter()
-            .filter(|w| !v.is_name(w))
+            .filter(|w| {
+                !v.is_name(w, is_title_case(sentence, &words(&unquoted(sentence)))) && !v.is_unit(w)
+            })
             .map(|w| w.text.to_lowercase())
             .filter(|w| !v.allowed(w, false))
             .collect()
@@ -608,7 +694,7 @@ mod tests {
             "Wasmtime runs `gizmo`ed 3 times, e.g. AGENTS.md says \"gizmo\" in (b) WASI; don't.";
         assert_eq!(
             texts(sentence),
-            ["Wasmtime", "runs", "Xed", "times", "says", "in", "WASI", "do"]
+            ["Wasmtime", "runs", "times", "says", "in", "WASI", "do"]
         );
         assert_eq!(
             texts("Calls fd_read and non-trivial don't-care work."),
@@ -624,6 +710,17 @@ mod tests {
         assert!(outside(&v, "Wasmtime runs the Gizmo check fast.").is_empty());
         assert!(outside(&v, "Run the WASI check.").is_empty());
         assert!(outside(&v, "Oxford Guide is run.").is_empty());
+        assert_eq!(outside(&v, "Wasmtime Gizmos Uses Checks"), ["gizmos"]);
+        assert!(outside(&v, "This is Veltkamp checks.")
+            .iter()
+            .all(|w| w != "veltkamp"));
+    }
+
+    #[test]
+    fn a_unit_follows_a_number() {
+        let v = vocabulary();
+        assert!(outside(&v, "Use the check 35 ms.").is_empty());
+        assert_eq!(outside(&v, "The ms is a unit."), ["ms", "unit"]);
     }
 
     #[test]

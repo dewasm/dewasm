@@ -41,10 +41,38 @@ Add such a term to a table below; write the plainer word otherwise.
 
 | Area | Terms |
 | --- | --- |
-| Programs and builds | `app`, `backend`, `baseline`, `cache`, `compatible`, `compile`, `crate`, `directory`, `fetch`, `linkage`, `repository`, `runtime`, `standalone`, `submodule`, `toolchain`, `upstream` |
-| Code | `alias`, `arithmetic`, `byte`, `callsite`, `dataflow`, `dispatch`, `exhaustive`, `fuse`, `hash`, `header`, `hoist`, `identifier`, `integer`, `invariant`, `iteration`, `literal`, `lookup`, `macro`, `mask`, `namespace`, `numeric`, `operand`, `precondition`, `recursion`, `token`, `unsigned`, `wildcard` |
-| Tests and tools | `benchmark`, `conformance`, `diff`, `glue`, `harness`, `lint`, `linter`, `oracle`, `parse`, `parser`, `shim`, `snapshot`, `suite`, `testsuite`, `verify` |
-| Text and markup | `indentation`, `markup`, `placeholder`, `prefix`, `template` |
+| Programs and builds | `app`, `archive`, `backend`, `baseline`, `browser`, `builtin`, `cache`, `compatible`, `compile`, `copyright`, `crate`, `default`, `dependency`, `directory`, `fetch`, `fork`, `frontend`, `gem`, `legacy`, `linkage`, `manifest`, `milestone`, `patch`, `registry`, `repository`, `reproducible`, `runtime`, `script`, `standalone`, `subagent`, `subcommand`, `submodule`, `toolchain`, `upstream`, `workflow`, `workspace` |
+| Code | `accessor`, `alias`, `arithmetic`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `constructor`, `dataflow`, `debug`, `defer`, `dispatch`, `elide`, `elision`, `epilogue`, `exhaustive`, `fallback`, `fuse`, `generic`, `hash`, `header`, `heap`, `hoist`, `identifier`, `incremental`, `inherit`, `initialize`, `initializer`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `mutex`, `namespace`, `numeric`, `offset`, `operand`, `optimization`, `optimize`, `override`, `peephole`, `pending`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `thunk`, `token`, `trampoline`, `tuple`, `unsigned`, `virtual`, `wildcard` |
+| Languages | `associative`, `associativity`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
+| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decimal`, `decode`, `dividend`, `exponent`, `gradual`, `hexadecimal`, `instantiate`, `instantiation`, `little-endian`, `modular`, `modulo`, `mutability`, `mutable`, `normalization`, `normalize`, `opcode`, `overflow`, `passive`, `payload`, `remainder`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `uninitialized`, `validate`, `validation`, `width` |
+| Systems and WASI | `ambient`, `buffer`, `checksum`, `console`, `cursor`, `deterministic`, `flush`, `headless`, `interactive`, `monotonic`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `subscription` |
+| Data and records | `amalgamation`, `collation`, `compress`, `compression`, `decompress`, `invalidate`, `invalidation`, `query`, `rollback`, `schema`, `verdict` |
+| Tests and tools | `benchmark`, `bug`, `calibrate`, `calibration`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `median`, `microbenchmark`, `microsecond`, `millisecond`, `nanosecond`, `oracle`, `parse`, `parser`, `sanity`, `shim`, `snapshot`, `suite`, `testsuite`, `verify`, `workload` |
+| Graphics and games | `dot`, `emulator`, `framebuffer`, `palette`, `pixel`, `shareware`, `texture`, `tick` |
+| Text and markup | `digit`, `font`, `indentation`, `interpolate`, `interpolation`, `kebab-case`, `markup`, `placeholder`, `prefix`, `slug`, `suffix`, `template` |
+
+A term of the field is used only in the sense its document gives it.
+Used for anything else, it is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
+A general term such as `bug` works better with its kind: a crash, a wrong result, a missed error.
+
+### Terms of one context
+
+A term below belongs to one program or one subject, and only the paths beside it use it.
+Elsewhere the same word would be a term nobody defined for that text.
+
+| Terms | Allowed in |
+| --- | --- |
+| `automap`, `demo`, `strafe`, `tic` | `examples/doom/`, `agents/decisions/50-doom-example-shape.md`, `agents/decisions/53-doom-frame-snapshot.md` |
+| `alternate` (the terminal's alternate screen) | `examples/` |
+| `balloon` (the speech balloon of `cowsay`) | `agents/decisions/95-cowsay-own-implementation.md` |
+
+### Units
+
+A unit below follows a number, as in `35 ms`; it is not a word of a sentence by itself.
+
+| Units |
+| --- |
+| `ns`, `ms`, `s`, `kB`, `MB`, `GB`, `Hz`, `nanosecond`, `microsecond`, `millisecond` |
 
 ### Abbreviations
 
@@ -79,10 +107,11 @@ Anywhere else a use of one is likely a metaphor.
 A name keeps the spelling its owner gives it: Wasmtime the product, `wasmtime` the command.
 A name that starts with a capital letter needs no entry, and neither does one in capitals.
 The names below are the ones their owners write in lower case.
+A name that only starts a table cell is listed too, since the check reads it as a first word.
 
 | Names |
 | --- |
-| `dewasm`, `spaCy`, `textlint`, `wasm` |
+| `dewasm`, `Fedora`, `Fujinami`, `Hiroya`, `id`, `iNES`, `macOS`, `mruby`, `silicon`, `spaCy`, `textlint`, `wasm` |
 
 ## Excluded words
 
