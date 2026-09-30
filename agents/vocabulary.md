@@ -49,7 +49,8 @@ A short form is allowed as the name of one thing, never as a shorter way to writ
 ### Terms for writing
 
 These terms describe a sentence, and they are allowed only where a document is about writing.
-Those documents are `AGENTS.md`, this file, and decisions 98 and 99.
+Those documents are `AGENTS.md`, `agents/vocabulary.md`, and decisions 98 and 99:
+`agents/decisions/98-sentence-length-bound.md` and `agents/decisions/99-allowed-vocabulary.md`.
 Anywhere else a use of one is likely a metaphor.
 
 | Terms |

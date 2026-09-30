@@ -1,7 +1,7 @@
 //! The vocabulary rules of `agents/vocabulary.md`, checked over Markdown.
 //! A word in a sentence comes from an allowed source, and no excluded word is used.
 //! The tables of `agents/vocabulary.md` and the fetched base lists are read as they are.
-//! No list of words is copied into this code.
+//! The one list of words here is the number words, which the "Number" source allows.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -11,23 +11,11 @@ use crate::markdown_lines;
 /// The file that holds the vocabulary tables, relative to the repository root.
 pub const VOCABULARY: &str = "agents/vocabulary.md";
 
-/// The documents about writing, the only ones where a term for writing is allowed.
-/// `agents/vocabulary.md` names them in its "Terms for writing" section.
-const WRITING_DOCUMENTS: &[&str] = &[
-    "AGENTS.md",
-    VOCABULARY,
-    "agents/decisions/98-sentence-length-bound.md",
-    "agents/decisions/99-allowed-vocabulary.md",
-];
-
 /// The base lists that `crates/text-check/setup.sh` fetches, relative to the repository root.
 const BASE_LISTS: &[&str] = &[
     "crates/text-check/cache/NGSL_12_lemmatized_for_research.csv",
     "crates/text-check/cache/NAWL_12_lemmatized_for_research.csv",
 ];
-
-/// Abbreviations that a reader of English knows without a list.
-const LATIN_ABBREVIATIONS: &[&str] = &["etc", "vs", "cf"];
 
 /// The "Number" source of `agents/vocabulary.md`: a number written as a word.
 /// The base lists leave numbers out, so the words are listed here.
@@ -94,6 +82,10 @@ struct Exclusion {
 
 pub struct Vocabulary {
     base: HashSet<String>,
+    /// The documents about writing, which the "Terms for writing" section names in code spans.
+    writing_documents: HashSet<String>,
+    /// Each capitalized word that some tracked Markdown uses inside a sentence, where it is a name.
+    names: HashSet<String>,
     terms: HashSet<String>,
     writing_terms: HashSet<String>,
     exclusions: Vec<Exclusion>,
@@ -138,6 +130,34 @@ impl Vocabulary {
             .collect();
         terms.extend(one_meaning);
         let writing_terms = spans_of("Terms for writing");
+        let writing_documents: HashSet<String> = sections
+            .iter()
+            .filter(|(t, _)| t == "Terms for writing")
+            .flat_map(|(_, body)| body.lines().filter(|l| !l.starts_with('|')))
+            .flat_map(code_spans)
+            .filter(|span| span.ends_with(".md"))
+            .collect();
+        if writing_documents.is_empty() {
+            return Err(format!("{VOCABULARY} names no document about writing"));
+        }
+        let mut names = HashSet::new();
+        for path in crate::tracked_files(root)
+            .iter()
+            .filter(|p| p.ends_with(".md"))
+        {
+            let Ok(text) = std::fs::read_to_string(root.join(path)) else {
+                continue;
+            };
+            for line in markdown_lines(&text, true) {
+                let sentence = unquoted(&line.text);
+                names.extend(
+                    words(&sentence)
+                        .into_iter()
+                        .filter(|w| !w.first && w.capitalized)
+                        .map(|w| w.text),
+                );
+            }
+        }
         let mut exclusions = Vec::new();
         let mut in_excluded = false;
         for (title, body) in &sections {
@@ -165,6 +185,8 @@ impl Vocabulary {
         }
         Ok(Vocabulary {
             base,
+            writing_documents,
+            names,
             terms,
             writing_terms,
             exclusions,
@@ -178,9 +200,9 @@ impl Vocabulary {
         }
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
-        let writing = WRITING_DOCUMENTS.contains(&path);
+        let writing = self.writing_documents.contains(path);
         let mut report = Vec::new();
-        for line in markdown_lines(&text) {
+        for line in markdown_lines(&text, true) {
             let sentence = unquoted(&line.text);
             let excluded = self.excluded_uses(&sentence);
             for form in &excluded {
@@ -188,6 +210,8 @@ impl Vocabulary {
             }
             let mut outside: Vec<String> = words(&sentence)
                 .into_iter()
+                .filter(|w| !self.is_name(w))
+                .map(|w| w.text.to_lowercase())
                 .filter(|w| !self.allowed(w, writing))
                 .filter(|w| {
                     !excluded
@@ -204,6 +228,18 @@ impl Vocabulary {
             }
         }
         report
+    }
+
+    /// Whether `word` is a name, which no list governs.
+    /// A word in capitals is one, and so is a capitalized word inside a sentence.
+    /// A capitalized first word is one only when some tracked text uses it inside a sentence.
+    /// So is a capitalized first word that the next word continues, as in "Oxford Guide".
+    /// Otherwise it is an ordinary word that starts the sentence.
+    fn is_name(&self, word: &Word) -> bool {
+        let all_capitals = word.text.chars().filter(|c| c.is_alphabetic()).count() > 1
+            && !word.text.chars().any(|c| c.is_lowercase());
+        let known = !word.first || word.next_capitalized || self.names.contains(&word.text);
+        all_capitals || (word.capitalized && known)
     }
 
     fn excluded_uses(&self, sentence: &str) -> Vec<String> {
@@ -228,7 +264,6 @@ impl Vocabulary {
         self.base.contains(word)
             || self.terms.contains(word)
             || NUMBER_WORDS.contains(&word)
-            || LATIN_ABBREVIATIONS.contains(&word)
             || (writing && self.writing_terms.contains(word))
     }
 
@@ -303,21 +338,24 @@ fn code_spans(cell: &str) -> Vec<String> {
 }
 
 /// `sentence` without its code spans and its double-quoted mentions.
+/// A quote that never closes is not a mention, as in `5" wide`, so its text stays.
 fn unquoted(sentence: &str) -> String {
     let mut out = String::with_capacity(sentence.len());
-    let mut closing: Option<char> = None;
+    let mut open: Option<(char, usize)> = None;
     for c in sentence.chars() {
-        match (closing, c) {
-            (None, '`') => closing = Some('`'),
-            (None, '"') => closing = Some('"'),
-            (None, '“') => closing = Some('”'),
-            (Some(close), c) if c == close => {
-                closing = None;
+        match open {
+            None if "`\"“".contains(c) => {
+                let close = if c == '“' { '”' } else { c };
+                open = Some((close, out.len()));
+                out.push(c);
+            }
+            Some((close, start)) if c == close => {
+                out.truncate(start);
                 // A capital letter keeps a suffix after a code span, as in "`foo`ed", off the list.
                 out.push('X');
+                open = None;
             }
-            (Some(_), _) => {}
-            (None, c) => out.push(c),
+            _ => out.push(c),
         }
     }
     out
@@ -331,29 +369,52 @@ fn contains_word(text: &str, form: &str) -> bool {
     })
 }
 
-/// The lower-case words of `sentence` that the allowed sources govern.
-/// A name, which starts with a capital letter, is not governed.
-/// Neither is a token with a digit, a one-letter token, or a token with an inner period.
+/// A word of a sentence, as written.
+#[derive(Debug, PartialEq)]
+struct Word {
+    text: String,
+    /// The word starts the sentence, where every word is capitalized.
+    first: bool,
+    capitalized: bool,
+    /// The next word of the sentence is capitalized too.
+    next_capitalized: bool,
+}
+
+/// The words of `sentence` that the vocabulary governs, as written.
+/// A token with a digit, a one-letter token, or a token with an inner period is not a word.
 /// Those are a list marker such as "(b)", a file name, or "e.g.".
 /// A hyphenated word stays whole, so a hyphenated name can be listed.
 /// A word with `_` stays whole too: it is an identifier outside a code span.
-fn words(sentence: &str) -> Vec<String> {
-    let mut out = Vec::new();
+fn words(sentence: &str) -> Vec<Word> {
+    let mut out: Vec<Word> = Vec::new();
+    let mut first = true;
     for token in sentence.split(|c: char| !(c.is_alphanumeric() || ".'’-_".contains(c))) {
         let token = token.trim_matches(['.', '\'', '’', '-', '_']);
+        if token.is_empty() {
+            continue;
+        }
+        let was_first = std::mem::replace(&mut first, false);
         if token.contains('.') || token.chars().count() < 2 {
             continue;
         }
-        let word: Vec<String> = token.split('-').map(without_contraction).collect();
-        let word = word.join("-");
-        if word.starts_with(|c: char| c.is_ascii_uppercase())
-            || !word
-                .chars()
-                .all(|c| c.is_ascii_alphabetic() || c == '-' || c == '_')
+        let parts: Vec<String> = token.split('-').map(without_contraction).collect();
+        let text = parts.join("-");
+        if !text
+            .chars()
+            .all(|c| c.is_ascii_alphabetic() || c == '-' || c == '_')
         {
             continue;
         }
-        out.push(word.to_lowercase());
+        let capitalized = text.starts_with(|c: char| c.is_ascii_uppercase());
+        if let Some(previous) = out.last_mut() {
+            previous.next_capitalized = capitalized;
+        }
+        out.push(Word {
+            text,
+            first: was_first,
+            capitalized,
+            next_capitalized: false,
+        });
     }
     out
 }
@@ -461,14 +522,16 @@ mod tests {
     use super::*;
 
     fn vocabulary() -> Vocabulary {
+        let set = |words: &[&str]| words.iter().map(|w| w.to_string()).collect();
         Vocabulary {
-            base: [
-                "run", "check", "fast", "use", "happy", "a", "the", "is", "gate",
-            ]
-            .map(str::to_owned)
-            .into(),
-            terms: ["backend".to_owned(), "wasi-sdk".to_owned()].into(),
-            writing_terms: ["idiom".to_owned()].into(),
+            base: set(&[
+                "run", "check", "fast", "use", "happy", "a", "the", "is", "gate", "wrap", "wide",
+                "rely", "verify", "trivial", "do", "list",
+            ]),
+            writing_documents: set(&["AGENTS.md"]),
+            names: set(&["Wasmtime"]),
+            terms: set(&["backend", "wasi-sdk"]),
+            writing_terms: set(&["idiom"]),
             exclusions: vec![
                 Exclusion {
                     forms: vec!["gate".to_owned(), "gates".to_owned()],
@@ -480,6 +543,22 @@ mod tests {
                 },
             ],
         }
+    }
+
+    fn texts(sentence: &str) -> Vec<String> {
+        words(&unquoted(sentence))
+            .into_iter()
+            .map(|w| w.text)
+            .collect()
+    }
+
+    fn outside(v: &Vocabulary, sentence: &str) -> Vec<String> {
+        words(&unquoted(sentence))
+            .into_iter()
+            .filter(|w| !v.is_name(w))
+            .map(|w| w.text.to_lowercase())
+            .filter(|w| !v.allowed(w, false))
+            .collect()
     }
 
     #[test]
@@ -503,10 +582,44 @@ mod tests {
     }
 
     #[test]
-    fn names_numbers_code_and_mentions_are_not_governed() {
+    fn numbers_code_and_mentions_are_not_words() {
         let sentence =
-            unquoted("Wasmtime runs `gizmo` 3 times, e.g. AGENTS.md says \"gizmo\" in WASI.");
-        assert_eq!(words(&sentence), ["runs", "times", "says", "in"]);
+            "Wasmtime runs `gizmo`ed 3 times, e.g. AGENTS.md says \"gizmo\" in (b) WASI; don't.";
+        assert_eq!(
+            texts(sentence),
+            ["Wasmtime", "runs", "Xed", "times", "says", "in", "WASI", "do"]
+        );
+        assert_eq!(
+            texts("Calls fd_read and non-trivial don't-care work."),
+            ["Calls", "fd_read", "and", "non-trivial", "do-care", "work"]
+        );
+    }
+
+    #[test]
+    fn a_first_word_is_checked_unless_it_is_a_known_name() {
+        let v = vocabulary();
+        assert_eq!(outside(&v, "Curate the list."), ["curate"]);
+        assert_eq!(outside(&v, "Gizmos run."), ["gizmos"]);
+        assert!(outside(&v, "Wasmtime runs the Gizmo check fast.").is_empty());
+        assert!(outside(&v, "Run the WASI check.").is_empty());
+        assert!(outside(&v, "Oxford Guide is run.").is_empty());
+    }
+
+    #[test]
+    fn an_unclosed_quote_hides_nothing() {
+        let v = vocabulary();
+        assert_eq!(
+            outside(&v, "The board is 5\" wide and we curate it."),
+            ["board", "and", "we", "curate", "it"]
+        );
+    }
+
+    #[test]
+    fn table_cells_are_read() {
+        let v = vocabulary();
+        let lines = markdown_lines("| a | b |\n| --- | --- |\n| run | a gizmo |\n", true);
+        let found: Vec<String> = lines.iter().flat_map(|l| outside(&v, &l.text)).collect();
+        assert_eq!(found, ["gizmo"]);
     }
 
     #[test]

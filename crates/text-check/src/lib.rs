@@ -35,7 +35,10 @@ fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-pub(crate) fn markdown_lines(text: &str) -> Vec<TextLine> {
+/// Each line of Markdown `text` that holds text a reader sees.
+/// Table rows are read only with `read_tables`.
+/// The length bound exempts them, and the vocabulary does not.
+pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
     let line_starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect();
@@ -52,9 +55,13 @@ pub(crate) fn markdown_lines(text: &str) -> Vec<TextLine> {
     let mut skipped_depth = 0;
     for (event, range) in Parser::new_ext(text, options).into_offset_iter() {
         match event {
-            Event::Start(Tag::CodeBlock(_) | Tag::Table(_)) => skipped_depth += 1,
-            Event::End(TagEnd::CodeBlock | TagEnd::Table) => skipped_depth -= 1,
+            Event::Start(Tag::CodeBlock(_)) => skipped_depth += 1,
+            Event::End(TagEnd::CodeBlock | TagEnd::MetadataBlock(_)) => skipped_depth -= 1,
+            Event::Start(Tag::Table(_)) if !read_tables => skipped_depth += 1,
+            Event::End(TagEnd::Table) if !read_tables => skipped_depth -= 1,
             _ if skipped_depth > 0 => {}
+            // Cells are separate, so a word never runs across a cell border.
+            Event::End(TagEnd::TableCell) => append(&mut lines[line_of(range.start)], "", " "),
             Event::Start(Tag::MetadataBlock(_)) => {
                 // A metadata block is YAML, so each of its lines is read as written.
                 let block = &text[range.clone()];
@@ -217,7 +224,7 @@ pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
         .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
     let (lines, unit) = match comment_markers(path) {
         Some(markers) => (comment_lines(markers, &text), "columns"),
-        None => (markdown_lines(&text), "read characters"),
+        None => (markdown_lines(&text, false), "read characters"),
     };
     let mut report = Vec::new();
     for line in lines {
@@ -323,7 +330,7 @@ mod tests {
             (1, 22, "A link and `xxx` and em.".to_owned()),
             (2, 21, "Item with with_units.".to_owned()),
         ];
-        assert_eq!(texts(markdown_lines(md)), expected);
+        assert_eq!(texts(markdown_lines(md, false)), expected);
     }
 
     #[test]
