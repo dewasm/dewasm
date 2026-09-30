@@ -1,10 +1,16 @@
-// Package nes is the dewasm-generated NES library (nes_gen.go, produced from the agnes-based cache/nes.wasm by build.sh) plus the host frontend that drives it.
-// Unlike the DOOM frontend, nes.wasm has zero host imports
-// (there's nothing to wire up), so the frontend only has to load a ROM into the module's linear memory and drive the game loop with ebiten for rendering and keyboard input.
+// Package nes is the dewasm-generated NES library plus the host frontend that drives it.
+// build.sh produces the library (nes_gen.go) from the agnes-based cache/nes.wasm.
+// Unlike the DOOM frontend, nes.wasm has zero host imports, so there's nothing to connect.
+// The frontend only has to load a ROM into the module's linear memory.
+// Then it drives the game loop with ebiten for rendering and keyboard input.
 //
-// The frontend lives *inside* the generated package rather than beside it because it reads the module's linear memory (nesInst.memory.data) directly, an unexported identifier only a file in the same package can name. ../main.go is the command: it imports this package and calls Run.
+// The frontend lives *inside* the generated package rather than beside it.
+// It reads the module's linear memory (nesInst.memory.data) directly.
+// That is an unexported identifier only a file in the same package can name.
+// ../main.go is the command: it imports this package and calls Run.
 //
-// Run with -smoke for a headless self-check (no window): it inits the game, ticks it a few hundred times, and writes the last frame to screenshot.png.
+// Run with -smoke for a headless self-check (no window).
+// It inits the game, ticks it a few hundred times, and writes the last frame to screenshot.png.
 package nes
 
 import (
@@ -23,20 +29,28 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-// nesInst is package-level so runSmoke and the Game methods below can reach its exported funcs and memory without threading it through every call.
+// nesInst is package-level so runSmoke and the Game methods below can reach it.
+// They use its exported funcs and memory without threading it through every call.
 var nesInst *Nes
 
-// frameW/frameH are fixed by the module (256x240) but read from its exports rather than hardcoded, matching frameBuf's DOOM-frontend counterpart.
-// palette holds the module's fixed 64 colors as ready-to-copy opaque RGBA quads, decoded once from paletteOffset: the guest hands over one palette
-// *index* per pixel, not a rendered image, so composing frameBuf is this frontend's job.
+// frameW/frameH are fixed by the module (256x240) but read from its exports rather than hardcoded.
+// That matches frameBuf's DOOM-frontend counterpart.
+// palette holds the module's fixed 64 colors as ready-to-copy opaque RGBA quads.
+// They are decoded once from paletteOffset.
+// The guest hands over one palette *index* per pixel, not a rendered image.
+// So composing frameBuf is this frontend's job.
 var (
 	frameW, frameH int
 	frameBuf       []byte
 	palette        [64][4]byte
 )
 
-// defaultRomPath resolves the demo ROM relative to the built binary's own location rather than the current working directory: build.sh always produces bin/nes inside examples/nes/go, so walking three directories up from there reaches examples/apps/cache regardless of where the binary is invoked from (mirroring how build.sh itself locates the repo root via
-// `cd "$(dirname "$0")"`).
+// defaultRomPath resolves the demo ROM relative to the built binary's own location.
+// It does not use the current working directory.
+// build.sh always produces bin/nes inside examples/nes/go.
+// So walking three directories up from there reaches examples/apps/cache.
+// That works regardless of where the binary is invoked from.
+// It mirrors how build.sh itself locates the repo root via `cd "$(dirname "$0")"`.
 func defaultRomPath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -62,7 +76,8 @@ const (
 )
 
 // buttonMask reads currently-held keys into the bitmask setInput expects.
-// Unlike DOOM's discrete reportKeyDown/reportKeyUp events, the NES module wants the full held-button state on every tick.
+// Unlike DOOM's discrete reportKeyDown/reportKeyUp events, the NES module wants the full state.
+// That is the full held-button state on every tick.
 func buttonMask() uint32 {
 	var mask uint32
 	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
@@ -92,7 +107,9 @@ func buttonMask() uint32 {
 	return mask
 }
 
-// drawFrame re-fetches nesInst.memory.data on every call rather than caching it: a preceding tick can grow the module's memory, which replaces the backing slice (same caveat as DOOM's hostDrawFrame).
+// drawFrame re-fetches nesInst.memory.data on every call rather than caching it.
+// A preceding tick can grow the module's memory, which replaces the backing slice.
+// DOOM's hostDrawFrame has the same caveat.
 func drawFrame(setInput func(uint32), tickGame func(), screenOffset func() uint32) {
 	setInput(buttonMask())
 	tickGame()
@@ -100,15 +117,20 @@ func drawFrame(setInput func(uint32), tickGame func(), screenOffset func() uint3
 	off := int(screenOffset())
 	n := frameW * frameH
 	for i := 0; i < n; i++ {
-		// One byte per pixel, a palette index; the & 0x3f mask is load-bearing (see examples/apps/src/nes_demo.c).
+		// One byte per pixel, a palette index.
+		// The & 0x3f mask is load-bearing (see examples/apps/src/nes_demo.c).
 		copy(frameBuf[i*4:], palette[data[off+i]&0x3f][:])
 	}
 }
 
-// controlsText mirrors the key mapping in buttonMask; shown as an on-screen overlay since there's no other discoverability path for a window app.
+// controlsText mirrors the key mapping in buttonMask.
+// It is shown as an on-screen overlay.
+// There's no other discoverability path for a window app.
 const controlsText = "arrows d-pad  x A  z B  enter start  space select  esc quit"
 
-// titleUpdateEvery throttles ebiten.SetWindowTitle calls: the title only needs to be legible, not frame-accurate, and OS window-title updates are not free every tick.
+// titleUpdateEvery throttles ebiten.SetWindowTitle calls.
+// The title only needs to be legible, not frame-accurate.
+// OS window-title updates are not free every tick.
 const titleUpdateEvery = 60 // roughly once a second at the NES's ~60Hz frame rate
 
 // Game implements ebiten.Game.
@@ -141,8 +163,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawHUD(screen, ebiten.ActualFPS())
 }
 
-// drawHUD overlays the FPS and control scheme on a dark bar along the bottom edge of the frame, so both stay legible against the game's own
-// (highly variable) palette.
+// drawHUD overlays the FPS and control scheme on a dark bar along the bottom edge of the frame.
+// So both stay legible against the game's own (highly variable) palette.
 func drawHUD(screen *ebiten.Image, fps float64) {
 	bounds := screen.Bounds()
 	const barHeight = 16
@@ -151,12 +173,15 @@ func drawHUD(screen *ebiten.Image, fps float64) {
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.0f FPS  |  %s", fps, controlsText), 4, bounds.Dy()-barHeight+2)
 }
 
-// Layout reports the module's native resolution as ebiten's logical screen size; ebiten upscales that to whatever the actual window size is, so Draw can hand it the framebuffer unscaled.
+// Layout reports the module's native resolution as ebiten's logical screen size.
+// ebiten upscales that to whatever the actual window size is.
+// So Draw can hand it the framebuffer unscaled.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return frameW, frameH
 }
 
-// loadRom reads the ROM file, copies it into the module's linear memory via allocRom, and returns the game-initialized Game ready for the loop.
+// loadRom reads the ROM file and copies it into the module's linear memory via allocRom.
+// It returns the game-initialized Game ready for the loop.
 func loadRom(romPath string) *Game {
 	rom, err := os.ReadFile(romPath)
 	if err != nil {
@@ -185,7 +210,8 @@ func loadRom(romPath string) *Game {
 	frameW, frameH = int(frameWidth()), int(frameHeight())
 	frameBuf = make([]byte, frameW*frameH*4)
 
-	// The palette is fixed data (R,G,B,A, alpha padding), so decode it once into opaque RGBA quads; only the index buffer changes per frame.
+	// The palette is fixed data (R,G,B,A, alpha padding), so decode it once into opaque RGBA quads.
+	// Only the index buffer changes per frame.
 	poff := int(paletteOffset())
 	for i := range palette {
 		c := nesInst.memory.data[poff+i*4:]
@@ -196,7 +222,8 @@ func loadRom(romPath string) *Game {
 }
 
 // runSmoke drives the game headlessly: no window, no ebiten loop.
-// It exists so CI and quick local checks can confirm the generated library still links and produces a plausible frame without a display.
+// It exists so CI and quick local checks can confirm the generated library still links.
+// The check also confirms it produces a plausible frame without a display.
 func runSmoke(g *Game) {
 	const ticks = 300
 	start := time.Now()
@@ -212,7 +239,8 @@ func runSmoke(g *Game) {
 		distinct[binary.LittleEndian.Uint32(frameBuf[i:i+4])] = struct{}{}
 	}
 	fmt.Printf("smoke: final frame is %dx%d with %d distinct colors\n", frameW, frameH, len(distinct))
-	// The NES's PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens; a degenerate (blank/solid) frame lands at 1.
+	// The NES's PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens.
+	// A degenerate (blank/solid) frame lands at 1.
 	const minDistinctColors = 4
 	if len(distinct) <= minDistinctColors {
 		fmt.Fprintln(os.Stderr, "smoke: FAIL: frame looks degenerate (too few distinct colors)")
@@ -236,7 +264,8 @@ func writePNG(path string, w, h int, rgba []byte) error {
 	return png.Encode(f, img)
 }
 
-// Run is the command entry point: parse flags, load the ROM, and either run the smoke check or hand the game loop to ebiten.
+// Run is the command entry point: parse flags and load the ROM.
+// Then either run the smoke check or hand the game loop to ebiten.
 func Run() {
 	smoke := flag.Bool("smoke", false, "headless self-check: init, tick ~300 times, write screenshot.png, exit")
 	flag.Parse()
@@ -255,7 +284,9 @@ func Run() {
 
 	ebiten.SetWindowSize(frameW*2, frameH*2)
 	ebiten.SetWindowTitle("NES (dewasm)")
-	// The NTSC NES runs at ~60.0988 Hz; ebiten's default 60 TPS is close enough that no explicit SetTPS call is needed (unlike DOOM's 35Hz, which does need an explicit override).
+	// The NTSC NES runs at ~60.0988 Hz.
+	// ebiten's default 60 TPS is close enough that no explicit SetTPS call is needed.
+	// DOOM's 35Hz is different: it does need an explicit override.
 	if err := ebiten.RunGame(game); err != nil {
 		fmt.Fprintln(os.Stderr, "nes:", err)
 		os.Exit(1)

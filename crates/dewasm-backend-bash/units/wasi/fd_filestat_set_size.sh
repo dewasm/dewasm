@@ -1,5 +1,7 @@
-# WASI fd_filestat_set_size: truncates or zero-extends a file fd's whole-file buffer to <size> and marks it dirty (flushed on close/sync).
-# A negative size is EINVAL (mirrors truncate(2)/Ruby's IO#truncate); a directory or stdio fd is EBADF.
+# WASI fd_filestat_set_size: truncates or zero-extends a file fd's whole-file buffer to <size>.
+# It marks the buffer dirty (flushed on close/sync).
+# A negative size is EINVAL (mirrors truncate(2)/Ruby's IO#truncate).
+# A directory or stdio fd is EBADF.
 wasi_fd_filestat_set_size() {
   local __p=$1 __fd=$2 __size=$3
   local -n __fds=${__p}wfds

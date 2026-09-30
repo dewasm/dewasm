@@ -1,4 +1,5 @@
-//! dewasm-core: decode + validate wasm binaries and build the structured IR shared by all language backends.
+//! dewasm-core: decode + validate wasm binaries.
+//! It builds the structured IR shared by all language backends.
 
 pub mod feature;
 pub mod ir;

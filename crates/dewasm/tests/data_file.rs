@@ -1,9 +1,17 @@
 //! End-to-end coverage for `--data-file` data-segment externalization.
-//! For Ruby, Go, Python, Perl and Java: convert a module both embedded and with a data file, run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
+//! For Ruby, Go, Python, Perl and Java, convert a module both embedded and with a data file.
+//! Run each generated program, and assert byte-identical stdout/exit plus a smaller source file.
 //! Also pins the loud rejections (the bash and codon targets, `-o -`).
 //!
-//! The inline fixture carries an active segment, a passive segment initialized via `memory.init` + `data.drop`, and a bulky third segment so the data-file form provably shrinks the source.
-//! The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on, matching the project's speed-category convention for cases that pay a multi-second `go build` / interpreter startup (run with `--features slow_test`).
+//! The inline fixture carries three segments:
+//!
+//! - an active segment;
+//! - a passive segment initialized via `memory.init` + `data.drop`;
+//! - a bulky third segment, so the data-file form provably shrinks the source.
+//!
+//! The slow real-app cases (`qjs.wasm`) are `#[ignore]`d unless the `slow_test` feature is on.
+//! This matches the project's speed-category convention for cases that pay a multi-second cost.
+//! That cost is a `go build` or an interpreter startup (run with `--features slow_test`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -18,7 +26,13 @@ fn dewasm_bin() -> &'static str {
     env!("CARGO_BIN_EXE_dewasm")
 }
 
-/// A standalone module exercising every data-emission path: an active segment (index 0), a passive segment written by `memory.init` then `data.drop`ped (index 1), and a 2 KiB third segment (index 2) whose bytes only exist to make the embedded hex dwarf the externalized data file.
+/// A standalone module exercising every data-emission path:
+///
+/// - an active segment (index 0);
+/// - a passive segment written by `memory.init` then `data.drop`ped (index 1);
+/// - a 2 KiB third segment (index 2).
+///
+/// The third segment's bytes only exist to make the embedded hex dwarf the externalized data file.
 /// `_start` prints `Active!\nPassive!\n`.
 fn fixture_wat() -> String {
     let bulk = "x".repeat(2000);
@@ -73,7 +87,8 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// Run a Ruby program from its own directory (so `__dir__`-relative data file loads resolve), returning (stdout, exit code).
+/// Run a Ruby program from its own directory, returning (stdout, exit code).
+/// The directory makes `__dir__`-relative data file loads resolve.
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby =
         find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
@@ -86,7 +101,9 @@ fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// `go build` a program in its own directory (so `//go:embed` resolves) and run the resulting binary, returning (stdout, exit code).
+/// `go build` a program in its own directory, and run the resulting binary.
+/// Returns (stdout, exit code).
+/// The directory makes `//go:embed` resolve.
 fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
@@ -113,7 +130,8 @@ fn run_go(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// Run a Python program from its own directory (so the data file, resolved via `os.path.dirname(__file__)`, is found), returning (stdout, exit code).
+/// Run a Python program from its own directory, returning (stdout, exit code).
+/// The directory lets the data file, resolved via `os.path.dirname(__file__)`, be found.
 fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let python = find_python().expect("python3 not found on PATH: see docs/testing.md");
     let out = Command::new(python)
@@ -125,7 +143,8 @@ fn run_python(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     (out.stdout, out.status.code().unwrap_or(-1))
 }
 
-/// Run a Perl program from its own directory (so the data file, resolved via `File::Basename::dirname(__FILE__)`, is found), returning (stdout, exit code).
+/// Run a Perl program from its own directory, returning (stdout, exit code).
+/// The directory lets the data file, resolved via `File::Basename::dirname(__FILE__)`, be found.
 fn run_perl(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let perl = find_perl()
         .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md");
@@ -154,7 +173,8 @@ fn compile_java(src: &Path, classdir: &Path) {
     );
 }
 
-/// Run `Main` from `classdir` on the classpath (so its `DATA_BLOB` loader resolves the data file sitting alongside `Main.class`), returning (stdout, exit code).
+/// Run `Main` from `classdir` on the classpath, returning (stdout, exit code).
+/// The classpath lets its `DATA_BLOB` loader resolve the data file sitting alongside `Main.class`.
 fn run_java(classdir: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
     let out = Command::new(&java)
@@ -438,7 +458,8 @@ fn java_data_file_matches_embedded() {
     let embedded = dir.join("embedded").join("Main.java");
     let ecls = dir.join("embedded-cls");
     std::fs::create_dir_all(embedded.parent().unwrap()).unwrap();
-    // Externalized: the data file lands directly in the run-time class dir so the `DATA_BLOB` code-source loader finds it next to `Main.class`.
+    // Externalized: the data file lands directly in the run-time class dir.
+    // The `DATA_BLOB` code-source loader then finds it next to `Main.class`.
     let ext = dir.join("ext").join("Main.java");
     let xcls = dir.join("ext-cls");
     std::fs::create_dir_all(ext.parent().unwrap()).unwrap();
@@ -510,7 +531,8 @@ fn rejects_unsupported_targets_and_stdout() {
     let data_file = dir.join("d.bin");
     let df = data_file.to_str().unwrap();
 
-    // Bash and codon reject `--data-file` (bash keeps its data in the runtime; codon has no externalization support); the error names the target.
+    // Bash and codon reject `--data-file`, and the error names the target.
+    // Bash keeps its data in the runtime; codon has no externalization support.
     for target in ["bash", "codon"] {
         let out = dir.join(format!("out.{target}"));
         let r = run_dewasm(&[
@@ -551,7 +573,8 @@ fn rejects_unsupported_targets_and_stdout() {
     );
 }
 
-/// A `--data-file` resolving to the same file as `-o` is rejected before anything is written: the blob would otherwise clobber the freshly written source (#30).
+/// A `--data-file` resolving to the same file as `-o` is rejected before anything is written.
+/// The blob would otherwise clobber the freshly written source (#30).
 /// Covers both the identical spelling and a `..`-hop alias of the same path.
 #[test]
 fn rejects_data_file_colliding_with_output_path() {
@@ -583,7 +606,8 @@ fn rejects_data_file_colliding_with_output_path() {
     );
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 
-    // A differently spelled alias of the same file ("dir/../dir/out.py") must be caught too: the check compares resolved paths, not strings.
+    // A differently spelled alias of the same file ("dir/../dir/out.py") must be caught too.
+    // The check compares resolved paths, not strings.
     let alias = dir.join("..").join(dir.file_name().unwrap()).join("out.py");
     let r = run_dewasm(&[
         watp,
@@ -600,8 +624,12 @@ fn rejects_data_file_colliding_with_output_path() {
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "sentinel");
 }
 
-/// A `--data-file` whose filename collides with a generated output file's name is rejected: routing is by name, so the java backend's fixed `Main.java` source would be misrouted to the data-file path and clobbered by the blob (#30).
-/// Covered with data segments (source and data file share the name) and without (the lone source itself matches the data-file name).
+/// A `--data-file` whose filename collides with a generated output file's name is rejected.
+/// Routing is by name.
+/// So the java backend's fixed `Main.java` source would be misrouted to the data-file path.
+/// There the blob would clobber it (#30).
+/// Covered with data segments, where the source and the data file share the name.
+/// Also covered without them, where the lone source itself matches the data-file name.
 #[test]
 fn rejects_data_file_colliding_with_generated_name() {
     let dir = tempdir("collide-name");
@@ -636,7 +664,9 @@ fn rejects_data_file_colliding_with_generated_name() {
         "no data file may be written on rejection"
     );
 
-    // Same collision with a data-less module: the backend emits no data file, so the lone `Main.java` source itself matches the data-file name and would be misrouted; it must be rejected identically.
+    // Same collision with a data-less module: the backend emits no data file.
+    // So the lone `Main.java` source itself matches the data-file name and would be misrouted.
+    // It must be rejected identically.
     let nodata = dir.join("nodata.wat");
     write(&nodata, "(module (func (export \"_start\")))\n");
     let r = run_dewasm(&[

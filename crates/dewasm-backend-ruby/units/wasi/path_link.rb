@@ -44,8 +44,10 @@ def linkat
 end
 private :linkat
 
-# link(2) follows symlinks on macOS/BSD, but WASI's path_link (without
-# SYMLINK_FOLLOW) must hardlink the link itself. linkat(..., 0) is nofollow on every POSIX.1-2008 platform; returns 0 on success or the errno on failure.
+# link(2) follows symlinks on macOS/BSD.
+# WASI's path_link (without SYMLINK_FOLLOW) must hardlink the link itself.
+# linkat(..., 0) is nofollow on every POSIX.1-2008 platform.
+# Returns 0 on success or the errno on failure.
 def linkat_nofollow(old_host, new_host)
   at_fdcwd = RUBY_PLATFORM.include?("darwin") ? -2 : -100
   Fiddle.last_error = 0

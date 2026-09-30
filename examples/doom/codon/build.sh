@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated DOOM library and compile it together with the terminal frontend into one native binary.
-# Codon has no import path for a sibling source file, so the two are linked by concatenation into doom_app.codon, the same way the backend's own test and benchmark runners do; both generated files are gitignored, so this step has to run before ./run.sh from a clean checkout.
-# The default is a debug build, the cheaper of the two; CODON_BUILD=release selects the optimized compile (README.md has the measured times).
+# Regenerate the dewasm-generated DOOM library.
+# Then compile it together with the terminal frontend into one native binary.
+# Codon has no import path for a sibling source file.
+# So the two are linked by concatenation into doom_app.codon.
+# The backend's own test and benchmark runners do the same.
+# Both generated files are gitignored.
+# So this step has to run before ./run.sh from a clean checkout.
+# The default is a debug build, the cheaper of the two.
+# CODON_BUILD=release selects the optimized compile (README.md has the measured times).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -23,7 +29,9 @@ repo_root="$(cd ../../.. && pwd)"
     -o examples/doom/codon/doom_gen.codon
 )
 
-# The build flags go into the source as a comment, so that switching build mode shows up as a source change and one comparison decides whether the compile can be skipped.
+# The build flags go into the source as a comment.
+# So switching build mode shows up as a source change.
+# Then one comparison decides whether the compile can be skipped.
 {
   printf '# codon build flags: %s\n' "${build_flags:-none (debug)}"
   cat doom_gen.codon main.codon

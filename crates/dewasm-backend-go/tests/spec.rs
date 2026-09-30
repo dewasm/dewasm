@@ -1,10 +1,26 @@
-//! Go side of the shared spec harness: converts each module with the Go backend to package-level declarations, phrases every assertion as compiled Go (`check`/`check_trap`/`check_exhaust`/ `check_unlinkable`, bit-exact float comparison via `math.Float32bits`/ `math.Float64bits`), assembles one self-contained program per `.wast` file, and `go build`s + runs it.
+//! Go side of the shared spec harness.
+//! It converts each module with the Go backend to package-level declarations.
+//! It phrases every assertion as compiled Go:
+//! `check`/`check_trap`/`check_exhaust`/`check_unlinkable`.
+//! Float comparison is bit-exact via `math.Float32bits`/`math.Float64bits`.
+//! It assembles one self-contained program per `.wast` file, and `go build`s + runs it.
 //! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Three Go facts shape the phrasing:
-//! - Go is statically typed and has no dynamic `invoke`, so each generated type carries a reflective `invoke(name, args...) []any` / `globalGet(name) any` dispatcher (built where the module, and hence every export's signature, is known); the harness asserts the boxed `any` results to the expected type.
-//! - Type/method declarations cannot live inside `func main`, so per-module `Converted.source` is accumulated at package scope in the harness's file-scoped `decls` buffer (hoisted ahead of the body by `assemble`) while only instantiation/assertion statements go in the body.
-//! - A runaway recursion overflows Go's goroutine stack *fatally* (uncatchable, killing the process), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
+//! - Go is statically typed and has no dynamic `invoke`.
+//!   So each generated type carries a reflective dispatcher:
+//!   `invoke(name, args...) []any` / `globalGet(name) any`.
+//!   It is built where the module, and hence every export's signature, is known.
+//!   The harness asserts the boxed `any` results to the expected type.
+//! - Type/method declarations cannot live inside `func main`.
+//!   So per-module `Converted.source` is accumulated at package scope.
+//!   It goes into the harness's file-scoped `decls` buffer.
+//!   `assemble` hoists that buffer ahead of the body.
+//!   Only instantiation/assertion statements go in the body.
+//! - A runaway recursion overflows Go's goroutine stack *fatally*.
+//!   That is uncatchable and kills the process.
+//!   So the spec build instruments every generated function with a recursion guard.
+//!   The guard turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -19,15 +35,34 @@ use wast::{WastArg, WastRet};
 
 mod common;
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution.
+/// The file still runs, so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: the Go type assertion that resolves an import checks its *kind* (func/global/table/memory/tag) and, for functions and globals, the full value/signature type too, but not a global's mutability, nor a table/memory's min/max limits, nor a tag's parameter types (a tag is an identity object carrying no type at all), against the import site's declared bounds.
+/// - `import-limits`: the Go type assertion that resolves an import checks its *kind*.
+///   The kinds are func/global/table/memory/tag.
+///   For functions and globals, it checks the full value/signature type too.
+///   It does not check these against the import site's declared bounds:
+///   - a global's mutability;
+///   - a table/memory's min/max limits;
+///   - a tag's parameter types (a tag is an identity object carrying no type at all).
+///
 ///   Every `assert_unlinkable` case testing one of those stays a known gap.
-///   The counts are *lower* than Ruby/Python's: the Go type assertion catches func-signature and global-value-type mismatches those backends' kind-only check misses, so only the mutability/limit/tag-type cases remain (the two `linking` failures are both global-mutability mismatches).
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
+///   The counts are *lower* than Ruby/Python's.
+///   The Go type assertion catches func-signature and global-value-type mismatches.
+///   Those backends' kind-only check misses them.
+///   So only the mutability/limit/tag-type cases remain.
+///   The two `linking` failures are both global-mutability mismatches.
+/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
+///   That feature is multi-memory, inside a module that also uses `register`.
+///   That module never converts.
+///   So a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 ///
-/// `skip-stack-guard-page` is *not* here: its `function-with-many-locals` (1056 locals) is the one function in the suite whose frame cost trips the recursion guard even at shallow depth, so all 10 of its exhaustion cases pass.
+/// `skip-stack-guard-page` is *not* here.
+/// Its `function-with-many-locals` has 1056 locals.
+/// It is the one function in the suite whose frame cost trips the recursion guard.
+/// It trips the guard even at shallow depth.
+/// So all 10 of its exhaustion cases pass.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 34, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -47,8 +82,10 @@ impl BackendUnderTest for GoSpec {
         &GoBackend
     }
 
-    /// Compile `source` to the crate's shared cache binary (identical programs build once) and run it.
-    /// A build failure is surfaced as the `go build` `Output` so the harness reports the compile error where it would report the program's own.
+    /// Compile `source` to the crate's shared cache binary and run it.
+    /// Identical programs build once.
+    /// A build failure is surfaced as the `go build` `Output`.
+    /// The harness then reports the compile error where it would report the program's own.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match common::build_go(source) {
             Err(build) => build,
@@ -62,7 +99,11 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         EXPECTED_FAILURES
     }
 
-    /// Go compiles each `.wast` file to one program (dominated by compile latency), so a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`: its `function-with-many-locals` is the one function in the suite whose frame cost trips the recursion guard, so its exhaustion cases are worth running by default.
+    /// Go compiles each `.wast` file to one program (dominated by compile latency).
+    /// So a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`.
+    /// One function in the suite has a frame cost that trips the recursion guard.
+    /// It is this file's `function-with-many-locals`.
+    /// So its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
             &["skip-stack-guard-page"],
@@ -78,10 +119,12 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
             "rt/link_error",
             // Same for check_exception and rtException.
             "rt/exception",
-            // float args are reconstructed bit-exactly; this also pulls in the `math` import the float result comparisons rely on.
+            // float args are reconstructed bit-exactly.
+            // This also pulls in the `math` import the float result comparisons rely on.
             "rt/f32_from_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE), not necessarily by the converted module itself.
+            // Referenced by the _spectest fixture (PREAMBLE).
+            // The converted module itself does not necessarily reference them.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -122,7 +165,8 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
             conv.handle,
             imports_expr(registered)
         );
-        // A module may be instantiated only for its side effects / to be registered; a never-read local is a Go compile error.
+        // A module may be instantiated only for its side effects / to be registered.
+        // A never-read local is a Go compile error.
         let _ = writeln!(script, "_ = {var}");
         var
     }
@@ -263,9 +307,14 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     }
 }
 
-/// The external packages the assembled program references, by the backend's own boundary-matching rule ([`dewasm_backend_go::selector_used`]).
-/// Every fragment scanned is controlled (runtime bundle, harness preamble, generated declarations, and a body whose only free-form strings are `file.wast:line` descriptions and wasm trap messages) so no user data can inject a false import.
-/// The candidate list stays local: it is what *this* program can reference, and importing more than that is a Go compile error.
+/// The external packages the assembled program references.
+/// They are found by the backend's own boundary-matching rule.
+/// That rule is [`dewasm_backend_go::selector_used`].
+/// Every fragment scanned is controlled, so no user data can inject a false import.
+/// The fragments are the runtime bundle, harness preamble, generated declarations, and the body.
+/// The body's only free-form strings are `file.wast:line` descriptions and wasm trap messages.
+/// The candidate list stays local: it is what *this* program can reference.
+/// Importing more than that is a Go compile error.
 fn scan_imports(text: &str) -> Vec<String> {
     let candidates = [
         ("fmt.", "fmt"),
@@ -298,7 +347,8 @@ fn import_block(imports: &[String]) -> String {
     out
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance's `Exports` map doubles as an import provider.
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name.
+/// Each instance's `Exports` map doubles as an import provider.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
     for (name, var) in registered {
@@ -323,8 +373,12 @@ fn arg_go(arg: &WastArg<'_>) -> Result<String, String> {
     }
 }
 
-/// The Go value of `ref.null <hty>`, or `None` for a heap type this backend has no host value for (skipped under [`dewasm_test_helper::heap_type_tag`]).
-/// `exnref` is the only reference type the Go backend takes as a *value* type, and its null has to be a typed one: a bare `nil` boxes into a nil interface, which the reflective `invoke`'s type assertion rejects.
+/// The Go value of `ref.null <hty>`.
+/// It is `None` for a heap type this backend has no host value for.
+/// Such a case is skipped under [`dewasm_test_helper::heap_type_tag`].
+/// `exnref` is the only reference type the Go backend takes as a *value* type.
+/// Its null has to be a typed one: a bare `nil` boxes into a nil interface.
+/// The reflective `invoke`'s type assertion rejects a nil interface.
 fn go_null_ref(hty: &HeapType<'_>) -> Option<String> {
     match hty {
         HeapType::Abstract {
@@ -367,7 +421,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        // A typeless `(ref.null)` result cannot pick a Go static type to assert against; every typed one this backend can express is an exnref.
+        // A typeless `(ref.null)` result cannot pick a Go static type to assert against.
+        // Every typed one this backend can express is an exnref.
         WastRet::Core(WastRetCore::RefNull(Some(hty))) if go_null_ref(hty).is_some() => {
             Ok(format!("{value}.(*rtException) == nil"))
         }
@@ -391,7 +446,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
 }
 
 /// Harness helpers + the `spectest` host fixture.
-/// `rtStack` is the recursion guard's shared counter (referenced only by spec-build generated functions).
+/// `rtStack` is the recursion guard's shared counter.
+/// Only spec-build generated functions reference it.
 const PREAMBLE: &str = r#"var rtStack int
 
 var _pass, _fail int
@@ -479,7 +535,8 @@ func check_exception(desc string, thunk func()) {
 	fmt.Printf("FAIL(panic %v, want a wasm exception): %s\n", r, desc)
 }
 
-// Upstream's assert_unlinkable message text never matches ours; a raised rtLinkError confirms the import was correctly rejected as unlinkable.
+// Upstream's assert_unlinkable message text never matches ours.
+// A raised rtLinkError confirms the import was rejected as unlinkable.
 // Any other panic means the module linked and then crashed, which must not pass.
 func check_unlinkable(desc string, thunk func()) {
 	var r any

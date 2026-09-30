@@ -1,9 +1,24 @@
-//! Loop-body extraction: move a contiguous, branch-closed span of a loop body into its own function, called once per iteration.
+//! Loop-body extraction: move a span of a loop body into its own function.
+//! The span is contiguous and branch-closed, and the new function is called once per iteration.
 //!
-//! Ruby's JITs (and several others) compile a method only when it is entered through a call, never mid-execution, so a hot loop inside a function entered once is interpreted forever.
-//! Splitting the body across a call turns it into a method invoked every iteration, which such a JIT does compile; the call costs nanoseconds per iteration while a compiled body of sufficient size saves far more.
-//! The extracted span must be branch-closed (every branch inside it lands on a frame opened inside it), must not return, and may leave at most one value behind for the rest of the function, because a call returns at most one.
-//! The span need not start at the body's first statement: a head-tested loop begins with its own exit branch, which stays behind while the work after it is extracted.
+//! Ruby's JITs (and several others) compile a method only when it is entered through a call.
+//! They never compile it mid-execution.
+//! So a hot loop inside a function entered once is interpreted forever.
+//! Splitting the body across a call turns it into a method invoked every iteration.
+//! Such a JIT does compile that method.
+//! The call costs nanoseconds per iteration.
+//! A compiled body of sufficient size saves far more than that.
+//!
+//! The extracted span has three requirements:
+//!
+//! - It must be branch-closed: every branch inside it lands on a frame opened inside it.
+//! - It must not return.
+//! - It may leave at most one value behind for the rest of the function.
+//!   That is because a call returns at most one.
+//!
+//! The span need not start at the body's first statement.
+//! A head-tested loop begins with its own exit branch.
+//! That branch stays behind while the work after it is extracted.
 //! Thresholds are a per-backend judgement, passed in as [`Params`].
 
 use std::collections::BTreeMap;
@@ -19,20 +34,29 @@ pub struct Params {
     pub min_weight: u32,
     /// Maximum number of parameters an extracted function may take.
     pub max_params: usize,
-    /// Maximum number of values the region may leave live for the rest of the function: 1 (returned from the call) or 0 (require none).
+    /// Maximum number of values the region may leave live for the rest of the function.
+    /// It is 1 (returned from the call) or 0 (require none).
     pub max_results: usize,
-    /// Minimum region size when the span consumes incoming temp values (see `Extraction::arg_temps`): such spans pay an extra argument and an entry copy per temp, so they must be larger to amortize it.
+    /// Minimum region size when the span consumes incoming temp values.
+    /// See `Extraction::arg_temps` for those values.
+    /// Such spans pay an extra argument and an entry copy per temp.
+    /// So they must be larger to amortize it.
     pub min_weight_with_temps: u32,
 }
 
-/// The rewritten function list: the module's defined functions with extracted regions replaced by calls, followed by the extracted functions.
-/// `types` extends the module's type list with any new signatures; indices below `module.types.len()` are unchanged, so only [`Func::type_idx`] lookups need the extended list.
+/// The rewritten function list.
+/// It holds the module's defined functions with extracted regions replaced by calls.
+/// The extracted functions follow them.
+/// `types` extends the module's type list with any new signatures.
+/// Indices below `module.types.len()` are unchanged.
+/// So only [`Func::type_idx`] lookups need the extended list.
 pub struct Extracted {
     pub funcs: Vec<Func>,
     pub types: Vec<FuncType>,
 }
 
-/// Boundaries per loop body are recorded only up to this many leading statements; a longer prefix is never a candidate.
+/// Boundaries per loop body are recorded only up to this many leading statements.
+/// A longer prefix is never a candidate.
 const BOUNDARY_CAP: usize = 256;
 
 pub fn extract(module: &Module, params: &Params) -> Extracted {
@@ -44,7 +68,8 @@ pub fn extract(module: &Module, params: &Params) -> Extracted {
     )
 }
 
-/// The same rewrite over an already-transformed function list (an earlier pass may run between the module and this one).
+/// The same rewrite over an already-transformed function list.
+/// An earlier pass may run between the module and this one.
 pub fn extract_funcs(
     mut funcs: Vec<Func>,
     mut types: Vec<FuncType>,
@@ -83,7 +108,8 @@ enum Var {
 
 struct Cx<'a> {
     params: &'a Params,
-    /// Per loop-body sequence (keyed by its buffer address): the live set at each leading top-level boundary, `[k]` = live just before the k-th statement.
+    /// Per loop-body sequence (keyed by its buffer address): the live set at each leading boundary.
+    /// Only top-level boundaries are recorded; `[k]` = live just before the k-th statement.
     boundaries: BTreeMap<usize, Vec<BTreeSet<Var>>>,
     /// Types of the enclosing function's locals (params ++ locals).
     local_tys: Vec<ValType>,
@@ -95,11 +121,15 @@ struct Cx<'a> {
     base_idx: u32,
 }
 
-/// `in_try` is true inside any try_table of the same function: an exception thrown from an extracted region would then skip the write-back of values the catch handler could observe, so throw-capable regions are refused there.
+/// `in_try` is true inside any try_table of the same function.
+/// An exception thrown from an extracted region would then skip its write-back of values.
+/// The catch handler could observe the values that write-back skips.
+/// So throw-capable regions are refused there.
 fn walk_seq(seq: &mut [Stmt], cx: &mut Cx, in_try: bool) {
     for stmt in seq.iter_mut() {
         if let Stmt::Loop { label, body } = stmt {
-            // A loop nothing branches back to runs its body once; a call there gains no compilation.
+            // A loop nothing branches back to runs its body once.
+            // A call there gains no compilation.
             if label.referenced {
                 try_extract_loop(body, cx, in_try);
             }
@@ -124,7 +154,8 @@ fn try_extract_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
         weights.push(weights.last().unwrap().saturating_add(stmt_weight(stmt)));
     }
 
-    // Maximal runs of consecutive closed statements, heaviest first: the heaviest run is where the loop's work sits.
+    // Maximal runs of consecutive closed statements, heaviest first.
+    // The heaviest run is where the loop's work sits.
     let mut runs: Vec<(usize, usize)> = Vec::new();
     let mut start = None;
     for (i, ok) in closed_flags.iter().chain([&false]).enumerate() {
@@ -160,7 +191,8 @@ fn try_extract_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
     }
 }
 
-/// Whether executing `stmts` can raise a wasm exception (not a trap: traps unwind the whole program and expose no locals).
+/// Whether executing `stmts` can raise a wasm exception.
+/// A trap does not count: traps unwind the whole program and expose no locals.
 fn may_throw(stmts: &[Stmt]) -> bool {
     Stmt::any(stmts, &mut |s| {
         matches!(
@@ -177,11 +209,15 @@ fn may_throw(stmts: &[Stmt]) -> bool {
 struct Extraction {
     /// Caller locals passed as arguments, in ascending index order.
     arg_locals: Vec<u32>,
-    /// Caller temps whose incoming value the region may read (a span starting mid-body can consume what earlier statements computed), passed as trailing arguments and copied into the matching temp at the extracted function's entry.
+    /// Caller temps whose incoming value the region may read.
+    /// A span starting mid-body can consume what earlier statements computed.
+    /// They are passed as trailing arguments.
+    /// Each is copied into the matching temp at the extracted function's entry.
     arg_temps: Vec<Temp>,
     /// The one variable the region leaves live for the rest of the function, if any.
     live_out: Option<Var>,
-    /// Caller locals that become the extracted function's own locals (referenced, not parameters), ascending.
+    /// Caller locals that become the extracted function's own locals, ascending.
+    /// They are referenced, not parameters.
     inner_locals: Vec<u32>,
     /// Temps the extracted function declares.
     temps: Vec<Temp>,
@@ -264,7 +300,8 @@ fn plan_extraction(
 fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx) {
     let mut region: Vec<Stmt> = body.drain(j..k).collect();
 
-    // Renumber caller locals into the extracted function's local index space: local parameters, then temp parameters, then its own locals.
+    // Renumber caller locals into the extracted function's local index space.
+    // The order is local parameters, then temp parameters, then its own locals.
     let params = ext.arg_locals.len() + ext.arg_temps.len();
     let mut map: BTreeMap<u32, u32> = BTreeMap::new();
     for (new, old) in ext.arg_locals.iter().enumerate() {
@@ -276,7 +313,8 @@ fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx)
     for stmt in &mut region {
         renumber_stmt(stmt, &map);
     }
-    // An incoming temp value arrives as a parameter and is copied into its temp at entry, so the region body reads it unchanged.
+    // An incoming temp value arrives as a parameter and is copied into its temp at entry.
+    // So the region body reads it unchanged.
     for (i, t) in ext.arg_temps.iter().enumerate().rev() {
         region.insert(
             0,
@@ -371,7 +409,8 @@ fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx)
 }
 
 /// Whether every branch inside `stmt` lands on a frame opened inside `stmt` itself.
-/// A statement that returns, or branches to the enclosing loop or further out, pins the extraction boundary in front of it.
+/// A statement that returns pins the extraction boundary in front of it.
+/// So does a branch to the enclosing loop or further out.
 fn closed(stmt: &Stmt) -> bool {
     fn go(stmt: &Stmt, scope: &mut Vec<u32>) -> bool {
         let target_ok = |t: &BrTarget, scope: &Vec<u32>| match t {
@@ -384,11 +423,13 @@ fn closed(stmt: &Stmt) -> bool {
             Stmt::BrTable {
                 targets, default, ..
             } => targets.iter().chain([default]).all(|t| target_ok(t, scope)),
-            // A tail call ends the enclosing wasm frame just as a return does, so it pins the boundary the same way.
+            // A tail call ends the enclosing wasm frame just as a return does.
+            // So it pins the boundary the same way.
             Stmt::Return { .. } | Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
                 false
             }
-            // Catch targets are resolved outside the try_table's own frame, so they are checked against the scope before it opens.
+            // Catch targets are resolved outside the try_table's own frame.
+            // So they are checked against the scope before it opens.
             Stmt::TryTable { catches, .. } => catches.iter().all(|c| target_ok(&c.target, scope)),
             _ => true,
         };
@@ -602,9 +643,14 @@ fn collect_seq(stmts: &[Stmt], reads: &mut BTreeSet<Var>, writes: &mut BTreeSet<
     }
 }
 
-/// Walk the region's top-level statements in order, tracking what straight-line statements definitely assign.
-/// Returns the variables possibly read before assignment (they must be parameters) and the definitely-assigned set (safe as callee locals, and a live-out among them needs no incoming value).
-/// Anything read inside nested control flow counts as possibly read first, and nothing written there counts as definite.
+/// Walk the region's top-level statements in order.
+/// Track what straight-line statements definitely assign.
+/// Returns two sets.
+/// The first is the variables possibly read before assignment; they must be parameters.
+/// The second is the definitely-assigned set.
+/// Those are safe as callee locals, and a live-out among them needs no incoming value.
+/// Anything read inside nested control flow counts as possibly read first.
+/// Nothing written there counts as definite.
 fn first_read_scan(stmts: &[Stmt]) -> (BTreeSet<Var>, BTreeSet<Var>) {
     let mut maybe_read = BTreeSet::new();
     let mut definite: BTreeSet<Var> = BTreeSet::new();
@@ -628,8 +674,10 @@ fn first_read_scan(stmts: &[Stmt]) -> (BTreeSet<Var>, BTreeSet<Var>) {
             }
         }
         maybe_read.extend(reads.difference(&definite).copied());
-        // Only unconditional straight-line writes count as definite; a branch's assigns or a catch clause's temps may not execute.
-        // Every top-level statement boundary is reached in order because branch-closure keeps control inside each statement.
+        // Only unconditional straight-line writes count as definite.
+        // A branch's assigns or a catch clause's temps may not execute.
+        // Every top-level statement boundary is reached in order.
+        // That holds because branch-closure keeps control inside each statement.
         match stmt {
             Stmt::Assign { dst, .. } | Stmt::MemoryGrow { dst, .. } => {
                 definite.insert(Var::Temp(*dst));
@@ -744,13 +792,17 @@ pub(crate) fn for_each_expr_mut(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) 
 }
 
 /// Backward may-liveness over the structured body.
-/// Records, for every loop body, the live set at each leading top-level statement boundary; those are the only program points the extraction queries.
+/// Records, for every loop body, the live set at each leading top-level statement boundary.
+/// Those are the only program points the extraction queries.
 struct Liveness {
-    /// Live set at each in-scope label's continuation: after the frame for blocks, ifs and try_tables, at the head for loops.
+    /// Live set at each in-scope label's continuation.
+    /// For blocks, ifs and try_tables that is after the frame; for loops it is at the head.
     labels: BTreeMap<u32, BTreeSet<Var>>,
-    /// Union of the live sets at the catch targets of enclosing try_tables: what an exception thrown here may expose.
+    /// Union of the live sets at the catch targets of enclosing try_tables.
+    /// That is what an exception thrown here may expose.
     catch_live: BTreeSet<Var>,
-    /// Converged head set of every loop analyzed so far, keyed by its label id, which is unique within one function.
+    /// Converged head set of every loop analyzed so far, keyed by its label id.
+    /// The label id is unique within one function.
     loop_heads: BTreeMap<u32, BTreeSet<Var>>,
     boundaries: BTreeMap<usize, Vec<BTreeSet<Var>>>,
 }
@@ -768,7 +820,9 @@ impl Liveness {
     }
 
     /// Live set before `stmts`, given `after` live at the fall-through exit.
-    /// With `record`, stores the boundary sets for this sequence; enclosing loops re-analyze their bodies to a fixpoint, so the last visit's record is the stable one.
+    /// With `record`, stores the boundary sets for this sequence.
+    /// Enclosing loops re-analyze their bodies to a fixpoint.
+    /// So the last visit's record is the stable one.
     fn seq(&mut self, stmts: &[Stmt], after: BTreeSet<Var>, record: bool) -> BTreeSet<Var> {
         let mut bounds: Vec<BTreeSet<Var>> = Vec::new();
         let mut live = after;
@@ -815,7 +869,8 @@ impl Liveness {
                 for r in results {
                     live.remove(&Var::Temp(*r));
                 }
-                // The callee may throw to an enclosing catch clause, so whatever those clauses need stays live across the call.
+                // The callee may throw to an enclosing catch clause.
+                // So whatever those clauses need stays live across the call.
                 live.extend(self.catch_live.iter().copied());
                 for a in args {
                     expr_reads(a, &mut live);
@@ -865,8 +920,14 @@ impl Liveness {
                 l
             }
             Stmt::Loop { label, body } => {
-                // Fixpoint on the live set at the loop head: a back edge re-enters the body, and falling off its end exits the loop.
-                // An enclosing loop re-enters this one with inputs that only grow, and the transfer functions are monotone, so the previous convergence is at or below the new least fixpoint and iterating from it reaches that same least fixpoint. Starting over from the empty set costs one full fixpoint per entry, which doubles the body passes per nesting level.
+                // Fixpoint on the live set at the loop head.
+                // A back edge re-enters the body, and falling off its end exits the loop.
+                // An enclosing loop re-enters this one with inputs that only grow.
+                // The transfer functions are monotone.
+                // So the previous convergence is at or below the new least fixpoint.
+                // Iterating from it then reaches that same least fixpoint.
+                // Starting over from the empty set costs one full fixpoint per entry.
+                // That doubles the body passes per nesting level.
                 let mut head = self.loop_heads.get(&label.id).cloned().unwrap_or_default();
                 loop {
                     self.labels.insert(label.id, head.clone());
@@ -918,7 +979,10 @@ impl Liveness {
                 }
                 l
             }
-            // A tail call ends this frame, so nothing after it is live, and `catch_live` does not survive it either: the callee runs once the enclosing handlers are gone, so what it throws cannot reach them.
+            // A tail call ends this frame, so nothing after it is live.
+            // `catch_live` does not survive it either.
+            // The callee runs once the enclosing handlers are gone.
+            // So what it throws cannot reach them.
             Stmt::ReturnCall { args, .. } => {
                 let mut l = BTreeSet::new();
                 for a in args {
@@ -1044,7 +1108,9 @@ mod tests {
     }
 
     /// `l1` counts to `l0`; `l2` accumulates `l3 = l1 * l1` per iteration.
-    /// The extractable span is the two leading statements: the count update reads the back edge's own condition local, and the back edge itself targets the loop.
+    /// The extractable span is the two leading statements.
+    /// The count update reads the back edge's own condition local.
+    /// The back edge itself targets the loop.
     fn accumulate_body() -> Vec<Stmt> {
         vec![
             local_set(1, Expr::I32Const(0)),
@@ -1082,7 +1148,8 @@ mod tests {
 
         let synth = &out.funcs[1];
         let ty = &out.types[synth.type_idx as usize];
-        // The count local and the accumulator flow in; the accumulator flows back out; the scratch local stays inside.
+        // The count local and the accumulator flow in, and the accumulator flows back out.
+        // The scratch local stays inside.
         assert_eq!(ty.params, vec![ValType::I32, ValType::I32]);
         assert_eq!(ty.results, vec![ValType::I32]);
         assert_eq!(synth.locals, vec![ValType::I32]);
@@ -1109,7 +1176,9 @@ mod tests {
 
     #[test]
     fn extracts_past_a_leading_exit_branch() {
-        // Head-tested shape: the loop opens with its own exit branch, does the work, then takes the back edge; the work in between is the extractable run.
+        // Head-tested shape: the loop opens with its own exit branch and does the work.
+        // It then takes the back edge.
+        // The work in between is the extractable run.
         let body = vec![
             Stmt::Block {
                 label: Label {

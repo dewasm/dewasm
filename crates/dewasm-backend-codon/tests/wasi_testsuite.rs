@@ -1,5 +1,9 @@
-//! Codon side of the official WASI p1 conformance harness: drives the prebuilt `WebAssembly/wasi-testsuite` modules through the Codon backend's standalone interface.
-//! Codon is compiled, so it overrides `pty_command` to `codon build` the generated program to a content-addressed cache binary (with the runtime dylibs copied beside it, so the manifest-only child environment needs no loader-path variable).
+//! Codon side of the official WASI p1 conformance harness.
+//! It drives the prebuilt `WebAssembly/wasi-testsuite` modules.
+//! They run through the Codon backend's standalone interface.
+//! Codon is compiled, so it overrides `pty_command` to `codon build` the generated program.
+//! The build goes to a content-addressed cache binary, with the runtime dylibs copied beside it.
+//! So the manifest-only child environment needs no loader-path variable.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
@@ -15,7 +19,8 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
-/// The pull-request category: no filesystem fixture, one trial per always-on interface (args, environ, stdout, exit, random, stdio round-trip).
+/// The pull-request category: no filesystem fixture, one trial per always-on interface.
+/// Those interfaces are args, environ, stdout, exit, random, and stdio round-trip.
 const FAST_TRIALS: &[&str] = &[
     "assemblyscript/args_get-multiple-arguments",
     "assemblyscript/environ_get-multiple-variables",
@@ -25,8 +30,16 @@ const FAST_TRIALS: &[&str] = &[
     "rust/stdio",
 ];
 
-/// What `slow_test` adds on top of [`FAST_TRIALS`] (the union is built in `curated_trials`, so the slow category is a superset by construction): the trials pinning the layout-decode paths (stat and dirent, this backend's platform-conditional risk area), the open/read/write core, and the `sock_shutdown` rows so the failure ledger stays exercised.
-/// Sized against the slow category's budget: each trial pays a codon build, so breadth beyond this list belongs to the ultra sweep.
+/// What `slow_test` adds on top of [`FAST_TRIALS`].
+/// The union is built in `curated_trials`, so the slow category is a superset by construction.
+/// The added trials are:
+/// - the trials pinning the layout-decode paths (stat and dirent);
+///   those are this backend's platform-conditional risk area;
+/// - the open/read/write core;
+/// - the `sock_shutdown` rows, so the failure ledger stays exercised.
+///
+/// It is sized against the slow category's budget.
+/// Each trial pays a codon build, so breadth beyond this list belongs to the ultra sweep.
 const SLOW_EXTRA_TRIALS: &[&str] = &[
     "c/sock_shutdown-invalid_fd",
     "c/sock_shutdown-not_sock",
@@ -68,7 +81,10 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
         WASI_TESTSUITE_EXPECTED_FAILURES
     }
 
-    /// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into every process environment, so count-exact environ assertions cannot hold there; a Codon binary on Linux inherits exactly the manifest environment, so these pass and must not be listed.
+    /// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into every process environment.
+    /// So count-exact environ assertions cannot hold there.
+    /// A Codon binary on Linux inherits exactly the manifest environment.
+    /// So these pass there and must not be listed.
     fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
         &[
             (
@@ -86,7 +102,10 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
         ]
     }
 
-    /// Every trial is a codon build, so the suite is tiered like the spec harness: a handful of no-fixture trials on a pull request, one representative per interface area under `slow_test`, and the full sweep only under `ultra_slow_test`.
+    /// Every trial is a codon build, so the suite is split into categories like the spec harness.
+    /// A pull request runs a handful of no-fixture trials.
+    /// Under `slow_test` it runs one representative per interface area.
+    /// The full sweep runs only under `ultra_slow_test`.
     fn curated_trials(&self) -> Option<&'static [&'static str]> {
         if cfg!(feature = "ultra_slow_test") {
             None

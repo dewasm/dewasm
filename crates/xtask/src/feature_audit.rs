@@ -1,9 +1,15 @@
-//! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate, plus its WASI preview 1 import surface.
+//! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate.
+//! The report also lists its WASI preview 1 import surface.
 //!
-//! This is the app audit test: before an app is pinned as a conversion target, run this command on its binary; an app that needs a proposal outside the accepted input (wasm 1.0 + the universally-emitted baseline + the final exception-handling proposal) is deferred and documented in `agents/apps-audit.md`.
-//! Exception handling never defers an app by itself: it is accepted input that each backend declares individually, and a backend without the lowering rejects at conversion time.
+//! This is the app audit test: run it on an app's binary before the app is pinned as a target.
+//! The accepted input is wasm 1.0, the universally-emitted baseline, and final exception handling.
+//! An app that needs a proposal outside it is deferred and documented in `agents/apps-audit.md`.
+//! Exception handling never defers an app by itself.
+//! It is accepted input that each backend declares individually.
+//! A backend without the lowering rejects it at conversion time.
 //!
-//! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than `dewasm-core`'s `Feature` enum, so it keeps naming proposals the converter itself no longer models.
+//! Deliberately built on raw `wasmparser::WasmFeatures` bits rather than `dewasm-core`'s `Feature`.
+//! It then keeps naming proposals the converter itself no longer models.
 
 use std::collections::BTreeMap;
 
@@ -11,7 +17,8 @@ use anyhow::{bail, Context, Result};
 use wasmparser::{Parser, Payload, TypeRef, Validator, WasmFeatures};
 
 /// The universal baseline: wasm 1.0 plus the extensions every current toolchain emits.
-/// Exception handling sits on top as accepted input with per-backend lowering, handled separately in the verdict.
+/// Exception handling sits on top as accepted input with per-backend lowering.
+/// The verdict handles it separately.
 fn baseline() -> WasmFeatures {
     WasmFeatures::WASM1
         | WasmFeatures::SIGN_EXTENSION
@@ -20,7 +27,8 @@ fn baseline() -> WasmFeatures {
         | WasmFeatures::BULK_MEMORY
 }
 
-/// Every post-baseline proposal this toolchain's validator knows, with the extra bits it implies (e.g. relaxed-simd needs simd).
+/// Every post-baseline proposal this toolchain's validator knows, with the extra bits it implies.
+/// For example, relaxed-simd needs simd.
 fn proposals() -> Vec<(&'static str, WasmFeatures)> {
     vec![
         ("reference-types", WasmFeatures::REFERENCE_TYPES),
@@ -49,7 +57,8 @@ fn validates(bytes: &[u8], extra: &[(&str, WasmFeatures)]) -> bool {
         .is_ok()
 }
 
-/// Greedy minimization, same shape as `classify_validation_failure` in `dewasm-core`'s `module.rs`: start from all known proposals, drop any whose absence still validates.
+/// Greedy minimization, same shape as `classify_validation_failure` in `dewasm-core`'s `module.rs`.
+/// Start from all known proposals, and drop any whose absence still validates.
 fn minimal_proposals(bytes: &[u8]) -> Option<Vec<&'static str>> {
     let mut active = proposals();
     if !validates(bytes, &active) {
@@ -65,7 +74,8 @@ fn minimal_proposals(bytes: &[u8]) -> Option<Vec<&'static str>> {
     Some(active.into_iter().map(|(name, _)| name).collect())
 }
 
-/// Imports grouped by module, so the WASI p1 surface an app actually uses is visible next to the feature verdict.
+/// Imports grouped by module.
+/// The WASI p1 surface an app actually uses is then visible next to the feature verdict.
 fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
     let mut by_module: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for payload in Parser::new(0).parse_all(bytes) {
@@ -88,11 +98,16 @@ fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
     by_module
 }
 
-/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled, so wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit while using no construct from the proposal.
-/// Distinguish that encoding artifact from a real use: return a description of the first genuine reference-types construct, or `None` if the module is MVP-shaped.
+/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled.
+/// So wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit.
+/// They still use no construct from the proposal.
+/// Distinguish that encoding artifact from a real use.
+/// Return a description of the first genuine reference-types construct.
+/// Return `None` if the module is MVP-shaped.
 fn first_ref_types_construct(bytes: &[u8]) -> Option<String> {
     use wasmparser::{AbstractHeapType, CompositeInnerType, HeapType, Operator, ValType};
-    // exnref (and its non-null form) belongs to the exception-handling proposal; this scan must not claim it for reference-types.
+    // exnref (and its non-null form) belongs to the exception-handling proposal.
+    // This scan must not claim it for reference-types.
     let is_ref = |ty: &ValType| match ty {
         ValType::Ref(r) => !matches!(
             r.heap_type(),
@@ -200,7 +215,8 @@ fn audit(path: &str) -> Result<bool> {
             true
         }
         Some(needed) => {
-            // Exception handling and tail calls are accepted input, lowered per backend; only the remaining proposals can push an app out of scope.
+            // Exception handling and tail calls are accepted input, lowered per backend.
+            // Only the remaining proposals can push an app out of scope.
             const PER_BACKEND: [&str; 2] = ["exception-handling", "tail-call"];
             let blocking: Vec<&str> = needed
                 .iter()
@@ -236,7 +252,9 @@ fn audit(path: &str) -> Result<bool> {
                     "{name}: needs {}, outside the accepted input",
                     blocking.join(", ")
                 );
-                // Name the first offending construct so the audit record can say *why* the proposal is required, not just that it is.
+                // Name the first offending construct.
+                // The audit record can then say *why* the proposal is required.
+                // It does not just say that it is.
                 if let Err(err) =
                     Validator::new_with_features(baseline() | WasmFeatures::EXCEPTIONS)
                         .validate_all(&bytes)
@@ -267,7 +285,8 @@ pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
     for path in &paths {
         all_clean &= audit(path)?;
     }
-    // Failing when any binary needs out-of-scope features lets scripts branch on the verdict; the human decision (defer vs. rethink) is recorded in agents/apps-audit.md.
+    // Failing when any binary needs out-of-scope features lets scripts branch on the verdict.
+    // The human decision (defer vs. rethink) is recorded in agents/apps-audit.md.
     if all_clean {
         Ok(())
     } else {

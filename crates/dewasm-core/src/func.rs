@@ -1,9 +1,18 @@
-//! Translate a wasm function body (stack machine) into structured IR with build-time expression folding.
+//! Translate a wasm function body (stack machine) into structured IR.
+//! The translation folds expressions at build time.
 //!
 //! The operand stack is modeled as a stack of `Slot`s.
-//! Each pushed value is kept as a *pending* expression (with its read/trap `Effects` and node count) rather than being materialized into a temp immediately.
-//! A pending is spilled to a temp (`sN = <expr>`) only when a later statement's effects could be observed by it, when a temp slot it reads is about to be written (`spill_clobbered`), when it crosses a control-flow boundary, or when a consumer would grow it past `MAX_FOLD_SIZE` nodes.
-//! Single-use values thus fold directly into their consumer, cutting the statement count for every backend.
+//! Each pushed value is kept as a *pending* expression with its read/trap `Effects` and node count.
+//! It is not materialized into a temp immediately.
+//! A pending is spilled to a temp (`sN = <expr>`) only in these cases:
+//!
+//! - it could observe a later statement's effects;
+//! - a temp slot it reads is about to be written (`spill_clobbered`);
+//! - it crosses a control-flow boundary;
+//! - a consumer would grow it past `MAX_FOLD_SIZE` nodes.
+//!
+//! Single-use values thus fold directly into their consumer.
+//! That cuts the statement count for every backend.
 //! Evaluation order and trap points are preserved by the spill discipline.
 //! Dead code after an unconditional branch is skipped while tracking block nesting only.
 
@@ -21,15 +30,22 @@ use crate::module::{unsupported, val_type};
 
 /// Node-count cap for a folded expression tree.
 /// Once a consumer would build a tree larger than this, its operands are spilled to temps first.
-/// The cap keeps the generated expressions shallow enough not to blow the recursive descent parser of any target language (Ruby/Python and friends parse expressions recursively and have finite stack budgets), and bounds the worst-case textual blow-up of backends whose inline lowerings duplicate an operand.
+/// The cap keeps the generated expressions shallow.
+/// Deeper ones could exhaust the recursive descent parser of a target language.
+/// Ruby, Python, and similar languages parse expressions recursively and have finite stack budgets.
+/// Some backends' inline lowerings duplicate an operand.
+/// The cap also bounds the worst-case text growth of those backends.
 const MAX_FOLD_SIZE: u32 = 32;
 
-/// Side effects a pending expression carries, used to decide when it must be spilled before a later statement so it cannot observe that statement's effect (or so its own trap fires at the right point).
+/// Side effects a pending expression carries.
+/// They decide when it must be spilled before a later statement.
+/// Then it cannot observe that statement's effect, and its own trap fires at the right point.
 #[derive(Clone, Copy, Default)]
 struct Effects {
     /// Bitmask of read locals with index < 64.
     locals: u64,
-    /// A local with index >= 64 is read (a conservative catch-all so the bitmask stays a single word).
+    /// A local with index >= 64 is read.
+    /// This is a conservative catch-all, so the bitmask stays a single word.
     any_high_local: bool,
     /// Reads a global.
     globals: bool,
@@ -38,8 +54,11 @@ struct Effects {
     /// May trap (a load, a divide/remainder, or a non-saturating float->int truncation).
     trap: bool,
     /// Deepest temp slot the expression reads, if it reads any.
-    /// Temps are keyed by stack depth and a depth is reused as soon as it is free, while folding a k-ary operator pushes its result at the depth of its *first* operand, so a pending at depth d legitimately keeps reading temps at depths above d.
-    /// Writing a temp at a depth this pending still reads would silently replace an operand, so `spill_clobbered` materializes the pending first.
+    /// Temps are keyed by stack depth, and a depth is reused as soon as it is free.
+    /// Folding a k-ary operator pushes its result at the depth of its *first* operand.
+    /// So a pending at depth d legitimately keeps reading temps at depths above d.
+    /// Writing a temp at a depth this pending still reads would silently replace an operand.
+    /// So `spill_clobbered` materializes the pending first.
     max_temp_read: Option<u32>,
 }
 
@@ -93,7 +112,8 @@ struct Slot {
 
 pub struct FuncBuilder<'a> {
     module: &'a ir::Module,
-    /// Type indices of all defined functions (the code section is being translated, so `module.funcs` is still incomplete).
+    /// Type indices of all defined functions.
+    /// The code section is being translated, so `module.funcs` is still incomplete.
     defined_func_types: &'a [u32],
     type_idx: u32,
     /// params ++ declared locals
@@ -107,11 +127,19 @@ pub struct FuncBuilder<'a> {
     /// DWARF line table for source back-mapping, when `--dwarf-line` is on.
     /// `None` leaves the whole marker path inert.
     line_table: Option<&'a LineTable>,
-    /// The most recent source position resolved from an operator's offset while streaming this body.
-    /// Updated per operator (holding its last *known* value across offsets that map to nothing), then consulted when a statement is emitted.
-    /// Tracking it as operators stream (rather than resolving only the emit-triggering operator) is what lets a folded expression (whose consuming operator, e.g. the function `end`, may sit on a line-table gap) still carry the source line of the operators that built it.
+    /// The most recent source position resolved from an operator's offset.
+    /// It is resolved while streaming this body.
+    /// Updated per operator, then consulted when a statement is emitted.
+    /// It holds its last *known* value across offsets that map to nothing.
+    /// It is tracked as operators stream.
+    /// It is not resolved only for the emit-triggering operator.
+    /// A folded expression's consuming operator may sit on a line-table gap.
+    /// The function `end` is an example.
+    /// Then the expression still carries the source line of the operators that built it.
     cur_pos: Option<SourcePos>,
-    /// The last source position actually emitted as a marker in this function, so only change points produce one (per-function: reset for every body).
+    /// The last source position emitted as a marker in this function.
+    /// Only change points then produce one.
+    /// It is per-function: reset for every body.
     last_pos: Option<SourcePos>,
 }
 
@@ -124,8 +152,9 @@ enum FrameKind {
         /// Set when the `else` keyword is reached.
         then_body: Option<Vec<Stmt>>,
     },
-    /// `try_table` with at least one catch clause (a catchless one is a plain block).
-    /// Clauses are resolved before the frame is pushed: their labels are relative to the enclosing context.
+    /// `try_table` with at least one catch clause; a catchless one is a plain block.
+    /// Clauses are resolved before the frame is pushed.
+    /// Their labels are relative to the enclosing context.
     TryTable {
         catches: Vec<ir::CatchClause>,
     },
@@ -207,8 +236,11 @@ impl<'a> FuncBuilder<'a> {
         self.cur().stmts.push(stmt);
     }
 
-    /// Resolve `offset` (an operator's module-file position) against the line table and remember it as the current source position, so the next emitted statement can be annotated.
-    /// An offset that maps to nothing (a line-table gap or `end_sequence` boundary) leaves the last known position in place rather than clearing it.
+    /// Resolve `offset` (an operator's module-file position) against the line table.
+    /// Remember it as the current source position, so the next emitted statement can be annotated.
+    /// An offset that maps to nothing keeps the last known position.
+    /// Such an offset is a line-table gap or an `end_sequence` boundary.
+    /// It does not clear it.
     /// A no-op without a line table.
     fn track_source_pos(&mut self, offset: usize) {
         let Some(table) = self.line_table else {
@@ -219,7 +251,9 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted, or `None` when the current source position is unchanged from the last marker emitted (change points only) or back-mapping is off.
+    /// The [`Stmt::SourceLine`] marker to place before the statement about to be emitted.
+    /// `None` when the current source position equals the last marker emitted (change points only).
+    /// Also `None` when back-mapping is off.
     fn source_marker(&mut self) -> Option<Stmt> {
         self.line_table?;
         let pos = self.cur_pos?;
@@ -230,7 +264,8 @@ impl<'a> FuncBuilder<'a> {
         Some(Stmt::SourceLine(pos))
     }
 
-    /// Push a value that is materialized immediately: the ones that never fold (call results, `memory.grow`), and `spill`'s.
+    /// Push a value that is materialized immediately.
+    /// Those are the ones that never fold (call results, `memory.grow`), and `spill`'s.
     fn push_temp(&mut self, ty: ValType) -> Temp {
         let depth = self.stack.len() as u32;
         self.spill_clobbered(depth);
@@ -294,11 +329,19 @@ impl<'a> FuncBuilder<'a> {
         });
     }
 
-    /// A temp at depth `depth` (or above) is about to be written: spill every pending that still reads a temp that deep, so its operand is read before the write replaces it.
-    /// Every temp write goes through `push_temp` (results of a call, `memory.grow`) or `spill` (the assignment it emits), so those two call this and nothing else has to.
+    /// A temp at depth `depth` (or above) is about to be written.
+    /// Spill every pending that still reads a temp that deep.
+    /// Its operand is then read before the write replaces it.
+    /// Every temp write goes through `push_temp` (results of a call, `memory.grow`).
+    /// Or it goes through `spill` (the assignment it emits).
+    /// So those two call this, and nothing else has to.
     ///
-    /// Only slots below `depth` can be at risk: a pending at depth d is built from slots at depths >= d, so it never reads a temp below its own slot.
-    /// Spilling one of them writes its own, shallower temp, which is why `spill` re-enters here; the recursion walks strictly downwards and each level emits before its caller, keeping the assignments in ascending-depth (= wasm evaluation) order.
+    /// Only slots below `depth` can be at risk.
+    /// A pending at depth d is built from slots at depths >= d.
+    /// So it never reads a temp below its own slot.
+    /// Spilling one of them writes its own, shallower temp, which is why `spill` re-enters here.
+    /// The recursion walks strictly downwards, and each level emits before its caller.
+    /// That keeps the assignments in ascending-depth (= wasm evaluation) order.
     fn spill_clobbered(&mut self, depth: u32) {
         for idx in 0..self.stack.len().min(depth as usize) {
             let hit = self.stack[idx]
@@ -311,7 +354,8 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Spill every pending whose effects match `pred`, in ascending depth order (= wasm evaluation order, so their statements and traps land in the right sequence).
+    /// Spill every pending whose effects match `pred`, in ascending depth order.
+    /// That is wasm evaluation order, so their statements and traps land in the right sequence.
     fn spill_if(&mut self, pred: impl Fn(&Effects) -> bool) {
         for idx in 0..self.stack.len() {
             let hit = match &self.stack[idx].pending {
@@ -403,7 +447,9 @@ impl<'a> FuncBuilder<'a> {
 
     fn select(&mut self) {
         // Stack: [then, els, cond] with cond on top.
-        // The backends lower Select to a conditionally-evaluated ternary, so a trapping then/els arm (which wasm evaluates eagerly) must be spilled to keep its trap.
+        // The backends lower Select to a conditionally-evaluated ternary.
+        // Wasm evaluates both arms eagerly.
+        // So a trapping then/els arm must be spilled to keep its trap.
         // The cond folds freely.
         let n = self.stack.len();
         let cond_i = n - 1;
@@ -480,8 +526,12 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Resolve one `try_table` catch clause.
-    /// The exception payload (the tag's parameters, plus the exnref for the `_ref` kinds) is written into the target frame's slots directly: the same arithmetic as [`Self::branch_target`], but sourced from the exception instead of the stack, so the branch itself carries no assigns.
-    /// Called before the `try_table` frame is pushed, because the spec validates catch labels against the enclosing context.
+    /// The exception payload is the tag's parameters, plus the exnref for the `_ref` kinds.
+    /// It is written into the target frame's slots directly.
+    /// That is the same arithmetic as [`Self::branch_target`], sourced from the exception.
+    /// Since the source is not the stack, the branch itself carries no assigns.
+    /// Called before the `try_table` frame is pushed.
+    /// The spec validates catch labels against the enclosing context.
     fn catch_clause(
         &mut self,
         captures_exnref: bool,
@@ -539,7 +589,9 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// Resolve a branch depth into a target, computing the moves from the current stack top into the target frame's result (or loop param) slots.
+    /// Resolve a branch depth into a target.
+    /// Compute the moves from the current stack top into the target frame's slots.
+    /// Those are its result slots, or its param slots for a loop.
     /// Marks the target label as referenced.
     /// The caller must have spilled the stack first, so the sources read from materialized temps.
     fn branch_target(&mut self, relative_depth: u32) -> BrTarget {
@@ -600,7 +652,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_else(&mut self) {
-        // Materialize the then-branch's fallthrough values (into the frame's result slots) before capturing its body.
+        // Materialize the then-branch's fallthrough values into the frame's result slots.
+        // Do it before capturing its body.
         // Skipped when the then branch ended unreachable (its stack shape is stale).
         if !self.cur().unreachable {
             self.spill_all();
@@ -622,7 +675,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn handle_end(&mut self) {
-        // Spill the frame's live values into its own body before it is popped (so control-boundary-crossing temps are materialized).
+        // Spill the frame's live values into its own body before it is popped.
+        // Then control-boundary-crossing temps are materialized.
         // The function frame folds its fallthrough return instead.
         let is_func = matches!(self.cur().kind, FrameKind::Func);
         if !self.cur().entered_dead && !self.cur().unreachable && !is_func {
@@ -631,7 +685,8 @@ impl<'a> FuncBuilder<'a> {
 
         let frame = self.frames.pop().expect("frame stack is not empty");
         if frame.entered_dead {
-            // The whole frame was dead code; the parent stays unreachable and the stack was never touched.
+            // The whole frame was dead code.
+            // The parent stays unreachable, and the stack was never touched.
             return;
         }
 
@@ -644,7 +699,9 @@ impl<'a> FuncBuilder<'a> {
                     for i in (0..arity).rev() {
                         values[i] = self.pop_expr().0;
                     }
-                    // The fallthrough return does not route through `emit`, so annotate it here too; folded bodies frequently collapse to just this statement.
+                    // The fallthrough return does not route through `emit`.
+                    // So annotate it here too.
+                    // Folded bodies frequently collapse to just this statement.
                     if let Some(marker) = self.source_marker() {
                         body.push(marker);
                     }
@@ -660,7 +717,8 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             kind => {
-                // Fallthrough values already live at the result slots; formally rebuild the stack shape for the parent frame.
+                // Fallthrough values already live at the result slots.
+                // Formally rebuild the stack shape for the parent frame.
                 self.stack.truncate(frame.base);
                 for ty in &frame.results {
                     self.push_temp(*ty);
@@ -713,7 +771,8 @@ impl<'a> FuncBuilder<'a> {
                         });
                     }
                     FrameKind::TryTable { catches } => {
-                        // Always emitted, never spliced: the catch clauses matter even when nothing branches to the try_table's own label.
+                        // Always emitted, never spliced, even if nothing branches to its own label.
+                        // The catch clauses matter in that case too.
                         self.emit(Stmt::TryTable {
                             label: Label {
                                 id: frame.label_id,
@@ -764,7 +823,8 @@ impl<'a> FuncBuilder<'a> {
             // control flow
             Operator::Nop => {}
             Operator::Unreachable => {
-                // A pending OOB load must trap with its own message before the "unreachable" trap, so resolve trapping pendings first.
+                // A pending OOB load must trap with its own message before the "unreachable" trap.
+                // So resolve trapping pendings first.
                 self.spill_if(|fx| fx.trap);
                 self.emit(Stmt::Unreachable);
                 self.cur().unreachable = true;
@@ -828,7 +888,8 @@ impl<'a> FuncBuilder<'a> {
                 for i in (0..arity).rev() {
                     args[i] = self.pop_expr().0;
                 }
-                // A deeper pending that traps is evaluated before the throw in wasm, and the throw discards it, so flush it first.
+                // A deeper pending that traps is evaluated before the throw in wasm.
+                // The throw discards it, so flush it first.
                 self.spill_if(|fx| fx.trap);
                 self.emit(Stmt::Throw {
                     tag: tag_index,
@@ -845,7 +906,9 @@ impl<'a> FuncBuilder<'a> {
             Operator::Br { relative_depth } => {
                 let idx = self.frames.len() - 1 - relative_depth as usize;
                 if matches!(self.frames[idx].kind, FrameKind::Func) {
-                    // A branch to the function frame is a return: fold the values, but first flush any deeper trapping pending that wasm would have evaluated before the branch.
+                    // A branch to the function frame is a return: fold the values.
+                    // First flush any deeper trapping pending.
+                    // Wasm would have evaluated it before the branch.
                     let arity = self.frames[idx].results.len();
                     let mut values = vec![Expr::I32Const(0); arity];
                     for i in (0..arity).rev() {
@@ -862,8 +925,10 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::BrIf { relative_depth } => {
                 let (cond, _, _) = self.pop_expr();
-                // A not-taken br_if must leave the operands reusable, and branch_target reads them at canonical depths, so materialize the whole stack.
-                // Return values are not folded under br_if (the not-taken path would double-consume them).
+                // A not-taken br_if must leave the operands reusable.
+                // branch_target reads them at canonical depths, so materialize the whole stack.
+                // Return values are not folded under br_if.
+                // The not-taken path would double-consume them.
                 self.spill_all();
                 let target = self.branch_target(relative_depth);
                 self.emit(Stmt::BrIf { cond, target });
@@ -895,7 +960,8 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::Call { function_index } => {
                 let ty = self.func_type_of(function_index).clone();
-                // A call can read/write globals and memory and can trap; pending values that observe any of those must be spilled.
+                // A call can read/write globals and memory and can trap.
+                // Pending values that observe any of those must be spilled.
                 // Pure-local args survive and fold into the call.
                 self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let mut args = vec![Expr::I32Const(0); ty.params.len()];
@@ -946,7 +1012,10 @@ impl<'a> FuncBuilder<'a> {
                 table_index,
                 ..
             } => {
-                // Spill effectful operands (and deeper pendings) first: this both preserves wasm order and makes the remaining index/arg fragments pure, so a backend that evaluates the index before the args cannot reorder an observable effect.
+                // Spill effectful operands (and deeper pendings) first.
+                // This preserves wasm order and makes the remaining index/arg fragments pure.
+                // A backend may evaluate the index before the args.
+                // It then cannot reorder an observable effect.
                 self.spill_if(|fx| fx.globals || fx.memory || fx.trap);
                 let ty = self.module.types[type_index as usize].clone();
                 let (index, _, _) = self.pop_expr();
@@ -964,7 +1033,8 @@ impl<'a> FuncBuilder<'a> {
                 });
             }
             Operator::Drop => {
-                // A dropped value with a pending trap must still evaluate so the trap fires; a pure one is simply discarded.
+                // A dropped value with a pending trap must still evaluate so the trap fires.
+                // A pure one is discarded.
                 let top = self.stack.len() - 1;
                 if self.slot_traps(top) {
                     self.spill(top);
@@ -972,7 +1042,8 @@ impl<'a> FuncBuilder<'a> {
                 self.pop_expr();
             }
             Operator::TypedSelect { ty } => {
-                // A numeric typed select is just an annotated select; a ref-typed one is a reference-types construct.
+                // A numeric typed select is an annotated select.
+                // A ref-typed one is a reference-types construct.
                 val_type(ty)?;
                 self.select();
             }
@@ -990,7 +1061,8 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::LocalSet { local_index } => {
                 let (value, _, _) = self.pop_expr();
-                // Earlier pendings that read this local must observe its old value, so spill them before the assignment.
+                // Earlier pendings that read this local must observe its old value.
+                // So spill them before the assignment.
                 self.spill_if(|fx| fx.reads_local(local_index));
                 self.emit(Stmt::LocalSet {
                     idx: local_index,
@@ -1005,7 +1077,8 @@ impl<'a> FuncBuilder<'a> {
                     idx: local_index,
                     expr: value,
                 });
-                // The value stays on the stack; a later `local.set` on the same local spills this via the reads-local rule.
+                // The value stays on the stack.
+                // A later `local.set` on the same local spills this via the reads-local rule.
                 self.push_pending(
                     ty,
                     Expr::LocalGet(local_index),
@@ -1023,7 +1096,8 @@ impl<'a> FuncBuilder<'a> {
             }
             Operator::GlobalSet { global_index } => {
                 let (value, _, _) = self.pop_expr();
-                // Post-trap global state is observable (the spec asserts it), so spill both global reads and trapping pendings first.
+                // Post-trap global state is observable (the spec asserts it).
+                // So spill both global reads and trapping pendings first.
                 self.spill_if(|fx| fx.globals || fx.trap);
                 self.emit(Stmt::GlobalSet {
                     idx: global_index,
@@ -1130,7 +1204,9 @@ impl<'a> FuncBuilder<'a> {
                 self.emit(Stmt::ElemDrop { seg: elem_index });
             }
 
-            // reference types: the validator tolerates the encoding (features() keeps the bit for overlong call_indirect immediates), but every actual construct is rejected.
+            // reference types: the validator tolerates the encoding.
+            // Every actual construct is rejected.
+            // features() keeps the bit for overlong call_indirect immediates.
             Operator::RefNull { .. }
             | Operator::RefFunc { .. }
             | Operator::RefIsNull
@@ -1331,7 +1407,8 @@ fn bin_traps(op: BinOp) -> bool {
     )
 }
 
-/// Unary ops that may trap: the non-saturating float->int truncations (the saturating `*_sat_*` forms do not trap).
+/// Unary ops that may trap: the non-saturating float->int truncations.
+/// The saturating `*_sat_*` forms do not trap.
 fn un_traps(op: UnOp) -> bool {
     use UnOp::*;
     matches!(
@@ -1348,7 +1425,9 @@ fn un_traps(op: UnOp) -> bool {
 }
 
 /// Attribute an untranslated operator to a feature.
-/// Operators controlled by validator features never reach this point; what does reach it are the families our base validation accepts: an unclassified operator here is a dewasm bug and the spec harness treats it as such.
+/// Operators controlled by validator features never reach this point.
+/// What does reach it are the families our base validation accepts.
+/// An unclassified operator here is a dewasm bug, and the spec harness treats it as such.
 fn classify_op(name: &str) -> Option<Feature> {
     let starts = |prefixes: &[&str]| prefixes.iter().any(|p| name.starts_with(p));
     if starts(&[
@@ -1381,7 +1460,9 @@ fn classify_op(name: &str) -> Option<Feature> {
     ]) {
         Some(Feature::Gc)
     } else if starts(&["Try", "Catch", "Delegate", "Rethrow", "Throw"]) {
-        // The retired `try`/`catch`/`rethrow`/`delegate` encoding: refused at validation (`LEGACY_EXCEPTIONS` is off), so this only attributes a form that reaches the builder some other way.
+        // The retired `try`/`catch`/`rethrow`/`delegate` encoding is refused at validation.
+        // `LEGACY_EXCEPTIONS` is off.
+        // So this only attributes a form that reaches the builder some other way.
         Some(Feature::ExceptionHandling)
     } else if name.contains("Atomic") {
         Some(Feature::Threads)

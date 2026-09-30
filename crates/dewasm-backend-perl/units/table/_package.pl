@@ -1,4 +1,8 @@
-# One slot per element: a [type_key, coderef] pair for funcref tables, or undef for a null slot; a tail-calling function's pair carries a coderef for its body as an optional third element (table/tail_ref). call_indirect compares type keys, not module-local indices, so a shared table stays consistent across modules.
+# One slot per element: a [type_key, coderef] pair for funcref tables, or undef for a null slot.
+# A tail-calling function's pair carries a coderef for its body as an optional third element.
+# table/tail_ref reads that element.
+# call_indirect compares type keys, not module-local indices.
+# A shared table then stays consistent across modules.
 sub new {
     my ($class, $size, $max) = @_;
     return bless({

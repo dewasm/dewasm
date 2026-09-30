@@ -22,7 +22,8 @@ struct Cli {
     #[arg(short, long)]
     target: String,
 
-    /// Output mode: "library" exposes exports to the host language, "standalone" wires up WASI and runs _start.
+    /// Output mode: "library" exposes exports to the host language.
+    /// "standalone" sets up WASI and runs _start.
     #[arg(short, long, default_value = "library")]
     mode: String,
 
@@ -30,8 +31,10 @@ struct Cli {
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Library-mode name of the generated class/module/package, used verbatim and rejected if it does not fit the target language's grammar.
-    /// Required for --mode library; incompatible with --mode standalone, whose internal name is fixed.
+    /// Library-mode name of the generated class/module/package, used verbatim.
+    /// A name that does not fit the target language's grammar is rejected.
+    /// Required for --mode library.
+    /// Incompatible with --mode standalone, whose internal name is fixed.
     #[arg(long)]
     module_name: Option<String>,
 
@@ -40,7 +43,8 @@ struct Cli {
     #[arg(long)]
     no_default_wasi: bool,
 
-    /// Externalize data-segment bytes into a binary data file written to this path instead of embedding them as literals in the source.
+    /// Externalize data-segment bytes into a binary data file written to this path.
+    /// Without it they are embedded as literals in the source.
     #[arg(long)]
     data_file: Option<PathBuf>,
 
@@ -71,13 +75,17 @@ fn main() -> Result<()> {
     if cli.no_default_wasi && mode == Mode::Standalone {
         bail!("--no-default-wasi cannot be combined with --mode standalone");
     }
-    // A standalone artifact is a self-contained program; its internal class/package/prefix name is not part of any interface, so it is fixed per backend and naming it is a mistake worth reporting rather than ignoring.
+    // A standalone artifact is a self-contained program.
+    // Its internal class/package/prefix name is not part of any interface.
+    // So the name is fixed per backend.
+    // Naming it is then a mistake worth reporting rather than ignoring.
     if cli.module_name.is_some() && mode == Mode::Standalone {
         bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
-    // Data-segment externalization: opt-in; ruby/go/python/java/perl only, needs a real data-file path (not stdout).
-    // Reject the unsupported combinations at the front with a clear, attributed error rather than mis-emitting.
+    // Data-segment externalization is opt-in and supported for ruby/go/python/java/perl only.
+    // It needs a real data-file path (not stdout).
+    // Reject unsupported combinations first with a clear, attributed error instead of mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
             match cli.target.as_str() {
@@ -94,7 +102,8 @@ fn main() -> Result<()> {
                      must be written to a real path next to the generated program"
                 );
             }
-            // A --data-file resolving to the same file as -o would clobber the generated source; fail before anything is written.
+            // A --data-file resolving to the same file as -o would clobber the generated source.
+            // Fail before anything is written.
             if resolve_for_collision(path) == resolve_for_collision(&cli.output) {
                 bail!(
                     "--data-file {} resolves to the same file as the output path {}: \
@@ -113,8 +122,11 @@ fn main() -> Result<()> {
         None => None,
     };
 
-    // Library mode requires an explicit name: deriving one from the file name is an implicit mapping whose result depends on how the input happens to be stored, not on what the caller wants to embed.
-    // Standalone output never reads the name beyond the OutputFile label (checked above), so a fixed placeholder matching the fixed internal name is used.
+    // Library mode requires an explicit name.
+    // Deriving one from the file name is an implicit mapping.
+    // Its result depends on how the input is stored, not on what the caller wants to embed.
+    // Standalone output never reads the name beyond the OutputFile label (checked above).
+    // So a fixed placeholder matching the fixed internal name is used.
     let module_name = match (mode, cli.module_name) {
         (Mode::Standalone, _) => "program".to_string(),
         (Mode::Library, Some(name)) => name,
@@ -135,7 +147,8 @@ fn main() -> Result<()> {
         default_wasi: !cli.no_default_wasi,
         data_file,
     };
-    // Component-model binaries (layer 1) are out of scope: reject them at conversion time with a clear, attributed error.
+    // Component-model binaries (layer 1) are out of scope.
+    // Reject them at conversion time with a clear, attributed error.
     if dewasm_core::is_component(&bytes) {
         return Err(dewasm_core::feature::UnsupportedError::new(
             dewasm_core::feature::Feature::ComponentModel,
@@ -151,9 +164,13 @@ fn main() -> Result<()> {
     )?;
     let files = backend.generate(&module, &opts)?;
 
-    // Route by name: the data file (its `name` is the configured `data_file_name`) goes to `--data-file`'s path, the primary source to `-o`.
+    // Route by name: the data file goes to `--data-file`'s path, the primary source to `-o`.
+    // The data file is the one whose `name` is the configured `data_file_name`.
     let data_file_name = opts.data_file.as_ref().map(|c| c.data_file_name.as_str());
-    // A generated source sharing `data_file_name` (e.g. java's fixed `Main.java`) would be misrouted and clobbered: `matching > 1` = source and data file collide, `matching == files.len()` = no data file emitted and the match is the source itself.
+    // A generated source sharing `data_file_name` would be misrouted and clobbered.
+    // An example is java's fixed `Main.java`.
+    // `matching > 1` means the source and the data file collide.
+    // `matching == files.len()` means no data file was emitted and the match is the source itself.
     if let Some(name) = data_file_name {
         let matching = files.iter().filter(|f| f.name == name).count();
         if matching > 1 || matching == files.len() {
@@ -185,7 +202,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Canonicalize for the --data-file/-o collision check (the file, else parent + final component, else cwd-anchored absolute) so differently spelled paths compare equal.
+/// Canonicalize for the --data-file/-o collision check, so differently spelled paths compare equal.
+/// It tries the file, else parent + final component, else the cwd-anchored absolute path.
 fn resolve_for_collision(path: &Path) -> PathBuf {
     if let Ok(resolved) = path.canonicalize() {
         return resolved;

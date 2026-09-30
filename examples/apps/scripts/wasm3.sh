@@ -3,8 +3,11 @@
 # shellcheck source=common.sh
 
 # wasm3: a WebAssembly interpreter written in C, from its official wasm32-wasi release asset.
-# The asset is the meta-WASI build, which forwards the guest's WASI calls to the outer host: the shape a converted interpreter needs, and the reason this app takes the module directly with no `--wasi` flag.
-# Its dispatch is a musttail chain, so it needs the tail-call proposal; every backend but Bash lowers that, and Bash's e2e case is the one that stays commented out.
+# The asset is the meta-WASI build, which forwards the guest's WASI calls to the outer host.
+# That is the shape a converted interpreter needs.
+# It is also the reason this app takes the module directly with no `--wasi` flag.
+# Its dispatch is a musttail chain, so it needs the tail-call proposal.
+# Every backend but Bash lowers that; Bash's e2e case is the one that stays commented out.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

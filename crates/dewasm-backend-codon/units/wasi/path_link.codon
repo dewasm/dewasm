@@ -1,7 +1,8 @@
 # requires: memory/read_path, wasi/resolve_path, wasi/fs_errno
 def wasi_path_link(self, old_fd: UInt[32], old_flags: UInt[32], old_path_ptr: UInt[32], old_path_len: UInt[32], new_fd: UInt[32], new_path_ptr: UInt[32], new_path_len: UInt[32]) -> UInt[32]:
     from C import linkat(int, cobj, int, cobj, int) -> int
-    # path_link operates on the source link itself; SYMLINK_FOLLOW is rejected rather than silently dereferenced.
+    # path_link operates on the source link itself.
+    # SYMLINK_FOLLOW is rejected rather than silently dereferenced.
     if int(old_flags) & 0x1 != 0:
         return UInt[32](self.ERRNO_INVAL)
     old_rel = self.memory.read_path(int(old_path_ptr), int(old_path_len))

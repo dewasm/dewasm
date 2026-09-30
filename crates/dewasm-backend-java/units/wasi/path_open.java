@@ -5,14 +5,17 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
     // dirflags::SYMLINK_FOLLOW decides whether the final component is chased through a symlink.
-    // Without it (the default) a symlink final component is
-    // ELOOP, not silently opened as its target (the O_NOFOLLOW shape).
+    // Without it (the default), a symlink final component is ELOOP.
+    // It is not silently opened as its target (the O_NOFOLLOW shape).
     boolean follow = (dirflags & 0x1) != 0;
     Resolved r = resolve_path(dirfd, rel, follow);
     if (r.errno != WASI_OK) {
         return r.errno;
     }
-    // The opening dirfd must itself carry PATH_OPEN; O_TRUNC additionally spends the directory's PATH_FILESTAT_SET_SIZE right (truncation is a size change), both enforced with NOTCAPABLE.
+    // The opening dirfd must itself carry PATH_OPEN.
+    // O_TRUNC also spends the directory's PATH_FILESTAT_SET_SIZE right.
+    // Truncation is a size change.
+    // Both are enforced with NOTCAPABLE.
     if (lacksRight(dirfd, R_PATH_OPEN)) {
         return WASI_NOTCAPABLE;
     }
@@ -31,14 +34,17 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
     boolean trailingSlash = rel.endsWith("/");
     boolean exists = java.nio.file.Files.exists(hostPath);
     boolean isDir = java.nio.file.Files.isDirectory(hostPath);
-    // The parent directory fd's inheriting rights cap what any child fd may hold; the opened fd's filetype then masks that down to the directory- relevant or file-relevant rights.
+    // The parent directory fd's inheriting rights cap what any child fd may hold.
+    // The opened fd's filetype then masks that down.
+    // A directory keeps the directory-relevant rights, and a file the file-relevant ones.
     FdMeta dm = meta.get(dirfd);
     long dirInh = (dm != null) ? dm.inheriting : (DIR_RIGHTS | FILE_RIGHTS);
 
     if (isDir) {
-        // An existing directory, opened with or without O_DIRECTORY and with an optional trailing slash.
-        // Requesting write access to a directory is
-        // EISDIR (a directory has no byte stream to write).
+        // An existing directory, opened with or without O_DIRECTORY.
+        // It may carry an optional trailing slash.
+        // Requesting write access to a directory is EISDIR.
+        // A directory has no byte stream to write.
         if ((fsRightsBase & R_FD_WRITE) != 0) {
             return WASI_ISDIR;
         }
@@ -51,8 +57,9 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
         return exists ? WASI_NOTDIR : WASI_NOENT;
     } else if (trailingSlash) {
-        // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when missing, except O_CREAT, which must not create through the slash;
-        // per wasmtime: EINVAL on macOS, EISDIR on Linux.
+        // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when missing.
+        // O_CREAT is the exception: it must not create through the slash.
+        // Per wasmtime, that is EINVAL on macOS and EISDIR on Linux.
         if (exists) {
             return WASI_NOTDIR;
         }
@@ -70,8 +77,12 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         if (read || (!read && !write)) {
             opts.add(java.nio.file.StandardOpenOption.READ);
         }
-        // FileChannel.open silently ignores CREATE/CREATE_NEW/TRUNCATE_EXISTING unless the channel is opened for WRITE, so a create request with rights_base=0 would resolve to {READ, CREATE}, fail to create, and then error NoSuchFileException -> NOENT.
-        // Force WRITE whenever a create/truncate option is present; the fd's reported and enforced rights still come from the rights model below.
+        // FileChannel.open silently ignores CREATE/CREATE_NEW/TRUNCATE_EXISTING.
+        // It does so unless the channel is opened for WRITE.
+        // So a create request with rights_base=0 would resolve to {READ, CREATE}.
+        // It would fail to create, and then error NoSuchFileException -> NOENT.
+        // Force WRITE whenever a create/truncate option is present.
+        // The fd's reported and enforced rights still come from the rights model below.
         if (write || create || excl || trunc) {
             opts.add(java.nio.file.StandardOpenOption.WRITE);
         }

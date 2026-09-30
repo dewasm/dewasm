@@ -1,10 +1,23 @@
-//! Python side of the shared spec harness: converts modules with the Python backend, phrases assertions as Python (`check`/ `check_trap`/`check_exhaust`/`check_unlinkable` helpers, bit-exact float comparison via `Rt.f32_bits`/`Rt.f64_bits`), and runs the script with the `python3` on PATH.
+//! Python side of the shared spec harness.
+//! It converts modules with the Python backend and phrases assertions as Python.
+//! The helpers are `check`/`check_trap`/`check_exhaust`/`check_unlinkable`.
+//! Float comparison is bit-exact via `Rt.f32_bits`/`Rt.f64_bits`.
+//! It runs the script with the `python3` on PATH.
 //! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Python facts shape the phrasing:
-//! - Assertions are passed as zero-arg lambdas because Python has no statement blocks; the value under test is bound inside the lambda with an inner `(lambda __r: (<cmp>, __r))(<call>)`.
-//! - Deep guest recursion (call/fac) and the `assert_exhaustion` cases both need more stack than the default; the whole assertion body runs in a thread with a large `threading.stack_size` and a raised `sys.setrecursionlimit`, so a runaway recursion surfaces as a catchable `RecursionError` (mapped to `call stack exhausted`) instead of a C-stack crash, the guest-side analogue of the harness's `convert_on_big_stack`.
-//!   `check_exhaust` lowers the limit around itself, because there the limit is not headroom but the entire cost of the check; see the comment on `_EXHAUST_RECURSION_LIMIT`.
+//! - Assertions are passed as zero-arg lambdas because Python has no statement blocks.
+//!   The value under test is bound inside the lambda.
+//!   An inner `(lambda __r: (<cmp>, __r))(<call>)` binds it.
+//! - Deep guest recursion (call/fac) and `assert_exhaustion` cases need a stack beyond the default.
+//!   The whole assertion body runs in a thread with a large `threading.stack_size`.
+//!   The thread also raises `sys.setrecursionlimit`.
+//!   So a runaway recursion surfaces as a catchable `RecursionError` instead of a C-stack crash.
+//!   The error is mapped to `call stack exhausted`.
+//!   This is the guest-side analogue of the harness's `convert_on_big_stack`.
+//!   `check_exhaust` lowers the limit around itself.
+//!   There the limit is not headroom but the entire cost of the check.
+//!   See the comment on `_EXHAUST_RECURSION_LIMIT`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -17,9 +30,19 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
-/// Identical in shape to the Ruby list: the only open gap is `import-limits`: `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type (a global's mutability, a table/memory's min/max limits, a function's signature), so the `assert_unlinkable` cases that test those, plus the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature (multi-memory) that also happens to `register`, stay known gaps.
-/// `imports.wast` moved 28 -> 59 for the same reason it did for Ruby (decision 19): its "test" fixture module exports a tag, so it did not convert before exception handling landed; now that it does, every `assert_unlinkable` case downstream of it (checking function signatures, global types, and tag parameter types) runs into the same kind-not-type gap, no new mechanism.
+/// Known assertion-level failures with their attribution.
+/// The file still runs, so regressions in the passing assertions are caught.
+/// Identical in shape to the Ruby list: the only open gap is `import-limits`.
+/// `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type.
+/// That type is a global's mutability, a table/memory's min/max limits, or a function's signature.
+/// So the `assert_unlinkable` cases that test those stay known gaps.
+/// So do the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature.
+/// That feature is multi-memory, in a module that also happens to `register`.
+/// `imports.wast` moved 28 -> 59 for the same reason it did for Ruby (decision 19).
+/// Its "test" fixture module exports a tag, so it did not convert before exception handling landed.
+/// Now that it does, every `assert_unlinkable` case downstream of it runs into the same gap.
+/// Those cases check function signatures, global types, and tag parameter types.
+/// It is the same kind-not-type gap, with no new mechanism.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -50,7 +73,11 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Python executes wasm several times slower than Ruby (the cost spreads thinly over per-file `python3` startup and the pure-Python numeric runtime, with no single dominant file), so, like Bash, a plain `cargo test` runs only the shared curated list, plus the exception-handling files this backend now supports.
+    /// Python executes wasm several times slower than Ruby.
+    /// The cost spreads thinly over per-file `python3` startup and the pure-Python numeric runtime.
+    /// No single file dominates.
+    /// So, like Bash, a plain `cargo test` runs only the shared curated list.
+    /// It adds the exception-handling files this backend now supports.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
             dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES,
@@ -61,7 +88,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable references Rt.LinkError even when the converted modules themselves don't.
+            // check_unlinkable references Rt.LinkError.
+            // It does so even when the converted modules themselves don't.
             "rt/link_error",
             // Same for check_exception and Rt.WasmException.
             "rt/wasm_exception",
@@ -69,7 +97,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE below), not necessarily by the converted module itself.
+            // Referenced by the _spectest fixture (PREAMBLE below).
+            // It is not necessarily referenced by the converted module itself.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -89,8 +118,11 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
             &RuntimeLinkage::Alias("Rt".to_string()),
             false, // spec modules import spectest, never WASI
         )?;
-        // The whole assertion body runs inside `def _main()`; a class defined there is a local class whose methods still resolve the module-level `Rt` global.
-        // The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name, so drop it and rely on the module global.
+        // The whole assertion body runs inside `def _main()`.
+        // A class defined there is a local class.
+        // Its methods still resolve the module-level `Rt` global.
+        // The `Rt = Rt` alias line, however, would make `Rt` a `_main`-local name.
+        // So drop it and rely on the module global.
         let source = source
             .strip_prefix("Rt = Rt\n\n\n")
             .unwrap_or(&source)
@@ -223,7 +255,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         _decls: &str,
         body: &str,
     ) -> anyhow::Result<String> {
-        // The runtime units use `math`/`struct`; the harness uses `sys` and `threading` (PREAMBLE), and shared_runtime emits only `class Rt`.
+        // The runtime units use `math`/`struct`; the harness uses `sys` and `threading` (PREAMBLE).
+        // shared_runtime emits only `class Rt`.
         let mut script = String::from("import math\nimport struct\nimport sys\n\n");
         script.push_str(
             &dewasm_backend_python::shared_runtime(units)
@@ -231,7 +264,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         );
         script.push('\n');
         script.push_str(PREAMBLE);
-        // The whole body (module class defs, instantiations, and assertions) runs inside `_main` so it can execute on a large-stack thread.
+        // The whole body (module class defs, instantiations, and assertions) runs inside `_main`.
+        // So it can execute on a large-stack thread.
         script.push_str("\ndef _main():\n");
         for line in body.lines() {
             if line.is_empty() {
@@ -246,7 +280,8 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     }
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance doubles as an import provider (`wasm_import`).
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name.
+/// Each instance doubles as an import provider (`wasm_import`).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "_spectest".to_string();
@@ -323,7 +358,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "(isinstance({value}, list) and isinstance({value}[0], str))"
         )),
-        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
+        // A specific function's identity: not expressible without an export map.
+        // No top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

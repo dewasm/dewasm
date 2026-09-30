@@ -1,5 +1,5 @@
-// Map an os.FileInfo's mode to a WASI filetype tag, using Go's portable
-// FileMode bits (so no platform-specific S_IFMT constants are needed).
+// Map an os.FileInfo's mode to a WASI filetype tag, using Go's portable FileMode bits.
+// So no platform-specific S_IFMT constants are needed.
 func (w *WASI) wasi_filetype(fi os.FileInfo) byte {
     m := fi.Mode()
     switch {

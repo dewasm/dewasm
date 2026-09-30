@@ -1,4 +1,6 @@
-//! The CLI half of the module-name policy: `--module-name` is a library-mode flag, required there and rejected for standalone, and an invalid name is rejected by the backend before anything is written.
+//! The CLI half of the module-name policy.
+//! `--module-name` is a library-mode flag, required there and rejected for standalone.
+//! An invalid name is rejected by the backend before anything is written.
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
@@ -14,8 +16,9 @@ fn run_dewasm(args: &[&str]) -> Output {
         .expect("spawn dewasm")
 }
 
-/// A fixture `.wat` named `stem.wat` in a fresh temp dir, so the default module name is exactly `stem`.
-/// The counter keeps parallel test threads (and concurrent `cargo test` processes) off each other's dirs.
+/// A fixture `.wat` named `stem.wat` in a fresh temp dir, so the default module name is `stem`.
+/// The counter keeps parallel test threads off each other's dirs.
+/// It does the same for concurrent `cargo test` processes.
 fn fixture(stem: &str) -> PathBuf {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -78,7 +81,8 @@ fn standalone_accepts_any_stem() {
     );
 }
 
-/// Library mode has no default name at all: omitting --module-name is an error before any backend runs.
+/// Library mode has no default name.
+/// Omitting --module-name is an error before any backend runs.
 #[test]
 fn library_requires_module_name() {
     let wat = fixture("sqlite3-shell");

@@ -1,8 +1,19 @@
-//! End-to-end cases over real-world apps (examples/apps/): convert each cached app with a backend and require byte-identical stdout and exit status against a snapshot output captured once from wasmtime and checked into `examples/apps/snapshots/` (running these does not itself need `wasmtime` installed).
+//! End-to-end cases over real-world apps (examples/apps/).
+//! Each case converts a cached app with a backend.
+//! It requires byte-identical stdout and exit status against a snapshot output.
+//! The snapshot was captured once from wasmtime and checked into `examples/apps/snapshots/`.
+//! Running these does not itself need `wasmtime` installed.
 //!
-//! Missing prerequisites (the interpreter, or the cache populated by `examples/apps/setup.sh`) fail the test, they don't skip it.
-//! Each case is a `pub const` [`AppCase`] driven by its own per-case macro (`cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`).
-//! `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow (softfloat makes QuickJS/SQLite take tens of seconds under Bash), so the macro expands their generated `#[test]` as `#[ignore]`d unless the expanding backend crate's `slow_test` feature is enabled; see [`run_slow_app_case`], which just runs the case unconditionally now that the conditioning lives at the macro/feature level.
+//! Missing prerequisites fail the test, they don't skip it.
+//! Those are the interpreter, or the cache populated by `examples/apps/setup.sh`.
+//! Each case is a `pub const` [`AppCase`] driven by its own per-case macro.
+//! The macros are `cowsay_args_e2e!`, `cowsay_stdin_e2e!`, `qjs_eval_e2e!`, `sqlite3_shell_e2e!`.
+//! `qjs_eval_e2e!`/`sqlite3_shell_e2e!` are slow.
+//! Softfloat makes QuickJS/SQLite take tens of seconds under Bash.
+//! So the macro expands their generated `#[test]` as `#[ignore]`d by default.
+//! It does so unless the expanding backend crate's `slow_test` feature is enabled.
+//! [`run_slow_app_case`] just runs the case unconditionally.
+//! The conditioning now lives at the macro/feature level.
 
 use dewasm_backend::Mode;
 
@@ -13,7 +24,8 @@ pub struct AppCase {
     pub name: &'static str,
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// Captured once via `wasmtime run`; the snapshot reference this case's generated-language output must match exactly.
+    /// Captured once via `wasmtime run`.
+    /// It is the snapshot reference this case's generated-language output must match exactly.
     pub expect_stdout: &'static str,
     pub expect_code: i32,
 }
@@ -34,7 +46,8 @@ pub const COWSAY_STDIN: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// QuickJS `-e` one-liner eval (slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
+/// QuickJS `-e` one-liner eval.
+/// Slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`].
 pub const QJS_EVAL: AppCase = AppCase {
     name: "qjs",
     args: &[
@@ -46,7 +59,8 @@ pub const QJS_EVAL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// sqlite3 shell against an in-memory database (slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`]).
+/// sqlite3 shell against an in-memory database.
+/// Slow: softfloat-bound interpreters skip by default, see [`run_slow_app_case`].
 pub const SQLITE3_SHELL: AppCase = AppCase {
     name: "sqlite3-shell",
     args: &[],
@@ -58,8 +72,12 @@ pub const SQLITE3_SHELL: AppCase = AppCase {
     expect_code: 0,
 };
 
-/// The same script on `cache/sqlite3-mod.wasm`, the shell built with the hot VDBE opcode bodies split into their own functions (`examples/apps/src/sqlite3-vdbe-split.patch`).
-/// The split is a code-shape change only, so this case takes the stock shell's snapshot as its expectation: the two artifacts must print the same bytes.
+/// The same script on `cache/sqlite3-mod.wasm`.
+/// That shell is built with the hot VDBE opcode bodies split into their own functions.
+/// The patch is `examples/apps/src/sqlite3-vdbe-split.patch`.
+/// The split is a code-shape change only.
+/// So this case takes the stock shell's snapshot as its expectation.
+/// The two artifacts must print the same bytes.
 pub const SQLITE3_MOD_SHELL: AppCase = AppCase {
     name: "sqlite3-mod",
     args: SQLITE3_SHELL.args,
@@ -68,13 +86,20 @@ pub const SQLITE3_MOD_SHELL: AppCase = AppCase {
     expect_code: SQLITE3_SHELL.expect_code,
 };
 
-/// The wasi-vfs-packed CRuby: `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr` by `wasi-vfs pack`, ruby.wasm's intended self-contained deployment shape.
-/// Needs no preopens (a `require` from the stdlib proves the embedded VFS serves it), so it is a plain [`AppCase`] where the unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase`.
-/// Expected stdout is inline like the other interpreter hellos (deterministic one-liner; the wasmtime suite revalidates it against a live engine).
+/// The wasi-vfs-packed CRuby: `cache/ruby.wasm` with its stdlib tree embedded at guest `/usr`.
+/// `wasi-vfs pack` embeds it, and this is ruby.wasm's intended self-contained deployment shape.
+/// It needs no preopens: a `require` from the stdlib proves the embedded VFS serves it.
+/// So it is a plain [`AppCase`].
+/// The unpacked [`CRUBY_HELLO`](crate::CRUBY_HELLO) is an `FsAppCase` instead.
+/// Expected stdout is inline like the other interpreter hellos (deterministic one-liner).
+/// The wasmtime suite revalidates it against a live engine.
 /// Slow, same as the unpacked case.
 /// mruby `-e` eval driving raise, rescue, ensure, a custom exception class, and retry.
-/// The cached mruby is built with LLVM's setjmp/longjmp lowering onto the exception-handling proposal, so this is the execution case for `try_table`/`throw` in a real interpreter, not just the spec harness.
-/// Expected stdout is inline like the other interpreter hellos (deterministic; the wasmtime suite revalidates it against a live engine).
+/// The cached mruby is built with LLVM's setjmp/longjmp lowering onto exception handling.
+/// That is the exception-handling proposal.
+/// So this case runs `try_table`/`throw` in a real interpreter, not only in the spec harness.
+/// Expected stdout is inline like the other interpreter hellos (deterministic).
+/// The wasmtime suite revalidates it against a live engine.
 pub const MRUBY_EH: AppCase = AppCase {
     name: "mruby",
     args: &[
@@ -141,7 +166,8 @@ pub fn run_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// Rerun an [`AppCase`] under `lang` (the wasmtime engine) and return its raw stdout: the bytes to write into the case's snapshot file.
+/// Rerun an [`AppCase`] under `lang` (the wasmtime engine) and return its raw stdout.
+/// Those are the bytes to write into the case's snapshot file.
 /// Used by `cargo xtask update-snapshots`; the compare-only `apps` suites never call it.
 /// Fails loud on a missing cache or a capture whose exit status is not the pinned `expect_code`.
 pub fn capture_app_stdout(lang: &dyn BackendUnderTest, case: &AppCase) -> Vec<u8> {
@@ -164,7 +190,8 @@ pub fn capture_app_stdout(lang: &dyn BackendUnderTest, case: &AppCase) -> Vec<u8
     output.stdout
 }
 
-/// Rerun the gzip *compress* case under `lang` and return its raw compressed stdout: the bytes for `examples/apps/snapshots/minigzip_compress.gz`.
+/// Rerun the gzip *compress* case under `lang` and return its raw compressed stdout.
+/// Those are the bytes for `examples/apps/snapshots/minigzip_compress.gz`.
 /// Fails loud on a missing cache or a nonzero exit.
 pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
@@ -188,17 +215,26 @@ pub fn capture_gzip_compress(lang: &dyn BackendUnderTest) -> Vec<u8> {
 }
 
 /// Run a slow [`AppCase`] (`QJS_EVAL`/`SQLITE3_SHELL`) for `lang` unconditionally.
-/// Identical to [`run_app_case`]: the speed opt-out lives on the macro, not here, so the wasmtime suite can call either directly.
+/// Identical to [`run_app_case`]: the speed opt-out lives on the macro, not here.
+/// So the wasmtime suite can call either directly.
 pub fn run_slow_app_case(lang: &dyn BackendUnderTest, case: &AppCase) {
     run_app_case_inner(lang, case);
 }
 
-/// The gzip byte-stdio stress cases (minigzip, the compression CLI): binary stdin/stdout the text-only app cases cannot carry (their `&str` stdin and `include_str!` snapshots require valid UTF-8; a gz stream is neither).
+/// The gzip byte-stdio stress cases (minigzip, the compression CLI).
+/// They carry binary stdin/stdout, which the text-only app cases cannot.
+/// Those cases' `&str` stdin and `include_str!` snapshots require valid UTF-8.
+/// A gz stream is neither.
 /// Every backend runs it; integer-only, so fast even under Bash.
 /// Two cases:
 ///
-/// * *compress*: feed a fixed text input on stdin, require the compressed stdout to be byte-identical to the snapshot captured from `wasmtime` (`examples/apps/snapshots/minigzip_compress.gz`). zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality.
-/// * *round trip*: compress, then decompress that output with `-d`, and require the result to equal the original input (self-checking; proves both directions of the binary stdio path).
+/// * *compress*: feed a fixed text input on stdin.
+///   Require the compressed stdout to be byte-identical to the snapshot captured from `wasmtime`.
+///   That snapshot is `examples/apps/snapshots/minigzip_compress.gz`.
+///   zlib's gz stream is deterministic here (mtime 0, OS byte 3), so this is a stable equality.
+/// * *round trip*: compress, then decompress that output with `-d`.
+///   Require the result to equal the original input.
+///   It is self-checking and proves both directions of the binary stdio path.
 pub fn run_gzip_cases(lang: &dyn BackendUnderTest) {
     let wasm_path = apps_cache_dir().join("minigzip.wasm");
     assert!(

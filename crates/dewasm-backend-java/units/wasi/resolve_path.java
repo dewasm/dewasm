@@ -1,20 +1,32 @@
 // requires: wasi/errno_fs
-// within reports whether path is base itself or lies under it (component-wise containment against the already-realpath'd base: Path.startsWith is safer than a raw string prefix, so /base does not "contain" /baseball).
+// within reports whether path is base itself or lies under it.
+// It is component-wise containment against the already-realpath'd base.
+// Path.startsWith is safer than a raw string prefix, so /base does not "contain" /baseball.
 private static boolean within(java.nio.file.Path base, java.nio.file.Path path) {
     return path.equals(base) || path.startsWith(base);
 }
 
-// Resolve a guest-relative path against a directory fd to an absolute host path, confined to that directory fd's own (already-realpath'd) root.
-// Every call re-validates against its own dirfd's root, so nested path_opens can't be used to launder an escape one level cheaper.
-// Returns a Resolved; an errno of
-// WASI_OK means success.
+// Resolve a guest-relative path against a directory fd to an absolute host path.
+// The result is confined to that directory fd's own (already-realpath'd) root.
+// Every call re-validates against its own dirfd's root.
+// So nested path_opens can't be used to launder an escape one level cheaper.
+// Returns a Resolved; an errno of WASI_OK means success.
 //
-// The join mirrors Go's filepath.Join: an absolute `rel` is still confined under base (base + "/" + rel, then normalize), so a guest cannot escape by passing a leading slash. normalize() collapses "." / ".." lexically; the realpath + within() check below then rejects anything that still escapes.
+// The join mirrors Go's filepath.Join: an absolute `rel` is still confined under base.
+// It becomes base + "/" + rel, then normalize.
+// So a guest cannot escape by passing a leading slash.
+// normalize() collapses "." / ".." lexically.
+// The realpath + within() check below then rejects anything that still escapes.
 //
-// followLast=false resolves the parent but leaves the final component untouched (the AT_SYMLINK_NOFOLLOW shape), for syscalls that operate on a symlink itself (lstat, unlink, rename, rmdir, mkdir, link, symlink, readlink).
+// followLast=false resolves the parent but leaves the final component untouched.
+// That is the AT_SYMLINK_NOFOLLOW shape.
+// It serves syscalls that operate on a symlink itself.
+// Those are lstat, unlink, rename, rmdir, mkdir, link, symlink, readlink.
 // A trailing "." or ".." is never a symlink, so those fall back to full resolution.
 //
-// Known limitation: this is a check-then-open, not an atomic openat(2)-beneath resolution: a TOCTOU race or a symlink planted inside the sandbox between the check and the actual filesystem call could in principle escape.
+// Known limitation: this is a check-then-open, not an atomic openat(2)-beneath resolution.
+// A TOCTOU race could in principle escape.
+// So could a symlink planted inside the sandbox between the check and the actual filesystem call.
 // Accepted for a single-process research/demo runtime.
 Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     Object e = fds.get(dirfd);
@@ -27,22 +39,28 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     if (rel.indexOf('\0') >= 0) {
         return new Resolved(null, WASI_INVAL);
     }
-    // A leading slash is an absolute path: WASI confines the guest to the preopen tree, so it is rejected outright rather than reinterpreted relative to the dirfd (the wasmtime behaviour interesting_paths asserts).
+    // A leading slash is an absolute path, and WASI confines the guest to the preopen tree.
+    // So it is rejected outright rather than reinterpreted relative to the dirfd.
+    // That is the wasmtime behaviour interesting_paths asserts.
     if (rel.startsWith("/")) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
     java.nio.file.Path base = dir.hostPath;
     java.nio.file.Path joined = java.nio.file.Paths.get(base.toString() + "/" + rel).normalize();
-    // Lexical containment check: enough ".." components can normalize to a path above base even though every prefix exists, so reject it here (NOTCAPABLE)
-    // before the filesystem is consulted.
-    // Otherwise a nonexistent escaped target would surface as NOENT rather than the capability error the guest expects.
+    // Lexical containment check.
+    // Enough ".." components can normalize to a path above base even though every prefix exists.
+    // So reject it here (NOTCAPABLE) before the filesystem is consulted.
+    // Otherwise a nonexistent escaped target would surface as NOENT.
+    // The guest expects the capability error instead.
     // The realpath + within() checks below still catch symlink escapes.
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
-    // A slash-suffixed name may only resolve to a directory (issue #42):
-    // Paths.get has normalized the slash away, so enforce it here: the probes follow symlinks as the slash requires; a missing target is each syscall's case.
-    // The slash is also stripped from `last` below, which would otherwise be "" and silently degrade followLast.
+    // A slash-suffixed name may only resolve to a directory (issue #42).
+    // Paths.get has normalized the slash away, so enforce it here.
+    // The probes follow symlinks as the slash requires; a missing target is each syscall's case.
+    // The slash is also stripped from `last` below.
+    // `last` would otherwise be "" and silently degrade followLast.
     boolean trailing = rel.endsWith("/");
     String core = rel;
     while (core.endsWith("/")) {
@@ -52,7 +70,8 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         && !java.nio.file.Files.isDirectory(joined)) {
         return new Resolved(null, WASI_NOTDIR);
     }
-    // The final component as the *guest* wrote it (not joined.getFileName(), which has Cleaned "." / ".." away).
+    // The final component as the *guest* wrote it.
+    // joined.getFileName() would not do: it has Cleaned "." / ".." away.
     // A trailing "." or ".." is never a symlink, so those fall through to full resolution.
     String last = core;
     int idx = core.lastIndexOf('/');
@@ -77,7 +96,8 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         try {
             real = joined.toRealPath();
         } catch (java.io.IOException ex) {
-            // A dangling symlink or a race: fall back to the literal path so the containment check still runs against it.
+            // A dangling symlink or a race: fall back to the literal path.
+            // So the containment check still runs against it.
             real = joined;
         }
         if (!within(base, real)) {
@@ -85,7 +105,8 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         }
         return new Resolved(real.toString(), WASI_OK);
     }
-    // The final component is missing: resolve the parent and re-attach it, so a create (path_open O_CREAT) still gets a sandboxed target path.
+    // The final component is missing: resolve the parent and re-attach it.
+    // So a create (path_open O_CREAT) still gets a sandboxed target path.
     java.nio.file.Path parent = joined.getParent();
     java.nio.file.Path realParent;
     try {

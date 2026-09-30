@@ -1,13 +1,26 @@
-//! `cargo xtask record-size` and `cargo xtask render-size`: the size record, sibling of the speed record.
+//! `cargo xtask record-size` and `cargo xtask render-size`: the size record.
+//! It is the sibling of the speed record.
 //!
-//! It answers the distribution question with numbers: shipping a wasm program means shipping the binary *and* a runtime that can execute it, while shipping dewasm's output means shipping source to users who already have the interpreter.
-//! Which is smaller is a fact about a given app and a given backend, and this command measures it: per app, the wasm binary and every backend's converted standalone source, beside the installed size of every native runtime on the host.
+//! It answers the distribution question with numbers.
+//! Shipping a wasm program means shipping the binary *and* a runtime that can execute it.
+//! Shipping dewasm's output means shipping source to users who already have the interpreter.
+//! Which is smaller is a fact about a given app and a given backend, and this command measures it.
+//! Per app, it measures the wasm binary and every backend's converted standalone source.
+//! Beside them it measures the installed size of every native runtime on the host.
 //!
-//! Measuring and rendering are separate commands, as on the speed side: `record-size` writes a dated record under `records/` (`<timestamp>Z-size.json`, beside the speed records, one home for every measurement record), `render-size` turns a record into `docs/sizes/results.md` with its figures under `docs/sizes/figs/`.
-//! The hand-written `docs/sizes/README.md` beside it says how to run this and how to read the numbers; nothing here writes it.
-//! Neither output is a compared snapshot (the sizes move with the host's runtime versions and with every codegen change), so no freshness test guards them.
+//! Measuring and rendering are separate commands, as on the speed side.
+//! `record-size` writes a dated record under `records/` as `<timestamp>Z-size.json`.
+//! That is beside the speed records: one home for every measurement record.
+//! `render-size` turns a record into `docs/sizes/results.md`.
+//! Its figures go under `docs/sizes/figs/`.
+//! The hand-written `docs/sizes/README.md` beside it says how to run this and read the numbers.
+//! Nothing here writes it.
+//! Neither output is a compared snapshot, so no freshness test guards them.
+//! The sizes move with the host's runtime versions and with every codegen change.
 //!
-//! Raw bytes throughout, never compressed: a release artifact's weight is the honest distribution figure, and compression flattens exactly the differences the record exists to track.
+//! Raw bytes throughout, never compressed.
+//! A release artifact's weight is the honest distribution figure.
+//! Compression flattens exactly the differences the record exists to track.
 
 mod chart;
 pub mod report;
@@ -24,12 +37,17 @@ use crate::bench::{
 };
 use crate::size::report::{App, Cell, Component, Outcome};
 
-/// The corpus, in report order: a small utility, a database shell, a JavaScript engine, a whole Ruby.
-/// Fixed rather than "everything in the cache": these four span two orders of magnitude of wasm size, and a record whose contents depend on which apps happen to be built is not comparable with the next one.
+/// The corpus, in report order.
+/// It holds a small utility, a database shell, a JavaScript engine, and a whole Ruby.
+/// Fixed rather than "everything in the cache".
+/// These four span two orders of magnitude of wasm size.
+/// A record whose contents depend on which apps happen to be built is not comparable with the next.
 const CORPUS: [&str; 4] = ["cowsay.wasm", "sqlite3-shell.wasm", "qjs.wasm", "ruby.wasm"];
 
 /// Regenerate `docs/sizes/results.md` and its figures from a stored size record.
-/// Converting the corpus with six backends takes minutes, so a wording fix must not require re-measuring: the JSON is the record, the markdown is a view of it.
+/// Converting the corpus with six backends takes minutes.
+/// So a wording fix must not require re-measuring.
+/// The JSON is the record, and the markdown is a view of it.
 pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
     let path = record_to_render(args, SIZE_SUFFIX)?;
     let report = report::load(&path)?;
@@ -44,7 +62,8 @@ pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
 }
 
 /// The backends, in report order.
-/// Each one converts every app in the corpus; nothing here is optional, because generating source needs no toolchain installed: only running it would.
+/// Each one converts every app in the corpus; nothing here is optional.
+/// Generating source needs no toolchain installed: only running it would.
 fn backends() -> Vec<(&'static str, &'static (dyn Backend + Sync))> {
     vec![
         ("ruby", &dewasm_backend_ruby::RubyBackend),
@@ -101,7 +120,8 @@ fn run() -> Result<()> {
     );
 }
 
-/// Figures the record no longer covers are deleted: an orphan SVG looks current while nothing links it.
+/// Figures the record no longer covers are deleted.
+/// An orphan SVG looks current while nothing links it.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);
     let mut written: Vec<String> = Vec::new();
@@ -179,7 +199,8 @@ fn measure_runtimes() -> Vec<report::Runtime> {
         .collect()
 }
 
-/// A bare executable name resolved against `$PATH`, the way the shell resolves it when the runner launches it.
+/// A bare executable name resolved against `$PATH`.
+/// It resolves the way the shell does when the runner launches it.
 /// Anything that already has a directory in it is returned unchanged.
 fn on_path(bin: &Path) -> PathBuf {
     if bin.components().count() > 1 {
@@ -196,11 +217,21 @@ fn on_path(bin: &Path) -> PathBuf {
         .unwrap_or_else(|| bin.to_path_buf())
 }
 
-/// What one runtime weighs as installed: the executable with its symlinks resolved, plus any shared library of its own that the executable actually loads.
+/// What one runtime weighs as installed.
+/// That is the executable with its symlinks resolved.
+/// It adds any shared library of its own that the executable actually loads.
 ///
 /// The library rule is not cosmetic in either direction.
-/// Homebrew's `wasmedge` executable is 100 kB of front end over a 2.4 MB `libwasmedge`, so counting the executable alone would report it twenty times too small; the same Homebrew ships a 55 MB `lib/` beside `wasmtime` (a static archive and a dylib for embedders) that the statically linked CLI never opens, so counting everything in that directory would report wasmtime twice too large.
-/// What is counted is therefore what the executable names: a candidate library beside it is included only when its filename appears in the executable's bytes, which is where the dynamic linker's own list of dependencies lives (Mach-O load commands, ELF `DT_NEEDED`).
+/// Homebrew's `wasmedge` executable is 100 kB of front end over a 2.4 MB `libwasmedge`.
+/// Counting the executable alone would report it twenty times too small.
+/// The same Homebrew ships a 55 MB `lib/` beside `wasmtime`.
+/// It holds a static archive and a dylib for embedders.
+/// The statically linked CLI never opens them.
+/// Counting everything in that directory would report wasmtime twice too large.
+/// What is counted is therefore what the executable names.
+/// A candidate library beside it is included only when the executable's bytes hold its filename.
+/// That is where the dynamic linker's own list of dependencies lives.
+/// It is the Mach-O load commands or ELF `DT_NEEDED`.
 /// Aliases resolve to one file, so a library reached through a `.0.dylib` symlink is counted once.
 fn weigh(bin: &Path) -> Result<(u64, Vec<Component>)> {
     let exe = std::fs::canonicalize(on_path(bin))
@@ -247,7 +278,8 @@ fn weigh(bin: &Path) -> Result<(u64, Vec<Component>)> {
 }
 
 /// Whether `image` mentions `name` anywhere in its bytes.
-/// The dynamic linker's dependency list is stored as plain strings in the executable, so this is how a library beside the binary is told apart from one merely installed in the same directory.
+/// The dynamic linker's dependency list is stored as plain strings in the executable.
+/// This tells a library beside the binary apart from one merely installed in the same directory.
 fn references(image: &[u8], name: &str) -> bool {
     image
         .windows(name.len())
@@ -255,7 +287,8 @@ fn references(image: &[u8], name: &str) -> bool {
 }
 
 /// One app: the wasm binary's size, then every backend's converted source.
-/// A cache file that is not there makes the app and all six of its targets skipped-with-reason, naming the script that would fix it.
+/// A cache file that is not there makes the app and all six of its targets skipped-with-reason.
+/// The reason names the script that would fix it.
 fn measure_app(file: &str) -> App {
     let app = file.trim_end_matches(".wasm").to_string();
     let path = apps_cache_dir().join(file);
@@ -315,10 +348,15 @@ fn measure_app(file: &str) -> App {
     }
 }
 
-/// Total bytes of the standalone source `backend` generates from `bytes`, across every file it emits: Java returns more than one, and the delivery is all of them.
+/// Total bytes of the standalone source `backend` generates from `bytes`.
+/// The total is across every file it emits.
+/// Java returns more than one, and the delivery is all of them.
 ///
-/// Converted on a 64 MiB stack: codegen recurses with the IR's control-flow nesting, and a SQLite-class module's deepest functions overflow the default stack (the same reason `dewasm_test_helper::convert_on_big_stack` exists).
-/// Nothing is written to disk; only the byte count is kept, so the several hundred MB a large module generates lives briefly in memory and is dropped.
+/// Converted on a 64 MiB stack: codegen recurses with the IR's control-flow nesting.
+/// A SQLite-class module's deepest functions overflow the default stack.
+/// That is the same reason `dewasm_test_helper::convert_on_big_stack` exists.
+/// Nothing is written to disk; only the byte count is kept.
+/// So the several hundred MB a large module generates lives briefly in memory and is dropped.
 fn generated_bytes(backend: &'static (dyn Backend + Sync), bytes: &[u8]) -> Result<u64> {
     std::thread::scope(|scope| {
         std::thread::Builder::new()
@@ -329,7 +367,8 @@ fn generated_bytes(backend: &'static (dyn Backend + Sync), bytes: &[u8]) -> Resu
                     &module,
                     &GenOptions {
                         mode: Mode::Standalone,
-                        // Only the output file's stem, which this command never writes: a standalone artifact's internal names are fixed.
+                        // Only the output file's stem, which this command never writes.
+                        // A standalone artifact's internal names are fixed.
                         module_name: "prog".to_string(),
                         runtime: RuntimeLinkage::Embedded,
                         default_wasi: true,

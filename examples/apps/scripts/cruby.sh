@@ -3,12 +3,18 @@
 # shellcheck source=common.sh
 
 # CRuby 3.4 (ruby.wasm 2.9.4): the official ruby.wasm wasm32-wasip1 full build.
-# Beyond ruby.wasm we extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at startup; the multi-hundred-MB libruby-static.a and the rest of the tree are not needed at run time and are left out (the extract helpers unpack only the two named members).
+# Beyond ruby.wasm we extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at startup.
+# The multi-hundred-MB libruby-static.a and the rest of the tree are not needed at run time.
+# They are left out; the extract helpers unpack only the two named members.
 # The e2e case preopens cache/ruby-lib/usr at guest /usr.
-# The "Ruby on Ruby" goal demo: every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` cargo features (the speed category varies by backend); the audit record is agents/apps-audit.md.
+# This is the "Ruby on Ruby" goal demo.
+# Every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` cargo features.
+# The speed category varies by backend.
+# The audit record is agents/apps-audit.md.
 #
-# A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended deployment shape: the same module with the stdlib embedded by
-# `wasi-vfs pack` (wizer pre-initialization), self-contained: no preopens.
+# A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended deployment shape.
+# It is the same module with the stdlib embedded by `wasi-vfs pack` (wizer pre-initialization).
+# It is self-contained: no preopens.
 # The official build links libwasi_vfs.a, which is what makes packing work.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -21,7 +27,8 @@ fetch_runtime_with_stdlib ruby \
   "$CRUBY_DIR/usr/local/bin/ruby" "$CRUBY_DIR/usr/local/lib/ruby" 1
 
 # ruby-packed: cache/ruby.wasm with cache/ruby-lib/usr embedded at guest /usr.
-# The stamp folds the archive sha and `wasi-vfs --version` (same discipline as the wasm-opt stamps): a re-pin or a CLI upgrade re-packs instead of keeping a stale module.
+# The stamp folds the archive sha and `wasi-vfs --version` (same discipline as the wasm-opt stamps).
+# So a re-pin or a CLI upgrade re-packs instead of keeping a stale module.
 require_tool ruby-packed wasi-vfs \
   "prebuilt CLI on https://github.com/kateinoigakukun/wasi-vfs/releases, or \`cargo install wasi-vfs-cli\`"
 packed=cache/ruby-packed.wasm

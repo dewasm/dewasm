@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# Populate benchmarks/cache/ with everything the benchmark suite needs that is not checked in: the two pure-source wasm interpreters we compare against, and the built microbenchmark modules.
+# Populate benchmarks/cache/ with everything the benchmark suite needs that is not checked in.
+# That is the two pure-source wasm interpreters we compare against.
+# It is also the built microbenchmark modules.
 #
 # cache/venv/    a Python venv with pywasm pinned to PYWASM_VERSION
 # cache/gems/    a GEM_HOME with wardite pinned to WARDITE_VERSION
@@ -11,7 +13,8 @@
 # Idempotent: re-running is a no-op beyond re-checking the pins and rebuilding the microbenchmarks.
 #
 # PyPy is deliberately not set up here.
-# The harness drives the host's own pypy3 install; benchmarks/drivers/pywasm.py runs under it unmodified, but pywasm has to be importable there, e.g.
+# The harness drives the host's own pypy3 install.
+# benchmarks/drivers/pywasm.py runs under it unmodified, but pywasm has to be importable there, e.g.
 #
 # pypy3 -m pip install pywasm==2.2.3
 #

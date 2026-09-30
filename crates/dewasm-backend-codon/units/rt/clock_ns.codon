@@ -1,5 +1,6 @@
 # requires: rt/raw_load64
-# The named clock in nanoseconds: id 0 realtime, everything else monotonic (the platform clockid values differ).
+# The named clock in nanoseconds: id 0 realtime, everything else monotonic.
+# The platform clockid values differ.
 @staticmethod
 def clock_ns(realtime: bool) -> int:
     from C import clock_gettime(int, Ptr[byte]) -> int

@@ -1,14 +1,14 @@
 /* wordcount: memory- and branch-heavy scanning over a generated buffer.
  *
- * One iteration consumes one byte of text: a load, a handful of unpredictable
- * branches, and a scattered histogram update. Where sha256 is a straight-line
- * arithmetic pipeline, this microbenchmark is what a backend's branch and array
- * lowering actually costs: the buffer is pseudo-random, so no branch here
- * predicts and no histogram slot stays hot.
+ * One iteration consumes one byte of text.
+ * It does a load, a handful of unpredictable branches, and a scattered histogram update.
+ * sha256 is a straight-line arithmetic pipeline.
+ * This microbenchmark instead shows what a backend's branch and array lowering actually costs.
+ * The buffer is pseudo-random, so no branch here predicts and no histogram slot stays hot.
  *
- * The text buffer is generated once at startup, before the iteration count is
- * even consulted, so its cost lands in the <iterations> = 0 baseline run the
- * harness subtracts. Per-iteration numbers stay pure scanning as a result.
+ * The text buffer is generated once at startup, before the iteration count is even consulted.
+ * So its cost lands in the <iterations> = 0 baseline run the harness subtracts.
+ * Per-iteration numbers stay pure scanning as a result.
  * <iterations> may exceed the buffer size; the scan wraps.
  *
  * The result folds words, lines and the longest word into one u64.
@@ -18,9 +18,9 @@
 
 #define TEXT_SIZE 8192
 
-/* 32 usable entries so the generator can mask instead of dividing: 26 letters,
- * four spaces and two newlines give roughly six-letter words and forty-word
- * lines. (The trailing NUL is entry 32 and is never indexed.) */
+/* 32 usable entries, so the generator can mask instead of dividing.
+ * 26 letters, four spaces and two newlines give roughly six-letter words and forty-word lines.
+ * (The trailing NUL is entry 32 and is never indexed.) */
 static const char ALPHABET[] = "abcdefghijklmnopqrstuvwxyz    \n\n";
 
 static char text[TEXT_SIZE];
@@ -34,9 +34,9 @@ static void bench_setup(void) {
   }
 }
 
-/* Static, not a zero-initialized local: -nostdlib leaves no memset to call, and
- * clang lowers a local `= {0}` of this size to one. Statics live in bss, which
- * the engine zeroes at instantiation for free. */
+/* Static, not a zero-initialized local: -nostdlib leaves no memset to call.
+ * clang lowers a local `= {0}` of this size to a memset call.
+ * Statics live in bss, which the engine zeroes at instantiation for free. */
 static u32 histogram[26];
 
 static u64 bench_run(u32 iterations) {
@@ -61,8 +61,8 @@ static u64 bench_run(u32 iterations) {
     }
   }
 
-  /* A trailing partial word counts, so the result does not depend on where the
-   * scan happened to stop mid-token. */
+  /* A trailing partial word counts.
+   * So the result does not depend on where the scan happened to stop mid-token. */
   if (cur_len != 0) {
     words++;
     if (cur_len > max_len) max_len = cur_len;

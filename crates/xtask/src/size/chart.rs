@@ -1,14 +1,20 @@
 //! The static SVG figures `docs/sizes/results.md` embeds: one for the runtimes, one per app.
 //!
-//! Drawn by [`crate::bench::chart::lollipop`] with a bytes axis, so a size figure and a benchmark figure are the same picture in different units: same palette, same geometry, same log10 axis, same light/dark pair behind a `<picture>`.
-//! Rows are smallest first; color carries what the row *is* (the wasm binary, converted source, a native runtime), never its rank.
+//! Drawn by [`crate::bench::chart::lollipop`] with a bytes axis.
+//! So a size figure and a benchmark figure are the same picture in different units.
+//! They share the palette, the geometry, and the log10 axis.
+//! They also share the light/dark pair behind a `<picture>`.
+//! Rows are smallest first.
+//! Color carries what the row *is* (the wasm binary, converted source, a native runtime).
+//! It never carries the row's rank.
 
 use crate::bench::chart::{fmt_ratio, lollipop, Family, Row, Units, DARK, LIGHT};
 use crate::size::report::{fmt_byte_tick, fmt_bytes_f, App, Report};
 
 /// One figure, rendered in both modes plus the alt text they share.
 pub struct Chart {
-    /// What this illustrates (`"runtimes"` or an app's cache stem), used to place it above the matching table.
+    /// What this illustrates (`"runtimes"` or an app's cache stem).
+    /// It is used to place the figure above the matching table.
     pub key: String,
     /// File stem under `docs/sizes/figs/`; the dark file is `<stem>-dark.svg`.
     pub stem: String,
@@ -23,7 +29,8 @@ const BYTES: Units = Units {
 };
 
 /// Every figure the record supports, in document order.
-/// A section the record does not cover simply produces none: `--render` has to work on an older record too.
+/// A section the record does not cover simply produces none.
+/// `--render` has to work on an older record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
     let mut charts: Vec<Chart> = Vec::new();
     charts.extend(runtimes(report));
@@ -103,7 +110,8 @@ fn app_chart(app: &App) -> Option<Chart> {
     })
 }
 
-/// Alt text derived from the data rather than written by hand, so it states the finding and cannot go stale when the record is remade.
+/// Alt text derived from the data rather than written by hand.
+/// It then states the finding and cannot go stale when the record is remade.
 fn alt_text(subject: &str, rows: &[Row]) -> String {
     let smallest = &rows[0];
     let largest = &rows[rows.len() - 1];

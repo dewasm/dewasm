@@ -1,7 +1,10 @@
 //! Intermediate representation of a wasm module.
 //!
-//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is and flattens the value stack into "temps": one variable per (stack depth, type) pair, in the style of wasm2c.
-//! A value folds into its consumer where it can and takes a temp only where it must; `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
+//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is.
+//! It flattens the value stack into "temps": one variable per (stack depth, type) pair.
+//! This follows the style of wasm2c.
+//! A value folds into its consumer where it can and takes a temp only where it must.
+//! `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ValType {
@@ -10,15 +13,18 @@ pub enum ValType {
     F32,
     F64,
     /// A nullable reference to a wasm function.
-    /// Legal only as a table element type; reference types used as value types are rejected at conversion time.
+    /// Legal only as a table element type.
+    /// Reference types used as value types are rejected at conversion time.
     FuncRef,
     /// A nullable reference to a caught exception (exception handling).
-    /// Unlike the other reference types this one *is* legal as a value type: `catch_ref` produces it in locals, temps, and block types.
+    /// Unlike the other reference types, this one *is* legal as a value type.
+    /// `catch_ref` produces it in locals, temps, and block types.
     ExnRef,
 }
 
 /// A flattened stack slot.
-/// `depth` is the value-stack depth the value lives at; the same (depth, ty) pair always maps to the same target variable.
+/// `depth` is the value-stack depth the value lives at.
+/// The same (depth, ty) pair always maps to the same target variable.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Temp {
     pub depth: u32,
@@ -56,7 +62,8 @@ pub struct Module {
     pub elems: Vec<ElemSegment>,
     pub datas: Vec<DataSegment>,
     pub start: Option<u32>,
-    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers, indexed by [`SourcePos::file`].
+    /// Interned source file paths referenced by [`Stmt::SourceLine`] markers.
+    /// [`SourcePos::file`] indexes them.
     /// Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`).
     pub debug_files: Vec<String>,
 }
@@ -195,7 +202,8 @@ pub enum ElemKind {
     Active { table_index: u32, offset: Expr },
     /// Retained for `table.init`; droppable.
     Passive,
-    /// Never copied into a table (only makes `ref.func` targets valid under reference-types validation); droppable, otherwise inert.
+    /// Never copied into a table; droppable, otherwise inert.
+    /// It only makes `ref.func` targets valid under reference-types validation.
     Declared,
 }
 
@@ -223,7 +231,8 @@ pub struct DataSegment {
     pub data: Vec<u8>,
 }
 
-/// Clonable so a backend-side rewriting pass (loop-body extraction) can produce an adjusted function list without mutating the shared module.
+/// Clonable, so a backend-side rewriting pass can produce an adjusted function list.
+/// Loop-body extraction is such a pass; it then does not mutate the shared module.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub type_idx: u32,
@@ -249,7 +258,9 @@ pub enum BrTarget {
     /// Branch to the function's outermost frame == return.
     Return { values: Vec<Expr> },
     /// Branch to a labelled frame.
-    /// `assigns` moves the branch operands into the frame's result temps (or param temps for loops); self-assignments are already filtered out.
+    /// `assigns` moves the branch operands into the frame's result temps.
+    /// For loops, it moves them into the param temps.
+    /// Self-assignments are already filtered out.
     Label {
         label: u32,
         /// true: continue the loop; false: exit the block/if.
@@ -259,8 +270,16 @@ pub enum BrTarget {
 }
 
 /// One `try_table` catch clause.
-/// The four catch kinds are fully encoded by two fields: `tag` (`Some` for `catch`/`catch_ref`, `None` for the catch-all kinds) and `exn_temp` (`Some` for the `_ref` kinds, which capture the exception as an exnref); no backend needs the kind spelled a second way.
-/// The exception's payload lands directly in the *target frame's* slots (`value_temps`, whose last entry is `exn_temp` for the `_ref` kinds): the same arithmetic a branch's moves use, sourced from the exception instead of the stack, which is why `target` carries no assigns.
+/// Two fields encode the four catch kinds, so no backend needs the kind spelled a second way.
+///
+/// - `tag` is `Some` for `catch`/`catch_ref`, `None` for the catch-all kinds.
+/// - `exn_temp` is `Some` for the `_ref` kinds, which capture the exception as an exnref.
+///
+/// The exception's payload lands directly in the *target frame's* slots (`value_temps`).
+/// The last entry of `value_temps` is `exn_temp` for the `_ref` kinds.
+/// This is the same arithmetic a branch's moves use.
+/// It is sourced from the exception instead of the stack.
+/// That is why `target` carries no assigns.
 #[derive(Clone, Debug)]
 pub struct CatchClause {
     /// Tag index for `catch`/`catch_ref`; `None` for the catch-all kinds.
@@ -271,7 +290,8 @@ pub struct CatchClause {
 }
 
 /// A resolved source position, indexing [`Module::debug_files`].
-/// Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping; a `col` of 0 means the column is unknown (DWARF's "left edge").
+/// Carried by [`Stmt::SourceLine`] markers for DWARF line back-mapping.
+/// A `col` of 0 means the column is unknown (DWARF's "left edge").
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct SourcePos {
     pub file: u32,
@@ -279,11 +299,14 @@ pub struct SourcePos {
     pub col: u32,
 }
 
-/// Clonable so a backend can hand its emitter a rewritten body (the Go backend drops the statements Go would report as unreachable before emitting).
+/// Clonable so a backend can hand its emitter a rewritten body.
+/// The Go backend drops the statements Go would report as unreachable before emitting.
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    /// A source-position marker emitted just before the statement it annotates when DWARF line back-mapping is on.
-    /// Semantically inert: a backend renders it as a position directive/comment or drops it, and its presence never changes the surrounding statements' meaning.
+    /// A source-position marker emitted just before the statement it annotates.
+    /// It is emitted only when DWARF line back-mapping is on.
+    /// Semantically inert: a backend renders it as a position directive/comment or drops it.
+    /// Its presence never changes the surrounding statements' meaning.
     SourceLine(SourcePos),
     Assign {
         dst: Temp,
@@ -342,12 +365,14 @@ pub enum Stmt {
         args: Vec<Expr>,
         results: Vec<Temp>,
     },
-    /// Replaces the current frame with a call to `func`: the callee must run after this frame, including any handler it carries, is gone.
+    /// Replaces the current frame with a call to `func`.
+    /// The callee must run after this frame, including any handler it carries, is gone.
     ReturnCall {
         func: u32,
         args: Vec<Expr>,
     },
-    /// `ReturnCall` through a table; the slot is resolved, and its traps raised, at this instruction's execution point.
+    /// `ReturnCall` through a table.
+    /// The slot is resolved, and its traps raised, at this instruction's execution point.
     ReturnCallIndirect {
         type_idx: u32,
         table_index: u32,
@@ -394,7 +419,8 @@ pub enum Stmt {
     ElemDrop {
         seg: u32,
     },
-    /// `try_table`: a block whose body's exceptions are dispatched to the catch clauses, first match wins; an unmatched exception (and every trap) keeps unwinding.
+    /// `try_table`: a block whose body's exceptions are dispatched to the catch clauses.
+    /// The first match wins; an unmatched exception (and every trap) keeps unwinding.
     /// A catchless `try_table` is a plain [`Stmt::Block`] and never reaches here.
     TryTable {
         label: Label,
@@ -412,8 +438,11 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    /// The statement sequences nested directly in this statement, in emission order; a statement holding none yields nothing.
-    /// Exhaustive on purpose: a new variant that carries statements must declare them here or fail to compile, which is what keeps every traversal built on [`Stmt::any`] reaching the whole tree.
+    /// The statement sequences nested directly in this statement, in emission order.
+    /// A statement holding none yields nothing.
+    /// Exhaustive on purpose: a new variant that carries statements must declare them here.
+    /// Otherwise it fails to compile.
+    /// That keeps every traversal built on [`Stmt::any`] reaching the whole tree.
     pub fn child_seqs(&self) -> impl Iterator<Item = &[Stmt]> {
         let seqs: [&[Stmt]; 2] = match self {
             Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {
@@ -448,8 +477,10 @@ impl Stmt {
         seqs.into_iter().filter(|seq| !seq.is_empty())
     }
 
-    /// Mutable counterpart of [`Stmt::child_seqs`], for passes that rewrite statement trees in place.
-    /// The same exhaustiveness contract applies: a new variant carrying statements must appear in both.
+    /// Mutable counterpart of [`Stmt::child_seqs`].
+    /// It serves passes that rewrite statement trees in place.
+    /// The same exhaustiveness contract applies.
+    /// A new variant carrying statements must appear in both.
     pub fn child_seqs_mut(&mut self) -> impl Iterator<Item = &mut Vec<Stmt>> {
         let seqs: [Option<&mut Vec<Stmt>>; 2] = match self {
             Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {
@@ -513,7 +544,8 @@ pub enum Expr {
         addr: Box<Expr>,
         offset: u64,
     },
-    /// Neither arm can trap (the builder spills a trapping one to a temp), so backends may lower this as a lazy ternary even though wasm evaluates both arms.
+    /// Neither arm can trap, since the builder spills a trapping one to a temp.
+    /// So backends may lower this as a lazy ternary even though wasm evaluates both arms.
     Select {
         cond: Box<Expr>,
         then: Box<Expr>,

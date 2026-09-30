@@ -1,22 +1,37 @@
 ;; f32_alu: f32 add / mul / sqrt in a tight loop.
 ;;
-;; The f64_alu body in single precision with the same constants, so the difference between the two cases is the cost of re-rounding every result to f32.
-;; The printed number is the accumulator's bit pattern rather than a scaled integer, so a backend that carries the intermediates in double precision fails the harness's byte comparison instead of reporting a fast wrong number.
-;; Each accumulator stops growing once its ulp exceeds what is added to it, near 2^24 and 2^37, so no iteration count reaches infinity or NaN.
+;; The f64_alu body in single precision with the same constants.
+;; So the difference between the two cases is the cost of re-rounding every result to f32.
+;; The printed number is the accumulator's bit pattern rather than a scaled integer.
+;; So a backend that carries the intermediates in double precision fails the byte comparison.
+;; It does not report a fast wrong number.
+;; Each accumulator stops growing once its ulp exceeds what is added to it, near 2^24 and 2^37.
+;; So no iteration count reaches infinity or NaN.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
-;; Duplicated verbatim in every hand-written microbenchmark so each
-;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;; Duplicated verbatim in every hand-written microbenchmark.
+;; So each .wat stays a standalone module that wat2wasm and dewasm can consume directly.
 ;;
 ;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
-;; It does
-;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
-;; Only args_sizes_get / args_get / fd_write / proc_exit are imported, and a body stays inside i32/i64/f64 except for the one axis its case exists to measure: f32 in f32_alu, exception handling in eh_throw and eh_try.
-;; That keeps every other case within reach of the pure-Ruby and pure-Python interpreters this suite compares, and a runner that cannot execute a case's axis is excluded for that case in the harness workload table, with the reason stated there.
+;; It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+;; The line is the decimal result followed by a newline.
+;; <iterations> = 0 does no work but still prints.
+;; That is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported.
+;; A body stays inside i32/i64/f64 except for the one axis its case exists to measure.
+;; That axis is f32 in f32_alu, and exception handling in eh_throw and eh_try.
+;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
+;; Those are the interpreters this suite compares.
+;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;; It starts at 0x1000 rather than at 0.
+;; wasm3 traps whenever a WASI out param is written to linear-memory address 0.
+;; The trap message is "out of bounds memory access".
+;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
+;; So the whole block is simply moved up out of wasm3's way:
 ;;
 ;; 0x1000   4  argc                     (args_sizes_get out param)
 ;; 0x1004   4  argv buffer size         (args_sizes_get out param)
@@ -43,7 +58,8 @@
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
   ;; Every argv problem lands here.
-  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
+  ;; The harness always passes exactly one argument.
+  ;; So anything else is a caller bug, not an input to guess at.
   (func $die
     (i32.store (i32.const 0x1400) (i32.const 0x1800))
     (i32.store (i32.const 0x1404) (i32.const 29))

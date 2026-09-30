@@ -1,5 +1,8 @@
 // Ensure the file is at least offset+len bytes.
-// FileChannel has no fallocate, so a grow is done by a positioned one-byte write at newSize-1 (the gap is a sparse hole), matching posix_fallocate's grow-only, never-shrink contract; a request that does not exceed the current size is a no-op.
+// FileChannel has no fallocate.
+// So a grow is done by a positioned one-byte write at newSize-1 (the gap is a sparse hole).
+// That matches posix_fallocate's grow-only, never-shrink contract.
+// A request that does not exceed the current size is a no-op.
 int wasi_fd_allocate(int fd, long offset, long len) {
     Object e = fds.get(fd);
     if (!(e instanceof Handle)) {

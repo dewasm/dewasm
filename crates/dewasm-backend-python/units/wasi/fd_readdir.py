@@ -6,8 +6,9 @@ def wasi_fd_readdir(self, fd, buf_ptr, buf_len, cookie, bufused_ptr):
     if not (self.fd_meta[fd][0] & self.RIGHTS_FD_READDIR):
         return self.ERRNO_NOTCAPABLE
     try:
-        # cookie 0 starts a fresh enumeration, so re-scan the directory then;
-        # a non-zero cookie resumes the snapshot cached from that start (the opaque-resume-point contract).
+        # cookie 0 starts a fresh enumeration, so re-scan the directory then.
+        # A non-zero cookie resumes the snapshot cached from that start.
+        # That is the opaque-resume-point contract.
         if entry.entries is None or cookie == 0:
             entry.entries = self.readdir_entries(entry.host_path)
         entries = entry.entries

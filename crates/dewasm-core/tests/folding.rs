@@ -1,4 +1,7 @@
-//! Build-time expression folding: assert the IR shapes the func builder produces from small wat inputs (single-use folding, the spill rules, the node-count cap, and what ends up in `Func.temps`).
+//! Build-time expression folding.
+//! Assert the IR shapes the func builder produces from small wat inputs.
+//! The cases cover single-use folding, the spill rules, and the node-count cap.
+//! They also cover what ends up in `Func.temps`.
 
 use dewasm_core::build_module;
 use dewasm_core::ir::{BinOp, Expr, Func, Stmt};
@@ -74,7 +77,8 @@ fn count_assigns(stmts: &[Stmt]) -> usize {
 
 #[test]
 fn single_use_values_fold_into_the_consumer() {
-    // add(a, b) folds to a single `return a + b`: no temps, no assigns, the return value is the composed expression.
+    // add(a, b) folds to a single `return a + b` with no temps and no assigns.
+    // The return value is the composed expression.
     let f = func(
         "(module (func (param i32 i32) (result i32)
             local.get 0 local.get 1 i32.add))",
@@ -121,7 +125,7 @@ fn local_set_spills_a_pending_that_reads_the_local() {
 
 #[test]
 fn a_call_spills_pending_memory_reads() {
-    // A pending load cannot cross the call (which may write memory), so it is spilled before the call.
+    // A pending load cannot cross the call (which may write memory), so it is spilled before it.
     let f = func(
         "(module
             (memory 1)
@@ -149,7 +153,8 @@ fn a_call_spills_pending_memory_reads() {
 
 #[test]
 fn local_tee_folds_its_value_and_leaves_a_local_read() {
-    // tee lowers to a local.set with the value inlined; the value left on the stack folds on into the following add.
+    // tee lowers to a local.set with the value inlined.
+    // The value left on the stack folds on into the following add.
     let f = func(
         "(module (func (param i32) (result i32)
             i32.const 5 local.tee 0
@@ -174,7 +179,8 @@ fn local_tee_folds_its_value_and_leaves_a_local_read() {
 
 #[test]
 fn select_spills_a_trapping_arm() {
-    // The backends lower select to a conditionally-evaluated ternary, so a trapping `then` arm (a load) must be spilled to keep its trap eager.
+    // The backends lower select to a conditionally-evaluated ternary.
+    // So a trapping `then` arm (a load) must be spilled to keep its trap eager.
     let f = func(
         "(module (memory 1)
             (func (param i32) (result i32)
@@ -202,7 +208,8 @@ fn select_spills_a_trapping_arm() {
 
 #[test]
 fn deep_expressions_are_capped() {
-    // Chain enough adds to exceed the node cap; the builder must spill so no single expression tree grows past MAX_FOLD_SIZE, and temps appear.
+    // Chain enough adds to exceed the node cap, so temps appear.
+    // The builder must spill so no single expression tree grows past MAX_FOLD_SIZE.
     let mut body = String::from("local.get 0\n");
     for _ in 0..40 {
         body.push_str("local.get 0 i32.add\n");
@@ -221,7 +228,8 @@ fn deep_expressions_are_capped() {
 
 #[test]
 fn return_value_is_inlined_and_temps_track_materialization() {
-    // A value produced by a call is materialized (call results never fold), then that single temp is the inlined return value.
+    // A value produced by a call is materialized, since call results never fold.
+    // Then that single temp is the inlined return value.
     let f = func(
         "(module
             (func $g (result i32) i32.const 7)
@@ -243,7 +251,9 @@ fn return_value_is_inlined_and_temps_track_materialization() {
 
 #[test]
 fn a_call_result_spills_a_pending_that_reads_its_slot() {
-    // `(one() + two())` is pending at depth 0 and reads the temp at depth 1, which the third call's result then takes: the pending must be spilled before that call, or the addition would read 100 twice.
+    // `(one() + two())` is pending at depth 0 and reads the temp at depth 1.
+    // The third call's result then takes that temp.
+    // The pending must be spilled before that call, or the addition would read 100 twice.
     let f = func(
         "(module
             (func $one (result i32) i32.const 1)
@@ -280,7 +290,8 @@ fn a_call_result_spills_a_pending_that_reads_its_slot() {
 
 #[test]
 fn a_spill_flushes_a_pending_that_reads_the_reused_slot() {
-    // Same shape without a call: the store spills the pending load into the temp at depth 1, which the pending addition at depth 0 reads, so that addition has to be spilled first.
+    // Same shape without a call: the store spills the pending load into the temp at depth 1.
+    // The pending addition at depth 0 reads that temp, so the addition has to be spilled first.
     let f = func(
         "(module
             (memory 1)

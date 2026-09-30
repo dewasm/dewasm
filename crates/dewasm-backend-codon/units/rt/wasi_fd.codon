@@ -1,6 +1,10 @@
-# One fd-table entry: a host file descriptor (kind 1), a sandboxed directory (kind 2), or a stdio stream (kind 3, no close, SPIPE on seek-family calls).
-# Carries the wasmtime-modelled per-fd capability fields (rights base/inheriting, fdflags) and the memoized filetype (-1 until first queried), the dynamic backends' parallel fd_meta folded into the entry itself.
-# `entries` is the fd_readdir listing cache: (name bytes, filetype, inode) triples, valid only while `entries_valid`.
+# One fd-table entry: a host file descriptor (kind 1), or a sandboxed directory (kind 2).
+# Kind 3 is a stdio stream: no close, and SPIPE on seek-family calls.
+# It carries the wasmtime-modelled per-fd capability fields (rights base/inheriting, fdflags).
+# It also carries the memoized filetype, -1 until first queried.
+# So the dynamic backends' parallel fd_meta is folded into the entry itself.
+# `entries` is the fd_readdir listing cache of (name bytes, filetype, inode) triples.
+# It is valid only while `entries_valid`.
 class WasiFd:
     kind: int
     host_fd: int

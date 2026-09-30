@@ -1,6 +1,7 @@
 # requires: rt/f32_from_bits
 # Unpacking "<f" is bit-exact for every non-NaN value.
-# A NaN takes the bit path because the float-to-double conversion quietens it, and wasm's f32.load is bit-preserving.
+# A NaN takes the bit path because the float-to-double conversion quietens it.
+# wasm's f32.load is bit-preserving.
 def fwla(self, a, b):
     a = (a + b) & 0xFFFFFFFF
     self.check(a, 4)

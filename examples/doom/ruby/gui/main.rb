@@ -1,11 +1,19 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Interactive windowed frontend for the dewasm-generated DOOM library (../doom_gen.rb, produced from jacobenget/doom.wasm by ../build.sh and shared with the terminal frontend), rendering with gosu.
+# Interactive windowed frontend for the dewasm-generated DOOM library, rendering with gosu.
+# The library is ../doom_gen.rb, shared with the terminal frontend.
+# ../build.sh produces it from jacobenget/doom.wasm.
 #
-# The parent ../main.rb draws into a terminal because the Ruby backend only manages ~15 ticks/sec under YJIT and a terminal has orders of magnitude fewer cells than a window has pixels.
-# This one takes the window anyway, which is affordable because the module's 640x400 framebuffer is an exact 2x upscale of DOOM's native 320x200: halving it back is lossless and leaves 64000 pixels per frame to hand to the GPU, not 256000.
-# What the window buys over the terminal is real key releases, so Ctrl (fire) and Shift (run) work as they do in DOOM.
+# The parent ../main.rb draws into a terminal.
+# The Ruby backend only manages ~15 ticks/sec under YJIT.
+# And a terminal has orders of magnitude fewer cells than a window has pixels.
+# This one takes the window anyway.
+# That is affordable because the module's 640x400 framebuffer is an exact 2x upscale of 320x200.
+# That is DOOM's native resolution.
+# Halving it back is lossless and leaves 64000 pixels per frame to hand to the GPU, not 256000.
+# What the window buys over the terminal is real key releases.
+# So Ctrl (fire) and Shift (run) work as they do in DOOM.
 #
 # Run with --smoke for a headless self-check (no window, no display needed).
 
@@ -18,8 +26,11 @@ def save_game_path(id)
   File.join(SAVE_DIR, "doomsav#{id}.dsg")
 end
 
-# Wires the wasm module's ten host imports to Ruby.
-# `doom_holder` exists because these closures have to be built before Doom.new returns the instance they read memory from; it's filled in immediately after construction and only read from within calls the imports themselves receive later (never during Doom.new itself).
+# Connects the wasm module's ten host imports to Ruby.
+# `doom_holder` exists because these closures have to be built before Doom.new returns the instance.
+# The closures read memory from that instance.
+# `doom_holder` is filled in immediately after construction.
+# It is only read from within calls the imports themselves receive later, never during Doom.new.
 def build_imports(doom_holder, frame_state)
   {
     "console" => {
@@ -51,13 +62,16 @@ def build_imports(doom_holder, frame_state)
       end,
     },
     "runtimeControl" => {
-      # Backs DOOM's internal 35Hz pacing, so it has to be a real monotonic clock (not a fake stepped one) or the game's notion of elapsed time would drift from how often we actually call tickGame.
+      # Backs DOOM's internal 35Hz pacing.
+      # So it has to be a real monotonic clock, not a fake stepped one.
+      # Otherwise the game's notion of elapsed time would drift from how often we call tickGame.
       "timeInMilliseconds" => lambda do
         Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
       end,
     },
     "ui" => {
-      # Converted here, inside the tick, rather than copied out for later: the memory buffer this reads can be replaced by a subsequent tick that grows the module's memory.
+      # Converted here, inside the tick, rather than copied out for later.
+      # A subsequent tick that grows the module's memory can replace the memory buffer this reads.
       "drawFrame" => lambda do |buf_off|
         frame_state[:buf_off] = buf_off
         frame_state[:rgba] = frame_state[:converter].convert(doom_holder[0].memory.buffer, buf_off)
@@ -69,7 +83,9 @@ def build_imports(doom_holder, frame_state)
         frame_state[:height] = h
         frame_state[:converter] = FrameConverter.new(w, h)
       end,
-      # Leaving both output slots untouched (they arrive pre-zeroed) selects the wasm-embedded shareware WAD; supplying external WADs is out of scope for this frontend.
+      # Leaving both output slots untouched (they arrive pre-zeroed) selects the embedded WAD.
+      # That is the wasm-embedded shareware WAD.
+      # Supplying external WADs is out of scope for this frontend.
       "wadSizes" => lambda { |_num_off, _bytes_off| },
       "readWads" => lambda { |_dst_off, _lengths_off| },
     },
@@ -78,17 +94,25 @@ end
 
 # Turns the module's framebuffer into the RGBA blob gosu wants.
 #
-# Two transformations, both per pixel and therefore the only part of this frontend where a naive Ruby loop would cost more than the wasm tick itself:
-# the module stores B,G,R,A while gosu wants R,G,B,A, and the module's alpha byte is always 0 where gosu needs 0xff.
+# There are two transformations, both per pixel.
+# So only here in this frontend would a naive Ruby loop cost more than the wasm tick itself.
+# First, the module stores B,G,R,A while gosu wants R,G,B,A.
+# Second, the module's alpha byte is always 0 where gosu needs 0xff.
 #
-# The work is kept to a few hundred Ruby-level operations per frame rather than 64000 by two facts about DOOM's renderer.
-# It is paletted (VGA Mode 13h, at most 256 colors per palette and a handful of palettes over a session), so every distinct 32-bit source word is swizzled once and memoized.
-# And its 640x400 output is an exact 2x nearest upscale of its native 320x200, so reading every other pixel of every other row is lossless.
-# The first frame checks that rather than trusting it, and falls back to full resolution if a future build of the module ever stops holding it.
+# Two facts about DOOM's renderer keep the work to a few hundred Ruby-level operations per frame.
+# Without them it would be 64000.
+# First, the renderer is paletted: VGA Mode 13h, at most 256 colors per palette.
+# A session has only a handful of palettes.
+# So every distinct 32-bit source word is swizzled once and memoized.
+# Second, its 640x400 output is an exact 2x nearest upscale of its native 320x200.
+# So reading every other pixel of every other row is lossless.
+# The first frame checks that rather than trusting it.
+# It falls back to full resolution if a future build of the module ever stops holding it.
 class FrameConverter
   attr_reader :out_w, :out_h
 
-  # out_w/out_h are not known until the first frame decides whether halving is lossless, so they start at full resolution and #convert narrows them once.
+  # out_w/out_h are not known until the first frame decides whether halving is lossless.
+  # So they start at full resolution, and #convert narrows them once.
   def initialize(src_w, src_h)
     @src_w = src_w
     @src_h = src_h
@@ -118,11 +142,13 @@ class FrameConverter
     warn "doom: framebuffer is not a 2x upscale; rendering at full #{@src_w}x#{@src_h}" if @step == 1
     @out_w = @src_w / @step
     @out_h = @src_h / @step
-    # One C-level unpack per row: "V" reads a 32-bit BGRA word and "x4" skips the duplicated neighbor.
+    # One C-level unpack per row.
+    # "V" reads a 32-bit BGRA word, and "x4" skips the duplicated neighbor.
     @row_template = ((@step == 2 ? "Vx4" : "V") * @out_w).freeze
   end
 
-  # True when every 2x2 block of the framebuffer is uniform, i.e. the image carries no more detail than its 320x200 half.
+  # True when every 2x2 block of the framebuffer is uniform.
+  # That is, the image carries no more detail than its 320x200 half.
   def upscaled_2x?(buffer, base_off)
     return false unless @src_w.even? && @src_h.even?
 
@@ -137,7 +163,10 @@ class FrameConverter
   end
 end
 
-# Translates a gosu button id to the code reportKeyDown/reportKeyUp expect: the module's KEY_* constant for special keys, or the ASCII value of the lowercase character for letters and digits (text entry, and weapon-select digits).
+# Translates a gosu button id to the code reportKeyDown/reportKeyUp expect.
+# For special keys that is the module's KEY_* constant.
+# For letters and digits it is the ASCII value of the lowercase character.
+# Those serve text entry, and weapon-select digits.
 class KeyMap
   def initialize(doom)
     @by_button = {
@@ -161,7 +190,8 @@ class KeyMap
       Gosu::KB_PERIOD => doom.global_get("KEY_STRAFE_R"),
     }
     (Gosu::KB_A..Gosu::KB_Z).each_with_index { |id, i| @by_button[id] = "a".ord + i }
-    # KB_1..KB_9 run 30..38 and KB_0 sits above them at 39, so the digit row is not one contiguous ascending range.
+    # KB_1..KB_9 run 30..38 and KB_0 sits above them at 39.
+    # So the digit row is not one contiguous ascending range.
     (Gosu::KB_1..Gosu::KB_9).each_with_index { |id, i| @by_button[id] = "1".ord + i }
     @by_button[Gosu::KB_0] = "0".ord
   end
@@ -174,9 +204,12 @@ CONTROLS_TEXT = "arrows move   ctrl fire   space use   shift run   ,/. strafe   
 
 class DoomWindow < Gosu::Window
   # DOOM's own internal tic rate.
-  # tickGame paces itself off runtimeControl.timeInMilliseconds no matter how often it is called, so matching 35Hz makes one update advance exactly one tic instead of some updates being no-ops.
+  # tickGame paces itself off runtimeControl.timeInMilliseconds no matter how often it is called.
+  # So matching 35Hz makes one update advance exactly one tic.
+  # Otherwise some updates would be no-ops.
   TICKS_PER_SECOND = 35
-  # The caption only has to be legible, not frame-accurate, and asking the window manager to retitle the window is not free.
+  # The caption only has to be legible, not frame-accurate.
+  # Asking the window manager to retitle the window is not free.
   CAPTION_UPDATE_EVERY = TICKS_PER_SECOND
   HUD_HEIGHT = 18
 
@@ -188,7 +221,8 @@ class DoomWindow < Gosu::Window
 
     @frame_state = frame_state
     @keys = KeyMap.new(doom)
-    # Fetched once out of the exports table: invoke() would redo the hash lookup and splat the arguments on every one of these calls.
+    # Fetched once out of the exports table.
+    # invoke() would redo the hash lookup and splat the arguments on every one of these calls.
     @tick_game = doom.exports.fetch("tickGame")
     @report_key_down = doom.exports.fetch("reportKeyDown")
     @report_key_up = doom.exports.fetch("reportKeyUp")
@@ -221,7 +255,9 @@ class DoomWindow < Gosu::Window
     return unless rgba
 
     image = frame_image(rgba)
-    # Letterbox: the window is resizable and need not keep the framebuffer's 8:5 ratio, so the frame is scaled by whichever axis runs out first and centred, leaving black bars on the other.
+    # Letterbox: the window is resizable and need not keep the framebuffer's 8:5 ratio.
+    # So the frame is scaled by whichever axis runs out first, and centred.
+    # That leaves black bars on the other axis.
     scale = [width.to_f / image.width, height.to_f / image.height].min
     draw_w = image.width * scale
     draw_h = image.height * scale
@@ -230,7 +266,8 @@ class DoomWindow < Gosu::Window
   end
 
   def button_down(id)
-    # Deliberately no `super`: gosu's default button_down closes the window on Escape, which is DOOM's menu key.
+    # Deliberately no `super`: gosu's default button_down closes the window on Escape.
+    # Escape is DOOM's menu key.
     case id
     when Gosu::KB_F10 then close
     when Gosu::KB_F1 then @show_hud = !@show_hud
@@ -248,7 +285,9 @@ class DoomWindow < Gosu::Window
   private
 
   # Uploads the frame to the GPU.
-  # Gosu interpolates a scaled-up image unless the texture was created with `retro: true`, which Image.from_blob has no way to ask for, so the retro path blits the frame into a persistent nearest-neighbor render target instead.
+  # Gosu interpolates a scaled-up image unless the texture was created with `retro: true`.
+  # Image.from_blob has no way to ask for that.
+  # So the retro path blits the frame into a persistent nearest-neighbor render target instead.
   # That costs about 10ms a frame against from_blob's 2, which is why --smooth exists.
   def frame_image(rgba)
     image = Gosu::Image.from_blob(@converter.out_w, @converter.out_h, rgba)
@@ -259,7 +298,8 @@ class DoomWindow < Gosu::Window
     @canvas
   end
 
-  # A dark bar along the bottom edge, so the tick rate and the controls stay legible against DOOM's own (highly variable) palette.
+  # A dark bar along the bottom edge.
+  # It keeps the tick rate and the controls legible against DOOM's own (highly variable) palette.
   def draw_hud
     bar_y = height - HUD_HEIGHT
     draw_rect(0, bar_y, width, HUD_HEIGHT, Gosu::Color.new(180, 0, 0, 0), 1)
@@ -280,7 +320,10 @@ def start_doom
   doom = Doom.new(build_imports(doom_holder, frame_state))
   doom_holder[0] = doom
   doom.invoke("initGame")
-  # initGame renders the title screen, so a frame has been through FrameConverter by now and out_w/out_h have settled; the window sizes itself from them, and would pick the unhalved 640x400 if this were ever not true.
+  # initGame renders the title screen.
+  # So a frame has been through FrameConverter by now, and out_w/out_h have settled.
+  # The window sizes itself from them.
+  # It would pick the unhalved 640x400 if this were ever not true.
   if frame_state[:converter].nil? || frame_state[:rgba].nil?
     warn "doom: FAIL: initGame produced no frame (loading.onGameInit or ui.drawFrame was never called)"
     exit 1
@@ -304,7 +347,8 @@ def run_smoke
     exit 1
   end
 
-  # Timed separately from the loop above because conversion runs inside the tick, as part of ui.drawFrame.
+  # Timed separately from the loop above.
+  # Conversion runs inside the tick, as part of ui.drawFrame.
   convert_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   10.times { converter.convert(doom.memory.buffer, frame_state.fetch(:buf_off)) }
   convert_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - convert_start) / 10 * 1000
@@ -316,14 +360,18 @@ def run_smoke
 
   distinct = rgba.unpack("V*").uniq.size
   puts "smoke: final frame is #{converter.out_w}x#{converter.out_h} with #{distinct} distinct colors"
-  # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors), so a healthy frame tops out in the low hundreds, not the thousands a truecolor renderer would produce.
+  # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
+  # So a healthy frame tops out in the low hundreds.
+  # A truecolor renderer would produce thousands.
   # A degenerate frame (blank/solid) instead lands in the single digits.
   if distinct <= 50
     warn "smoke: FAIL: frame looks degenerate (too few distinct colors)"
     exit 1
   end
 
-  # Gosu decodes and encodes images without a window, so unlike the terminal frontend (which falls back to PPM for want of a stdlib PNG writer) this writes a real PNG with no display attached.
+  # Gosu decodes and encodes images without a window.
+  # So this writes a real PNG with no display attached.
+  # The terminal frontend falls back to PPM instead, for want of a stdlib PNG writer.
   Gosu::Image.from_blob(converter.out_w, converter.out_h, rgba).save("screenshot.png")
   puts "smoke: wrote #{File.expand_path('screenshot.png')}"
 end
@@ -349,7 +397,8 @@ def parse_options(argv)
 end
 
 def run_interactive(options)
-  # Gosu.render, which the nearest-neighbor path needs, arrived in gosu 1.1; degrade to interpolated scaling rather than refusing to run.
+  # Gosu.render, which the nearest-neighbor path needs, arrived in gosu 1.1.
+  # Before that, degrade to interpolated scaling rather than refusing to run.
   if options[:retro] && !Gosu.respond_to?(:render)
     warn "doom: this gosu is too old for nearest-neighbor scaling; falling back to --smooth"
     options[:retro] = false

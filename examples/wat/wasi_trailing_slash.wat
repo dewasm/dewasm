@@ -1,9 +1,12 @@
-;; Trailing-slash shapes across the path_* family (issue #42): unspecified by
-;; WASI, pinned to wasmtime 47 as measured on macOS and Linux.
-;; Each probe prints "<tag><errno as two decimal digits>\n"; per-probe intent is commented at each call, expectations live in the shared WASI_CASES entry.
+;; Trailing-slash shapes across the path_* family (issue #42).
+;; WASI leaves them unspecified, so they are pinned to wasmtime 47 as measured on macOS and Linux.
+;; Each probe prints "<tag><errno as two decimal digits>\n".
+;; Per-probe intent is commented at each call; expectations live in the shared WASI_CASES entry.
 ;; Setup provides a file "file", a file "file2", and a directory "dir".
 ;; Probe k is wasmtime's own host split: EINVAL on macOS, EISDIR on Linux.
-;; Left unpinned: nofollow filestat of "file/" (wasmtime's two hosts disagree) and unlink/rename-of-directory errnos (host split, covered per host by the strict wasi-testsuite).
+;; Left unpinned: nofollow filestat of "file/", since wasmtime's two hosts disagree.
+;; Also unpinned: unlink/rename-of-directory errnos.
+;; Those are a host split, covered per host by the strict wasi-testsuite.
 (module
   (import "wasi_snapshot_preview1" "path_rename"
     (func $path_rename (param i32 i32 i32 i32 i32 i32) (result i32)))

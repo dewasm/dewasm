@@ -1,22 +1,32 @@
 //! What gets benchmarked: the two workload kinds and how the suite finds them.
 //!
-//! **Microbenchmarks** live in two families (hand-written `benchmarks/wat/`, wasi-sdk-compiled `benchmarks/c/`), each built by its own `build.sh` into `benchmarks/cache/<family>/`.
-//! The contract: `<module> <iterations>` does that many units of work, prints exactly one decimal result line, exits 0; `<iterations> = 0` does no work but still prints, which is what lets [`crate::bench::measure`] separate startup + load from compute.
-//! Same `<iterations>` must give byte-identical stdout on every runtime: the wasmtime cross-check enforces it.
+//! **Microbenchmarks** live in two families.
+//! They are hand-written `benchmarks/wat/` and wasi-sdk-compiled `benchmarks/c/`.
+//! Each family is built by its own `build.sh` into `benchmarks/cache/<family>/`.
+//! The contract: `<module> <iterations>` does that many units of work.
+//! It prints exactly one decimal result line and exits 0.
+//! `<iterations> = 0` does no work but still prints.
+//! That is what lets [`crate::bench::measure`] separate startup + load from compute.
+//! Same `<iterations>` must give byte-identical stdout on every runtime.
+//! The wasmtime cross-check enforces it.
 //!
-//! The set is discovered from disk; the table below only adds per-workload iteration caps. **Apps** are real cached programs with fixed argv/stdin, wall time only, hand-declared.
+//! The set is discovered from disk; the table below only adds per-workload iteration caps.
+//! **Apps** are real cached programs with fixed argv/stdin, wall time only, hand-declared.
 
 use std::path::PathBuf;
 
 use crate::bench::{apps_cache_dir, bench_cache_dir, display_path};
 
-/// Cap for a microbenchmark absent from [`MICRO_ITER_CAPS`]: a ceiling on calibration, not a target.
+/// Cap for a microbenchmark absent from [`MICRO_ITER_CAPS`].
+/// It is a ceiling on calibration, not a target.
 const DEFAULT_ITER_CAP: u64 = 100_000_000;
 
-/// The families; each prefix names the source directory, the cache subdirectory, and the build script.
+/// The families.
+/// Each prefix names the source directory, the cache subdirectory, and the build script.
 const MICRO_FAMILIES: &[&str] = &["wat", "c"];
 
-/// Per-workload calibration **ceilings**, not fixed counts: they bind only the fastest runners, and exist to stop a workload with non-constant per-iteration cost from being driven absurdly far.
+/// Per-workload calibration **ceilings**, not fixed counts: they bind only the fastest runners.
+/// They stop a workload with non-constant per-iteration cost from being driven absurdly far.
 /// Set to roughly 3x what wasmtime needs for the default 300 ms target; retune when a body changes.
 const MICRO_ITER_CAPS: &[(&str, u64)] = &[
     ("wat/i32_alu", 500_000_000),
@@ -40,7 +50,8 @@ const MICRO_ITER_CAPS: &[(&str, u64)] = &[
 ];
 
 /// Runners excluded from one microbenchmark, keyed by its id.
-/// Same discipline as [`SQLITE_QUERY_EXCLUDES`]: every reason is a measurement or an observed error, never a guess.
+/// Same discipline as [`SQLITE_QUERY_EXCLUDES`].
+/// Every reason is a measurement or an observed error, never a guess.
 const MICRO_EXCLUDES: &[(&str, &[(&str, Exclusion)])] = &[
     ("wat/eh_throw", EH_EXCLUDES),
     ("wat/eh_try", EH_EXCLUDES),
@@ -49,7 +60,9 @@ const MICRO_EXCLUDES: &[(&str, &[(&str, Exclusion)])] = &[
     ("wat/i64_div", I64_DIV_EXCLUDES),
 ];
 
-/// One declared exclusion: the class the rendered document shows as its own column, and the specifics without the class restated.
+/// One declared exclusion.
+/// It holds the class the rendered document shows as its own column.
+/// It also holds the specifics without the class restated.
 /// Every reason is a measurement or an observed error, never a guess.
 #[derive(Clone, Copy)]
 pub struct Exclusion {
@@ -57,7 +70,8 @@ pub struct Exclusion {
     pub reason: &'static str,
 }
 
-/// The two classes a declared exclusion falls into; the third skip class in the record, a host setup gap, never comes from these tables.
+/// The two classes a declared exclusion falls into.
+/// The third skip class in the record, a host setup gap, never comes from these tables.
 #[derive(Clone, Copy)]
 pub enum ExclusionKind {
     /// Runs correctly, but too slowly to keep in the suite.
@@ -66,7 +80,9 @@ pub enum ExclusionKind {
     Capability,
 }
 
-/// Runners excluded from both exception-handling microbenchmarks, since the reason is the same axis on both: none of these five decode or accept the tag section that `try_table`/`throw` needs.
+/// Runners excluded from both exception-handling microbenchmarks.
+/// The reason is the same axis on both.
+/// None of these five decode or accept the tag section that `try_table`/`throw` needs.
 const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "dewasm-bash",
@@ -100,8 +116,11 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
 ];
 
 /// Runners excluded from the tail-call microbenchmark: none of these accepts `return_call`.
-/// The paired `call_direct` case has no exclusions, so a runner missing here is measured on both and a runner listed here is measured on the baseline alone.
-/// Every dewasm backend runs it, bash included: the proposal is lowered everywhere (see docs/support.md).
+/// The paired `call_direct` case has no exclusions.
+/// So a runner missing here is measured on both.
+/// A runner listed here is measured on the baseline alone.
+/// Every dewasm backend runs it, bash included.
+/// The proposal is lowered everywhere (see docs/support.md).
 const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "wasmer",
@@ -148,7 +167,9 @@ const WARDITE_EH_EXCLUSION: Exclusion = Exclusion {
     reason: "wardite fails to load the tag section",
 };
 
-/// wardite does not re-round f32 arithmetic to single precision between operations, so a chain of dependent f32 ops accumulates double-precision bits and diverges from wasmtime; the byte-for-byte verification would fail the whole run.
+/// wardite does not re-round f32 arithmetic to single precision between operations.
+/// So a chain of dependent f32 ops accumulates double-precision bits and diverges from wasmtime.
+/// The byte-for-byte verification would fail the whole run.
 const F32_ALU_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wardite", WARDITE_F32_ALU_EXCLUSION),
     ("wardite-yjit", WARDITE_F32_ALU_EXCLUSION),
@@ -159,7 +180,8 @@ const WARDITE_F32_ALU_EXCLUSION: Exclusion = Exclusion {
     reason: "wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run",
 };
 
-/// wardite computes `i64.div_s` at `f64` precision, which loses bits for operands beyond 2^53 and gives a wrong quotient.
+/// wardite computes `i64.div_s` at `f64` precision.
+/// That loses bits for operands beyond 2^53 and gives a wrong quotient.
 const I64_DIV_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wardite", WARDITE_I64_DIV_EXCLUSION),
     ("wardite-yjit", WARDITE_I64_DIV_EXCLUSION),
@@ -170,8 +192,12 @@ const WARDITE_I64_DIV_EXCLUSION: Exclusion = Exclusion {
     reason: "wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53",
 };
 
-/// The `sqlite3_query` script: a 100k-row table in one transaction (recursive CTE, so the work is the engine's), then an aggregate and a `LIKE` scan. 100k rows so the wasmtime baseline resolves above process startup.
-/// The script is fixed rather than calibrated per runner (that is what makes it realistic), which is why the slowest runners are excluded instead of measured at their own size.
+/// The `sqlite3_query` script.
+/// It builds a 100k-row table in one transaction, then runs an aggregate and a `LIKE` scan.
+/// The table comes from a recursive CTE, so the work is the engine's.
+/// 100k rows so the wasmtime baseline resolves above process startup.
+/// The script is fixed rather than calibrated per runner: that is what makes it realistic.
+/// That is why the slowest runners are excluded instead of measured at their own size.
 const SQLITE_QUERY_SQL: &str = "\
 .bail on
 PRAGMA journal_mode = memory;
@@ -187,7 +213,10 @@ SELECT count(*) FROM t WHERE name LIKE '%7%';
 ";
 
 /// Deterministic compressible text for `app/minigzip`, ~1.2 MB.
-/// A fixed-seed linear congruential generator (Knuth's MMIX constants) picks one of a dozen words each step and joins them with spaces: pure integer arithmetic, so the bytes are exactly reproducible on every platform and run, which the byte-for-byte stdout comparison against wasmtime depends on.
+/// A fixed-seed linear congruential generator (Knuth's MMIX constants) drives the text.
+/// Each step picks one of a dozen words, and spaces join the words.
+/// It is pure integer arithmetic, so the bytes are exactly reproducible on every platform and run.
+/// The byte-for-byte stdout comparison against wasmtime depends on that.
 /// Sized so the wasmtime baseline is the same order as `app/sqlite3_query`'s.
 fn minigzip_input() -> String {
     const WORDS: &[&str] = &[
@@ -230,18 +259,21 @@ pub enum Kind {
 
 pub struct Workload {
     /// The filter/report label, e.g. `wat/i32_alu`, `c/sha256` or `app/sqlite3_query`.
-    /// The part before the slash is the family, which is also the source directory for a microbenchmark.
+    /// The part before the slash is the family.
+    /// It is also the source directory for a microbenchmark.
     pub label: String,
     /// Path to the `.wasm`; may not exist yet (see [`Workload::missing_reason`]).
     pub wasm: PathBuf,
     pub kind: Kind,
-    /// Runner labels this workload deliberately does not run on, each with the reason reported in the JSON and the doc.
+    /// Runner labels this workload deliberately does not run on.
+    /// Each carries the reason reported in the JSON and the doc.
     /// Never a silent omission (a gap is stated, not hidden).
     pub exclude: &'static [(&'static str, Exclusion)],
 }
 
 impl Workload {
-    /// `Some(reason)` when the module is not on disk, phrased as the setup command that produces it.
+    /// `Some(reason)` when the module is not on disk.
+    /// The reason is phrased as the setup command that produces it.
     pub fn missing_reason(&self) -> Option<String> {
         if self.wasm.is_file() {
             return None;
@@ -269,8 +301,11 @@ impl Workload {
     }
 }
 
-/// Every workload the suite knows about: the declared microbenchmarks unioned with whatever `benchmarks/cache/<family>/` actually holds, then the declared app cases.
-/// One present on disk but absent from the table is included with the default cap; one in the table but absent from disk is included as missing so `--list` names it.
+/// Every workload the suite knows about.
+/// That is the declared microbenchmarks unioned with what `benchmarks/cache/<family>/` holds.
+/// Then come the declared app cases.
+/// One present on disk but absent from the table is included with the default cap.
+/// One in the table but absent from disk is included as missing, so `--list` names it.
 pub fn workloads() -> Vec<Workload> {
     let mut ids: Vec<String> = MICRO_ITER_CAPS
         .iter()
@@ -281,7 +316,9 @@ pub fn workloads() -> Vec<Workload> {
             ids.push(found);
         }
     }
-    // Family-major (in `MICRO_FAMILIES`'s declared order), alphabetical within a family, rather than a plain alphabetical sort, which would put `c/*` before `wat/*` and scatter run order, results.md sections and charts out of the families' declared order.
+    // Family-major (in `MICRO_FAMILIES`'s declared order), alphabetical within a family.
+    // A plain alphabetical sort would put `c/*` before `wat/*`.
+    // That would scatter run order, results.md sections and charts out of the declared order.
     ids.sort_by_key(|id| {
         let family = id.split('/').next().unwrap_or(id.as_str());
         let family_rank = MICRO_FAMILIES
@@ -315,8 +352,10 @@ pub fn workloads() -> Vec<Workload> {
     out
 }
 
-/// The `<family>/<stem>` ids actually present under `benchmarks/cache/`, walking each family's own subdirectory.
-/// A missing directory is not an error here: it just means that family is not built yet, which `--list` and the per-workload `missing_reason` report with the build command.
+/// The `<family>/<stem>` ids actually present under `benchmarks/cache/`.
+/// It walks each family's own subdirectory.
+/// A missing directory is not an error here: it just means that family is not built yet.
+/// `--list` and the per-workload `missing_reason` report that with the build command.
 fn discovered_micro_ids() -> Vec<String> {
     let cache = bench_cache_dir();
     MICRO_FAMILIES
@@ -337,12 +376,21 @@ fn discovered_micro_ids() -> Vec<String> {
         .collect()
 }
 
-/// The declared app cases: `cowsay`, a startup-dominated real program on a small module where every runner in the matrix competes, `sqlite3_query` for sustained real work, `sqlite3_mod_query`, the same script on the opcode-split build of the same engine, and `minigzip`, a byte-granular compression workload the other three do not exercise.
-/// All are timed as whole wall time: an app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
+/// The declared app cases:
+///
+/// * `cowsay`, a startup-dominated real program on a small module where every runner competes;
+/// * `sqlite3_query` for sustained real work;
+/// * `sqlite3_mod_query`, the same script on the opcode-split build of the same engine;
+/// * `minigzip`, a byte-granular compression workload the other three do not exercise.
+///
+/// All are timed as whole wall time.
+/// An app has no iteration parameter to calibrate, so there is no `t(0)` to subtract.
 fn app_workloads() -> Vec<Workload> {
     let cache = apps_cache_dir();
     // `-batch` pins the shell to non-interactive mode.
-    // Otherwise it decides from `isatty`, and a runtime that misreports the standard fds runs a different program: pywasm calls every fd a character device (`wasi.py:429`) and got a banner and box-drawing output.
+    // Otherwise it decides from `isatty`.
+    // A runtime that misreports the standard fds then runs a different program.
+    // pywasm calls every fd a character device (`wasi.py:429`) and got a banner and box drawing.
     let sqlite_query = || Kind::App {
         args: ["-batch", ":memory:"].map(String::from).to_vec(),
         stdin: SQLITE_QUERY_SQL.to_string(),
@@ -364,7 +412,10 @@ fn app_workloads() -> Vec<Workload> {
             kind: sqlite_query(),
             exclude: SQLITE_QUERY_EXCLUDES,
         },
-        // Script, argv and exclusions are the stock case's, so the pair differs only in the artifact: `cache/sqlite3-mod.wasm` carries `examples/apps/src/sqlite3-vdbe-split.patch`, which moves the hot VDBE opcode bodies into their own functions.
+        // Script, argv and exclusions are the stock case's.
+        // So the pair differs only in the artifact.
+        // `cache/sqlite3-mod.wasm` carries `examples/apps/src/sqlite3-vdbe-split.patch`.
+        // That patch moves the hot VDBE opcode bodies into their own functions.
         Workload {
             label: "app/sqlite3_mod_query".to_string(),
             wasm: cache.join("sqlite3-mod.wasm"),
@@ -384,9 +435,13 @@ fn app_workloads() -> Vec<Workload> {
     ]
 }
 
-/// Runners excluded from both SQL query cases, which run the same script on two builds of the same engine.
-/// Every reason below is measured, not guessed: an earlier draft guessed "do not finish in a practical time" for all four interpreter entries and was wrong on both counts (wardite fails outright; pywasm runs it fine, just slowly).
-/// The measurements were taken on `sqlite3-shell.wasm`; each names the engine rather than the file, because the opcode-split build is the same program.
+/// Runners excluded from both SQL query cases.
+/// Those run the same script on two builds of the same engine.
+/// Every reason below is measured, not guessed.
+/// An earlier draft guessed "do not finish in a practical time" for all four interpreter entries.
+/// It was wrong on both counts: wardite fails outright, and pywasm runs it fine, just slowly.
+/// The measurements were taken on `sqlite3-shell.wasm`.
+/// Each names the engine rather than the file, because the opcode-split build is the same program.
 const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "dewasm-bash",
@@ -458,7 +513,8 @@ const DEWASM_PYTHON_SQLITE_EXCLUSION: Exclusion = Exclusion {
     reason: "dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks",
 };
 
-/// Runners excluded from the compression case; each reason is a measurement, not a guess (see the module doc comment on [`SQLITE_QUERY_EXCLUDES`] for why that discipline matters here too).
+/// Runners excluded from the compression case; each reason is a measurement, not a guess.
+/// The module doc comment on [`SQLITE_QUERY_EXCLUDES`] says why that discipline matters here too.
 const MINIGZIP_EXCLUDES: &[(&str, Exclusion)] = &[
     ("dewasm-bash", BASH_MINIGZIP_EXCLUSION),
     ("wasm3-ruby", CONVERTED_WASM3_MINIGZIP_EXCLUSION),

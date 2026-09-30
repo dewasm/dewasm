@@ -1,7 +1,15 @@
 //! `go vet` over converted artifacts.
-//! A Go project that imports an artifact runs its own vet over it, so generated source has to satisfy the same checks hand-written Go does; before issue #214 a converted mruby carried about 7,200 diagnostics, all of them unreachable statements and self-assignments.
+//! A Go project that imports an artifact runs its own vet over it.
+//! So generated source has to satisfy the same checks hand-written Go does.
+//! Before issue #214 a converted mruby carried about 7,200 diagnostics.
+//! All of them were unreachable statements and self-assignments.
 //!
-//! The cases are the shapes the emitter has to get right: a standalone program (frame exits and `br_table` switches), a standalone program using exception handling (`try_table` closures and catch handlers), a fixture whose pruned statements carry the last use of a label and a local, and a library artifact (the package layout an embedder imports).
+//! The cases are the shapes the emitter has to get right:
+//!
+//! - a standalone program (frame exits and `br_table` switches);
+//! - a standalone program using exception handling (`try_table` closures and catch handlers);
+//! - a fixture whose pruned statements carry the last use of a label and a local;
+//! - a library artifact (the package layout an embedder imports).
 
 use std::process::Command;
 
@@ -21,7 +29,9 @@ fn standalone_app(name: &str) -> String {
     dewasm_test_helper::convert_on_big_stack(&GoBackend, &bytes, Mode::Standalone, name)
 }
 
-/// Run `go vet` over `source` in a throwaway module laid out the way `common::build_go` lays one out for `go build`: `package main` is a file beside the `go.mod`, a library package a directory of its own name.
+/// Run `go vet` over `source` in a throwaway module.
+/// The module is laid out the way `common::build_go` lays one out for `go build`.
+/// `package main` is a file beside the `go.mod`; a library package is a directory of its own name.
 /// A missing `go` toolchain is a loud failure, as everywhere else in this crate's tests.
 fn assert_vet_clean(case: &str, source: &str) {
     let go =
@@ -40,7 +50,8 @@ fn assert_vet_clean(case: &str, source: &str) {
     let out = Command::new(&go)
         .args(["vet", "./..."])
         .current_dir(&dir)
-        // A stray `go.work` above the temp dir would otherwise pull this throwaway module into a workspace that does not list it.
+        // A stray `go.work` may sit above the temp dir.
+        // It would otherwise pull this throwaway module into a workspace that does not list it.
         .env("GOWORK", "off")
         .output()
         .expect("spawn go vet");
@@ -56,15 +67,21 @@ fn cowsay_standalone_artifact_is_vet_clean() {
     assert_vet_clean("cowsay", &standalone_app("cowsay"));
 }
 
-/// mruby is the exception-handling app (its setjmp/longjmp lowering uses `try_table`/`throw`), and the artifact issue #214 measured.
+/// mruby is the exception-handling app: its setjmp/longjmp lowering uses `try_table`/`throw`.
+/// It is also the artifact issue #214 measured.
 /// No category token: cowsay-class, like the `mruby_eh` e2e case.
 #[test]
 fn mruby_standalone_artifact_is_vet_clean() {
     assert_vet_clean("mruby", &standalone_app("mruby"));
 }
 
-/// A loop with no exit makes the statements after it unreachable, and dropping those can take the last branch to the enclosing frame's label and the last read of a local with them: Go rejects both an unused label and an unused variable, so the emitter has to drop the label and blank the local too.
-/// No cached app produces this shape (every one of them keeps its label count across the change), so it is pinned here.
+/// A loop with no exit makes the statements after it unreachable.
+/// Dropping those can take two things with them.
+/// One is the last branch to the enclosing frame's label; the other is the last read of a local.
+/// Go rejects both an unused label and an unused variable.
+/// So the emitter has to drop the label and blank the local too.
+/// No cached app produces this shape: every one of them keeps its label count across the change.
+/// So it is pinned here.
 const PRUNED_TAIL_WAT: &str = r#"(module
   (func $sink (param i32))
   (func (export "loop_without_exit") (result i32)
@@ -84,8 +101,13 @@ const PRUNED_TAIL_WAT: &str = r#"(module
     (i32.const 3)))
 "#;
 
-/// Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps, so the emitter has to keep such an operation from being a Go constant expression at all.
-/// The spec testsuite passes its operands in at each `invoke`, so no `.wast` file produces this shape; it reached the emitter through the official wasm3 build (issue #289), whose PRNG multiplies two constants.
+/// Go computes an operation between two constants at arbitrary precision.
+/// It rejects a result outside the type, where wasm wraps.
+/// So the emitter has to keep such an operation from being a Go constant expression at all.
+/// The spec testsuite passes its operands in at each `invoke`.
+/// So no `.wast` file produces this shape.
+/// It reached the emitter through the official wasm3 build (issue #289).
+/// That build's PRNG multiplies two constants.
 const CONST_ARITHMETIC_WAT: &str = r#"(module
   (func (export "mul") (result i32) (i32.mul (i32.const 20152) (i32.const 1103515245)))
   (func (export "sub") (result i32) (i32.sub (i32.const 0) (i32.const 1)))

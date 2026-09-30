@@ -98,7 +98,6 @@ A sentence has a length bound, and the other rules remove every way to meet it e
 - One paragraph explains one thing.
   A side note worth keeping gets its own paragraph; usually it is worth removing instead.
 - Prefer a self-contained example, a table, or a figure over text describing one.
-- Existing text is brought under the rules when it is edited, not in passing.
 
 ## Coding style
 

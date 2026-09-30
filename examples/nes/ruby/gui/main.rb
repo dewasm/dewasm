@@ -1,11 +1,18 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Interactive windowed frontend for the dewasm-generated NES library (../nes_gen.rb, produced from the agnes-based cache/nes.wasm by ../build.sh and shared with the terminal frontend), rendering with gosu.
+# Interactive windowed frontend for the dewasm-generated NES library, rendering with gosu.
+# The library is ../nes_gen.rb, shared with the terminal frontend.
+# ../build.sh produces it from the agnes-based cache/nes.wasm.
 #
 # The parent ../main.rb draws into a terminal; this one takes a real window.
-# Like there, nes.wasm has zero host imports, so the host drives everything itself: pacing (gosu's 60Hz update interval, matching the NTSC NES's ~60.0988Hz closely enough), input polling, and frame presentation.
-# What the window buys over the terminal is real key releases: setInput wants the full held-button bitmask every tick, and gosu's button_down/button_up report exactly that, where a terminal has to synthesize releases after a hold window.
+# Like there, nes.wasm has zero host imports, so the host drives everything itself.
+# That covers pacing, input polling, and frame presentation.
+# Pacing is gosu's 60Hz update interval, close enough to the NTSC NES's ~60.0988Hz.
+# What the window buys over the terminal is real key releases.
+# setInput wants the full held-button bitmask every tick.
+# gosu's button_down/button_up report exactly that.
+# A terminal has to synthesize releases after a hold window instead.
 #
 # Run with --smoke for a headless self-check (no window, no display needed).
 
@@ -26,8 +33,10 @@ BUTTON_BITS = {
   right: 0x80,
 }.freeze
 
-# Read the ROM file, copy it into the module's linear memory via allocRom, and initialize the emulator.
-# Raises if the ROM is rejected (unsupported mapper or corrupt file), the module's own way of signalling failure.
+# Read the ROM file, copy it into the module's linear memory via allocRom.
+# Then initialize the emulator.
+# Raises if the ROM is rejected (unsupported mapper or corrupt file).
+# That is the module's own way of signalling failure.
 def load_rom(nes, path)
   rom = File.binread(path)
   ptr = nes.invoke("allocRom", rom.bytesize)
@@ -43,12 +52,19 @@ def new_nes
   nes
 end
 
-# Turns the module's frame (one palette index per pixel at screenOffset, against the fixed 64-entry palette at paletteOffset) into the RGBA blob gosu wants.
+# Turns the module's frame into the RGBA blob gosu wants.
+# The frame is one palette index per pixel at screenOffset.
+# The indices refer to the fixed 64-entry palette at paletteOffset.
 #
-# The guest hands over indices, not colors, which keeps the per-pixel work to one Array lookup: each of the 256 possible index bytes maps to a precomputed 32-bit RGBA word (the module's `& 0x3f` mask folded into the table), so a frame is one `unpack`, one `map!` over the lookup table and one `pack`, all at C level except the lookups.
+# The guest hands over indices, not colors, which keeps the per-pixel work to one Array lookup.
+# Each of the 256 possible index bytes maps to a precomputed 32-bit RGBA word.
+# The module's `& 0x3f` mask is folded into that table.
+# So a frame is one `unpack`, one `map!` over the lookup table, and one `pack`.
+# All of it runs at C level except the lookups.
 class FrameConverter
   def initialize(palette)
-    # pack("V*") writes little-endian, so the word R | G<<8 | B<<16 | A<<24 lands in memory as the R,G,B,A bytes gosu reads.
+    # pack("V*") writes little-endian.
+    # So the word R | G<<8 | B<<16 | A<<24 lands in memory as the R,G,B,A bytes gosu reads.
     @lut = Array.new(256) do |i|
       r, g, b = palette[i & 0x3f]
       r | (g << 8) | (b << 16) | (0xff << 24)
@@ -60,7 +76,8 @@ class FrameConverter
   end
 end
 
-# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding), read once: it never changes, unlike the per-frame index buffer.
+# The module's fixed 64-entry palette (R,G,B,A per entry; alpha is padding).
+# It is read once: it never changes, unlike the per-frame index buffer.
 def read_palette(nes)
   bytes = nes.memory.buffer.get_string(nes.invoke("paletteOffset"), 64 * 4).bytes
   Array.new(64) { |i| bytes[i * 4, 3] }
@@ -69,10 +86,13 @@ end
 CONTROLS_TEXT = "arrows d-pad   x=A z=B   enter start   space select   F1 hud   q/esc quit"
 
 class NesWindow < Gosu::Window
-  # The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no separate calibration is needed.
-  # When the interpreter cannot sustain it, gosu's update simply runs late, which is the same fastest-sustainable-rate behavior the terminal frontend implements by hand.
+  # The NTSC NES runs at ~60.0988Hz.
+  # 60 exactly is close enough that no separate calibration is needed.
+  # When the interpreter cannot sustain it, gosu's update simply runs late.
+  # That is the same fastest-sustainable-rate behavior the terminal frontend implements by hand.
   TICKS_PER_SECOND = 60
-  # The caption only has to be legible, not frame-accurate, and asking the window manager to retitle the window is not free.
+  # The caption only has to be legible, not frame-accurate.
+  # Asking the window manager to retitle the window is not free.
   CAPTION_UPDATE_EVERY = TICKS_PER_SECOND
   HUD_HEIGHT = 18
 
@@ -85,7 +105,8 @@ class NesWindow < Gosu::Window
     @frame_h = frame_h
     @converter = converter
     @screen_off = screen_off
-    # Fetched once out of the exports table: invoke() would redo the hash lookup and splat the arguments on every one of these calls.
+    # Fetched once out of the exports table.
+    # invoke() would redo the hash lookup and splat the arguments on every one of these calls.
     @set_input = nes.exports.fetch("setInput")
     @tick_game = nes.exports.fetch("tickGame")
     @buffer = nes.memory.buffer
@@ -122,7 +143,9 @@ class NesWindow < Gosu::Window
     return unless rgba
 
     image = frame_image(rgba)
-    # Letterbox: the window is resizable and need not keep the frame's ratio, so the frame is scaled by whichever axis runs out first and centred, leaving black bars on the other.
+    # Letterbox: the window is resizable and need not keep the frame's ratio.
+    # So the frame is scaled by whichever axis runs out first, and centred.
+    # That leaves black bars on the other axis.
     scale = [width.to_f / image.width, height.to_f / image.height].min
     draw_w = image.width * scale
     draw_h = image.height * scale
@@ -161,7 +184,9 @@ class NesWindow < Gosu::Window
   end
 
   # Uploads the frame to the GPU.
-  # Gosu interpolates a scaled-up image unless the texture was created with `retro: true`, which Image.from_blob has no way to ask for, so the retro path blits the frame into a persistent nearest-neighbor render target instead.
+  # Gosu interpolates a scaled-up image unless the texture was created with `retro: true`.
+  # Image.from_blob has no way to ask for that.
+  # So the retro path blits the frame into a persistent nearest-neighbor render target instead.
   # That is what --smooth turns off.
   def frame_image(rgba)
     image = Gosu::Image.from_blob(@frame_w, @frame_h, rgba)
@@ -172,7 +197,8 @@ class NesWindow < Gosu::Window
     @canvas
   end
 
-  # A dark bar along the bottom edge, so the tick rate and the controls stay legible against the game's own palette.
+  # A dark bar along the bottom edge.
+  # It keeps the tick rate and the controls legible against the game's own palette.
   def draw_hud
     bar_y = height - HUD_HEIGHT
     draw_rect(0, bar_y, width, HUD_HEIGHT, Gosu::Color.new(180, 0, 0, 0), 1)
@@ -210,7 +236,9 @@ def run_smoke(rom_path)
   end
   elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
 
-  # Timed separately from the loop above: the interactive window converts once per tick, but the tick cost is what varies between machines and Rubies.
+  # Timed separately from the loop above.
+  # The interactive window converts once per tick.
+  # But the tick cost is what varies between machines and Rubies.
   screen = nes.memory.buffer.get_string(screen_off, frame_w * frame_h)
   convert_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   rgba = nil
@@ -224,14 +252,17 @@ def run_smoke(rom_path)
 
   distinct = rgba.unpack("V*").uniq.size
   puts "smoke: final frame is #{frame_w}x#{frame_h} with #{distinct} distinct colors"
-  # The NES PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens; a degenerate (blank/solid) frame lands in the single digits
-  # (mirroring the >4 threshold the snapshot oracle uses, crates/xtask/src/nes_snapshot.rs).
+  # The NES PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens.
+  # A degenerate (blank/solid) frame lands in the single digits.
+  # This mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs).
   if distinct <= 4
     warn "smoke: FAIL: frame looks degenerate (too few distinct colors)"
     exit 1
   end
 
-  # Gosu decodes and encodes images without a window, so unlike the terminal frontend (which falls back to PPM for want of a stdlib PNG writer) this writes a real PNG with no display attached.
+  # Gosu decodes and encodes images without a window.
+  # So this writes a real PNG with no display attached.
+  # The terminal frontend falls back to PPM instead, for want of a stdlib PNG writer.
   Gosu::Image.from_blob(frame_w, frame_h, rgba).save("screenshot.png")
   puts "smoke: wrote #{File.expand_path('screenshot.png')}"
 end
@@ -261,7 +292,8 @@ def parse_options(argv)
 end
 
 def run_interactive(options, rom_path)
-  # Gosu.render, which the nearest-neighbor path needs, arrived in gosu 1.1; degrade to interpolated scaling rather than refusing to run.
+  # Gosu.render, which the nearest-neighbor path needs, arrived in gosu 1.1.
+  # Before that, degrade to interpolated scaling rather than refusing to run.
   if options[:retro] && !Gosu.respond_to?(:render)
     warn "nes: this gosu is too old for nearest-neighbor scaling; falling back to --smooth"
     options[:retro] = false

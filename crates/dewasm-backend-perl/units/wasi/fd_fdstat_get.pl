@@ -3,7 +3,10 @@ sub wasi_fd_fdstat_get {
     my ($self, $fd, $out_ptr) = @_;
     my $e = $self->{fds}{$fd};
     return ERRNO_BADF unless defined $e;
-    # `-t` is a host syscall, and an open descriptor's filetype cannot change while it is open, so it runs at most once per fd (the answer is memoized in the fd-table entry, which fd_renumber moves and fd_close drops): a guest polling isatty in a loop would otherwise pay one syscall per call.
+    # `-t` is a host syscall, and an open descriptor's filetype cannot change while it is open.
+    # So it runs at most once per fd, and the answer is memoized in the fd-table entry.
+    # fd_renumber moves that entry and fd_close drops it.
+    # A guest polling isatty in a loop would otherwise pay one syscall per call.
     my $filetype = $e->{filetype} //= $e->{dir} ? 3 : (-t $e->{fh} ? 2 : 4);  # directory / char device / regular file
     my ($base, $inheriting, $fdflags) = @{$self->{meta}{$fd}};
     # fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base

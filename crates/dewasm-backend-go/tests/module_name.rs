@@ -1,11 +1,16 @@
-//! The module-name policy for Go output: a library artifact is a Go *package*, so its name is validated, not sanitized; a standalone artifact is a program with fixed internal names, so its bytes do not depend on the name at all.
+//! The module-name policy for Go output.
+//! A library artifact is a Go *package*, so its name is validated, not sanitized.
+//! A standalone artifact is a program with fixed internal names.
+//! So its bytes do not depend on the name at all.
 
 use dewasm_backend::Mode;
 use dewasm_backend_go::GoBackend;
 
 mod common;
 
-/// The shared two-export fixture, converted with WASI on: `library_artifact_is_importable_as_a_package` below compiles what this produces, so the fixture is the one a real embedder gets.
+/// The shared two-export fixture, converted with WASI on.
+/// `library_artifact_is_importable_as_a_package` below compiles what this produces.
+/// So the fixture is the one a real embedder gets.
 const ADD_WAT: &str = include_str!("../../../examples/wat/add.wat");
 
 dewasm_test_helper::module_name_policy_suite!(
@@ -17,7 +22,8 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["\npackage main\n", "func NewProgram(", "func main() {"],
 );
 
-/// From a valid name, both mappings are total and fully specified: package = lowercased, type = first letter uppercased.
+/// From a valid name, both mappings are total and fully specified.
+/// The package is the name lowercased; the type is the name with its first letter uppercased.
 #[test]
 fn library_package_and_type_come_from_the_module_name() {
     for (name, package, ty) in [
@@ -38,7 +44,8 @@ fn library_package_and_type_come_from_the_module_name() {
     }
 }
 
-/// Standalone output is byte-identical however the artifact was named, including under a name library mode would reject, which is simply irrelevant here.
+/// Standalone output is byte-identical however the artifact was named.
+/// That includes a name library mode would reject, which is irrelevant here.
 #[test]
 fn standalone_is_byte_stable() {
     let a = convert("add", Mode::Standalone).expect("generate");
@@ -48,8 +55,10 @@ fn standalone_is_byte_stable() {
     assert_eq!(a, dashed);
 }
 
-/// The embedding shape a consumer actually uses: the artifact is imported as a package from another one, with no host code inside it.
-/// `common::build_go` is exactly that layout (temp module, `main.go` importing the package), so this drives it end to end.
+/// The embedding shape a consumer actually uses.
+/// The artifact is imported as a package from another one, with no host code inside it.
+/// `common::build_go` is that layout (temp module, `main.go` importing the package).
+/// So this drives it end to end.
 #[test]
 fn library_artifact_is_importable_as_a_package() {
     let src = convert("adder", Mode::Library).expect("generate");

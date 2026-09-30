@@ -34,21 +34,25 @@ SAVE_DIR = ".savegame"
 
 # A pressed key is held reportKeyDown-active until this many seconds pass without seeing it again.
 # Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
-# This matches the Python DOOM frontend's window; it has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+# This matches the Python DOOM frontend's window.
+# It has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
 RELEASE_TIMEOUT = 0.4
 
 SMOKE_TICKS = 15
 
 
 def emit(s: str):
-    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes, so len(s) is not the byte count write() needs.
+    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes.
+    # So len(s) is not the byte count write() needs.
     b = s.encode()
     write(1, Ptr[byte](b._ptr.as_byte()), b._len)
 
 
 # --- Terminal control ----------------------------------------------------
 
-# `ioctl` is variadic, and on darwin arm64 a variadic argument is passed on the stack rather than in a register, so the call has to be spelled as variadic for the buffer pointer to reach the kernel.
+# `ioctl` is variadic.
+# On darwin arm64 a variadic argument is passed on the stack rather than in a register.
+# So the call has to be spelled as variadic for the buffer pointer to reach the kernel.
 @llvm
 def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
     declare i32 @ioctl(i32, i64, ...)
@@ -59,7 +63,9 @@ def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
 
 
 TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
-# struct termios has a different layout on darwin and linux (72 and 60 bytes), so the saved state is only ever copied as opaque bytes and edited through cfmakeraw; this covers both.
+# struct termios has a different layout on darwin and linux (72 and 60 bytes).
+# So the saved state is only ever copied as opaque bytes and edited through cfmakeraw.
+# This covers both.
 TERMIOS_SIZE = 128
 TCSADRAIN = 1
 POLLIN = 1
@@ -101,20 +107,26 @@ class Terminal:
         emit("\x1b[?1049h\x1b[?25l")
 
     def leave(self):
-        # SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+        # SGR reset first.
+        # Otherwise the fixed status-line colors persist past leaving the alternate screen.
+        # They would tint the shell prompt underneath.
         emit("\x1b[0m\x1b[?25h\x1b[?1049l")
         tcsetattr(0, TCSADRAIN, self.saved)
 
 
 # --- Host imports --------------------------------------------------------
 #
-# The ten imports all need to reach the module's memory or record state for the host loop, but they have to exist before Doom(...) returns the instance that owns that memory, so they share this one object and the instance fills its `mem` in afterwards.
-# `mem` holds the DoomRt.Memory rather than its `data` pointer: memory.grow reallocates the buffer, so a cached pointer would go stale mid-tick.
+# The ten imports all need to reach the module's memory or record state for the host loop.
+# But they have to exist before Doom(...) returns the instance that owns that memory.
+# So they share this one object, and the instance fills its `mem` in afterwards.
+# `mem` holds the DoomRt.Memory rather than its `data` pointer.
+# memory.grow reallocates the buffer, so a cached pointer would go stale mid-tick.
 
 
 class Host:
     mem: Optional[DoomRt.Memory]
-    # Frame geometry comes from loading.onGameInit (640x400 for this binary) and the offset from every ui.drawFrame call during a tick; neither is hardcoded.
+    # Frame geometry comes from loading.onGameInit (640x400 for this binary).
+    # The offset comes from every ui.drawFrame call during a tick; neither is hardcoded.
     frame_w: int
     frame_h: int
     frame_off: int
@@ -203,7 +215,8 @@ class WriteSaveGame(DoomRt.Fn):
     def invoke(self, a: List[DoomRt.Val]) -> List[DoomRt.Val]:
         src = int(a[1].i32())
         length = int(a[2].i32())
-        # Codon's os.mkdir raises when the directory is already there, which is the normal case after the first save.
+        # Codon's os.mkdir raises when the directory is already there.
+        # That is the normal case after the first save.
         try:
             os.mkdir(SAVE_DIR)
         except OSError:
@@ -310,16 +323,21 @@ def tick(doom: Doom):
 
 # --- Terminal rendering --------------------------------------------------
 #
-# Each character cell shows two vertically-stacked pixels via the upper-half block character, foreground = top pixel, background = bottom pixel.
-# The 640x400 framebuffer is a 2x upscale of DOOM's native 320x200, so pixels are read at even (x, y) on the logical 320x200 grid and nearest-neighbor sampled from there down to however many columns/rows actually fit.
+# Each character cell shows two vertically-stacked pixels via the upper-half block character.
+# Its foreground is the top pixel, and its background is the bottom pixel.
+# The 640x400 framebuffer is a 2x upscale of DOOM's native 320x200.
+# So pixels are read at even (x, y) on the logical 320x200 grid.
+# From there they are nearest-neighbor sampled down to however many columns/rows actually fit.
 
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
-# A cell packs its two 24-bit colors as `top * RGB_SPAN + bottom` so that comparing it against the previous frame's is a single integer comparison.
+# A cell packs its two 24-bit colors as `top * RGB_SPAN + bottom`.
+# So comparing it against the previous frame's is a single integer comparison.
 RGB_SPAN = 1 << 24
 
 
@@ -432,8 +450,11 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow keys as 3-byte escape sequences, everything else as 1 byte.
-# A lone ESC keypress is indistinguishable from the first byte of an escape sequence until either more bytes show up (they arrive together, already buffered, for a real escape sequence) or a short timeout passes with nothing more arriving (a real ESC keypress).
+# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
+# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# - more bytes show up; they arrive together, already buffered, for a real escape sequence;
+# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
 ESC_TIMEOUT_MS = 10
 
 # read_key's out-of-band results; every DOOM key code is positive.
@@ -560,7 +581,9 @@ def run_interactive():
 
     terminal.enter()
     try:
-        # No pacing here, matching the Python frontend: the module advances game time at 35Hz off the clock import, so the host loop just ticks as fast as it can.
+        # No pacing here, matching the Python frontend.
+        # The module advances game time at 35Hz off the clock import.
+        # So the host loop just ticks as fast as it can.
         while True:
             events = List[int]()
             while keyboard.ready(0):
@@ -636,7 +659,9 @@ def run_smoke():
         print("smoke: FAIL: no frame was ever captured", file=sys.stderr)
         sys.exit(1)
 
-    # Measure render cost without a real terminal: build the escape string for a representative fixed size and throw it away instead of writing it to a screen.
+    # Measure render cost without a real terminal.
+    # Build the escape string for a representative fixed size and throw it away.
+    # It is not written to a screen.
     render_start = time.monotonic()
     width, rows = fit(host.frame_w // 2, host.frame_h // 2, FALLBACK_COLS, FALLBACK_ROWS)
     cells = build_cells(host.data(), host.frame_off, host.frame_w, host.frame_h, width, rows)
@@ -654,7 +679,9 @@ def run_smoke():
         "wrote screenshot.ppm (" + str(distinct) + " distinct colors)",
     )
 
-    # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors), so a healthy frame tops out in the low hundreds, not the thousands a truecolor renderer would produce.
+    # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
+    # So a healthy frame tops out in the low hundreds.
+    # A truecolor renderer would produce thousands.
     # A degenerate frame (blank/solid) instead lands in the single digits.
     if distinct <= 50:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)

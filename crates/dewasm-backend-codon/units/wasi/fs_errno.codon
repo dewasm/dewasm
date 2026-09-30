@@ -1,5 +1,6 @@
 # requires: rt/cerr
-# One host-errno-to-WASI-errno mapping shared by every filesystem syscall, so the same host error never maps to different codes depending on which syscall raised it.
+# One host-errno-to-WASI-errno mapping shared by every filesystem syscall.
+# So the same host error never maps to different codes depending on which syscall raised it.
 # The host values that differ per platform are conditional.
 def fs_errno(self) -> UInt[32]:
     e = Rt.cerr()

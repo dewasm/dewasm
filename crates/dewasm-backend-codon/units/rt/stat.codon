@@ -1,5 +1,7 @@
 # A decoded struct stat: the fields WASI's filestat and filetype logic consume.
-# Timestamps are nanoseconds since the epoch (negative before it); dev can be negative on macOS (devfs nodes), so every field stays a signed int and the filestat packer masks to u64.
+# Timestamps are nanoseconds since the epoch, negative before it.
+# dev can be negative on macOS (devfs nodes).
+# So every field stays a signed int, and the filestat packer masks to u64.
 class Stat:
     dev: int
     ino: int

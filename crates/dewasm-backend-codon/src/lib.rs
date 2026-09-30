@@ -1,18 +1,39 @@
-//! Codon backend: translates dewasm IR into a Codon module (a class plus a bundled lightweight runtime), compiled ahead of time by the Codon toolchain.
+//! Codon backend: translates dewasm IR into a Codon module.
+//! The module is a class plus a bundled lightweight runtime.
+//! The Codon toolchain compiles it ahead of time.
 //!
 //! Lowering conventions:
-//! - i32/i64 are native `UInt[32]`/`UInt[64]` (wrapping arithmetic, unsigned compares and shifts are the stored representation's own); signed views are `Int[32]`/`Int[64]` casts, the Go backend's shape rather than the masked-unsigned one (Codon's `int` is 64-bit signed, so masked-unsigned i64 values would not fit).
+//! - i32/i64 are native `UInt[32]`/`UInt[64]`.
+//!   Wrapping arithmetic, unsigned compares and shifts are the stored representation's own.
+//!   Signed views are `Int[32]`/`Int[64]` casts.
+//!   This is the Go backend's shape rather than the masked-unsigned one.
+//!   Codon's `int` is 64-bit signed, so masked-unsigned i64 values would not fit.
 //! - f32/f64 are native `float32`/`float`.
-//!   Float division goes through an `@llvm` `fdiv` unit because Codon's `/` raises on a zero divisor.
-//!   A float add/sub/mul/div with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q`: LLVM folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x` under `-release`, which would skip the signaling-NaN quieting wasm requires (measured on Codon 0.20.1).
-//! - Control flow uses the Python backend's branch-register model: block bodies are spliced inline, forward branches set a per-function `_br` register read by guarded regions, and only real loops become `while True:`.
+//!   Float division goes through an `@llvm` `fdiv` unit.
+//!   Codon's `/` raises on a zero divisor.
+//!   A float add/sub/mul/div with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q`.
+//!   Under `-release`, LLVM folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x`.
+//!   This was measured on Codon 0.20.1.
+//!   That would skip the signaling-NaN quieting wasm requires.
+//! - Control flow uses the Python backend's branch-register model.
+//!   Block bodies are spliced inline.
+//!   Forward branches set a per-function `_br` register read by guarded regions.
+//!   Only real loops become `while True:`.
 //!   The flat state-machine lowering for deep crossings is not ported yet; every branch relays.
-//! - The dynamic boundary is uniformly boxed, the Java backend's shape under Codon's static typing: a wasm function value is an `Rt.Fn` (`invoke(List[Val]) -> List[Val]`), an import/export value is an `Rt.Extern` whose typed field per kind is what makes import resolution check kinds and global value types, and direct calls to defined functions stay native.
-//!   Import providers are plain `Dict[str, Dict[str, Rt.Extern]]`; the duck-typed provider objects of the dynamic backends have no Codon equivalent.
-//! - Memory is a raw `Ptr[byte]` with `@llvm` `align 1` loads and stores, so unaligned access is defined and free.
+//! - The dynamic boundary is uniformly boxed, the Java backend's shape under Codon's static typing.
+//!   A wasm function value is an `Rt.Fn` (`invoke(List[Val]) -> List[Val]`).
+//!   An import/export value is an `Rt.Extern` with a typed field per kind.
+//!   Those fields make import resolution check kinds and global value types.
+//!   Direct calls to defined functions stay native.
+//!   Import providers are plain `Dict[str, Dict[str, Rt.Extern]]`.
+//!   The duck-typed provider objects of the dynamic backends have no Codon equivalent.
+//! - Memory is a raw `Ptr[byte]` with `@llvm` `align 1` loads and stores.
+//!   So unaligned access is defined and free.
 //!
 //! The runtime is composed from per-method units and referenced by a module-level class name.
-//! Under `Embedded` linkage that name is per-artifact (`<Class>Rt`), so two generated artifacts in one namespace keep independent runtimes; `Alias` linkage keeps the shared `Rt`.
+//! Under `Embedded` linkage that name is per-artifact (`<Class>Rt`).
+//! So two generated artifacts in one namespace keep independent runtimes.
+//! `Alias` linkage keeps the shared `Rt`.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -72,7 +93,10 @@ pub fn bundler() -> &'static RuntimeBundler {
                     close: "",
                     prelude: Some("wasi/_class"),
                 },
-                // Last on purpose: Extern's field annotations name Fn, Global, Table, Memory and Tag, and Codon resolves nested-class field and signature annotations in definition order (no forward references).
+                // This is last on purpose.
+                // Extern's field annotations name Fn, Global, Table, Memory and Tag.
+                // Codon resolves nested-class field and signature annotations in definition order.
+                // It allows no forward references.
                 RuntimeScope {
                     prefix: "ext",
                     open: "",
@@ -86,19 +110,22 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Emit a top-level shared runtime (`class Rt: ...`) for the closure of `seeds`; generated classes then use `RuntimeLinkage::Alias("Rt")`.
+/// Emit a top-level shared runtime (`class Rt: ...`) for the closure of `seeds`.
+/// Generated classes then use `RuntimeLinkage::Alias("Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("class Rt:\n{}", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a `codon` toolchain able to compile generated programs: `$DEWASM_CODON` first, then `codon` on `PATH`.
+/// Locate a `codon` toolchain able to compile generated programs.
+/// `$DEWASM_CODON` comes first, then `codon` on `PATH`.
 /// A missing toolchain is a loud failure at the call site, not here.
 pub fn find_codon() -> Option<std::path::PathBuf> {
     static CODON: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     CODON.get_or_init(find_codon_uncached).clone()
 }
 
-/// The probe behind [`find_codon`], memoized there: it spawns a process per call, and the toolchain cannot change under a running process.
+/// The probe behind [`find_codon`], memoized there: it spawns a process per call.
+/// The toolchain cannot change under a running process.
 fn find_codon_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -115,8 +142,10 @@ fn find_codon_uncached() -> Option<std::path::PathBuf> {
     })
 }
 
-/// The directory holding Codon's runtime dylibs (`libcodonrt`, `libomp`), which a built binary needs on the loader path.
-/// Resolved relative to the `codon` binary (`<prefix>/bin/codon` -> `<prefix>/lib/codon`), following symlinks.
+/// The directory holding Codon's runtime dylibs (`libcodonrt`, `libomp`).
+/// A built binary needs it on the loader path.
+/// It is resolved relative to the `codon` binary, following symlinks.
+/// `<prefix>/bin/codon` maps to `<prefix>/lib/codon`.
 pub fn codon_lib_dir(codon: &std::path::Path) -> Option<std::path::PathBuf> {
     let resolved = codon.canonicalize().ok()?;
     let prefix = resolved.parent()?.parent()?;
@@ -141,16 +170,22 @@ impl Backend for CodonBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Native float32/float with @llvm bit paths; NaN payload handling mirrors the Go backend's units.
+            // Native float32/float with @llvm bit paths.
+            // NaN payload handling mirrors the Go backend's units.
             Feature::Floats => SupportStatus::Supported,
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
-            // Tags are identity objects, a thrown exception is a native exception that doubles as the exnref, and traps stay uncatchable: the Python backend's model under Codon's typing.
+            // Tags are identity objects.
+            // A thrown exception is a native exception that doubles as the exnref.
+            // Traps stay uncatchable: the Python backend's model under Codon's typing.
             Feature::ExceptionHandling => SupportStatus::Supported,
-            // A trampoline with a body/entry split (the Go backend's shape under Codon's nominal typing): a parked call is typed per argument slot and per result signature, so a chain bounces in one frame with nothing boxed.
+            // A trampoline with a body/entry split.
+            // It is the Go backend's shape under Codon's nominal typing.
+            // A parked call is typed per argument slot and per result signature.
+            // So a chain bounces in one frame with nothing boxed.
             Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
@@ -165,7 +200,8 @@ impl Backend for CodonBackend {
         };
         let rt_name = runtime_name(&class_name, &opts.runtime);
 
-        // The Exit/Trap handlers in the standalone main need these even when the module itself never references them.
+        // The Exit/Trap handlers in the standalone main need these.
+        // They are needed even when the module itself never references them.
         let mut extra_seeds = BTreeSet::new();
         if opts.mode == Mode::Standalone {
             extra_seeds.insert("rt/trap".to_string());
@@ -205,7 +241,8 @@ impl Backend for CodonBackend {
     }
 }
 
-/// The standalone entrypoint: parse the `--dir HOST::GUEST` runtime interface, instantiate, run `_start`, and map Exit/Trap to the process exit status.
+/// The standalone entrypoint: parse the `--dir HOST::GUEST` runtime interface, instantiate.
+/// Then run `_start`, and map Exit/Trap to the process exit status.
 fn standalone_main(
     w: &mut CodeWriter,
     module: &Module,
@@ -315,7 +352,8 @@ fn standalone_main(
     w.line("_run_main()");
 }
 
-/// Returns the class source (runtime bundle included for `Embedded`, wrapper classes appended) and the set of runtime units it needs.
+/// Returns the class source and the set of runtime units it needs.
+/// The source includes the runtime bundle for `Embedded`, with wrapper classes appended.
 pub fn generate_class_with_units(
     module: &Module,
     class_name: &str,
@@ -332,7 +370,10 @@ pub fn generate_class_with_units(
     )
 }
 
-/// The spec-harness variant: shared `Rt` linkage, plus the reflective `invoke`/`global_get` dispatchers and the recursion guard that turns a fatal native stack overflow into a catchable "call stack exhausted" trap.
+/// The spec-harness variant: shared `Rt` linkage and the reflective dispatchers.
+/// The dispatchers are `invoke` and `global_get`.
+/// It also adds the recursion guard.
+/// The guard turns a fatal native stack overflow into a catchable "call stack exhausted" trap.
 pub fn generate_spec_class_with_units(
     module: &Module,
     class_name: &str,
@@ -365,7 +406,9 @@ fn generate_class_inner(
         .map(|(i, _)| module.num_imported_funcs() + i as u32)
         .collect();
     let mut seeds = extra_seeds.clone();
-    // Always bundled: embedder glue names `<Rt>.Trap`/`<Rt>.Exit` in `except` clauses, which Codon resolves statically even when the run never raises (CPython's lazy except-expression evaluation has no equivalent).
+    // Always bundled: embedder glue names `<Rt>.Trap`/`<Rt>.Exit` in `except` clauses.
+    // Codon resolves those statically even when the run never raises.
+    // CPython's lazy except-expression evaluation has no equivalent.
     seeds.insert("rt/trap".to_string());
     seeds.insert("rt/exit".to_string());
     let mut tail_entry_set = tail_callers.clone();
@@ -386,7 +429,8 @@ fn generate_class_inner(
                     }
                 }
                 Stmt::ReturnCallIndirect { type_idx, .. } => {
-                    // An indirect site can park boxed (a foreign funcref) and needs every param slot of its signature.
+                    // An indirect site can park boxed (a foreign funcref).
+                    // So it needs every param slot of its signature.
                     let ty = &module.types[*type_idx as usize];
                     tail_sig_set.insert(ty.results.clone());
                     boxed_sig_set.insert(ty.results.clone());
@@ -420,12 +464,15 @@ fn generate_class_inner(
         spec,
     };
     let mut wb = CodeWriter::new("\t");
-    // Tail-entry base classes come first: the generated class's parked-target fields name them in annotations, which Codon resolves in definition order.
+    // Tail-entry base classes come first.
+    // The generated class's parked-target fields name them in annotations.
+    // Codon resolves those in definition order.
     gen.tail_bases(&mut wb);
     gen.class(&mut wb, class_name);
     let mut body = wb.finish();
 
-    // Boxed-function wrapper classes are module-level (they subclass the runtime's Fn and name the generated class), appended after it.
+    // Boxed-function wrapper classes are module-level, appended after the generated class.
+    // They subclass the runtime's Fn and name the generated class.
     let mut ww = CodeWriter::new("\t");
     gen.wrappers(&mut ww);
     let wrappers = ww.finish();
@@ -439,7 +486,11 @@ fn generate_class_inner(
     match linkage {
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
-                // Namespace the runtime under the generated class: the units reference the runtime only as `Rt.<name>`, never inside a string literal (the units lint enforces that), so one textual replace moves every reference onto the per-artifact name.
+                // Namespace the runtime under the generated class.
+                // The units reference the runtime only as `Rt.<name>`.
+                // They never reference it inside a string literal.
+                // The units lint enforces that.
+                // So one textual replace moves every reference onto the per-artifact name.
                 out.push_str(&format!("class {rt_name}:\n"));
                 out.push_str(
                     &bundler()
@@ -460,7 +511,9 @@ fn generate_class_inner(
 }
 
 /// The module-level name the generated class references its runtime by.
-/// `Embedded` output is self-contained and must survive sharing a namespace with another artifact, so it gets a per-artifact `<Class>Rt`; `Alias` output points at a runtime someone else emitted.
+/// `Embedded` output is self-contained and must survive sharing a namespace with another artifact.
+/// So it gets a per-artifact `<Class>Rt`.
+/// `Alias` output points at a runtime someone else emitted.
 fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     match linkage {
         RuntimeLinkage::Embedded => format!("{class_name}Rt"),
@@ -468,10 +521,12 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
     }
 }
 
-/// The class a `--mode standalone` program defines: fixed, since nothing outside a self-contained program observes it.
+/// The class a `--mode standalone` program defines.
+/// It is fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a single identifier and is used verbatim (it names the generated class and, suffixed `Rt`, its embedded runtime).
+/// The library-mode module name must be a single identifier and is used verbatim.
+/// It names the generated class and, suffixed `Rt`, its embedded runtime.
 fn check_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -556,7 +611,10 @@ pub fn i32_const(v: u32) -> String {
 }
 
 /// A `UInt[64]` constant expression.
-/// Values above `i64::MAX` are spelled in hex: Codon rejects a decimal literal outside the signed 64-bit range but parses the hex form (wrapping), and `UInt[64]` reinterprets the bits.
+/// Values above `i64::MAX` are spelled in hex.
+/// Codon rejects a decimal literal outside the signed 64-bit range.
+/// But it parses the hex form (wrapping).
+/// `UInt[64]` reinterprets the bits.
 pub fn i64_const(v: u64) -> String {
     if v > i64::MAX as u64 {
         format!("UInt[64](0x{v:X})")
@@ -566,7 +624,8 @@ pub fn i64_const(v: u64) -> String {
 }
 
 /// A float literal that round-trips to the same double.
-/// `{:?}` on f64 gives the shortest round-tripping decimal, which Codon parses back exactly; non-finite values never reach here.
+/// `{:?}` on f64 gives the shortest round-tripping decimal, which Codon parses back exactly.
+/// Non-finite values never reach here.
 fn codon_float(v: f64) -> String {
     format!("{v:?}")
 }
@@ -607,7 +666,8 @@ fn global_extern(ty: ValType) -> (&'static str, &'static str) {
     }
 }
 
-/// The identifier suffix naming a tail-call result signature: `v` for none, else the type suffixes joined by `_`.
+/// The identifier suffix naming a tail-call result signature.
+/// It is `v` for none, else the type suffixes joined by `_`.
 fn sig_id(results: &[ValType]) -> String {
     if results.is_empty() {
         return "v".to_string();
@@ -624,7 +684,11 @@ fn tail_arg_slot(i: usize, ty: ValType) -> String {
     format!("_ta{i}_{}", ty_suffix(ty))
 }
 
-/// The recursion-guard budget (spec builds only), the Go backend's model: each generated function adds its frame's slot count to a shared counter on entry and traps once the running total exceeds this, turning an otherwise-fatal native stack overflow into a catchable "call stack exhausted" trap.
+/// The recursion-guard budget (spec builds only), the Go backend's model.
+/// Each generated function adds its frame's slot count to a shared counter on entry.
+/// It traps once the running total exceeds this budget.
+/// That turns an otherwise-fatal native stack overflow into a catchable trap.
+/// The trap message is "call stack exhausted".
 const SPEC_STACK_LIMIT: usize = 1024;
 
 const DATA_LITERAL_HEX_DIGITS: usize = 8192;
@@ -632,13 +696,18 @@ const DATA_LITERAL_HEX_DIGITS: usize = 8192;
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
-    /// Defined functions (function index space) containing a tail call: these are the ones split into `_f{idx}_body` plus a trampoline entry.
+    /// Defined functions (function index space) containing a tail call.
+    /// These are the ones split into `_f{idx}_body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
-    /// [`Gen::tail_entries`]'s value, computed once: it scans every function body, and `tail_slot` consults it per element item and per `return_call`.
+    /// [`Gen::tail_entries`]'s value, computed once: it scans every function body.
+    /// `tail_slot` consults it per element item and per `return_call`.
     tail_entry_set: BTreeSet<u32>,
-    /// [`Gen::tail_signatures`]'s value, computed once alongside `tail_entry_set` for the same reason.
+    /// [`Gen::tail_signatures`]'s value, computed once alongside `tail_entry_set`.
+    /// The reason is the same.
     tail_sigs: Vec<Vec<ValType>>,
-    /// The subset of `tail_sigs` a *boxed* parked target can carry (an indirect tail call site or an imported direct target): only these need a `_X` entry subclass.
+    /// The subset of `tail_sigs` a *boxed* parked target can carry.
+    /// Such a target is an indirect tail call site or an imported direct target.
+    /// Only these need a `_X` entry subclass.
     boxed_tail_sigs: Vec<Vec<ValType>>,
     /// [`Gen::tail_arg_slots`]'s value, computed once alongside `tail_entry_set`.
     tail_slots: Vec<(usize, ValType)>,
@@ -647,7 +716,8 @@ struct Gen<'a> {
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
     rt_name: String,
     class_name: String,
-    /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatchers and the recursion guard.
+    /// Spec-harness mode.
+    /// Emit the reflective `invoke`/`global_get` dispatchers and the recursion guard.
     spec: bool,
 }
 
@@ -662,7 +732,9 @@ impl<'a> Gen<'a> {
         format!("{}.{name}", self.rt_name)
     }
 
-    /// The Codon spelling of a value type; exnref is the runtime's own nullable exception class, so it carries the per-artifact runtime name.
+    /// The Codon spelling of a value type.
+    /// exnref is the runtime's own nullable exception class.
+    /// So it carries the per-artifact runtime name.
     fn ty_str(&self, ty: ValType) -> String {
         if ty == ValType::ExnRef {
             self.use_unit("rt/boxed");
@@ -685,18 +757,24 @@ impl<'a> Gen<'a> {
         self.type_symbol_of(&self.module.types[type_idx as usize])
     }
 
-    /// A structural type key (see [`type_key`]) as a string literal, which is what the table stores and `call_indirect` compares.
+    /// A structural type key (see [`type_key`]) as a string literal.
+    /// The table stores this literal, and `call_indirect` compares it.
     fn type_symbol_of(&self, ty: &FuncType) -> String {
         codon_string(&type_key(ty, dewasm_backend::val_name))
     }
 
-    /// The defined functions that get a typed tail entry: the tail callers themselves plus every defined function a direct `return_call` targets (computed once into `tail_entry_set`).
-    /// A tail call always parks (running the callee inline would keep this frame's exception handlers alive, which the proposal forbids), so every parkable direct target needs an entry.
+    /// The defined functions that get a typed tail entry (computed once into `tail_entry_set`).
+    /// Those are the tail callers themselves.
+    /// Every defined function a direct `return_call` targets is one too.
+    /// A tail call always parks, so every parkable direct target needs an entry.
+    /// Running the callee inline would keep this frame's exception handlers alive.
+    /// The proposal forbids that.
     fn tail_entries(&self) -> &BTreeSet<u32> {
         &self.tail_entry_set
     }
 
-    /// The dense position of `func_idx` in its result signature's entry table, or None when it has no entry.
+    /// The dense position of `func_idx` in its result signature's entry table.
+    /// None when it has no entry.
     fn tail_slot(&self, func_idx: u32) -> Option<usize> {
         let entries = self.tail_entries();
         if !entries.contains(&func_idx) {
@@ -709,13 +787,20 @@ impl<'a> Gen<'a> {
             .position(|f| *f == func_idx)
     }
 
-    /// The distinct result signatures a parked tail call can carry: the entries' own, every indirect tail call site's, and every imported direct target's (computed once into `tail_sigs`).
-    /// Each needs one parked-target field, one entry table, and one entry base class; the boxed subset (`boxed_tail_sigs`) additionally gets a boxed entry subclass.
+    /// The distinct result signatures a parked tail call can carry.
+    /// They are computed once into `tail_sigs`.
+    /// They are the entries' own, and every indirect tail call site's.
+    /// Every imported direct target's is one too.
+    /// Each needs one parked-target field, one entry table, and one entry base class.
+    /// The boxed subset (`boxed_tail_sigs`) additionally gets a boxed entry subclass.
     fn tail_signatures(&self) -> &[Vec<ValType>] {
         &self.tail_sigs
     }
 
-    /// Every argument slot the module's tail calls park into: one per position and type a tail-calling function's own parameters need (its entry reads them back out), plus every signature reachable through an indirect tail call site (computed once into `tail_slots`).
+    /// Every argument slot the module's tail calls park into (computed once into `tail_slots`).
+    /// There is one per position and type a tail-calling function's own parameters need.
+    /// Its entry reads them back out.
+    /// Every signature reachable through an indirect tail call site adds its slots too.
     fn tail_arg_slots(&self) -> &[(usize, ValType)] {
         &self.tail_slots
     }
@@ -735,7 +820,9 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The wrapper classes the boxed boundary needs: one per defined function that is exported or referenced by an element segment, plus the bundled-WASI and ENOSYS fallbacks per imported function.
+    /// The wrapper classes the boxed boundary needs.
+    /// There is one per defined function that is exported or referenced by an element segment.
+    /// There are also the bundled-WASI and ENOSYS fallbacks per imported function.
     fn boxed_funcs(&self) -> BTreeSet<u32> {
         let m = self.module;
         let mut set = BTreeSet::new();
@@ -773,7 +860,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit the abstract tail-entry base classes (module level, before the generated class): one per result signature, whose `run` re-enters a parked body.
+    /// Emit the abstract tail-entry base classes (module level, before the generated class).
+    /// There is one per result signature, whose `run` re-enters a parked body.
     fn tail_bases(&self, w: &mut CodeWriter) {
         let class = &self.class_name;
         for sig in self.tail_signatures() {
@@ -825,7 +913,8 @@ impl<'a> Gen<'a> {
                 .map(|(i, t)| format!("self.p.{}", tail_arg_slot(i, *t)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            // A tail caller's entry re-enters its body; a plain target's entry completes in one frame, which the criterion permits.
+            // A tail caller's entry re-enters its body.
+            // A plain target's entry completes in one frame, which the criterion permits.
             let call = if self.tail_callers.contains(&idx) {
                 format!("self.p._f{idx}_body({args})")
             } else {
@@ -840,8 +929,11 @@ impl<'a> Gen<'a> {
             w.dedent();
             w.line("");
         }
-        // The boxed entry: an indirect tail call to another instance's function (or a direct one to an import) parks the boxed callee with its boxed arguments.
-        // Only the signatures those two sites can carry get one; an entry-only signature has no construction site for it.
+        // The boxed entry parks the boxed callee with its boxed arguments.
+        // It serves an indirect tail call to another instance's function.
+        // It also serves a direct tail call to an import.
+        // Only the signatures those two sites can carry get one.
+        // An entry-only signature has no construction site for it.
         for sig in &self.boxed_tail_sigs {
             self.use_unit("rt/boxed");
             let id = sig_id(sig);
@@ -1023,12 +1115,14 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// Whether any imported function falls back to the bundled WASI (which is what makes the lazy `_wasi` machinery worth emitting).
+    /// Whether any imported function falls back to the bundled WASI.
+    /// That is what makes the lazy `_wasi` machinery worth emitting.
     fn wasi_fallback_used(&self) -> bool {
         wasi_bundled(self.module, self.default_wasi, bundler())
     }
 
-    /// Codon requires instance attributes declared as class-level annotations; emit one per field the constructor assigns.
+    /// Codon requires instance attributes declared as class-level annotations.
+    /// Emit one per field the constructor assigns.
     fn fields(&self, w: &mut CodeWriter) {
         let m = self.module;
         let rt = &self.rt_name;
@@ -1101,7 +1195,9 @@ impl<'a> Gen<'a> {
                 zero_value(ty)
             ));
         }
-        // Entry tables are built before anything that parks a target or stores a funcref in a table: a tail call reads its target out of here rather than building a closure per hop.
+        // Entry tables are built before anything that parks a target.
+        // They are also built before anything that stores a funcref in a table.
+        // A tail call reads its target out of here rather than building a closure per hop.
         for sig in self.tail_signatures() {
             let id = sig_id(sig);
             let class = self.class_name.clone();
@@ -1237,8 +1333,13 @@ impl<'a> Gen<'a> {
                     w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
                 }
                 ElemKind::Passive | ElemKind::Active { .. } => {
-                    // One list literal, not one append per item: `__init__`'s statement count is what the optimizer's compile time is superlinear in.
-                    // Every item is wrapped in `Optional[...]` explicitly: Codon types the literal from its elements alone, `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`, and anchoring null items too keeps an all-null segment from depending on free-variable unification.
+                    // One list literal, not one append per item.
+                    // The optimizer's compile time is superlinear in `__init__`'s statement count.
+                    // Every item is wrapped in `Optional[...]` explicitly.
+                    // Codon types the literal from its elements alone.
+                    // `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`.
+                    // Null items are anchored too.
+                    // So an all-null segment does not depend on free-variable unification.
                     if elem.items.is_empty() {
                         w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
                     } else {
@@ -1272,7 +1373,8 @@ impl<'a> Gen<'a> {
         for (i, data) in m.datas.iter().enumerate() {
             self.use_unit("rt/data");
             self.use_unit("rt/unhex");
-            // The hex alphabet needs no escaping, so the segment skips `codon_string`'s per-character scan (segments run to megabytes).
+            // The hex alphabet needs no escaping.
+            // So the segment skips `codon_string`'s per-character scan (segments run to megabytes).
             let payload = hex_literals(&data.data, DATA_LITERAL_HEX_DIGITS);
             match &data.offset {
                 Some(offset) => {
@@ -1326,7 +1428,8 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// The lazily built bundled WASI, memory bound at creation (the constructor resolves memory before any import).
+    /// The lazily built bundled WASI, memory bound at creation.
+    /// The constructor resolves memory before any import.
     fn wasi_accessor(&self, w: &mut CodeWriter) {
         let rt = &self.rt_name;
         self.use_unit("wasi/_class");
@@ -1348,14 +1451,16 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// Resolve a non-function import through its typed checker, with a missing import raising a link error inline.
+    /// Resolve a non-function import through its typed checker.
+    /// A missing import raises a link error inline.
     fn checked_import(&self, checker: &str, module: &str, name: &str) -> String {
         self.use_unit("ext/resolve_import");
         self.use_unit("ext/require");
         self.use_unit("rt/link_error");
         self.use_unit(&format!("ext/{checker}"));
         let rt = &self.rt_name;
-        // `resolve_or_missing` would need a per-kind return type; instead the None case is folded into the checker call via a small helper expression.
+        // `resolve_or_missing` would need a per-kind return type.
+        // Instead a small helper expression folds the None case into the checker call.
         format!(
             "{rt}.{checker}({rt}.require({rt}.resolve_import(imports, {m}, {n}), {m}, {n}), {m}, {n})",
             m = codon_string(module),
@@ -1363,7 +1468,8 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// The spec-harness reflective dispatcher: boxed args in, boxed results out, so the harness needs no per-signature phrasing.
+    /// The spec-harness reflective dispatcher: boxed args in, boxed results out.
+    /// So the harness needs no per-signature phrasing.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         let m = self.module;
         let rt = &self.rt_name;
@@ -1400,7 +1506,8 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// The spec-harness global reader: the boxed current value in a one-element list, treated by the harness exactly like a single-result invoke.
+    /// The spec-harness global reader: the boxed current value in a one-element list.
+    /// The harness treats it exactly like a single-result invoke.
     fn emit_global_get_method(&self, w: &mut CodeWriter) {
         let m = self.module;
         let rt = &self.rt_name;
@@ -1438,7 +1545,8 @@ impl<'a> Gen<'a> {
                 } else {
                     format!("{}_W{idx}(self)", self.class_name)
                 };
-                // A tail-calling function's funcref carries its entry-table position, so a chain through the table stays flat within the owning instance.
+                // A tail-calling function's funcref carries its entry-table position.
+                // So a chain through the table stays flat within the owning instance.
                 let slot = self.tail_slot(*idx).map(|k| k as i64).unwrap_or(-1);
                 format!(
                     "{rt}.Funcref({}, {fn_expr}, id(self), {slot})",
@@ -1446,12 +1554,14 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "None".to_string(),
-            // A `global.get` element item needs a ref-typed immutable global, i.e. reference types (rejected at conversion); unreachable here.
+            // A `global.get` element item needs a ref-typed immutable global.
+            // That means reference types, which are rejected at conversion; unreachable here.
             ElemItem::Global(_) => unreachable!("ref-typed global element item"),
         }
     }
 
-    /// A statement calling function `func_idx` with no arguments and discarding results (the start function).
+    /// A statement calling function `func_idx` with no arguments and discarding results.
+    /// This is the start function.
     fn call_only(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             let rt = &self.rt_name;
@@ -1479,7 +1589,9 @@ impl<'a> Gen<'a> {
                     .join(", ")
             ),
         };
-        // A tail-calling function's real code lives in `_f{idx}_body`, which parks the next call in the instance's slots instead of growing the stack; the public `_f{idx}` is the trampoline that runs the chain, so no call site changes.
+        // A tail-calling function's real code lives in `_f{idx}_body`.
+        // It parks the next call in the instance's slots instead of growing the stack.
+        // The public `_f{idx}` is the trampoline that runs the chain, so no call site changes.
         let is_tail_caller = self.tail_callers.contains(&idx);
         if is_tail_caller {
             let id = sig_id(&ty.results);
@@ -1556,7 +1668,9 @@ impl<'a> Gen<'a> {
         }
         let mut guarded = false;
         self.emit_seq(w, &func.body, &mut guarded, true);
-        // Codon is statically typed: a function with results must return on every path the compiler sees, and the branch-register rendering can always fall off the end.
+        // Codon is statically typed.
+        // A function with results must return on every path the compiler sees.
+        // The branch-register rendering can always fall off the end.
         if !ty.results.is_empty() {
             self.emit_zero_return(w, &ty.results);
         }
@@ -1585,7 +1699,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Whether `stmts` holds a branch that travels through `_br` (i.e. whether the function needs the branch register at all).
+    /// Whether `stmts` holds a branch that travels through `_br`.
+    /// That is, whether the function needs the branch register at all.
     fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
         let relays = |t: &BrTarget| matches!(t, BrTarget::Label { .. });
         Stmt::any(stmts, &mut |stmt| match stmt {
@@ -1593,18 +1708,26 @@ impl<'a> Gen<'a> {
             Stmt::BrTable {
                 targets, default, ..
             } => relays(default) || targets.iter().any(relays),
-            // A catch clause's own branch relays through `_br` too, even when the body underneath never does.
+            // A catch clause's own branch relays through `_br` too.
+            // This holds even when the body underneath never does.
             Stmt::TryTable { catches, .. } => catches.iter().any(|c| relays(&c.target)),
             _ => false,
         })
     }
 
-    /// Emit a statement sequence, threading the compile-time `guarded` flag (whether a preceding statement may have left a branch pending in `_br`).
-    /// Block/Loop bodies are spliced inline so block nesting adds no host-language nesting; only real loops become `while True:`.
-    /// The region discipline is the Python backend's: once guarded, one `if _br == 0:` suite is opened lazily and every following statement is emitted inside it unguarded, until a statement carrying a free branch ends the run.
+    /// Emit a statement sequence, threading the compile-time `guarded` flag.
+    /// The flag says whether a preceding statement may have left a branch pending in `_br`.
+    /// Block/Loop bodies are spliced inline, so block nesting adds no host-language nesting.
+    /// Only real loops become `while True:`.
+    /// The region discipline is the Python backend's.
+    /// Once guarded, one `if _br == 0:` suite is opened lazily.
+    /// Every following statement is emitted inside it unguarded.
+    /// That run ends at a statement carrying a free branch.
     ///
-    /// `tail` says nothing runs after this sequence before the function falls off; a landing marker there writes a register nothing reads again, so it is skipped.
-    /// Returns the sequence's free branch targets (label ids it branches to that are not bound within it).
+    /// `tail` says nothing runs after this sequence before the function falls off.
+    /// A landing marker there writes a register nothing reads again, so it is skipped.
+    /// Returns the sequence's free branch targets.
+    /// Those are the label ids it branches to that are not bound within it.
     fn emit_seq(
         &self,
         w: &mut CodeWriter,
@@ -1695,8 +1818,12 @@ impl<'a> Gen<'a> {
                     catches,
                     body,
                 } => {
-                    // The body needs a real host scope: catching an exception raised anywhere inside it (a callee included) is not expressible through the `_br` register alone.
-                    // The wrapping `while True:` gives every catch clause's own branch somewhere to `break` to; the body itself keeps using `_br` for any branch it contains, same as a Block's (the Python backend's shape).
+                    // The body needs a real host scope.
+                    // It must catch an exception raised anywhere inside it, a callee included.
+                    // The `_br` register alone cannot express that.
+                    // Each catch clause's own branch can `break` out of the wrapping `while True:`.
+                    // The body keeps using `_br` for any branch it contains, same as a Block's.
+                    // This is the Python backend's shape.
                     self.use_unit("rt/boxed");
                     w.line("while True:");
                     w.indent();
@@ -1719,7 +1846,9 @@ impl<'a> Gen<'a> {
                     // No clause matched: the exception keeps unwinding.
                     w.line("raise");
                     w.dedent();
-                    // Reached only when the body ran to completion without an exception; an exception either lands in a clause (which breaks the loop itself) or re-raises past this statement entirely.
+                    // Reached only when the body ran to completion without an exception.
+                    // An exception that lands in a clause breaks the loop itself.
+                    // Any other exception re-raises past this statement entirely.
                     w.line("break");
                     w.dedent();
                     if label.referenced && !stmt_tail {
@@ -1759,7 +1888,8 @@ impl<'a> Gen<'a> {
         free
     }
 
-    /// Fuse a call-family producer with the adjacent statement that consumes its whole result (see the Python backend; the shapes and the soundness argument are the same).
+    /// Fuse a call-family producer with the adjacent statement that consumes its whole result.
+    /// See the Python backend; the shapes and the soundness argument are the same.
     fn fused_call_line(&self, producer: &Stmt, consumer: Option<&Stmt>) -> Option<String> {
         let (produced, call) = match producer {
             Stmt::Call {
@@ -1807,7 +1937,8 @@ impl<'a> Gen<'a> {
         Some(format!("{target} = {call}"))
     }
 
-    /// A single-result direct call as one expression: native for a defined function, boxed-and-unboxed for an imported one.
+    /// A single-result direct call as one expression.
+    /// It is native for a defined function, boxed-and-unboxed for an imported one.
     fn call_expr_single(&self, func: u32, args: &[Expr], result: Temp) -> Option<String> {
         if (func as usize) < self.module.imported_funcs.len() {
             Some(format!(
@@ -1885,7 +2016,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit the statements `stmt_emits` deems code-free: a comment renders, an empty construct vanishes.
+    /// Emit the statements `stmt_emits` deems code-free.
+    /// A comment renders, and an empty construct vanishes.
     fn simple_stmt_or_skip(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::SourceLine(_) => self.simple_stmt(w, stmt),
@@ -2136,8 +2268,10 @@ impl<'a> Gen<'a> {
             Stmt::ThrowRef { exn } => {
                 w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
             }
-            // Parked, never called: the callee must run once this frame (any enclosing handler included) is gone, and returning is what unwinds them.
-            // The target is the callee's tail entry, built once at instantiation, so a hop allocates nothing.
+            // Parked, never called: the callee must run once this frame is gone.
+            // That includes any enclosing handler, and returning is what unwinds them.
+            // The target is the callee's tail entry, built once at instantiation.
+            // So a hop allocates nothing.
             Stmt::ReturnCall { func, args } => {
                 let args_r: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
                 let fty = self.module.func_type(*func).clone();
@@ -2152,7 +2286,9 @@ impl<'a> Gen<'a> {
                     // An imported callee has no typed entry: park it boxed.
                     None => {
                         let vals = self.boxed_vals(&args_r, &fty.params);
-                        // Through an annotated local: Codon upcasts a subclass into a base-typed binding, but not directly into an Optional[base] field.
+                        // This goes through an annotated local.
+                        // Codon upcasts a subclass into a base-typed binding.
+                        // But it does not upcast directly into an Optional[base] field.
                         w.line(format!(
                             "_tx_{id}: {cls}_TB_{id} = {cls}_TB_{id}_X(self.if{func}, {vals})",
                             cls = self.class_name
@@ -2172,14 +2308,18 @@ impl<'a> Gen<'a> {
                 self.use_unit("rt/boxed");
                 let ty = self.module.types[*type_idx as usize].clone();
                 let id = sig_id(&ty.results);
-                // The slot is resolved, and its traps raised, here rather than after the frame is gone: an indirect tail call's checks happen at the instruction.
+                // The slot is resolved, and its traps raised, here.
+                // That happens before the frame is gone, not after.
+                // An indirect tail call's checks happen at the instruction.
                 w.line(format!(
                     "_fr = self.t{table_index}.slot({}, {})",
                     self.expr(index),
                     self.type_symbol(*type_idx)
                 ));
                 let args_r: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
-                // A tail entry belongs to the instance that built it and reads *its* parked slots, so only this instance's own entries can be parked; anything else completes here instead.
+                // A tail entry belongs to the instance that built it and reads *its* parked slots.
+                // So only this instance's own entries can be parked.
+                // Anything else completes here instead.
                 w.line("if _fr.owner == id(self) and _fr.tail_slot >= 0:");
                 w.indent();
                 for (i, (a, t)) in args_r.iter().zip(&ty.params).enumerate() {
@@ -2189,9 +2329,12 @@ impl<'a> Gen<'a> {
                 w.dedent();
                 w.line("else:");
                 w.indent();
-                // Another instance's function (or an own funcref without an entry): park it boxed, so the frame and its handlers are still gone before the callee runs.
+                // Another instance's function (or an own funcref without an entry): park it boxed.
+                // So the frame and its handlers are still gone before the callee runs.
                 let vals = self.boxed_vals(&args_r, &ty.params);
-                // Through an annotated local: Codon upcasts a subclass into a base-typed binding, but not directly into an Optional[base] field.
+                // This goes through an annotated local.
+                // Codon upcasts a subclass into a base-typed binding.
+                // But it does not upcast directly into an Optional[base] field.
                 w.line(format!(
                     "_tx_{id}: {cls}_TB_{id} = {cls}_TB_{id}_X(_fr.fn, {vals})",
                     cls = self.class_name
@@ -2270,9 +2413,13 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// One `try_table` catch clause inside the handler: bind the payload into the target frame's slots, then take the branch.
-    /// A tagged clause guards that with `is` (wasm tag equality is object identity); a catch-all runs unconditionally.
-    /// `branch()` alone never leaves the `except` suite, so this appends the `break` that exits the `try_table`'s wrapping `while True:` itself (dead, but harmless, right after a `return`).
+    /// One `try_table` catch clause inside the handler.
+    /// It binds the payload into the target frame's slots, then takes the branch.
+    /// A tagged clause guards that with `is`, since wasm tag equality is object identity.
+    /// A catch-all runs unconditionally.
+    /// `branch()` alone never leaves the `except` suite.
+    /// So this appends the `break` that exits the `try_table`'s wrapping `while True:` itself.
+    /// The `break` is dead, but harmless, right after a `return`.
     fn catch_clause(&self, w: &mut CodeWriter, clause: &dewasm_core::ir::CatchClause) {
         let bind_and_branch = |gen: &Self, w: &mut CodeWriter| {
             for (i, t) in clause.value_temps.iter().enumerate() {
@@ -2317,7 +2464,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Record a branch target's label id into `free`, returning whether it is a label branch (one that travels through `_br`).
+    /// Record a branch target's label id into `free`.
+    /// Returns whether it is a label branch (one that travels through `_br`).
     fn collect_target_free(&self, t: &BrTarget, free: &mut BTreeSet<u32>) -> bool {
         match t {
             BrTarget::Return { .. } => false,
@@ -2328,7 +2476,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`, returning whether it has any (i.e. whether it may leave `_br` set on fall-through).
+    /// Add the label ids a non-structured statement branches to into `free`.
+    /// Returns whether it has any, i.e. whether it may leave `_br` set on fall-through.
     fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
         match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
@@ -2345,7 +2494,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The address argument of a memory unit: an `int` (64-bit) effective address, exact however large the static offset is.
+    /// The address argument of a memory unit: an `int` (64-bit) effective address.
+    /// It is exact however large the static offset is.
     fn addr(&self, addr: &Expr, offset: u64) -> String {
         if let Expr::I32Const(base) = addr {
             return (u64::from(*base) + offset).to_string();
@@ -2380,7 +2530,8 @@ impl<'a> Gen<'a> {
             Expr::Temp(t) => temp(*t),
             Expr::LocalGet(idx) => format!("l{idx}"),
             Expr::GlobalGet(idx) => format!("self.g{idx}.value"),
-            // `eqz` of something already emitted as a boolean: read the wasm 0/1 straight off that boolean.
+            // `eqz` of something already emitted as a boolean.
+            // Read the wasm 0/1 straight off that boolean.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) if is_boolean(a) => {
                 format!("(UInt[32](0) if {} else UInt[32](1))", self.cond(a))
             }
@@ -2405,7 +2556,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// An expression in boolean context (an `if`/`br_if` test): a comparison renders as its own boolean, anything else as `!= 0`.
+    /// An expression in boolean context (an `if`/`br_if` test).
+    /// A comparison renders as its own boolean, anything else as `!= 0`.
     fn cond(&self, e: &Expr) -> String {
         match e {
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.not_cond(a),
@@ -2418,7 +2570,8 @@ impl<'a> Gen<'a> {
     }
 
     /// The negation of [`cond`]: `e` is zero.
-    /// A comparison is negated as a whole rather than by flipping its operator, which would be wrong for floats.
+    /// A comparison is negated as a whole rather than by flipping its operator.
+    /// Flipping would be wrong for floats.
     fn not_cond(&self, e: &Expr) -> String {
         match e {
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) => self.cond(a),
@@ -2429,7 +2582,9 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A comparison as a host boolean: unsigned and float compares are the stored representation's own, signed ones go through `Int[N]` casts.
+    /// A comparison as a host boolean.
+    /// Unsigned and float compares are the stored representation's own.
+    /// Signed ones go through `Int[N]` casts.
     fn rel(&self, (r, operands): (&'static str, CompareOperands), a: &Expr, b: &Expr) -> String {
         let (ra, rb) = (self.expr(a), self.expr(b));
         match operands {
@@ -2513,7 +2668,10 @@ impl<'a> Gen<'a> {
         if let Some(rel) = comparison(op) {
             return format!("(UInt[32](1) if {} else UInt[32](0))", self.rel(rel, a, b));
         }
-        // A float operation with a constant operand may be folded to its other operand by LLVM (x * 1.0, x + -0.0, ...), skipping the signaling-NaN quieting wasm requires; the quiet-if-NaN wrapper restores it.
+        // LLVM may fold a float operation with a constant operand to its other operand.
+        // Examples are x * 1.0 and x + -0.0.
+        // That skips the signaling-NaN quieting wasm requires.
+        // The quiet-if-NaN wrapper restores it.
         let quiet32 = matches!(op, F32Add | F32Sub | F32Mul | F32Div)
             && (matches!(a, Expr::F32Const(_)) || matches!(b, Expr::F32Const(_)));
         let quiet64 = matches!(op, F64Add | F64Sub | F64Mul | F64Div)
@@ -2580,7 +2738,9 @@ enum ImportFallback {
     LinkError,
 }
 
-/// Whether `stmt` emits at least one real statement (see the Python backend: a comment or an all-comment construct must not open a region guard, whose suite would be empty).
+/// Whether `stmt` emits at least one real statement.
+/// See the Python backend: a comment or an all-comment construct must not open a region guard.
+/// That guard's suite would be empty.
 fn stmt_emits(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::SourceLine(_) => false,
@@ -2591,8 +2751,12 @@ fn stmt_emits(stmt: &Stmt) -> bool {
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `# requires:` header.
-/// Mirrors the Python backend's units lint, adjusted for this runtime's shapes (`Rt.<name>` staticmethod/class references, `m.<name>` memory-method calls in the WASI units, `self.<name>(...)` sibling calls within a scope).
+/// Lint for the runtime units.
+/// Every reference a unit body makes to another unit must be declared in its `# requires:` header.
+/// Mirrors the Python backend's units lint, adjusted for this runtime's shapes:
+/// - `Rt.<name>` staticmethod/class references;
+/// - `m.<name>` memory-method calls in the WASI units;
+/// - `self.<name>(...)` sibling calls within a scope.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -2605,7 +2769,9 @@ mod units {
         bundler().bundle_all(0).expect("full bundle resolves");
     }
 
-    /// `Embedded` linkage renames the runtime per artifact by replacing `Rt.` across the bundle text, which is sound only while every `Rt.` in a unit is code.
+    /// `Embedded` linkage renames the runtime per artifact.
+    /// It replaces `Rt.` across the bundle text.
+    /// That is sound only while every `Rt.` in a unit is code.
     #[test]
     fn no_rt_reference_inside_a_string_literal() {
         let mut problems = Vec::new();
@@ -2634,7 +2800,8 @@ mod units {
         );
     }
 
-    /// The contents of every single-line string literal on `line`, stopping at an unquoted `#` comment.
+    /// The contents of every single-line string literal on `line`.
+    /// The scan stops at an unquoted `#` comment.
     fn string_literals(line: &str) -> Vec<String> {
         let mut out = Vec::new();
         let mut quote: Option<char> = None;
@@ -2763,7 +2930,8 @@ mod units {
     }
 
     /// The whole runtime (every unit, not just the subset a given module uses) must be valid Codon.
-    /// Type-check the full bundle with `codon build` (a missing toolchain fails loud, it does not skip).
+    /// Type-check the full bundle with `codon build`.
+    /// A missing toolchain fails loud; it does not skip.
     #[test]
     fn all_units_compile_as_codon() {
         let codon = find_codon()

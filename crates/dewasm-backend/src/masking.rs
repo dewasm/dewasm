@@ -1,20 +1,57 @@
 //! Mask elision for the backends that store integers masked-unsigned.
 //!
-//! The stored representation masks every integer to its width, and each wrapping operation re-masks its result.
-//! That is often double work: a consumer that reads its operand only modulo 2^32 or 2^64 (a wrapping add's operand, a shift count) cannot observe the high bits its own mask throws away.
-//! [`MaskContext`] names the consumption contexts, [`bin_operand_context`] and [`un_operand_context`] are the table of which operands an operation reads modularly, and [`elides_mask`] is the guard: a backend may skip a site's own result mask exactly when the consumer's context and the interval bound allow it.
-//! [`Elision`] extends the same guard across statements with a per-function dataflow that lets a local or temp store an unmasked value when every read of it is modular; the free functions below are its no-variables form.
-//! [`fold_and_chain`] folds the constants of an AND chain at conversion time, and [`eq_const_rewrite`] drops the mask of a site compared for equality against a constant when the interval pins a unique raw preimage.
-//! [`shift_count_mode`] is the count-position counterpart: the `& (width - 1)` a backend emits on a shift count implements wasm's semantic reduction, and it folds for a constant count and drops when the count's exact rendering provably sits in range.
+//! The stored representation masks every integer to its width.
+//! Each wrapping operation re-masks its result.
+//! That is often double work.
+//! Some consumers read their operand only modulo 2^32 or 2^64.
+//! Examples are a wrapping add's operand and a shift count.
+//! Such a consumer cannot observe the high bits its own mask throws away.
 //!
-//! Soundness rests on the targets' integers being arbitrary-precision two's complement (Ruby, Python, Perl): an unmasked value is congruent to the masked value modulo 2^w, every modular consumer preserves that congruence (a bitwise operator reads a negative operand as its infinite two's-complement form, so `(x - y) & 0xffffffff` is the correct wrap of a negative difference), and every non-modular consumer either sits behind a kept mask or reads a variable all of whose stores are masked.
-//! A mask whose raw interval already sits inside `[0, 2^w)` is the identity on the exact value, so it drops in every context.
+//! - [`MaskContext`] names the consumption contexts.
+//! - [`bin_operand_context`] and [`un_operand_context`] form one table.
+//!   It lists which operands an operation reads modularly.
+//! - [`elides_mask`] is the guard.
+//!   Two things decide whether a backend may skip a site's own result mask.
+//!   Those are the consumer's context and the interval bound.
+//! - [`Elision`] extends the same guard across statements with a per-function dataflow.
+//!   The dataflow lets a local or temp store an unmasked value when every read of it is modular.
+//!   The free functions below are its no-variables form.
+//! - [`fold_and_chain`] folds the constants of an AND chain at conversion time.
+//! - [`eq_const_rewrite`] drops the mask of a site compared for equality against a constant.
+//!   It does so when the interval pins a unique raw preimage.
+//! - [`shift_count_mode`] is the count-position counterpart.
+//!   The `& (width - 1)` a backend emits on a shift count implements wasm's semantic reduction.
+//!   It folds for a constant count.
+//!   It drops when the count's exact rendering provably sits in range.
+//!
+//! Soundness rests on the targets' integers being arbitrary-precision two's complement.
+//! Those targets are Ruby, Python, and Perl.
+//! Three facts make it sound:
+//!
+//! - An unmasked value is congruent to the masked value modulo 2^w.
+//! - Every modular consumer preserves that congruence.
+//!   A bitwise operator reads a negative operand as its infinite two's-complement form.
+//!   So `(x - y) & 0xffffffff` is the correct wrap of a negative difference.
+//! - Every non-modular consumer either sits behind a kept mask or reads a variable.
+//!   All of that variable's stores are masked.
+//!
+//! A mask whose raw interval already sits inside `[0, 2^w)` is the identity on the exact value.
+//! So it drops in every context.
 
 use std::collections::BTreeMap;
 
 use dewasm_core::ir::{BinOp, BrTarget, Expr, Func, LoadOp, Stmt, Temp, UnOp, ValType};
 
-/// How a consumer reads an integer operand: `Masked` when it observes the exact stored value, `Modular` when it reads only the value's congruence class modulo the type width, so an unmasked operand serves, and `Reducing` when it additionally reduces what it is handed at least as strongly as the operand's own mask would (a bitwise AND with a constant operand, or the pinned equality of [`eq_const_rewrite`]), so the operand's mask drops with no bound guard.
+/// How a consumer reads an integer operand.
+///
+/// - `Masked`: it observes the exact stored value.
+/// - `Modular`: it reads only the value's congruence class modulo the type width.
+///   So an unmasked operand serves.
+/// - `Reducing`: it additionally reduces what it is handed.
+///   The reduction is at least as strong as the operand's own mask would be.
+///   Examples are a bitwise AND with a constant operand and the pinned equality of
+///   [`eq_const_rewrite`].
+///   So the operand's mask drops with no bound guard.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MaskContext {
     Masked,
@@ -22,13 +59,28 @@ pub enum MaskContext {
     Reducing,
 }
 
-/// The context in which `op` consumes its operand `k` (0-based), whose sibling operand is `sibling`, given that `op`'s own result is consumed in `ctx`.
+/// The context in which `op` consumes its operand `k` (0-based).
+/// The operand's sibling is `sibling`, and `op`'s own result is consumed in `ctx`.
 ///
-/// An operation with its own result mask (wrapping add/sub/mul, `shl`, the wrap) reads its operands modularly regardless of `ctx`: the site's mask restores the invariant even when its own elision guard fails.
-/// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift; a backend that renders counts through [`shift_count_mode`] consults that instead, because a skipped count reduction demands the `Masked` context.
-/// An AND with a constant sibling reduces its other operand into `[0, constant]` itself (every IR constant sits inside its width), at least as strong a reduction as the operand's own mask, in every `ctx`.
-/// The other maskless bitwise operators pass `ctx` through, except that a reducing consumer weakens to `Modular`: it reduces the operator's result, which needs only congruent operands, and the raw operands feed the operator itself, so the bound guard must still hold for them.
-/// Everything else (comparisons, division, signed and unsigned views, addresses, helper calls) observes the exact value.
+/// An operation with its own result mask reads its operands modularly regardless of `ctx`.
+/// Those operations are wrapping add/sub/mul, `shl`, and the wrap.
+/// The site's mask restores the invariant even when its own elision guard fails.
+///
+/// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift.
+/// A backend that renders counts through [`shift_count_mode`] consults that instead.
+/// The reason is that a skipped count reduction demands the `Masked` context.
+///
+/// An AND with a constant sibling reduces its other operand into `[0, constant]` itself.
+/// This holds because every IR constant sits inside its width.
+/// In every `ctx`, that is at least as strong a reduction as the operand's own mask.
+///
+/// The other maskless bitwise operators pass `ctx` through, except for a reducing consumer.
+/// A reducing consumer weakens to `Modular`: it reduces the operator's result.
+/// That result needs only congruent operands.
+/// But the raw operands feed the operator itself, so the bound guard must still hold for them.
+///
+/// Everything else observes the exact value.
+/// That covers comparisons, division, signed and unsigned views, addresses, and helper calls.
 pub fn bin_operand_context(op: BinOp, k: usize, sibling: &Expr, ctx: MaskContext) -> MaskContext {
     use BinOp::*;
     match op {
@@ -52,7 +104,8 @@ pub fn bin_operand_context(op: BinOp, k: usize, sibling: &Expr, ctx: MaskContext
     }
 }
 
-/// The [`bin_operand_context`] counterpart for unary operations: only the wrap consumes modularly (its result mask keeps the low 32 bits either way).
+/// The [`bin_operand_context`] counterpart for unary operations.
+/// Only the wrap consumes modularly (its result mask keeps the low 32 bits either way).
 pub fn un_operand_context(op: UnOp) -> MaskContext {
     match op {
         UnOp::I32WrapI64 => MaskContext::Modular,
@@ -60,15 +113,23 @@ pub fn un_operand_context(op: UnOp) -> MaskContext {
     }
 }
 
-/// [`Elision::elides_mask`] with no variables tracked: every local and temp read counts as its full masked width, so the guard holds only from the expression tree itself.
+/// [`Elision::elides_mask`] with no variables tracked.
+/// Every local and temp read counts as its full masked width.
+/// So the guard holds only from the expression tree itself.
 pub fn elides_mask(e: &Expr, ctx: MaskContext, limit: i128) -> bool {
     Elision::none(limit).elides_mask(e, ctx)
 }
 
-/// Whether a site with raw interval `raw` under a `bits`-wide mask may render unmasked when consumed in `ctx`.
-/// An interval inside `[0, 2^bits)` makes the mask the identity on the exact value: it drops in every context.
-/// A modular consumer needs only congruence, but elision must stay strictly profitable: the exposed value must provably stay in `[-limit, limit)`, never trading a cheap mask for bignum arithmetic.
-/// A reducing consumer hands the raw value to nothing but its own reduction, which the mask's presence would not weaken, so no guard applies.
+/// Whether a site may render unmasked when consumed in `ctx`.
+/// The site has raw interval `raw` under a `bits`-wide mask.
+///
+/// An interval inside `[0, 2^bits)` makes the mask the identity on the exact value.
+/// Then the mask drops in every context.
+/// A modular consumer needs only congruence, but elision must stay strictly profitable.
+/// The exposed value must provably stay in `[-limit, limit)`.
+/// Elision never trades a cheap mask for bignum arithmetic.
+/// A reducing consumer hands the raw value to nothing but its own reduction.
+/// The mask's presence would not weaken that reduction, so no guard applies.
 fn may_skip_mask(raw: Bound, bits: u32, ctx: MaskContext, limit: i128) -> bool {
     raw.is_masked_range(bits)
         || match ctx {
@@ -79,7 +140,9 @@ fn may_skip_mask(raw: Bound, bits: u32, ctx: MaskContext, limit: i128) -> bool {
 }
 
 /// How a backend renders a shift count.
-/// wasm reduces the count modulo the shift width; the `& (bits - 1)` a backend emits implements that reduction and is dropped exactly when the reduction is provably the identity on the rendered value.
+/// wasm reduces the count modulo the shift width.
+/// The `& (bits - 1)` a backend emits implements that reduction.
+/// It is dropped exactly when the reduction is provably the identity on the rendered value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShiftCountMode {
     /// A constant count, already reduced modulo the width: emit the value bare.
@@ -90,10 +153,16 @@ pub enum ShiftCountMode {
     Masked,
 }
 
-/// [`ShiftCountMode`] for the count `e` of a `bits`-wide shift, under the elision policy of [`elides_mask`] with the same `limit`.
+/// [`ShiftCountMode`] for the count `e` of a `bits`-wide shift.
+/// It follows the elision policy of [`elides_mask`] with the same `limit`.
 ///
-/// The emitted `& (bits - 1)` is congruence-preserving, so a kept reduction takes the count's `Modular` rendering.
-/// Skipping it hands the rendered value straight to the target's shift operator, which observes the exact count (a negative or oversized count would shift the wrong way or too far), so the in-range proof is judged on the `Masked` rendering, and an `InRange` site must emit that rendering.
+/// The emitted `& (bits - 1)` is congruence-preserving.
+/// So a kept reduction takes the count's `Modular` rendering.
+/// Skipping it hands the rendered value straight to the target's shift operator.
+/// That operator observes the exact count.
+/// A negative or oversized count would shift the wrong way or too far.
+/// So the in-range proof is judged on the `Masked` rendering.
+/// An `InRange` site must then emit that rendering.
 pub fn shift_count_mode(e: &Expr, bits: u32, limit: i128) -> ShiftCountMode {
     if matches!(e, Expr::I32Const(_) | Expr::I64Const(_)) {
         return ShiftCountMode::Constant(count_bound(e, bits).0);
@@ -106,7 +175,9 @@ pub fn shift_count_mode(e: &Expr, bits: u32, limit: i128) -> ShiftCountMode {
     }
 }
 
-/// The width `op` reduces its shift count modulo, for the shifts whose count reduction sits at the call site (`rotl`/`rotr` reduce inside their runtime helpers).
+/// The width `op` reduces its shift count modulo.
+/// It covers the shifts whose count reduction sits at the call site.
+/// `rotl`/`rotr` reduce inside their runtime helpers.
 pub fn shift_width(op: BinOp) -> Option<u32> {
     use BinOp::*;
     match op {
@@ -116,7 +187,9 @@ pub fn shift_width(op: BinOp) -> Option<u32> {
     }
 }
 
-/// Everything the interval analysis tracks is clamped to this magnitude: far beyond any elision limit, and small enough that saturating i128 arithmetic on two clamped bounds cannot wrap.
+/// Everything the interval analysis tracks is clamped to this magnitude.
+/// It is far beyond any elision limit.
+/// It is small enough that saturating i128 arithmetic on two clamped bounds cannot wrap.
 const CEILING: i128 = 1 << 100;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -161,12 +234,29 @@ impl Bound {
     }
 }
 
-/// Which of one function's locals and temps may store an unmasked value, each with the interval its stored values stay in.
+/// Which of one function's locals and temps may store an unmasked value.
+/// Each comes with the interval its stored values stay in.
 ///
 /// A variable qualifies when the analysis proves two things.
-/// Every read of it is modular: an operand position the consumption table clears, a memory unit's address or stored-value operand (the unit reduces it itself), or a copy into another qualifying variable.
-/// A comparison, a division, a signed or unsigned view, a call argument, a return, a global set, or any position the model does not cover disqualifies, which keeps the function boundary (decision 2's ABI) and every helper call fully masked; a function parameter is defined by the caller at full masked width.
-/// And its interval converges within `limit`: each definition's bound (the expression bound with qualifying variables read at their current intervals, an external definition such as a call result at full masked width) is joined to a fixpoint, so a loop-carried definition whose unmasked updates compound past the limit is demoted and keeps its masks.
+///
+/// Every read of it is modular.
+/// A modular read is one of these:
+///
+/// - an operand position the consumption table clears;
+/// - a memory unit's address or stored-value operand (the unit reduces it itself);
+/// - a copy into another qualifying variable.
+///
+/// Some positions disqualify: a comparison, a division, a signed or unsigned view, a call argument.
+/// So do a return, a global set, and any position the model does not cover.
+/// That keeps the function boundary (decision 2's ABI) and every helper call fully masked.
+/// A function parameter is defined by the caller at full masked width.
+///
+/// And its interval converges within `limit`.
+/// Each definition's bound is joined to a fixpoint.
+/// That bound is the expression bound with qualifying variables read at their current intervals.
+/// An external definition, such as a call result, counts at full masked width.
+/// A loop-carried definition whose unmasked updates compound past the limit is then demoted.
+/// It keeps its masks.
 pub struct Elision {
     limit: i128,
     locals: BTreeMap<u32, Bound>,
@@ -183,7 +273,8 @@ impl Elision {
         }
     }
 
-    /// Run the dataflow over `func` (`params` are the function's parameter types, indexed below its declared locals).
+    /// Run the dataflow over `func`.
+    /// `params` are the function's parameter types, indexed below its declared locals.
     pub fn analyze(params: &[ValType], func: &Func, limit: i128) -> Elision {
         let mut el = Elision::none(limit);
         for (i, ty) in params.iter().chain(&func.locals).enumerate() {
@@ -196,7 +287,9 @@ impl Elision {
                 el.temps.insert(*t, Bound::exact(0));
             }
         }
-        // A demotion turns a variable's stores back into masked observation roots, which can disqualify further variables, so both halves rerun until neither changes anything.
+        // A demotion turns a variable's stores back into masked observation roots.
+        // Those roots can disqualify further variables.
+        // So both halves rerun until neither changes anything.
         loop {
             qualify(&mut el, func);
             if solve(&mut el, params, func) == 0 {
@@ -206,7 +299,8 @@ impl Elision {
         el
     }
 
-    /// Whether stores to local `idx` may render their value in modular context, with no store mask of their own.
+    /// Whether stores to local `idx` may render their value in modular context.
+    /// Such stores have no store mask of their own.
     pub fn unmasked_local(&self, idx: u32) -> bool {
         self.locals.contains_key(&idx)
     }
@@ -216,7 +310,10 @@ impl Elision {
         self.temps.contains_key(&t)
     }
 
-    /// Whether `e`'s own result mask may be skipped when its consumer reads it in `ctx`: `e` must carry a mask of its own, and the interval of the value it exposes unmasked decides per [`may_skip_mask`], with tracked variables read at their analyzed intervals.
+    /// Whether `e`'s own result mask may be skipped when its consumer reads it in `ctx`.
+    /// `e` must carry a mask of its own.
+    /// The interval of the value it exposes unmasked decides per [`may_skip_mask`].
+    /// Tracked variables are read at their analyzed intervals.
     /// `limit` is the backend's unboxed-integer bound (Ruby: `1 << 62`).
     pub fn elides_mask(&self, e: &Expr, ctx: MaskContext) -> bool {
         match self.raw_bound(e) {
@@ -225,18 +322,41 @@ impl Elision {
         }
     }
 
-    /// The unmasked form of an integer equality between a mask site `e` and the constant `c` (given in its stored masked form): `wrap(v) == c` holds exactly when raw `v` lands on `c + k * 2^bits`, so when the raw interval of `v` meets exactly one such candidate, the mask drops and `v` compares against that candidate directly.
-    /// The constant then migrates across the raw add/sub-by-constant layers the rendering exposes (`x - c1 == c'` is `x == c' + c1`), stopping at the first layer whose own mask stays.
-    /// The result is the expression to render, the context to render it in, and the exact comparison constant.
-    /// `None` keeps the mask: when `e` carries none, when several candidates fit the interval, and also when none does; the comparison is then statically false, but the operand can hold a trapping load or division, so it must still run.
-    /// The intervals, the elision checks, and the emission must agree on which masks drop, so a backend holding a per-function analysis must route both this rewrite and its rendering through the same `Elision`.
+    /// The unmasked form of an integer equality between a mask site `e` and the constant `c`.
+    /// `c` is given in its stored masked form.
+    ///
+    /// `wrap(v) == c` holds exactly when raw `v` lands on `c + k * 2^bits`.
+    /// Suppose the raw interval of `v` meets exactly one such candidate.
+    /// Then the mask drops, and `v` compares against that candidate directly.
+    ///
+    /// The constant then migrates across the raw add/sub-by-constant layers the rendering exposes.
+    /// For example, `x - c1 == c'` is `x == c' + c1`.
+    /// It stops at the first layer whose own mask stays.
+    /// The result has three parts:
+    ///
+    /// - the expression to render;
+    /// - the context to render it in;
+    /// - the exact comparison constant.
+    ///
+    /// `None` keeps the mask in three cases:
+    ///
+    /// - `e` carries none;
+    /// - several candidates fit the interval;
+    /// - no candidate fits.
+    ///   The comparison is then statically false.
+    ///   But the operand can hold a trapping load or division, so it must still run.
+    ///
+    /// The intervals, the elision checks, and the emission must agree on which masks drop.
+    /// So a backend with a per-function analysis must route two things through one `Elision`.
+    /// Those are this rewrite and its rendering.
     pub fn eq_const_rewrite<'a>(
         &self,
         e: &'a Expr,
         c: u64,
     ) -> Option<(&'a Expr, MaskContext, i128)> {
         let (raw, bits) = self.raw_bound(e)?;
-        // An interval touching the analysis ceiling may have been clamped, hiding candidates beyond it.
+        // An interval touching the analysis ceiling may have been clamped.
+        // The clamp may hide candidates beyond the ceiling.
         if raw.lo <= -CEILING || raw.hi >= CEILING {
             return None;
         }
@@ -250,7 +370,9 @@ impl Elision {
         let mut e = e;
         let mut target = c + k_min * module;
         let mut ctx = MaskContext::Reducing;
-        // Invariant: `e` rendered in `ctx` is the raw arithmetic form the algebra below rewrites (at the top the rewrite itself replaces the mask; deeper, elision is checked before descending).
+        // Invariant: `e` rendered in `ctx` is the raw arithmetic form the algebra below rewrites.
+        // At the top, the rewrite itself replaces the mask.
+        // Deeper, elision is checked before descending.
         loop {
             use BinOp::*;
             let peeled = match e {
@@ -287,7 +409,12 @@ impl Elision {
     }
 
     /// Join a definition's bound into `var`'s interval, reporting whether it changed.
-    /// From pass [`WIDEN_AFTER`] on, a still-changing interval is widened, to its masked width first and past the limit after that: growth too slow to wait out (a loop counter gaining 1 per pass) ends in a bounded number of steps, while a definition whose bound is narrow on its own (a bitwise `&`) still settles at the masked width instead of being demoted.
+    /// From pass [`WIDEN_AFTER`] on, a still-changing interval is widened.
+    /// It widens to its masked width first and past the limit after that.
+    /// Growth too slow to wait out then ends in a bounded number of steps.
+    /// An example of such growth is a loop counter gaining 1 per pass.
+    /// A bitwise `&` is a definition whose bound is narrow on its own.
+    /// Such a definition still settles at the masked width instead of being demoted.
     fn join(&mut self, var: Var, b: Bound, bits: u32, pass: usize) -> bool {
         let cur = match var {
             Var::Local(i) => self.locals.get_mut(&i),
@@ -309,8 +436,10 @@ impl Elision {
         true
     }
 
-    /// The interval of the value `e`'s rendering takes when consumed in `ctx`, under the elision policy of [`Elision::elides_mask`].
-    /// `bits` is the width of `e`'s integer type, which the caller knows from the operation consuming it.
+    /// The interval of the value `e`'s rendering takes when consumed in `ctx`.
+    /// It follows the elision policy of [`Elision::elides_mask`].
+    /// `bits` is the width of `e`'s integer type.
+    /// The caller knows it from the operation consuming `e`.
     fn bound(&self, e: &Expr, bits: u32, ctx: MaskContext) -> Bound {
         if let Some((raw, _)) = self.raw_bound(e) {
             return if may_skip_mask(raw, bits, ctx, self.limit) {
@@ -374,7 +503,8 @@ impl Elision {
         }
     }
 
-    /// The interval of `e`'s value rendered without its own result mask and the width of that mask, or `None` when `e` carries no mask of its own.
+    /// The interval of `e`'s value rendered without its own result mask, and that mask's width.
+    /// It is `None` when `e` carries no mask of its own.
     fn raw_bound(&self, e: &Expr) -> Option<(Bound, u32)> {
         use BinOp::*;
         use MaskContext::Modular;
@@ -447,9 +577,11 @@ fn int_const(e: &Expr) -> Option<u64> {
     }
 }
 
-/// The conversion-time fold of a constant AND chain: in `x & c1 & c2` the two constants meet in one `c1 & c2`, by associativity.
+/// The conversion-time fold of a constant AND chain.
+/// In `x & c1 & c2`, the two constants meet in one `c1 & c2` by associativity.
 /// `a` and `b` are the operands of the outermost AND; `Some` only when at least two constants fold.
-/// The residual expression is consumed in [`MaskContext::Reducing`], like the non-constant operand of any AND with a constant.
+/// The residual expression is consumed in [`MaskContext::Reducing`].
+/// The non-constant operand of any AND with a constant is consumed the same way.
 pub fn fold_and_chain<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     let (mut e, mut c) = and_const_split(a, b)?;
     let mut folded = false;
@@ -466,7 +598,8 @@ pub fn fold_and_chain<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     folded.then_some((e, c))
 }
 
-/// The non-constant operand of an AND and its constant sibling, when exactly one operand is an integer constant.
+/// The non-constant operand of an AND and its constant sibling.
+/// It is `Some` only when exactly one operand is an integer constant.
 fn and_const_split<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     match (int_const(a), int_const(b)) {
         (Some(c), None) => Some((b, c)),
@@ -475,7 +608,8 @@ fn and_const_split<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     }
 }
 
-/// The integer width the masking convention covers; floats and references are never mask candidates.
+/// The integer width the masking convention covers.
+/// Floats and references are never mask candidates.
 fn int_bits(ty: ValType) -> Option<u32> {
     match ty {
         ValType::I32 => Some(32),
@@ -493,20 +627,28 @@ enum Var {
 
 /// One dataflow-relevant position directly in a statement.
 enum Site<'a> {
-    /// `var = expr` (`Stmt::LocalSet` / `Stmt::Assign`): rendered in modular context when `var` stores unmasked.
+    /// `var = expr` (`Stmt::LocalSet` / `Stmt::Assign`).
+    /// It is rendered in modular context when `var` stores unmasked.
     Assign(Var, &'a Expr),
     /// `dst = src`, a branch-result copy between temps (`BrTarget::Label`'s `assigns`).
     Copy(Temp, Temp),
-    /// `temp` receives an externally produced value of full masked width: a call result, `memory.grow`, an exception payload.
+    /// `temp` receives an externally produced value of full masked width.
+    /// Examples are a call result, `memory.grow`, and an exception payload.
     External(Temp),
-    /// `expr` is a statement root whose exact value is observed; reads inside it follow the consumption table from `Masked` down.
+    /// `expr` is a statement root whose exact value is observed.
+    /// Reads inside it follow the consumption table from `Masked` down.
     Observe(&'a Expr),
-    /// `expr` is a statement root a memory unit consumes (a store's address or value): the unit reduces its operand itself, so reads inside it follow the consumption table from `Modular` down.
+    /// `expr` is a statement root a memory unit consumes (a store's address or value).
+    /// The unit reduces its operand itself.
+    /// So reads inside it follow the consumption table from `Modular` down.
     ModularRoot(&'a Expr),
 }
 
-/// Every dataflow-relevant position directly in `stmt`; nested statement sequences are reached by [`Stmt::any`].
-/// A condition is an observation root: boolean lowering tests the exact value (comparison operands, zero tests), and the table takes over below it.
+/// Every dataflow-relevant position directly in `stmt`.
+/// Nested statement sequences are reached by [`Stmt::any`].
+/// A condition is an observation root.
+/// Boolean lowering tests the exact value (comparison operands, zero tests).
+/// The table takes over below it.
 fn sites<'a>(stmt: &'a Stmt, f: &mut impl FnMut(Site<'a>)) {
     fn target<'a>(t: &'a BrTarget, f: &mut dyn FnMut(Site<'a>)) {
         match t {
@@ -625,8 +767,16 @@ fn sites<'a>(stmt: &'a Stmt, f: &mut impl FnMut(Site<'a>)) {
     }
 }
 
-/// The reads of locals and temps inside `e` that observe the exact value, mirroring the contexts emission threads through the tree: operands per the consumption table, a load address handed modular to its memory unit, `Select`'s condition and arms.
-/// A read under a `Reducing` consumer observes only bits congruence preserves (the table's constant-AND rule), so like a `Modular` one it does not count.
+/// The reads of locals and temps inside `e` that observe the exact value.
+/// It mirrors the contexts emission threads through the tree:
+///
+/// - operands per the consumption table;
+/// - a load address handed modular to its memory unit;
+/// - `Select`'s condition and arms.
+///
+/// A read under a `Reducing` consumer observes only bits congruence preserves.
+/// That is the table's constant-AND rule.
+/// So, like a `Modular` read, it does not count.
 fn scan_reads(e: &Expr, ctx: MaskContext, on_masked_read: &mut impl FnMut(&Expr)) {
     match e {
         Expr::LocalGet(_) | Expr::Temp(_) => {
@@ -663,8 +813,12 @@ fn remove_read(el: &mut Elision, read: &Expr) -> bool {
 }
 
 /// The qualification half: remove every variable one of whose reads observes the exact value.
-/// It starts from everything tracked and only removes; a store root or a copy counts as modular exactly while its destination is still tracked, so removals cascade, and each changing pass removes at least one variable, which bounds the passes.
-/// The surviving set is consistent as a whole: copy cycles among survivors are sound because no survivor is ever observed exactly.
+/// It starts from everything tracked and only removes.
+/// A store root or a copy counts as modular exactly while its destination is still tracked.
+/// So removals cascade.
+/// Each changing pass removes at least one variable, which bounds the passes.
+/// The surviving set is consistent as a whole.
+/// Copy cycles among survivors are sound because no survivor is ever observed exactly.
 fn qualify(el: &mut Elision, func: &Func) {
     loop {
         let mut changed = false;
@@ -703,12 +857,24 @@ fn qualify(el: &mut Elision, func: &Func) {
     }
 }
 
-/// Kleene passes before [`Elision::join`] starts widening: enough for chains of narrow definitions to settle without it.
+/// Kleene passes before [`Elision::join`] starts widening.
+/// They are enough for chains of narrow definitions to settle without it.
 const WIDEN_AFTER: usize = 3;
 
-/// The interval half: Kleene iteration from the seeds (a parameter at full masked width, a declared local at its zero initializer, a temp at zero), joining every definition's bound until a pass changes nothing.
-/// Joins only grow and widening caps how often each variable can change, so the iteration ends; the unchanged pass certifies that every tracked interval contains all of its definitions' bounds, which is what makes the recorded intervals hold at runtime.
-/// Variables whose interval breached the limit are then demoted to must-mask; the count of demotions is returned.
+/// The interval half: Kleene iteration from the seeds.
+/// The seeds are these:
+///
+/// - a parameter at full masked width;
+/// - a declared local at its zero initializer;
+/// - a temp at zero.
+///
+/// The iteration joins every definition's bound until a pass changes nothing.
+/// Joins only grow, and widening caps how often each variable can change.
+/// So the iteration ends.
+/// The unchanged pass certifies that every tracked interval contains all its definitions' bounds.
+/// That is what makes the recorded intervals hold at runtime.
+/// Variables whose interval breached the limit are then demoted to must-mask.
+/// The count of demotions is returned.
 fn solve(el: &mut Elision, params: &[ValType], func: &Func) -> usize {
     for (i, b) in el.locals.iter_mut() {
         let i = *i as usize;
@@ -786,7 +952,8 @@ fn var_bits(var: Var, params: &[ValType], func: &Func) -> Option<u32> {
     }
 }
 
-/// The values a shift count takes after its semantic `& (bits - 1)`: exact for a constant, the full `0..bits` otherwise.
+/// The values a shift count takes after its semantic `& (bits - 1)`.
+/// They are exact for a constant, and the full `0..bits` otherwise.
 fn count_bound(b: &Expr, bits: u32) -> (u32, u32) {
     match b {
         Expr::I32Const(v) => {
@@ -801,7 +968,8 @@ fn count_bound(b: &Expr, bits: u32) -> (u32, u32) {
     }
 }
 
-/// The interval of the signed view (`s32`/`s64`) of a masked interval: the identity below the sign bit, the full signed range once the interval reaches it.
+/// The interval of the signed view (`s32`/`s64`) of a masked interval.
+/// It is the identity below the sign bit, and the full signed range once the interval reaches it.
 fn signed_view(a: Bound, bits: u32) -> Bound {
     let half = 1i128 << (bits - 1);
     if a.lo >= 0 && a.hi < half {
@@ -812,8 +980,10 @@ fn signed_view(a: Bound, bits: u32) -> Bound {
 }
 
 /// Bitwise `&`, `|`, `^` on two's-complement integers.
-/// `x & y` with a non-negative `y` never sets a bit `y` lacks, whatever `x`'s sign: `0 <= x & y <= y`.
-/// `|` and `^` of non-negative operands stay inside the operands' bit envelope; with a possibly negative operand, anything representable in the covering two's-complement width can come out.
+/// `x & y` with a non-negative `y` never sets a bit `y` lacks, whatever `x`'s sign.
+/// So `0 <= x & y <= y`.
+/// `|` and `^` of non-negative operands stay inside the operands' bit envelope.
+/// Otherwise, anything representable in the covering two's-complement width can come out.
 fn bitwise_bound(is_and: bool, a: Bound, b: Bound) -> Bound {
     if is_and {
         match (a.lo >= 0, b.lo >= 0) {
@@ -838,7 +1008,8 @@ fn bitwise_bound(is_and: bool, a: Bound, b: Bound) -> Bound {
     Bound::new(-p, p - 1)
 }
 
-/// The masked range a load produces, exact for the zero-extending narrow loads; a sign-extending load is stored re-masked, so it spans the full destination width.
+/// The masked range a load produces, exact for the zero-extending narrow loads.
+/// A sign-extending load is stored re-masked, so it spans the full destination width.
 fn load_bound(op: LoadOp, bits: u32) -> Bound {
     use LoadOp::*;
     match op {
@@ -898,7 +1069,8 @@ mod tests {
 
     #[test]
     fn and_bounds_by_a_non_negative_operand_alone() {
-        // The unmasked difference can be negative, but `& 0xff` still lands in 0..255, so the product elides.
+        // The unmasked difference can be negative, but `& 0xff` still lands in 0..255.
+        // So the product elides.
         let byte_of_diff = |i, j| {
             bin(
                 BinOp::I32And,
@@ -961,7 +1133,8 @@ mod tests {
         // (l0 + l1) + l2 unmasked is below 3 * 2^32.
         let inner = bin(BinOp::I32Add, local(0), local(1));
         assert!(elides_modular(&bin(BinOp::I32Add, inner, local(2))));
-        // ((l0 + l1) * l2) unmasked reaches 2^65: the mul keeps its mask even though its operand elides.
+        // ((l0 + l1) * l2) unmasked reaches 2^65.
+        // So the mul keeps its mask even though its operand elides.
         let inner = bin(BinOp::I32Add, local(0), local(1));
         assert!(!elides_modular(&bin(BinOp::I32Mul, inner, local(2))));
     }
@@ -1006,7 +1179,8 @@ mod tests {
             shift_count_mode(&Expr::Un(UnOp::I32Clz, Box::new(local(0))), 32, LIMIT),
             Masked
         );
-        // A sub elides its mask under a modular consumer, but its exact rendering can be negative: the in-range proof binds the Masked rendering, so the reduction stays.
+        // A sub elides its mask under a modular consumer, but its exact rendering can be negative.
+        // The in-range proof binds the Masked rendering, so the reduction stays.
         assert_eq!(
             shift_count_mode(&bin(BinOp::I32Sub, local(0), local(1)), 32, LIMIT),
             Masked
@@ -1046,7 +1220,8 @@ mod tests {
 
     #[test]
     fn a_reducing_consumer_drops_the_mask_with_no_bound_guard() {
-        // A full-range product exceeds the limit, so a modular consumer keeps its mask; a reducing one drops it.
+        // A full-range product exceeds the limit, so a modular consumer keeps its mask.
+        // A reducing consumer drops it.
         let mul = bin(BinOp::I32Mul, local(0), local(1));
         assert!(!elides_mask(&mul, Modular, LIMIT));
         assert!(elides_mask(&mul, Reducing, LIMIT));
@@ -1059,13 +1234,15 @@ mod tests {
 
     #[test]
     fn an_identity_mask_drops_in_every_context() {
-        // The high half extracted by `>> 32` sits in [0, 2^32): the wrap is the identity even at an observation point.
+        // The high half extracted by `>> 32` sits in [0, 2^32).
+        // So the wrap is the identity even at an observation point.
         let wrap = Expr::Un(
             UnOp::I32WrapI64,
             Box::new(bin(BinOp::I64ShrU, local(0), Expr::I64Const(32))),
         );
         assert!(elides_mask(&wrap, Masked, LIMIT));
-        // A raw interval reaching outside [0, 2^32) is not the identity: the mask stays under a masked consumer.
+        // A raw interval reaching outside [0, 2^32) is not the identity.
+        // So the mask stays under a masked consumer.
         let add = bin(BinOp::I32Add, local(0), local(1));
         assert!(!elides_mask(&add, Masked, LIMIT));
         let sub = bin(BinOp::I32Sub, local(0), Expr::I32Const(1));
@@ -1113,7 +1290,8 @@ mod tests {
 
     #[test]
     fn eq_rewrite_pins_a_unique_preimage_and_migrates_the_constant() {
-        // `(l0 - 5) & 0xffffffff == 7` has raw interval [-5, 2^32 - 6]: only 7 fits, and the constant migrates to `l0 == 12`.
+        // `(l0 - 5) & 0xffffffff == 7` has raw interval [-5, 2^32 - 6], and only 7 fits.
+        // The constant migrates to `l0 == 12`.
         let sub = bin(BinOp::I32Sub, local(0), Expr::I32Const(5));
         let (e, ctx, t) = eq_const_rewrite(&sub, 7, LIMIT).expect("unique preimage");
         assert!(matches!(e, Expr::LocalGet(0)));
@@ -1139,7 +1317,8 @@ mod tests {
         assert!(matches!(e, Expr::Load { .. }));
         assert_eq!(ctx, Modular);
         assert_eq!(t, 7);
-        // A site with no peelable layer compares its whole raw form in reducing context: `i64.shr_s` raw is within [-2^63, 2^63), so only the candidate 7 fits.
+        // A site with no peelable layer compares its whole raw form in reducing context.
+        // `i64.shr_s` raw is within [-2^63, 2^63), so only the candidate 7 fits.
         let shr = bin(BinOp::I64ShrS, local(0), local(1));
         let (e, ctx, t) = eq_const_rewrite(&shr, 7, LIMIT).expect("unique preimage");
         assert!(matches!(e, Expr::Bin(BinOp::I64ShrS, ..)));
@@ -1149,7 +1328,8 @@ mod tests {
 
     #[test]
     fn eq_rewrite_against_zero_pins_a_two_sided_sub() {
-        // The sub's open interval (-2^32, 2^32) holds exactly one multiple of 2^32: zero itself, so `eqz(x - y)` reads the raw difference.
+        // The sub's open interval (-2^32, 2^32) holds exactly one multiple of 2^32: zero itself.
+        // So `eqz(x - y)` reads the raw difference.
         let sub = bin(BinOp::I32Sub, local(0), local(1));
         let (e, ctx, t) = eq_const_rewrite(&sub, 0, LIMIT).expect("unique preimage");
         assert!(matches!(e, Expr::Bin(BinOp::I32Sub, ..)));
@@ -1162,7 +1342,8 @@ mod tests {
         // A two-sided sub spans almost 2^33: both 7 and 7 - 2^32 fit.
         let sub = bin(BinOp::I32Sub, local(0), local(1));
         assert!(eq_const_rewrite(&sub, 7, LIMIT).is_none());
-        // A narrow interval missing the constant fits no candidate: statically false, but the operand must still run, so the mask stays.
+        // A narrow interval missing the constant fits no candidate: the result is statically false.
+        // But the operand must still run, so the mask stays.
         let narrow = bin(BinOp::I32Add, load8u(), Expr::I32Const(1));
         assert!(eq_const_rewrite(&narrow, 500, LIMIT).is_none());
         // A maskless expression is no rewrite site.
@@ -1279,7 +1460,8 @@ mod dataflow {
 
     #[test]
     fn a_loop_carried_definition_narrowed_by_and_converges() {
-        // l1 = (l1 + 1) & 255 in a loop: the `&` re-narrows every iteration, so the interval settles and the store elides.
+        // l1 = (l1 + 1) & 255 in a loop: the `&` re-narrows every iteration.
+        // So the interval settles and the store elides.
         let update = bin(
             BinOp::I32And,
             bin(BinOp::I32Add, local(1), c32(1)),
@@ -1291,7 +1473,8 @@ mod dataflow {
 
     #[test]
     fn a_compounding_loop_carried_definition_is_demoted() {
-        // l1 = l1 + 1 in a loop: the unmasked interval grows without bound, so widening pushes it past the limit and the store keeps its mask.
+        // l1 = l1 + 1 in a loop: the unmasked interval grows without bound.
+        // So widening pushes it past the limit, and the store keeps its mask.
         let update = bin(BinOp::I32Add, local(1), c32(1));
         let el = Elision::analyze(&[ValType::I32], &counting_loop(update), LIMIT);
         assert!(!el.unmasked_local(1));
@@ -1320,7 +1503,8 @@ mod dataflow {
 
     #[test]
     fn a_bit_test_under_a_constant_mask_reads_modularly() {
-        // `l1 & 1` in a condition observes only bit 0, which congruence preserves, so it does not disqualify l1.
+        // `l1 & 1` in a condition observes only bit 0, which congruence preserves.
+        // So it does not disqualify l1.
         let f = func(
             vec![ValType::I32],
             vec![],
@@ -1351,7 +1535,8 @@ mod dataflow {
 
     #[test]
     fn a_store_operand_read_counts_as_modular() {
-        // The memory units reduce their address and stored-value operands themselves, so reads at those positions leave l1 qualified.
+        // The memory units reduce their address and stored-value operands themselves.
+        // So reads at those positions leave l1 qualified.
         let f = func(
             vec![ValType::I32],
             vec![],
@@ -1409,13 +1594,15 @@ mod dataflow {
             ],
         );
         let el = Elision::analyze(&[], &f, LIMIT);
-        // The full masked i64 width reaches 2^64, past the Fixnum limit, so even a purely modular consumer set cannot clear it.
+        // The full masked i64 width reaches 2^64, past the Fixnum limit.
+        // So even a purely modular consumer set cannot clear it.
         assert!(!el.unmasked_temp(t64));
     }
 
     #[test]
     fn a_tracked_interval_refines_the_expression_guard() {
-        // l1 is confined to a byte by its only definition, so a product of two reads elides where masked-width operands would not.
+        // l1 is confined to a byte by its only definition.
+        // So a product of two reads elides where masked-width operands would not.
         let f = func(
             vec![ValType::I32],
             vec![],

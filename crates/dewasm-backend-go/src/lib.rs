@@ -1,20 +1,44 @@
-//! Go backend: translates dewasm IR into a single self-contained Go source file (a `package` clause plus a bundled runtime).
+//! Go backend: translates dewasm IR into a single self-contained Go source file.
+//! The file is a `package` clause plus a bundled runtime.
 //!
 //! The package clause follows the mode.
-//! Standalone output is `package main` with the fixed type `Program` and a `func main`, so a standalone artifact is byte-stable whatever it was named.
-//! Library output is `package <module name lowercased>` with the type `<module name, first letter uppercased>`: a Go artifact is a *package* an embedder imports, so the module name has to be a Go identifier and is rejected at conversion time when it is not (see [`validate_library_module_name`]).
+//! Standalone output is `package main` with the fixed type `Program` and a `func main`.
+//! A standalone artifact is therefore byte-stable whatever it was named.
+//! Library output is `package <module name lowercased>`.
+//! Its type is `<module name, first letter uppercased>`.
+//! A Go artifact is a *package* an embedder imports, so the module name has to be a Go identifier.
+//! A name that is not one is rejected at conversion time (see [`validate_library_module_name`]).
 //!
 //! Lowering conventions:
-//! - i32/i64 are native `uint32`/`uint64` (masking is free: arithmetic wraps); signed views are `int32(x)`/`int64(x)` casts. f32/f64 are native `float32`/`float64`, so f32 re-rounding and IEEE float division need no helper (Go floats trap-free, unlike Python/Ruby/Bash).
-//! - NaN bit paths go through `math.Float32bits`/`Float64bits`, which are bit-preserving on native floats; only demote/promote reconstruct NaN payloads explicitly.
-//! - Control flow maps onto Go's labeled loops: a referenced block/if becomes `L: for { ...; break L }`, a referenced loop `L: for { ...; break L }` with back-edges as `continue L`.
+//! - i32/i64 are native `uint32`/`uint64` (masking is free: arithmetic wraps).
+//!   Signed views are `int32(x)`/`int64(x)` casts.
+//!   f32/f64 are native `float32`/`float64`.
+//!   So f32 re-rounding and IEEE float division need no helper.
+//!   Go floats are trap-free, unlike Python/Ruby/Bash.
+//! - NaN bit paths go through `math.Float32bits`/`Float64bits`.
+//!   Those preserve bits on native floats.
+//!   Only demote/promote reconstruct NaN payloads explicitly.
+//! - Control flow maps onto Go's labeled loops.
+//!   A referenced block/if becomes `L: for { ...; break L }`.
+//!   A referenced loop becomes `L: for { ...; break L }` with back-edges as `continue L`.
 //!   Unreferenced structures are spliced inline.
-//!   Unused labels/variables are Go compile errors, so labels are emitted only when referenced and locals/temps only when used (a pre-pass over the body computes the read/used sets, blanking the rest with `_ =`).
-//! - `try_table` is the one structure that cannot stay a labeled loop: `recover` works only inside a deferred function, and a labeled `break`/`continue` may not cross a function-literal boundary.
-//!   Its body becomes an immediately-invoked closure returning an outcome code, and the `switch` after it performs the branch that the body could not take from inside ([`TryFrame`]).
-//! - An artifact carries its consumer's `go vet` run, which rejects unreachable code and self-assignment, so a statement the emitter can already see is dead is not emitted: [`prune`] drops it, together with the frame labels and locals that only it reached.
+//!   Unused labels/variables are Go compile errors.
+//!   So labels are emitted only when referenced, and locals/temps only when used.
+//!   A pre-pass over the body computes the read/used sets and blanks the rest with `_ =`.
+//! - `try_table` is the one structure that cannot stay a labeled loop.
+//!   `recover` works only inside a deferred function.
+//!   A labeled `break`/`continue` may not cross a function-literal boundary.
+//!   Its body becomes an immediately-invoked closure returning an outcome code.
+//!   The `switch` after it performs the branch the body could not take from inside ([`TryFrame`]).
+//! - An artifact carries its consumer's `go vet` run.
+//!   `go vet` rejects unreachable code and self-assignment.
+//!   So a statement the emitter can already see is dead is not emitted.
+//!   [`prune`] drops it, together with the frame labels and locals that only it reached.
 //!
-//! The runtime is composed from per-method units referenced as `Rt.<name>` (methods on a zero-size `rt` receiver), plus package-level constructors (`newMemory`/`newTable`/`newWASI`) and a generic `rtSelect`.
+//! The runtime is composed from per-method units referenced as `Rt.<name>`.
+//! Those are methods on a zero-size `rt` receiver.
+//! It also has package-level constructors: `newMemory`, `newTable`, and `newWASI`.
+//! It also has a generic `rtSelect`.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -35,14 +59,17 @@ use dewasm_core::ir::{
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
 /// The runtime unit bundler for Go (see crates/dewasm-backend-go/units/).
-/// Every scope has empty wrappers: Go methods and types are package-level regardless of the struct they belong to, so the bundle is a flat list of declarations (unlike Python's nested classes).
+/// Every scope has empty wrappers.
+/// Go methods and types are package-level regardless of the struct they belong to.
+/// So the bundle is a flat list of declarations, unlike Python's nested classes.
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
         RuntimeBundler::new(
             "//",
             "\t",
-            // Emit unit bodies exactly as written (they are space-indented, unlike the tabbed base indent).
+            // Emit unit bodies exactly as written.
+            // They are space-indented, unlike the tabbed base indent.
             0,
             vec![
                 RuntimeScope {
@@ -82,14 +109,16 @@ pub fn bundler() -> &'static RuntimeBundler {
     })
 }
 
-/// Locate a `go` toolchain able to compile generated programs: `$DEWASM_GO` first, then `go` on `PATH`.
+/// Locate a `go` toolchain that can compile generated programs.
+/// It tries `$DEWASM_GO` first, then `go` on `PATH`.
 /// A missing toolchain is a loud failure at the call site, not here.
 pub fn find_go() -> Option<std::path::PathBuf> {
     static GO: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
     GO.get_or_init(find_go_uncached).clone()
 }
 
-/// The probe behind [`find_go`], memoized there: it spawns a process per call, and the toolchain cannot change under a running process.
+/// The probe behind [`find_go`], memoized there since it spawns a process per call.
+/// The toolchain cannot change under a running process, so memoizing is sound.
 fn find_go_uncached() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -106,7 +135,9 @@ fn find_go_uncached() -> Option<std::path::PathBuf> {
     })
 }
 
-/// A complete, compilable Go file bundling *every* runtime unit (with a dummy `main`), for the units lint's `go build` check that all units (not just the subset any one module uses) are valid Go.
+/// A complete, compilable Go file bundling *every* runtime unit, with a dummy `main`.
+/// It is for the units lint's `go build` check that all units are valid Go.
+/// That covers every unit, not just the subset any one module uses.
 pub fn full_bundle_go() -> Result<String> {
     let bundle = bundler().bundle_all(0)?;
     let imports = scan_imports(&bundle, false);
@@ -135,16 +166,21 @@ impl Backend for GoBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Go floats are native IEEE float32/float64, and the NaN paths are bit-exact via `math.Float32bits`/`Float64bits`.
+            // Go floats are native IEEE float32/float64.
+            // The NaN paths are bit-exact via `math.Float32bits`/`Float64bits`.
             Feature::Floats => SupportStatus::Supported,
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
-            // Tags are identity objects, a thrown exception is a panic carrying the `*rtException` that doubles as the exnref, and traps stay uncatchable.
+            // Tags are identity objects.
+            // A thrown exception is a panic carrying the `*rtException` that doubles as the exnref.
+            // Traps stay uncatchable.
             Feature::ExceptionHandling => SupportStatus::Supported,
-            // A trampoline with a body/entry split: the body returns a thunk alongside its results, typed per result signature since a tail call always agrees with its callee on results.
+            // A trampoline with a body/entry split: the body returns a thunk alongside its results.
+            // The thunk is typed per result signature.
+            // That suffices since a tail call always agrees with its callee on results.
             Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
@@ -157,7 +193,9 @@ impl Backend for GoBackend {
             name: format!("{}.go", opts.module_name),
             contents: contents.into_bytes(),
         }];
-        // The data file: every segment's bytes concatenated in segment order, matching the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices and `//go:embed`ed by the generated file.
+        // The data file: every segment's bytes concatenated in segment order.
+        // It matches the `data_offsets` baked into the generated `dataBlob[o:o+len]` slices.
+        // The generated file `//go:embed`s it.
         // Only emitted when there is data to externalize.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -175,7 +213,15 @@ impl Backend for GoBackend {
     }
 }
 
-/// Emit just the package-level declarations for `module` (the struct, its constructor and methods, the spec-harness `invoke`/`globalGet` dispatch, and the recursion guard), for the spec harness: the harness bundles one shared runtime for every module in a `.wast` file, so per-module output carries no `package`/`import`/`main`.
+/// Emit just the package-level declarations for `module`, for the spec harness.
+/// The harness bundles one shared runtime for every module in a `.wast` file.
+/// So per-module output carries no `package`/`import`/`main`.
+///
+/// The declarations are:
+/// - the struct, its constructor, and its methods;
+/// - the spec-harness `invoke`/`globalGet` dispatch;
+/// - the recursion guard.
+///
 /// Returns the declarations and the runtime units they reference.
 pub fn generate_program_with_units(
     module: &Module,
@@ -202,8 +248,12 @@ pub fn generate_program_with_units(
 
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     let standalone = opts.mode == Mode::Standalone;
-    // Standalone artifacts are `package main` with a fixed internal name: nothing outside the file can refer to them, so the module name has no work to do and the output stays byte-identical whatever it is.
-    // Library artifacts *are* named: the package an embedder imports and the type it instantiates both come from the module name, which therefore has to be a Go identifier.
+    // Standalone artifacts are `package main` with a fixed internal name.
+    // Nothing outside the file can refer to them, so the module name has no work to do.
+    // The output then stays byte-identical whatever the name is.
+    // Library artifacts *are* named.
+    // The package an embedder imports and the type it instantiates both come from the module name.
+    // The module name therefore has to be a Go identifier.
     let (package, type_name) = if standalone {
         (STANDALONE_PACKAGE.to_string(), STANDALONE_TYPE.to_string())
     } else {
@@ -237,21 +287,29 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         gen.use_unit("rt/trap");
         gen.use_unit("rt/exit");
     } else if wasi {
-        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`; that glue needs to catch a `proc_exit` (rtExit) to read the exit code, exactly as the standalone main does.
-        // Seed rt/exit so the type is always defined even for a module that never imports proc_exit itself.
+        // Library-mode WASI output is driven by host glue that instantiates and calls `_start`.
+        // That glue needs to catch a `proc_exit` (rtExit) to read the exit code.
+        // The standalone main does the same.
+        // Seed rt/exit so the type is always defined.
+        // A module may never import proc_exit itself.
         gen.use_unit("rt/exit");
     }
     let uses = gen.uses.borrow().clone();
     let bundle = bundler().bundle(&uses, 0)?;
 
     let mut imports = scan_imports(&bundle, standalone);
-    // The standalone WASI main parses `--dir` flags with `strings`; that code lives in main_func (not the scanned bundle), so add the import here.
+    // The standalone WASI main parses `--dir` flags with `strings`.
+    // That code lives in main_func, not the scanned bundle, so add the import here.
     if standalone && wasi && !imports.iter().any(|i| i == "strings") {
         imports.push("strings".to_string());
         imports.sort();
     }
-    // Library mode admits host code written into the same package (a second file, or text appended to this one).
-    // Go requires all imports before other declarations, so glue appended to *this* file cannot carry its own `import`; the generated file imports `fmt` up front (marked used below) so such glue can print without one.
+    // Library mode admits host code written into the same package.
+    // That is a second file, or text appended to this one.
+    // Go requires all imports before other declarations.
+    // So glue appended to *this* file cannot carry its own `import`.
+    // The generated file imports `fmt` up front, so such glue can print without one.
+    // The import is marked used below.
     if !standalone && !imports.iter().any(|i| i == "fmt") {
         imports.push("fmt".to_string());
         imports.sort();
@@ -262,7 +320,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     out.push_str(&import_block(&imports));
     out.push('\n');
     // Data externalization: pull the segment bytes from a `//go:embed`ed data file.
-    // `embed` is a blank import (the package is used only through the directive, which, unlike a package-qualified selector, the import scanner cannot see), and the directive must sit immediately above its `var` with no intervening blank line.
+    // `embed` is a blank import: the package is used only through the directive.
+    // The import scanner cannot see the directive, unlike a package-qualified selector.
+    // The directive must sit immediately above its `var`, with no intervening blank line.
     // A separate `import` declaration is legal Go and keeps `import_block` untouched.
     if let Some(cfg) = &opts.data_file {
         if !module.datas.is_empty() {
@@ -288,8 +348,13 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
 }
 
 /// The external packages a bundle references, plus `os` for a standalone main.
-/// Only the runtime bundle (controlled code) is scanned; generated program code emits no package-qualified selectors and data blobs are hex literals, so no user string can inject a false import.
-/// Line comments are stripped first: a prose "at instantiation time." must not pull in the `time` package (`//go:` directives survive in the emitted bundle regardless: this stripping only computes the import set).
+/// Only the runtime bundle (controlled code) is scanned.
+/// Generated program code emits no package-qualified selectors, and data blobs are hex literals.
+/// So no user string can inject a false import.
+/// Line comments are stripped first.
+/// A prose "at instantiation time." must not pull in the `time` package.
+/// `//go:` directives still survive in the emitted bundle.
+/// This stripping only computes the import set.
 fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     let candidates = [
         ("binary.", "encoding/binary"),
@@ -327,9 +392,15 @@ fn scan_imports(bundle: &str, standalone: bool) -> Vec<String> {
     set.into_iter().map(|s| s.to_string()).collect()
 }
 
-/// Whether `text` uses the package selector `sel` (`"time."`, `"os."`, ...), that is, whether it occurs at an identifier boundary.
-/// `runtime.GOOS` must not register a use of `time.`, and `p.os.x` must not register one of `os.`, so an occurrence preceded by an identifier character or a dot does not count.
-/// Public because the test crate's own scanners (the spec harness and the multi-module e2e composer assemble programs from several fragments and must compute the same import set) would otherwise re-derive this rule and drift from it.
+/// Whether `text` uses the package selector `sel` (`"time."`, `"os."`, ...).
+/// That is, whether `sel` occurs at an identifier boundary.
+/// `runtime.GOOS` must not register a use of `time.`.
+/// `p.os.x` must not register a use of `os.`.
+/// So an occurrence preceded by an identifier character or a dot does not count.
+/// It is public for the test crate's own scanners.
+/// The spec harness and the multi-module e2e composer assemble programs from several fragments.
+/// They must compute the same import set.
+/// Without this function they would re-derive this rule and drift from it.
 pub fn selector_used(text: &str, sel: &str) -> bool {
     let bytes = text.as_bytes();
     let mut start = 0;
@@ -360,7 +431,11 @@ fn import_block(imports: &[String]) -> String {
 }
 
 fn main_func(type_name: &str, wasi: bool) -> String {
-    // Standalone WASI parses the runtime interface: a leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths (wasmtime-style), stopping at `--` or the first non-flag token; the rest is the guest's argv[1..], with argv[0] the program basename.
+    // Standalone WASI parses the runtime interface.
+    // A leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths.
+    // This follows wasmtime.
+    // The run stops at `--` or the first non-flag token.
+    // The rest is the guest's argv[1..], with argv[0] the program basename.
     // Without WASI there is nothing to preopen and no argv to deliver.
     let (arg_setup, args_arg, env_arg, preopen_arg) = if wasi {
         (
@@ -426,12 +501,16 @@ fn main_func(type_name: &str, wasi: bool) -> String {
     )
 }
 
-/// The package and type a standalone artifact always uses: it is a program, not something anyone imports, so its internal names are fixed and its bytes do not depend on the module name.
+/// The package and type a standalone artifact always uses.
+/// It is a program, not something anyone imports, so its internal names are fixed.
+/// Its bytes then do not depend on the module name.
 const STANDALONE_PACKAGE: &str = "main";
 const STANDALONE_TYPE: &str = "Program";
 
 /// The grammar a library-mode module name must match: a Go identifier restricted to ASCII.
-/// Names are taken as written (there is no sanitization), so a name that cannot be a Go package/type name is a conversion-time error (fail at conversion, never at runtime), not something quietly rewritten into a name the embedder did not ask for.
+/// Names are taken as written, with no sanitization.
+/// A name that cannot be a Go package/type name is a conversion-time error, never a runtime one.
+/// It is not quietly rewritten into a name the embedder did not ask for.
 fn validate_library_module_name(name: &str) -> Result<()> {
     if is_ident(
         name,
@@ -454,8 +533,10 @@ fn package_name(module_name: &str) -> String {
     module_name.to_ascii_lowercase()
 }
 
-/// The exported Go type of a library artifact: the module name with its first letter uppercased, leaving the rest exactly as written (`ruby` → `Ruby`, `Rg` → `Rg`).
-/// Total on a validated name; a leading `_` stays unexported, which is the embedder's own choice to make.
+/// The exported Go type of a library artifact: the module name with its first letter uppercased.
+/// The rest stays exactly as written (`ruby` → `Ruby`, `Rg` → `Rg`).
+/// Total on a validated name.
+/// A leading `_` stays unexported, which is the embedder's own choice to make.
 fn type_name(module_name: &str) -> String {
     let mut chars = module_name.chars();
     match chars.next() {
@@ -529,14 +610,17 @@ fn ty_suffix(ty: ValType) -> &'static str {
     }
 }
 
-/// Whether `expr` renders as a Go integer constant, which makes any operation over two of them a compile-time constant expression.
+/// Whether `expr` renders as a Go integer constant.
+/// Any operation over two such constants is a compile-time constant expression.
 /// Float constants render as calls (`f32_from_bits`), so they are never constant to Go.
 fn int_const(expr: &Expr) -> bool {
     matches!(expr, Expr::I32Const(_) | Expr::I64Const(_))
 }
 
 /// Whether `expr` is a float constant.
-/// It is not constant to Go (see `int_const`), but the compiler folds the `from_bits` intrinsic to a machine constant, which is what Go's identity rewrites over a multiply or a divide match on.
+/// It is not constant to Go (see `int_const`).
+/// But the compiler folds the `from_bits` intrinsic to a machine constant.
+/// Go's identity rewrites over a multiply or a divide match on that constant.
 fn float_const(expr: &Expr) -> bool {
     matches!(expr, Expr::F32Const(_) | Expr::F64Const(_))
 }
@@ -559,7 +643,8 @@ fn tail_suffix(results: &[ValType]) -> String {
         .collect()
 }
 
-/// Defined functions (function index space) containing a tail call: these are the ones split into `f{idx}Body` plus a trampoline entry.
+/// Defined functions (function index space) containing a tail call.
+/// These are split into `f{idx}Body` plus a trampoline entry.
 fn tail_callers(module: &Module) -> BTreeSet<u32> {
     module
         .funcs
@@ -605,30 +690,49 @@ fn go_func_type(params: &[ValType], results: &[ValType]) -> String {
     format!("func({}){}", ps, go_results(results))
 }
 
-/// The recursion-guard budget (spec-harness builds only): each generated function adds its frame's slot count (`1 + params + locals + temps`) to the global `rtStack` on entry and traps once the running total exceeds this.
-/// It bounds otherwise-uncatchable Go stack overflow (a runaway recursion aborts the process fatally) into a catchable "call stack exhausted" trap the spec harness can observe.
-/// Sized so every runaway/huge recursion and the one >50-slot function in the testsuite (`function-with-many-locals`, 1056 locals, `skip-stack-guard-page.wast`) trip it, while every legitimately terminating recursion in the suite stays under it.
+/// The recursion-guard budget (spec-harness builds only).
+/// Each generated function adds its frame's slot count to the global `rtStack` on entry.
+/// The slot count is `1 + params + locals + temps`.
+/// It traps once the running total exceeds this budget.
+/// Go stack overflow is otherwise uncatchable: a runaway recursion aborts the process fatally.
+/// The guard bounds it into a catchable "call stack exhausted" trap the spec harness can observe.
+/// It is sized so every runaway/huge recursion trips it.
+/// The one >50-slot function in the testsuite trips it too.
+/// That is `function-with-many-locals` (1056 locals) in `skip-stack-guard-page.wast`.
+/// Every legitimately terminating recursion in the suite stays under it.
 const SPEC_STACK_LIMIT: usize = 1024;
 
 /// The state of one `try_table` whose body is currently being emitted into a closure.
 ///
-/// Go's `recover` works only inside a deferred function and Go forbids a labeled `break`/`continue` (or a `return` for the enclosing function) crossing a function-literal boundary, so the body becomes an immediately-invoked closure returning an outcome code that the following `switch` acts on.
-/// Code 0 is normal completion, `1..=catches` are the catch clauses, and the rest are allocated here, one per branch that has to leave the closure.
+/// Go's `recover` works only inside a deferred function.
+/// Go forbids a labeled `break`/`continue` crossing a function-literal boundary.
+/// A `return` for the enclosing function may not cross it either.
+/// So the body becomes an immediately-invoked closure returning an outcome code.
+/// The following `switch` acts on that code.
+/// Code 0 is normal completion, and `1..=catches` are the catch clauses.
+/// The rest are allocated here, one per branch that has to leave the closure.
 struct TryFrame {
-    /// The try_table's own label: a branch to it lands exactly where falling off the end of the closure does, so it is outcome 0 rather than an escape.
+    /// The try_table's own label.
+    /// A branch to it lands exactly where falling off the end of the closure does.
+    /// So it is outcome 0 rather than an escape.
     label: u32,
-    /// Labels opened *inside* the closure; a branch to one of those stays a direct labeled break/continue.
+    /// Labels opened *inside* the closure.
+    /// A branch to one of them stays a direct labeled break/continue.
     inner_labels: Vec<u32>,
     catches: usize,
-    /// What leaves the closure, in outcome-code order; the enclosing `switch` re-emits each one where the labels are in scope again.
+    /// What leaves the closure, in outcome-code order.
+    /// The enclosing `switch` re-emits each one where the labels are in scope again.
     escapes: Vec<Escape>,
 }
 
 /// One way out of a `try_table` closure other than falling off its end.
-/// Re-emitting the original statement is sound because an escape is the last thing its closure does: nothing runs between the escape point and the `switch` arm, so the operands still read the same locals and temps.
+/// Re-emitting the original statement is sound: an escape is the last thing its closure does.
+/// Nothing runs between the escape point and the `switch` arm.
+/// So the operands still read the same locals and temps.
 enum Escape {
     Br(BrTarget),
-    /// A tail call, which must run its callee with the closure (and the handler it installed) already gone.
+    /// A tail call.
+    /// It must run its callee with the closure (and the handler it installed) already gone.
     Tail(Stmt),
 }
 
@@ -641,14 +745,20 @@ struct Gen<'a> {
     cur_locals: RefCell<Vec<ValType>>,
     /// The `try_table` closures enclosing the statement being emitted, innermost last.
     try_stack: RefCell<Vec<TryFrame>>,
-    /// Defined functions (function index space) containing a tail call: these are the ones split into `f{idx}Body` plus a trampoline entry.
+    /// Defined functions (function index space) containing a tail call.
+    /// These are split into `f{idx}Body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
-    /// The result signature of the tail-calling function currently being emitted, set by `function()`: every `return` in its body carries a trailing `nil` thunk.
+    /// The result signature of the tail-calling function being emitted, set by `function()`.
+    /// Every `return` in its body carries a trailing `nil` thunk.
     cur_tail: RefCell<Option<Vec<ValType>>>,
-    /// Spec-harness mode: emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
-    /// Off for the shipped standalone/library output, whose deep-but-valid recursions must not falsely trap.
+    /// Spec-harness mode.
+    /// Emit the reflective `invoke`/`global_get` dispatch methods and the recursion guard.
+    /// Off for the shipped standalone/library output.
+    /// Its deep-but-valid recursions must not falsely trap.
     spec: bool,
-    /// When `Some`, data segments are externalized into a `//go:embed`ed binary data file of this filename instead of embedded as `Rt.unhex` literals; `data_offsets[i]` locates segment `i` in the blob.
+    /// When `Some`, data segments are externalized into a binary data file of this filename.
+    /// The file is `//go:embed`ed, and the segments are not embedded as `Rt.unhex` literals.
+    /// `data_offsets[i]` locates segment `i` in the blob.
     data_file: Option<String>,
     data_offsets: Vec<usize>,
 }
@@ -658,7 +768,8 @@ impl<'a> Gen<'a> {
         self.uses.borrow_mut().insert(id.to_string());
     }
 
-    /// The distinct result signatures of the module's tail-calling functions, each needing one thunk type.
+    /// The distinct result signatures of the module's tail-calling functions.
+    /// Each needs one thunk type.
     fn tail_signatures(&self) -> Vec<Vec<ValType>> {
         let mut seen: BTreeSet<Vec<ValType>> = BTreeSet::new();
         for idx in &self.tail_callers {
@@ -667,17 +778,21 @@ impl<'a> Gen<'a> {
         seen.into_iter().collect()
     }
 
-    /// The parked-target field for a result signature: a chain agrees on its results, so one field per signature is enough and nothing is boxed.
+    /// The parked-target field for a result signature.
+    /// A chain agrees on its results, so one field per signature is enough.
+    /// Nothing is boxed.
     fn tail_field(&self, results: &[ValType]) -> String {
         format!("tf{}", tail_suffix(results))
     }
 
-    /// The per-instance table of tail entries for a result signature, built once in the constructor.
+    /// The per-instance table of tail entries for a result signature.
+    /// It is built once in the constructor.
     fn tail_table(&self, results: &[ValType]) -> String {
         format!("tb{}", tail_suffix(results))
     }
 
-    /// The Go type of a tail entry: a call that takes its arguments out of the parked slots and runs the callee's body.
+    /// The Go type of a tail entry.
+    /// It is a call that takes its arguments out of the parked slots and runs the callee's body.
     /// Unnamed on purpose, so a slot written by another artifact still type-asserts here.
     fn tail_entry_type(&self, results: &[ValType]) -> String {
         format!("func(){}", go_results(results))
@@ -688,8 +803,11 @@ impl<'a> Gen<'a> {
         format!("ta{i}{}", ty_suffix(ty))
     }
 
-    /// Every argument slot the module's tail calls need: one per position and type a tail call passes.
-    /// A tail-calling function's own parameters, because its tail entry reads them back out; and every signature reachable through a table, because an indirect tail call parks against the *call site's* type, which need not be one of them.
+    /// Every argument slot the module's tail calls need.
+    /// There is one per position and type a tail call passes.
+    /// It covers a tail-calling function's own parameters: its tail entry reads them back out.
+    /// It also covers every signature reachable through a table.
+    /// An indirect tail call parks against the *call site's* type, which need not be one of them.
     fn arg_slots(&self) -> Vec<(String, ValType)> {
         let mut seen: BTreeSet<(usize, ValType)> = BTreeSet::new();
         let mut note = |params: &[ValType]| {
@@ -725,7 +843,8 @@ impl<'a> Gen<'a> {
             .position(|f| *f == func_idx)
     }
 
-    /// A tail call whose callee has no tail entry here: it completes in one frame, so the chain ends with its result.
+    /// A tail call whose callee has no tail entry here.
+    /// It completes in one frame, so the chain ends with its result.
     fn return_call_completing(&self, w: &mut CodeWriter, call: &str) {
         if self
             .cur_tail
@@ -740,8 +859,12 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Park a tail call and leave: the arguments into their slots, then the target, then this frame's own zero results, which the trampoline discards.
-    /// The arguments are already free of calls (the IR spills an effectful operand before the instruction), so nothing between these assignments can reach another trampoline and overwrite a slot.
+    /// Park a tail call and leave.
+    /// Write the arguments into their slots, then the target.
+    /// Then return this frame's own zero results, which the trampoline discards.
+    /// The arguments are already free of calls.
+    /// The IR spills an effectful operand before the instruction.
+    /// So nothing between these assignments can reach another trampoline and overwrite a slot.
     fn park_tail(&self, w: &mut CodeWriter, params: &[ValType], args: &[String], target: &str) {
         for (i, (a, ty)) in args.iter().zip(params).enumerate() {
             w.line(format!("p.{} = {a}", Self::arg_slot(i, *ty)));
@@ -756,7 +879,9 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The Go expression yielding a data segment's bytes: a sub-slice of the embedded blob when `--data-file` is on (no runtime helper), else an `Rt.unhex(...)` inline hex literal.
+    /// The Go expression yielding a data segment's bytes.
+    /// With `--data-file`, it is a sub-slice of the embedded blob, which needs no runtime helper.
+    /// Otherwise it is an `Rt.unhex(...)` inline hex literal.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
         if self.data_file.is_some() {
             let o = self.data_offsets[seg];
@@ -767,7 +892,10 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Record the runtime unit a value type's Go spelling needs: `exnref` is spelled as the runtime's own `*rtException`, which a module can name without ever throwing or catching (an imported signature, a local, a global).
+    /// Record the runtime unit a value type's Go spelling needs.
+    /// `exnref` is spelled as the runtime's own `*rtException`.
+    /// A module can name it without ever throwing or catching.
+    /// An imported signature, a local, or a global can name it.
     fn note_type(&self, ty: ValType) {
         if ty == ValType::ExnRef {
             self.use_unit("rt/exception");
@@ -809,7 +937,9 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The spec-harness reflective dispatcher: `invoke(name, args...) []any` asserts each arg to its wasm param type and boxes every result into `[]any`, mirroring Ruby/Python's dynamic `invoke` under Go's static typing.
+    /// The spec-harness reflective dispatcher `invoke(name, args...) []any`.
+    /// It asserts each arg to its wasm param type and boxes every result into `[]any`.
+    /// It mirrors Ruby/Python's dynamic `invoke` under Go's static typing.
     /// The harness compares the boxed results bit-exactly.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         w.line(format!(
@@ -855,7 +985,9 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// The spec-harness global reader: returns the boxed global's current value boxed in a one-element `[]any`, so the harness treats it exactly like a single-result `invoke` (`__r[0]`).
+    /// The spec-harness global reader.
+    /// It returns the boxed global's current value boxed in a one-element `[]any`.
+    /// So the harness treats it exactly like a single-result `invoke` (`__r[0]`).
     fn emit_global_get_method(&self, w: &mut CodeWriter) {
         w.line(format!(
             "func (p *{}) globalGet(name string) []any {{",
@@ -907,7 +1039,9 @@ impl<'a> Gen<'a> {
                 global_field_type(g.ty)
             ));
         }
-        // Tag index space = imported_tags ++ tags; a tag is an identity object, so the field holds the shared pointer whether the tag is defined here or imported.
+        // Tag index space = imported_tags ++ tags.
+        // A tag is an identity object.
+        // So the field holds the shared pointer whether the tag is defined here or imported.
         for i in 0..m.imported_tags.len() + m.tags.len() {
             self.use_unit("rt/tag");
             w.line(format!("tag{i} *rtTag"));
@@ -918,7 +1052,8 @@ impl<'a> Gen<'a> {
             w.line(format!("if{i} {}", go_func_type(&ty.params, &ty.results)));
         }
         if wasi_bundled(m, self.default_wasi, bundler()) {
-            // The bundled WASI is built on first fallback, not in the ctor, so the ctor arguments are kept for `wasiInstance` to use.
+            // The bundled WASI is built on first fallback, not in the ctor.
+            // So the ctor arguments are kept for `wasiInstance` to use.
             w.line("wasi *WASI");
             w.line("wasiArgs []string");
             w.line("wasiEnv []string");
@@ -930,7 +1065,8 @@ impl<'a> Gen<'a> {
         for i in 0..m.datas.len() {
             w.line(format!("data{i} []byte"));
         }
-        // Parked tail calls: one argument slot per position and type a tail-calling function takes, and one target field plus one entry table per result signature.
+        // Parked tail calls: one argument slot per position and type a tail-calling function takes.
+        // Each result signature also gets one target field and one entry table.
         for (name, ty) in self.arg_slots() {
             w.line(format!("{name} {}", go_type(ty)));
         }
@@ -959,8 +1095,10 @@ impl<'a> Gen<'a> {
         ));
         w.indent();
         w.line(format!("p := &{name}{{}}"));
-        // Built once, before anything that parks a target or stores one in a table: a tail call reads its target out of here rather than building a closure per hop.
-        // Each entry is bound to this instance and reads *its* parked slots, which is what makes the owner check at an indirect tail call necessary.
+        // Built once, before anything that parks a target or stores one in a table.
+        // A tail call reads its target out of here rather than building a closure per hop.
+        // Each entry is bound to this instance and reads *its* parked slots.
+        // That is what makes the owner check at an indirect tail call necessary.
         for sig in self.tail_signatures() {
             let entries: Vec<String> = self
                 .tail_callers
@@ -1027,7 +1165,9 @@ impl<'a> Gen<'a> {
             || m.imported_memory.is_some();
         if wasi {
             self.use_unit("wasi/_class");
-            // Kept for `wasiInstance`, which builds the bundled WASI the first time an import falls back to it: an embedder covering every WASI import never pays for one.
+            // Kept for `wasiInstance`.
+            // It builds the bundled WASI the first time an import falls back to it.
+            // An embedder covering every WASI import never pays for one.
             w.line("p.wasiArgs = args");
             w.line("p.wasiEnv = env");
             w.line("p.wasiPreopens = preopens");
@@ -1046,7 +1186,8 @@ impl<'a> Gen<'a> {
         }
 
         // Globals: imported first, then defined; every global is a boxed *global[T].
-        // Defined globals' init exprs may read imported globals, so they must resolve after the imported ones.
+        // Defined globals' init exprs may read imported globals.
+        // So they must resolve after the imported ones.
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -1067,7 +1208,9 @@ impl<'a> Gen<'a> {
         }
 
         // Tags: imported first, then defined (index space is imported_tags ++ tags).
-        // A defined tag is a fresh identity object; nothing about it is derived from its type, since wasm tag equality is identity and never structure.
+        // A defined tag is a fresh identity object.
+        // Nothing about it is derived from its type.
+        // That is because wasm tag equality is identity and never structure.
         for (i, import) in m.imported_tags.iter().enumerate() {
             self.use_unit("rt/tag");
             self.emit_typed_import(
@@ -1128,7 +1271,10 @@ impl<'a> Gen<'a> {
             }
         }
 
-        // Exports map holds every export kind as `any` so a generated instance doubles as another module's import provider (`imports["M"] = inst.Exports`), the mechanism the spec harness's `register` support uses.
+        // Exports map holds every export kind as `any`.
+        // So a generated instance doubles as another module's import provider.
+        // That is `imports["M"] = inst.Exports`.
+        // The spec harness's `register` support uses this mechanism.
         // Globals export the shared box, not its value.
         let mut export_entries = Vec::new();
         for export in &m.exports {
@@ -1150,7 +1296,8 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Let import providers bind to the fully-constructed instance (the optional `Attach` half of the provider protocol).
+        // Let import providers bind to the fully-constructed instance.
+        // This is the optional `Attach` half of the provider protocol.
         if has_imports {
             w.line("for _, s := range imports {");
             w.indent();
@@ -1178,7 +1325,11 @@ impl<'a> Gen<'a> {
     }
 
     /// The bundled WASI, built on first use.
-    /// Nothing constructs it in the ctor: an embedder whose provider covers every WASI import gets no WASI at all (which is exactly what `p.wasi == nil` says) while the first import that falls back builds it, with the memory already bound (the ctor resolves memory before any import).
+    /// Nothing constructs it in the ctor.
+    /// An embedder whose provider covers every WASI import gets no WASI at all.
+    /// That is exactly what `p.wasi == nil` says.
+    /// Otherwise the first import that falls back builds it, with the memory already bound.
+    /// The ctor resolves memory before any import.
     fn wasi_accessor(&self, w: &mut CodeWriter) {
         let m = self.module;
         w.line(format!(
@@ -1208,7 +1359,10 @@ impl<'a> Gen<'a> {
             let unit = format!("wasi/{}", import.name);
             if bundler().has_unit(&unit) {
                 self.use_unit(&unit);
-                // A method value on the lazily built WASI: taking it here is what constructs the bundled WASI, so it exists exactly when some import fell back to it (mirroring Ruby's `@wasi ||=`).
+                // A method value on the lazily built WASI.
+                // Taking it here is what constructs the bundled WASI.
+                // So the bundled WASI exists exactly when some import fell back to it.
+                // This mirrors Ruby's `@wasi ||=`.
                 Some(format!("p.wasiInstance().wasi_{}", import.name))
             } else {
                 Some(self.enosys_stub(ty))
@@ -1241,7 +1395,9 @@ impl<'a> Gen<'a> {
         w.indent();
         match fallback {
             Some(f) => w.line(format!("p.if{i} = {f}")),
-            // A missing non-WASI import is a link error at instantiation, not a deferred call-time failure (mirrors Ruby/Python).
+            // A missing non-WASI import is a link error at instantiation.
+            // It is not a deferred call-time failure.
+            // This mirrors Ruby/Python.
             None => w.line(format!(
                 "{}({})",
                 self.rt("link_error"),
@@ -1252,9 +1408,13 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Resolve a non-function import (memory/table/global) into `target`, asserting it to `go_ty` (`*Memory`/`*Table`/`*global[T]`).
-    /// A present wrong-kind (or wrong-type) value is a link error; a missing one is a link error too (there is no fallback for these, unlike WASI funcs).
-    /// The Go type assertion performs the kind check (and, for globals, the value-type check) inherently; mutability and min/max limits stay unchecked (the import-limits gap).
+    /// Resolve a non-function import (memory/table/global) into `target`.
+    /// It is asserted to `go_ty` (`*Memory`/`*Table`/`*global[T]`).
+    /// A present wrong-kind (or wrong-type) value is a link error, and so is a missing one.
+    /// Unlike WASI funcs, these have no fallback.
+    /// The Go type assertion inherently performs the kind check.
+    /// For globals, it also performs the value-type check.
+    /// Mutability and min/max limits stay unchecked (the import-limits gap).
     fn emit_typed_import(
         &self,
         w: &mut CodeWriter,
@@ -1300,7 +1460,8 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// An ENOSYS stub for an unimplemented WASI import: single-i32-result syscalls return errno 52, everything else returns zero values.
+    /// An ENOSYS stub for an unimplemented WASI import.
+    /// Single-i32-result syscalls return errno 52, and everything else returns zero values.
     fn enosys_stub(&self, ty: &dewasm_core::ir::FuncType) -> String {
         let params = ty
             .params
@@ -1350,7 +1511,9 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "nil".to_string(),
-            // A `global.get` element item needs a ref-typed immutable global, i.e. reference types (rejected at conversion); unreachable here.
+            // A `global.get` element item needs a ref-typed immutable global.
+            // That requires reference types, which are rejected at conversion.
+            // So this is unreachable here.
             ElemItem::Global(idx) => format!("p.g{idx}.value"),
         }
     }
@@ -1371,7 +1534,10 @@ impl<'a> Gen<'a> {
         type_key(self.module.func_type(func_idx), ty_suffix)
     }
 
-    /// A structural key for a function type ([`type_key`]), spelled with this backend's own [`ty_suffix`]: a table is only ever shared between artifacts of one backend, so the spelling only has to be self-consistent here.
+    /// A structural key for a function type ([`type_key`]).
+    /// It is spelled with this backend's own [`ty_suffix`].
+    /// A table is only ever shared between artifacts of one backend.
+    /// So the spelling only has to be self-consistent here.
     fn type_symbol(&self, type_idx: u32) -> String {
         type_key(&self.module.types[type_idx as usize], ty_suffix)
     }
@@ -1393,7 +1559,9 @@ impl<'a> Gen<'a> {
             .map(|(i, t)| format!("l{i} {}", go_type(*t)))
             .collect::<Vec<_>>()
             .join(", ");
-        // A tail-calling function's real code lives in `f{idx}Body`, which parks the next call in the instance's slots instead of growing the stack; the public `f{idx}` is the trampoline that runs the chain, so no call site changes.
+        // A tail-calling function's real code lives in `f{idx}Body`.
+        // It parks the next call in the instance's slots instead of growing the stack.
+        // The public `f{idx}` is the trampoline that runs the chain, so no call site changes.
         let is_tail_caller = self.tail_callers.contains(&idx);
         if is_tail_caller {
             let args = (0..nparams)
@@ -1445,8 +1613,10 @@ impl<'a> Gen<'a> {
         w.indent();
 
         if self.spec {
-            // Recursion guard (spec-harness only): bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap.
-            // The defer is registered before the check so the trapping frame's own cost is unwound too.
+            // Recursion guard (spec-harness only).
+            // Bound otherwise-fatal Go stack overflow into a catchable "call stack exhausted" trap.
+            // The defer is registered before the check.
+            // So the trapping frame's own cost is unwound too.
             let cost = 1 + local_types.len() + func.temps.len();
             w.line(format!("rtStack += {cost}"));
             w.line(format!("defer func() {{ rtStack -= {cost} }}()"));
@@ -1483,7 +1653,9 @@ impl<'a> Gen<'a> {
         self.emit_seq(w, &body);
 
         if !ty.results.is_empty() && !ends_unreachable(&body) {
-            // Go's missing-return rule is syntactic: a body whose last statement is a call that only panics inside the runtime (`Rt.trap`) still needs this.
+            // Go's missing-return rule is syntactic.
+            // A body may end in a call that only panics inside the runtime (`Rt.trap`).
+            // Such a body still needs this.
             let zeros: Vec<&str> = ty.results.iter().map(|t| zero_value(*t)).collect();
             w.line(format!("return {}", zeros.join(", ")));
         }
@@ -1562,8 +1734,10 @@ impl<'a> Gen<'a> {
                 body,
             } => self.emit_try_table(w, label.id, catches, body),
             Stmt::SourceLine(pos) => {
-                // Go honors `//line` directives only at column 1, so bypass the writer's indentation with `raw`.
-                // The directive sets the source position of the *following* line, which is exactly the statement this marker precedes.
+                // Go honors `//line` directives only at column 1.
+                // So bypass the writer's indentation with `raw`.
+                // The directive sets the source position of the *following* line.
+                // That line is the statement this marker precedes.
                 let file = &self.module.debug_files[pos.file as usize];
                 if pos.col > 0 {
                     w.raw(format!("//line {file}:{}:{}\n", pos.line, pos.col));
@@ -1571,12 +1745,16 @@ impl<'a> Gen<'a> {
                     w.raw(format!("//line {file}:{}\n", pos.line));
                 }
             }
-            // Every other statement is a leaf; `simple_stmt` matches all of them exhaustively, so a new variant is a compile error there rather than silent output.
+            // Every other statement is a leaf.
+            // `simple_stmt` matches all of them exhaustively.
+            // So a new variant is a compile error there rather than silent output.
             _ => self.simple_stmt(w, stmt),
         }
     }
 
-    /// Record that `label` is in scope for the statements about to be emitted, so a branch to it stays a direct labeled break/continue rather than an escape out of the enclosing `try_table` closure.
+    /// Record that `label` is in scope for the statements about to be emitted.
+    /// A branch to it then stays a direct labeled break/continue.
+    /// It is not an escape out of the enclosing `try_table` closure.
     fn open_label(&self, label: u32) {
         if let Some(frame) = self.try_stack.borrow_mut().last_mut() {
             frame.inner_labels.push(label);
@@ -1589,8 +1767,11 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// `try_table`: the body as an immediately-invoked closure whose deferred handler dispatches the catch clauses, followed by a `switch` on the outcome code (see [`TryFrame`]).
-    /// The try_table's own label needs no Go label of its own: a branch to it is outcome 0, which lands where falling off the end of the closure does.
+    /// `try_table`: the body as an immediately-invoked closure.
+    /// A `switch` on the outcome code follows it.
+    /// The closure's deferred handler dispatches the catch clauses (see [`TryFrame`]).
+    /// The try_table's own label needs no Go label of its own.
+    /// A branch to it is outcome 0, which lands where falling off the end of the closure does.
     fn emit_try_table(
         &self,
         w: &mut CodeWriter,
@@ -1640,8 +1821,11 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// The deferred handler: clauses are checked in order (first match wins), a matched one writes the payload into the target frame's slots and sets the outcome code, and anything else keeps unwinding.
-    /// Only `*rtException` is caught, so a trap, a `proc_exit`, and a Go runtime panic are structurally uncatchable.
+    /// The deferred handler checks clauses in order, and the first match wins.
+    /// A matched clause writes the payload into the target frame's slots and sets the outcome code.
+    /// Anything else keeps unwinding.
+    /// Only `*rtException` is caught.
+    /// So a trap, a `proc_exit`, and a Go runtime panic are structurally uncatchable.
     fn emit_catch_handler(&self, w: &mut CodeWriter, label: u32, catches: &[CatchClause]) {
         w.line("defer func() {");
         w.indent();
@@ -1834,8 +2018,11 @@ impl<'a> Gen<'a> {
             Stmt::DataDrop { seg } => {
                 w.line(format!("p.data{seg} = nil"));
             }
-            // Parked, never called: the callee must run once this frame, including any `try_table` closure that installed a handler, is gone, and returning is what unwinds them.
-            // The target is the callee's tail entry, built once at instantiation, so a hop allocates nothing.
+            // Parked, never called: the callee must run once this frame is gone.
+            // That includes any `try_table` closure that installed a handler.
+            // Returning is what unwinds them.
+            // The target is the callee's tail entry, built once at instantiation.
+            // So a hop allocates nothing.
             Stmt::ReturnCall { func, args } => {
                 if let Some(code) = self.escape_tail(stmt) {
                     w.line(format!("return {code}"));
@@ -1848,7 +2035,8 @@ impl<'a> Gen<'a> {
                         let target = format!("p.{}[{k}]", self.tail_table(&fty.results));
                         self.park_tail(w, &fty.params, &args, &target);
                     }
-                    // A callee without a tail entry completes in a single frame, so calling it here ends the chain, which the criterion permits.
+                    // A callee without a tail entry completes in a single frame.
+                    // So calling it here ends the chain, which the criterion permits.
                     None => self.return_call_completing(w, &self.call_string(*func, &args)),
                 }
             }
@@ -1866,8 +2054,11 @@ impl<'a> Gen<'a> {
                 let ty = self.module.types[*type_idx as usize].clone();
                 let idx = self.expr(index);
                 let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
-                // The slot is resolved, and its traps raised, here rather than after the frame is gone: an indirect tail call's checks happen at the instruction.
-                // A tail entry belongs to the instance that built it and reads *its* parked slots, so only this instance's own entries can be parked; anything else completes here instead.
+                // Resolve the slot and raise its traps here, not after the frame is gone.
+                // An indirect tail call's checks happen at the instruction.
+                // A tail entry belongs to the instance that built it and reads *its* parked slots.
+                // So only this instance's own entries can be parked.
+                // Anything else completes here instead.
                 w.line(format!(
                     "__tb, __tf := p.t{table_index}.tailRef({idx}, {}, p)",
                     go_string(&self.type_symbol(*type_idx))
@@ -1945,8 +2136,11 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The outcome code a branch to `target` returns out of the innermost `try_table` closure, one per branch site, or `None` when the branch does not leave a closure.
-    /// A branch to a label opened inside the closure, and one to the try_table's own frame, both stay where they are.
+    /// The outcome code a branch to `target` returns out of the innermost `try_table` closure.
+    /// Each branch site gets its own code.
+    /// The result is `None` when the branch does not leave a closure.
+    /// A branch to a label opened inside the closure stays where it is.
+    /// So does a branch to the try_table's own frame.
     fn escape_code(&self, target: &BrTarget) -> Option<usize> {
         let mut stack = self.try_stack.borrow_mut();
         let frame = stack.last_mut()?;
@@ -1959,7 +2153,8 @@ impl<'a> Gen<'a> {
         Some(frame.catches + frame.escapes.len())
     }
 
-    /// The same for a `return`, which always leaves the closure (the closure's own `return` is the outcome code).
+    /// The same for a `return`, which always leaves the closure.
+    /// The closure's own `return` is the outcome code.
     fn escape_return(&self, values: &[Expr]) -> Option<usize> {
         let mut stack = self.try_stack.borrow_mut();
         let frame = stack.last_mut()?;
@@ -1977,7 +2172,8 @@ impl<'a> Gen<'a> {
         Some(frame.catches + frame.escapes.len())
     }
 
-    /// Whether `label` is the innermost enclosing `try_table`'s own frame, whose landing point is the closure's normal return.
+    /// Whether `label` is the innermost enclosing `try_table`'s own frame.
+    /// That frame's landing point is the closure's normal return.
     fn is_enclosing_try(&self, label: u32) -> bool {
         matches!(self.try_stack.borrow().last(), Some(f) if f.label == label)
     }
@@ -2029,7 +2225,9 @@ impl<'a> Gen<'a> {
     }
 
     /// A load as a cast around one of the raw-width memory units.
-    /// The sign extensions and the float reinterpretations are spelled at the site because a memory unit that calls another unit does not fit the inline budget of a large function (see `memory/_class`).
+    /// A memory unit that calls another unit does not fit the inline budget of a large function.
+    /// So the sign extensions and the float reinterpretations are spelled at the site.
+    /// See `memory/_class`.
     fn load(&self, op: LoadOp, addr: &str) -> String {
         use LoadOp::*;
         let raw = |name: &str| format!("p.memory.{}({addr})", self.mem(name));
@@ -2051,7 +2249,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A store through one of the raw-width memory units, the [`Self::load`] counterpart: a narrowing i64 store truncates at the site and a float store reinterprets at the site.
+    /// A store through one of the raw-width memory units, the [`Self::load`] counterpart.
+    /// A narrowing i64 store truncates at the site, and a float store reinterprets at the site.
     fn store(&self, op: StoreOp, addr: &str, value: &str) -> String {
         use StoreOp::*;
         let raw = |name: &str, v: String| format!("p.memory.{}({addr}, {v})", self.mem(name));
@@ -2068,7 +2267,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The same constant, always laundered through the identity call, so the expression holding it is not a Go constant expression.
+    /// The same constant, always laundered through the identity call.
+    /// So the expression holding it is not a Go constant expression.
     fn laundered_const(&self, expr: &Expr) -> String {
         match expr {
             Expr::I32Const(v) => format!("{}(0x{v:x})", self.rt("i32c")),
@@ -2079,7 +2279,9 @@ impl<'a> Gen<'a> {
 
     fn expr(&self, expr: &Expr) -> String {
         match expr {
-            // A folded constant may land directly inside a signed cast (int32/int64); Go rejects that conversion for a compile-time constant beyond the signed range, so launder large values through a call to keep the conversion a runtime one.
+            // A folded constant may land directly inside a signed cast (int32/int64).
+            // Go rejects that conversion for a compile-time constant beyond the signed range.
+            // So launder large values through a call to keep the conversion a runtime one.
             Expr::I32Const(v) => {
                 if *v > i32::MAX as u32 {
                     format!("{}(0x{v:x})", self.rt("i32c"))
@@ -2087,7 +2289,11 @@ impl<'a> Gen<'a> {
                     format!("uint32({v})")
                 }
             }
-            // An i64 constant is cast both to int64 (signed views) and, via i32.wrap_i64, to uint32; either conversion rejects a compile-time constant beyond its range, so launder anything above u32::MAX (the wrap target, a superset of the int64 overflow threshold).
+            // An i64 constant is cast to int64 for signed views.
+            // It is also cast to uint32 via i32.wrap_i64.
+            // Either conversion rejects a compile-time constant beyond its range.
+            // So launder anything above u32::MAX, the wrap target.
+            // The values above it are a superset of those that overflow int64.
             Expr::I64Const(v) => {
                 if *v > u32::MAX as u64 {
                     format!("{}(0x{v:x})", self.rt("i64c"))
@@ -2186,15 +2392,24 @@ impl<'a> Gen<'a> {
 
     fn bin(&self, op: BinOp, a: &Expr, b: &Expr) -> String {
         use BinOp::*;
-        // Go rewrites `x * 1.0` and `x / 1.0` to `x` and `x * -1.0` to `-x`, dropping the signaling-NaN quieting wasm requires of an arithmetic result; quieting afterwards restores it, and is correct whether or not the rewrite fired.
-        // Only a constant operand can match those rewrites, so only such a site pays for the wrapper.
+        // Go rewrites `x * 1.0` and `x / 1.0` to `x`, and `x * -1.0` to `-x`.
+        // That drops the signaling-NaN quieting wasm requires of an arithmetic result.
+        // Quieting afterwards restores it, and is correct whether or not the rewrite fired.
+        // Only a constant operand can match those rewrites.
+        // So only such a site pays for the wrapper.
         let quiet = match op {
             F32Mul | F32Div if float_const(a) || float_const(b) => Some("f32_q"),
             F64Mul | F64Div if float_const(a) || float_const(b) => Some("f64_q"),
             _ => None,
         };
-        // Go computes an operation between two constants at arbitrary precision and rejects a result outside the type, where wasm wraps; laundering one operand makes the operation a runtime one, which wraps.
-        // Applied to every operator rather than the ones known to overflow today (`+`, `-`, `*`, `<<`), because the rule is about the operands being constants at all, and the lowering below is free to turn an operator into arithmetic that overflows where the operator itself would not.
+        // Go computes an operation between two constants at arbitrary precision.
+        // It rejects a result outside the type, where wasm wraps.
+        // Laundering one operand makes the operation a runtime one, which wraps.
+        // It applies to every operator, not only the ones known to overflow today.
+        // Those are `+`, `-`, `*`, and `<<`.
+        // The rule is about the operands being constants at all.
+        // And the lowering below may rewrite an operator into arithmetic that overflows.
+        // The operator itself would not overflow there.
         let (a, b) = if int_const(a) && int_const(b) {
             (self.laundered_const(a), self.expr(b))
         } else {
@@ -2242,7 +2457,10 @@ impl<'a> Gen<'a> {
             I64GeS => format!("{}(int64({a}) >= int64({b}))", self.rt("b2i")),
             F32Add | F64Add => format!("({a} + {b})"),
             F32Sub | F64Sub => format!("({a} - {b})"),
-            // The conversion is what keeps a following add or subtract from fusing into a hardware FMA, which wasm forbids: an explicit float conversion rounds to the target precision, so Go compiles it to a rounding step the fusion rewrite does not match through.
+            // The conversion keeps a following add or subtract from fusing into a hardware FMA.
+            // Wasm forbids that fusion.
+            // An explicit float conversion rounds to the target precision.
+            // So Go compiles it to a rounding step the fusion rewrite does not match through.
             F32Mul => format!("float32({a} * {b})"),
             F64Mul => format!("float64({a} * {b})"),
             F32Div => format!("float32({a} / {b})"),
@@ -2271,12 +2489,19 @@ fn assign_results(results: &[Temp], call: String) -> String {
     }
 }
 
-/// `stmts` as the emitter is to see them: statements Go would report as unreachable code are dropped, catch clauses that can never match go with them, and a frame whose surviving body no longer branches to its label loses the label.
-/// Runs before the read/use pre-pass and before emission so both see the same statements: a local whose only read was dropped must not be declared, and a Go label nothing jumps to does not compile.
+/// `stmts` as the emitter is to see them.
+/// Statements Go would report as unreachable code are dropped.
+/// Catch clauses that can never match go with them.
+/// A frame whose surviving body no longer branches to its label loses the label.
+/// Runs before the read/use pre-pass and before emission, so both see the same statements.
+/// A local whose only read was dropped must not be declared.
+/// A Go label nothing jumps to does not compile.
 fn prune(stmts: &[Stmt]) -> Vec<Stmt> {
     let mut out: Vec<Stmt> = Vec::with_capacity(stmts.len());
     for stmt in stmts {
-        // `local.get $x; local.set $x` renders as `lx = lx`, which `go vet` reports as a self-assignment; the wasm pair is a no-op, so dropping it is the whole fix.
+        // `local.get $x; local.set $x` renders as `lx = lx`.
+        // `go vet` reports that as a self-assignment.
+        // The wasm pair is a no-op, so dropping it is the whole fix.
         if matches!(stmt, Stmt::LocalSet { idx, expr: Expr::LocalGet(src) } if idx == src) {
             continue;
         }
@@ -2321,7 +2546,8 @@ fn prune_stmt(stmt: &Stmt) -> Stmt {
             catches,
             body,
         } => Stmt::TryTable {
-            // A try_table's label names its outcome variables rather than a Go label, so there is nothing to demote.
+            // A try_table's label names its outcome variables rather than a Go label.
+            // So there is nothing to demote.
             label: *label,
             catches: live_catches(catches).to_vec(),
             body: prune(body),
@@ -2330,7 +2556,9 @@ fn prune_stmt(stmt: &Stmt) -> Stmt {
     }
 }
 
-/// `label` with `referenced` recomputed over the pruned `bodies`: Go rejects a label nothing jumps to, so a frame all of whose branches were pruned away loses its label with them.
+/// `label` with `referenced` recomputed over the pruned `bodies`.
+/// Go rejects a label nothing jumps to.
+/// So a frame all of whose branches were pruned away loses its label with them.
 fn frame_label(label: Label, bodies: &[&[Stmt]]) -> Label {
     Label {
         id: label.id,
@@ -2338,7 +2566,9 @@ fn frame_label(label: Label, bodies: &[&[Stmt]]) -> Label {
     }
 }
 
-/// The catch clauses that can still run: clauses are matched in order and a tag-less one matches every exception, so it is the last that can.
+/// The catch clauses that can still run.
+/// Clauses are matched in order, and a tag-less one matches every exception.
+/// So a tag-less clause is the last that can run.
 fn live_catches(catches: &[CatchClause]) -> &[CatchClause] {
     let live = catches
         .iter()
@@ -2347,7 +2577,8 @@ fn live_catches(catches: &[CatchClause]) -> &[CatchClause] {
     &catches[..live]
 }
 
-/// Whether any statement in `stmts` branches to `label`, that is, whether the emitted frame still needs its Go label.
+/// Whether any statement in `stmts` branches to `label`.
+/// That is, whether the emitted frame still needs its Go label.
 fn branches_to(stmts: &[Stmt], label: u32) -> bool {
     let hits = |t: &BrTarget| matches!(t, BrTarget::Label { label: l, .. } if *l == label);
     Stmt::any(stmts, &mut |stmt| match stmt {
@@ -2355,16 +2586,25 @@ fn branches_to(stmts: &[Stmt], label: u32) -> bool {
         Stmt::BrTable {
             targets, default, ..
         } => targets.iter().chain([default]).any(hits),
-        // A matched clause branches from the outcome switch, which sits inside the frame like any other branch.
+        // A matched clause branches from the outcome switch.
+        // The switch sits inside the frame like any other branch.
         Stmt::TryTable { catches, .. } => catches.iter().any(|c| hits(&c.target)),
-        // No other statement carries a branch target, and the sequences nested in them are reached by `Stmt::any`.
+        // No other statement carries a branch target.
+        // The sequences nested in them are reached by `Stmt::any`.
         _ => false,
     })
 }
 
-/// Whether a statement emitted after `stmts` would be unreachable code: the Go rendering of the last one transfers control away unconditionally (a `break`, a `continue`, a `return`, or a `panic`).
-/// `Stmt::Unreachable` and `Stmt::ThrowRef` are not among them: they render as a call that panics inside the runtime, which Go's reachability rule does not look through.
-/// At the top level of a function body or of a `try_table` closure the same statements are Go *terminating* statements too (a `break` there would need an enclosing labeled `for`, which the top level has none of), so the trailing `return` Go's missing-return rule would otherwise demand is dead as well.
+/// Whether a statement emitted after `stmts` would be unreachable code.
+/// That is so when the Go rendering of the last one transfers control away unconditionally.
+/// The transfer is a `break`, a `continue`, a `return`, or a `panic`.
+/// `Stmt::Unreachable` and `Stmt::ThrowRef` are not among them.
+/// They render as a call that panics inside the runtime.
+/// Go's reachability rule does not look through that call.
+/// The same statements are also Go *terminating* statements at the top level.
+/// The top level is that of a function body or of a `try_table` closure.
+/// A `break` there would need an enclosing labeled `for`, which the top level has none of.
+/// So the trailing `return` that Go's missing-return rule would otherwise demand is dead as well.
 fn ends_unreachable(stmts: &[Stmt]) -> bool {
     let Some(last) = stmts
         .iter()
@@ -2374,16 +2614,20 @@ fn ends_unreachable(stmts: &[Stmt]) -> bool {
         return false;
     };
     match last {
-        // The `switch` a `br_table` renders as branches out of itself in every case, its default included.
+        // The `switch` a `br_table` renders as branches out of itself in every case.
+        // That includes its default case.
         Stmt::Br(_) | Stmt::BrTable { .. } | Stmt::Return { .. } | Stmt::Throw { .. } => true,
-        // A referenced block or if frame keeps a `break L` inside it, so its `for` is one Go can leave.
+        // A referenced block or if frame keeps a `break L` inside it.
+        // So its `for` is one Go can leave.
         Stmt::Block { label, body } => !label.referenced && ends_unreachable(body),
         Stmt::If {
             label, then, els, ..
         } => !label.referenced && if_ends_unreachable(then, els),
-        // A branch to a loop label is a `continue`, never a `break`, so a loop body that cannot fall out of itself leaves the `for` with no exit at all.
+        // A branch to a loop label is a `continue`, never a `break`.
+        // So a loop body that cannot fall out of itself leaves the `for` with no exit at all.
         Stmt::Loop { body, .. } => ends_unreachable(body),
-        // Every other statement can fall through to the next one; answering `false` only keeps the exit that used to be emitted unconditionally.
+        // Every other statement can fall through to the next one.
+        // Answering `false` only keeps the exit that used to be emitted unconditionally.
         _ => false,
     }
 }
@@ -2393,7 +2637,8 @@ fn if_ends_unreachable(then: &[Stmt], els: &[Stmt]) -> bool {
     !els.is_empty() && ends_unreachable(then) && ends_unreachable(els)
 }
 
-/// Read/use pre-pass: collect which locals and temps a statement sequence reads, so emission can satisfy Go's unused-variable discipline.
+/// Read/use pre-pass: collect which locals and temps a statement sequence reads.
+/// So emission can satisfy Go's unused-variable discipline.
 fn collect_reads_seq(
     stmts: &[Stmt],
     read_locals: &mut BTreeSet<u32>,
@@ -2446,7 +2691,9 @@ fn collect_reads_stmt(
             targets,
             default,
         } => {
-            // Matches the emitter: with no case targets it collapses to the default branch and never evaluates the (already side-effect-free, hoisted) index, so counting it read here would leave a declared temp Go rejects as unused.
+            // Matches the emitter: with no case targets it collapses to the default branch.
+            // It never evaluates the index, which is already side-effect-free and hoisted.
+            // So counting the index read here would leave a declared temp Go rejects as unused.
             if !targets.is_empty() {
                 e(index, read_locals, used_locals, read_temps);
             }
@@ -2494,7 +2741,8 @@ fn collect_reads_stmt(
         }
         Stmt::TryTable { catches, body, .. } => {
             collect_reads_seq(body, read_locals, used_locals, read_temps);
-            // A catch clause's payload temps are written by the handler, never read by it; the clause's target may read them back.
+            // A catch clause's payload temps are written by the handler, never read by it.
+            // The clause's target may read them back.
             for clause in catches {
                 collect_reads_target(&clause.target, read_locals, used_locals, read_temps);
             }
@@ -2564,9 +2812,13 @@ fn collect_reads_expr(
     }
 }
 
-/// Lint for the runtime units: every reference a unit body makes to another unit must be declared in its `// requires:` header.
-/// Mirrors the Python backend's units lint, adjusted for Go syntax: `Rt.<name>` helper calls, `.memory.<name>` memory-method calls, and per-scope sibling calls through the receiver letter (`m`/`t`/`w`).
-/// A second test compiles the full bundle with `go build`, so a syntax error in any unit (not just the subset any one module uses) is caught.
+/// Lint for the runtime units.
+/// Every reference a unit body makes to another unit must be declared in its `// requires:` header.
+/// Mirrors the Python backend's units lint, adjusted for Go syntax.
+/// It checks `Rt.<name>` helper calls and `.memory.<name>` memory-method calls.
+/// It also checks per-scope sibling calls through the receiver letter (`m`/`t`/`w`).
+/// A second test compiles the full bundle with `go build`.
+/// So a syntax error in any unit is caught, not just in the subset any one module uses.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -2684,7 +2936,11 @@ mod units {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
-    /// The eight load/store units must fit Go's inline budget for callees of a large function: a function over 5000 AST nodes, which every large wasm function becomes, only inlines a callee costing at most `inlineBigFunctionMaxCost` (20 in go1.27), and an out-of-line call per memory access was measured as half of sqlite3's run time.
+    /// The eight load/store units must fit Go's inline budget for callees of a large function.
+    /// Every large wasm function becomes a function over 5000 AST nodes.
+    /// Such a function only inlines a callee costing at most `inlineBigFunctionMaxCost`.
+    /// That cost is 20 in go1.27.
+    /// An out-of-line call per memory access was measured as half of sqlite3's run time.
     /// Compile the full bundle with the inliner's report and assert each unit's reported cost.
     #[test]
     fn memory_units_fit_the_big_function_inline_budget() {

@@ -1,5 +1,7 @@
-// fst_flags selects which of atim and mtim to set and whether to "now"; setting a timestamp both explicitly and to "now" is EINVAL.
-// A null FileTime leaves that timestamp untouched, so a guest can change one without disturbing the other.
+// fst_flags selects which of atim and mtim to set, and whether to set it to "now".
+// Setting a timestamp both explicitly and to "now" is EINVAL.
+// A null FileTime leaves that timestamp untouched.
+// So a guest can change one without disturbing the other.
 int wasi_fd_filestat_set_times(int fd, long atim, long mtim, int fstflags) {
     Object e = fds.get(fd);
     java.nio.file.Path p;

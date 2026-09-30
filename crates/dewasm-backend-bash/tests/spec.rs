@@ -1,6 +1,11 @@
-//! Bash side of the shared spec harness: converts modules with the Bash backend, phrases assertions as bash (`ck`/`ckt`/`cke` helpers over the R0..Rn result globals and the status-134 trap protocol), and runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
+//! Bash side of the shared spec harness: converts modules with the Bash backend.
+//! It phrases assertions as bash through the `ck`/`ckt`/`cke` helpers.
+//! Those helpers read the R0..Rn result globals and follow the status-134 trap protocol.
+//! It runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
 //!
-//! Bash executes wasm orders of magnitude slower than Ruby, so `cargo test` runs a curated file list; the rest are `#[ignore]`d trials, unless the `slow_test` feature is on.
+//! Bash executes wasm orders of magnitude slower than Ruby.
+//! So `cargo test` runs a curated file list.
+//! The rest are `#[ignore]`d trials, unless the `slow_test` feature is on.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
@@ -15,15 +20,37 @@ use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
 /// Known assertion-level failures.
-/// Cross-module linking of function, global, memory, and now table imports (through PROVIDERS and the per-kind export maps) is fully wired; `assert_unlinkable` is checked for real.
-/// Two residual clusters, both pre-existing and out of this backend's scope to fix (matching the Ruby list, which has already covered every import kind for a while):
+/// Cross-module linking of function, global, memory, and now table imports is implemented.
+/// It goes through PROVIDERS and the per-kind export maps.
+/// `assert_unlinkable` is checked for real.
+/// Two residual clusters remain, both pre-existing and out of this backend's scope to fix.
+/// They match the Ruby list, which has already covered every import kind for a while:
 ///
-/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4): `rt_resolve_import` validates that a resolved import is the right *kind* (func/global/table/memory) but not the finer-grained wasm type: a function's param/result signature, a global's mutability, a table's min/max limits, or a memory's min/max limits.
-///   Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) links instead of failing.
-///   Same accepted gap as the Ruby list's `import-limits`, and now the same count (28/2/4) since Bash supports every import kind Ruby does.
-/// - `multi-memory` (`linking0`, `load1`): a second `(memory ...)` declaration or import is rejected outright by the core builder (`Feature::MultiMemory`, a post-1.0 proposal) regardless of backend.
-///   Both files exercise this via a module with two memories (one often an import of another module's exported memory); that module fails to convert, so the data/assertions that depended on it running observe stale (zeroed) state in a memory another, unrelated module still owns.
-///   Not a linking gap (every import in play resolves fine) and not fixable without the multi-memory proposal, which is rejected outright as a post-1.0 wasm feature.
+/// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4).
+///   `rt_resolve_import` validates that a resolved import is the right *kind*.
+///   The kinds are func, global, table, and memory.
+///   It does not validate the finer-grained wasm type:
+///   - a function's param/result signature;
+///   - a global's mutability;
+///   - a table's min/max limits;
+///   - a memory's min/max limits.
+///
+///   Every `assert_unlinkable` case testing one of those links instead of failing.
+///   A kind mismatch is caught.
+///   This is the same accepted gap as the Ruby list's `import-limits`.
+///   It now has the same count (28/2/4), since Bash supports every import kind Ruby does.
+/// - `multi-memory` (`linking0`, `load1`).
+///   The core builder rejects a second `(memory ...)` outright.
+///   That holds for a declaration or an import, regardless of backend.
+///   The feature is `Feature::MultiMemory`, a post-1.0 proposal.
+///   Both files exercise this via a module with two memories.
+///   One memory is often an import of another module's exported memory.
+///   That module fails to convert.
+///   So the data/assertions that depended on it running observe stale (zeroed) state.
+///   That state is in a memory another, unrelated module still owns.
+///   This is not a linking gap: every import in play resolves.
+///   It is not fixable without the multi-memory proposal.
+///   That proposal is rejected outright as a post-1.0 wasm feature.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 28, "import-limits"),
     ("imports2", 2, "import-limits"),
@@ -32,8 +59,12 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("load1", 5, "multi-memory"),
 ];
 
-/// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial (`slow_test` runs everything).
-/// Curated separately from the shared list: the heavy float files stay out because every float op runs on the softfloat, and the tail-call pair stays out for the same reason (its million-deep chains are millions of bash function calls).
+/// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial.
+/// `slow_test` runs everything.
+/// The list is curated separately from the shared list.
+/// The heavy float files stay out because every float op runs on the softfloat.
+/// The tail-call pair stays out for the same reason.
+/// Its million-deep chains are millions of bash function calls.
 const CURATED_FILES: &[&str] = &[
     "address",
     "address0",
@@ -183,9 +214,12 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
         registered: &[(String, String)],
     ) -> String {
         script.push_str(&conv.source);
-        // Rebuild PROVIDERS from the *current* registered set before every instantiation: a plain reassignment fully replaces the associative array on bash >= 5, so a module registered after a failed one never leaves a stale provider entry behind.
+        // Rebuild PROVIDERS from the *current* registered set before every instantiation.
+        // A plain reassignment replaces the whole associative array on bash >= 5.
+        // So a module registered after a failed one never leaves a stale provider entry behind.
         let _ = writeln!(script, "{}", providers_line(registered));
-        // A trap while instantiating a plain module directive aborts the file, mirroring an uncaught Ruby exception at toplevel.
+        // A trap while instantiating a plain module directive aborts the file.
+        // This mirrors an uncaught Ruby exception at toplevel.
         let _ = writeln!(
             script,
             "{}init || {{ echo \"toplevel init failed (status $?): $TRAP_MSG\" >&2; exit 1; }}",
@@ -254,7 +288,8 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
     }
 
     fn emit_check_exhaust(&self, script: &mut String, desc: &str, call: &str) {
-        // FUNCNEST overflow kills the shell it happens in, so exhaustion must run in a subshell; nothing else needs one.
+        // FUNCNEST overflow kills the shell it happens in, so exhaustion must run in a subshell.
+        // Nothing else needs one.
         let _ = writeln!(
             script,
             "( FUNCNEST=1000; {call} ) 2>/dev/null\ncke $? {}",
@@ -285,7 +320,10 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
     }
 }
 
-/// The PROVIDERS rebuild line for an instantiation: always the `spectest` host prefix plus each currently-`register`ed module mapped to its generation prefix (the `conv.handle` returned by `emit_instantiate`).
+/// The PROVIDERS rebuild line for an instantiation.
+/// It always holds the `spectest` host prefix.
+/// It also maps each currently-`register`ed module to its generation prefix.
+/// That prefix is the `conv.handle` returned by `emit_instantiate`.
 fn providers_line(registered: &[(String, String)]) -> String {
     let mut entries = vec!["[spectest]=spectest_".to_string()];
     for (name, prefix) in registered {
@@ -311,7 +349,8 @@ fn ret_cond(i: usize, ret: &WastRet<'_>) -> Result<String, String> {
     match ret {
         WastRet::Core(WastRetCore::I32(v)) => Ok(format!("R{i} == {}", *v as u32)),
         WastRet::Core(WastRetCore::I64(v)) => Ok(format!("R{i} == {v}")),
-        // Floats are compared as bit patterns (they already are the R registers' representation); the NaN masks mirror the ruby side's ret_cmp, as signed-64-safe integer constants.
+        // Floats are compared as bit patterns, which already are the R registers' representation.
+        // The NaN masks mirror the ruby side's ret_cmp, as signed-64-safe integer constants.
         WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
                 format!("(R{i} & 0x7fffffff) == 0x7fc00000")

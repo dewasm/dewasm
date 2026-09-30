@@ -1,5 +1,6 @@
 # requires: rt/f32_bits, rt/f64_from_bits
-# A NaN input promotes to a quiet NaN keeping its sign and payload (shifted into the double's mantissa).
+# A NaN input promotes to a quiet NaN keeping its sign and payload.
+# The payload is shifted into the double's mantissa.
 @staticmethod
 def f64_promote(x: float32) -> float:
     if x != x:

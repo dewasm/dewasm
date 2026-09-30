@@ -1,25 +1,25 @@
 /* Shared preamble for the C microbenchmarks.
  *
- * A microbenchmark is a WASI command module invoked as `<module> <iterations>`. It does
- * <iterations> units of work, writes exactly one line (the decimal result
- * followed by a newline) to stdout, and exits 0. <iterations> = 0 does no
- * work but still prints, which is how the harness measures startup in
- * isolation.
+ * A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
+ * It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+ * The line is the decimal result followed by a newline.
+ * <iterations> = 0 does no work but still prints.
+ * That is how the harness measures startup in isolation.
  *
- * The suite compares wasmtime against pure-Ruby and pure-Python interpreters
- * that implement only part of WASI, so a microbenchmark may import nothing beyond
- * args_sizes_get / args_get / fd_write / proc_exit. That rules out libc stdio,
- * whose buffered streams import fd_seek and fd_close as well: imports are
- * resolved at instantiation, so merely linking them in would make the module
- * unloadable under wardite even if it never called them.
+ * The suite compares wasmtime against pure-Ruby and pure-Python interpreters.
+ * Those implement only part of WASI.
+ * So a microbenchmark may import nothing beyond args_sizes_get / args_get / fd_write / proc_exit.
+ * That rules out libc stdio, whose buffered streams import fd_seek and fd_close as well.
+ * Imports are resolved at instantiation.
+ * So merely linking them in would make the module unloadable under wardite, even if never called.
  *
- * Hence: the microbenchmarks are built with -nostartfiles and define their own _start,
- * bypassing crt1 and libc entirely. Everything they need (argv
- * parsing, decimal output) is here, and it is deliberately small.
+ * Hence the microbenchmarks are built with -nostartfiles and define their own _start.
+ * That bypasses crt1 and libc entirely.
+ * Everything they need (argv parsing, decimal output) is here, and it is deliberately small.
  *
- * The suite calibrates iterations per runner against a measured baseline and keeps every
- * workload inside what every runner supports; the flags enforcing that here are documented
- * in c/build.sh.
+ * The suite calibrates iterations per runner against a measured baseline.
+ * It keeps every workload inside what every runner supports.
+ * The flags enforcing that here are documented in c/build.sh.
  */
 
 #ifndef DEWASM_BENCH_H
@@ -61,8 +61,9 @@ _Noreturn static void bench_die(void) {
   wasi_proc_exit(2);
 }
 
-/* argv[1] as an unsigned decimal. The harness always passes exactly one
- * argument, so anything else is a caller bug, not an input to guess at. */
+/* argv[1] as an unsigned decimal.
+ * The harness always passes exactly one argument.
+ * So anything else is a caller bug, not an input to guess at. */
 static u32 bench_iterations(void) {
   static char argv_buf[256];
   static char *argv[8];
@@ -83,8 +84,8 @@ static u32 bench_iterations(void) {
   return n;
 }
 
-/* Write `<v>\n` to stdout with v as an unsigned decimal. Digits come out least
- * significant first, so the scratch buffer is filled backwards. */
+/* Write `<v>\n` to stdout with v as an unsigned decimal.
+ * Digits come out least significant first, so the scratch buffer is filled backwards. */
 static void bench_print(u64 v) {
   static char buf[24];
   char *end = buf + sizeof(buf);
@@ -97,10 +98,11 @@ static void bench_print(u64 v) {
   bench_write(1, p, (u32)(end - p));
 }
 
-/* Each microbenchmark supplies both. bench_setup runs before argv is even read, so any
- * fixed cost it has lands in the <iterations> = 0 baseline run the harness
- * subtracts, leaving per-iteration numbers pure; most leave it empty.
- * It is an explicit hook rather than __attribute__((constructor)) because
+/* Each microbenchmark supplies both.
+ * bench_setup runs before argv is even read.
+ * So any fixed cost it has lands in the <iterations> = 0 baseline run the harness subtracts.
+ * Per-iteration numbers then stay pure; most leave it empty.
+ * It is an explicit hook rather than __attribute__((constructor)).
  * -nostartfiles means nothing calls __wasm_call_ctors. */
 static void bench_setup(void);
 static u64 bench_run(u32 iterations);

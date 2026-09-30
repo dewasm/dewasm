@@ -1,24 +1,43 @@
 ;; tail_call: the same chain as call_direct, made of tail calls.
 ;;
-;; One iteration walks the same four functions doing the same arithmetic, but each hop is a `return_call` instead of a `call`, so the chain replaces its frame rather than nesting four deep.
-;; call_direct prints the same number from the same work, so the difference between the two cases is the cost of a frame-replacing call against a nesting one; that pairing is why this case exists, and it is the shape eh_throw and eh_try already use for exception handling.
+;; One iteration walks the same four functions doing the same arithmetic.
+;; But each hop is a `return_call` instead of a `call`.
+;; So the chain replaces its frame rather than nesting four deep.
+;; call_direct prints the same number from the same work.
+;; So the difference between the two cases is the cost of a frame-replacing call.
+;; That cost is measured against a nesting one.
+;; That pairing is why this case exists.
+;; It is the shape eh_throw and eh_try already use for exception handling.
 ;;
 ;; The chain stays four hops rather than going a million deep on purpose.
-;; A depth no ordinary call could reach would measure the proposal's space guarantee, which is real, but it has no paired baseline to measure against and it would exclude every runner that lowers a tail call as an ordinary call.
+;; A depth no ordinary call could reach would measure the proposal's space guarantee, which is real.
+;; But it has no paired baseline to measure against.
+;; It would also exclude every runner that lowers a tail call as an ordinary call.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
-;; Duplicated verbatim in every hand-written microbenchmark so each
-;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;; Duplicated verbatim in every hand-written microbenchmark.
+;; So each .wat stays a standalone module that wat2wasm and dewasm can consume directly.
 ;;
 ;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
-;; It does
-;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
-;; Only args_sizes_get / args_get / fd_write / proc_exit are imported, and a body stays inside i32/i64/f64 except for the one axis its case exists to measure: f32 in f32_alu, exception handling in eh_throw and eh_try.
-;; That keeps every other case within reach of the pure-Ruby and pure-Python interpreters this suite compares, and a runner that cannot execute a case's axis is excluded for that case in the harness workload table, with the reason stated there.
+;; It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+;; The line is the decimal result followed by a newline.
+;; <iterations> = 0 does no work but still prints.
+;; That is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported.
+;; A body stays inside i32/i64/f64 except for the one axis its case exists to measure.
+;; That axis is f32 in f32_alu, and exception handling in eh_throw and eh_try.
+;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
+;; Those are the interpreters this suite compares.
+;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;; It starts at 0x1000 rather than at 0.
+;; wasm3 traps whenever a WASI out param is written to linear-memory address 0.
+;; The trap message is "out of bounds memory access".
+;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
+;; So the whole block is simply moved up out of wasm3's way:
 ;;
 ;; 0x1000   4  argc                     (args_sizes_get out param)
 ;; 0x1004   4  argv buffer size         (args_sizes_get out param)
@@ -45,7 +64,8 @@
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
   ;; Every argv problem lands here.
-  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
+  ;; The harness always passes exactly one argument.
+  ;; So anything else is a caller bug, not an input to guess at.
   (func $die
     (i32.store (i32.const 0x1400) (i32.const 0x1800))
     (i32.store (i32.const 0x1404) (i32.const 29))

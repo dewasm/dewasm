@@ -1,12 +1,15 @@
 #!/usr/bin/env perl
-# Interactive terminal frontend for the dewasm-generated DOOM library
-# (doom_gen.pl, produced from jacobenget/doom.wasm by build.sh).
-# Like the
-# Ruby/Python/Bash frontends it renders into any ANSI truecolor terminal with half-block characters instead of opening a pixel window (see ../go,
-# ../java): plain Perl runs DOOM at well under one tick/sec, hopeless for a
-# GUI but fine for a terminal, which has orders of magnitude fewer cells to redraw than a window has pixels.
+# Interactive terminal frontend for the dewasm-generated DOOM library.
+# build.sh produces that library (doom_gen.pl) from jacobenget/doom.wasm.
+# Like the Ruby/Python/Bash frontends, it renders into any ANSI truecolor terminal.
+# It uses half-block characters.
+# It does not open a pixel window (see ../go, ../java).
+# Plain Perl runs DOOM at well under one tick/sec, hopeless for a GUI but fine for a terminal.
+# A terminal has orders of magnitude fewer cells to redraw than a window has pixels.
 #
-# Run with --smoke for a headless self-check (no tty needed): it inits the game, ticks it 10 times, measures tick rate and render cost, and writes the final frame to screenshot.ppm.
+# Run with --smoke for a headless self-check (no tty needed).
+# It inits the game, ticks it 10 times, and measures tick rate and render cost.
+# Then it writes the final frame to screenshot.ppm.
 # Core modules only; raw mode goes through stty (Term::ReadKey is not core).
 use strict;
 use warnings;
@@ -18,24 +21,30 @@ use Time::HiRes qw(clock_gettime CLOCK_MONOTONIC);
 require "$FindBin::Bin/doom_gen.pl";
 
 use constant SAVE_DIR => '.savegame';
-# Terminals deliver only key *presses*, so a press is held "down" for this long after the last matching press/autorepeat before synthesizing the release.
-# Wider than Ruby's 180ms window because this backend only manages
-# ~0.7 ticks/sec, so polls (and therefore chances to notice an autorepeat)
-# are over a second apart (same reasoning as the Python frontend).
+# Terminals deliver only key *presses*.
+# So a press is held "down" for this long after the last matching press/autorepeat.
+# Then the release is synthesized.
+# The window is wider than Ruby's 180ms because this backend only manages ~0.7 ticks/sec.
+# So polls, and therefore chances to notice an autorepeat, are over a second apart.
+# The Python frontend has the same reasoning.
 use constant KEY_HOLD_SECONDS => 0.4;
 
 my $HALF_BLOCK = "\xE2\x96\x80";    # U+2580 upper half block, as raw UTF-8
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# It would then flicker with the game.
 my $STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m";
 
 sub monotonic { return clock_gettime(CLOCK_MONOTONIC); }
 
 sub save_game_path { return SAVE_DIR . "/doomsav$_[0].dsg"; }
 
-# Wires the wasm module's ten host imports to Perl.
-# `$doom_ref` exists because these closures have to be built before Doom->new returns the instance they read memory from; it's filled in immediately after construction and only dereferenced within calls the imports themselves receive later (never during Doom->new itself).
+# Connects the wasm module's ten host imports to Perl.
+# `$doom_ref` exists because these closures have to be built before Doom->new returns the instance.
+# The closures read memory from that instance.
+# `$doom_ref` is filled in immediately after construction.
+# It is only dereferenced within calls the imports themselves receive later, never during Doom->new.
 sub build_imports {
     my ($doom_ref, $frame, $suppress_info) = @_;
     my $mem_string = sub { return substr($$doom_ref->{memory}{data}, $_[0], $_[1]); };
@@ -48,7 +57,9 @@ sub build_imports {
         'console' => {
             'onErrorMessage' => sub { $emit->(\*STDERR, $mem_string->(@_)); },
             'onInfoMessage'  => sub {
-                # Info messages would corrupt the ANSI frame while the alternate screen is active, so they're dropped in interactive mode; --smoke has no alternate screen and prints them normally.
+                # Info messages would corrupt the ANSI frame while the alternate screen is active.
+                # So they're dropped in interactive mode.
+                # --smoke has no alternate screen and prints them normally.
                 return if $suppress_info;
                 $emit->(\*STDOUT, $mem_string->(@_));
             },
@@ -73,11 +84,15 @@ sub build_imports {
             },
         },
         'runtimeControl' => {
-            # Backs DOOM's internal 35Hz pacing, so it has to be a real monotonic clock (not a fake stepped one) or the game's notion of elapsed time would drift from how often we call tickGame.
+            # Backs DOOM's internal 35Hz pacing.
+            # So it has to be a real monotonic clock, not a fake stepped one.
+            # Otherwise the game's notion of elapsed time would drift from our tickGame call rate.
             'timeInMilliseconds' => sub { return int(monotonic() * 1000); },
         },
         'ui' => {
-            # Captured as one immediate bulk substr copy, not scanned pixel-by-pixel: a per-pixel memory call here would be ~256k calls/frame and would dominate the whole tick budget.
+            # Captured as one immediate bulk substr copy, not scanned pixel-by-pixel.
+            # A per-pixel memory call here would be ~256k calls/frame.
+            # That would dominate the whole tick budget.
             'drawFrame' => sub {
                 my ($buf_off) = @_;
                 my $len = $frame->{w} * $frame->{h} * 4;
@@ -110,16 +125,22 @@ sub key_map {
         escape    => $doom->global_get('KEY_ESCAPE'),
         enter     => $doom->global_get('KEY_ENTER'),
         backspace => $doom->global_get('KEY_BACKSPACE'),
-        # KEY_SHIFT/KEY_ALT exist as exports too, but Shift (run) and Alt have no terminal-deliverable equivalent, so they're never looked up here.
+        # KEY_SHIFT/KEY_ALT exist as exports too.
+        # But Shift (run) and Alt have no terminal-deliverable equivalent.
+        # So they're never looked up here.
     };
 }
 
 # ---------------------------------------------------------------- Renderer
 #
-# Renders the framebuffer into ANSI half-block terminal cells: each character cell shows two vertically-stacked source pixels via "▀"
-# (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
-# SGR).
-# This is the performance-sensitive part of this frontend in the other frontends' languages (much less so in Perl, where a single tick already costs over a second), but the same diff strategy is kept: track the previous frame's cell contents and the cursor/SGR state, and only emit escape codes for cells that actually changed (DOOM's software renderer is paletted, so most cells repeat exactly from one frame to the next).
+# Renders the framebuffer into ANSI half-block terminal cells.
+# Each character cell shows two vertically-stacked source pixels via "▀".
+# The foreground is the top pixel and the background the bottom pixel, both 24-bit truecolor SGR.
+# In the other frontends' languages this is the performance-sensitive part.
+# It is much less so in Perl, where a single tick already costs over a second.
+# But the same diff strategy is kept: track the previous frame's cell contents and cursor/SGR state.
+# Only cells that actually changed get escape codes.
+# DOOM's software renderer is paletted, so most cells repeat exactly from one frame to the next.
 package Renderer;
 
 sub new {
@@ -156,7 +177,9 @@ sub new {
 sub cell_cols { return $_[0]->{cell_cols}; }
 sub cell_rows { return $_[0]->{cell_rows}; }
 
-# Builds one frame's worth of escape sequences/characters as a single string; the caller is responsible for writing it (or, for --smoke, just timing how long this took and discarding it).
+# Builds one frame's worth of escape sequences/characters as a single string.
+# The caller is responsible for writing it.
+# For --smoke, the caller just times how long this took and discards it.
 sub render {
     my ($self, $pixels, $frame_w, $frame_h, $status_text) = @_;
     my $buf = '';
@@ -199,7 +222,10 @@ sub render {
         }
     }
     if (!defined($self->{last_status}) || $status_text ne $self->{last_status}) {
-        # Reset SGR first: otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active, making its background flicker with the game's own colors instead of staying the terminal default.
+        # Reset SGR first.
+        # Otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active.
+        # Its background would then flicker with the game's own colors.
+        # With the reset it stays the terminal default.
         $buf .= sprintf("\e[%d;1H\e[0m%s\e[K%s", $self->{cell_rows} + 1, $STATUS_SGR, $status_text);
         $self->{last_status} = $status_text;
         # Force the next painted cell to reposition: the cursor is now on the status line.
@@ -213,8 +239,10 @@ sub render {
 
 # ------------------------------------------------------------------ Input
 #
-# Terminals deliver only key *presses*, never releases, so a press synthesizes both an immediate reportKeyDown and a reportKeyUp once
-# KEY_HOLD_SECONDS pass with no matching repeat (terminal autorepeat just resends the same bytes, which pushes the deadline back via key_down).
+# Terminals deliver only key *presses*, never releases.
+# So a press synthesizes an immediate reportKeyDown.
+# It also synthesizes a reportKeyUp once KEY_HOLD_SECONDS pass with no matching repeat.
+# Terminal autorepeat just resends the same bytes, which pushes the deadline back via key_down.
 package InputHandler;
 
 my %ESCAPE_SEQUENCES = (
@@ -270,7 +298,8 @@ sub process_pending {
     return;
 }
 
-# Returns true if it consumed (or decided to drop) something from pending, false if it needs more bytes and the caller should stop polling for this tick.
+# Returns true if it consumed (or decided to drop) something from pending.
+# Returns false if it needs more bytes and the caller should stop polling for this tick.
 sub process_escape {
     my ($self, $now) = @_;
     my $pending = $self->{pending};
@@ -280,8 +309,9 @@ sub process_escape {
             $self->key_down($self->{keys}{ $ESCAPE_SEQUENCES{$seq} }, $now);
             substr($self->{pending}, 0, length($seq)) = '';
         } else {
-            # Not one of our known arrow sequences (e.g. an F-key or
-            # Home/End CSI sequence): drop just the ESC byte and reprocess the rest as ordinary bytes rather than losing them.
+            # Not one of our known arrow sequences (e.g. an F-key or Home/End CSI sequence).
+            # Drop just the ESC byte and reprocess the rest as ordinary bytes.
+            # That way they are not lost.
             substr($self->{pending}, 0, 1) = '';
         }
         $self->{esc_seen_at} = undef;
@@ -295,7 +325,8 @@ sub process_escape {
     }
 
     if ($pending eq "\e" && defined($self->{esc_seen_at})) {
-        # Still a bare ESC on a second poll with no growth: a real Escape key press, not the start of a sequence still in flight.
+        # Still a bare ESC on a second poll with no growth: a real Escape key press.
+        # It is not the start of a sequence still in flight.
         $self->key_down($self->{keys}{escape}, $now);
         $self->{pending} = '';
         $self->{esc_seen_at} = undef;
@@ -397,10 +428,10 @@ sub run_smoke {
     }
     my $colors = scalar(keys %distinct);
     print "smoke: final frame is ${w}x${h} with $colors distinct colors\n";
-    # DOOM's software renderer is paletted (classic VGA Mode 13h: at most
-    # 256 colors), so a healthy frame tops out in the low hundreds, not the thousands a truecolor renderer would produce.
-    # A degenerate frame
-    # (blank/solid) instead lands in the single digits.
+    # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
+    # So a healthy frame tops out in the low hundreds.
+    # A truecolor renderer would produce thousands.
+    # A degenerate frame (blank/solid) instead lands in the single digits.
     if ($colors <= 50) {
         print STDERR "smoke: FAIL: frame looks degenerate (too few distinct colors)\n";
         exit 1;
@@ -412,7 +443,9 @@ sub run_smoke {
 }
 
 use constant ENTER_ALT_SCREEN => "\e[?1049h\e[?25l\e[2J\e[H";
-# SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+# SGR reset first.
+# Otherwise the fixed status-line colors persist past leaving the alternate screen.
+# They would tint the shell prompt underneath.
 use constant EXIT_ALT_SCREEN  => "\e[0m\e[?25h\e[?1049l";
 
 sub run_interactive {
@@ -440,7 +473,9 @@ sub run_interactive {
         system('stty', $orig_stty) if $orig_stty;
         print EXIT_ALT_SCREEN;
     };
-    # Ctrl-C is handled explicitly as a byte in InputHandler because raw mode disables the terminal's own SIGINT generation; these handlers are only a backstop for termination from outside (e.g. `kill`).
+    # Ctrl-C is handled explicitly as a byte in InputHandler.
+    # Raw mode disables the terminal's own SIGINT generation.
+    # These handlers are only a backstop for termination from outside (e.g. `kill`).
     local $SIG{INT}  = sub { $restore->(); exit 0; };
     local $SIG{TERM} = sub { $restore->(); exit 0; };
 

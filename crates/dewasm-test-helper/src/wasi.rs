@@ -1,10 +1,22 @@
-//! The project's own WASI preview-1 conformance suite: WASI has no official testsuite, so the WASI-exercising fixtures are grouped by feature unit: stdio, args/env, clock/random, filesystem.
-//! Each backend crate wires up exactly the kinds it supports via `wasi_suite!`.
+//! The project's own WASI preview-1 conformance suite.
+//! WASI has no official testsuite, so the WASI-exercising fixtures are grouped by feature unit.
+//! The units are stdio, args/env, clock/random, and filesystem.
+//! Each backend crate selects exactly the kinds it supports via `wasi_suite!`.
 //!
-//! Two execution shapes share one table: * `WasiCheck::Standalone`: a whole-program standalone run checked by stdout + exit code (stdio, args/env, clock/random).
-//! No glue; every backend runs these. * `WasiCheck::Fs`: a library-mode run against a preopened host scratch directory, with host-side setup before and assertions after.
-//! Needs per-backend instantiation glue: a single template string per backend (`wasi_suite!(Lang, Fs, TEMPLATE)`) whose `{guest}`/`{host}` placeholders the runner fills with the preopen pair.
-//! The one case that does not fit the template (the root-preopen containment probe, which calls the WASI resolver directly rather than running a guest) is dissolved into its own `wasi_root_containment_e2e!` macro with its own glue const.
+//! Two execution shapes share one table:
+//!
+//! * `WasiCheck::Standalone`: a whole-program standalone run checked by stdout + exit code.
+//!   It covers stdio, args/env, and clock/random.
+//!   No glue; every backend runs these.
+//! * `WasiCheck::Fs`: a library-mode run against a preopened host scratch directory.
+//!   Host-side setup runs before it and assertions after.
+//!   It needs per-backend instantiation glue: a single template string per backend.
+//!   The template is passed as `wasi_suite!(Lang, Fs, TEMPLATE)`.
+//!   The runner fills its `{guest}`/`{host}` placeholders with the preopen pair.
+//!
+//! One case does not fit the template: the root-preopen containment probe.
+//! It calls the WASI resolver directly rather than running a guest.
+//! So it has its own `wasi_root_containment_e2e!` macro with its own glue const.
 
 use std::path::Path;
 
@@ -15,13 +27,15 @@ use crate::fixtures::{convert, examples_dir};
 use crate::glue::fill;
 
 /// The WASI p1 feature units a fixture exercises.
-/// Public API of the helper crate, so unused variants are not dead code: a backend selects the kinds it supports at `wasi_suite!` sites.
+/// Public API of the helper crate, so unused variants are not dead code.
+/// A backend selects the kinds it supports at `wasi_suite!` sites.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WasiKind {
     Stdio,
     ArgsEnv,
     ClockRandom,
-    /// poll_oneoff kept a separate variant so a backend without it could wire the other three; every backend currently wires it.
+    /// poll_oneoff kept a separate variant so a backend without it could run the other three.
+    /// Every backend currently runs it.
     Poll,
     Fs,
 }
@@ -40,13 +54,16 @@ pub enum WasiCheck {
     Standalone { stdout: &'static str, code: i32 },
     /// Library-mode filesystem run against a preopened scratch directory.
     Fs {
-        /// Preopen a subdirectory of the scratch root instead of the root itself, so a canary can sit *outside* the sandbox (the escape test).
-        /// `setup`/`assert_host`/glue all receive the preopened dir; its `.parent()` reaches the scratch root.
+        /// Preopen a subdirectory of the scratch root instead of the root itself.
+        /// So a canary can sit *outside* the sandbox (the escape test).
+        /// `setup`/`assert_host`/glue all receive the preopened dir.
+        /// Its `.parent()` reaches the scratch root.
         preopen_subdir: Option<&'static str>,
         /// Prepare the scratch layout before the run (create a symlink, drop a canary file, ...).
         /// Receives the preopened dir.
         setup: fn(&Path),
-        /// Check the run's captured stdout (exact match vs. `contains` is the closure's own business, the exact original assertion).
+        /// Check the run's captured stdout.
+        /// Exact match vs. `contains` is the closure's own business, the exact original assertion.
         check_stdout: fn(&str),
         /// Assert host filesystem state after the run.
         /// Receives the preopened dir.
@@ -56,7 +73,8 @@ pub enum WasiCheck {
     },
 }
 
-/// A fresh, empty scratch directory keyed by `name`, so cases running in parallel never share host state.
+/// A fresh, empty scratch directory keyed by `name`.
+/// So cases running in parallel never share host state.
 fn scratch_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("dewasm-wasi-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -77,7 +95,8 @@ pub const WASI_CASES: &[WasiCase] = &[
             code: 0,
         },
     },
-    // Args/env: argc (program name + arguments) becomes the exit code via args_sizes_get + proc_exit.
+    // Args/env: argc (program name + arguments) becomes the exit code.
+    // It goes through args_sizes_get + proc_exit.
     WasiCase {
         name: "argc",
         wat: "args_proc_exit.wat",
@@ -89,7 +108,10 @@ pub const WASI_CASES: &[WasiCase] = &[
             code: 3,
         },
     },
-    // poll_oneoff: a clock subscription (relative 1 ms) plus an fd_write readiness subscription on stdout. stdout is always ready, so the call reports at least one event with error 0 and the module prints its success line without blocking on the timer.
+    // poll_oneoff: a clock subscription (relative 1 ms) plus an fd_write readiness subscription.
+    // The readiness subscription is on stdout, which is always ready.
+    // So the call reports at least one event with error 0.
+    // The module then prints its success line without blocking on the timer.
     WasiCase {
         name: "poll_oneoff",
         wat: "wasi_poll_oneoff.wat",
@@ -101,7 +123,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             code: 0,
         },
     },
-    // Filesystem. path_open (create+write, then reopen+read) round-trips real file content through a preopened host directory.
+    // Filesystem.
+    // path_open (create+write, then reopen+read) round-trips real file content.
+    // The content goes through a preopened host directory.
     WasiCase {
         name: "fs_path_open_roundtrip",
         wat: "wasi_path_open_roundtrip.wat",
@@ -121,7 +145,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // path_create_directory + fd_readdir + path_unlink_file / path_remove_directory, verified from both sides: the dirent listing the guest saw, and the host filesystem after cleanup.
+    // path_create_directory + fd_readdir + path_unlink_file / path_remove_directory.
+    // They are verified from both sides.
+    // Those are the dirent listing the guest saw, and the host filesystem after cleanup.
     WasiCase {
         name: "fs_mkdir_readdir_unlink",
         wat: "wasi_mkdir_readdir_unlink.wat",
@@ -141,7 +167,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // fd_readdir with a dircookie whose high bit is set (u64 2^63): the cookie is an unsigned position past any snapshot's end, so the call succeeds with bufused 0 (matching wasmtime).
+    // fd_readdir with a dircookie whose high bit is set (u64 2^63).
+    // The cookie is an unsigned position past any snapshot's end.
+    // So the call succeeds with bufused 0 (matching wasmtime).
     // Runtimes holding the cookie in a signed type must not index negatively (issue #27).
     WasiCase {
         name: "fs_readdir_high_cookie",
@@ -157,7 +185,8 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // path_open with oflags::DIRECTORY on a missing path is ENOENT (44), not ENOTDIR (54): guests (e.g. wasi-libc's opendir) branch on the difference.
+    // path_open with oflags::DIRECTORY on a missing path is ENOENT (44), not ENOTDIR (54).
+    // Guests (e.g. wasi-libc's opendir) branch on the difference.
     // The fixture exits with the errno.
     WasiCase {
         name: "fs_dir_open_missing",
@@ -173,7 +202,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // path_filestat_get without SYMLINK_FOLLOW stats the symlink itself (filetype 7), not its target: resolution must not follow the final component.
+    // path_filestat_get without SYMLINK_FOLLOW stats the symlink itself (filetype 7).
+    // It does not stat the target.
+    // Resolution must not follow the final component.
     // The fixture exits with the reported filetype.
     WasiCase {
         name: "fs_filestat_nofollow_symlink",
@@ -197,7 +228,9 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: true,
         },
     },
-    // A `..`-escaping guest path must be rejected (ERRNO_NOTCAPABLE, not a host filesystem escape): a canary file sitting just outside the preopened directory must stay unreadable and untouched.
+    // A `..`-escaping guest path must be rejected with ERRNO_NOTCAPABLE.
+    // It must not escape to the host filesystem.
+    // A canary file just outside the preopened directory must stay unreadable and untouched.
     // The scratch dir is a `sandbox` subdir; the canary sits beside it.
     WasiCase {
         name: "fs_escape_rejected",
@@ -225,7 +258,8 @@ pub const WASI_CASES: &[WasiCase] = &[
         },
     },
     // Trailing-slash shapes (issue #42): pinned to wasmtime 47 on both hosts.
-    // Probe k is wasmtime's own host split, asserted per host; the fixture header lists the unpinned shapes.
+    // Probe k is wasmtime's own host split, asserted per host.
+    // The fixture header lists the unpinned shapes.
     // The bash-only PR #41 pins live in crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs.
     WasiCase {
         name: "fs_trailing_slash",
@@ -254,7 +288,8 @@ pub const WASI_CASES: &[WasiCase] = &[
                 )
             },
             assert_host: |dir| {
-                // The failing probes must have left the filesystem alone; the succeeding ones (j, m, p) must have taken effect.
+                // The failing probes must have left the filesystem alone.
+                // The succeeding ones (j, m, p) must have taken effect.
                 assert_eq!(
                     std::fs::read_to_string(dir.join("file")).unwrap(),
                     "keep me"
@@ -274,7 +309,8 @@ pub const WASI_CASES: &[WasiCase] = &[
             unix_only: false,
         },
     },
-    // The symlink side: readlink through a slash follows to the target; a slash-suffixed symlink destination errs by what sits behind the slash.
+    // The symlink side: readlink through a slash follows to the target.
+    // A slash-suffixed symlink destination errs by what sits behind the slash.
     WasiCase {
         name: "fs_trailing_slash_symlink",
         wat: "wasi_trailing_slash_symlink.wat",
@@ -308,8 +344,13 @@ pub const WASI_CASES: &[WasiCase] = &[
         },
     },
     // Per-fd rights enforcement.
-    // A fd narrowed by fd_fdstat_set_rights must refuse fd_pread/fd_pwrite (NOTCAPABLE, like fd_read/fd_write); a dirfd stripped of PATH_FILESTAT_SET_SIZE must refuse an O_TRUNC open without touching the file; and one stripped of PATH_OPEN must refuse any open.
-    // The fixture prints "<tag><errno>" per probe (76 = NOTCAPABLE), so the expected stdout pins every probe.
+    // A fd narrowed by fd_fdstat_set_rights must refuse fd_pread/fd_pwrite (NOTCAPABLE).
+    // That matches fd_read/fd_write.
+    // A dirfd stripped of PATH_FILESTAT_SET_SIZE must refuse an O_TRUNC open.
+    // The refusal must not touch the file.
+    // A dirfd stripped of PATH_OPEN must refuse any open.
+    // The fixture prints "<tag><errno>" per probe (76 = NOTCAPABLE).
+    // So the expected stdout pins every probe.
     WasiCase {
         name: "fs_rights_notcapable",
         wat: "wasi_rights_notcapable.wat",
@@ -332,7 +373,8 @@ pub const WASI_CASES: &[WasiCase] = &[
     },
 ];
 
-/// Run the `WasiCheck::Standalone` cases of `kind` (stdio, args/env, clock/random): convert standalone, run, check stdout + exit code.
+/// Run the `WasiCheck::Standalone` cases of `kind` (stdio, args/env, clock/random).
+/// Convert standalone, run, and check stdout + exit code.
 /// Works for every backend; no glue.
 pub fn run_wasi_standalone(lang: &dyn BackendUnderTest, kind: WasiKind) {
     for case in WASI_CASES.iter().filter(|c| c.kind == kind) {
@@ -366,8 +408,15 @@ pub fn run_wasi_standalone(lang: &dyn BackendUnderTest, kind: WasiKind) {
     }
 }
 
-/// Run the `WasiCheck::Fs` cases: create a scratch dir, run the host-side setup, convert in library mode, append `template` with its `{guest}`/`{host}` placeholders filled (guest `/`, host the preopened dir), run, then apply the case's stdout check and host-state assertions.
-/// Every non-containment Fs case shares the one template (preopen the host dir at `/`, run `_start`, surface a `proc_exit` code as a trailing decimal line); the containment probe is a separate case (see [`run_wasi_containment`]).
+/// Run the `WasiCheck::Fs` cases.
+/// Create a scratch dir, run the host-side setup, and convert in library mode.
+/// Append `template` with its `{guest}`/`{host}` placeholders filled.
+/// The guest side is `/`, and the host side is the preopened dir.
+/// Run, then apply the case's stdout check and host-state assertions.
+/// Every non-containment Fs case shares the one template.
+/// It preopens the host dir at `/`, runs `_start`, and surfaces a `proc_exit` code.
+/// That code is a trailing decimal line.
+/// The containment probe is a separate case (see [`run_wasi_containment`]).
 pub fn run_wasi_fs(lang: &dyn BackendUnderTest, template: &str) {
     for case in WASI_CASES.iter().filter(|c| c.kind == WasiKind::Fs) {
         let WasiCheck::Fs {
@@ -417,8 +466,13 @@ pub fn run_wasi_fs(lang: &dyn BackendUnderTest, template: &str) {
     }
 }
 
-/// Exercise the standalone runtime interface's `--dir` end to end: convert `wasi_standalone_dir.wat` in *standalone* mode, run it with a `--dir HOST::GUEST` mount of a fresh scratch dir at guest `/`, and require the guest to round-trip a file through it: the echoed stdout and the host file the guest wrote must both be correct.
-/// Shared by every backend and re-run under wasmtime as ground truth (its `run_standalone_dir` override consumes `--dir` as a host flag).
+/// Exercise the standalone runtime interface's `--dir` end to end.
+/// Convert `wasi_standalone_dir.wat` in *standalone* mode.
+/// Run it with a `--dir HOST::GUEST` mount of a fresh scratch dir at guest `/`.
+/// Require the guest to round-trip a file through it.
+/// The echoed stdout and the host file the guest wrote must both be correct.
+/// Shared by every backend and re-run under wasmtime as ground truth.
+/// Its `run_standalone_dir` override consumes `--dir` as a host flag.
 /// No glue: standalone needs none.
 pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
     let scratch = scratch_dir(&format!("standalone-dir-{}", lang.name()));
@@ -450,8 +504,13 @@ pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
     );
 }
 
-/// Run the deep-recursion standalone case (`deep_recursion_e2e!`): convert `deep_recursion.wat` (whose `_start` recurses 5000 wasm frames, far past e.g. CPython's default ~1000-frame recursion limit) in *standalone* mode and run it with no arguments.
-/// The generated entrypoint must survive the recursion (Python: a raised recursion limit plus a big-stack guest thread) and still surface the guest's `proc_exit(42)` as the process exit code.
+/// Run the deep-recursion standalone case (`deep_recursion_e2e!`).
+/// Convert `deep_recursion.wat` in *standalone* mode and run it with no arguments.
+/// Its `_start` recurses 5000 wasm frames.
+/// That is far past e.g. CPython's default ~1000-frame recursion limit.
+/// The generated entrypoint must survive the recursion.
+/// Python does so with a raised recursion limit plus a big-stack guest thread.
+/// It must still surface the guest's `proc_exit(42)` as the process exit code.
 /// Like `run_standalone_dir`, this exercises the emitted entrypoint itself, so no glue.
 pub fn run_deep_recursion(lang: &dyn BackendUnderTest) {
     let src = convert(
@@ -476,9 +535,15 @@ pub fn run_deep_recursion(lang: &dyn BackendUnderTest) {
     );
 }
 
-/// Run the root-preopen containment probe (`wasi_root_containment_e2e!`): a preopen whose realpath is the filesystem root must not reject every path (the containment check would otherwise build the prefix "//" and never match).
-/// This exercises a WASI-model *internal* (the path-resolution helper) rather than a guest fixture (no host files are touched), so `glue` probes the resolver directly with a `"/" => "/"` preopen instead of running the converted module's `_start`.
-/// `wasi_path_open_roundtrip.wat` is converted only to bring the runtime's WASI class into scope; `glue` normalizes the outcome to `contained`.
+/// Run the root-preopen containment probe (`wasi_root_containment_e2e!`).
+/// A preopen whose realpath is the filesystem root must not reject every path.
+/// The containment check would otherwise build the prefix "//" and never match.
+/// This exercises a WASI-model *internal* (the path-resolution helper) rather than a guest fixture.
+/// No host files are touched.
+/// So `glue` probes the resolver directly with a `"/" => "/"` preopen.
+/// It does not run the converted module's `_start`.
+/// `wasi_path_open_roundtrip.wat` is converted only to bring the runtime's WASI class into scope.
+/// `glue` normalizes the outcome to `contained`.
 /// Unix-only: a realpath of `/` is a unix notion, so it is a no-op elsewhere.
 pub fn run_wasi_containment(lang: &dyn BackendUnderTest, glue: &str) {
     if !cfg!(unix) {

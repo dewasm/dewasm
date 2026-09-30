@@ -1,10 +1,14 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
 # Byte-wise binary-safe reads.
-# A file fd (kind 2) copies from its whole-file byte buffer at the current offset; stdin (kind 1, fd 0) consumes the pushback buffer first (<p>wpush, a space-separated byte-ordinal list shared with poll_oneoff), then reads live.
-# A non-tty stdin reads via `read -d '' -n
-# 1`, where '' with success is a NUL byte and failure is EOF.
-# A tty stdin instead reads a whole canonical line into the pushback buffer with a plain
-# `read`: bash's `-n`/`-N`/`-t` reads toggle ICANON per call and each restore makes the pty line discipline re-echo the still-pending line, so the tty path must not use them.
+# A file fd (kind 2) copies from its whole-file byte buffer at the current offset.
+# stdin (kind 1, fd 0) consumes the pushback buffer <p>wpush first, then reads live.
+# <p>wpush is a space-separated byte-ordinal list shared with poll_oneoff.
+# A non-tty stdin reads via `read -d '' -n 1`.
+# There '' with success is a NUL byte, and failure is EOF.
+# A tty stdin instead reads a whole canonical line into the pushback buffer with a plain `read`.
+# bash's `-n`/`-N`/`-t` reads toggle ICANON per call.
+# Each restore makes the pty line discipline re-echo the still-pending line.
+# So the tty path must not use them.
 # Bash strings cannot hold NUL, but canonical tty line input never contains one.
 # A directory fd is EISDIR.
 # LC_ALL=C keeps reads and ordinal conversion byte-granular.
@@ -70,7 +74,8 @@ wasi_fd_read() {
         if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
       elif (( __tty )); then
         # Short-read handling as below: only the first byte of the call blocks.
-        # Once the buffered line is drained, return what was delivered rather than blocking on the next line.
+        # Once the buffered line is drained, return what was delivered.
+        # Do not block on the next line.
         if (( __total > 0 )); then
           __stop=1
           break
@@ -87,17 +92,20 @@ wasi_fd_read() {
           __push+=$__b
         done
         if (( __rc == 0 )); then
-          # `read` strips the delimiter; restore it (rc != 0 with content is
-          # EOF without a trailing newline).
+          # `read` strips the delimiter; restore it.
+          # rc != 0 with content is EOF without a trailing newline.
           __push+=${__push:+ }
           __push+=10
         fi
         __b=${__push%% *}
         if [[ $__push == *' '* ]]; then __push=${__push#* }; else __push=''; fi
       else
-        # Short-read handling: only the first byte of the call blocks; each further byte is taken only while input is already available.
-        # `read
-        # -t 0` reports readiness without consuming (success iff a byte is ready), giving the readpartial short-read semantics wasmtime/Ruby offer and that line-buffered tty guests (the QuickJS REPL) need: a full iovec is not drained past what one interactive line delivered.
+        # Short-read handling: only the first byte of the call blocks.
+        # Each further byte is taken only while input is already available.
+        # `read -t 0` reports readiness without consuming (success iff a byte is ready).
+        # That gives the readpartial short-read semantics wasmtime/Ruby offer.
+        # Line-buffered tty guests (the QuickJS REPL) need them.
+        # A full iovec is not drained past what one interactive line delivered.
         if (( __total > 0 )) && ! IFS= read -r -t 0; then
           __stop=1
           break

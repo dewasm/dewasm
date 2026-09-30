@@ -1,7 +1,9 @@
 # requires: wasi/fd_flush
 # WASI fd_sync: sync is treated as flush.
 # The whole-file-buffer model has no separate durability barrier.
-# Delegates to wasi_fd_flush, which is already a no-op (R0=0) for a directory/stdio fd or a clean buffer; only a genuinely unknown fd is rejected here (every other fd_* unit checks this).
+# Delegates to wasi_fd_flush.
+# That is already a no-op (R0=0) for a directory/stdio fd or a clean buffer.
+# Only an unknown fd is rejected here, as every other fd_* unit checks.
 wasi_fd_sync() {
   local __p=$1 __fd=$2
   local -n __fds=${__p}wfds

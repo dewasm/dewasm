@@ -1,6 +1,12 @@
-//! Python end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Python backend.
-//! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations.
-//! Python covers full WASI preview 1 incl. the filesystem, so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and the shared-table multi-module case.
+//! Python end-to-end suites: the shared case consts (`dewasm-test-helper`) for the Python backend.
+//! This file holds ONLY:
+//! - the [`BackendUnderTest`] impl;
+//! - named glue string constants;
+//! - per-case macro invocations.
+//!
+//! Python covers full WASI preview 1 incl. the filesystem.
+//! So it invokes every WASI kind and the slow `apps`/`fs_apps`/`capi` suites.
+//! It also invokes the shared-table multi-module case.
 
 use std::path::{Path, PathBuf};
 
@@ -23,9 +29,15 @@ impl BackendUnderTest for Python {
         find_python().expect("python3 >= 3.9 not found on PATH: see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file and return the driver's `from <module> import ...` preamble; the interpreter puts the driver's directory first on `sys.path`, so plain imports find them.
-    /// `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage) written to `rt.py`, which every module file imports (its class body binds `Rt` at import time), so an imported table crosses modules.
-    /// Otherwise each file is a self-contained Embedded conversion, whose runtime class is `<Class>Rt`; the driver imports both names, which is what lets the glue name Alpha's trap type without touching Beta's.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own importable `.py` file.
+    /// Return the driver's `from <module> import ...` preamble.
+    /// The interpreter puts the driver's directory first on `sys.path`, so plain imports find them.
+    /// `shared_runtime` emits each module against one top-level `class Rt:` (Alias linkage).
+    /// That class is written to `rt.py`, which every module file imports.
+    /// A module's class body binds `Rt` at import time, so an imported table crosses modules.
+    /// Otherwise each file is a self-contained Embedded conversion.
+    /// Its runtime class is `<Class>Rt`, and the driver imports both names.
+    /// That lets the glue name Alpha's trap type without touching Beta's.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -112,7 +124,10 @@ inst.invoke("_start")  # random_get falls back to the bundled WASI
 sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* (`wasm_import`/`attach`, the Python analog of Ruby's duck-typed provider) covers every import, so the bundled WASI (`_wasi`) is never lazily constructed.
+/// The `custom_wasi_provider` glue.
+/// A provider *object* (`wasm_import`/`attach`) covers every import.
+/// It is the Python analog of Ruby's duck-typed provider.
+/// So the bundled WASI (`_wasi`) is never lazily constructed.
 const PYTHON_CUSTOM_PROVIDER_GLUE: &str = r#"import sys
 
 
@@ -145,7 +160,8 @@ sys.stdout.write(wasi.out.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue.
+/// fd_write is intercepted and random_get falls back, so the bundled WASI *was* lazily constructed.
 const PYTHON_PARTIAL_OVERRIDE_GLUE: &str = r#"import sys
 _captured = bytearray()
 _holder = {}
@@ -167,7 +183,11 @@ sys.stdout.write(_captured.decode("utf-8", "surrogateescape"))
 print("bundled wasi constructed:", "true" if inst._wasi is not None else "false")
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect `sys.stdout` (whose `.buffer` the bundled WASI captures on lazy construction) to a `BytesIO`, run, then print the captured bytes to the real stdout, the Python mirror of Ruby's StringIO idiom.
+/// The `wasi_stdio_capture` glue: redirect `sys.stdout` to a `BytesIO` and run.
+/// Then print the captured bytes.
+/// They are printed to the real stdout.
+/// The bundled WASI captures the `.buffer` of `sys.stdout` on lazy construction.
+/// This is the Python mirror of Ruby's StringIO idiom.
 const PYTHON_STDIO_CAPTURE_GLUE: &str = r#"import io
 import sys
 
@@ -189,7 +209,9 @@ sys.stdout.buffer.write(_data)
 sys.stdout.flush()
 "#;
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
+/// The shared filesystem template.
+/// Preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`).
+/// Then run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const PYTHON_FS_GLUE: &str = r#"inst = Prog({}, preopens={"{guest}": "{host}"})
 try:
     inst.invoke("_start")
@@ -197,13 +219,15 @@ except ProgRt.Exit as e:
     print(e.code)
 "#;
 
-/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen.
+/// No guest runs, and the outcome is normalized to `contained`.
 const PYTHON_CONTAINMENT_GLUE: &str = r#"wasi = ProgRt.WASI(preopens={"/": "/"})
 _path, err = wasi.resolve_path(3, "etc")
 print("contained" if err is None else "rejected")
 "#;
 
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
+// Filesystem app glue: class/argv/env/preopen-guest-paths are literals.
+// Only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PYTHON_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs({}, args=["qjs", "/work/qjs_file_io.js"], env={}, preopens={"/work": "{scratch}"})
 try:
@@ -226,7 +250,8 @@ except RgRt.Exit:
     pass
 "#;
 
-/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// The whole app cache is preopened at `/apps`.
+/// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
 const PYTHON_TOYWASM_GLUE: &str = r#"inst = Toywasm({}, args=["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
 try:
     inst.invoke("_start")
@@ -234,8 +259,11 @@ except ToywasmRt.Exit:
     pass
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-/// Plain glue, unlike every other converted-interpreter case here: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one Python frame and no recursion limit is raised.
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
+/// Its meta-WASI build always forwards the guest's WASI.
+/// Plain glue, unlike every other converted-interpreter case here.
+/// The official asset's dispatch is a tail call.
+/// So the trampoline runs the whole chain in one Python frame, and no recursion limit is raised.
 const PYTHON_WASM3_GLUE: &str = r#"inst = Wasm3({}, args=["wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
 try:
     inst.invoke("_start")
@@ -406,7 +434,11 @@ for r in ROWS:
 print("CALLBACK-OK")
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
+/// libpcap BPF filter compilation.
+/// Drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535).
+/// Then walk the serialized program in guest memory.
+/// Its layout is `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`.
+/// Each instruction is printed as `code jt jf k`.
 const PYTHON_PCAP_COMPILE: &str = r#"
 inst = Libpcap({})
 inst.invoke("_initialize")
@@ -434,7 +466,9 @@ inst.invoke("free", prog)
 print("BPF-OK")
 "#;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}`.
+/// Then print the parse tree's S-expression from guest memory.
+/// The S-expression is a malloc'd NUL-terminated C string.
 const PYTHON_TREESITTER_PARSE: &str = r#"
 inst = Treesitter({})
 inst.invoke("_initialize")
@@ -458,9 +492,12 @@ inst.invoke("free", r)
 print("TS-OK")
 "#;
 
-/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a zero-returning `env.call_host_function` import stub (only invoked when the guest registers host callbacks: this program registers none) and a
-/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
-/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`.
+/// zeroperl Perl-5.42 eval (issue #67).
+/// Instantiate the reactor with a zero-returning `env.call_host_function` import stub.
+/// The stub is only invoked when the guest registers host callbacks; this program registers none.
+/// The reactor also gets a `/dev/null` preopen (`zeroperl_init` returns 1 without it).
+/// Then run `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory.
+/// After that come `zeroperl_eval` → `zeroperl_flush`.
 /// The program is a regex capture and a `printf`, so its stdout is deterministic.
 /// The Perl source is a raw byte literal: its backslash escapes belong to Perl, not to Python.
 const PYTHON_ZEROPERL_EVAL: &str = r#"
@@ -484,16 +521,18 @@ inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
 inst.invoke("zeroperl_flush")
 "#;
 
-/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
-/// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
-/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree, so `use Image::ExifTool` resolves in-guest with no module preopen.
-/// Instantiated like [`PYTHON_ZEROPERL_EVAL`] (the
-/// `call_host_function` stub + a `/dev/null` preopen), plus the staged image at
-/// `/img`.
-/// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal
-/// `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`, and then
-/// `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1.
+/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver.
+/// The driver is `{cache}/exiftool-lib/exiftool`, preopened at `/work`.
+/// It runs on the same `cache/zeroperl.wasm` reactor.
+/// The reactor's SFS blob embeds the `Image::ExifTool` module tree.
+/// So `use Image::ExifTool` resolves in-guest with no module preopen.
+/// Instantiated like [`PYTHON_ZEROPERL_EVAL`].
+/// That is the `call_host_function` stub + a `/dev/null` preopen.
+/// It also preopens the staged image at `/img`.
+/// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script.
+/// It first overrides `CORE::GLOBAL::exit` to a `die`.
+/// So ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`.
+/// Then `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1.
 /// Only deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
 const PYTHON_EXIFTOOL: &str = r#"
 inst = Zeroperl(
@@ -520,14 +559,19 @@ inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
 inst.invoke("zeroperl_flush")
 "#;
 
-/// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
+/// Driver for the shared-table case.
+/// Instantiate the exporter and the importer linked against it.
+/// Then print `call0` (call_indirect through the shared table -> 42).
 const PYTHON_SHARED_TABLE_GLUE: &str = r#"a = TableExp()
 b = TableImp({"a": a})
 print(b.invoke("call0"))
 "#;
 
-/// Driver for the embedded-coexistence case: two independent Embedded artifacts concatenated into one module.
-/// Each carries its own runtime class (`AlphaRt`/`BetaRt`), so their trap types are distinct objects and Alpha's trap is catchable by name.
+/// Driver for the embedded-coexistence case.
+/// Two independent Embedded artifacts are concatenated into one module.
+/// Each carries its own runtime class (`AlphaRt`/`BetaRt`).
+/// So their trap types are distinct objects.
+/// Alpha's trap is then catchable by name.
 const PYTHON_EMBEDDED_COEXIST_GLUE: &str = r#"a = Alpha()
 b = Beta()
 print(a.invoke("div", 7, 2))
@@ -539,7 +583,9 @@ except AlphaRt.Trap:
     print("trapped")
 "#;
 
-/// DOOM: drive the converted library under the deterministic contract (synthetic clock, no input) and dump the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// DOOM: drive the converted library under the deterministic contract.
+/// The contract is a synthetic clock and no input.
+/// Then dump the framebuffer as a P6 PPM matching the wasmtime snapshot.
 /// `{ticks}`/`{clock_step}` are filled by the runner.
 const PYTHON_DOOM_FRAME_GLUE: &str = r#"import sys
 
@@ -589,9 +635,11 @@ out.write(rgb)
 out.flush()
 "#;
 
-/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame from agnes's palette-index screen buffer and its palette (issue #117; the
-/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime snapshot.
+/// NES (issue #114, mirrors the DOOM glue above).
+/// Load the pinned ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
+/// Compose the frame from agnes's palette-index screen buffer and its palette (issue #117).
+/// The `& 0x3f` mask in that step is required.
+/// Then dump the frame as a P6 PPM matching the wasmtime snapshot.
 /// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 const PYTHON_NES_FRAME_GLUE: &str = r#"import sys
 
@@ -654,10 +702,16 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Python, PYTHON_SQLITE3_SHELL_GLUE)
 dewasm_test_helper::rg_search_e2e!(Python, PYTHON_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Python, PYTHON_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Python, PYTHON_CRUBY_GLUE);
-// Ultra-slow category (issue #126): host-CPython memory, not time, and the e2e binary starts the alphabetically adjacent giants (cpython_hello, cruby_hello, this) on concurrent threads: three of them exhausted the CI runner (SIGTERM, the #23 signature), where the pre-existing two fit.
-// The packed case is the newcomer, so it leaves the CI run; it still runs on Ruby and under wasmtime in CI, and still converts here.
+// Ultra-slow category (issue #126): the reason is host-CPython memory, not time.
+// The e2e binary starts the alphabetically adjacent memory-heavy cases on concurrent threads.
+// Those are cpython_hello, cruby_hello, and this one.
+// Three of them exhausted the CI runner (SIGTERM, the #23 signature).
+// The pre-existing two fit.
+// The packed case is the newcomer, so it leaves the CI run.
+// It still runs on Ruby and under wasmtime in CI, and still converts here.
 dewasm_test_helper::cruby_packed_hello_e2e!(Python, ultra);
-// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases.
+// It converts the interpreter, then interprets the cowsay guest.
 dewasm_test_helper::toywasm_cowsay_e2e!(Python, PYTHON_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Python, PYTHON_WASM3_GLUE);
@@ -668,7 +722,10 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Python, PYTHON_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Python, PYTHON_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Python, PYTHON_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Python, PYTHON_TREESITTER_PARSE);
-// Ultra-slow category (issue #139): compiling the zeroperl reactor's generated module costs host-CPython memory, the criterion that put the packed-CRuby case here (issue #126), and these would run on concurrent threads next to it.
+// Ultra-slow category (issue #139).
+// Compiling the zeroperl reactor's generated module costs host-CPython memory.
+// That is the criterion that put the packed-CRuby case here (issue #126).
+// These cases would also run on concurrent threads next to it.
 // Memory, not the clock, is what puts the eval case here; the two share the one oversized module.
 dewasm_test_helper::zeroperl_eval_e2e!(Python, PYTHON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Python, PYTHON_EXIFTOOL, ultra);

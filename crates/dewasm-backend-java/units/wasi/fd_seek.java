@@ -29,8 +29,9 @@ int wasi_fd_seek(int fd, long offset, int whence, int outPtr) {
             default:
                 return WASI_INVAL;
         }
-        // A resulting offset before byte 0 is EINVAL, not an I/O error
-        // (FileChannel.position would raise IllegalArgumentException); seeking past the end is allowed.
+        // A resulting offset before byte 0 is EINVAL, not an I/O error.
+        // FileChannel.position would raise IllegalArgumentException for it.
+        // Seeking past the end is allowed.
         // Check explicitly so the errno is precise.
         if (pos < 0) {
             return WASI_INVAL;

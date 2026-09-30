@@ -35,7 +35,9 @@ module SQLite3
         end
       @readonly = (flags & Constants::Open::READONLY) != 0
 
-      # The wasm guest sees the host filesystem 1:1 (the driver preopens "/"), but its cwd is not the Ruby process's cwd: absolutize relative paths so both agree on where the database lives.
+      # The wasm guest sees the host filesystem 1:1 (the driver preopens "/").
+      # But its cwd is not the Ruby process's cwd.
+      # So absolutize relative paths, and both agree on where the database lives.
       @path =
         if file.empty? || file == ":memory:" || file.start_with?("file:")
           file
@@ -49,7 +51,8 @@ module SQLite3
       if options[:extensions] && !Array(options[:extensions]).empty?
         raise NotImplementedError, "sqlite extensions are not supported by the dewasm shim"
       end
-      # `strict:` (double-quoted-string rejection) needs sqlite3_db_config, a varargs API we don't export; ignore it rather than fail closed.
+      # `strict:` (double-quoted-string rejection) needs sqlite3_db_config.
+      # That is a varargs API we don't export; ignore it rather than fail closed.
 
       if block
         begin
@@ -200,8 +203,10 @@ module SQLite3
     end
     alias busy_timeout= busy_timeout
 
-    # The real gem implements this as a Ruby busy_handler retry loop; a guest->host callback is not available here, so sqlite's built-in timeout handler stands in: same observable outcome (SQLITE_BUSY after
-    # ~ms milliseconds → BusyException → ActiveRecord::StatementTimeout).
+    # The real gem implements this as a Ruby busy_handler retry loop.
+    # A guest->host callback is not available here, so sqlite's built-in timeout handler stands in.
+    # The observable outcome is the same:
+    # SQLITE_BUSY after ~ms milliseconds → BusyException → ActiveRecord::StatementTimeout.
     def busy_handler_timeout=(ms)
       busy_timeout(ms)
     end

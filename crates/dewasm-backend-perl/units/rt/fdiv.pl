@@ -1,8 +1,11 @@
 # requires: rt/quiet_nan, rt/f64_bits, rt/f64_from_bits
-# Perl dies on float division by zero, so IEEE division goes through a helper (wasm requires inf/nan there, never an error).
-# A NaN dividend must come out quiet (arithmetic-NaN result), and the zero-divisor shortcut skips the hardware division that would quiet it.
-# The nonzero path needs Rt::fadd's integer-fast-path countermeasures too (measured): the pack 'd' round-trip for exact even divisions beyond 2^53, and the sign
-# XOR for zero (including underflowed) quotients.
+# Perl dies on float division by zero, so IEEE division goes through a helper.
+# Wasm requires inf/nan there, never an error.
+# A NaN dividend must come out quiet (arithmetic-NaN result).
+# The zero-divisor shortcut skips the hardware division that would quiet it.
+# The nonzero path needs Rt::fadd's integer-fast-path countermeasures too (measured):
+# - the pack 'd' round-trip for exact even divisions beyond 2^53;
+# - the sign XOR for zero (including underflowed) quotients.
 sub fdiv {
     my ($a, $b) = @_;
     if ($b != 0.0) {

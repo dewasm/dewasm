@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build (if needed) and run the NES frontend, forwarding any arguments (e.g. a
-# ROM path, or `./run.sh --smoke` for the headless self-check).
-# A codon-built binary links Codon's runtime dylibs (libcodonrt, libomp) relative to the toolchain, so its lib/codon directory has to be on the loader path (docs/backends/codon.md).
+# Build (if needed) and run the NES frontend, forwarding any arguments.
+# An example is a ROM path, or `./run.sh --smoke` for the headless self-check.
+# A codon-built binary links Codon's runtime dylibs (libcodonrt, libomp) relative to the toolchain.
+# So its lib/codon directory has to be on the loader path (docs/backends/codon.md).
 set -euo pipefail
 cd "$(dirname "$0")"
 

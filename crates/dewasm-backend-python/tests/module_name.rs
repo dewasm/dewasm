@@ -1,4 +1,8 @@
-//! The module-name policy for Python: a library name is one identifier taken verbatim (and carried into the `<Class>Rt` runtime name), an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program`.
+//! The module-name policy for Python:
+//! - A library name is one identifier taken verbatim.
+//!   It is carried into the `<Class>Rt` runtime name.
+//! - An invalid one is a conversion-time error.
+//! - Standalone output ignores the name for a fixed `Program`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_python::{find_python, PythonBackend};
@@ -17,7 +21,8 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["class Program"],
 );
 
-/// A name is used exactly as given (no capitalization, no case folding), and the per-artifact runtime is named after it.
+/// A name is used exactly as given (no capitalization, no case folding).
+/// The per-artifact runtime is named after it.
 #[test]
 fn library_name_is_verbatim_and_runs() {
     let source = convert("sqlite3", Mode::Library).expect("convert");

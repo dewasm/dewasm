@@ -8,7 +8,8 @@ sub wasi_path_open {
     my $follow = ($dirflags & 0x1) != 0;  # lookupflags::SYMLINK_FOLLOW
     my ($host, $err) = $self->resolve_path($dirfd, $rel, $follow);
     return $err if defined $err;
-    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir fd that dropped it can no longer open beneath itself.
+    # The dirfd must itself carry PATH_OPEN.
+    # A rights-narrowed dir fd that dropped it can no longer open beneath itself.
     return ERRNO_NOTCAPABLE unless $self->{meta}{$dirfd}[0] & RIGHTS_PATH_OPEN;
     # OFLAGS_TRUNC needs the PATH_FILESTAT_SET_SIZE right on the dirfd.
     if (($oflags & 0x8) && !($self->{meta}{$dirfd}[0] & RIGHTS_PATH_FILESTAT_SET_SIZE)) {
@@ -24,8 +25,8 @@ sub wasi_path_open {
     $flags |= Fcntl::O_CREAT() if $oflags & 0x1;  # oflags::CREAT
     $flags |= Fcntl::O_EXCL() if $oflags & 0x4;  # oflags::EXCL
     $flags |= Fcntl::O_TRUNC() if $oflags & 0x8;  # oflags::TRUNC
-    # O_CREAT must not create through a trailing slash (issue #42); per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open
-    # ENOENT.
+    # O_CREAT must not create through a trailing slash (issue #42).
+    # Per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
     if (substr($host, -1) eq '/' && !lstat(substr($host, 0, -1))) {
         return ERRNO_NOENT unless $oflags & 0x1;  # no oflags::CREAT
         return $^O eq 'darwin' ? ERRNO_INVAL : ERRNO_ISDIR;
@@ -47,7 +48,9 @@ sub wasi_path_open {
         $base = $fs_rights_base & $self->{meta}{$dirfd}[1] & DIR_RIGHTS_BASE;
         $inheriting = $fs_rights_inheriting & $self->{meta}{$dirfd}[1] & DIR_RIGHTS_INHERITING;
     } else {
-        # Unbuffered by construction: every access goes through sysread/ syswrite/sysseek, so pread/pwrite emulation stays coherent with read/write/seek: sqlite mixes both on one fd.
+        # Unbuffered by construction: every access goes through sysread/syswrite/sysseek.
+        # So pread/pwrite emulation stays coherent with read/write/seek.
+        # sqlite mixes both on one fd.
         binmode($fh);
         $self->{fds}{$self->{next_fd}} = { fh => $fh, path => $host };
         $base = $fs_rights_base & $self->{meta}{$dirfd}[1] & FILE_RIGHTS_BASE;

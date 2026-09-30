@@ -1,12 +1,22 @@
-//! Codon side of the shared spec harness: converts each module with the Codon backend, phrases every assertion as a Codon thunk plus a `check*` helper call, assembles one self-contained program per `.wast` file, and `codon build`s + runs it.
+//! Codon side of the shared spec harness.
+//! It converts each module with the Codon backend.
+//! It phrases every assertion as a Codon thunk plus a `check*` helper call.
+//! It assembles one self-contained program per `.wast` file, and `codon build`s + runs it.
 //! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Builds are debug (see tests/common).
 //!
 //! Codon facts that shape the phrasing:
-//! - Codon is statically typed with no dynamic `invoke`, so each generated class carries a boxed `invoke(name, List[Val]) -> List[Val]` / `global_get(name) -> List[Val]` dispatcher, and the harness compares boxed results bit-exactly through `Rt.f32_bits`/`Rt.f64_bits`.
-//! - Assertions live in named thunks (`def _tN(): ...`) rather than one flat run: a single module-level run of thousands of statements would form the megafunction shape whose `-release` compile time is superlinear.
-//! - A runaway recursion overflows the native stack fatally (uncatchable), so the spec build instruments every generated function with a recursion guard that turns exhaustion into a catchable "call stack exhausted" trap.
+//! - Codon is statically typed with no dynamic `invoke`.
+//!   So each generated class carries a boxed `invoke(name, List[Val]) -> List[Val]` dispatcher.
+//!   It also carries a boxed `global_get(name) -> List[Val]` dispatcher.
+//!   The harness compares boxed results bit-exactly through `Rt.f32_bits`/`Rt.f64_bits`.
+//! - Assertions live in named thunks (`def _tN(): ...`) rather than one flat run.
+//!   A single module-level run of thousands of statements would form the megafunction shape.
+//!   That shape's `-release` compile time is superlinear.
+//! - A runaway recursion overflows the native stack fatally (uncatchable).
+//!   So the spec build instruments every generated function with a recursion guard.
+//!   The guard turns exhaustion into a catchable "call stack exhausted" trap.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -24,11 +34,21 @@ use wast::{WastArg, WastRet};
 
 mod common;
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution.
+/// The file still runs, so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: import resolution checks the kind, a function's structural signature (the `Extern.fn_ty` key) and a global's value type (the typed `Extern` field), but not a global's mutability, a table/memory's min/max limits, nor a tag's parameter types (a tag is an identity object carrying no type at all).
-///   Every `assert_unlinkable` case testing one of those stays a known gap; the counts match the Go backend's, whose type assertion covers the same surface.
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also uses `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
+/// - `import-limits`: import resolution checks the kind and a function's structural signature.
+///   The signature is the `Extern.fn_ty` key.
+///   It also checks a global's value type (the typed `Extern` field).
+///   It does not check a global's mutability or a table/memory's min/max limits.
+///   Nor does it check a tag's parameter types.
+///   A tag is an identity object carrying no type at all.
+///   Every `assert_unlinkable` case testing one of those stays a known gap.
+///   The counts match the Go backend's, whose type assertion covers the same surface.
+/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
+///   That feature is multi-memory, inside a module that also uses `register`.
+///   That module never converts.
+///   So a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 34, "import-limits"),
@@ -52,9 +72,20 @@ const FAST_SPEC_FILES: &[&str] = &[
     "traps",
 ];
 
-/// What `slow_test` adds on top of [`FAST_SPEC_FILES`] (the union is built in `curated_files`, so the slow category is a superset by construction): the files covering this backend's own risk areas, sized by measured fresh-build cost.
-/// Native unsigned arithmetic (`i32`/`i64`), the float conversion and bit paths (`conversions`/`f32_bitwise`), funcref tables and the element literal (`elem`/`call_indirect`), bulk memory (`memory_fill`), globals, and the boxed import boundary with its failure-ledger rows (`imports`).
-/// The float arithmetic files (`f32`/`f64`) and `memory_copy` (the memmove overlap coverage) measured as the three heaviest builds in the suite and run only in the ultra sweep; `memory_grow` is multi-memory-first upstream, so nearly all of it skips and it covers nothing here.
+/// What `slow_test` adds on top of [`FAST_SPEC_FILES`].
+/// The union is built in `curated_files`, so the slow category is a superset by construction.
+/// The added files cover this backend's own risk areas, sized by measured fresh-build cost:
+/// - native unsigned arithmetic (`i32`/`i64`);
+/// - the float conversion and bit paths (`conversions`/`f32_bitwise`);
+/// - funcref tables and the element literal (`elem`/`call_indirect`);
+/// - bulk memory (`memory_fill`), and globals;
+/// - the boxed import boundary with its failure-ledger rows (`imports`).
+///
+/// The float arithmetic files (`f32`/`f64`) and `memory_copy` run only in the ultra sweep.
+/// `memory_copy` is the memmove overlap coverage.
+/// Those three measured as the heaviest builds in the suite.
+/// `memory_grow` is multi-memory-first upstream, so nearly all of it skips.
+/// It covers nothing here.
 const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
     "call_indirect",
     "conversions",
@@ -67,7 +98,8 @@ const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
     "memory_fill",
 ];
 
-/// Thunk names must be unique per assembled file; a process-wide counter is unique across every file, which is enough.
+/// Thunk names must be unique per assembled file.
+/// A process-wide counter is unique across every file, which is enough.
 static THUNK: AtomicU64 = AtomicU64::new(0);
 
 fn thunk_name() -> String {
@@ -85,7 +117,9 @@ impl BackendUnderTest for CodonSpec {
         &CodonBackend
     }
 
-    /// Compile `source` to the crate's shared cache binary (identical programs build once; debug by default, see tests/common) and run it with the Codon runtime dylibs on the loader path.
+    /// Compile `source` to the crate's shared cache binary; identical programs build once.
+    /// Then run it with the Codon runtime dylibs on the loader path.
+    /// The build is debug by default (see tests/common).
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match common::build_codon(source) {
             Err(build) => build,
@@ -182,7 +216,8 @@ fn null_exn(hty: &HeapType<'_>) -> Option<String> {
     }
 }
 
-/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance's `exports` dict doubles as an import source.
+/// `_spectest`, plus any currently-`register`ed instances merged in under their registered name.
+/// Each instance's `exports` dict doubles as an import source.
 fn imports_expr(registered: &[(String, String)]) -> String {
     let mut entries = vec!["\"spectest\": _spectest".to_string()];
     for (name, var) in registered {
@@ -196,7 +231,12 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
         EXPECTED_FAILURES
     }
 
-    /// Codon compiles each `.wast` file to one program, so the category sizes are set by compile latency, not run time: a plain `cargo test` (the pull-request category) runs [`FAST_SPEC_FILES`], `--features slow_test` (CI's main-branch run) adds [`SLOW_EXTRA_SPEC_FILES`] and the exception-handling and tail-call files, and the full testsuite runs only under `--features ultra_slow_test`.
+    /// Codon compiles each `.wast` file to one program.
+    /// So compile latency sets the category sizes, not run time:
+    /// - a plain `cargo test` (the pull-request category) runs [`FAST_SPEC_FILES`];
+    /// - `--features slow_test` (CI's main-branch run) adds [`SLOW_EXTRA_SPEC_FILES`];
+    ///   it also adds the exception-handling and tail-call files;
+    /// - the full testsuite runs only under `--features ultra_slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         if cfg!(feature = "ultra_slow_test") {
             None
@@ -228,7 +268,8 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE), not necessarily by the converted module itself.
+            // Referenced by the _spectest fixture (PREAMBLE).
+            // The converted module itself does not necessarily reference it.
             "ext/extern",
             "global/_class",
             "table/_class",
@@ -404,7 +445,8 @@ impl dewasm_test_helper::SpecBackend for CodonSpec {
 }
 
 /// Harness helpers + the `spectest` host fixture.
-/// `_rt_stack` is the recursion guard's shared counter (referenced only by spec-build generated functions).
+/// `_rt_stack` is the recursion guard's shared counter.
+/// Only spec-build generated functions reference it.
 const PREAMBLE: &str = r#"_rt_stack = 0
 _pass = 0
 _fail = 0

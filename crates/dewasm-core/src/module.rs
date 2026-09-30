@@ -17,7 +17,8 @@ use crate::ir;
 /// Defaults reproduce [`build_module`] exactly, so every existing call site is byte-identical.
 #[derive(Debug, Default, Clone)]
 pub struct BuildOptions {
-    /// Parse `.debug_*` custom sections and emit [`ir::Stmt::SourceLine`] markers at source-line change points.
+    /// Parse `.debug_*` custom sections.
+    /// Emit [`ir::Stmt::SourceLine`] markers at source-line change points.
     /// Off by default.
     pub debug_line: bool,
 }
@@ -26,9 +27,19 @@ pub(crate) fn unsupported(feature: Feature, detail: impl Into<String>) -> anyhow
     UnsupportedError::new(feature, detail).into()
 }
 
-/// Wasm feature set accepted by the core converter: Wasm 1.0 plus the universally-emitted baseline (sign-extension, saturating truncation, multi-value, bulk memory) plus exception handling and tail calls.
-/// The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*: LLVM toolchains emit overlong `call_indirect` immediates when the reference-types target feature is on, so real wasip1 binaries only validate with the bit, but every actual reference-types construct is rejected during IR building.
-/// `LEGACY_EXCEPTIONS` stays off: the retired `try`/`catch`/`rethrow`/`delegate` encoding is refused at validation, so only the `try_table` design reaches the IR.
+/// Wasm feature set accepted by the core converter.
+/// It is Wasm 1.0 plus the universally-emitted baseline plus exception handling and tail calls.
+/// The baseline is sign-extension, saturating truncation, multi-value, and bulk memory.
+///
+/// The `REFERENCE_TYPES` bit is kept purely as an *encoding relaxation*.
+/// Under the reference-types target feature, LLVM emits overlong `call_indirect` immediates.
+/// So real wasip1 binaries only validate with the bit.
+/// Every actual reference-types construct is still rejected during IR building.
+///
+/// `LEGACY_EXCEPTIONS` stays off.
+/// The retired `try`/`catch`/`rethrow`/`delegate` encoding is refused at validation.
+/// So only the `try_table` design reaches the IR.
+///
 /// Whether a specific backend lowers a construct is its own declaration (`check_module_support`).
 pub fn features() -> WasmFeatures {
     WasmFeatures::WASM1
@@ -42,7 +53,8 @@ pub fn features() -> WasmFeatures {
 }
 
 /// Whether `bytes` is a component-model binary (layer 1) rather than a core module (layer 0).
-/// Core modules carry version 1 / layer 0 in bytes 4..8; components use layer 1 (`[.., 0x01, 0x00]`).
+/// Core modules carry version 1 / layer 0 in bytes 4..8.
+/// Components use layer 1 (`[.., 0x01, 0x00]`).
 /// Used to reject components with a clear error.
 pub fn is_component(bytes: &[u8]) -> bool {
     bytes.len() >= 8 && bytes[0..4] == *b"\0asm" && bytes[6..8] == [0x01, 0x00]
@@ -52,7 +64,9 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
     build_module_with_options(bytes, &BuildOptions::default())
 }
 
-/// Build the line table in a pre-pass of its own, because `.debug_line` custom sections normally appear *after* the code section: the table must exist before any function body is translated.
+/// Build the line table in a pre-pass of its own.
+/// `.debug_line` custom sections normally appear *after* the code section.
+/// The table must exist before any function body is translated.
 fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
     let mut debug_sections: HashMap<String, Vec<u8>> = HashMap::new();
     let mut code_section_start: u64 = 0;
@@ -72,7 +86,8 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
 
 pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result<ir::Module> {
     if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
-        // Attribute the refusal to the proposals whose validator features would make the module validate; an empty feature list means "newer than this toolchain knows".
+        // Attribute the refusal to the proposals whose validator features make the module validate.
+        // An empty feature list means "newer than this toolchain knows".
         let needed = classify_validation_failure(bytes).unwrap_or_default();
         return Err(anyhow::Error::new(UnsupportedError {
             features: needed,
@@ -349,13 +364,16 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
     }
 
     // Collapse runs of adjacent active data segments into single blobs.
-    // Semantics-preserving and unconditional: every backend emits one initializer per active segment, so the reduction composes downstream.
+    // Semantics-preserving and unconditional.
+    // Every backend emits one initializer per active segment, so the reduction composes downstream.
     crate::data_merge::merge_adjacent_data_segments(&mut module);
 
     Ok(module)
 }
 
-/// Find the minimal set of known proposals that makes `bytes` validate, or `None` if even all of them do not suffice (the module is newer than this toolchain, or genuinely malformed).
+/// Find the minimal set of known proposals that makes `bytes` validate.
+/// Return `None` if even all of them do not suffice.
+/// Then the module is newer than this toolchain, or malformed.
 fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
     let candidates: Vec<Feature> = Feature::ALL
         .iter()
@@ -385,9 +403,11 @@ fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
     Some(active)
 }
 
-/// Map a wasm value type (as it appears in signatures, locals, globals, and block types) to the IR.
-/// `exnref` is the one reference type legal here: `catch_ref` hands a caught exception to ordinary locals, temps, and block types.
-/// The reference-types hierarchies are not: funcref stays representable only via `table_elem_type` for a table's element typing.
+/// Map a wasm value type to the IR, as it appears in signatures, locals, globals, and block types.
+/// `exnref` is the one reference type legal here.
+/// `catch_ref` hands a caught exception to ordinary locals, temps, and block types.
+/// The reference-types hierarchies are not legal here.
+/// funcref stays representable only via `table_elem_type` for a table's element typing.
 pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     Ok(match ty {
         wasmparser::ValType::I32 => ir::ValType::I32,
@@ -412,7 +432,8 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
 }
 
 /// Map a table's element type to the IR.
-/// Only funcref tables are supported; externref (and every other reference type) is rejected with the proposal that introduced it.
+/// Only funcref tables are supported.
+/// externref (and every other reference type) is rejected with the proposal that introduced it.
 pub(crate) fn table_elem_type(r: &wasmparser::RefType) -> Result<ir::ValType> {
     if *r == wasmparser::RefType::FUNCREF {
         return Ok(ir::ValType::FuncRef);
@@ -428,7 +449,8 @@ pub(crate) fn table_elem_type(r: &wasmparser::RefType) -> Result<ir::ValType> {
 pub(crate) fn heap_type_feature(hty: &wasmparser::HeapType) -> Feature {
     use wasmparser::AbstractHeapType as A;
     match hty {
-        // Non-nullable/exact forms of these reach here (the nullable ones are handled before); those come from typed function references.
+        // Non-nullable/exact forms of these reach here; the nullable ones are handled before.
+        // Those forms come from typed function references.
         wasmparser::HeapType::Abstract {
             ty: A::Func | A::Extern,
             ..
@@ -444,8 +466,12 @@ pub(crate) fn heap_type_feature(hty: &wasmparser::HeapType) -> Feature {
     }
 }
 
-/// Evaluate a constant expression: a plain constant, or (MVP rule) a `global.get` of an imported immutable global: the validator already enforces that constraint, so the index is used as-is.
-/// Reference constants only appear in element items (`elem_item_expr`); a global whose init is a reference constant is rejected earlier by `val_type` refusing its ref-typed content type.
+/// Evaluate a constant expression.
+/// It is a plain constant, or (MVP rule) a `global.get` of an imported immutable global.
+/// The validator already enforces that constraint, so the index is used as-is.
+/// Reference constants only appear in element items (`elem_item_expr`).
+/// A global whose init is a reference constant is rejected earlier.
+/// There `val_type` refuses its ref-typed content type.
 fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {
@@ -470,8 +496,11 @@ fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
     )
 }
 
-/// One item of an expression-encoded element segment: `ref.func $i`, `ref.null` (an intentionally-empty slot), or `global.get $i` of a ref-typed immutable global.
-/// Anything else comes from extended constant expressions (or a proposal the validator would have refused first).
+/// One item of an expression-encoded element segment.
+/// It is `ref.func $i`, `ref.null` (an intentionally-empty slot), or `global.get $i`.
+/// The `global.get $i` must be of a ref-typed immutable global.
+/// Anything else comes from extended constant expressions.
+/// Or it comes from a proposal the validator would have refused first.
 fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<ir::ElemItem> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {

@@ -1,26 +1,37 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Interactive terminal frontend for the dewasm-generated DOOM library
-# (doom_gen.rb, produced from jacobenget/doom.wasm by build.sh).
-# Instead of a pixel window (see ../go, ../java) this renders into any ANSI truecolor terminal with half-block characters: the Ruby backend only manages
-# ~15 ticks/sec under YJIT, far below what a GUI needs but plenty for a terminal, which has orders of magnitude fewer cells to redraw than a window has pixels.
+# Interactive terminal frontend for the dewasm-generated DOOM library.
+# build.sh produces that library (doom_gen.rb) from jacobenget/doom.wasm.
+# Instead of a pixel window (see ../go, ../java), this renders into any ANSI truecolor terminal.
+# It uses half-block characters.
+# The Ruby backend only manages ~15 ticks/sec under YJIT, far below what a GUI needs.
+# But that is plenty for a terminal.
+# A terminal has orders of magnitude fewer cells to redraw than a window has pixels.
 #
-# Run with --smoke for a headless self-check (no tty needed): it inits the game, ticks it 60 times, measures tick rate and render cost, and writes the final frame to screenshot.ppm.
+# Run with --smoke for a headless self-check (no tty needed).
+# It inits the game, ticks it 60 times, and measures tick rate and render cost.
+# Then it writes the final frame to screenshot.ppm.
 
 require_relative "doom_gen"
 require "io/console"
 
 SAVE_DIR = ".savegame"
-# Terminals deliver only key *presses*, so a press is held "down" for this long after the last matching press/autorepeat before synthesizing the release; comfortably above a terminal's own autorepeat interval.
+# Terminals deliver only key *presses*.
+# So a press is held "down" for this long after the last matching press/autorepeat.
+# Then the release is synthesized.
+# The hold is comfortably above a terminal's own autorepeat interval.
 KEY_HOLD_SECONDS = 0.18
 
 def save_game_path(id)
   File.join(SAVE_DIR, "doomsav#{id}.dsg")
 end
 
-# Wires the wasm module's ten host imports to Ruby.
-# `doom_holder` exists because these closures have to be built before Doom.new returns the instance they read memory from; it's filled in immediately after construction and only read from within calls the imports themselves receive later (never during Doom.new itself).
+# Connects the wasm module's ten host imports to Ruby.
+# `doom_holder` exists because these closures have to be built before Doom.new returns the instance.
+# The closures read memory from that instance.
+# `doom_holder` is filled in immediately after construction.
+# It is only read from within calls the imports themselves receive later, never during Doom.new.
 def build_imports(doom_holder, frame_state, suppress_info:)
   {
     "console" => {
@@ -28,7 +39,8 @@ def build_imports(doom_holder, frame_state, suppress_info:)
         warn doom_holder[0].memory.buffer.get_string(off, len)
       end,
       "onInfoMessage" => lambda do |off, len|
-        # Info messages would corrupt the ANSI frame while the alternate screen is active, so they're dropped in interactive mode;
+        # Info messages would corrupt the ANSI frame while the alternate screen is active.
+        # So they're dropped in interactive mode.
         # --smoke has no alternate screen and prints them normally.
         next if suppress_info
 
@@ -56,14 +68,17 @@ def build_imports(doom_holder, frame_state, suppress_info:)
       end,
     },
     "runtimeControl" => {
-      # Backs DOOM's internal 35Hz pacing, so it has to be a real monotonic clock (not a fake stepped one) or the game's notion of elapsed time would drift from how often we actually call tickGame.
+      # Backs DOOM's internal 35Hz pacing.
+      # So it has to be a real monotonic clock, not a fake stepped one.
+      # Otherwise the game's notion of elapsed time would drift from how often we call tickGame.
       "timeInMilliseconds" => lambda do
         Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)
       end,
     },
     "ui" => {
-      # Captured as one immediate bulk copy (IO::Buffer#get_string), not scanned pixel-by-pixel: a per-pixel wasm memory call here would be
-      # ~256k calls/frame and would dominate the whole tick budget.
+      # Captured as one immediate bulk copy (IO::Buffer#get_string), not scanned pixel-by-pixel.
+      # A per-pixel wasm memory call here would be ~256k calls/frame.
+      # That would dominate the whole tick budget.
       "drawFrame" => lambda do |buf_off|
         len = frame_state[:width] * frame_state[:height] * 4
         frame_state[:pixels] = doom_holder[0].memory.buffer.get_string(buf_off, len)
@@ -74,7 +89,9 @@ def build_imports(doom_holder, frame_state, suppress_info:)
         frame_state[:width] = w
         frame_state[:height] = h
       end,
-      # Leaving both output slots untouched (they arrive pre-zeroed) selects the wasm-embedded shareware WAD; supplying external WADs is out of scope for this frontend.
+      # Leaving both output slots untouched (they arrive pre-zeroed) selects the embedded WAD.
+      # That is the wasm-embedded shareware WAD.
+      # Supplying external WADs is out of scope for this frontend.
       "wadSizes" => lambda { |_num_off, _bytes_off| },
       "readWads" => lambda { |_dst_off, _lengths_off| },
     },
@@ -95,16 +112,23 @@ def key_map(doom)
     escape: doom.global_get("KEY_ESCAPE"),
     enter: doom.global_get("KEY_ENTER"),
     backspace: doom.global_get("KEY_BACKSPACE"),
-    # KEY_SHIFT/KEY_ALT exist as exports too, but Shift (run) and Alt have no terminal-deliverable equivalent, so they're never looked up here.
+    # KEY_SHIFT/KEY_ALT exist as exports too.
+    # But Shift (run) and Alt have no terminal-deliverable equivalent.
+    # So they're never looked up here.
   }
 end
 
-# Renders the framebuffer into ANSI half-block terminal cells: each character cell shows two vertically-stacked source pixels via "▀"
-# (foreground = top pixel, background = bottom pixel, both 24-bit truecolor
-# SGR).
-# This is the performance-sensitive part of this frontend, not the wasm execution, so it diffs against the previous frame's cell contents and its own idea of where the terminal's cursor already sits, and only emits an SGR code when a cell's color actually differs from the one before it: DOOM's software renderer is paletted, so most cells repeat exactly from one frame to the next.
+# Renders the framebuffer into ANSI half-block terminal cells.
+# Each character cell shows two vertically-stacked source pixels via "▀".
+# The foreground is the top pixel and the background the bottom pixel, both 24-bit truecolor SGR.
+# This is the performance-sensitive part of this frontend, not the wasm execution.
+# So it diffs against the previous frame's cell contents.
+# It also tracks its own idea of where the terminal's cursor already sits.
+# It only emits an SGR code when a cell's color actually differs from the one before it.
+# DOOM's software renderer is paletted, so most cells repeat exactly from one frame to the next.
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# It would then flicker with the game.
 STATUS_SGR = "\e[48;2;0;0;0m\e[38;2;255;255;255m"
 
 class Renderer
@@ -135,7 +159,9 @@ class Renderer
     @last_status = nil
   end
 
-  # Builds one frame's worth of escape sequences/characters as a single string; the caller is responsible for writing it (or, for --smoke, just timing how long this took and discarding it).
+  # Builds one frame's worth of escape sequences/characters as a single string.
+  # The caller is responsible for writing it.
+  # For --smoke, the caller just times how long this took and discards it.
   def render(pixels, frame_w, frame_h, status_text)
     buf = String.new(capacity: @cell_cols * @cell_rows * 4)
     @cell_rows.times do |cy|
@@ -174,7 +200,10 @@ class Renderer
       end
     end
     if status_text != @last_status
-      # Reset SGR first: otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active, making its background flicker with the game's own colors instead of staying the terminal default.
+      # Reset SGR first.
+      # Otherwise the status line inherits whichever fg/bg the last-drawn pixel cell left active.
+      # Its background would then flicker with the game's own colors.
+      # With the reset it stays the terminal default.
       buf << "\e[#{@cell_rows + 1};1H\e[0m#{STATUS_SGR}\e[K#{status_text}"
       @last_status = status_text
       @cursor_row = -1 # force the next painted cell to reposition: the cursor is now on the status line
@@ -185,8 +214,10 @@ class Renderer
   end
 end
 
-# Terminals deliver only key *presses*, never releases, so a press synthesizes both an immediate reportKeyDown and a reportKeyUp once
-# KEY_HOLD_SECONDS pass with no matching repeat (terminal autorepeat just resends the same bytes, which pushes the deadline back via #key_down).
+# Terminals deliver only key *presses*, never releases.
+# So a press synthesizes an immediate reportKeyDown.
+# It also synthesizes a reportKeyUp once KEY_HOLD_SECONDS pass with no matching repeat.
+# Terminal autorepeat just resends the same bytes, which pushes the deadline back via #key_down.
 class InputHandler
   ESCAPE_SEQUENCES = {
     "\e[A" => :up,
@@ -248,8 +279,9 @@ class InputHandler
         key_down(@keys.fetch(ESCAPE_SEQUENCES[seq]), now)
         @pending = @pending.byteslice(seq.bytesize..)
       else
-        # Not one of our known arrow sequences (e.g. an F-key or Home/End
-        # CSI sequence): drop just the ESC byte and reprocess the rest as ordinary bytes rather than losing them.
+        # Not one of our known arrow sequences (e.g. an F-key or Home/End CSI sequence).
+        # Drop just the ESC byte and reprocess the rest as ordinary bytes.
+        # That way they are not lost.
         @pending = @pending.byteslice(1..)
       end
       @esc_seen_at = nil
@@ -263,7 +295,8 @@ class InputHandler
     end
 
     if @pending == "\e" && @esc_seen_at
-      # Still a bare ESC on a second poll with no growth: a real Escape key press, not the start of a sequence still in flight.
+      # Still a bare ESC on a second poll with no growth: a real Escape key press.
+      # It is not the start of a sequence still in flight.
       key_down(@keys.fetch(:escape), now)
       @pending = "".b
       @esc_seen_at = nil
@@ -378,9 +411,10 @@ def run_smoke
     distinct[pixels.getbyte(o) | (pixels.getbyte(o + 1) << 8) | (pixels.getbyte(o + 2) << 16)] = true
   end
   puts "smoke: final frame is #{w}x#{h} with #{distinct.size} distinct colors"
-  # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors), so a healthy frame tops out in the low hundreds, not the thousands a truecolor renderer would produce.
-  # A degenerate frame
-  # (blank/solid) instead lands in the single digits.
+  # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
+  # So a healthy frame tops out in the low hundreds.
+  # A truecolor renderer would produce thousands.
+  # A degenerate frame (blank/solid) instead lands in the single digits.
   if distinct.size <= 50
     warn "smoke: FAIL: frame looks degenerate (too few distinct colors)"
     exit 1
@@ -391,7 +425,9 @@ def run_smoke
 end
 
 ENTER_ALT_SCREEN = "\e[?1049h\e[?25l\e[2J\e[H"
-# SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+# SGR reset first.
+# Otherwise the fixed status-line colors persist past leaving the alternate screen.
+# They would tint the shell prompt underneath.
 EXIT_ALT_SCREEN = "\e[0m\e[?25h\e[?1049l"
 
 def run_interactive
@@ -418,7 +454,9 @@ def run_interactive
     $stdout.flush
   end
   at_exit(&restore)
-  # Ctrl-C is handled explicitly as a byte in InputHandler because raw mode disables the terminal's own SIGINT generation; these traps are only a backstop for termination from outside (e.g. `kill`).
+  # Ctrl-C is handled explicitly as a byte in InputHandler.
+  # Raw mode disables the terminal's own SIGINT generation.
+  # These traps are only a backstop for termination from outside (e.g. `kill`).
   Signal.trap("INT") { restore.call; exit(0) }
   Signal.trap("TERM") { restore.call; exit(0) }
 

@@ -1,23 +1,37 @@
 ;; f64_alu: f64 add / mul / sqrt in a tight loop.
 ;;
-;; Every operation here is correctly rounded double arithmetic on every runtime, so the accumulated sum is bit-identical everywhere and the printed integer is a genuine oracle.
-;; The result is scaled by 1000 and truncated:
-;; printing the double itself would compare Ruby/Python/Perl/Go/Java float formatting rather than the arithmetic.
-;; The scaled sum stays inside i64 for any iteration count below roughly 1e12, well past anything runnable.
+;; Every operation here is correctly rounded double arithmetic on every runtime.
+;; So the accumulated sum is bit-identical everywhere, and the printed integer is a genuine oracle.
+;; The result is scaled by 1000 and truncated.
+;; Printing the double itself would compare Ruby/Python/Perl/Go/Java float formatting.
+;; It would not compare the arithmetic.
+;; The scaled sum stays inside i64 for any iteration count below roughly 1e12.
+;; That is well past anything runnable.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
-;; Duplicated verbatim in every hand-written microbenchmark so each
-;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;; Duplicated verbatim in every hand-written microbenchmark.
+;; So each .wat stays a standalone module that wat2wasm and dewasm can consume directly.
 ;;
 ;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
-;; It does
-;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
-;; Only args_sizes_get / args_get / fd_write / proc_exit are imported, and a body stays inside i32/i64/f64 except for the one axis its case exists to measure: f32 in f32_alu, exception handling in eh_throw and eh_try.
-;; That keeps every other case within reach of the pure-Ruby and pure-Python interpreters this suite compares, and a runner that cannot execute a case's axis is excluded for that case in the harness workload table, with the reason stated there.
+;; It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+;; The line is the decimal result followed by a newline.
+;; <iterations> = 0 does no work but still prints.
+;; That is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported.
+;; A body stays inside i32/i64/f64 except for the one axis its case exists to measure.
+;; That axis is f32 in f32_alu, and exception handling in eh_throw and eh_try.
+;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
+;; Those are the interpreters this suite compares.
+;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;; It starts at 0x1000 rather than at 0.
+;; wasm3 traps whenever a WASI out param is written to linear-memory address 0.
+;; The trap message is "out of bounds memory access".
+;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
+;; So the whole block is simply moved up out of wasm3's way:
 ;;
 ;; 0x1000   4  argc                     (args_sizes_get out param)
 ;; 0x1004   4  argv buffer size         (args_sizes_get out param)
@@ -44,7 +58,8 @@
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
   ;; Every argv problem lands here.
-  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
+  ;; The harness always passes exactly one argument.
+  ;; So anything else is a caller bug, not an input to guess at.
   (func $die
     (i32.store (i32.const 0x1400) (i32.const 0x1800))
     (i32.store (i32.const 0x1404) (i32.const 29))

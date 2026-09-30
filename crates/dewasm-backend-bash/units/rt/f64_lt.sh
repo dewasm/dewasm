@@ -1,4 +1,5 @@
-# The order key p >= 0 ? p : -(p & ABSM) collapses both zeros to 0 and linearizes the sign, matching IEEE order for all non-NaN patterns.
+# The order key p >= 0 ? p : -(p & ABSM) collapses both zeros to 0 and linearizes the sign.
+# The key then matches IEEE order for all non-NaN patterns.
 rt_f64_lt() {
   local a=$1 b=$2
   if (( (a & 0x7fffffffffffffff) > 0x7ff0000000000000 || (b & 0x7fffffffffffffff) > 0x7ff0000000000000 )); then

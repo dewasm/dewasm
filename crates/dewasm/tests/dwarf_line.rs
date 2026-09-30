@@ -1,9 +1,17 @@
 //! End-to-end coverage for `--dwarf-line` source back-mapping.
 //!
-//! Semantics-neutrality is the whole contract: the flag adds source-position markers (Go `//line`, Ruby comments) and changes nothing else.
-//! Each case converts the cached DWARF fixture both with and without the flag, then asserts (a) the flagged output actually carries fixture markers, (b) it renders and runs to the same stdout/exit as the plain output, and (c) stripping the marker lines from the flagged source yields the plain source byte-for-byte.
+//! Semantics-neutrality is the whole contract.
+//! The flag adds source-position markers (Go `//line`, Ruby comments) and changes nothing else.
+//! Each case converts the cached DWARF fixture both with and without the flag, then asserts:
 //!
-//! The Go case additionally pins the two `//line` gotchas: the directive is emitted at column 1 (Go honors it nowhere else) and never with a `line 0` (which `go build` rejects).
+//! - (a) the flagged output carries fixture markers;
+//! - (b) it renders and runs to the same stdout/exit as the plain output;
+//! - (c) stripping the marker lines from the flagged source yields a source equal to the plain one.
+//!
+//! The Go case additionally pins the two `//line` gotchas:
+//!
+//! - the directive is emitted at column 1, since Go honors it nowhere else;
+//! - it is never emitted with a `line 0`, which `go build` rejects.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -212,7 +220,10 @@ fn ruby_dwarf_line_markers_are_neutral_and_run() {
     assert_eq!((out_p, code_p), (out_d, code_d));
 }
 
-/// `--dwarf-line` is accepted by every target, whether it renders markers (Python, Perl, Codon) or drops them (Bash, Java): only that conversion succeeds is asserted here, marker content is the Go and Ruby cases' business.
+/// `--dwarf-line` is accepted by every target.
+/// That holds whether it renders markers (Python, Perl, Codon) or drops them (Bash, Java).
+/// Only that conversion succeeds is asserted here.
+/// Marker content is the Go and Ruby cases' business.
 #[test]
 fn dwarf_line_flag_is_accepted_by_all_targets() {
     for target in ["bash", "python", "perl", "java", "codon"] {

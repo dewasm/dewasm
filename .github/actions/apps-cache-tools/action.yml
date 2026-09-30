@@ -7,7 +7,8 @@ description: >
 runs:
   using: composite
   steps:
-    # Binaryen comes from the pinned upstream release, not apt, for the same reason the apps-cache job takes it from there.
+    # Binaryen comes from the pinned upstream release, not apt.
+    # The reason is the same as for the apps-cache job, which takes it from there too.
     - shell: bash
       run: |
         curl -sSfL -o /tmp/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz

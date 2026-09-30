@@ -1,6 +1,6 @@
 // memory.grow: returns the old size in pages, or -1 when unsatisfiable.
-// Byte size checked in long against the byte[] cap (32768 pages > max array);
-// allocation failure is also -1: wasm lets grow fail, never crash.
+// The byte size is checked in long against the byte[] cap (32768 pages > max array).
+// Allocation failure is also -1: wasm lets grow fail, never crash.
 int grow(int delta) {
     int old = size / 65536;
     long want = (long) old + (delta & 0xFFFFFFFFL);
@@ -9,7 +9,8 @@ int grow(int delta) {
     }
     int newSize = (int) (want * 65536);
     if (newSize > d.length) {
-        // Geometric capacity amortizes one-page grow loops; the new array is zero-initialized, so the pages becoming visible are zero (see at).
+        // Geometric capacity amortizes one-page grow loops.
+        // The new array is zero-initialized, so the pages becoming visible are zero (see at).
         long cap = Math.min((long) maxPages * 65536, Integer.MAX_VALUE);
         byte[] nd;
         try {

@@ -1,4 +1,8 @@
-//! The module-name policy for Ruby: library names are Ruby constant paths taken verbatim, a nested one defines its ancestors under a guard, an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program`.
+//! The module-name policy for Ruby:
+//! - Library names are Ruby constant paths taken verbatim.
+//! - A nested one defines its ancestors under a guard.
+//! - An invalid one is a conversion-time error.
+//! - Standalone output ignores the name for a fixed `Program`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_ruby::{find_ruby, RubyBackend};
@@ -39,7 +43,9 @@ fn nested_name_defines_its_ancestors_and_runs() {
     assert_eq!(run(&format!("{source}\n{glue}")), "5\n");
 }
 
-/// An ancestor that already exists (as a *class*, which `module Dewasm; end` could not reopen) is left alone by the guard, so the generated file loads next to it.
+/// An ancestor that already exists as a *class* is left alone by the guard.
+/// `module Dewasm; end` could not reopen such a class.
+/// So the generated file loads next to it.
 #[test]
 fn preexisting_class_ancestor_is_not_redefined() {
     let source = convert("Dewasm::Nested::Add", Mode::Library).expect("convert");

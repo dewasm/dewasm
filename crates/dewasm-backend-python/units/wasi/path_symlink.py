@@ -1,7 +1,8 @@
 # requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 def wasi_path_symlink(self, old_path_ptr, old_path_len, fd, new_path_ptr, new_path_len):
     target = self.memory.read_string(old_path_ptr, old_path_len).decode("utf-8", "surrogateescape")
-    # The symlink target is stored verbatim (never pre-resolved); containment is enforced when the link is later followed.
+    # The symlink target is stored verbatim (never pre-resolved).
+    # Containment is enforced when the link is later followed.
     # An absolute target can never be confined to the preopen, so it is rejected up front.
     if target.startswith("/"):
         return self.ERRNO_NOTCAPABLE
