@@ -85,7 +85,7 @@ The saving is source bytes, 5.6% of `sqlite3-shell` and 5.0% of `merman`.
 
 ## Rejected alternatives
 
-- **Keep the wasm spellings (the state before this decision).**
+- **Keep the wasm spellings (the current state).**
   4.07 MB of method-name bytes on `merman`, repeated in every future artifact.
 - **Readable short names** (`ld32`, `st8u`, …).
   Every character above the minimum repeats 433k times on `merman`, and buys nothing back.

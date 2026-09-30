@@ -88,8 +88,7 @@ It also names where Codon forced a different one.
   That mirrors what Go's type assertion checks.
   Import sources are plain `Dict[str, Dict[str, Extern]]`.
   An instance's `exports` dictionary fits in directly.
-  The dynamic backends accept any provider object that has the needed methods (decision 7).
-  Codon has no equivalent.
+  The duck-typed provider objects of the dynamic backends (decision 7) have no Codon equivalent.
   So the dictionary *is* the provider contract.
   Direct calls to defined functions stay native; only imports, exports, and `call_indirect` box.
 - **Codon resolves the declared types of nested-class fields and method signatures in definition order.**
@@ -100,8 +99,8 @@ It also names where Codon forced a different one.
   That is because the declared field types of `Extern` name types across every other scope.
   Those types are `Fn`, `Global`, `Table`, `Memory` and `Tag`.
 - **Memory is a raw `Ptr[byte]` with `@llvm` `align 1` loads and stores.**
-  Codon's `Ptr[T]` indexing would assume an address that is a multiple of the value's size.
-  The explicit `align 1` units make access at any address defined, and cost nothing on the target hosts.
+  Codon's `Ptr[T]` indexing would emit naturally aligned access.
+  The explicit `align 1` units make unaligned access defined, and cost nothing on the target hosts.
   Allocations are set to zero with `memset` (Codon's GC does not clear atomic allocations).
 - **The specification harness phrases each assertion as a named thunk.**
   **Specification builds carry the Go backend's recursion guard.**
@@ -125,7 +124,7 @@ It also names where Codon forced a different one.
 - **A CPython-compatible output dialect.**
   `UInt[N]`, `Ptr[byte]` and `@llvm` blocks do not run under `python3`.
   Keeping compatibility would give up exactly the native numerics and memory the target exists for.
-  An artifact readable by CPython remains the Python backend's product.
+  An artifact that is readable and runs on CPython remains the Python backend's product.
 - **Per-signature unboxed `call_indirect` dispatch (Go's typed-assertion shape).**
   Codon has no `any` to assert on, and no cast that narrows a type.
   So recovering a typed callable from an erased table slot has no direct spelling.

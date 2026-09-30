@@ -1,6 +1,7 @@
 # Decision 24: 0.1 Scope Reset (Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals)
 
-Status: **Accepted, 2026-07-25; changed by [decision 69](69-exception-handling-accepted-input.md), 2026-08-14.**
+Status: **Accepted, 2026-07-25.**
+[Decision 69](69-exception-handling-accepted-input.md) changed it on 2026-08-14.
 The feature-audit tool (`crates/dewasm-core/src/bin/feature-audit.rs`) and the removal have landed.
 Reference types, tail calls, and exception handling are removed.
 The component model and WASI Preview 2 are removed too.
@@ -17,7 +18,7 @@ Replaces:
 
 Revises the target-language plan of [decision 10](10-csharp-target.md).
 The criterion below for keeping a feature is unchanged.
-Later, `mruby` became a target app (decision 69).
+Later, `mruby` became an app at a fixed version (decision 69).
 The criterion's first condition then let exception handling back in.
 The "everything else stays out" list no longer includes exception handling.
 
@@ -51,7 +52,7 @@ IR variants, lowering, feature tests, runtime units, harness support, and docume
 Unsupported input keeps failing at conversion time with a clear error (decision 0).
 
 The app audit (`agents/apps-audit.md`) found one detail at the validation level.
-LLVM-based toolchains encode `call_indirect` immediates as LEBs longer than needed.
+LLVM-based toolchains encode `call_indirect` immediates as overlong LEBs.
 They do so when the reference-types *target feature* is on (their default).
 So real wasip1 binaries only validate with the reference-types feature bit enabled.
 That includes the already shipping `qjs` and sqlite3.
@@ -61,7 +62,7 @@ Those constructs are `externref`, table instructions, `ref.*`, and non-zero tabl
 
 The deciding criterion: **a feature stays only if one of two conditions holds.**
 
-- **A target app on the list needs it.**
+- **A target app at a fixed version needs it.**
 - **Every 0.1 backend is expected to implement it.**
 
 Code kept "just in case" is paid for in every exhaustive match, every new backend, and every reader.
@@ -79,7 +80,7 @@ The specification testsuite remains the correctness test (decision 3), not the g
 - a CPython or CRuby runtime binary;
 - a compression CLI.
 
-A **feature audit** (conversion-time feature report over each listed binary) runs before the removal.
+A **feature audit** (conversion-time feature report per fixed-version binary) runs before the removal.
 An app that needs a dropped feature is deferred with a written note in `agents/apps-audit.md`.
 It does not block the removal.
 `pandoc.wasm` is the expected first deferral.
@@ -107,11 +108,11 @@ Future work recorded, deliberately out of 0.1 scope:
 - **Keep Ruby's 2.0+ support as labels**: it is tested, working code.
   Removing it costs real work.
   It lost to the criterion above.
-  No listed app needs it, and no other 0.1 backend will implement it.
+  No target app at a fixed version needs it, and no other 0.1 backend will implement it.
   A five-backend project whose backends accept different inputs reintroduces uneven support.
   It is exactly the uneven support decision 23 tried to manage.
 - **Specification-coverage goals**: coverage numbers do not answer "what can I convert?"; apps do.
-  Each app fixes an exact WASI surface to implement.
+  Each app determines an exact WASI surface to implement.
   The specification testsuite stays as the test underneath.
 
 ## Consequences

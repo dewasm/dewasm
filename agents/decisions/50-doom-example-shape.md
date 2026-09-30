@@ -53,8 +53,8 @@ It is outside the `cargo test` speed categories ([decision 48](48-slow-test-spee
   It inverts the example: WASI has no display/input surface.
   So the interesting part would live in a shim written for this example only.
   Nothing would exercise `--mode library`'s host-import path, the thing this example exists to show.
-- **Per-language guest builds (e.g. Emscripten JS glue, TinyGo-side ports).**
-  It breaks the one-artifact claim that is the point of the example.
+- **Per-language guest builds (for example, Emscripten JS glue, TinyGo-side ports).**
+  It breaks the one-artifact claim that makes the example convincing.
   Every frontend would demonstrate a different binary.
 - **A uniform SDL binding layer in every language.**
   One rendering stack to learn, but it imports a C dependency into every language.

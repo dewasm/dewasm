@@ -2,9 +2,9 @@
 
 Status: **Accepted, 2026-09-30.**
 Landed: [`agents/vocabulary.md`](../vocabulary.md) holds the sources of allowed words and the excluded words.
-[`AGENTS.md`](../../AGENTS.md), that file, decision 98, and this record use only allowed words.
-`cargo test -p text-check` applies the lists to Markdown.
-The check leaves out a file written before them, until that file is rewritten.
+`cargo test -p text-check` applies the lists to every tracked Markdown file, and all of them pass.
+The pass in #341 rewrote the Markdown written before the lists.
+Comments in source code are not checked for vocabulary yet.
 
 ## Context
 

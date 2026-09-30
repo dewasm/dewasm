@@ -1,4 +1,4 @@
-# Decision 37: Optional Data Segments in a Separate File (`--data-file`)
+# Decision 37: Data Segments Moved to a Separate File on Request (`--data-file`)
 
 Status: **Accepted, 2026-07-28.**
 Implemented for the Ruby, Go, Python and Java backends behind the CLI's `--data-file` flag.
@@ -64,7 +64,7 @@ The process CWD is not used, since neither shape reliably answers it.
 So a backend can return raw binary alongside UTF-8 source.
 
 **Deciding rule:** a separate data file is a size/layout trade-off with no semantic content.
-So it is a *flag* set per run, never a default and never a backend capability flip.
+So it is a *flag* set on each conversion, never a default and never a backend capability flip.
 The generated program's behaviour is identical either way.
 The specification harness, which never sets the flag, still binds (decision 3).
 

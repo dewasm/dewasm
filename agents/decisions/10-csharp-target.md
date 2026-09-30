@@ -12,7 +12,7 @@ Java and C# are designed as one "managed static languages" pair.
 
 C# was missing from the original target list (the user pointed it out).
 It fits the decision 0 criterion.
-C# is a widely used language whose tools do not ship a wasm runtime by default.
+C# is a widely used language whose tools and libraries do not ship a wasm runtime by default.
 That holds in the places `dewasmify` targets.
 And no wasm→C# *source* converter exists.
 
@@ -41,7 +41,7 @@ A shared lowering-conventions decision for the pair is expected when that milest
 
 ## Consequences
 
-- The README target table and the plan of future work gain C#.
+- The README target table and the roadmap gain C#.
   The support matrix (`docs/support.md`) grows a column when the backend lands.
 - The Java/C# milestone produces one design and two emitters.
   It is a first test of how much backend machinery is reusable across similar languages.

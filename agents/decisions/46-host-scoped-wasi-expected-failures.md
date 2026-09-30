@@ -62,8 +62,7 @@ An entry that fails identically on both hosts stays in the base list.
 - CI on `ubuntu-latest` and local macOS runs both pass against one list declaration.
   Each host still checks the both-ways discipline for the entries that apply to it.
 - A scoped entry is only ever *verified* on its own host.
-  macOS entries are exercised locally, Linux entries only by CI.
-  On a Linux development host it is the reverse.
+  macOS entries are exercised locally and Linux entries only by CI, or the reverse.
   An out-of-date scoped entry therefore surfaces one environment later, not never.
 - New backends state host-dependent gaps where they belong.
   They do not paper over them with the flat list.

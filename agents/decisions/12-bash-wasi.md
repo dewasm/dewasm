@@ -12,13 +12,13 @@ The file system scope excluded here is replaced by [decision 34](34-bash-wasi-fi
 WASI needs three things Bash does not natively offer:
 
 - a non-local exit (`proc_exit`);
-- binary-safe standard input and output;
+- binary-safe stdio;
 - a source of random data and of time.
 
 All three must meet decision 5's dependency criterion and decision 11's status chain protocol.
 Decision 5's criterion means exactly a Bash interpreter, with no external commands.
 WASI units also need the per-module state prefix.
-But imports are bound as command names without a prefix.
+But imports are bound as command names alone, with no arguments added.
 
 ## Decision
 
@@ -29,7 +29,7 @@ But imports are bound as command names without a prefix.
   A sourced library surfaces it as `invoke`'s return status.
   The reusable rule: any non-local wasm exit is a reserved status code, never a Bash `exit`.
   The code passes up through the existing `|| return $?` chains.
-- **Binary-safe standard input and output is byte-wise through builtins.**
+- **Binary-safe stdio is byte-wise through builtins.**
   Writes collect memory bytes into an every-byte `'\\x%02x'` `printf` format.
   The format is NUL/%/`\` safe and must stay single-quoted.
   Reads use `IFS= LC_ALL=C read -r -d '' -n 1`.
@@ -41,7 +41,7 @@ But imports are bound as command names without a prefix.
   This is an accepted, documented deviation.
 - **Imports bind through per-module wrapper functions.**
   The wrapper form is `<p>imp_wasi_<name>() { <p>wasi_<name> <p> "$@"; }`.
-  It fixes the state prefix inside a plain command name, the form the import table expects.
+  It builds the state prefix into a command name alone, the form the import table expects.
   (Revision, [decision 62](62-embedded-runtime-isolation.md): the wrapper was `<p>wasi_<name>` calling the flat `wasi_<name>`.
   Once each artifact's runtime carries its own prefix, that name *is* the unit's.
   A wrapper of the same name would call itself.)
@@ -49,7 +49,7 @@ But imports are bound as command names without a prefix.
   State is per-prefix (`<p>wargs`, `<p>wenv`, `<p>wfds`, `<p>wtell`).
   Callers set the `WASI_ARGS`/`WASI_ENV` arrays before `<p>init`.
   The standalone main fills them from `$0`/`$@` and `compgen -e`.
-- **The file descriptor model covers standard input, output and error only**:
+- **The file descriptor model is stdio-only**:
   - file descriptors 0/1/2 preopened;
   - `fd_seek` answers ESPIPE;
   - `fd_tell` reports the byte counters `fd_read`/`fd_write` track;
@@ -63,15 +63,15 @@ But imports are bound as command names without a prefix.
   RANDOM is 15-bit and unseedable-weak.
 - **`od`/`dd`/`head` for binary I/O**: external commands, rejected by decision 5's criterion.
 - **A global current-instance variable instead of prefix wrappers.**
-  It breaks the moment calls to two instances mix.
+  It breaks the moment two instances interleave calls.
   The wrapper costs one function definition per bundled system call.
 
 ## Consequences
 
 - Positive: `hello.wat` runs standalone under Bash with the same standard output and exit code as Ruby.
   The decision 7 override/fallback semantics carry over (`crates/dewasm-backend-bash/tests/e2e.rs`).
-- Negative: byte-wise standard input and output is slow for large payloads.
-  Grouping bytes depends on decision 11's bulk-memory scaling work.
+- Negative: byte-wise stdio is slow for large payloads.
+  Batching depends on decision 11's bulk-memory scaling work.
   That work happens when real apps (after softfloat, decision 5) demand it.
 - Time from clock identifiers 1-3 can go backwards with the real-time fallback.
   Programs timing themselves may misbehave.

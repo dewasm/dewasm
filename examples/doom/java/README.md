@@ -1,12 +1,12 @@
 # DOOM (Java, Swing)
 
-An interactive DOOM frontend built on a pure-Java library.
-dewasm generated that library from [jacobenget/doom.wasm](https://github.com/jacobenget/doom.wasm).
+An interactive DOOM frontend built on a library written only in Java.
+dewasm generated that library from [`jacobenget/doom.wasm`](https://github.com/jacobenget/doom.wasm).
 The shareware WAD is embedded in the wasm module, so no game data files are needed.
 `Main.java` implements the module's tiny host interface with a Swing window.
-The interface covers console logging, save-game I/O, timing, and the framebuffer blit.
+The interface covers console logging, save-game I/O, timing, and the framebuffer copy.
 Each frame, a `BufferedImage` is filled from wasm linear memory and drawn scaled into the window.
-Keyboard input is queued from a `KeyListener`.
+Key input is collected from a `KeyListener`.
 The dedicated game thread that ticks DOOM drains it.
 
 Zero external dependencies: only the JDK (`javac`/`java`, AWT/Swing, NIO).

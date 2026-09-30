@@ -31,7 +31,7 @@ The Python file descriptor model differs only where the standard library forces 
 
 With this, `has_wasi_p1` reports the same surface as Ruby.
 The shared WASI `Fs` suite runs under Python.
-So do the `gzip` byte I/O case and the file-system-heavy app cases (QuickJS, SQLite, `ripgrep`).
+So do the `gzip` byte stdio case and the file-system-heavy app cases (QuickJS, SQLite, `ripgrep`).
 
 **Revision, 2026-07-29 (issue #31).**
 The recursion/exhaustion handling below is no longer harness-only.

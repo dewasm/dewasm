@@ -29,7 +29,7 @@ A negative count shifts the other way, and one that is too large shifts too far.
 So the decision 71 rule (elide under a modular consumer) does not apply.
 `shift_count_mode` implements the exact-value rule with three outcomes:
 
-- **Constant count**: fold at conversion time and emit the reduced value as a plain constant (`x << 2`).
+- **Constant count**: fold at conversion time and emit the reduced value with no reduction (`x << 2`).
   The width itself folds to 0 and still shifts, `x << 0`.
 - **Provably in-range count**: the interval bound proves the count's rendering sits in `0..width`.
   Then emit it with no reduction; this removes the doubled reduction above.
@@ -49,7 +49,7 @@ So no per-site reduction exists to fold.
 
 ## Rejected alternatives
 
-- **Keep every count reduction (the state before this decision).**
+- **Keep every count reduction (the current state).**
   Constant counts dominate, and their reduction is pure parse, size, and runtime overhead.
   Folding them is free and loses nothing.
 - **Fold constants only.**

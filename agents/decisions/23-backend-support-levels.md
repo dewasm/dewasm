@@ -1,6 +1,7 @@
 # Decision 23: Backend Support Maturity Levels, Specialized to Wasm 1.0 + WASI Preview 1
 
-Status: **Superseded by [decision 25](25-retire-support-levels.md), 2026-07-26.**
+Status: **Superseded (decision 25), 2026-07-26.**
+[Decision 25](25-retire-support-levels.md) replaced it.
 Originally accepted 2026-07-24 and implemented as described below.
 It is kept here as history of the maturity levels' design and reasons.
 Decision 25 removes the level machinery entirely.
@@ -78,7 +79,8 @@ It is the model for label-conditional cases once one exists.
 
 ## Rejected alternatives
 
-- **Include wasm 2.0+/CM in the scale** (e.g. Level 1 = "every feature dewasmify tracks, including CM").
+- **Include wasm 2.0+/CM in the scale.**
+  For example, Level 1 would be "every feature dewasmify tracks, including CM".
   Rejected: it ties Level 1 to the changes of WASI 0.3.
   It also ties Level 1 to proposals of uncertain adoption outside the Bytecode Alliance projects.
   It would implicitly commit every future backend to a CM port to reach the top level.
@@ -99,7 +101,7 @@ It is the model for label-conditional cases once one exists.
   Currently Ruby = Level 2 targeting Level 1.
   Bash = Level 3, its settled target.
   The core intended use case, running self-contained C/Rust CLI tools, is met there.
-  New backends have a concrete Level 2 list to check.
+  New backends have a concrete Level 2 checklist.
   They need not copy Ruby's full feature set.
 - Positive: e2e cases self-describe their requirement instead of being hand-conditional per language.
   A future language automatically inherits every case its level covers.

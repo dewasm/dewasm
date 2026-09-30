@@ -68,7 +68,7 @@ A trampoline, shaped so that no stack frame per step survives:
   Decision 17's slot pair carries an optional **third element**, the body method.
   `Gen::func_pair` adds it for tail-calling functions.
   `tail_ref` performs `call`'s exact trap sequence: undefined element, uninitialized, type mismatch.
-  It raises inside the caller's body, i.e. at the right point in execution order.
+  It raises inside the caller's body, that is, at the right point in execution order.
   It returns `slot[2] || slot[1]`.
   A pair from a non-tail-caller, or from another module instance, falls back to its public entry.
   That entry runs its *own* trampoline to completion.

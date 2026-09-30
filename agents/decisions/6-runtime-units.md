@@ -49,7 +49,7 @@ Two independent mechanisms:
 The declared-dependency drift risk (edit the code, forget the header) is reduced twice:
 
 - A lint test extracts references from unit bodies.
-  They are `Rt.x`, `Rt::X`, `@memory.x`, and calls to related units without a receiver.
+  They are `Rt.x`, `Rt::X`, `@memory.x`, and calls without a receiver to other units of the same scope.
   It checks them against the header.
   The test is a `#[cfg(test)] mod units` at the bottom of `crates/dewasm-backend-ruby/src/lib.rs`.
 - The specification harness runs its 19k assertions against minimal bundles.

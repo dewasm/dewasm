@@ -91,8 +91,8 @@ These three language facts drove the lowering shape.
   Once they are, a control-only flag needs no per-block dispatch.
   And `catch`/`throw`'s allocation cost turned out to dominate hot loops.)*
 - **`define_method` per export as the public API.**
-  Export names can equal `Object` method names and Ruby keywords.
-  A name-keyed hash plus `invoke` avoids that problem.
+  Export names collide with `Object` method names and Ruby keywords.
+  A name-keyed hash plus `invoke` is collision-free.
   Friendly named methods can be layered on later.
 
 ## Consequences

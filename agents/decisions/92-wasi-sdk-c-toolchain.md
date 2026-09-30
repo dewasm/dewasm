@@ -31,15 +31,15 @@ The project uses Zig purely as a packaging of Clang + `wasi-libc`, and that pack
 Its shipped `libsetjmp` takes `-mllvm -wasm-enable-sjlj -mllvm -wasm-use-legacy-eh=false`.
 Together they replace the `rt.c` local fix entirely.
 The SDK ships Clang and `wasi-libc` at fixed versions.
-They come as one packed file per platform, verified by checksum.
-CI already fixes the versions of Binaryen and `wasi-vfs` in the same way.
+They come as one tarball per platform, verified by checksum.
+CI already holds Binaryen and `wasi-vfs` at fixed versions in the same way.
 
 ## Decision
 
 **The C toolchain is chosen for the stability and controllability of its Clang + `wasi-libc` packaging.**
 **It is not chosen for ease of installation.**
 **A packaging may alter Clang behavior outside our control.**
-**Such a packaging loses to one whose version we fix explicitly.**
+**Such a packaging loses to one at a version we choose explicitly.**
 Concretely:
 
 - All locally-compiled modules build with `wasi-sdk` through `wasi_sdk_clang`.
@@ -47,7 +47,7 @@ Concretely:
   The `WASI_SDK_PATH` environment variable locates the SDK.
   A missing SDK fails loudly, naming the fixed version and the URL to fetch it from ([decision 15](15-tests-fail-not-skip.md)).
   How a developer installs it is deliberately their choice.
-  The repository fixes the version only where it installs the SDK itself (CI).
+  The repository names a fixed version only where it installs the SDK itself (CI).
   It also documents the version (`docs/testing.md`).
 - Every build passes `--no-wasm-opt`.
   Otherwise the `wasi-sdk` Clang driver runs a `wasm-opt` found on `PATH` over the linked module.
@@ -71,7 +71,7 @@ Concretely:
 - **Stay on Zig.**
   The 0.16 trap is one instance of a class of problems that repeats.
   The local fix depended on Zig internals.
-  The Zig installed by Homebrew drifts from the version CI fixes, without anyone choosing an update.
+  The Zig from Homebrew drifts from the version CI installs, without anyone choosing an update.
   Decision 22 was decided by ease of installation.
   That is worth less than a repeated maintenance cost on the EH fixture.
   The EH fixture is the one app whose build is hardest to debug.
@@ -93,7 +93,7 @@ Concretely:
   The hidden driver `wasm-opt` is turned off everywhere.
   So decision 39's constraints hold by construction.
 - Negative: installing the SDK is a manual step, where Zig was one Homebrew command.
-  The step is one packed file plus `WASI_SDK_PATH`.
+  The step is a tarball plus `WASI_SDK_PATH`.
   A future C app may need compatibility additions where `wasi-libc` leaves out headers `musl` carries.
 - Carry-over: no tool checks that the local and CI SDK versions match.
   Drift surfaces only as behavior differences, which the snapshot suites detect.

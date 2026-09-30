@@ -1,6 +1,7 @@
 # Decision 20: Component Model (Canonical-ABI Adapters Built as Core IR, Fixed Host Vocabulary)
 
-Status: **Superseded by [decision 24](24-01-scope-reset.md), 2026-07-26.**
+Status: **Superseded (decision 24), 2026-07-26.**
+[Decision 24](24-01-scope-reset.md) replaced it.
 Kept as a design record for a future restoration of this support.
 Git history plus this decision make the work cheap to bring back.
 The original status note and implementation pointers below are retained as history.
@@ -45,8 +46,7 @@ A D0 probe of a real Rust `wasm32-wasip2` binary fixed the required shape:
   - (b) per-language host units (decision 21);
   - (c) a wrapper emitter executing the plan.
 - **The host boundary is a fixed IR vocabulary.**
-  It is `ValType::Host` plus ~25 `Expr::Host*`/2 `Stmt::Host*` operations.
-  A `ValType::Host` is a host value the IR never looks inside.
+  It is `ValType::Host` (an opaque host value) plus ~25 `Expr::Host*`/2 `Stmt::Host*` operations.
   The operations cover:
   - string/bytes lift-store;
   - list `new`/`get`/`len`/`push`;

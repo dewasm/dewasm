@@ -1,10 +1,10 @@
 # Standalone runtime interface
 
 A program converted with `--mode standalone` is a self-contained CLI.
-The generated `main` supplies the WASI guest its argv, environment, and filesystem preopens.
+The generated `main` supplies the WASI guest its `argv`, environment, and file system preopens.
 It also translates the guest's exit/trap into a process exit code.
 That interface is uniform across every backend.
-It is modelled on wasmtime's CLI, so a converted program behaves like the `.wasm` it came from.
+It is modelled on Wasmtime's CLI, so a converted program behaves like the `.wasm` it came from.
 
 The guest runs as soon as the file is loaded.
 No `__main__`-style guard stands between loading the artifact and running it.
@@ -21,7 +21,7 @@ That name is therefore fixed:
 
 `--module-name` is a library-mode flag and is rejected together with `--mode standalone`.
 
-## Invocation
+## Command line
 
 ```
 <runner> <program> [--dir HOST::GUEST]... [--] [guest args...]
@@ -40,7 +40,7 @@ It hands everything after them to the guest as `argv[1..]`:
 
 `<runner>` is the per-backend way to launch the program (below).
 `--dir` is a shim parsed *inside the generated program*, not a flag of the interpreter.
-It therefore comes after `<program>`, whereas wasmtime consumes its own `--dir` before the `.wasm`.
+It therefore comes after `<program>`, whereas `wasmtime` consumes its own `--dir` before the `.wasm`.
 
 ### Per-backend runner lines
 
@@ -53,22 +53,22 @@ It therefore comes after `<program>`, whereas wasmtime consumes its own `--dir` 
 | Go | `go build -o prog prog.go` | `./prog [--dir H::G]... [args...]` |
 | Java | `javac Main.java` | `java Main [--dir H::G]... [args...]` |
 
-## argv, env, exit
+## `argv`, environment, exit
 
 | Aspect | Behavior |
 | --- | --- |
-| `argv[0]` | The program name, the basename of the invoked program file (`prog.rb`, `prog`, `prog.sh`, ...), matching `basename(wasm)` under wasmtime. **Java exception:** the JVM does not pass the launched file name to `main`, so Java uses the module class name, which in standalone mode is the fixed `Program`. |
+| `argv[0]` | The program name: the name of the program file as run, without its directory (`prog.rb`, `prog`, `prog.sh`, ...), matching `basename(wasm)` under Wasmtime. **Java exception:** the JVM does not pass the launched file name to `main`, so Java uses the module class name, which in standalone mode is the fixed `Program`. |
 | `argv[1..]` | The tokens left after `--dir` parsing, in order. |
-| env | The whole process environment passes through to the guest. |
+| Environment | The whole process environment passes through to the guest. |
 | `proc_exit(N)` | Process exits with code `N`. |
 | `_start` returns | Process exits `0`. |
-| trap | `trap: <message>` on stderr, process exits **134**. |
-| `--dir` with no argument | `--dir requires a HOST::GUEST argument` on stderr, process exits **1**. |
+| trap | `trap: <message>` on `stderr`, process exits **134**. |
+| `--dir` with no argument | `--dir requires a HOST::GUEST argument` on `stderr`, process exits **1**. |
 
 ## Bash `--dir`
 
-The Bash backend honors `--dir` with real WASI filesystem support.
-It reaches the same exit/trap surface as the other backends through its status-cascade protocol.
+The Bash backend honors `--dir` with real WASI file system support.
+It reaches the same exit/trap surface as the other backends through its status chain protocol.
 That protocol uses status 133 for `proc_exit` and 134 for a trap.
 
 ## Example
@@ -82,6 +82,6 @@ $ cat /tmp/work/hello.txt
 hello, wasi fs!
 ```
 
-Under wasmtime, `wasmtime run --dir /tmp/work::/ wasi_standalone_dir.wat` produces identical output.
-The shared `wasi_standalone_dir` e2e case runs the program on every filesystem backend.
-It also re-runs the program under wasmtime as ground truth.
+Under Wasmtime, `wasmtime run --dir /tmp/work::/ wasi_standalone_dir.wat` produces identical output.
+The shared `wasi_standalone_dir` e2e case runs the program on every file system backend.
+It also re-runs the program under Wasmtime as the reference.

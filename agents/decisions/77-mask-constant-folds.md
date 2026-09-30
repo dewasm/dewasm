@@ -120,5 +120,5 @@ That analysis costs too much for a comparison real code rarely writes.
   For the visibility, `bin_operand_context` takes the other operand.
   The interval analysis is otherwise decision 71's, and the limit judgement there is unchanged.
 - Rule 4's constant migration can emit a comparison constant outside `[0, 2^w)`.
-  An example is a negative raw value that wraps to the constant after a subtraction.
+  An example is a negative raw value that wraps to the original constant after a subtraction.
   That is the exact raw value, not a masked one, and correct by construction.

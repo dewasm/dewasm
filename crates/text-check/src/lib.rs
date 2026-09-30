@@ -263,37 +263,20 @@ mod tests {
         );
     }
 
-    /// Files written before the vocabulary rules, which the check skips until each is rewritten.
-    /// A listed file that already passes fails the check, so the list only shrinks.
-    const VOCABULARY_EXEMPT: &str = include_str!("vocabulary_exempt.txt");
-
     #[test]
     fn text_uses_the_vocabulary() {
         let root = repo_root();
         let vocabulary = vocabulary::Vocabulary::load(&root).unwrap_or_else(|e| panic!("{e}"));
-        let exempt: Vec<&str> = VOCABULARY_EXEMPT
-            .lines()
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        let mut report: Vec<String> = tracked_files(&root)
+            .iter()
+            .flat_map(|path| vocabulary.file_defects(&root, path))
             .collect();
-        let mut report = Vec::new();
-        let mut stale = Vec::new();
-        for path in tracked_files(&root) {
-            let found = vocabulary.file_defects(&root, &path);
-            if !exempt.contains(&path.as_str()) {
-                report.extend(found);
-            } else if found.is_empty() {
-                stale.push(path);
-            }
-        }
+        report.extend(vocabulary.table_defects());
         assert!(
             report.is_empty(),
-            "text uses words that agents/vocabulary.md does not allow:\n{}",
+            "text and agents/vocabulary.md disagree:\n{}\n\
+             Run `cargo xtask check-text <path>` to check a file again.",
             report.join("\n")
-        );
-        assert!(
-            stale.is_empty(),
-            "these files now pass; remove them from vocabulary_exempt.txt:\n{}",
-            stale.join("\n")
         );
     }
 

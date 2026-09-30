@@ -45,7 +45,7 @@ Split the top level by audience.
 - The reference rule is stated as a directory rule.
   Nothing outside `agents/` references anything under it.
   `AGENTS.md`, `CLAUDE.md`, and `.claude/` are excepted.
-  Everything else states its constraint in place, and an `agents/` document links out.
+  Everything else states its constraint in place, and an `agents/` document links outward.
 - A skill under `.claude/skills/` is a Claude Code router.
   It is a description that makes it load automatically, plus a pointer.
   The test is whether removing `.claude/` would lose information rather than ease of use.
@@ -67,7 +67,7 @@ Split the top level by audience.
 - **Keep the records under `docs/` and mark them agent-facing in text.**
   That was the previous state.
   `docs-policy.md` already said `docs/adr/` was for agents and that user documents must not cite it.
-  It did not stop the documents for the two audiences from mixing.
+  It did not stop the documents for the two audiences from interleaving.
   The reason is that the tree is the first thing a reader and a writer both consult.
 
 - **Name the directory `agents/memory/`.**
@@ -78,7 +78,7 @@ Split the top level by audience.
   A knowledge entry is edited in place as it goes out of date.
   So they should not share a directory, and certainly not before the second kind exists.
 
-- **Keep `ADR-N` as historical identifiers with no meaning of their own.**
+- **Keep `ADR-N` as opaque historical identifiers.**
   Every reader must still be told what the letters once meant.
   So every reader pays that vocabulary cost again; a one-time mechanical rename ends it.
   References written as "ADR-58" in old issues, pull requests, and commits still resolve.

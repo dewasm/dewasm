@@ -157,7 +157,7 @@ fn render_environment(out: &mut String, report: &Report) {
     let _ = writeln!(out, "| OS | {} |", md_cell(&report.host.os));
     let _ = writeln!(out, "| Kernel | {} |", md_cell(&report.host.kernel));
     let _ = writeln!(out, "| CPU | {} |", md_cell(&report.host.cpu));
-    let _ = writeln!(out, "| Arch | {} |", md_cell(&report.host.arch));
+    let _ = writeln!(out, "| Architecture | {} |", md_cell(&report.host.arch));
     out.push('\n');
 
     out.push_str("Version strings are captured by executing each runtime.\nA runtime missing from this table was not installed on this host; it appears under [Not measured](#not-measured).\n\n");
@@ -170,7 +170,7 @@ fn render_environment(out: &mut String, report: &Report) {
             out,
             "| `{}` | {} |",
             runtime.runtime,
-            md_cell(runtime.version.as_deref().unwrap_or("unknown")),
+            code_cell(runtime.version.as_deref().unwrap_or("unknown")),
         );
     }
     out.push('\n');
@@ -328,6 +328,11 @@ fn si_unit(bytes: f64) -> (f64, &'static str) {
 /// Escape the one character that would break a markdown table row.
 fn md_cell(text: &str) -> String {
     text.replace('|', "\\|")
+}
+
+/// Program output goes in a code span: it is not a sentence, and the vocabulary check skips it.
+fn code_cell(text: &str) -> String {
+    format!("`{}`", md_cell(text))
 }
 
 /// Escape text going into a double-quoted HTML attribute (the chart alt text, which is generated).

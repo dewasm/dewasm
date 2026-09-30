@@ -66,7 +66,7 @@ Code this governs:
 - **Keep the thunk and make the allocation cheaper** (a reused instance, a `struct` rather than a class).
   The argument array remains.
   In Go the thunk is a closure whose whole cost *is* the capture.
-- **Merge the mutually tail-calling set into one dispatch loop.**
+- **Defunctionalize the mutually tail-calling set into one dispatch loop.**
   A step is then a state assignment.
   It was measured 2.85x faster than parking at ten arms, even at two hundred.
   At five hundred it was nine times *slower*, past the code size the JIT handles well.

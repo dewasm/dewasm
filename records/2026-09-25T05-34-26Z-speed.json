@@ -3884,7 +3884,7 @@
       "runner": "wazero",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wazero rejects the tag section: its exception-handling feature is disabled"
+      "reason": "`wazero` rejects the tag section: its exception-handling feature is not enabled"
     },
     {
       "workload": "wat/eh_throw",
@@ -4363,7 +4363,7 @@
       "runner": "dewasm-bash",
       "status": "skipped",
       "kind": "capability",
-      "reason": "the bash backend has no exception-handling lowering and rejects the module at conversion time"
+      "reason": "the Bash backend has no exception-handling lowering and rejects the module at conversion time"
     },
     {
       "workload": "wat/eh_throw",
@@ -4398,28 +4398,28 @@
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no exception-handling opcodes and fails decoding the module"
+      "reason": "`pywasm` has no exception-handling opcodes and fails decoding the module"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "pywasm-pypy",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no exception-handling opcodes and fails decoding the module"
+      "reason": "`pywasm` has no exception-handling opcodes and fails decoding the module"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite fails to load the tag section"
+      "reason": "`wardite` fails to load the tag section"
     },
     {
       "workload": "wat/eh_throw",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite fails to load the tag section"
+      "reason": "`wardite` fails to load the tag section"
     },
     {
       "workload": "wat/eh_try",
@@ -4519,7 +4519,7 @@
       "runner": "wazero",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wazero rejects the tag section: its exception-handling feature is disabled"
+      "reason": "`wazero` rejects the tag section: its exception-handling feature is not enabled"
     },
     {
       "workload": "wat/eh_try",
@@ -4998,7 +4998,7 @@
       "runner": "dewasm-bash",
       "status": "skipped",
       "kind": "capability",
-      "reason": "the bash backend has no exception-handling lowering and rejects the module at conversion time"
+      "reason": "the Bash backend has no exception-handling lowering and rejects the module at conversion time"
     },
     {
       "workload": "wat/eh_try",
@@ -5033,28 +5033,28 @@
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no exception-handling opcodes and fails decoding the module"
+      "reason": "`pywasm` has no exception-handling opcodes and fails decoding the module"
     },
     {
       "workload": "wat/eh_try",
       "runner": "pywasm-pypy",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no exception-handling opcodes and fails decoding the module"
+      "reason": "`pywasm` has no exception-handling opcodes and fails decoding the module"
     },
     {
       "workload": "wat/eh_try",
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite fails to load the tag section"
+      "reason": "`wardite` fails to load the tag section"
     },
     {
       "workload": "wat/eh_try",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite fails to load the tag section"
+      "reason": "`wardite` fails to load the tag section"
     },
     {
       "workload": "wat/f32_alu",
@@ -5898,14 +5898,14 @@
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run"
+      "reason": "`wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run"
     },
     {
       "workload": "wat/f32_alu",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run"
+      "reason": "`wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run"
     },
     {
       "workload": "wat/f64_alu",
@@ -10345,14 +10345,14 @@
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53"
+      "reason": "`wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53"
     },
     {
       "workload": "wat/i64_div",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53"
+      "reason": "`wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53"
     },
     {
       "workload": "wat/mem_narrow",
@@ -12188,7 +12188,7 @@
       "runner": "wasmer",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wasmer rejects the module: tail-call support is not enabled"
+      "reason": "`wasmer` rejects the module: tail-call support is not enabled"
     },
     {
       "workload": "wat/tail_call",
@@ -12226,7 +12226,7 @@
       "runner": "wazero",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wazero rejects return_call: its tail-call feature is disabled"
+      "reason": "`wazero` rejects `return_call`: its tail-call feature is not enabled"
     },
     {
       "workload": "wat/tail_call",
@@ -12884,28 +12884,28 @@
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no tail-call opcodes and fails decoding return_call"
+      "reason": "`pywasm` has no tail-call opcodes and fails decoding `return_call`"
     },
     {
       "workload": "wat/tail_call",
       "runner": "pywasm-pypy",
       "status": "skipped",
       "kind": "capability",
-      "reason": "pywasm has no tail-call opcodes and fails decoding return_call"
+      "reason": "`pywasm` has no tail-call opcodes and fails decoding `return_call`"
     },
     {
       "workload": "wat/tail_call",
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite decodes return_call but has no implementation for it"
+      "reason": "`wardite` decodes `return_call` but has no implementation for it"
     },
     {
       "workload": "wat/tail_call",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite decodes return_call but has no implementation for it"
+      "reason": "`wardite` decodes `return_call` but has no implementation for it"
     },
     {
       "workload": "c/mandelbrot",
@@ -16513,14 +16513,14 @@
       "runner": "dewasm-python",
       "status": "skipped",
       "kind": "cost",
-      "reason": "dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
+      "reason": "`dewasm-python` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "dewasm-python-jit",
       "status": "skipped",
       "kind": "cost",
-      "reason": "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as dewasm-python"
+      "reason": "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as `dewasm-python`"
     },
     {
       "workload": "app/sqlite3_query",
@@ -16557,7 +16557,7 @@
       "runner": "dewasm-perl",
       "status": "skipped",
       "kind": "cost",
-      "reason": "dewasm-perl runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
+      "reason": "`dewasm-perl` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_query",
@@ -16633,14 +16633,14 @@
       "runner": "dewasm-codon",
       "status": "skipped",
       "kind": "cost",
-      "reason": "codon build -release stalls in Codon's capture analysis on the sqlite3 shell's largest generated functions, so the artifact build does not finish in a practical time"
+      "reason": "the artifact build does not finish in a practical time: `codon build -release` does not get past Codon's capture analysis on the sqlite3 shell's largest generated functions"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "dewasm-bash",
       "status": "skipped",
       "kind": "cost",
-      "reason": "bash executes compute workloads orders of magnitude slower than wasmtime, so the query script does not finish in a practical time"
+      "reason": "Bash executes compute workloads orders of magnitude slower than Wasmtime, so the query script does not finish in a practical time"
     },
     {
       "workload": "app/sqlite3_query",
@@ -16675,28 +16675,28 @@
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "cost",
-      "reason": "pywasm runs this program correctly but too slowly for the query script"
+      "reason": "`pywasm` runs this program correctly but too slowly for the query script"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
       "kind": "cost",
-      "reason": "pywasm runs this program correctly but too slowly for the query script"
+      "reason": "`pywasm` runs this program correctly but too slowly for the query script"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
+      "reason": "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_query",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
+      "reason": "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -16940,14 +16940,14 @@
       "runner": "dewasm-python",
       "status": "skipped",
       "kind": "cost",
-      "reason": "dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
+      "reason": "`dewasm-python` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "dewasm-python-jit",
       "status": "skipped",
       "kind": "cost",
-      "reason": "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as dewasm-python"
+      "reason": "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as `dewasm-python`"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -16984,7 +16984,7 @@
       "runner": "dewasm-perl",
       "status": "skipped",
       "kind": "cost",
-      "reason": "dewasm-perl runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
+      "reason": "`dewasm-perl` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -17060,14 +17060,14 @@
       "runner": "dewasm-codon",
       "status": "skipped",
       "kind": "cost",
-      "reason": "codon build -release stalls in Codon's capture analysis on the sqlite3 shell's largest generated functions, so the artifact build does not finish in a practical time"
+      "reason": "the artifact build does not finish in a practical time: `codon build -release` does not get past Codon's capture analysis on the sqlite3 shell's largest generated functions"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "dewasm-bash",
       "status": "skipped",
       "kind": "cost",
-      "reason": "bash executes compute workloads orders of magnitude slower than wasmtime, so the query script does not finish in a practical time"
+      "reason": "Bash executes compute workloads orders of magnitude slower than Wasmtime, so the query script does not finish in a practical time"
     },
     {
       "workload": "app/sqlite3_mod_query",
@@ -17102,28 +17102,28 @@
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "cost",
-      "reason": "pywasm runs this program correctly but too slowly for the query script"
+      "reason": "`pywasm` runs this program correctly but too slowly for the query script"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "pywasm-pypy",
       "status": "skipped",
       "kind": "cost",
-      "reason": "pywasm runs this program correctly but too slowly for the query script"
+      "reason": "`pywasm` runs this program correctly but too slowly for the query script"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
+      "reason": "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
     },
     {
       "workload": "app/sqlite3_mod_query",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
+      "reason": "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs"
     },
     {
       "workload": "app/minigzip",
@@ -17590,14 +17590,14 @@
       "runner": "dewasm-bash",
       "status": "skipped",
       "kind": "cost",
-      "reason": "bash compresses this workload's input too slowly to finish in a practical time"
+      "reason": "Bash compresses this workload's input too slowly to finish in a practical time"
     },
     {
       "workload": "app/minigzip",
       "runner": "wasm3-ruby",
       "status": "skipped",
       "kind": "cost",
-      "reason": "the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured"
+      "reason": "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured"
     },
     {
       "workload": "app/minigzip",
@@ -17627,21 +17627,21 @@
       "runner": "wasm3-python",
       "status": "skipped",
       "kind": "cost",
-      "reason": "the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured"
+      "reason": "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured"
     },
     {
       "workload": "app/minigzip",
       "runner": "wasm3-pypy",
       "status": "skipped",
       "kind": "cost",
-      "reason": "the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured"
+      "reason": "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured"
     },
     {
       "workload": "app/minigzip",
       "runner": "pywasm-cpython",
       "status": "skipped",
       "kind": "cost",
-      "reason": "pywasm under CPython compresses this workload's input too slowly to finish in a practical time"
+      "reason": "`pywasm` under CPython compresses this workload's input too slowly to finish in a practical time"
     },
     {
       "workload": "app/minigzip",
@@ -17671,14 +17671,14 @@
       "runner": "wardite",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite computes the correct compressed output but its driver crashes on exit: minigzip closes stdout itself and wardite's fd_close closes the real fd under it"
+      "reason": "`wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it"
     },
     {
       "workload": "app/minigzip",
       "runner": "wardite-yjit",
       "status": "skipped",
       "kind": "capability",
-      "reason": "wardite computes the correct compressed output but its driver crashes on exit: minigzip closes stdout itself and wardite's fd_close closes the real fd under it"
+      "reason": "`wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it"
     }
   ]
 }

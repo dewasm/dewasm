@@ -1,6 +1,7 @@
 # Decision 21: WASI Preview 2 Host for Ruby (CLI World)
 
-Status: **Superseded by [decision 24](24-01-scope-reset.md), 2026-07-26.**
+Status: **Superseded (decision 24), 2026-07-26.**
+[Decision 24](24-01-scope-reset.md) replaced it.
 Kept as a design record for a future restoration of this support.
 Git history plus this decision make the work cheap to bring back.
 The original status note and implementation pointers below are retained as history.
@@ -22,7 +23,7 @@ That is enough to run real `wasm32-wasip2` binaries; `sockets`/`http` and 0.3 `a
 
 - **One resource table** (`@res`, integer handles) holds streams, descriptors, and pollables.
   The wrapper's `canon resource.drop` lambdas call `resource_drop(id, handle)`.
-  It closes IOs the host opened and never the process's standard input, output, or error.
+  It closes IOs the host opened and never the process stdio.
   **File system descriptors hold a host path, not an open IO**.
   Each `*-via-stream` call opens its own handle.
   So stream offsets never interfere and drop order cannot double-close.
@@ -60,7 +61,7 @@ That is enough to run real `wasm32-wasip2` binaries; `sockets`/`http` and 0.3 `a
   It also covers open-at/`stat`/via-stream file I/O, clocks, and random.
   A user host object can replace `Rt::WASIP2` whole by implementing `import(name)` + `resource_drop`.
 - Negative / carry-over: rights/permissions are not modelled at all (beyond the sandbox containment).
-  Time values in `stat` are `none`; `metadata-hash` is `ino`/`dev`, not a real hash.
+  Timestamps in `stat` are `none`; `metadata-hash` is `ino`/`dev`, not a real hash.
   Bash has no p2 story (and per decision 20 would need the host vocabulary first).
 
 See also: [decision 20](20-component-model-core-ir-adapters.md), [decision 14](14-ruby-wasi-file-system.md), [decision 7](7-import-providers.md).

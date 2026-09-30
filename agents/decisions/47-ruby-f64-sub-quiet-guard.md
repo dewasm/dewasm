@@ -77,5 +77,5 @@ The same criterion applies to other backends if they exhibit the class.
   So nested subs re-assign it only after the inner value is consumed.
   It cannot share a name with the generated `l*`/`s*` locals.
 - The quiet guard's absence elsewhere is an intended, evidence-driven gap.
-  A future host might fold another identity (e.g. `x + (-0.0)`).
+  A future host might fold another identity, for example `x + (-0.0)`.
   It will then fail the specification harness loudly, not silently.

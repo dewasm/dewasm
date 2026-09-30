@@ -62,7 +62,7 @@ That includes NaN payloads through `reinterpret` and memory.
 - Positive: the `f32`/`f64`/`f32_bitwise`/`float_memory`/`conversions` specification files pass on Ruby.
   That includes their NaN sign/payload assertions.
 - Known limitation: a *signaling* NaN can be quieted by the processor's float↔double conversion.
-  This happens on paths our helpers do not cover.
+  This happens on paths where our code does not step in.
   No specification test currently catches this on the Ruby backend.
   But it is a standing limit for future backends.
 - Exported function results are unsigned integers by ABI.

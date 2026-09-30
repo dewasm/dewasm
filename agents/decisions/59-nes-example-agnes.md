@@ -22,7 +22,7 @@ The composed pixels are identical, so the recorded snapshot is unchanged.
 Extended with `ruby/gui/`, a windowed Ruby frontend on `gosu`.
 It shares the terminal frontend's generated library.
 The reasons for a second frontend and the bundler scoping are recorded in [decision 50](50-doom-example-shape.md).
-That decision records them with the matching change to the DOOM example.
+That decision records them for the DOOM example's matching frontend.
 
 ## Context
 
@@ -76,7 +76,8 @@ The snapshot is captured after 40 input-free frames.
 That is the smallest count safely inside the first stable screen.
 The credits fade-in completes at ~37.
 Every extra frame is real wall time in Bash's `ultra` category.
-The blank-frame guard in `crates/xtask/src/nes_snapshot.rs` accepts ≥5 distinct colors.
+`crates/xtask/src/nes_snapshot.rs` guards against a blank or near-blank frame.
+That guard accepts ≥5 distinct colors.
 NES palettes are small (the recorded frame has 7), so DOOM's >50 threshold does not transfer.
 
 ## Rejected alternatives

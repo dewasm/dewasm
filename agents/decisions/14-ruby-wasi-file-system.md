@@ -47,12 +47,12 @@ The TOCTOU check-then-open limit itself is unchanged.
 
 ## Context
 
-`Rt::WASI` (decision 7) covered standard input and output, arguments/environment, clock, and random.
+`Rt::WASI` (decision 7) covered stdio, arguments/environment, clock, and random.
 But every `path_*` call and file-system-only `fd_*` call resolved to the ENOSYS stub.
 That blocked the project's stated goal: running Rails on a SQLite driver in pure Ruby.
 The driver needs the real life cycle of a main database file plus its journal/WAL.
 The life cycle is create, read/write at arbitrary offsets, save to disk, remove, rename.
-Real file I/O raises two questions the design for standard input and output never had to answer:
+Real file I/O raises two questions the stdio-only design never had to answer:
 
 - what a directory descriptor *is*;
 - how a guest-supplied path gets confined to a directory the embedder explicitly allowed.
@@ -73,8 +73,8 @@ That holds even in a demonstration runtime.
   It fills the same keyword argument.
   It is kept separate from `ARGV` because `ARGV` already mirrors the guest's own `argv` one-to-one.
 - **One file descriptor table, two kinds of entry.**
-  `@fds` keeps mapping file descriptor → Ruby `IO` for files and standard input and output.
-  This is unchanged: `File` already answers every method the units for standard input and output called.
+  `@fds` keeps mapping file descriptor → Ruby `IO` for files and stdio.
+  This is unchanged: `File` already answers every method the stdio-only units called.
   A directory may be a true preopen.
   It may also be one the guest opened itself via `path_open`'s `oflags::DIRECTORY`.
   Either way, it is a `WasiDir = Struct.new(:host_path, :preopen_name, :entries)`.
@@ -85,7 +85,7 @@ That holds even in a demonstration runtime.
   File descriptors are never reused after `fd_close`.
   That is simpler than tracking reuse safety, and irrelevant at the scale this runtime targets.
   Criterion: reuse the existing IO-shaped path for files.
-  Every unit for standard input and output keeps working unmodified against `File`.
+  Every stdio unit keeps working unmodified against `File`.
   Add exactly one new shape for the one thing IO cannot represent (a directory).
   The criterion rules out wrapping every file descriptor in a new envelope type.
 - **Sandboxing is `File.realpath` plus prefix-containment.**

@@ -1,6 +1,7 @@
 # Decision 26: Rename the Project (`dewasmify` → dewasm)
 
-Status: **Accepted, 2026-07-25; completed 2026-07-28.**
+Status: **Accepted, 2026-07-25.**
+The rename was completed on 2026-07-28.
 Landed 2026-07-26: crates are `dewasm-*`, and the binary is `dewasm`.
 Environment variables are `DEWASM_*`.
 Documents are updated; the bodies of replaced decisions keep the old name.
@@ -31,7 +32,7 @@ A name that will be typed for years should be short and pronounceable.
 This one is verified free.
 
 Reserving the crates.io name with an early publish is recommended at release time.
-The 0.1 list of release steps owns that call.
+The 0.1 checklist owns that call.
 
 ## Rejected alternatives
 

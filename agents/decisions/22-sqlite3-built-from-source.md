@@ -1,4 +1,4 @@
-# Decision 22: Build the sqlite3 Apps From Fixed Source With Zig, Both Standalone and Library
+# Decision 22: Build the sqlite3 Apps From a Fixed Source Version With Zig, Standalone and Library
 
 Status: **Accepted, 2026-07-24.**
 Implemented:
@@ -8,10 +8,10 @@ Implemented:
 
 The build toolchain has since moved from Zig to `wasi-sdk` ([decision 92](92-wasi-sdk-c-toolchain.md)).
 That reverses the "wasi-sdk/clang instead of zig" rejection below.
-The fixed-source criterion, the artifact set, and the stamp policy are unchanged.
+The criterion on the fixed source version, the artifact set, and the stamp policy are unchanged.
 
 Extended (Phase 5a, 2026-07-26) with a third `zig cc` build, `sqlite3-binding.wasm`.
-It is compiled from the same fixed source plus our own `examples/apps/src/sqlite3_binding.c`.
+It is compiled from the same source version plus our own `examples/apps/src/sqlite3_binding.c`.
 That file exports `run_query`, which calls `sqlite3_exec` with a C callback.
 The callback forwards each row to an imported `env.host_row`.
 The build exercises the guest→host `sqlite3_exec` function-pointer callback.
@@ -30,27 +30,27 @@ With `-mexec-model=reactor` plus `-Wl,--export=...` it produces exactly that mis
 
 ## Decision
 
-`setup.sh` fetches the amalgamation source ZIP (3.53.3) fixed by version and checksum.
+`setup.sh` fetches the amalgamation source ZIP at version 3.53.3 and checks its fixed checksum.
 It builds **two artifacts from the one source**:
 
-- `sqlite3-shell.wasm`: the CLI shell, `_start` + standard input/output.
+- `sqlite3-shell.wasm`: the CLI shell, `_start` + stdio.
   It replaces the Wasmer binary in the snapshot-diffed standalone cases.
 - `libsqlite3.wasm`: a reactor exporting the sqlite3 C API, driven from Ruby in `libsqlite3_c_api_ruby`.
   It exercises `_initialize` and guest-memory pointer passing through `sqlite3_malloc`/`Rt::Memory`.
   It also exercises the prepare/step/column flow the future gem shim will use.
 
-**Criterion: what is fixed is the upstream *source*, not the build product**.
+**Criterion: what is held at a fixed version is the upstream *source*, not the build product**.
 The decision 9 rule ("version-pinned, checksum-verified, never committed") is unchanged.
 The stamp records the source checksum; only the producing step moved from "extract" to "compile".
 The library test's expectation is a fixed string rather than a Wasmtime snapshot.
 The `wasmtime` CLI cannot drive a C API whose results live in guest memory.
-Every expected value is determined by the fixed source version.
+Every expected value is determined by the source version.
 
 Cost accepted: `setup.sh` now requires `zig` and `unzip`, failing loudly per decision 15 when missing.
 Only `setup.sh` requires them, never `cargo test` with a warm cache.
 Build output bytes vary across Zig versions.
-That is fine because nothing fixes the *artifact*.
-The snapshots compare program behavior, which the fixed source decides.
+That is fine because nothing fixes the bytes of the *artifact*.
+The snapshots compare program behavior, which the source version decides.
 
 ## Rejected alternatives
 
@@ -60,7 +60,7 @@ The snapshots compare program behavior, which the fixed source decides.
 - **Commit the built `.wasm` artifacts**: breaks decision 9.
   At ~11 MB it would grow the repository for something reproducible in seconds.
 - **`wasi-sdk`/`clang` instead of Zig**: works.
-  But `wasi-sdk` is a versioned SDK package to install and point at.
+  But `wasi-sdk` is a versioned SDK tarball to install and point at.
   Zig is a single binary that Homebrew can install, with the WASI system root built in.
   Zig also matches how the artifact was first validated.
 
@@ -72,7 +72,7 @@ The snapshots compare program behavior, which the fixed source decides.
   SQLite is current (3.53.3) and its build flags are ours to change.
   Examples are `SQLITE_OMIT_LOAD_EXTENSION` and future VFS experiments.
 - Negative / carry-over: one more tool in `setup.sh`'s requirements.
-  The snapshot for the shell changed shape (output with no prompts).
+  The snapshot for the shell changed shape (batch-mode output).
   The 3.26 Wasmer build printed interactive prompts.
   The two original artifacts left `sqlite3_exec`-style function-pointer callbacks unexercised.
   The prepare/step flow avoids them.

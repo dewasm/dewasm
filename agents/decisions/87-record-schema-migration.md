@@ -33,8 +33,8 @@ The default parser changes the last ulp of a stored value.
 - **Per-reader fallbacks.**
   These derive the classification from the legacy reason prefix at render time.
   It works for one reader, but every future command re-implements the same derivation.
-  The stored files also stay open to more than one reading forever.
-- **Keeping old records at their original schema as measurement artifacts that never change.**
+  The stored files also stay ambiguous forever.
+- **Keeping old records at their original schema as immutable measurement artifacts.**
   The measurements are what must not change, and the migration does not touch them.
   The encoding around them is the tool's, not the measurement's.
 

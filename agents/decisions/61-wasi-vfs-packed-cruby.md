@@ -8,7 +8,7 @@ The case runs on Ruby/Python/Perl and converts everywhere (issue #123).
 ## Context
 
 ruby.wasm is designed to ship with [`wasi-vfs`](https://github.com/kateinoigakukun/wasi-vfs).
-The official modules built in advance link `libwasi_vfs.a`.
+The official prebuilt modules link `libwasi_vfs.a`.
 The intended shape is `rbwasm pack`, a `wasi-vfs` wrapper.
 It embeds the standard library and app files into the module via Wizer pre-initialization.
 That yields a self-contained wasm that needs no preopens.
@@ -19,14 +19,14 @@ So ruby.wasm's primary real-world usage had no coverage.
 A packed module is still an ordinary WASI command module:
 
 - `wasi-vfs` shadows the `wasi_snapshot_preview1` imports at link time;
-- Wizer writes the loaded files into data segments.
+- Wizer materializes the loaded files as data segments.
 
 Conversion needed no code change: the gap was purely test coverage.
-Data segments that large are also a converter input shape nothing else in the cache exercises.
+Wizer-sized data segments are also a converter input shape nothing else in the cache exercises.
 
 ## Decision
 
-`setup.sh` derives the packed artifact **in-cache from the inputs already fixed**.
+`setup.sh` derives the packed artifact **in-cache from the inputs already at fixed versions**.
 `examples/apps/scripts/cruby.sh` runs this:
 
 ```sh
@@ -34,12 +34,12 @@ wasi-vfs pack cache/ruby.wasm --dir cache/ruby-lib/usr::/usr -o cache/ruby-packe
 ```
 
 The `wasi-vfs` CLI is required on PATH like the other build tools (decision 15).
-The stamp folds the Ruby package's hash plus `wasi-vfs --version`.
+The stamp folds the SHA-256 of the `ruby.wasm` release archive plus `wasi-vfs --version`.
 That is the `wasm-opt` discipline of decision 39.
-CI installs a fixed CLI release and folds its version into the apps-cache key.
+CI installs the CLI at a fixed version and folds that version into the apps-cache key.
 
-The reusable criterion: **derive a shipping shape in-cache, not a second fixed upstream artifact**.
-It applies **when a tool at a fixed version can derive the shape from inputs the cache already fixes**.
+The reusable criterion: **derive a shipping shape in-cache; do not fetch a second upstream artifact**.
+It applies **when a tool at a fixed version can derive the shape from inputs the cache already holds**.
 That means one fetch of the bytes and one version to update.
 The derivation itself is also under test (here: that packing works on the official build at all).
 
@@ -54,8 +54,8 @@ The `wasmtime_test` suite revalidates it against a live engine.
 
 - **Consume an upstream pre-packed artifact.**
   An example is the packed module inside the `@ruby/*-wasm-wasi` `npm` packages.
-  This adds a second fixed artifact of several MB.
-  It holds a copy of the interpreter and standard-library bytes the cache already fixes.
+  This adds a second artifact of several MB at a fixed version.
+  It holds a copy of the interpreter and standard-library bytes the cache already holds.
   It adds a second distribution channel (`npm`).
   It leaves the pack step itself (the thing this decision wants covered) outside the test.
 - **No coverage (the current state).**
@@ -63,9 +63,9 @@ The `wasmtime_test` suite revalidates it against a live engine.
   The whole point of the app suite is the shapes users actually run (decision 9).
 - **Packing CPython the same way.**
   `wasi-vfs` can only pack modules linked against `libwasi_vfs.a`.
-  The `brettcannon/cpython-wasi-build` binary the cache fixes is not.
+  The `brettcannon/cpython-wasi-build` binary the cache holds at a fixed version is not.
   So this would mean building CPython from source with the library linked in.
-  That rebuilds an interpreter we deliberately consume already built.
+  That rebuilds an interpreter we deliberately consume prebuilt.
   It is out of proportion to the coverage gained (decided against in issue #123).
 
 ## Consequences
@@ -81,7 +81,7 @@ The `wasmtime_test` suite revalidates it against a live engine.
   Go and Java are excluded for the unpacked CRuby's own reasons.
   The packed module is the same interpreter, strictly larger.
 - `setup.sh` gains a required tool: `wasi-vfs`.
-  It is a CLI built in advance or `cargo install wasi-vfs-cli`; `require_tool` fails loudly without it.
+  It is a prebuilt CLI or `cargo install wasi-vfs-cli`; `require_tool` fails loudly without it.
   Its version participates in the stamp and the CI cache key, so a new CLI version packs again.
 - The cache grows by the ~49 MB packed module.
   The convert suites pay one more heavy trial per backend.

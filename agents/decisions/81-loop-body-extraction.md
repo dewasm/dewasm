@@ -4,7 +4,7 @@ Status: **Accepted, 2026-08-21.**
 The shared pass lives in [`crates/dewasm-backend/src/extract.rs`](../../crates/dewasm-backend/src/extract.rs).
 The Ruby backend is the only consumer.
 Its thresholds are in `EXTRACT_PARAMS` (`crates/dewasm-backend-ruby/src/lib.rs`).
-Regions containing a `return` or a branch out of the region are not yet extractable.
+Regions containing a `return` or an outward branch are not yet extractable.
 That leaves the NES example and sqlite3-shell's interpreter loop uncaptured; see Consequences.
 
 ## Context
@@ -92,7 +92,7 @@ It also makes `app/sqlite3_query` 1.52x slower (cold methods get compiled for no
   The IR already has the structure.
   Recovering scopes, liveness and types from emitted text repeats decision 58's rejected text pass.
   It does so with more ways to be wrong.
-- **Extracting spans that return or branch out of the span, via a signal protocol.**
+- **Extracting spans that return or branch outward, via a signal protocol.**
   The call would have to report which exit was taken as well as the value.
   That needs a second return slot (an allocation per iteration) or a special-value encoding.
   A special-value encoding has its own masking questions.
@@ -101,7 +101,7 @@ It also makes `app/sqlite3_query` 1.52x slower (cold methods get compiled for no
 ## Consequences
 
 **Positive.**
-Measured on Ruby 4.0.4 (arm64), with before and after runs taken in turn:
+Measured on Ruby 4.0.4 (arm64), alternating runs:
 
 - `c/mandelbrot` 2 M iterations: `--yjit` 9.09 s → 3.09 s (2.9x); interpreter unchanged (9.21 s → 9.12 s).
 - `c/sha256` 300 k iterations: `--yjit` 14.27 s → 10.62 s (1.34x).
@@ -109,7 +109,7 @@ Measured on Ruby 4.0.4 (arm64), with before and after runs taken in turn:
 - DOOM example smoke run: 16.2 → 16.7 ticks/sec under `--yjit`.
 - `app/sqlite3_query`: neutral (9.56 s → 9.48 s `--yjit`, interpreter unchanged).
   It has 242 functions extracted.
-  The interpreter loop's own body branches out of the loop everywhere and is not captured.
+  The interpreter loop's own body branches outward everywhere and is not captured.
 - The `wat/` microbenchmark outputs are byte-identical.
   The dangerous tight-loop case is structurally refused, not only warned against.
 

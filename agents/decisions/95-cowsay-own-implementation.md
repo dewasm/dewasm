@@ -1,7 +1,7 @@
 # Decision 95: `cowsay` Comes From Our Own Implementation, Published Upstream
 
 Status: **Accepted, 2026-09-18.**
-Implemented: [`examples/apps/scripts/cowsay.sh`](../../examples/apps/scripts/cowsay.sh) fixes [dewasm/cowsay.wasm](https://github.com/dewasm/cowsay.wasm) at v0.1.0.
+Implemented: [`examples/apps/scripts/cowsay.sh`](../../examples/apps/scripts/cowsay.sh) fetches [dewasm/cowsay.wasm](https://github.com/dewasm/cowsay.wasm) at the fixed version v0.1.0.
 That is a C reimplementation of `cowsay` 3.03.
 Its output is byte-identical to the original Perl script.
 The fetch at a fixed version (decision 9) is unchanged; only the upstream this app points at is.
@@ -29,8 +29,7 @@ Our own upstream is still an upstream.
 So nothing about the fetch, the fixed version, or the audit changes.
 
 The published implementation carries its own correctness argument.
-That repository keeps a copy of the original `cowsay` 3.03.
-A differential test suite runs the implementation against it under the host Perl.
+A differential test suite runs it against the vendored `cowsay` 3.03 under the host Perl.
 The suite compares standard output, standard error and the exit code over 738 cases.
 So "byte-identical to the original" is checked there and not assumed here.
 
@@ -46,7 +45,8 @@ So "byte-identical to the original" is checked there and not assumed here.
 - **Build it from source in `setup.sh`, as `sqlite3` and `minigzip` are (decision 92).**
   Those are third-party sources we must build, because nobody publishes a WASI binary.
   For our own code we control the release.
-  So a fixed release asset costs developers here nothing, and keeps the bytes identical everywhere.
+  So a release asset at a fixed version costs developers here nothing.
+  It also keeps the bytes identical everywhere.
 - **Adopt another existing `cowsay` port.**
   Every one surveyed either draws the same broken art or carries a language runtime of its own.
   That is the size problem again.
@@ -59,14 +59,13 @@ So "byte-identical to the original" is checked there and not assumed here.
   That is because its release runs the same `wasm-opt` pass the locally-built modules get.
 - Positive: the app now exercises the WASI file system surface in the default `cargo test` run.
   That is because the lookup of cow files honours `COWPATH`.
-  Its imports go from 8 functions to 17.
-  The 8 cover standard streams, arguments, environment, `random_get` and `proc_exit`.
+  Its imports go from 8 functions (stdio, arguments, environment, `random_get`, `proc_exit`) to 17.
   The added ones are `path_open`, `fd_readdir`, `path_filestat_get` and the preopen calls.
 - Negative: `app/cowsay` rows are not comparable across this change.
   A speed or size record from before it cannot be compared row by row against a later one.
   That is because the module is a different program.
   The records are dated snapshots, so the break is visible rather than silent.
-- Carry-over: some cases follow the fixed release:
+- Carry-over: some cases follow the release at the fixed version:
   - the `cowsay` snapshots under `examples/apps/snapshots/`;
   - the two interpreter cases that run `cowsay` as an inner guest (`TOYWASM_COWSAY`, `WASM3_COWSAY`).
 

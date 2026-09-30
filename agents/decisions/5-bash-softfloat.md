@@ -52,4 +52,4 @@ This is consistent with decision 0's unsupported-feature contract.
   Floats in Bash will be orders of magnitude slower than integers, which are already slow.
   Accepted: the Bash backend's value is existence, not speed (stated in the README).
 - The softfloat routines live in `runtime/bash/` like any other embedded runtime.
-  The specification float files become the test that decides completion.
+  The specification float files become the acceptance test.

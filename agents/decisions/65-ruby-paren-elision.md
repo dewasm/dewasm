@@ -69,7 +69,7 @@ The conservative rules are these:
 **The condition renderers go through the same mechanism.**
 `cond`/`not_cond` fuse a wasm comparison into a Ruby `true` or `false`.
 They previously emitted their operands with a different rule for parentheses.
-It differed from that of the `a < b ? 1 : 0` form, which produces an integer.
+It differed from that of the materialized `a < b ? 1 : 0` form.
 The same expression got parentheses in one path and not in the other.
 With one table there is one answer.
 

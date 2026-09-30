@@ -234,14 +234,14 @@ fn render_environment(out: &mut String, report: &Report) {
     let _ = writeln!(out, "| OS | {} |", md_cell(&report.host.os));
     let _ = writeln!(out, "| Kernel | {} |", md_cell(&report.host.kernel));
     let _ = writeln!(out, "| CPU | {} |", md_cell(&report.host.cpu));
-    let _ = writeln!(out, "| Arch | {} |", md_cell(&report.host.arch));
+    let _ = writeln!(out, "| Architecture | {} |", md_cell(&report.host.arch));
     out.push('\n');
 
     out.push_str("Version strings are captured by executing each runtime.\nA runner missing from this table was unavailable on this host; its cells appear under [Not measured](#not-measured).\n\n");
     out.push_str("| Runner | Version |\n| --- | --- |\n");
     for runtime in report.runtimes.iter().filter(|runtime| runtime.available) {
         let version = runtime.version.as_deref().unwrap_or("unknown");
-        let _ = writeln!(out, "| `{}` | {} |", runtime.runner, md_cell(version));
+        let _ = writeln!(out, "| `{}` | {} |", runtime.runner, code_cell(version));
     }
     out.push('\n');
 }
@@ -300,10 +300,10 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
         );
 
         if is_app {
-            out.push_str("| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |\n");
+            out.push_str("| Runner | Runs/sample | Wall time (minimum) | Wall time (median) | vs. `wasmtime` | Load |\n");
             out.push_str("| --- | --- | --- | --- | --- | --- |\n");
         } else {
-            out.push_str("| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |\n");
+            out.push_str("| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |\n");
             out.push_str("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
         }
         for cell in &cells {
@@ -403,13 +403,13 @@ fn render_gaps(out: &mut String, report: &Report) {
         out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
         return;
     }
-    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap:\n\n- *cost*: runs correctly, but too slowly to keep in the suite;\n- *capability*: the runner cannot execute the workload;\n- *setup*: this host lacks the runner or the built module.\n\n");
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap:\n\n- `cost`: runs correctly, but too slowly to keep in the suite;\n- `capability`: the runner cannot execute the workload;\n- `setup`: this host lacks the runner or the built module.\n\n");
     out.push_str("| Workload | Runner | Kind | Reason |\n| --- | --- | --- | --- |\n");
     for cell in skipped {
         if let Outcome::Skipped { kind, reason } = &cell.outcome {
             let _ = writeln!(
                 out,
-                "| `{}` | `{}` | {} | {} |",
+                "| `{}` | `{}` | `{}` | {} |",
                 cell.workload,
                 cell.runner,
                 kind.label(),
@@ -484,6 +484,11 @@ fn fmt_count(n: u64) -> String {
 /// Escape the one character that would break a markdown table row.
 fn md_cell(text: &str) -> String {
     text.replace('|', "\\|")
+}
+
+/// Program output goes in a code span: it is not a sentence, and the vocabulary check skips it.
+fn code_cell(text: &str) -> String {
+    format!("`{}`", md_cell(text))
 }
 
 /// Escape text going into a double-quoted HTML attribute.

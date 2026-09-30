@@ -17,7 +17,7 @@ Project documents are written in English.
 
 ## Development environment
 
-The Rust toolchain is fixed by `rust-toolchain.toml`; plain `cargo` commands pick it up.
+The Rust toolchain version is set in `rust-toolchain.toml`; plain `cargo` commands pick it up.
 Everything else the test suite needs is in [`docs/testing.md`](docs/testing.md).
 That covers the interpreters, the submodules, the apps cache, and the fail-loud-not-skip policy.
 
@@ -56,7 +56,7 @@ Its README holds the index, the authoring procedure, and the quality bar.
 An entry is `agents/decisions/<N>-<slug>.md`, cited as "decision N".
 Nothing outside `agents/` references anything under it: no decision citation, no link.
 The exceptions are this file, `CLAUDE.md`, and `.claude/`.
-The app audit tooling is one more: it cites `agents/apps-audit.md`, the record of its results.
+The app audit tooling is one more: it cites `agents/apps-audit.md`, the record of its verdicts.
 Code and user-facing documents state their constraints in place.
 The decision links out to the code it governs, never the reverse.
 `agents/` is for documents an agent reads while working; `docs/` is for documents a human reads.

@@ -26,11 +26,11 @@ We will use [`examples/wat/hello.wat`](../examples/wat/hello.wat), which writes 
     (call $proc_exit (i32.const 0))))
 ```
 
-dewasm accepts `.wat` text directly, so no separate assembler step is needed.
+dewasm accepts `.wat` text directly, so it needs no separate step to convert the text to binary.
 
 ## 2. Standalone mode: run the program
 
-`--mode standalone` wires up WASI and runs the module's `_start`.
+`--mode standalone` connects the module to WASI and runs its `_start`.
 Pick a target with `--target`:
 
 ```console
@@ -80,7 +80,7 @@ Hello, WASI!
 ```
 
 A real binary works the same way.
-If you have run `examples/apps/setup.sh`, try the cowsay showpiece:
+If you have run `examples/apps/setup.sh`, try the `cowsay` app:
 
 ```console
 $ dewasm examples/apps/cache/cowsay.wasm --target bash --mode standalone -o cowsay.sh
@@ -95,12 +95,12 @@ $ echo "moo" | bash cowsay.sh
                 ||     ||
 ```
 
-Standalone programs share one runtime interface across every backend, modelled on wasmtime's CLI.
+Standalone programs share one runtime interface across every backend, modelled on Wasmtime's CLI.
 Pass the guest arguments after the program.
 Mount host directories with repeatable `--dir HOST::GUEST` flags.
-A `proc_exit(N)` becomes exit code `N`, and a trap prints to stderr and exits 134.
-The full reference is [docs/standalone-interface.md](standalone-interface.md).
-It covers argv, env, exit/trap, and per-backend runner lines.
+A `proc_exit(N)` becomes exit code `N`, and a trap prints to standard error and exits 134.
+The full reference is [`docs/standalone-interface.md`](standalone-interface.md).
+It covers `argv`, environment, exit/trap, and per-backend runner lines.
 
 ```console
 $ dewasm examples/wat/wasi_standalone_dir.wat --target ruby --mode standalone -o rt.rb
@@ -185,7 +185,7 @@ $ go run .
 The generated module class is package-private.
 It carries the runtime as `static` nested classes (hence `Add.Rt.Fn`).
 So put your `public class Main` in the *same* `.java` file.
-Generate it with `--module-name Add`, then append the class below:
+Generate it with `--module-name Add`, then add the class below at the end of the file:
 
 ```java
 public class Main {
@@ -206,12 +206,12 @@ The compiled backends take the constructor arguments `(imports, argv, env, preop
 Pass `nil`/`null` for none.
 Ruby, Python, and Perl take the imports table as the first positional argument and the rest by name.
 So preopens are `preopens:` in Ruby, `preopens=` in Python, and `preopens =>` in Perl.
-See [docs/backends/](backends/) for the exact per-language shape.
+See [`docs/backends/`](backends/) for the exact per-language shape.
 
 ## 4. Overriding an import (provider)
 
 In library mode, any WASI import the embedder does not provide falls back to the bundled WASI.
-You can intercept individual imports to capture output or sandbox the module.
+You can replace individual imports to capture output or sandbox the module.
 You can also supply host functions it imports.
 
 Convert `hello.wat` as a library and provide our own `fd_write`.
@@ -249,13 +249,13 @@ An imports-table value can also be a whole *provider object* that replaces an en
 A custom WASI is one example.
 The object implements `import(name)` and optionally `attach(instance)`.
 Any WASI import the table leaves unresolved falls back to the bundled WASI.
-Every backend's provider snippet is in [docs/backends/](backends/).
+Every backend's provider example is in [`docs/backends/`](backends/).
 
 ## Where to go next
 
-- [docs/backends/](backends/): output shape, requirements, and idioms per target language.
-- [docs/standalone-interface.md](standalone-interface.md): the standalone runtime interface shared by every backend.
-  It covers argv, `--dir`, env, and exit/trap.
-- [docs/support.md](support.md): which features and WASI calls each backend supports.
+- [`docs/backends/`](backends/): output shape, requirements, and conventions per target language.
+- [`docs/standalone-interface.md`](standalone-interface.md): the standalone runtime interface shared by every backend.
+  It covers `argv`, `--dir`, environment, and exit/trap.
+- [`docs/support.md`](support.md): which features and WASI calls each backend supports.
 - [README](../README.md): what dewasm is, plus the real-world examples it converts.
   Those are Rails on converted SQLite, DOOM, and NES.

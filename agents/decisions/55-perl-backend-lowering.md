@@ -116,7 +116,7 @@ An unbounded recursion just uses up memory.
   Measured on a 2M-operation loop, `vec` is fastest for bytes (0.07s vs. 0.14s for `unpack`+`substr`).
   But `vec` is only big-endian beyond 8 bits, so wider access goes through `unpack`.
   Its cost, 0.14s/2M ≈ 70ns, is acceptable.
-  Traps (bounds, division by zero, overflow, a `trunc` out of range) `die` a blessed `Rt::Trap`.
+  Traps (bounds, division by zero, overflow, a `trunc` of NaN or out of range) `die` a blessed `Rt::Trap`.
   It carries the specification interpreter's message wording.
 
 ## Rejected alternatives

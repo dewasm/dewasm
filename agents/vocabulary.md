@@ -28,32 +28,48 @@ The derivation rules skip a stem shorter than three letters and the words in the
 
 | Not a derived form |
 | --- |
-| `arity`, `binaryen`, `fatal`, `flattering`, `outlier`, `paren`, `parity`, `refactor`, `relay`, `resume`, `retention`, `retract`, `siren`, `unwasm`, `virtual`, `wasmer` |
+| `arity`, `binaryen`, `fatal`, `flattering`, `header`, `literal`, `outlier`, `paren`, `parity`, `refactor`, `relay`, `resume`, `retention`, `retract`, `siren`, `subscription`, `unwasm`, `virtual`, `wasmer` |
 
 A word from none of these sources is a question, not an error in itself.
-Either a plainer word says the same, or the word is a term of the field.
-A reader who looks up a term of the field reaches an official document.
-Add such a term to a table below; write the plainer word otherwise.
+Either a plainer word says the same, or the word belongs in a table below.
+A term of the field names a concept of computing.
+A reader who looks it up reaches an official document.
+A plain word outside the base list is listed when no plainer word of its length says the same.
+
+The check reports a listed word that no text uses, and one that another source already allows.
+Such an entry goes, so the tables hold only the words the text needs.
 
 ## Project terms
 
 ### Terms of the field
 
+A term below names a concept of computing, and the text uses it only in that sense.
+That holds where a dictionary also gives it a plain sense: `compile` never means to gather a list.
+
 | Area | Terms |
 | --- | --- |
-| Programs and builds | `app`, `archive`, `backend`, `baseline`, `browser`, `builtin`, `cache`, `compatible`, `compile`, `copyright`, `crate`, `default`, `dependency`, `directory`, `fetch`, `fork`, `frontend`, `gem`, `legacy`, `linkage`, `manifest`, `milestone`, `patch`, `registry`, `repository`, `reproducible`, `runtime`, `script`, `standalone`, `subagent`, `subcommand`, `submodule`, `toolchain`, `upstream`, `workflow`, `workspace` |
-| Code | `accessor`, `alias`, `arithmetic`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `constructor`, `dataflow`, `debug`, `defer`, `dispatch`, `elide`, `elision`, `epilogue`, `exhaustive`, `fallback`, `fuse`, `generic`, `hash`, `header`, `heap`, `hoist`, `identifier`, `incremental`, `inherit`, `initialize`, `initializer`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `mutex`, `namespace`, `numeric`, `offset`, `operand`, `optimization`, `optimize`, `override`, `peephole`, `pending`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `thunk`, `token`, `trampoline`, `tuple`, `unsigned`, `virtual`, `wildcard` |
-| Languages | `associative`, `associativity`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
-| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decimal`, `decode`, `dividend`, `exponent`, `gradual`, `hexadecimal`, `instantiate`, `instantiation`, `little-endian`, `modular`, `modulo`, `mutability`, `mutable`, `normalization`, `normalize`, `opcode`, `overflow`, `passive`, `payload`, `remainder`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `uninitialized`, `validate`, `validation`, `width` |
-| Systems and WASI | `ambient`, `buffer`, `checksum`, `console`, `cursor`, `deterministic`, `flush`, `headless`, `interactive`, `monotonic`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `subscription` |
-| Data and records | `amalgamation`, `collation`, `compress`, `compression`, `decompress`, `invalidate`, `invalidation`, `query`, `rollback`, `schema`, `verdict` |
-| Tests and tools | `benchmark`, `bug`, `calibrate`, `calibration`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `median`, `microbenchmark`, `microsecond`, `millisecond`, `nanosecond`, `oracle`, `parse`, `parser`, `sanity`, `shim`, `snapshot`, `suite`, `testsuite`, `verify`, `workload` |
-| Graphics and games | `dot`, `emulator`, `framebuffer`, `palette`, `pixel`, `shareware`, `texture`, `tick` |
-| Text and markup | `digit`, `font`, `indentation`, `interpolate`, `interpolation`, `kebab-case`, `markup`, `placeholder`, `prefix`, `slug`, `suffix`, `template` |
+| Programs and builds | `app`, `backend`, `backport`, `baseline`, `builtin`, `cache`, `compile`, `crate`, `fork`, `frontend`, `gem`, `linkage`, `manifest`, `patch`, `prebuilt`, `registry`, `repository`, `runtime`, `standalone`, `subagent`, `subcommand`, `submodule`, `tarball`, `toolchain`, `upstream`, `vendor`, `workspace` |
+| Code | `accessor`, `alias`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `co-inductive`, `collide`, `constructor`, `dataflow`, `debug`, `defunctionalize`, `dispatch`, `duck-typed`, `elide`, `epilogue`, `exhaustive`, `fallback`, `fallthrough`, `fuse`, `hash`, `header`, `heap`, `hoist`, `immutable`, `inherit`, `initialize`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `materialize`, `mutex`, `namespace`, `offset`, `operand`, `optimize`, `override`, `peephole`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `substring`, `thunk`, `token`, `trampoline`, `tuple`, `variadic`, `virtual`, `wildcard` |
+| Languages | `associative`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
+| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decode`, `gradual`, `hexadecimal`, `instantiate`, `little-endian`, `modular`, `modulo`, `mutable`, `normalization`, `opcode`, `overflow`, `overlong`, `passive`, `payload`, `radicand`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `validate` |
+| Systems and WASI | `buffer`, `checksum`, `flush`, `headless`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `stdio`, `subscription` |
+| Data and records | `amalgamation`, `collation`, `compress`, `decompress`, `invalidate`, `query`, `rollback`, `schema`, `verdict` |
+| Tests and tools | `benchmark`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `lollipop`, `microbenchmark`, `oracle`, `parse`, `shim`, `snapshot`, `suite`, `testsuite`, `workload` |
+| Graphics and games | `dot`, `emulator`, `framebuffer`, `pixel`, `shareware`, `tick` |
+| Text and markup | `glob`, `kebab-case`, `markup`, `slug`, `whitespace` |
 
-A term of the field is used only in the sense its document gives it.
-Used for anything else, it is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
-A general term such as `bug` works better with its kind: a crash, a wrong result, a missed error.
+Used in another sense, a term is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
+
+### Plain words outside the base list
+
+A word below means what a dictionary says, and it names no concept of computing.
+It is listed because no plainer word of about the same length says the same.
+It needs no document.
+A general word such as `bug` works better with its kind: a crash, a wrong result, a missed error.
+
+| Words |
+| --- |
+| `acceptance`, `align`, `alternating`, `ambient`, `ambiguous`, `archive`, `arithmetic`, `batch`, `browser`, `bug`, `calibrate`, `checklist`, `circularity`, `compatible`, `console`, `copyright`, `cursor`, `decimal`, `default`, `defer`, `dependency`, `deterministic`, `digit`, `directory`, `dividend`, `exponent`, `fake`, `falsifiable`, `fetch`, `font`, `generic`, `incremental`, `indentation`, `interactive`, `interleave`, `interpolate`, `laptop`, `legacy`, `median`, `microsecond`, `milestone`, `millisecond`, `monotonic`, `nanosecond`, `numeric`, `opaque`, `optimistic`, `outward`, `palette`, `pending`, `pessimistic`, `placeholder`, `prefix`, `remainder`, `reproducible`, `roadmap`, `sanity`, `script`, `slideshow`, `sparse`, `suffix`, `template`, `texture`, `timestamp`, `verify`, `width`, `workflow` |
 
 ### Terms of one context
 
@@ -64,7 +80,7 @@ Elsewhere the same word would be a term nobody defined for that text.
 | --- | --- |
 | `automap`, `demo`, `strafe`, `tic` | `examples/doom/`, `agents/decisions/50-doom-example-shape.md`, `agents/decisions/53-doom-frame-snapshot.md` |
 | `alternate` (the terminal's alternate screen) | `examples/` |
-| `balloon` (the speech balloon of `cowsay`) | `agents/decisions/95-cowsay-own-implementation.md` |
+| `balloon` (the speech balloon of the cowsay program) | `agents/decisions/95-cowsay-own-implementation.md` |
 
 ### Units
 
@@ -80,7 +96,7 @@ An abbreviation below is written in this one form, and no other.
 
 | Abbreviation |
 | --- |
-| `e.g.`, `i.e.`, `etc.`, `vs.` |
+| `etc.`, `vs.` |
 
 ### Terms with one meaning
 
@@ -100,7 +116,7 @@ Anywhere else a use of one is likely a metaphor.
 
 | Terms |
 | --- |
-| `abbreviation`, `bold`, `colon`, `dash`, `hyphen`, `idiom`, `imperative`, `intensifier`, `modifier`, `punctuation`, `semicolon`, `subordinate` |
+| `abbreviation`, `bold`, `colon`, `dash`, `hyphen`, `idiom`, `imperative`, `intensifier`, `punctuation`, `semicolon`, `subordinate` |
 
 ### Names
 
@@ -159,6 +175,7 @@ The lists do not apply to this file.
 | `status quo` | the current state | — |
 | `verbatim` | unchanged | — |
 | `cf`, `cf.` | see, refer to | — |
+| `e.g.`, `i.e.` | for example, that is | — |
 | `v.s.`, `vs`, `etc` | `vs.`, `etc.` | `vs.`, `etc.` |
 
 ### Intensifiers

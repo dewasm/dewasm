@@ -62,7 +62,7 @@ This is the decision 5 dependency criterion, applied backend-wide.
   Operand/destination aliasing is real.
   The delta of `memory.grow` may live in the destination temp.
   So `memory.grow` must update pages before deriving the old size.
-- **Linear memory is an indexed array with gaps, one byte per element.**
+- **Linear memory is a sparse indexed array, one byte per element.**
   It is read as `__m[a]` inside arithmetic.
   Unset elements are 0, so the initial zeros and `memory.grow` are free.
   Loads/stores are nameref units (`runtime/bash/units/mem/`).
@@ -100,7 +100,7 @@ The feared fork cost never appeared, since the chain design forks only for exhau
   The status chain isolates nothing because it never needs to.
 - **Word-packed memory (8 bytes/element)**: less RAM and faster bulk operations.
   But every load/store pays shift/mask reassembly.
-  One byte per element is simpler and measured fast enough for the specification suite.
+  Sparse one-byte elements are simpler and measured fast enough for the specification suite.
   Revisit when MB-class app memories (QuickJS/SQLite) become the target.
 - **External commands (`od`, `awk`, `bc`) for bit work**: rejected by decision 5's criterion.
   The dependency set must be exactly a Bash interpreter.
@@ -115,7 +115,7 @@ The feared fork cost never appeared, since the chain design forks only for exhau
 - Negative (resolved): float-using modules were refused (attributed `floats`, decision 8).
   That lasted until the decision 5 softfloat landed under decision 13.
   The classic control-flow files and the pure-float suite have passed since.
-- Deep recursion without `FUNCNEST` crashes Bash around 10-20k frames.
+- Deep recursion without `FUNCNEST` causes segmentation faults in Bash around 10-20k frames.
   Exhaustion checks must stay inside `( FUNCNEST=...; ... )` subshells.
 - Bulk memory operations loop per byte.
-  Large `memory.copy`/`fill` will need to handle bytes in groups before real apps run under Bash.
+  Large `memory.copy`/`fill` will need batching before real apps run under Bash.

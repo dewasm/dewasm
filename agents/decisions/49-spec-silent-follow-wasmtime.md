@@ -1,4 +1,4 @@
-# Decision 49: Where WASI Is Silent, Follow Wasmtime; Host-Matched `errno` Modes for `wasi-testsuite`
+# Decision 49: Where WASI Is Silent, Follow Wasmtime; `errno` Modes Fixed per Host for `wasi-testsuite`
 
 Status: **Accepted, 2026-07-29.**
 Implemented in PR #43 (issue #42).
@@ -59,5 +59,5 @@ It is scoped to Rust because the C and AssemblyScript suites assert exact `envir
 Some units carry host OS branches to reproduce Wasmtime's splits.
 Its special cases are copied as-is.
 A future Wasmtime change to a shape the specification leaves open forces a re-measure.
-The PR #41 Bash regression tests are re-based on this rule.
+The expected codes in the PR #41 Bash tests are re-based on this rule.
 They are in `crates/dewasm-backend-bash/tests/wasi_fs_regressions.rs`.

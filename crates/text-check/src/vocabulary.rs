@@ -3,6 +3,7 @@
 //! The tables of `agents/vocabulary.md` and the fetched base lists are read as they are.
 //! The one list of words here is the number words, which the "Number" source allows.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -95,7 +96,28 @@ pub struct Vocabulary {
     /// Terms of one context, each with the path prefixes where it is allowed.
     context_terms: Vec<(HashSet<String>, Vec<String>)>,
     exclusions: Vec<Exclusion>,
+    /// Each word of a term or name table, with the table that lists it.
+    listed: Vec<(String, &'static str)>,
+    /// The listed words some checked text has used.
+    used: RefCell<HashSet<String>>,
+    /// A listed word the check treats as absent, to see whether another source allows it.
+    skipped: RefCell<Option<String>>,
 }
+
+/// The tables whose words must each be used, and the ones whose words must need their entry.
+const LISTING_TABLES: &[&str] = &[
+    "Terms of the field",
+    "Plain words outside the base list",
+    "Terms with one meaning",
+    "Terms for writing",
+    "Names",
+];
+const NEEDED_TABLES: &[&str] = &[
+    "Terms of the field",
+    "Plain words outside the base list",
+    "Terms with one meaning",
+    "Terms for writing",
+];
 
 impl Vocabulary {
     /// Reads `agents/vocabulary.md` and the fetched base lists under `root`.
@@ -125,6 +147,7 @@ impl Vocabulary {
                 .collect()
         };
         let mut terms = spans_of("Terms of the field");
+        terms.extend(spans_of("Plain words outside the base list"));
         terms.extend(spans_of("Names"));
         let one_meaning: HashSet<String> = sections
             .iter()
@@ -138,7 +161,7 @@ impl Vocabulary {
         let writing_terms = spans_of("Terms for writing");
         let not_derived = spans_of("Not derived forms");
         let units = spans_of("Units");
-        let context_terms = sections
+        let context_terms: Vec<(HashSet<String>, Vec<String>)> = sections
             .iter()
             .filter(|(t, _)| t == "Terms of one context")
             .flat_map(|(_, body)| table_rows(body))
@@ -213,6 +236,25 @@ impl Vocabulary {
         if base.is_empty() || terms.is_empty() || exclusions.is_empty() {
             return Err(format!("{VOCABULARY} or a base list has no entries"));
         }
+        let mut listed: Vec<(String, &'static str)> = Vec::new();
+        for table in LISTING_TABLES {
+            for (title, body) in sections.iter().filter(|(t, _)| t == table) {
+                for row in table_rows(body) {
+                    // "Terms with one meaning" lists the term in its first cell only.
+                    let cells = if title == "Terms with one meaning" {
+                        &row[..1]
+                    } else {
+                        &row[..]
+                    };
+                    for cell in cells {
+                        listed.extend(code_spans(cell).iter().map(|w| (w.to_lowercase(), *table)));
+                    }
+                }
+            }
+        }
+        for (terms, _) in &context_terms {
+            listed.extend(terms.iter().map(|w| (w.clone(), "Terms of one context")));
+        }
         Ok(Vocabulary {
             base,
             writing_documents,
@@ -223,7 +265,37 @@ impl Vocabulary {
             units,
             context_terms,
             exclusions,
+            listed,
+            used: RefCell::new(HashSet::new()),
+            skipped: RefCell::new(None),
         })
+    }
+
+    /// Each listed word that no checked text used, and each one another source already allows.
+    /// It is complete only after every tracked Markdown file went through `file_defects`.
+    pub fn table_defects(&self) -> Vec<String> {
+        let used = self.used.borrow().clone();
+        let mut report: Vec<String> = self
+            .listed
+            .iter()
+            .filter(|(word, _)| !used.contains(word))
+            .map(|(word, table)| format!("{VOCABULARY}: \"{word}\" in {table} is used by no text"))
+            .collect();
+        for (word, table) in self
+            .listed
+            .iter()
+            .filter(|(_, t)| NEEDED_TABLES.contains(t))
+        {
+            *self.skipped.borrow_mut() = Some(word.clone());
+            let allowed = self.allowed(word, false);
+            *self.skipped.borrow_mut() = None;
+            if allowed {
+                report.push(format!(
+                    "{VOCABULARY}: \"{word}\" in {table} is already allowed without its entry"
+                ));
+            }
+        }
+        report
     }
 
     /// Each vocabulary defect of the Markdown file `path` under `root`, as `path:line: what`.
@@ -253,7 +325,7 @@ impl Vocabulary {
                 .into_iter()
                 .filter(|w| !self.is_name(w, title) && !self.is_unit(w))
                 .map(|w| self.without_name_parts(&w.text).to_lowercase())
-                .filter(|w| !self.allowed(w, writing) && !context_terms_allow(&context, w))
+                .filter(|w| !self.allowed(w, writing) && !self.context_allows(&context, w))
                 .filter(|w| {
                     !excluded
                         .iter()
@@ -328,10 +400,22 @@ impl Vocabulary {
     }
 
     fn known(&self, word: &str, writing: bool) -> bool {
-        self.base.contains(word)
-            || self.terms.contains(word)
-            || NUMBER_WORDS.contains(&word)
-            || (writing && self.writing_terms.contains(word))
+        let skipped = self.skipped.borrow().as_deref() == Some(word);
+        let listed = !skipped
+            && (self.terms.contains(word) || (writing && self.writing_terms.contains(word)));
+        if listed {
+            self.used.borrow_mut().insert(word.to_owned());
+        }
+        self.base.contains(word) || listed || NUMBER_WORDS.contains(&word)
+    }
+
+    /// Whether a term of the file's context allows `word` or one of its inflections.
+    fn context_allows(&self, context: &HashSet<&str>, word: &str) -> bool {
+        let found = inflections(word).find(|w| context.contains(w.as_str()));
+        if let Some(term) = &found {
+            self.used.borrow_mut().insert(term.clone());
+        }
+        found.is_some()
     }
 
     /// Whether `word`, lower case, is allowed.
@@ -378,11 +462,6 @@ fn is_title_case(sentence: &str, words: &[Word]) -> bool {
     }
     let long: Vec<&Word> = words.iter().filter(|w| w.text.len() >= 4).collect();
     long.len() >= 3 && long.iter().filter(|w| w.capitalized).count() * 5 >= long.len() * 4
-}
-
-/// Whether a term of the file's context allows `word` or one of its inflections.
-fn context_terms_allow(context: &HashSet<&str>, word: &str) -> bool {
-    inflections(word).any(|w| context.contains(w.as_str()))
 }
 
 /// `(title, body)` for each heading of `markdown`, at any level.
@@ -635,6 +714,9 @@ mod tests {
             terms: set(&["backend", "wasi-sdk"]),
             writing_terms: set(&["idiom"]),
             not_derived: set(&["siren"]),
+            listed: vec![],
+            used: RefCell::new(HashSet::new()),
+            skipped: RefCell::new(None),
             units: set(&["ms"]),
             context_terms: vec![],
             exclusions: vec![
@@ -721,6 +803,26 @@ mod tests {
         let v = vocabulary();
         assert!(outside(&v, "Use the check 35 ms.").is_empty());
         assert_eq!(outside(&v, "The ms is a unit."), ["ms", "unit"]);
+    }
+
+    #[test]
+    fn a_table_word_is_used_and_needed() {
+        let mut v = vocabulary();
+        v.listed = vec![
+            ("backend".to_owned(), "Terms of the field"),
+            ("wasi-sdk".to_owned(), "Terms of the field"),
+            ("usable".to_owned(), "Terms of the field"),
+        ];
+        v.terms.insert("usable".to_owned());
+        assert!(v.allowed("backends", false));
+        assert_eq!(
+            v.table_defects(),
+            [
+                "agents/vocabulary.md: \"wasi-sdk\" in Terms of the field is used by no text",
+                "agents/vocabulary.md: \"usable\" in Terms of the field is used by no text",
+                "agents/vocabulary.md: \"usable\" in Terms of the field is already allowed without its entry",
+            ]
+        );
     }
 
     #[test]

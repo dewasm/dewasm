@@ -18,11 +18,11 @@ Imports could only be supplied as a Hash of per-function callables.
 That made a whole-runtime replacement not practical.
 A WASI implementation is coupled to the guest memory.
 But the memory exists only after `new` returns, while imports must go *into* `new`.
-This is the classic instantiation problem: each side needs the other to exist first.
+This is the classic instantiation circularity.
 Library mode also refused to instantiate WASI-importing modules at all.
 The exception was an embedder that hand-implemented WASI Preview 1.
 
-Survey of how real systems solve it:
+Survey of how real systems break the circularity:
 
 - **Node.js `node:wasi`**: a WASI object yields the import object.
   `wasi.start(instance)` binds the exported memory before execution.
@@ -53,7 +53,7 @@ Survey of how real systems solve it:
 - **The bundled WASI is constructed only when needed.**
   The first fallback resolution runs `@wasi ||= Rt::WASI.new(args:, env:)`.
   If the embedder covers every WASI import, no instance is created.
-  Its side effects (`binmode` on standard input and output) then never happen.
+  Its side effects (stdio `binmode`) then never happen.
   Unimplemented system calls resolve to stubs at generation time, so they cannot trigger construction.
 - `Rt::WASI` implements the provider protocol itself.
   So a custom WASI runtime can replace it whole by defining two methods.
@@ -78,7 +78,7 @@ Survey of how real systems solve it:
 ## Consequences
 
 - Positive: `Hello.new` works out of the box for WASI programs in library mode.
-  Custom runtimes replace it whole.
+  Custom WASI runtimes replace the bundled WASI whole.
   The specification harness needed no changes (Hash path untouched).
 - Negative / limit: this concerns minimal Embedded bundles.
   There, `instance.memory` only carries the typed accessors the module itself uses.

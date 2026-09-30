@@ -48,7 +48,7 @@ Any scheme that moves work across a method boundary pays a call and gains no com
   This is not economy.
   A tight back-edge turned into a state transition measured *slower* than the chain it replaces.
   That holds once the loop runs ~100 trips per entry.
-- **One shape of branch to an outer frame is left as it is: Ruby's `break`.**
+- **One shape of outward branch is left as it is: Ruby's `break`.**
   Consider a `br` crossing a single loop that is the **only** statement of the block it targets.
   That `br` leaves the loop and lands at the block's end, where the branch was going, in O(1).
   That is the standard compilation of `while` with a conditional exit.
@@ -98,7 +98,7 @@ So the `wat` microbenchmarks come out slightly ahead of the pre-flattening lower
 
 **Negative.**
 Depth-1 branches get *more* expensive.
-They are the majority of all branches (20,588 vs. 19,939 deeper ones in `sqlite3-shell`).
+They are the majority of all branches (20,588 vs. 19,939 outward ones in `sqlite3-shell`).
 Under decision 42, each was a single `break`.
 Of those in flattened functions, 69% (89% in `ruby.wasm`) now pay more.
 They pay an assignment plus a hash dispatch instead.
@@ -114,4 +114,4 @@ Consider a state whose only entry is one earlier state's trailing transition.
 That state is the earlier state's continuation and could be spliced in.
 Splicing removes a dispatch round-trip.
 Measured at 1.5-4%, which is inside the measurement drift of the host it was taken on.
-It is not implemented here and needs a measurement that runs the two builds in turn before it is.
+It is not implemented here and needs an interleaved measurement before it is.

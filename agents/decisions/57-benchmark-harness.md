@@ -9,7 +9,7 @@ Timings never repeat with identical bytes, so nothing here is a compared snapsho
 ## Context
 
 Every neighbouring project publishes numbers, and dewasm published none.
-So no measurement could prove the central claim wrong: AOT source output beats an interpreter loop.
+That made the central claim unfalsifiable: AOT source output beats an interpreter loop.
 The direct competitors are [`pywasm`](https://github.com/mohanson/pywasm) (pure Python) and [`wardite`](https://github.com/udzura/wardite) (pure Ruby).
 Wasmtime is the upper limit.
 
@@ -84,7 +84,7 @@ Constraining the workload is what makes the comparison a comparison.
 - no WASI beyond `args_get`/`args_sizes_get`/`fd_write`/`proc_exit`.
 
 Imports resolve at instantiation.
-So merely linking `wasi-libc` standard I/O (which imports `fd_seek`) makes a module unloadable there.
+So merely linking `wasi-libc` stdio (which imports `fd_seek`) makes a module unloadable there.
 Two runtime caps come from elsewhere.
 `pywasm` asserts at wasm call depth 1024.
 wasm3 rejects WASI output parameters at linear-memory address 0.

@@ -48,7 +48,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 19 | [Ruby Exception Handling (Tags as Identity Objects, Exceptions as Native Exceptions)](19-ruby-exception-handling.md) | Accepted |
 | 20 | [Component Model (Canonical-ABI Adapters Built as Core IR, Fixed Host Vocabulary)](20-component-model-core-ir-adapters.md) | Superseded (decision 24) |
 | 21 | [WASI Preview 2 Host for Ruby (CLI World)](21-ruby-wasi-preview2.md) | Superseded (decision 24) |
-| 22 | [Build the sqlite3 Apps From Fixed Source With Zig, Both Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
+| 22 | [Build the sqlite3 Apps From a Fixed Source Version With Zig, Standalone and Library](22-sqlite3-built-from-source.md) | Accepted |
 | 23 | [Backend Support Maturity Levels, Specialized to Wasm 1.0 + WASI Preview 1](23-backend-support-levels.md) | Superseded (decision 25) |
 | 24 | [0.1 Scope Reset (Wasm 1.0 + WASI Preview 1 Only, App-Driven Goals)](24-01-scope-reset.md) | Accepted |
 | 25 | [Retire the Support Maturity Levels for Plain Capability Declarations](25-retire-support-levels.md) | Accepted |
@@ -63,7 +63,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 34 | [Bash WASI File System](34-bash-wasi-file-system.md) | Accepted |
 | 35 | [Bash Cross-Module Linking](35-bash-cross-module-linking.md) | Accepted |
 | 36 | [Official WASI p1 Conformance Suite as a Harness Layer](36-wasi-testsuite-conformance.md) | Accepted |
-| 37 | [Optional Data Segments in a Separate File (`--data-file`)](37-data-segments-in-a-file.md) | Accepted |
+| 37 | [Data Segments Moved to a Separate File on Request (`--data-file`)](37-data-segments-in-a-file.md) | Accepted |
 | 38 | [Optional DWARF Line-Number Back-Mapping (`--dwarf-line`)](38-dwarf-line-back-mapping.md) | Accepted |
 | 39 | [Running `wasm-opt` on Locally-Built App Modules](39-running-wasm-opt.md) | Accepted |
 | 40 | [WASI p1 Completion (Symbolic Links, Checked `fd` Rights, Conformance-Runner Environment)](40-wasi-p1-completion.md) | Accepted |
@@ -75,7 +75,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 46 | [Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness](46-host-scoped-wasi-expected-failures.md) | Accepted |
 | 47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
 | 48 | [Two-Speed Slow-Test Classification (`slow_test` / `ultra_slow_test`)](48-slow-test-speeds.md) | Accepted |
-| 49 | [Where WASI Is Silent, Follow Wasmtime; Host-Matched `errno` Modes for `wasi-testsuite`](49-spec-silent-follow-wasmtime.md) | Accepted |
+| 49 | [Where WASI Is Silent, Follow Wasmtime; `errno` Modes Fixed per Host for `wasi-testsuite`](49-spec-silent-follow-wasmtime.md) | Accepted |
 | 50 | [DOOM Example (One Wasm Binary, Per-Language Native Frontends)](50-doom-example-shape.md) | Accepted |
 | 51 | [Bash Linear Memory as an Associative Array](51-bash-assoc-memory.md) | Accepted |
 | 52 | [Bash Emitter Inlines Linear-Memory Loads and Stores](52-bash-inline-memops.md) | Accepted |
@@ -123,7 +123,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 94 | [Codon Backend Lowering Conventions](94-codon-backend-lowering.md) | Accepted |
 | 95 | [`cowsay` Comes From Our Own Implementation, Published Upstream](95-cowsay-own-implementation.md) | Accepted |
 | 96 | [Generated Output Must Survive Ahead-of-Time Compilation](96-generated-code-compiles-ahead-of-time.md) | Accepted |
-| 97 | [A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Stubbed](97-optional-host-libraries.md) | Accepted |
+| 97 | [A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Faked](97-optional-host-libraries.md) | Accepted |
 | 98 | [A Sentence Is at Most 100 Characters as Read](98-sentence-length-bound.md) | Accepted |
 | 99 | [Text Uses a Learner Word List Plus Project Terms](99-allowed-vocabulary.md) | Accepted |
 

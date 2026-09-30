@@ -163,9 +163,9 @@ Only larger modules exercise the machinery.
   That left its function unsplit.
 - **Data segments are chunked Base64** (`Rt.data_from_b64`).
   A chunk is 32KB raw, to stay under the string limit.
-  Each is built in its own `initData{i}()`, so `<init>` never accumulates bytecode that fills data.
+  Each is materialized in its own `initData{i}()`, so `<init>` never accumulates bytecode that fills data.
   Hexadecimal text was rejected, as it doubles the constant size for no benefit.
-  Honest finding: the predicted overflow of many MB does not occur for the listed binaries.
+  Honest finding: the predicted overflow of many MB does not occur for the fixed-version app binaries.
   `ripgrep`'s largest segment is about 36 chunks at roughly 8 bytes of bytecode each.
   So one method would have been enough.
   The per-segment split is kept as the general bound, always exercised and free.
@@ -175,8 +175,7 @@ Only larger modules exercise the machinery.
   That class fills it via chunked part methods of `ELEM_PART` (512) entries.
   `qjs` and SQLite (about 550) stay inline.
   One class is not enough for CRuby: each entry costs a pool roughly ten entries.
-  Those are a lambda's `invokedynamic`, method handle, and synthetic method.
-  The method reference it calls adds one more.
+  They are a lambda's `invokedynamic`, method handle, synthetic method, and called method reference.
   So its 8737-entry table filled one pool alone.
   The fillers live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` (2048) entries.
   **Reading `javac`'s diagnosis:** CRuby reported "too many constants" 1059 times.
@@ -200,14 +199,14 @@ Only larger modules exercise the machinery.
   With partitioning off, the output is identical to the unpartitioned shape.
   So the specification suite and `qjs`/SQLite stay on their proven path.
   Only modules the size of `ripgrep` exercise the new one.
-  `rg_search_java`'s snapshot, matched exactly, proves it.
+  `rg_search_java`'s snapshot, matched exactly, checks it.
   Converting takes about 2 s, and `javac` about 10 s over 5 partition classes.
 
 ### WASI: where Java's standard library forced a different shape
 
 - **The file descriptor table** is a `Map<Integer, Object>`.
   A value is one of:
-  - an `InputStream`/`OutputStream` (standard input/output inherited from the parent process);
+  - an `InputStream`/`OutputStream` (inherited stdio);
   - a `Handle` (a guest-opened file over a seekable `FileChannel`);
   - a `Dir`.
 

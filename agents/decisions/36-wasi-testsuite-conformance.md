@@ -15,7 +15,7 @@ Builds on decision 8 (list-with-attribution) and decision 31 (standalone interfa
 dewasm's own WASI p1 fixtures (`crates/dewasm-test-helper/src/wasi.rs`) are a few `.wat` probes.
 They are hand-written and grouped by feature unit.
 They are enough to guard the units we wrote, but not a conformance bar.
-The [`WebAssembly/wasi-testsuite`](https://github.com/WebAssembly/wasi-testsuite) project publishes `.wasm` modules built in advance.
+The [`WebAssembly/wasi-testsuite`](https://github.com/WebAssembly/wasi-testsuite) project publishes prebuilt `.wasm` modules.
 They are compiled from C, Rust, and AssemblyScript sources.
 They exercise WASI p1 system calls against expected exit codes and output.
 Each test has a JSON manifest (`args`, `env`, `root`, `exit_code`, `stdout`).
@@ -25,14 +25,14 @@ So the modules can run through that interface unchanged.
 
 ## Decision
 
-- **Keep the suite as a Git submodule**, `tests/wasi-testsuite` on branch `prod/testsuite-base`.
+- **Vendor the suite as a Git submodule**, `tests/wasi-testsuite` on branch `prod/testsuite-base`.
   This mirrors the `tests/spec` submodule.
-  That branch carries the artifacts *built in advance*.
+  That branch carries the *prebuilt* artifacts.
   They are under `tests/{c,rust,assemblyscript}/testsuite/wasm32-wasip1/`.
   Criterion: *upstream that ships built artifacts we do not rebuild is a submodule, not a fetch script*.
   There is no toolchain step to run, and the fixed version is a commit.
   Updating that version is an intended commit like `tests/spec`.
-- **Execute through the decision 31 standalone interface, not a separate host.**
+- **Execute through the decision 31 standalone interface, not a host made for this suite.**
   A new `BackendUnderTest::run_standalone_wasi` reuses each backend's own launch recipe (`pty_command`).
   It runs a converted standalone program with the manifest translated to that interface:
   - `root` → a `--dir <root>::/` preopen, as upstream's Wasmtime adapter mounts `root` at guest `/`;
@@ -47,7 +47,7 @@ So the modules can run through that interface unchanged.
   Running the modules the way a user runs a converted program is what makes a pass meaningful.
 - **Scope: `c` + `rust` + `assemblyscript`, `wasm32-wasip1` only.**
   The Rust `wasm32-wasip3` tree is excluded.
-  Preview 3 is component-model territory, rejected by decision 24.
+  Preview 3 is component-model territory, rejected for every backend by decision 24.
   AssemblyScript is included: its modules convert cleanly and run.
 - **Known failures are listed with attribution, not implemented now** (decision 8).
   Each backend's `WASI_TESTSUITE_EXPECTED_FAILURES` maps a trial to a tag naming its cause.
@@ -73,7 +73,7 @@ So the modules can run through that interface unchanged.
 ## Rejected alternatives
 
 - **A fetch script (like `examples/apps/setup.sh`).**
-  That pattern exists for artifacts we rebuild from a fixed source or fetch per shape (decision 9).
+  That pattern is for artifacts fetched per shape or built from a fixed source version (decision 9).
   This suite ships built `.wasm` we consume unchanged.
   So a submodule is the lighter, reproducible way to fix the version.
   It needs no build tools, and the version is a commit.

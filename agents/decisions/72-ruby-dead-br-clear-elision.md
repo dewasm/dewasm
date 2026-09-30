@@ -64,7 +64,7 @@ Skipping can only keep a droppable clear.
 - The matching refinement of the other spelling is not taken.
   The relaying spelling's land arm can likewise be dead.
   But the relay arm is protocol-required, and the spelling is a single line either way.
-- Tests of the generated code's shape check both sides.
+- Tests of the generated code's shape check both sides and the conservative choice.
   They also check the cases where the rule keeps a clear it could drop.
   They are in `crates/dewasm-backend-ruby/src/lib.rs`:
   - `dead_method_level_clear_is_dropped`;

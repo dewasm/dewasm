@@ -19,7 +19,7 @@ Size is the axis on which it can win, and it was unmeasured.
 So the distribution argument was being made in text with no numbers behind it.
 The argument is "ship source instead of a binary plus a runtime".
 
-The claim can be tested and is worth checking, because the answer is not obviously favourable.
+The claim is falsifiable and worth checking, because the answer is not obviously favourable.
 Converted source is much larger than the wasm it came from, a factor of 3 to 30 across the backends.
 What it replaces is not the wasm alone but the wasm *plus a runtime that can execute it*.
 Those runtimes differ by more than two orders of magnitude among themselves.

@@ -6,7 +6,7 @@ description: |
   Use also when the user asks to "add a decision for X".
   Also use when a design discussion reaches a decision worth recording.
   The procedure lives in agents/decisions/README.md § "Adding a new decision".
-  It covers the go/no-go call, the numbering, the skeleton, and the index row.
+  It covers the go/no-go call, the numbering, the template, and the index row.
   It also covers the quality bar and the verification steps.
   This skill only routes there.
 ---

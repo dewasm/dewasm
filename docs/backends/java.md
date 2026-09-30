@@ -8,7 +8,7 @@ Very large modules are split across multiple classes.
 
 A single `.java` file holds the generated module class.
 The runtime (`Rt`/`Memory`/`Table`/`WASI`) sits inside it as `static` nested classes.
-Nesting is what lets two converted artifacts sit in one package without their runtimes colliding.
+Nesting lets two converted artifacts share one package without a name conflict between runtimes.
 Each one's trap type is its own.
 So from outside the module class they are spelled `Add.Rt.Fn`, `Add.Rt.Trap`, and `Add.WASI`.
 In **standalone** mode the entry point is always a `public class Main` with `public static void main`.
@@ -17,16 +17,16 @@ The module class is always `Program`, and `--module-name` is rejected.
 In **library** mode the module class is package-private.
 So put your own `public class Main` (or other public entry) in the *same* file.
 
-Library mode requires `--module-name` and takes it verbatim as a dot-separated name.
+Library mode requires `--module-name` and takes it unchanged as a dot-separated name.
 The last segment is the class name.
 Anything before it becomes the file's `package` declaration.
 So `--module-name com.github.dewasm.Sqlite3` gives `package com.github.dewasm;` and `class Sqlite3`.
-Your appended `Main` then shares that package.
+Your `Main`, added at the end of the file, then shares that package.
 Every segment must match `[A-Za-z_$][A-Za-z0-9_$]*`.
-Anything else is a conversion-time error, and nothing is sanitized.
+Anything else is a conversion-time error, and nothing is rewritten.
 Java keywords pass the character-level grammar and fail in `javac` with the compiler's own message.
 
-Integers are native `int`/`long` as bit patterns; unsigned ops use `Integer.*`/`Long.*`.
+Integers are native `int`/`long` as bit patterns; unsigned operations use `Integer.*`/`Long.*`.
 Control flow uses a per-function branch register `_br`.
 
 ## Requirements
@@ -42,13 +42,13 @@ $ dewasm prog.wasm --target java --mode standalone -o Main.java
 $ javac Main.java && java Main --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs follow the shared runtime interface: argv, `--dir` preopens, env, exit/trap.
-It is described in [docs/standalone-interface.md](../standalone-interface.md).
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 Java is the one deviation on `argv[0]`.
 The JVM does not pass the launched file name to `main`, so Java uses the module class name.
 In standalone mode that name is the fixed `Program`.
 
-Library: append your `public class Main` to the generated file.
+Library: add your `public class Main` at the end of the generated file.
 Or put it beside the generated file in the same package.
 Constructor arguments are `(imports, argv, env, preopens)`.
 Exports are `<Class>.Rt.Fn` values in the `Exports` map:
@@ -69,13 +69,13 @@ Catch it if you drive `_start`.
 ## Capabilities
 
 Full wasm core 1.0 plus the universal baseline.
-**Full WASI preview 1 including the filesystem**, adopting the Ruby fs model.
-Non-function imports, multiple tables, and table bulk ops are supported.
+**Full WASI Preview 1 including the file system**, adopting the Ruby file system model.
+Non-function imports, multiple tables, and table bulk operations are supported.
 The final exception-handling proposal is supported.
 A thrown wasm exception is a native exception carrying its tag.
-catch_all cannot observe traps.
-C programs based on setjmp/longjmp convert and run; mruby is the covered app case.
-Authoritative matrix: [docs/support.md](../support.md).
+`catch_all` cannot observe traps.
+C programs based on `setjmp`/`longjmp` convert and run; `mruby` is the covered app case.
+The official support table: [`docs/support.md`](../support.md).
 
 ## Providers and library usage
 
@@ -92,12 +92,12 @@ A source is one of two things:
   Its method is `Object wasmImport(String name)`.
 
 `ImportProvider` has a default method `attach(Object instance)`.
-It is called once the instance is fully built.
+It is called once the instance is built.
 So a provider can reach its memory.
 The e2e override and custom-provider glues are the worked reference.
 They are in `crates/dewasm-backend-java/tests/e2e.rs`.
 
-## Caveats
+## Limits
 
 - **Class splitting at scale.**
   The JVM caps three sizes:
@@ -108,8 +108,8 @@ They are in `crates/dewasm-backend-java/tests/e2e.rs`.
   dewasm handles all three automatically:
   - large functions are split into numbered `part` methods over a per-call frame object;
   - huge modules are partitioned across nested `P{k}` classes, and a large binary spans several;
-  - oversized data segments are emitted as chunked Base64.
+  - data segments that are too large are emitted as chunked Base64.
 
-  This is transparent but explains why one binary yields many classes.
+  This needs nothing from the user, but explains why one binary yields many classes.
 - **Compile cost** is the slow step for large modules, as in Go.
-  The e2e suite compiles to a content-addressed class-dir cache to pay `javac` once.
+  The e2e suite compiles to a content-addressed cache directory of classes to pay `javac` once.

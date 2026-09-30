@@ -15,42 +15,42 @@ Measured 2026-09-25T05:34:26Z.
 | OS | macOS 27.0 |
 | Kernel | Darwin 27.0.0 |
 | CPU | Apple M1 Pro |
-| Arch | aarch64 |
+| Architecture | aarch64 |
 
 Version strings are captured by executing each runtime.
 A runner missing from this table was unavailable on this host; its cells appear under [Not measured](#not-measured).
 
 | Runner | Version |
 | --- | --- |
-| `wasmtime` | wasmtime 49.0.1 (46c23a87d 2026-09-24) |
-| `wasmer` | wasmer 7.4.2 |
-| `wasmedge` | wasmedge version 0.17.1 |
-| `wazero` | 1.12.0 |
-| `wasm3` | Wasm3 v0.9.1-beta.1 on arm64-v8a |
-| `dewasm-ruby` | ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25] |
-| `dewasm-ruby-yjit` | ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25] |
-| `dewasm-ruby-zjit` | ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25] |
-| `dewasm-monoruby` | monoruby 0.3.0 (revision 22a4f78ab7) [arm64-darwin25] |
-| `dewasm-jruby` | jruby 10.1.2.0-SNAPSHOT (4.0.0) 2026-09-12 336fd7701b OpenJDK 64-Bit Server VM 25.0.2+10-69 on 25.0.2+10-69 +indy +jit [arm64-darwin] |
-| `dewasm-spinel` | spinel 2026.09.12+893 (e25c617d) [apple clang 21.0.0 (cc)] |
-| `dewasm-python` | Python 3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)] |
-| `dewasm-python-jit` | Python 3.14.7 (main, Sep 12 2026, 18:45:02) [Clang 19.1.7 ] |
-| `dewasm-pypy` | Python 3.11.16 (78565394c9b5, Sep 21 2026, 11:18:20) |
-| `dewasm-graalpy` | GraalPy 3.12.8 (Oracle GraalVM Native 25.0.3) |
-| `dewasm-perl` | v5.44.0 |
-| `dewasm-go` | go version go1.27.1 darwin/arm64 |
-| `dewasm-tinygo` | tinygo version 0.42.0 darwin/arm64 (using go version go1.27.1 and LLVM version 22.1.4) |
-| `dewasm-java` | openjdk version "25.0.2" 2026-01-20 |
-| `dewasm-codon` | 0.20.1 |
-| `dewasm-bash` | 5.3.20(1)-release |
-| `wasm3-ruby` | Wasm3 v0.9.0 on wasm |
-| `wasm3-ruby-yjit` | Wasm3 v0.9.0 on wasm |
-| `wasm3-python` | Wasm3 v0.9.0 on wasm |
-| `wasm3-pypy` | Wasm3 v0.9.0 on wasm |
-| `pywasm-cpython` | pywasm 2.2.3 |
-| `pywasm-pypy` | pywasm 2.2.3 |
-| `wardite` | wardite 0.9.0 |
-| `wardite-yjit` | wardite 0.9.0 |
+| `wasmtime` | `wasmtime 49.0.1 (46c23a87d 2026-09-24)` |
+| `wasmer` | `wasmer 7.4.2` |
+| `wasmedge` | `wasmedge version 0.17.1` |
+| `wazero` | `1.12.0` |
+| `wasm3` | `Wasm3 v0.9.1-beta.1 on arm64-v8a` |
+| `dewasm-ruby` | `ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25]` |
+| `dewasm-ruby-yjit` | `ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25]` |
+| `dewasm-ruby-zjit` | `ruby 4.0.7 (2026-09-15 revision 229531a6cf) +PRISM [arm64-darwin25]` |
+| `dewasm-monoruby` | `monoruby 0.3.0 (revision 22a4f78ab7) [arm64-darwin25]` |
+| `dewasm-jruby` | `jruby 10.1.2.0-SNAPSHOT (4.0.0) 2026-09-12 336fd7701b OpenJDK 64-Bit Server VM 25.0.2+10-69 on 25.0.2+10-69 +indy +jit [arm64-darwin]` |
+| `dewasm-spinel` | `spinel 2026.09.12+893 (e25c617d) [apple clang 21.0.0 (cc)]` |
+| `dewasm-python` | `Python 3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]` |
+| `dewasm-python-jit` | `Python 3.14.7 (main, Sep 12 2026, 18:45:02) [Clang 19.1.7 ]` |
+| `dewasm-pypy` | `Python 3.11.16 (78565394c9b5, Sep 21 2026, 11:18:20)` |
+| `dewasm-graalpy` | `GraalPy 3.12.8 (Oracle GraalVM Native 25.0.3)` |
+| `dewasm-perl` | `v5.44.0` |
+| `dewasm-go` | `go version go1.27.1 darwin/arm64` |
+| `dewasm-tinygo` | `tinygo version 0.42.0 darwin/arm64 (using go version go1.27.1 and LLVM version 22.1.4)` |
+| `dewasm-java` | `openjdk version "25.0.2" 2026-01-20` |
+| `dewasm-codon` | `0.20.1` |
+| `dewasm-bash` | `5.3.20(1)-release` |
+| `wasm3-ruby` | `Wasm3 v0.9.0 on wasm` |
+| `wasm3-ruby-yjit` | `Wasm3 v0.9.0 on wasm` |
+| `wasm3-python` | `Wasm3 v0.9.0 on wasm` |
+| `wasm3-pypy` | `Wasm3 v0.9.0 on wasm` |
+| `pywasm-cpython` | `pywasm 2.2.3` |
+| `pywasm-pypy` | `pywasm 2.2.3` |
+| `wardite` | `wardite 0.9.0` |
+| `wardite-yjit` | `wardite 0.9.0` |
 
 ## Results
 
@@ -74,7 +74,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/br_table</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 34 964 177 | 8.47 | 8.53 | 4.4 ms | 300.6 ms | 1.00x | — |
 | `wasmer` | 35 094 903 | 8.43 | 8.50 | 7.0 ms | 302.8 ms | 0.99x | — |
@@ -118,7 +118,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/call_direct</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 86 173 077 | 3.49 | 3.49 | 4.4 ms | 305.4 ms | 1.00x | — |
 | `wasmer` | 87 370 870 | 3.43 | 3.43 | 7.0 ms | 306.6 ms | 0.98x | — |
@@ -162,7 +162,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/call_indirect</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 33 554 432 | 10.4 | 10.4 | 4.4 ms | 352.7 ms | 1.00x | — |
 | `wasmer` | 31 309 074 | 10.3 | 10.4 | 7.2 ms | 331.0 ms | 1.00x | — |
@@ -206,7 +206,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/conv</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 39 466 477 | 7.53 | 7.55 | 4.3 ms | 301.7 ms | 1.00x | — |
 | `wasmer` | 38 866 212 | 7.53 | 7.56 | 7.0 ms | 299.5 ms | 1.00x | — |
@@ -250,7 +250,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/eh_throw</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 1 411 931 | 212.0 | 215.0 | 4.6 ms | 303.9 ms | 1.00x | — |
 | `wasmer` | 19 192 | 13257 | 13294 | 6.9 ms | 261.4 ms | 63x | — |
@@ -283,7 +283,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/eh_try</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 103 631 742 | 2.79 | 2.80 | 4.5 ms | 293.7 ms | 1.00x | — |
 | `wasmer` | 238 070 846 | 1.25 | 1.25 | 7.1 ms | 304.7 ms | 0.45x | — |
@@ -316,7 +316,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/f32_alu</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 310 150 729 | 0.98 | 0.98 | 4.7 ms | 309.6 ms | 1.00x | — |
 | `wasmer` | 303 358 800 | 0.98 | 0.99 | 7.3 ms | 305.2 ms | 1.00x | — |
@@ -358,7 +358,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/f64_alu</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 308 786 280 | 0.96 | 0.97 | 4.5 ms | 301.4 ms | 1.00x | — |
 | `wasmer` | 309 637 945 | 0.96 | 0.96 | 7.2 ms | 305.1 ms | 1.00x | — |
@@ -402,7 +402,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/i32_alu</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 132 658 841 | 2.28 | 2.30 | 4.6 ms | 307.6 ms | 1.00x | — |
 | `wasmer` | 132 240 583 | 2.29 | 2.29 | 7.1 ms | 309.4 ms | 1.00x | — |
@@ -446,7 +446,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/i32_div</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 40 060 768 | 7.53 | 7.57 | 4.4 ms | 306.1 ms | 1.00x | — |
 | `wasmer` | 40 056 198 | 7.53 | 7.52 | 7.1 ms | 308.6 ms | 1.00x | — |
@@ -490,7 +490,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/i64_alu</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 131 463 137 | 2.29 | 2.30 | 4.8 ms | 306.4 ms | 1.00x | — |
 | `wasmer` | 132 006 471 | 2.29 | 2.30 | 7.3 ms | 310.0 ms | 1.00x | — |
@@ -534,7 +534,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/i64_div</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 37 006 126 | 8.17 | 8.20 | 4.4 ms | 306.9 ms | 1.00x | — |
 | `wasmer` | 36 347 844 | 8.14 | 8.16 | 7.1 ms | 303.2 ms | 1.00x | — |
@@ -576,7 +576,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/mem_narrow</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 198 134 315 | 1.48 | 1.49 | 4.4 ms | 298.6 ms | 1.00x | — |
 | `wasmer` | 192 948 143 | 1.57 | 1.57 | 7.3 ms | 309.5 ms | 1.05x | — |
@@ -620,7 +620,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/mem_rw</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 291 932 097 | 1.01 | 1.01 | 4.5 ms | 298.7 ms | 1.00x | — |
 | `wasmer` | 312 622 989 | 0.99 | 1.00 | 7.8 ms | 318.5 ms | 0.99x | — |
@@ -664,7 +664,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>wat/tail_call</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 84 935 923 | 3.49 | 3.50 | 4.6 ms | 301.4 ms | 1.00x | — |
 | `wasmedge` | 1 644 962 | 187.4 | 188.8 | 18.6 ms | 326.9 ms | 54x | — |
@@ -702,7 +702,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>c/mandelbrot</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 3 149 864 | 95.1 | 95.1 | 4.4 ms | 304.0 ms | 1.00x | — |
 | `wasmer` | 3 107 382 | 94.7 | 94.7 | 7.4 ms | 301.7 ms | 1.00x | — |
@@ -746,7 +746,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>c/sha256</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 1 019 471 | 292.6 | 293.3 | 4.4 ms | 302.7 ms | 1.00x | — |
 | `wasmer` | 1 013 486 | 293.2 | 294.5 | 7.1 ms | 304.2 ms | 1.00x | — |
@@ -790,7 +790,7 @@ So compare the per-iteration figures, not the raw wall times.
 <details>
 <summary>Full numbers for <code>c/wordcount</code></summary>
 
-| Runner | Iterations | ns/op (min) | ns/op (median) | Cold start `t(0)` | Total `t(N)` | vs wasmtime | Load |
+| Runner | Iterations | Minimum `ns/op` | Median `ns/op` | Cold start `t(0)` | Total `t(N)` | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 190 969 969 | 1.51 | 1.53 | 4.5 ms | 293.3 ms | 1.00x | — |
 | `wasmer` | 187 970 272 | 1.50 | 1.54 | 7.1 ms | 289.8 ms | 0.99x | — |
@@ -839,7 +839,7 @@ Every runner executes the same work, so wall times compare directly.
 <details>
 <summary>Full numbers for <code>app/cowsay</code></summary>
 
-| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
+| Runner | Runs/sample | Wall time (minimum) | Wall time (median) | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 19 | 5.1 ms | 5.1 ms | 1.00x | — |
 | `wasmer` | 31 | 8.3 ms | 8.3 ms | 1.61x | — |
@@ -883,7 +883,7 @@ Every runner executes the same work, so wall times compare directly.
 <details>
 <summary>Full numbers for <code>app/sqlite3_query</code></summary>
 
-| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
+| Runner | Runs/sample | Wall time (minimum) | Wall time (median) | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 2 | 75.9 ms | 76.0 ms | 1.00x | — |
 | `wasmer` | 2 | 85.0 ms | 85.6 ms | 1.12x | — |
@@ -912,7 +912,7 @@ Every runner executes the same work, so wall times compare directly.
 <details>
 <summary>Full numbers for <code>app/sqlite3_mod_query</code></summary>
 
-| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
+| Runner | Runs/sample | Wall time (minimum) | Wall time (median) | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 2 | 81.6 ms | 81.8 ms | 1.00x | — |
 | `wasmer` | 2 | 89.2 ms | 89.6 ms | 1.09x | — |
@@ -941,7 +941,7 @@ Every runner executes the same work, so wall times compare directly.
 <details>
 <summary>Full numbers for <code>app/minigzip</code></summary>
 
-| Runner | Runs/sample | Wall time (min) | Wall time (median) | vs wasmtime | Load |
+| Runner | Runs/sample | Wall time (minimum) | Wall time (median) | vs. `wasmtime` | Load |
 | --- | --- | --- | --- | --- | --- |
 | `wasmtime` | 5 | 42.1 ms | 42.2 ms | 1.00x | — |
 | `wasmer` | 6 | 48.2 ms | 48.3 ms | 1.14x | — |
@@ -974,79 +974,79 @@ Every pair the suite did not measure, and why.
 A missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.
 Kind classifies the gap:
 
-- *cost*: runs correctly, but too slowly to keep in the suite;
-- *capability*: the runner cannot execute the workload;
-- *setup*: this host lacks the runner or the built module.
+- `cost`: runs correctly, but too slowly to keep in the suite;
+- `capability`: the runner cannot execute the workload;
+- `setup`: this host lacks the runner or the built module.
 
 | Workload | Runner | Kind | Reason |
 | --- | --- | --- | --- |
-| `wat/eh_throw` | `wazero` | capability | wazero rejects the tag section: its exception-handling feature is disabled |
-| `wat/eh_throw` | `wasm3` | capability | wasm3 fails to load the module: the tag section is unknown to it |
-| `wat/eh_throw` | `dewasm-bash` | capability | the bash backend has no exception-handling lowering and rejects the module at conversion time |
-| `wat/eh_throw` | `wasm3-ruby` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_throw` | `wasm3-ruby-yjit` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_throw` | `wasm3-python` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_throw` | `wasm3-pypy` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_throw` | `pywasm-cpython` | capability | pywasm has no exception-handling opcodes and fails decoding the module |
-| `wat/eh_throw` | `pywasm-pypy` | capability | pywasm has no exception-handling opcodes and fails decoding the module |
-| `wat/eh_throw` | `wardite` | capability | wardite fails to load the tag section |
-| `wat/eh_throw` | `wardite-yjit` | capability | wardite fails to load the tag section |
-| `wat/eh_try` | `wazero` | capability | wazero rejects the tag section: its exception-handling feature is disabled |
-| `wat/eh_try` | `wasm3` | capability | wasm3 fails to load the module: the tag section is unknown to it |
-| `wat/eh_try` | `dewasm-bash` | capability | the bash backend has no exception-handling lowering and rejects the module at conversion time |
-| `wat/eh_try` | `wasm3-ruby` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_try` | `wasm3-ruby-yjit` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_try` | `wasm3-python` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_try` | `wasm3-pypy` | capability | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
-| `wat/eh_try` | `pywasm-cpython` | capability | pywasm has no exception-handling opcodes and fails decoding the module |
-| `wat/eh_try` | `pywasm-pypy` | capability | pywasm has no exception-handling opcodes and fails decoding the module |
-| `wat/eh_try` | `wardite` | capability | wardite fails to load the tag section |
-| `wat/eh_try` | `wardite-yjit` | capability | wardite fails to load the tag section |
-| `wat/f32_alu` | `wardite` | capability | wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run |
-| `wat/f32_alu` | `wardite-yjit` | capability | wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run |
-| `wat/i64_div` | `wardite` | capability | wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53 |
-| `wat/i64_div` | `wardite-yjit` | capability | wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53 |
-| `wat/tail_call` | `wasmer` | capability | wasmer rejects the module: tail-call support is not enabled |
-| `wat/tail_call` | `wazero` | capability | wazero rejects return_call: its tail-call feature is disabled |
-| `wat/tail_call` | `pywasm-cpython` | capability | pywasm has no tail-call opcodes and fails decoding return_call |
-| `wat/tail_call` | `pywasm-pypy` | capability | pywasm has no tail-call opcodes and fails decoding return_call |
-| `wat/tail_call` | `wardite` | capability | wardite decodes return_call but has no implementation for it |
-| `wat/tail_call` | `wardite-yjit` | capability | wardite decodes return_call but has no implementation for it |
-| `app/sqlite3_query` | `dewasm-jruby` | cost | JRuby runs this program correctly but too slowly to keep: the largest generated methods exceed the JVM's per-method bytecode limit and never JIT (issue #206) |
-| `app/sqlite3_query` | `dewasm-python` | cost | dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
-| `app/sqlite3_query` | `dewasm-python-jit` | cost | the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as dewasm-python |
-| `app/sqlite3_query` | `dewasm-graalpy` | cost | GraalPy runs this program correctly but no faster than CPython: the engine's JIT does not reach the largest generated methods |
-| `app/sqlite3_query` | `dewasm-perl` | cost | dewasm-perl runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
-| `app/sqlite3_query` | `dewasm-codon` | cost | codon build -release stalls in Codon's capture analysis on the sqlite3 shell's largest generated functions, so the artifact build does not finish in a practical time |
-| `app/sqlite3_query` | `dewasm-bash` | cost | bash executes compute workloads orders of magnitude slower than wasmtime, so the query script does not finish in a practical time |
-| `app/sqlite3_query` | `wasm3-ruby` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_query` | `wasm3-ruby-yjit` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_query` | `wasm3-python` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_query` | `wasm3-pypy` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_query` | `pywasm-cpython` | cost | pywasm runs this program correctly but too slowly for the query script |
-| `app/sqlite3_query` | `pywasm-pypy` | cost | pywasm runs this program correctly but too slowly for the query script |
-| `app/sqlite3_query` | `wardite` | capability | wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
-| `app/sqlite3_query` | `wardite-yjit` | capability | wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
-| `app/sqlite3_mod_query` | `dewasm-jruby` | cost | JRuby runs this program correctly but too slowly to keep: the largest generated methods exceed the JVM's per-method bytecode limit and never JIT (issue #206) |
-| `app/sqlite3_mod_query` | `dewasm-python` | cost | dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
-| `app/sqlite3_mod_query` | `dewasm-python-jit` | cost | the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as dewasm-python |
-| `app/sqlite3_mod_query` | `dewasm-graalpy` | cost | GraalPy runs this program correctly but no faster than CPython: the engine's JIT does not reach the largest generated methods |
-| `app/sqlite3_mod_query` | `dewasm-perl` | cost | dewasm-perl runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
-| `app/sqlite3_mod_query` | `dewasm-codon` | cost | codon build -release stalls in Codon's capture analysis on the sqlite3 shell's largest generated functions, so the artifact build does not finish in a practical time |
-| `app/sqlite3_mod_query` | `dewasm-bash` | cost | bash executes compute workloads orders of magnitude slower than wasmtime, so the query script does not finish in a practical time |
-| `app/sqlite3_mod_query` | `wasm3-ruby` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_mod_query` | `wasm3-ruby-yjit` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_mod_query` | `wasm3-python` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_mod_query` | `wasm3-pypy` | cost | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
-| `app/sqlite3_mod_query` | `pywasm-cpython` | cost | pywasm runs this program correctly but too slowly for the query script |
-| `app/sqlite3_mod_query` | `pywasm-pypy` | cost | pywasm runs this program correctly but too slowly for the query script |
-| `app/sqlite3_mod_query` | `wardite` | capability | wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
-| `app/sqlite3_mod_query` | `wardite-yjit` | capability | wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
-| `app/minigzip` | `dewasm-bash` | cost | bash compresses this workload's input too slowly to finish in a practical time |
-| `app/minigzip` | `wasm3-ruby` | cost | the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured |
-| `app/minigzip` | `wasm3-python` | cost | the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured |
-| `app/minigzip` | `wasm3-pypy` | cost | the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured |
-| `app/minigzip` | `pywasm-cpython` | cost | pywasm under CPython compresses this workload's input too slowly to finish in a practical time |
-| `app/minigzip` | `wardite` | capability | wardite computes the correct compressed output but its driver crashes on exit: minigzip closes stdout itself and wardite's fd_close closes the real fd under it |
-| `app/minigzip` | `wardite-yjit` | capability | wardite computes the correct compressed output but its driver crashes on exit: minigzip closes stdout itself and wardite's fd_close closes the real fd under it |
+| `wat/eh_throw` | `wazero` | `capability` | `wazero` rejects the tag section: its exception-handling feature is not enabled |
+| `wat/eh_throw` | `wasm3` | `capability` | wasm3 fails to load the module: the tag section is unknown to it |
+| `wat/eh_throw` | `dewasm-bash` | `capability` | the Bash backend has no exception-handling lowering and rejects the module at conversion time |
+| `wat/eh_throw` | `wasm3-ruby` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_throw` | `wasm3-ruby-yjit` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_throw` | `wasm3-python` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_throw` | `wasm3-pypy` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_throw` | `pywasm-cpython` | `capability` | `pywasm` has no exception-handling opcodes and fails decoding the module |
+| `wat/eh_throw` | `pywasm-pypy` | `capability` | `pywasm` has no exception-handling opcodes and fails decoding the module |
+| `wat/eh_throw` | `wardite` | `capability` | `wardite` fails to load the tag section |
+| `wat/eh_throw` | `wardite-yjit` | `capability` | `wardite` fails to load the tag section |
+| `wat/eh_try` | `wazero` | `capability` | `wazero` rejects the tag section: its exception-handling feature is not enabled |
+| `wat/eh_try` | `wasm3` | `capability` | wasm3 fails to load the module: the tag section is unknown to it |
+| `wat/eh_try` | `dewasm-bash` | `capability` | the Bash backend has no exception-handling lowering and rejects the module at conversion time |
+| `wat/eh_try` | `wasm3-ruby` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_try` | `wasm3-ruby-yjit` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_try` | `wasm3-python` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_try` | `wasm3-pypy` | `capability` | the converted wasm3 fails to load the module like the native one: the tag section is unknown to it |
+| `wat/eh_try` | `pywasm-cpython` | `capability` | `pywasm` has no exception-handling opcodes and fails decoding the module |
+| `wat/eh_try` | `pywasm-pypy` | `capability` | `pywasm` has no exception-handling opcodes and fails decoding the module |
+| `wat/eh_try` | `wardite` | `capability` | `wardite` fails to load the tag section |
+| `wat/eh_try` | `wardite-yjit` | `capability` | `wardite` fails to load the tag section |
+| `wat/f32_alu` | `wardite` | `capability` | `wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run |
+| `wat/f32_alu` | `wardite-yjit` | `capability` | `wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run |
+| `wat/i64_div` | `wardite` | `capability` | `wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53 |
+| `wat/i64_div` | `wardite-yjit` | `capability` | `wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53 |
+| `wat/tail_call` | `wasmer` | `capability` | `wasmer` rejects the module: tail-call support is not enabled |
+| `wat/tail_call` | `wazero` | `capability` | `wazero` rejects `return_call`: its tail-call feature is not enabled |
+| `wat/tail_call` | `pywasm-cpython` | `capability` | `pywasm` has no tail-call opcodes and fails decoding `return_call` |
+| `wat/tail_call` | `pywasm-pypy` | `capability` | `pywasm` has no tail-call opcodes and fails decoding `return_call` |
+| `wat/tail_call` | `wardite` | `capability` | `wardite` decodes `return_call` but has no implementation for it |
+| `wat/tail_call` | `wardite-yjit` | `capability` | `wardite` decodes `return_call` but has no implementation for it |
+| `app/sqlite3_query` | `dewasm-jruby` | `cost` | JRuby runs this program correctly but too slowly to keep: the largest generated methods exceed the JVM's per-method bytecode limit and never JIT (issue #206) |
+| `app/sqlite3_query` | `dewasm-python` | `cost` | `dewasm-python` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
+| `app/sqlite3_query` | `dewasm-python-jit` | `cost` | the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as `dewasm-python` |
+| `app/sqlite3_query` | `dewasm-graalpy` | `cost` | GraalPy runs this program correctly but no faster than CPython: the engine's JIT does not reach the largest generated methods |
+| `app/sqlite3_query` | `dewasm-perl` | `cost` | `dewasm-perl` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
+| `app/sqlite3_query` | `dewasm-codon` | `cost` | the artifact build does not finish in a practical time: `codon build -release` does not get past Codon's capture analysis on the sqlite3 shell's largest generated functions |
+| `app/sqlite3_query` | `dewasm-bash` | `cost` | Bash executes compute workloads orders of magnitude slower than Wasmtime, so the query script does not finish in a practical time |
+| `app/sqlite3_query` | `wasm3-ruby` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_query` | `wasm3-ruby-yjit` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_query` | `wasm3-python` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_query` | `wasm3-pypy` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_query` | `pywasm-cpython` | `cost` | `pywasm` runs this program correctly but too slowly for the query script |
+| `app/sqlite3_query` | `pywasm-pypy` | `cost` | `pywasm` runs this program correctly but too slowly for the query script |
+| `app/sqlite3_query` | `wardite` | `capability` | `wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
+| `app/sqlite3_query` | `wardite-yjit` | `capability` | `wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
+| `app/sqlite3_mod_query` | `dewasm-jruby` | `cost` | JRuby runs this program correctly but too slowly to keep: the largest generated methods exceed the JVM's per-method bytecode limit and never JIT (issue #206) |
+| `app/sqlite3_mod_query` | `dewasm-python` | `cost` | `dewasm-python` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
+| `app/sqlite3_mod_query` | `dewasm-python-jit` | `cost` | the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as `dewasm-python` |
+| `app/sqlite3_mod_query` | `dewasm-graalpy` | `cost` | GraalPy runs this program correctly but no faster than CPython: the engine's JIT does not reach the largest generated methods |
+| `app/sqlite3_mod_query` | `dewasm-perl` | `cost` | `dewasm-perl` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks |
+| `app/sqlite3_mod_query` | `dewasm-codon` | `cost` | the artifact build does not finish in a practical time: `codon build -release` does not get past Codon's capture analysis on the sqlite3 shell's largest generated functions |
+| `app/sqlite3_mod_query` | `dewasm-bash` | `cost` | Bash executes compute workloads orders of magnitude slower than Wasmtime, so the query script does not finish in a practical time |
+| `app/sqlite3_mod_query` | `wasm3-ruby` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_mod_query` | `wasm3-ruby-yjit` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_mod_query` | `wasm3-python` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_mod_query` | `wasm3-pypy` | `cost` | the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners |
+| `app/sqlite3_mod_query` | `pywasm-cpython` | `cost` | `pywasm` runs this program correctly but too slowly for the query script |
+| `app/sqlite3_mod_query` | `pywasm-pypy` | `cost` | `pywasm` runs this program correctly but too slowly for the query script |
+| `app/sqlite3_mod_query` | `wardite` | `capability` | `wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
+| `app/sqlite3_mod_query` | `wardite-yjit` | `capability` | `wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs |
+| `app/minigzip` | `dewasm-bash` | `cost` | Bash compresses this workload's input too slowly to finish in a practical time |
+| `app/minigzip` | `wasm3-ruby` | `cost` | the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured |
+| `app/minigzip` | `wasm3-python` | `cost` | the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured |
+| `app/minigzip` | `wasm3-pypy` | `cost` | the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured |
+| `app/minigzip` | `pywasm-cpython` | `cost` | `pywasm` under CPython compresses this workload's input too slowly to finish in a practical time |
+| `app/minigzip` | `wardite` | `capability` | `wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it |
+| `app/minigzip` | `wardite-yjit` | `capability` | `wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it |
 

@@ -27,13 +27,14 @@ The harness compares results bit-exactly including NaN patterns (decision 8/deci
   Reinterprets are the identity, and float loads/stores reuse the integer memory units.
   So a float-free module's bundle is unchanged (decision 6).
 - **f64 is the core; f32 arithmetic is `promote` → f64 operation → `demote`.**
-  `promote` is exact, and 53 ≥ 2·24+2 means double rounding causes no error for `add`/`sub`/`mul`/`div`/`sqrt`.
+  `promote` is exact, and 53 ≥ 2·24+2 holds.
+  So for `add`/`sub`/`mul`/`div`/`sqrt`, double rounding gives the result of one rounding.
   This is the same theorem the Ruby backend rests on, proven by the specification suite.
   Everything that needs no rounding theorem operates directly on u32 patterns.
   That covers comparisons, `min`/`max`, the `ceil`/`floor`/`trunc`/`nearest` family, and integer→f32.
   Integer→f32 rounds once from the full 64-bit integer, removing Ruby's round-to-odd first step.
 - **All rounding goes through one shared core**, `rt_f64_round_pack s e m sk`.
-  `rt_f32_round_pack` is the same core for f32.
+  `rt_f32_round_pack` does the same for f32.
   Its value is (−1)^s·m·2^(e−53) with a sticky flag.
   It implements RNE, gradual underflow, and overflow to ±Inf.
   Its contract is m < 2^63, and never a left normalization with sticky pending.
@@ -71,7 +72,7 @@ The harness compares results bit-exactly including NaN patterns (decision 8/deci
 - **32-bit halves for the significand product**: partials reach ~2^64 and wrap (verified).
   The 26-bit split keeps everything provably in range.
 - **128-bit high/low arithmetic for `sqrt`**: not needed.
-  The low half of the number under the root is all zeros.
+  The radicand's low half is all zeros.
   So a 2-bits-per-step restoring loop never exceeds 2^59.
 - **Payload-propagating NaNs**: the specification only ever checks quiet-bit masks for arithmetic results.
   Carrying payloads through would complicate every special-value path for zero observable benefit.

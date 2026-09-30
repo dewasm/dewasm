@@ -41,7 +41,7 @@ Three uses resolve through the nameref to the shared variable:
 
 - reads (`(( x = <p>g<i> ))`);
 - mutable writes (`(( <p>g<i> = v ))`);
-- `global.get` in the initial expressions of offsets.
+- offsets whose initializer expression is a `global.get`.
 
 So mutation is visible in both modules with no boxing.
 Defined globals keep their literal `<p>g<num_imported_globals + i>` slot in the unified index space.
@@ -111,8 +111,8 @@ So the tag is derived from the type's shape (`i32,i64->f32`).
   They form the `import-limits` list cluster: `imports`/`imports2`/part of `linking`.
   It is the same accepted gap as Ruby.
   It is now at the same counts, since Bash covers every import kind Ruby does.
-  135 is also `128 + SIGBUS` under the signal convention.
-  No generated module starts a child process that can raise SIGBUS, so the shared value is accepted.
+  135 collides with `128 + SIGBUS` under the signal convention.
+  No generated module starts a child process that can raise SIGBUS, so the collision is accepted.
 - Residual, unrelated to this decision: `linking0` and `load1` still fail one assertion each.
   The failures follow from a *different*, permanently out-of-scope gap.
   The core builder rejects a module declaring two memories.

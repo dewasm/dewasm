@@ -16,18 +16,18 @@ Measured 2026-09-19T02:25:54Z.
 | OS | macOS 26.6.2 |
 | Kernel | Darwin 25.6.0 |
 | CPU | Apple M1 Pro |
-| Arch | aarch64 |
+| Architecture | aarch64 |
 
 Version strings are captured by executing each runtime.
 A runtime missing from this table was not installed on this host; it appears under [Not measured](#not-measured).
 
 | Runtime | Version |
 | --- | --- |
-| `wasmtime` | wasmtime 48.0.2 (e9f1ea232 2026-09-10) |
-| `wasmer` | wasmer 7.4.2 |
-| `wasmedge` | wasmedge version 0.17.1 |
-| `wazero` | 1.12.0 |
-| `wasm3` | Wasm3 v0.9.1-beta.1 on arm64-v8a |
+| `wasmtime` | `wasmtime 48.0.2 (e9f1ea232 2026-09-10)` |
+| `wasmer` | `wasmer 7.4.2` |
+| `wasmedge` | `wasmedge version 0.17.1` |
+| `wazero` | `1.12.0` |
+| `wasm3` | `Wasm3 v0.9.1-beta.1 on arm64-v8a` |
 
 ## Results
 

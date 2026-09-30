@@ -105,7 +105,7 @@ impl Feature {
             Feature::ImportedMemories => "Imported memories (wasm 1.0)",
             Feature::ImportedTables => "Imported tables (wasm 1.0)",
             Feature::MultipleTables => "Multiple tables",
-            Feature::TableBulkOps => "Bulk table ops / passive element segments",
+            Feature::TableBulkOps => "Bulk table operations / passive element segments",
             Feature::Floats => "Floating-point (wasm 1.0)",
             Feature::ReferenceTypes => "Reference types",
             Feature::FunctionReferences => "Typed function references",

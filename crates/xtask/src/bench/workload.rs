@@ -88,14 +88,14 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
         "dewasm-bash",
         Exclusion {
         kind: ExclusionKind::Capability,
-        reason: "the bash backend has no exception-handling lowering and rejects the module at conversion time",
+        reason: "the Bash backend has no exception-handling lowering and rejects the module at conversion time",
     },
     ),
     (
         "wazero",
         Exclusion {
         kind: ExclusionKind::Capability,
-        reason: "wazero rejects the tag section: its exception-handling feature is disabled",
+        reason: "`wazero` rejects the tag section: its exception-handling feature is not enabled",
     },
     ),
     (
@@ -126,14 +126,14 @@ const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
         "wasmer",
         Exclusion {
             kind: ExclusionKind::Capability,
-            reason: "wasmer rejects the module: tail-call support is not enabled",
+            reason: "`wasmer` rejects the module: tail-call support is not enabled",
         },
     ),
     (
         "wazero",
         Exclusion {
             kind: ExclusionKind::Capability,
-            reason: "wazero rejects return_call: its tail-call feature is disabled",
+            reason: "`wazero` rejects `return_call`: its tail-call feature is not enabled",
         },
     ),
     ("pywasm-cpython", PYWASM_TAIL_CALL_EXCLUSION),
@@ -144,12 +144,12 @@ const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
 
 const PYWASM_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "pywasm has no tail-call opcodes and fails decoding return_call",
+    reason: "`pywasm` has no tail-call opcodes and fails decoding `return_call`",
 };
 
 const WARDITE_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "wardite decodes return_call but has no implementation for it",
+    reason: "`wardite` decodes `return_call` but has no implementation for it",
 };
 
 const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
@@ -159,12 +159,12 @@ const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
 
 const PYWASM_EH_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "pywasm has no exception-handling opcodes and fails decoding the module",
+    reason: "`pywasm` has no exception-handling opcodes and fails decoding the module",
 };
 
 const WARDITE_EH_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "wardite fails to load the tag section",
+    reason: "`wardite` fails to load the tag section",
 };
 
 /// wardite does not re-round f32 arithmetic to single precision between operations.
@@ -177,7 +177,7 @@ const F32_ALU_EXCLUDES: &[(&str, Exclusion)] = &[
 
 const WARDITE_F32_ALU_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "wardite does not re-round f32 arithmetic to single precision, so a dependent operation chain diverges from wasmtime and the byte-for-byte verification would fail the whole run",
+    reason: "`wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run",
 };
 
 /// wardite computes `i64.div_s` at `f64` precision.
@@ -189,7 +189,7 @@ const I64_DIV_EXCLUDES: &[(&str, Exclusion)] = &[
 
 const WARDITE_I64_DIV_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "wardite computes i64.div_s at f64 precision, wrong for operands beyond 2^53",
+    reason: "`wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53",
 };
 
 /// The `sqlite3_query` script.
@@ -447,14 +447,14 @@ const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
         "dewasm-bash",
         Exclusion {
         kind: ExclusionKind::Cost,
-        reason: "bash executes compute workloads orders of magnitude slower than wasmtime, so the query script does not finish in a practical time",
+        reason: "Bash executes compute workloads orders of magnitude slower than Wasmtime, so the query script does not finish in a practical time",
     },
     ),
     (
         "dewasm-codon",
         Exclusion {
             kind: ExclusionKind::Cost,
-            reason: "codon build -release stalls in Codon's capture analysis on the sqlite3 shell's largest generated functions, so the artifact build does not finish in a practical time",
+            reason: "the artifact build does not finish in a practical time: `codon build -release` does not get past Codon's capture analysis on the sqlite3 shell's largest generated functions",
         },
     ),
     ("pywasm-cpython", PYWASM_SQLITE_EXCLUSION),
@@ -479,7 +479,7 @@ const JRUBY_SQLITE_EXCLUSION: Exclusion = Exclusion {
 
 const PYTHON_JIT_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as dewasm-python",
+    reason: "the JIT-enabled CPython runs this program correctly but in the same cost class as plain CPython, so it is excluded for the same reason as `dewasm-python`",
 };
 
 const GRAALPY_SQLITE_EXCLUSION: Exclusion = Exclusion {
@@ -495,22 +495,22 @@ const CONVERTED_WASM3_SQLITE_EXCLUSION: Exclusion = Exclusion {
 const WARDITE_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
     reason:
-        "wardite loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs",
+        "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs",
 };
 
 const PYWASM_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "pywasm runs this program correctly but too slowly for the query script",
+    reason: "`pywasm` runs this program correctly but too slowly for the query script",
 };
 
 const DEWASM_PERL_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "dewasm-perl runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks",
+    reason: "`dewasm-perl` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks",
 };
 
 const DEWASM_PYTHON_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "dewasm-python runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks",
+    reason: "`dewasm-python` runs this program correctly but too slowly to keep; it stays measured on the other app cases and the microbenchmarks",
 };
 
 /// Runners excluded from the compression case; each reason is a measurement, not a guess.
@@ -527,20 +527,20 @@ const MINIGZIP_EXCLUDES: &[(&str, Exclusion)] = &[
 
 const CONVERTED_WASM3_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "the converted wasm3 compresses the input correctly but too slowly to keep on ruby, pypy and cpython; wasm3-ruby-yjit stays measured",
+    reason: "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured",
 };
 
 const BASH_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "bash compresses this workload's input too slowly to finish in a practical time",
+    reason: "Bash compresses this workload's input too slowly to finish in a practical time",
 };
 
 const PYWASM_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "pywasm under CPython compresses this workload's input too slowly to finish in a practical time",
+    reason: "`pywasm` under CPython compresses this workload's input too slowly to finish in a practical time",
 };
 
 const WARDITE_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "wardite computes the correct compressed output but its driver crashes on exit: minigzip closes stdout itself and wardite's fd_close closes the real fd under it",
+    reason: "`wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it",
 };
