@@ -2,7 +2,8 @@
 def wasi_path_create_directory(self, dirfd: UInt[32], path_ptr: UInt[32], path_len: UInt[32]) -> UInt[32]:
     from C import mkdir(cobj, int) -> int
     rel = self.memory.read_path(int(path_ptr), int(path_len))
-    # Strip a trailing slash: mkdir names a directory anyway, and EEXIST is wasmtime's answer for mkdir("file/") where the hosts split.
+    # Strip a trailing slash: mkdir names a directory anyway.
+    # EEXIST is wasmtime's answer for mkdir("file/") where the hosts split.
     core = rel
     while core.endswith("/"):
         core = core[:len(core) - 1]

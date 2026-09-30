@@ -1,6 +1,7 @@
 # requires: rt/boxed, global/_class, table/_class, memory/_class
 # One import/export value: the kind tag says which typed field is set.
-# A typed field per global value type is what lets import resolution check the value type, not just the kind, without a dynamic cast.
+# A typed field per global value type lets import resolution check the kind and the value type.
+# That check needs no dynamic cast.
 class Extern:
     kind: str
     fn: Optional[Rt.Fn]

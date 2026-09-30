@@ -1,6 +1,9 @@
 # requires: rt/trap
-# tab_copy <dst-base> <src-base> <d> <s> <n>; copies function command names, their structural type keys, and their tail commands between (or within) tables.
-# The loop is direction-aware so overlapping ranges in a single table copy correctly; the two bases may name the same table.
+# tab_copy <dst-base> <src-base> <d> <s> <n>
+# Copies function command names, their structural type keys, and their tail commands.
+# The copy runs between tables or within one table.
+# The loop is direction-aware, so overlapping ranges in a single table copy correctly.
+# The two bases may name the same table.
 tab_copy() {
   local -n __dt=$1 __dty=${1}ty __dtl=${1}tl __dsz=${1}sz
   local -n __st=$2 __sty=${2}ty __stl=${2}tl __ssz=${2}sz

@@ -1,5 +1,6 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Both endpoints are resolved NOFOLLOW, and LOOKUPFLAGS_SYMLINK_FOLLOW is rejected as EINVAL like the other backends.
+// Both endpoints are resolved NOFOLLOW.
+// LOOKUPFLAGS_SYMLINK_FOLLOW is rejected as EINVAL like the other backends.
 func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDirfd, newPathPtr, newPathLen uint32) uint32 {
     if oldFlags&0x1 != 0 { // lookupflags::SYMLINK_FOLLOW
         return wasiInval
@@ -19,8 +20,9 @@ func (w *WASI) wasi_path_link(oldDirfd, oldFlags, oldPathPtr, oldPathLen, newDir
         return err
     }
     if e := os.Link(oldHost, newHost); e != nil {
-        // macOS link(2) follows a symlink source (unlike Linux and unlike the
-        // AT_SYMLINK_NOFOLLOW linkat the suite expects), and std exposes no portable linkat.
+        // macOS link(2) follows a symlink source.
+        // Linux does not, and neither does the AT_SYMLINK_NOFOLLOW linkat the suite expects.
+        // std exposes no portable linkat.
         // Emulate a NOFOLLOW hard-link-to-a-symlink by recreating the symlink at the destination.
         if fi, le := os.Lstat(oldHost); le == nil && fi.Mode()&os.ModeSymlink != 0 {
             if target, re := os.Readlink(oldHost); re == nil {

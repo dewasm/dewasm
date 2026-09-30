@@ -1,8 +1,20 @@
 //! Fuse the byte-scatter store idiom into one 32-bit store behind a runtime precondition.
 //!
-//! Portable C writes a 32-bit value byte by byte (`dest[i] = v >> (i * 8)`), and compiled to wasm that survives as a four-iteration loop of `store8(base + i, word >> shift)` with `shift` stepping by 8.
-//! Proving the trip count statically needs path-sensitive bit reasoning (the exit condition folds a flag bit), so the pass proves nothing: it recognizes the loop's shape and emits a runtime-guarded fast path, `if flag is odd and the inductions start at zero and the base is safely in bounds, one 32-bit store; else the original loop`.
-//! The bounds clause keeps the memory-edge case on the original loop, whose byte-at-a-time trap (with the partial writes it leaves visible) stays exact.
+//! Portable C writes a 32-bit value byte by byte (`dest[i] = v >> (i * 8)`).
+//! Compiled to wasm, it stays a four-iteration loop of `store8(base + i, word >> shift)`.
+//! The `shift` steps by 8.
+//! Proving the trip count statically needs path-sensitive bit reasoning.
+//! The reason is that the exit condition folds a flag bit.
+//! So the pass proves nothing.
+//! It recognizes the loop's shape and emits a runtime-guarded fast path:
+//!
+//! ```text
+//! if flag is odd and the inductions start at zero and the base is safely in bounds,
+//! one 32-bit store; else the original loop
+//! ```
+//!
+//! The bounds clause keeps the memory-edge case on the original loop.
+//! That loop's byte-at-a-time trap (with the partial writes it leaves visible) stays exact.
 
 use dewasm_core::ir::{BinOp, BrTarget, Expr, Func, Label, Stmt, StoreOp};
 
@@ -51,7 +63,8 @@ fn walk_seq(seq: &mut [Stmt], next_label: &mut u32) {
         ];
         let cond = and(
             and(
-                // The flag's low bit decides the exit; odd means the loop runs exactly four iterations.
+                // The flag's low bit decides the exit.
+                // Odd means the loop runs exactly four iterations.
                 eq(
                     Expr::Bin(
                         BinOp::I32And,
@@ -64,7 +77,11 @@ fn walk_seq(seq: &mut [Stmt], next_label: &mut u32) {
             ),
             and(
                 eq(Expr::LocalGet(m.shift), 0),
-                // The fast path needs the whole 32-bit store in bounds; comparing pages keeps the arithmetic inside 32 bits and sends a base in the memory's last page to the original loop, whose byte-at-a-time trap behavior (and the partial writes it leaves visible) must stay exact.
+                // The fast path needs the whole 32-bit store in bounds.
+                // Comparing pages keeps the arithmetic inside 32 bits.
+                // It also sends a base in the memory's last page to the original loop.
+                // That loop's byte-at-a-time trap behavior must stay exact.
+                // The same holds for the partial writes it leaves visible.
                 Expr::Bin(
                     BinOp::I32LtU,
                     Box::new(Expr::Bin(
@@ -112,12 +129,14 @@ struct Scatter {
     shift: u32,
     /// Holds `idx == 3`, consumed by the exit condition.
     done: u32,
-    /// Holds `idx + 1`, copied back into `idx` (and read after the loop by the code advancing the base).
+    /// Holds `idx + 1`, copied back into `idx`.
+    /// The code advancing the base also reads it after the loop.
     next_idx: u32,
     flag: u32,
 }
 
-/// Match the six-statement scatter body exactly; anything else (including any other branch, which wasm scoping confines to the body) misses.
+/// Match the six-statement scatter body exactly; anything else misses.
+/// That includes any other branch, which wasm scoping confines to the body.
 fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
     let [Stmt::Store {
         op: StoreOp::I32Store8,
@@ -220,7 +239,8 @@ fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
         _ => return None,
     };
 
-    // The written locals must be pairwise distinct and never the read-only ones, or the exit values would clobber an input.
+    // The written locals must be pairwise distinct and never the read-only ones.
+    // Otherwise the exit values would clobber an input.
     let written = [shift, done, next_idx, idx];
     for (n, w) in written.iter().enumerate() {
         if written[..n].contains(w) || [base, word, flag].contains(w) {

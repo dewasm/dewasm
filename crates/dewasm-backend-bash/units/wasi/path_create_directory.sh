@@ -1,13 +1,24 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_create_directory: creating a directory entry is one of the four operations pure Bash cannot express at all, so this is one of the only four units allowed to invoke an external POSIX command, a single
-# `--`-guarded `mkdir` on the resolved physical path. mkdir(2) never follows a trailing symlink (an existing one there is EEXIST, not "enter it"), so resolution uses follow_last=0, mirroring crates/dewasm-backend-ruby/units/wasi/path_create_directory.rb. mkdir's own diagnostics aren't parsed (they're not machine-readable); the errno comes from a post-hoc probe instead: an existing path is EEXIST, anything else defaults to ENOENT (a parent-permission failure would also surface as ENOENT here, an accepted imprecision of probing after the fact rather than reading the real errno).
+# WASI path_create_directory: creating a directory entry is one of four operations.
+# Pure Bash cannot express any of the four.
+# So this is one of the only four units allowed to invoke an external POSIX command.
+# That command is a single `--`-guarded `mkdir` on the resolved physical path.
+# mkdir(2) never follows a trailing symlink: an existing one there is EEXIST, not "enter it".
+# So resolution uses follow_last=0.
+# This mirrors crates/dewasm-backend-ruby/units/wasi/path_create_directory.rb.
+# mkdir's own diagnostics aren't parsed, since they're not machine-readable.
+# The errno comes from a post-hoc probe instead.
+# An existing path is EEXIST, and anything else defaults to ENOENT.
+# A parent-permission failure would also surface as ENOENT here.
+# That is an accepted imprecision of probing after the fact rather than reading the real errno.
 wasi_path_create_directory() {
   local __p=$1 __dirfd=$2 __path_ptr=$3 __path_len=$4
   wasi_read_path "$__p" "$__path_ptr" "$__path_len" || return $?
   if (( R0 != 0 )); then return 0; fi
   local __rel=$R1
-  # Strip a trailing slash before the resolver's directory check: mkdir names a directory anyway, and EEXIST is wasmtime's answer for mkdir("file/")
-  # where the hosts split.
+  # Strip a trailing slash before the resolver's directory check.
+  # mkdir names a directory anyway.
+  # EEXIST is wasmtime's answer for mkdir("file/") where the hosts split.
   local __stripped=$__rel
   while [[ $__stripped == */ ]]; do __stripped=${__stripped%/}; done
   [[ -n $__stripped ]] && __rel=$__stripped

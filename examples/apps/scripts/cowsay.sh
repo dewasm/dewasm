@@ -3,7 +3,8 @@
 # shellcheck source=common.sh
 
 # cowsay: the classic args+stdout demo, from our own C reimplementation of cowsay 3.03.
-# Its output is byte-identical to the original Perl script, and the binary is a tenth of the Rust clone the Wasmer registry serves.
+# Its output is byte-identical to the original Perl script.
+# The binary is a tenth of the Rust clone the Wasmer registry serves.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

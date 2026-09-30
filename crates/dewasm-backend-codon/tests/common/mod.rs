@@ -1,7 +1,10 @@
-//! The `codon build` step the Codon crate's test binaries share: compile generated source to a content-addressed cache binary (identical programs build once) and hand back the path.
+//! The `codon build` step the Codon crate's test binaries share.
+//! It compiles generated source to a content-addressed cache binary and hands back the path.
+//! Identical programs build once.
 //! The cache is keyed on the source alone and shared by every suite in the crate.
 //!
-//! A built binary links Codon's runtime dylibs (`libcodonrt`, `libomp`) by `@rpath`/`@loader_path`, so [`run_codon_binary`] puts the toolchain's lib directory on the loader path of every spawned run.
+//! A built binary links Codon's runtime dylibs (`libcodonrt`, `libomp`) by `@rpath`/`@loader_path`.
+//! So [`run_codon_binary`] puts the toolchain's lib directory on every spawned run's loader path.
 
 // Shared by several test binaries, each of which uses a subset.
 #![allow(dead_code)]
@@ -23,10 +26,17 @@ const LOADER_PATH_VAR: &str = if cfg!(target_os = "macos") {
 };
 
 /// Compile `source` to a content-addressed cache binary and return its path.
-/// `Err(Output)` carries the `codon build` failure so a piped run can report it via `status.success()`.
+/// `Err(Output)` carries the `codon build` failure.
+/// So a piped run can report it via `status.success()`.
 /// A missing `codon` toolchain is a loud failure.
 ///
-/// Every suite builds *debug*: `-release` costs ~8x the compile time (superlinearly worse on huge single generated functions), CI pays every codon build fresh, and the build is semantically identical (the one optimizer-sensitive path, identity-fold NaN quieting, is handled at emission via the quiet-if-NaN wrappers, so no release-mode verification pass is kept either).
+/// Every suite builds *debug*, for three reasons:
+/// - `-release` costs ~8x the compile time.
+///   It is superlinearly worse on huge single generated functions.
+/// - CI pays every codon build fresh.
+/// - The build is semantically identical, so no release-mode verification pass is kept either.
+///   The one optimizer-sensitive path is identity-fold NaN quieting.
+///   It is handled at emission via the quiet-if-NaN wrappers.
 pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
     let codon = find_codon()
         .expect("codon toolchain not found on PATH (or $DEWASM_CODON): see docs/testing.md");
@@ -42,7 +52,9 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
         return Ok(bin);
     }
 
-    // Both the sources and the binary get per-attempt unique names: two threads with the same hash may build concurrently, and a shared source path would let one truncate the file mid-read of the other's build.
+    // Both the sources and the binary get per-attempt unique names.
+    // Two threads with the same hash may build concurrently.
+    // A shared source path would let one truncate the file mid-read of the other's build.
     // Only the final rename onto the cache key is shared, and that is atomic.
     let unique = format!(
         "{hash:016x}.{}.{}",
@@ -69,8 +81,11 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-/// Copy Codon's runtime shared libraries next to the cache binaries once: a built binary references them relative to itself (`@loader_path` on macOS), so a copy beside it runs without any loader-path environment variable.
-/// That matters to the WASI-testsuite runs, whose child environment is exactly the manifest's: a loader-path variable added there would leak into the guest's environ.
+/// Copy Codon's runtime shared libraries next to the cache binaries once.
+/// A built binary references them relative to itself (`@loader_path` on macOS).
+/// So a copy beside it runs without any loader-path environment variable.
+/// That matters to the WASI-testsuite runs, whose child environment is exactly the manifest's.
+/// A loader-path variable added there would leak into the guest's environ.
 fn ensure_runtime_dylibs(cache: &std::path::Path) {
     let Some(lib) = find_codon().and_then(|c| codon_lib_dir(&c)) else {
         return;

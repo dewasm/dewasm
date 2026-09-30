@@ -1,5 +1,6 @@
 # requires: wasi/file_flush
-# wasi_fd_flush <p> <fd>: flush a file fd's buffer to disk if it is dirty, then clear the dirty flag.
+# wasi_fd_flush <p> <fd>: flush a file fd's buffer to disk if it is dirty.
+# It then clears the dirty flag.
 # A no-op for non-file fds or a clean buffer.
 # R0 is the errno (from file_flush; 0 for the no-op paths).
 wasi_fd_flush() {

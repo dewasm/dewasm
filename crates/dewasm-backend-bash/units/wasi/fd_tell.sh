@@ -1,5 +1,6 @@
 # requires: mem/i64_store
-# For a file fd (kind 2) the offset is its buffer position; for stdio it is the byte counter fd_read/fd_write track.
+# For a file fd (kind 2) the offset is its buffer position.
+# For stdio it is the byte counter fd_read/fd_write track.
 # A directory fd is EBADF.
 wasi_fd_tell() {
   local __p=$1 __fd=$2 __out=$3

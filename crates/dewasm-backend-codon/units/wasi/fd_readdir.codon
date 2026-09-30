@@ -6,7 +6,9 @@ def wasi_fd_readdir(self, fd: UInt[32], buf_ptr: UInt[32], buf_len: UInt[32], co
         return UInt[32](self.ERRNO_BADF)
     if f.base & self.RIGHTS_FD_READDIR == 0:
         return UInt[32](self.ERRNO_NOTCAPABLE)
-    # cookie 0 starts a fresh enumeration, so re-scan the directory then; a non-zero cookie resumes the snapshot cached from that start (the opaque-resume-point contract).
+    # cookie 0 starts a fresh enumeration, so re-scan the directory then.
+    # A non-zero cookie resumes the snapshot cached from that start.
+    # This is the opaque-resume-point contract.
     if not f.entries_valid or cookie == UInt[64](0):
         f.entries = self.readdir_entries(f.host_path)
         f.entries_valid = True
@@ -20,7 +22,9 @@ def wasi_fd_readdir(self, fd: UInt[32], buf_ptr: UInt[32], buf_len: UInt[32], co
     i = cookie
     while i < UInt[64](len(entries)) and used < cap:
         name, ft, ino = entries[int(i)]
-        # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad, followed by the (unpadded) name; legally truncated at the tail once buf_len runs out.
+        # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad.
+        # The (unpadded) name follows.
+        # The entry is legally truncated at the tail once buf_len runs out.
         scratch = Ptr[byte](24 + len(name))
         Rt.raw_store64(scratch, i + UInt[64](1))
         Rt.raw_store64(scratch + 8, UInt[64](ino))

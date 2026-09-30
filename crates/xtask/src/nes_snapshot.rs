@@ -1,16 +1,20 @@
-//! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one:
-//! run the *original* `nes.wasm` under the wasmtime crate with the deterministic driving contract (load the pinned ROM, tick [`NES_FRAMES`]
-//! frames with no input) and write the rendered frame to
-//! `examples/apps/snapshots/nes_frame.ppm`. wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
+//! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one.
+//! It runs the *original* `nes.wasm` under the wasmtime crate with the deterministic contract.
+//! That contract loads the pinned ROM and ticks [`NES_FRAMES`] frames with no input.
+//! The oracle writes the rendered frame to `examples/apps/snapshots/nes_frame.ppm`.
+//! wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
 //! A PNG rendering is emitted alongside for human inspection; only the PPM is the compared oracle.
 //!
-//! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain reactor library, so the oracle only calls `_initialize` plus the demo exports.
+//! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain reactor library.
+//! So the oracle only calls `_initialize` plus the demo exports.
 //! The ROM is copied into guest memory through `allocRom`.
 
 use anyhow::{ensure, Context, Result};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
-/// Instantiate and drive `nes.wasm` under the deterministic contract, returning agnes's own frame representation: the palette-index screen buffer, the palette, and the frame dimensions.
+/// Instantiate and drive `nes.wasm` under the deterministic contract.
+/// Return agnes's own frame representation.
+/// That is the palette-index screen buffer, the palette, and the frame dimensions.
 fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>, u32, u32)> {
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
@@ -71,7 +75,8 @@ fn read_frame(
     Ok((screen, palette, w, h))
 }
 
-/// Recapture the NES framebuffer from the embedded wasmtime; returns the compared P6-PPM bytes plus a PNG for human inspection.
+/// Recapture the NES framebuffer from the embedded wasmtime.
+/// Return the compared P6-PPM bytes plus a PNG for human inspection.
 pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::nes_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
@@ -97,9 +102,12 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     );
 
     // Guard against a degenerate (blank/near-blank) capture.
-    // NES palettes are tiny, so the DOOM oracle's >50 threshold is wrong here: the Alter Ego credits screen this pins measures 7 distinct colors, while the near-black boot frame is a single color.
+    // NES palettes are tiny, so the DOOM oracle's >50 threshold is wrong here.
+    // The Alter Ego credits screen this pins measures 7 distinct colors.
+    // The near-black boot frame is a single color.
     // A >4 threshold cleanly separates the two.
-    // Counted over colors, not raw indices: distinct indices can alias onto one palette entry (the mask, plus repeated black entries).
+    // Counted over colors, not raw indices: distinct indices can alias onto one palette entry.
+    // The mask does that, and so do repeated black entries.
     let ppm = dewasm_test_helper::nes_frame_to_ppm(&screen, &palette, w, h);
     let distinct = screen
         .iter()
@@ -114,7 +122,8 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((ppm, frame_to_png(&screen, &palette, w, h)?))
 }
 
-/// Encode the palette-index screen buffer as an 8-bit RGB PNG, composing pixels the same way [`nes_frame_to_ppm`] does.
+/// Encode the palette-index screen buffer as an 8-bit RGB PNG.
+/// It composes pixels the same way [`nes_frame_to_ppm`] does.
 /// Settings are the crate defaults, kept fixed so regeneration is byte-stable.
 /// This PNG exists only for humans to view: no test compares it.
 fn frame_to_png(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {

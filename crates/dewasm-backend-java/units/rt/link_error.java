@@ -1,4 +1,5 @@
-// A failed import resolution at instantiation time (missing import, or one of the wrong kind), kept distinct from a trap.
+// A failed import resolution at instantiation time, kept distinct from a trap.
+// The import is missing, or one of the wrong kind.
 // `link_error` is void and throws.
 static final class LinkError extends RuntimeException {
     LinkError(String msg) {

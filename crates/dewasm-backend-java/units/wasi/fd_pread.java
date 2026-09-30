@@ -1,5 +1,6 @@
 // requires: memory/i32_load, memory/i32_store, memory/init
-// Positional scatter read: reads at an absolute file offset without moving the channel's own position.
+// Positional scatter read at an absolute file offset.
+// It does not move the channel's own position.
 // Stdio is not seekable (SPIPE).
 int wasi_fd_pread(int fd, int iovsPtr, int iovsLen, long offset, int nreadPtr) {
     Object e = fds.get(fd);

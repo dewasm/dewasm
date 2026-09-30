@@ -1,6 +1,12 @@
-# WASI preview 1 runtime state (mirroring the Ruby/Python runtimes): a fd table plus a parallel per-fd capability map, seeded from the constructor's preopens.
-# Per-fd rights are modelled after wasmtime's wasi-common: a directory and a file each carry a different default set, path_open narrows the requested rights against the parent's inheriting set (then per-filetype), and fd_fdstat_set_rights can only drop bits.
-# Kept in the always-bundled prelude because new() seeds the fd -> [base, inheriting, fdflags] meta map for every preopen and for stdio, so the constants must exist whenever any WASI import is used.
+# WASI preview 1 runtime state, mirroring the Ruby/Python runtimes.
+# It is a fd table plus a parallel per-fd capability map, seeded from the constructor's preopens.
+# Per-fd rights are modelled after wasmtime's wasi-common:
+# - a directory and a file each carry a different default set;
+# - path_open narrows the requested rights against the parent's inheriting set (then per-filetype);
+# - fd_fdstat_set_rights can only drop bits.
+# This state is kept in the always-bundled prelude.
+# new() seeds the fd -> [base, inheriting, fdflags] meta map for every preopen and for stdio.
+# So the constants must exist whenever any WASI import is used.
 use Cwd ();
 
 use constant {
@@ -44,7 +50,9 @@ use constant {
     RIGHTS_POLL_FD_READWRITE => 1 << 27,
 };
 
-# The rights a directory descriptor carries (base) and the rights it may pass to things opened beneath it (inheriting = directory rights plus every file right).
+# The base rights are the rights a directory descriptor carries.
+# The inheriting rights are the rights it may pass to things opened beneath it.
+# Those are the directory rights plus every file right.
 # Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
 use constant DIR_RIGHTS_BASE =>
     RIGHTS_FD_FDSTAT_SET_FLAGS | RIGHTS_FD_SYNC | RIGHTS_FD_ADVISE
@@ -105,8 +113,10 @@ sub new {
     my $next_fd = 3;
     my $preopens = $opts{preopens} // {};
     for my $guest (sort keys %$preopens) {
-        # The host path must resolve, but need not be a directory: like the
-        # Ruby runtime, a single-file preopen (e.g. '/dev/null' for the zeroperl reactor's init probe) is accepted: the guest resolves it as the preopen root itself.
+        # The host path must resolve, but need not be a directory.
+        # Like the Ruby runtime, a single-file preopen is accepted.
+        # An example is '/dev/null' for the zeroperl reactor's init probe.
+        # The guest resolves it as the preopen root itself.
         my $real = Cwd::realpath($preopens->{$guest});
         die "preopen '$guest' => '$preopens->{$guest}': does not exist\n"
             unless defined $real;
@@ -118,7 +128,8 @@ sub new {
     return $self;
 }
 
-# Import-provider protocol: a custom WASI runtime can replace this package wholesale by implementing wasm_import($name) and attach($instance).
+# Import-provider protocol: a custom WASI runtime can replace this package wholesale.
+# It does so by implementing wasm_import($name) and attach($instance).
 sub wasm_import {
     my ($self, $name) = @_;
     my $method = "wasi_$name";

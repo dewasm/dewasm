@@ -1,7 +1,14 @@
-//! Core coverage for DWARF `.debug_line` source back-mapping: the `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers resolved through the interned [`ir::Module::debug_files`], and the default build stays byte-for-byte marker-free.
+//! Core coverage for DWARF `.debug_line` source back-mapping.
+//! The `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers.
+//! They are resolved through the interned [`ir::Module::debug_files`].
+//! The default build stays marker-free.
 //!
-//! The fixture (`examples/apps/src/dwarf_fixture.c`, built by setup.sh into the cache with `-g -O1`) pins the one calibration constant this feature has: the DWARF address base.
-//! `add_mul` is a folded, single-statement function whose only marker must land on the exact source line of its first statement; a wrong base shifts that line (or drops the marker entirely), so this test fails loudly for any miscalibration.
+//! The fixture is `examples/apps/src/dwarf_fixture.c`.
+//! setup.sh builds it into the cache with `-g -O1`.
+//! It pins the one calibration constant this feature has: the DWARF address base.
+//! `add_mul` is a folded, single-statement function.
+//! Its only marker must land on the exact source line of its first statement.
+//! A wrong base shifts that line or drops the marker, so this test fails for any miscalibration.
 
 use std::path::{Path, PathBuf};
 
@@ -20,7 +27,10 @@ fn fixture_bytes() -> Vec<u8> {
     })
 }
 
-/// The `[Stmt::SourceLine]` positions anywhere in the body of the exported function named `export` (nested statements included; the toolchain decides how much of a function's control flow nests), as `(file_path, line, col)` in traversal order.
+/// The `[Stmt::SourceLine]` positions anywhere in the body of the exported function named `export`.
+/// Nested statements are included.
+/// The toolchain decides how much of a function's control flow nests.
+/// The positions are `(file_path, line, col)` in traversal order.
 fn export_source_positions<'m>(
     module: &'m dewasm_core::ir::Module,
     export: &str,
@@ -86,7 +96,10 @@ fn debug_line_calibration_pins_add_mul_first_statement() {
     let bytes = fixture_bytes();
     let module = build_module_with_options(&bytes, &BuildOptions { debug_line: true }).unwrap();
 
-    // `add_mul` folds to a single `Return`, so its lone marker is the one the fallthrough-return path emits, and it must resolve to the exact source line of `int product = a * b;` (line 22 of dwarf_fixture.c).
+    // `add_mul` folds to a single `Return`.
+    // So its lone marker is the one the fallthrough-return path emits.
+    // It must resolve to the exact source line of `int product = a * b;`.
+    // That is line 22 of dwarf_fixture.c.
     // This is the address-base calibration: a wrong base moves this line or yields none.
     let positions = export_source_positions(&module, "add_mul");
     let (file, line, _col) = *positions
@@ -102,7 +115,8 @@ fn debug_line_calibration_pins_add_mul_first_statement() {
          a different line means the DWARF address base is miscalibrated"
     );
 
-    // `sum_prefix` spans several source lines, so it must yield more than one change-point marker, all inside the fixture source.
+    // `sum_prefix` spans several source lines, so it must yield more than one change-point marker.
+    // All of them lie inside the fixture source.
     let sp = export_source_positions(&module, "sum_prefix");
     assert!(
         sp.len() >= 2,

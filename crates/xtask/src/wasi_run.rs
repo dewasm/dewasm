@@ -1,6 +1,8 @@
-//! The WASI command runner behind `cargo xtask test-wasmtime-wasi`, and the in-process entry point the snapshot capture uses.
+//! The WASI command runner behind `cargo xtask test-wasmtime-wasi`.
+//! It is also the in-process entry point the snapshot capture uses.
 //!
-//! The flags mirror the `wasmtime run` subset the snapshot cases were captured with, so the runner is a drop-in replacement for a `wasmtime` CLI on `PATH`:
+//! The flags mirror the `wasmtime run` subset the snapshot cases were captured with.
+//! The runner is then a drop-in replacement for a `wasmtime` CLI on `PATH`:
 //!
 //! * `argv[0]` is the wasm file's base name, the rest of the command line is guest `argv[1..]`;
 //! * the guest environment holds exactly what `--env K=V` passes, nothing of the host's;
@@ -17,10 +19,13 @@ use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 use wasmtime_wasi::{DirPerms, FilePerms, I32Exit, WasiCtxBuilder};
 
 /// A cap on what one captured run may write.
-/// `MemoryOutputPipe` allocates nothing up front, and a guest that exceeds the cap traps instead of silently truncating, so this only has to be larger than any snapshot.
+/// `MemoryOutputPipe` allocates nothing up front.
+/// A guest that exceeds the cap traps instead of silently truncating.
+/// So this only has to be larger than any snapshot.
 const CAPTURE_CAPACITY: usize = 256 << 20;
 
-/// One WASI command invocation: a wasm file plus the guest-visible environment `wasmtime run` would build for it.
+/// One WASI command invocation.
+/// It is a wasm file plus the guest-visible environment `wasmtime run` would build for it.
 pub struct WasiRun {
     pub wasm: PathBuf,
     /// Guest `argv[1..]`.
@@ -38,7 +43,9 @@ pub struct Captured {
 }
 
 impl WasiRun {
-    /// Parse the `test-wasmtime-wasi` command line: option flags first, then the wasm path, then guest `argv[1..]` verbatim (a guest argument may repeat an option name).
+    /// Parse the `test-wasmtime-wasi` command line.
+    /// Option flags come first, then the wasm path, then guest `argv[1..]` verbatim.
+    /// A guest argument may repeat an option name.
     pub fn parse(mut argv: impl Iterator<Item = String>) -> Result<Self> {
         let mut env = Vec::new();
         let mut dirs = Vec::new();
@@ -81,7 +88,8 @@ impl WasiRun {
     }
 
     /// Run with the host's stdin/stdout/stderr, returning the guest's exit status.
-    /// The guest sees whatever those three descriptors are, a pty slave included, which is what makes the interactive-REPL transcript reproducible.
+    /// The guest sees whatever those three descriptors are, a pty slave included.
+    /// That is what makes the interactive-REPL transcript reproducible.
     pub fn run_inheriting_stdio(&self) -> Result<i32> {
         let mut builder = self.builder()?;
         builder.inherit_stdio();
@@ -134,15 +142,18 @@ impl WasiRun {
     }
 }
 
-/// wasmtime carries its own error type; its debug rendering is what holds the context chain behind a trap.
+/// wasmtime carries its own error type.
+/// Its debug rendering is what holds the context chain behind a trap.
 fn from_wasmtime(err: wasmtime::Error) -> anyhow::Error {
     anyhow::anyhow!("{err:?}")
 }
 
-/// Instantiate `wasm` against WASI p1 and call `_start`, returning the guest's exit status (a `proc_exit` unwinds as [`I32Exit`]; a normal return is 0).
+/// Instantiate `wasm` against WASI p1 and call `_start`, returning the guest's exit status.
+/// A `proc_exit` unwinds as [`I32Exit`]; a normal return is 0.
 /// Kept in `wasmtime::Result` so wasmtime's `?` composes; the callers lift it to anyhow.
 fn execute(ctx: WasiP1Ctx, wasm: &Path) -> wasmtime::Result<i32> {
-    // The exception-handling proposal is off by default in the wasmtime crate (unlike the CLI); mruby's setjmp/longjmp lowering needs it.
+    // The exception-handling proposal is off by default in the wasmtime crate (unlike the CLI).
+    // mruby's setjmp/longjmp lowering needs it.
     let mut config = wasmtime::Config::new();
     config.wasm_exceptions(true);
     let engine = Engine::new(&config)?;
@@ -165,7 +176,9 @@ fn execute(ctx: WasiP1Ctx, wasm: &Path) -> wasmtime::Result<i32> {
 /// [--env K=V]... <wasm> [args...]`.
 pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
     let code = WasiRun::parse(argv)?.run_inheriting_stdio()?;
-    // Rust's stdout is line-buffered, so a guest's trailing partial line (a binary stream has none at all) would be lost across `exit`, which runs no destructors.
+    // Rust's stdout is line-buffered, and `exit` runs no destructors.
+    // So a guest's trailing partial line would be lost across `exit`.
+    // A binary stream has no line ends at all.
     std::io::stdout().flush()?;
     std::io::stderr().flush()?;
     std::process::exit(code);

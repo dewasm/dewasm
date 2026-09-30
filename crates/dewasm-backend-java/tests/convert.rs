@@ -1,4 +1,6 @@
-//! Java side of the whole-cache convert suite: converts every cached real-world app with the Java backend and requires the conversion to complete with non-empty source, without compiling or running it.
+//! Java side of the whole-cache convert suite.
+//! It converts every cached real-world app with the Java backend.
+//! Each conversion must complete with non-empty source; the suite neither compiles nor runs it.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend_java::JavaBackend;

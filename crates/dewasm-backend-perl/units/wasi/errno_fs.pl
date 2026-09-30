@@ -1,5 +1,7 @@
-# Filesystem-only errno codes: kept out of the always-bundled wasi/_package prelude so a stdio-only WASI module (no path_* / fs-only fd_* imports) doesn't carry them.
-# ERRNO_NOTCAPABLE (76) lives in the prelude: rights enforcement in fd_read/fd_write/etc. needs it even when errno_fs is not otherwise bundled.
+# Filesystem-only errno codes, kept out of the always-bundled wasi/_package prelude.
+# A stdio-only WASI module (no path_* / fs-only fd_* imports) then doesn't carry them.
+# ERRNO_NOTCAPABLE (76) lives in the prelude.
+# Rights enforcement in fd_read/fd_write/etc. needs it even when errno_fs is not otherwise bundled.
 use Errno ();
 
 use constant {
@@ -14,7 +16,8 @@ use constant {
     ERRNO_PERM => 63,
 };
 
-# One host-errno-to-WASI-errno table shared by every filesystem syscall, so the same host error never maps to different codes depending on which syscall raised it.
+# One host-errno-to-WASI-errno table shared by every filesystem syscall.
+# The same host error then never maps to different codes depending on which syscall raised it.
 # Callers pass the numified $! immediately after the failed call ($! is easily clobbered).
 our %FS_ERRNO = (
     Errno::EACCES() => ERRNO_ACCES,

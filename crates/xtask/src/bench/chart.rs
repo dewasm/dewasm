@@ -1,15 +1,23 @@
 //! The static SVG charts that ride above the tables in `docs/benchmarks/results.md`.
 //!
 //! SVG files, not Mermaid: the span forces a log10 axis, which Mermaid's `xychart` lacks.
-//! Two files per chart, not CSS `prefers-color-scheme`: GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between baked-in modes.
+//! Two files per chart, not CSS `prefers-color-scheme`.
+//! GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between modes.
+//! The two modes are baked into the files.
 //!
-//! The form is a horizontal lollipop, fastest at the top, not bars, because a bar encodes length from a zero that a log axis does not have.
+//! The form is a horizontal lollipop, fastest at the top, not bars.
+//! A bar encodes length from a zero that a log axis does not have.
 //! Color carries the runner family, never the rank, and every row is direct-labelled.
 //!
-//! The axis is always seconds (per *iteration* for a microbenchmark, per *run* for an app, the title says which), never a ratio, so charts can be read against each other.
-//! The plotted statistic is the median: the minimum is the better estimator (noise is one-sided) but the median is what a user experiences, and here they differ by well under 1%.
+//! The axis is always seconds, never a ratio, so charts can be read against each other.
+//! It is per *iteration* for a microbenchmark and per *run* for an app; the title says which.
+//! The plotted statistic is the median.
+//! The minimum is the better estimator (noise is one-sided), but the median is what a user sees.
+//! Here the two differ by well under 1%.
 //!
-//! [`lollipop`] and the theme around it are the drawing, with the unit left open; the size record draws its byte figures with the same function so the two records look like one family of charts.
+//! [`lollipop`] and the theme around it are the drawing, with the unit left open.
+//! The size record draws its byte figures with the same function.
+//! So the two records look like one family of charts.
 
 use std::fmt::Write as _;
 
@@ -25,7 +33,8 @@ const LABEL_RIGHT: f64 = 152.0;
 /// The plot area: gridlines, rules and dots live between these two.
 const PLOT_LEFT: f64 = 168.0;
 const PLOT_RIGHT: f64 = 726.0;
-/// Right edge of the value column, which sits outside the plot so a label can never collide with a dot.
+/// Right edge of the value column.
+/// The column sits outside the plot so a label can never collide with a dot.
 const VALUE_RIGHT: f64 = WIDTH - PAD;
 /// First row's top edge, below the title and the legend.
 const PLOT_TOP: f64 = 74.0;
@@ -44,7 +53,9 @@ pub struct Chart {
 }
 
 /// What one point on the axis is a duration *of*.
-/// Both arms are seconds: this only names the denominator, which the title and alt text have to state or the two kinds of chart would look comparable when they are not.
+/// Both arms are seconds: this only names the denominator.
+/// The title and alt text have to state it.
+/// Otherwise the two kinds of chart would look comparable when they are not.
 #[derive(Clone, Copy, PartialEq)]
 enum Quantity {
     /// A microbenchmark: compute time `t(N) - t(0)` divided by the calibrated iteration count.
@@ -71,9 +82,12 @@ pub enum Family {
     Baseline,
     Dewasm,
     /// A wasm runtime executing the module natively: wasmer, wasmedge, wazero, wasm3.
-    /// Split out from [`Family::Baseline`] so a reader does not have to know which of them is the reference, and from [`Family::Interpreter`] because "an interpreter written in Go" and "an interpreter written in Ruby" are not the same class of thing.
+    /// It is split out from [`Family::Baseline`], so a reader need not know which is the reference.
+    /// It is split out from [`Family::Interpreter`] too.
+    /// "An interpreter written in Go" and "an interpreter written in Ruby" are different things.
     Native,
-    /// A wasm interpreter running on a host language, whether hand-written (pywasm, wardite) or converted by dewasm (the `wasm3-*` runners).
+    /// A wasm interpreter running on a host language.
+    /// It is either hand-written (pywasm, wardite) or converted by dewasm (the `wasm3-*` runners).
     /// The comparison dewasm actually cares about.
     Interpreter,
 }
@@ -92,7 +106,8 @@ fn family(runner: &str) -> Family {
 }
 
 /// Slots 1-4 of the validated categorical palette, plus the surface and text tokens.
-/// Dark is a selected variant: its own steps for the dark surface, not an inversion of the light one.
+/// Dark is a selected variant.
+/// It has its own steps for the dark surface, not an inversion of the light one.
 pub struct Theme {
     surface: &'static str,
     text_primary: &'static str,
@@ -142,7 +157,8 @@ pub struct Row {
 }
 
 /// How a chart spells a plotted value and a power-of-ten gridline label.
-/// The renderer is unit-agnostic; these two functions are the whole difference between a seconds chart and a bytes chart.
+/// The renderer is unit-agnostic.
+/// These two functions are the whole difference between a seconds chart and a bytes chart.
 pub struct Units {
     pub value: fn(f64) -> String,
     pub tick: fn(f64) -> String,
@@ -161,7 +177,8 @@ const BENCH_LEGEND: [(Family, &str); 4] = [
 ];
 
 /// A chart for every workload the record has at least two measurements for, in document order.
-/// A workload the run did not cover simply produces none: `--render` has to work on an old or filtered record too.
+/// A workload the run did not cover simply produces none.
+/// `--render` has to work on an old or filtered record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
     ordered_workloads(report)
         .into_iter()
@@ -170,7 +187,8 @@ pub fn charts(report: &Report) -> Vec<Chart> {
 }
 
 fn build(report: &Report, workload: &str) -> Option<Chart> {
-    // The same split the tables use, so the chart and the numbers under it cannot disagree: an app has no iteration parameter, so its comparable quantity is whole wall time.
+    // The same split the tables use, so the chart and the numbers under it cannot disagree.
+    // An app has no iteration parameter, so its comparable quantity is whole wall time.
     let quantity = if workload.starts_with("app/") {
         Quantity::PerRun
     } else {
@@ -227,7 +245,8 @@ fn rows(report: &Report, workload: &str, quantity: Quantity) -> Option<Vec<Row>>
     Some(rows)
 }
 
-/// Alt text derived from the data rather than written by hand, so it states the finding and cannot go stale when the suite is re-run.
+/// Alt text derived from the data rather than written by hand.
+/// It then states the finding and cannot go stale when the suite is re-run.
 fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
     let fastest = &rows[0];
     let slowest = &rows[rows.len() - 1];
@@ -259,7 +278,10 @@ pub fn lollipop(
     let plot_bottom = PLOT_TOP + ROW_H * rows.len() as f64;
     let height = plot_bottom + 30.0;
 
-    // The axis starts at the power of ten at or below the fastest value, so the fastest row still gets a readable rule, and ends at the slowest value itself: rounding that end up to the next power of ten would leave most of the plot empty.
+    // The axis starts at the power of ten at or below the fastest value.
+    // So the fastest row still gets a readable rule.
+    // The axis ends at the slowest value itself.
+    // Rounding that end up to the next power of ten would leave most of the plot empty.
     let min = rows[0].value;
     let max = rows[rows.len() - 1].value;
     let first_tick = min.log10().floor() as i32;
@@ -359,7 +381,8 @@ pub fn lollipop(
     out
 }
 
-/// The legend is required even though every row is labelled: it is what names the families, which the row labels only imply.
+/// The legend is required even though every row is labelled.
+/// It is what names the families, which the row labels only imply.
 fn render_legend(out: &mut String, theme: &Theme, entries: &[(Family, &str)]) {
     let y = 48.0;
     let mut x = PAD;
@@ -400,8 +423,10 @@ pub fn fmt_ratio(ratio: f64) -> String {
     }
 }
 
-/// The SI prefix a duration reads best in: the largest unit that still leaves a mantissa of at least 1.
-/// The `0.999999` slack is there because `10f64.powi(-6)` is not exactly `1e-6`, and a tick that landed one ULP low would otherwise be labelled `1000 ns` instead of `1 µs`.
+/// The SI prefix a duration reads best in.
+/// That is the largest unit that still leaves a mantissa of at least 1.
+/// The `0.999999` slack is there because `10f64.powi(-6)` is not exactly `1e-6`.
+/// Without it, a tick that landed one ULP low would be labelled `1000 ns` instead of `1 µs`.
 fn si_unit(seconds: f64) -> (f64, &'static str) {
     const UNITS: [(f64, &str); 4] = [(1.0, "s"), (1e-3, "ms"), (1e-6, "µs"), (1e-9, "ns")];
     UNITS
@@ -427,7 +452,9 @@ fn fmt_time(seconds: f64) -> String {
 }
 
 /// A power-of-ten gridline label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`.
-/// Bare mantissa and unit, no decimals: an exponent (`1e-9`) is a notation a reader has to decode, and these labels are read at a glance.
+/// Bare mantissa and unit, no decimals.
+/// An exponent (`1e-9`) is a notation a reader has to decode.
+/// These labels are read at a glance.
 fn fmt_tick(seconds: f64) -> String {
     let (scale, unit) = si_unit(seconds);
     format!("{:.0} {unit}", seconds / scale)

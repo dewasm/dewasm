@@ -1,7 +1,9 @@
-# WASI fd_allocate: ensure the file is at least offset+len bytes, extending the whole-file byte buffer with zero bytes and marking it dirty; a request that does not grow past the current size is a no-op.
+# WASI fd_allocate: ensure the file is at least offset+len bytes.
+# It extends the whole-file byte buffer with zero bytes and marks it dirty.
+# A request that does not grow past the current size is a no-op.
 # Purely in-memory: no external command, unlike the namespace-mutation four.
-# Only a regular-file fd (kind 2) can be allocated; a directory or stdio fd is
-# EBADF (8), which dir_fd_op_failures accepts alongside ISDIR/NOTCAPABLE.
+# Only a regular-file fd (kind 2) can be allocated; a directory or stdio fd is EBADF (8).
+# dir_fd_op_failures accepts EBADF alongside ISDIR/NOTCAPABLE.
 wasi_fd_allocate() {
   local __p=$1 __fd=$2 __offset=$3 __len=$4
   local -n __fds=${__p}wfds
@@ -15,7 +17,8 @@ wasi_fd_allocate() {
   fi
   if (( __len > 0x7fffffffffffffff - __offset )); then
     # offset+len would wrap bash's signed-64 arithmetic; no file can be that large.
-    # EIO matches Ruby/Python, whose OS-level EFBIG falls through their generic errno mapping as ERRNO_IO.
+    # EIO matches Ruby/Python.
+    # Their OS-level EFBIG falls through their generic errno mapping as ERRNO_IO.
     R0=29 # EIO
     return 0
   fi

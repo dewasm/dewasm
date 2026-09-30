@@ -1,5 +1,7 @@
 # requires: rt/f64_round_pack
-# A u64 with the top bit set is halved exactly; the lost bit 0 can never become the guard bit (the mantissa still needs >= 9 right shifts), so feeding it as sticky is exact.
+# A u64 with the top bit set is halved exactly.
+# The lost bit 0 can never become the guard bit, since the mantissa still needs >= 9 right shifts.
+# So feeding it as sticky is exact.
 rt_f64_convert_i64_u() {
   local v=$1
   if (( v < 0 )); then

@@ -1,4 +1,10 @@
-//! The module-name policy for Java: a dotted library name splits into a `package` declaration plus a verbatim class name, an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program` (which is also its `argv[0]`, see docs/standalone-interface.md).
+//! The module-name policy for Java:
+//!
+//! - a dotted library name splits into a `package` declaration plus a verbatim class name;
+//! - an invalid name is a conversion-time error;
+//! - standalone output ignores the name for a fixed `Program`.
+//!
+//! That `Program` is also its `argv[0]` (see docs/standalone-interface.md).
 
 use std::process::Command;
 
@@ -8,7 +14,8 @@ use dewasm_backend_java::{find_java, javac_command, JavaBackend};
 const ADD_WAT: &str = r#"(module
   (func (export "add") (param i32 i32) (result i32) (i32.add (local.get 0) (local.get 1))))"#;
 
-// Keywords like `int` are NOT rejected: the grammar is character-level only, and javac is the authority on the rest.
+// Keywords like `int` are NOT rejected: the grammar is character-level only.
+// javac is the authority on the rest.
 dewasm_test_helper::module_name_policy_suite!(
     backend: JavaBackend,
     wat: ADD_WAT,
@@ -17,7 +24,9 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["final class Program {"],
 );
 
-/// The whole point of the dotted form: a conventional package *and* a conventional class name, with the embedder's `Main` appended to the same compilation unit (docs/backends/java.md) and therefore the same package.
+/// The whole point of the dotted form: a conventional package *and* a conventional class name.
+/// The embedder's `Main` is appended to the same compilation unit (docs/backends/java.md).
+/// It is therefore in the same package.
 #[test]
 fn dotted_name_emits_a_package_and_runs() {
     let source = convert("com.github.dewasm.Add", Mode::Library).expect("convert");
@@ -78,7 +87,9 @@ fn undotted_name_emits_no_package() {
     assert!(source.contains("final class Add {"));
 }
 
-/// Standalone output carries no `package` line either, even from a name whose dots would have produced one in library mode: the fixed class is also the artifact's `argv[0]`, which a package would have qualified.
+/// Standalone output carries no `package` line either.
+/// That holds even for a name whose dots would have produced one in library mode.
+/// The fixed class is also the artifact's `argv[0]`, which a package would have qualified.
 #[test]
 fn standalone_emits_no_package() {
     let source = convert("com.github.dewasm.Add", Mode::Standalone).expect("convert");

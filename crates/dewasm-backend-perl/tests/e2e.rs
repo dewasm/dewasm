@@ -1,6 +1,13 @@
-//! Perl end-to-end suites: the shared case consts (`dewasm-test-helper`) wired up for the Perl backend.
-//! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations.
-//! Perl covers full WASI preview 1 incl. the filesystem (issue #69), so it wires every WASI kind, the slow `apps`/`fs_apps`/`capi` suites, and both multi-module cases (the Embedded runtime is prefix-namespaced per package, so two artifacts coexist).
+//! Perl end-to-end suites: the shared case consts (`dewasm-test-helper`) run on the Perl backend.
+//! This file holds ONLY these:
+//! - the [`BackendUnderTest`] impl;
+//! - named glue string constants;
+//! - per-case macro invocations.
+//!
+//! Perl covers full WASI preview 1, including the filesystem (issue #69).
+//! So it invokes every WASI kind and the slow `apps`/`fs_apps`/`capi` suites.
+//! It also invokes both multi-module cases.
+//! The Embedded runtime is prefix-namespaced per package, so two artifacts coexist.
 
 use std::path::{Path, PathBuf};
 
@@ -24,10 +31,15 @@ impl BackendUnderTest for Perl {
             .expect("perl >= 5.26 with 64-bit IVs/NVs not found on PATH: see docs/testing.md")
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file and return the `require` preamble that loads them.
-    /// The paths are absolute: `require` searches `@INC` for anything else, and `.` has not been on `@INC` since perl 5.26.
+    /// Write each `.wat` module of a multi-module case into `dir` as its own `.pl` file.
+    /// Return the `require` preamble that loads them.
+    /// The paths are absolute: `require` searches `@INC` for anything else.
+    /// `.` has not been on `@INC` since perl 5.26.
     /// Each file ends with `1;` so `require` sees the true value it demands.
-    /// `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) written to `rt.pl`, required by every module file, so an imported table crosses modules; otherwise each file is a self-contained Embedded conversion carrying its own `<Package>::Rt`.
+    /// `shared_runtime` emits each module against one top-level `Rt` (Alias linkage) in `rt.pl`.
+    /// Every module file requires `rt.pl`, so an imported table crosses modules.
+    /// Otherwise each file is a self-contained Embedded conversion.
+    /// Such a file carries its own `<Package>::Rt`.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -109,7 +121,10 @@ $inst->invoke('_start');  # random_get falls back to the bundled WASI
 print $captured;
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* (`wasm_import`/`attach`, the Perl analog of Python's provider) covers every import, so the bundled WASI (`_wasi`) is never lazily constructed.
+/// The `custom_wasi_provider` glue: a provider *object* covers every import.
+/// The object implements `wasm_import`/`attach`.
+/// It is the Perl analog of Python's provider.
+/// So the bundled WASI (`_wasi`) is never lazily constructed.
 const PERL_CUSTOM_PROVIDER_GLUE: &str = r#"package MyWasi {
     sub new { return bless({ out => '' }, shift); }
     sub wasm_import {
@@ -138,7 +153,9 @@ print $wasi->{out};
 print 'bundled wasi constructed: ', (defined $inst->{_wasi} ? 'true' : 'false'), "\n";
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted, random_get falls back, so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue.
+/// fd_write is intercepted, and random_get falls back.
+/// So the bundled WASI *was* lazily constructed.
 const PERL_PARTIAL_OVERRIDE_GLUE: &str = r#"my $inst;
 my $captured = '';
 my $fd_write = sub {
@@ -156,8 +173,11 @@ print $captured;
 print 'bundled wasi constructed: ', (defined $inst->{_wasi} ? 'true' : 'false'), "\n";
 "#;
 
-/// The `wasi_stdio_capture` glue: redirect STDOUT's file descriptor to an anonymous (unlinked) temp file, run, restore, then print the captured bytes to the real stdout.
-/// The temp file is perl's native embedder-controlled sink that still supports the runtime's raw syswrite.
+/// The `wasi_stdio_capture` glue: redirect STDOUT's file descriptor to a temp file.
+/// The temp file is anonymous (unlinked).
+/// Run, restore, then print the captured bytes to the real stdout.
+/// The temp file is perl's native embedder-controlled sink.
+/// It still supports the runtime's raw syswrite.
 const PERL_STDIO_CAPTURE_GLUE: &str = r#"open(my $cap, '+>', undef) or die "capture: $!";
 open(my $saved, '>&', \*STDOUT) or die "dup: $!";
 open(STDOUT, '>&', $cap) or die "redirect: $!";
@@ -175,7 +195,9 @@ binmode(STDOUT);
 print $data;
 "#;
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code as a trailing decimal line.
+/// The shared filesystem template preopens the scratch dir (`{host}`) at guest `{guest}`.
+/// The guest path is always `/`.
+/// It runs `_start` and surfaces a `proc_exit` code as a trailing decimal line.
 const PERL_FS_GLUE: &str = r#"my $inst = Prog->new({}, preopens => { '{guest}' => '{host}' });
 eval { $inst->invoke('_start'); };
 if (my $e = $@) {
@@ -184,13 +206,15 @@ if (my $e = $@) {
 }
 "#;
 
-/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen (no guest run) and normalize the outcome to `contained`.
+/// The root-preopen containment probe: call the WASI resolver directly with a `"/" => "/"` preopen.
+/// There is no guest run; the outcome is normalized to `contained`.
 const PERL_CONTAINMENT_GLUE: &str = r#"my $wasi = Prog::Rt::WASI->new(preopens => { '/' => '/' });
 my ($path, $err) = $wasi->resolve_path(3, 'etc');
 print defined $err ? "rejected\n" : "contained\n";
 "#;
 
-// Filesystem app glue: package/argv/env/preopen-guest-paths are literals; only the host scratch/cache dirs come through {scratch}/{cache}.
+// Filesystem app glue: package/argv/env/preopen-guest-paths are literals.
+// Only the host scratch/cache dirs come through {scratch}/{cache}.
 
 const PERL_QJS_FILE_IO_GLUE: &str = r#"my $inst = Qjs->new({}, args => ['qjs', '/work/qjs_file_io.js'], env => {}, preopens => { '/work' => '{scratch}' });
 eval { $inst->invoke('_start'); };
@@ -207,13 +231,15 @@ eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Rg::Rt::Exit'));
 "#;
 
-/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const PERL_TOYWASM_GLUE: &str = r#"my $inst = Toywasm->new({}, args => ['toywasm', '--wasi', '/apps/cowsay.wasm', 'Hello', 'from', 'dewasm!'], env => {}, preopens => { '/apps' => '{cache}' });
 eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Toywasm::Rt::Exit'));
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
+/// Its meta-WASI build always forwards the guest's WASI.
 const PERL_WASM3_GLUE: &str = r#"my $inst = Wasm3->new({}, args => ['wasm3', '/apps/cowsay.wasm', 'Hello', 'from', 'dewasm!'], env => {}, preopens => { '/apps' => '{cache}' });
 eval { $inst->invoke('_start'); };
 die $@ if $@ && !(ref($@) && $@->isa('Wasm3::Rt::Exit'));
@@ -377,7 +403,10 @@ print 'row: ', join('|', @$_), "\n" for @rows;
 print "CALLBACK-OK\n";
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len x {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
+/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80".
+/// The link type is DLT_EN10MB, and the snaplen is 65535.
+/// Then walk the serialized program in guest memory, printing each instruction as `code jt jf k`.
+/// The program layout is `[u32 bf_len][bf_len x {u16 code; u8 jt; u8 jf; u32 k}]`.
 const PERL_PCAP_COMPILE: &str = r#"
 my $inst = Libpcap->new({});
 $inst->invoke('_initialize');
@@ -406,7 +435,9 @@ $inst->invoke('free', $prog);
 print "BPF-OK\n";
 "#;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}`.
+/// Print the parse tree's S-expression from guest memory.
+/// The S-expression is a malloc'd NUL-terminated C string.
 const PERL_TREESITTER_PARSE: &str = r#"
 my $inst = Treesitter->new({});
 $inst->invoke('_initialize');
@@ -429,11 +460,15 @@ $inst->invoke('free', $r);
 print "TS-OK\n";
 "#;
 
-/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a zero-returning `env.call_host_function` import stub (only invoked when the guest registers host callbacks: this program registers none) and a
-/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
-/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`.
-/// Perl-on-Perl: the guest snippet
-/// (a non-interpolating `<<'GUEST_PROGRAM'` heredoc, delimiter chosen not to collide with either Perl layer) is byte-identical to the other backends'.
+/// zeroperl Perl-5.42 eval (issue #67).
+/// Instantiate the reactor with a zero-returning `env.call_host_function` import stub.
+/// The stub is only invoked when the guest registers host callbacks; this program registers none.
+/// The reactor also gets a `/dev/null` preopen (`zeroperl_init` returns 1 without it).
+/// Then call `_initialize` → `zeroperl_init`, and `malloc` + copy a Perl program into guest memory.
+/// Finally call `zeroperl_eval` → `zeroperl_flush`.
+/// Perl-on-Perl: the guest snippet is byte-identical to the other backends'.
+/// It is a non-interpolating `<<'GUEST_PROGRAM'` heredoc.
+/// Its delimiter is chosen not to collide with either Perl layer.
 const PERL_ZEROPERL_EVAL: &str = r#"
 my $inst = Zeroperl->new(
     { 'env' => { 'call_host_function' => sub { 0 } } },
@@ -457,15 +492,16 @@ $inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
 $inst->invoke('zeroperl_flush');
 "#;
 
-/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
-/// (`{cache}/exiftool-lib`, preopened at `/work`) run on the same
-/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree.
+/// ExifTool on zeroperl (issue #70).
+/// It runs the flattened `exiftool` CLI driver (`{cache}/exiftool-lib`, preopened at `/work`).
+/// The driver runs on the same `cache/zeroperl.wasm` reactor.
+/// The reactor's SFS blob embeds the `Image::ExifTool` module tree.
 /// Instantiated like [`PERL_ZEROPERL_EVAL`] plus the staged image at `/img`.
-/// The guest driver snippet (identical bytes to the other backends')
-/// overrides `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit`
-/// unwinds back into `eval_pv` instead of tripping `proc_exit`, sets
-/// `@ARGV`/`$0`, and `do`es the script; `zeroperl_flush` then pushes ExifTool's buffered stdout out through fd 1.
+/// The guest driver snippet has identical bytes to the other backends'.
+/// It overrides `CORE::GLOBAL::exit` to a `die`.
+/// So ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`.
+/// The snippet then sets `@ARGV`/`$0` and `do`es the script.
+/// `zeroperl_flush` then pushes ExifTool's buffered stdout out through fd 1.
 const PERL_EXIFTOOL: &str = r#"
 my $inst = Zeroperl->new(
     { 'env' => { 'call_host_function' => sub { 0 } } },
@@ -493,7 +529,8 @@ $inst->invoke('zeroperl_eval', $ptr, 0, 0, 0);
 $inst->invoke('zeroperl_flush');
 "#;
 
-/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// DOOM: deterministic drive (synthetic clock, no input).
+/// It dumps the framebuffer as a P6 PPM matching the wasmtime snapshot.
 /// `{ticks}`/`{clock_step}` filled by the runner.
 const PERL_DOOM_FRAME_GLUE: &str = r#"my $frame = { off => undef, w => 0, h => 0 };
 my $ms = 0;
@@ -522,9 +559,11 @@ print "P6\n$w $h\n255\n";
 print $rgb;
 "#;
 
-/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame from agnes's palette-index screen buffer and its palette (issue #117; the
-/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime snapshot.
+/// NES (issue #114, mirrors the DOOM glue above).
+/// Load the pinned ROM into `allocRom`'s buffer and tick `{frames}` times with no input.
+/// Compose the frame from agnes's palette-index screen buffer and its palette (issue #117).
+/// The `& 0x3f` mask is load-bearing.
+/// Dump the frame as a P6 PPM matching the wasmtime snapshot.
 /// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 const PERL_NES_FRAME_GLUE: &str = r#"my $rom = do {
     local $/;
@@ -550,13 +589,16 @@ print "P6\n$w $h\n255\n";
 print $rgb;
 "#;
 
-/// Driver for the shared-table case: instantiate the exporter and the importer linked against it, then print `call0` (call_indirect through the shared table -> 42).
+/// Driver for the shared-table case: instantiate the exporter and the importer linked against it.
+/// Then print `call0` (call_indirect through the shared table -> 42).
 const PERL_SHARED_TABLE_GLUE: &str = r#"my $a = TableExp->new({});
 my $b = TableImp->new({ 'a' => $a });
 print $b->invoke('call0'), "\n";
 "#;
 
-/// Driver for the Embedded-coexistence case: two independently converted packages, each with its own prefix-namespaced runtime (`Alpha::Rt`, `Beta::Rt`), living in one interpreter.
+/// Driver for the Embedded-coexistence case.
+/// Two independently converted packages live in one interpreter.
+/// Each has its own prefix-namespaced runtime (`Alpha::Rt`, `Beta::Rt`).
 /// The trap raised by one must be its own runtime's class, not the other's.
 const PERL_EMBEDDED_COEXIST_GLUE: &str = r#"my $a = Alpha->new({});
 my $b = Beta->new({});
@@ -580,7 +622,8 @@ dewasm_test_helper::wasi_suite!(Perl, Poll);
 dewasm_test_helper::wasi_suite!(Perl, Fs, PERL_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Perl, PERL_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Perl);
-// Perl recursion is heap-allocated (no host stack to overflow); the case pins that the entrypoint still surfaces proc_exit(42) through deep guest recursion.
+// Perl recursion is heap-allocated (no host stack to overflow).
+// The case pins that the entrypoint still surfaces proc_exit(42) through deep guest recursion.
 dewasm_test_helper::deep_recursion_e2e!(Perl);
 dewasm_test_helper::folded_temp_reuse_e2e!(Perl);
 
@@ -595,11 +638,14 @@ dewasm_test_helper::qjs_file_io_e2e!(Perl, PERL_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Perl, PERL_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Perl, PERL_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Perl, PERL_CPYTHON_GLUE);
-// Ultra-slow category: measured ~57s locally (CRuby-on-Perl), which crosses the ~1-minute CI-runner line the other backends' cruby cases stay under.
-// The packed variant is the same interpreter plus the wizer-embedded stdlib, so it inherits the category.
+// Ultra-slow category: measured ~57s locally (CRuby-on-Perl).
+// That crosses the ~1-minute CI-runner line the other backends' cruby cases stay under.
+// The packed variant is the same interpreter plus the wizer-embedded stdlib.
+// So it inherits the category.
 dewasm_test_helper::cruby_hello_e2e!(Perl, PERL_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Perl, ultra);
-// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest).
+// Slow, like the other filesystem app cases.
+// The case converts the interpreter, then interprets the cowsay guest.
 dewasm_test_helper::toywasm_cowsay_e2e!(Perl, PERL_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Perl, PERL_WASM3_GLUE);
@@ -611,10 +657,14 @@ dewasm_test_helper::sqlite3_callback_binding_e2e!(Perl, PERL_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Perl, PERL_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Perl, PERL_TREESITTER_PARSE);
 dewasm_test_helper::zeroperl_eval_e2e!(Perl, PERL_ZEROPERL_EVAL);
-// Ultra-slow category: measured ~75s locally (ExifTool-on-zeroperl-on-Perl), well past the ~1-minute CI-runner line; the zeroperl_eval case above (~7s: same convert + host-perl compile, tiny guest program) pins the embedding path at `slow`.
+// Ultra-slow category: measured ~75s locally (ExifTool-on-zeroperl-on-Perl).
+// That is well past the ~1-minute CI-runner line.
+// The zeroperl_eval case above pins the embedding path at `slow`.
+// It takes ~7s: the same convert + host-perl compile, with a tiny guest program.
 dewasm_test_helper::exiftool_extract_e2e!(Perl, PERL_EXIFTOOL, ultra);
 
-// Slow category like Ruby/Python: measured ~10s locally (convert + initGame + 2 ticks), nowhere near the ~1-minute ultra line.
+// Slow category like Ruby/Python: measured ~10s locally (convert + initGame + 2 ticks).
+// That is nowhere near the ~1-minute ultra line.
 dewasm_test_helper::doom_frame_e2e!(Perl, PERL_DOOM_FRAME_GLUE);
 dewasm_test_helper::nes_frame_e2e!(Perl, PERL_NES_FRAME_GLUE);
 

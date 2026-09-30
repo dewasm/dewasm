@@ -4,16 +4,20 @@ func (w *WASI) wasi_fd_fdstat_get(fd, outPtr uint32) uint32 {
     if !present {
         return wasiBadf
     }
-    // fdstat: fs_filetype (u8) + pad + fs_flags (u16) + pad + fs_rights_base
-    // (u64) + fs_rights_inheriting (u64) = 24 bytes.
-    // Rights and fdflags come from the stored per-fd meta; a missing entry (should not happen for a live fd) reports the permissive all-ones.
+    // fdstat is 24 bytes: fs_filetype (u8) + pad + fs_flags (u16) + pad.
+    // Then fs_rights_base (u64) + fs_rights_inheriting (u64).
+    // Rights and fdflags come from the stored per-fd meta.
+    // A missing entry (should not happen for a live fd) reports the permissive all-ones.
     base, inheriting := ^uint64(0), ^uint64(0)
     var fdflags uint16
     m, hasMeta := w.meta[fd]
     if hasMeta {
         base, inheriting, fdflags = m.base, m.inheriting, m.fdflags
     }
-    // The Stat behind the character-device answer is a host syscall, and an open descriptor's filetype cannot change while it is open, so it runs at most once per fd (see wasiFdMeta): a guest polling isatty in a loop would otherwise pay one syscall per call.
+    // The Stat behind the character-device answer is a host syscall.
+    // An open descriptor's filetype cannot change while it is open.
+    // So the Stat runs at most once per fd (see wasiFdMeta).
+    // A guest polling isatty in a loop would otherwise pay one syscall per call.
     var filetype uint32
     if hasMeta && m.filetypeKnown {
         filetype = m.filetype

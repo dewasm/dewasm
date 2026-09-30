@@ -2,10 +2,12 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# tree-sitter: the incremental-parsing runtime plus the tree-sitter-json grammar, built from the pinned upstream releases with wasi-sdk as a reactor library.
-# The runtime is a single-TU amalgamation (lib/src/lib.c);
+# tree-sitter: the incremental-parsing runtime plus the tree-sitter-json grammar.
+# Both are built as one reactor library with wasi-sdk, from the pinned upstream releases.
+# The runtime is a single-TU amalgamation (lib/src/lib.c).
 # tree-sitter-json ships a pre-generated src/parser.c (no grammar codegen).
-# Our own src/treesitter_binding.c exports parse_source(), which parses a source string and returns the parse tree's S-expression (ts_node_string).
+# Our own src/treesitter_binding.c exports parse_source().
+# It parses a source string and returns the parse tree's S-expression (ts_node_string).
 # One combined stamp covers both source checksums.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -17,7 +19,8 @@ TSJSON_URL="https://github.com/tree-sitter/tree-sitter-json/archive/refs/tags/v0
 TSJSON_SHA256="acf6e8362457e819ed8b613f2ad9a0e1b621a77556c296f3abea58f7880a9213"
 TSJSON_DIR="tree-sitter-json-0.24.8"
 
-# One stamp covering both pinned checksums (order-fixed) plus wasm-opt version and the toolchain token.
+# One stamp covering both pinned checksums (order-fixed) plus wasm-opt version.
+# It also covers the toolchain token.
 ts_stamp="cache/treesitter.src-sha256"
 ts_want="$(printf '%s %s\n%s\n%s' "$TS_SHA256" "$TSJSON_SHA256" "$(wasm_opt_version)" "$(wasi_sdk_stamp)")"
 if is_cached "$ts_stamp" "$ts_want" cache/treesitter.wasm; then

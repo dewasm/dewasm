@@ -1,13 +1,17 @@
-//! The DOOM framebuffer-snapshot oracle: run the *original* `doom.wasm`
-//! under the wasmtime crate with the deterministic driving contract, and write the rendered frame to `examples/apps/snapshots/doom_frame.ppm`. wasmtime lives here, in dev tooling, not in `dewasm-test-helper`: the per-backend comparison never needs an embedder, only the committed snapshot this produces.
-//! A PNG rendering of the same frame is emitted alongside it for human inspection (the
-//! DOOM README); only the PPM is the compared oracle.
+//! The DOOM framebuffer-snapshot oracle.
+//! It runs the *original* `doom.wasm` under the wasmtime crate with the deterministic contract.
+//! It writes the rendered frame to `examples/apps/snapshots/doom_frame.ppm`.
+//! wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
+//! The per-backend comparison never needs an embedder, only the committed snapshot this produces.
+//! A PNG rendering of the same frame is emitted alongside it for human inspection.
+//! The DOOM README shows it; only the PPM is the compared oracle.
 
 use anyhow::{ensure, Context, Result};
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
-/// Host state threaded through the imports: the synthetic clock, the last framebuffer offset `ui.drawFrame` delivered, and the dimensions
-/// `loading.onGameInit` reported.
+/// Host state threaded through the imports.
+/// It holds the synthetic clock and the last framebuffer offset `ui.drawFrame` delivered.
+/// It also holds the dimensions `loading.onGameInit` reported.
 struct DoomState {
     ms: i64,
     frame_off: Option<u32>,
@@ -15,9 +19,9 @@ struct DoomState {
     frame_h: u32,
 }
 
-/// Instantiate and drive `doom.wasm` under the deterministic contract, returning the captured framebuffer bytes (`B,G,R,A`) and its dimensions.
-/// Kept in
-/// `wasmtime::Result` so wasmtime's `?` composes; the caller lifts it to anyhow.
+/// Instantiate and drive `doom.wasm` under the deterministic contract.
+/// Return the captured framebuffer bytes (`B,G,R,A`) and its dimensions.
+/// Kept in `wasmtime::Result` so wasmtime's `?` composes; the caller lifts it to anyhow.
 fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
@@ -31,7 +35,10 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
         },
     );
 
-    // The ten host imports under the deterministic contract: no console output, no save state, a synthetic clock, the embedded WAD (wad imports are no-ops, leaving their out-params zero), and dims/offset recorded.
+    // The ten host imports follow the deterministic contract.
+    // There is no console output, no save state, and a synthetic clock.
+    // The WAD is embedded: wad imports are no-ops that leave their out-params zero.
+    // Dims and offset are recorded.
     let mut linker = Linker::new(&engine);
     linker.func_wrap(
         "console",
@@ -117,7 +124,8 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     Ok((frame, w, h))
 }
 
-/// Recapture the DOOM framebuffer from the embedded wasmtime; returns the compared P6-PPM bytes plus a PNG for human inspection.
+/// Recapture the DOOM framebuffer from the embedded wasmtime.
+/// Return the compared P6-PPM bytes plus a PNG for human inspection.
 ///
 /// `update-snapshots` writes both; the per-backend test compares only the PPM.
 pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
@@ -137,7 +145,8 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
         dewasm_test_helper::DOOM_FRAME_H
     );
 
-    // Guard against a degenerate (blank/near-blank) capture: DOOM's paletted renderer lands in the low hundreds of distinct colors on a real frame.
+    // Guard against a degenerate (blank/near-blank) capture.
+    // DOOM's paletted renderer lands in the low hundreds of distinct colors on a real frame.
     let distinct = frame
         .as_chunks::<4>()
         .0
@@ -156,9 +165,9 @@ pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     ))
 }
 
-/// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit
-/// RGB PNG.
-/// Settings are the crate defaults, kept fixed so regeneration is byte-stable (verified by capturing twice and diffing).
+/// Encode a `B,G,R,A` framebuffer (row-major, alpha padding dropped) as an 8-bit RGB PNG.
+/// Settings are the crate defaults, kept fixed so regeneration is byte-stable.
+/// Capturing twice and diffing verified that.
 /// This PNG exists only for humans to view: no test compares it.
 fn frame_to_png(frame: &[u8], w: u32, h: u32) -> Result<Vec<u8>> {
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);

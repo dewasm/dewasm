@@ -1,14 +1,27 @@
-//! The `go build` step the Go crate's test binaries share: compile generated source to a content-addressed cache binary (so identical sources, e.g. cowsay's args and stdin cases, build once) and hand back the path.
-//! The cache is keyed on the source alone and shared by every suite in the crate (e2e, spec, wasi-testsuite, module-name), so a program two of them happen to agree on is built once.
+//! The `go build` step the Go crate's test binaries share.
+//! It compiles generated source to a content-addressed cache binary and hands back the path.
+//! Identical sources (e.g. cowsay's args and stdin cases) then build once.
+//! The cache is keyed on the source alone.
+//! Every suite in the crate shares it (e2e, spec, wasi-testsuite, module-name).
+//! So a program two of them happen to agree on is built once.
 //!
-//! Two layouts, selected by the artifact's own `package` clause, the one fact that decides how Go can build it:
+//! The artifact's own `package` clause selects one of two layouts.
+//! It is the one fact that decides how Go can build the artifact.
 //!
-//! - `package main` (standalone output, and the spec-style multi-module compositions the test crate assembles itself): one file, `go build` it directly.
+//! - `package main`: one file, `go build` it directly.
+//!   This covers standalone output and the spec-style multi-module compositions.
+//!   The test crate assembles those compositions itself.
 //! - `package <name>` (library output): a Go *package*, which can only be built from a module.
-//!   The source (the artifact plus whatever host glue the shared runner appended to it, both in that package) is written to `<pkg>/<pkg>.go` inside a temp module, next to a two-line `main.go` that imports it and calls the glue's `RunTest`.
-//!   Glue that reaches into unexported internals (`inst.memory.data`, `*global[uint32]`) is why it is appended into the package rather than written beside `main.go`.
+//!   The source is the artifact plus whatever host glue the shared runner appended to it.
+//!   Both are in that package.
+//!   The source is written to `<pkg>/<pkg>.go` inside a temp module.
+//!   Next to it sits a two-line `main.go` that imports it and calls the glue's `RunTest`.
+//!   Some glue reaches into unexported internals (`inst.memory.data`, `*global[uint32]`).
+//!   That is why the glue is appended into the package rather than written beside `main.go`.
 
-// Shared by several test binaries, each of which uses a subset: a test module is compiled into every binary that declares it, so an item only one of them calls would otherwise warn as dead code.
+// Shared by several test binaries, each of which uses a subset.
+// A test module is compiled into every binary that declares it.
+// So an item only one of them calls would otherwise warn as dead code.
 #![allow(dead_code)]
 
 use std::collections::hash_map::DefaultHasher;
@@ -21,7 +34,8 @@ use dewasm_backend_go::find_go;
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Compile `source` to a content-addressed cache binary and return its path.
-/// `Err(Output)` carries the `go build` failure so a piped run can report it via `status.success()` while a pty run panics on it.
+/// `Err(Output)` carries the `go build` failure.
+/// A piped run can then report it via `status.success()`, while a pty run panics on it.
 /// A missing `go` toolchain is a loud failure.
 pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     let go =
@@ -38,7 +52,10 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
         return Ok(bin);
     }
 
-    // Both the sources and the binary get per-attempt unique names: two threads with the same hash (cowsay's args and stdin cases) may build concurrently, and a shared source path would let one truncate the file mid-read of the other's `go build` (issue #19).
+    // Both the sources and the binary get per-attempt unique names.
+    // Two threads with the same hash (cowsay's args and stdin cases) may build concurrently.
+    // A shared source path would let one truncate the file mid-read of the other's `go build`.
+    // That was issue #19.
     // Only the final rename onto the cache key is shared, and that is atomic.
     let unique = format!(
         "{hash:016x}.{}.{}",
@@ -69,7 +86,8 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
             ),
         )
         .unwrap();
-        // Build the module's root package (`.`), which pulls in the artifact package through the import above.
+        // Build the module's root package (`.`).
+        // It pulls in the artifact package through the import above.
         let build = run_build(&go, &tmp_bin, std::path::Path::new("."), Some(&dir));
         if build.status.success() {
             let _ = std::fs::remove_dir_all(&dir);
@@ -84,8 +102,12 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     Ok(bin)
 }
 
-/// Build the Go module the caller has already laid out in `dir` (a `go.mod` at its root, `package main` files beside it, and whatever library packages it wrote into subdirectories) and return the resulting binary's path.
-/// The multi-module cases use this instead of [`build_go`]: their artifacts are several files by design (that is what the case is about), so there is no single source to key a cache on, and each case gets a fresh directory anyway.
+/// Build the Go module the caller has already laid out in `dir` and return the binary's path.
+/// The layout is a `go.mod` at its root and `package main` files beside it.
+/// Library packages the caller wrote go into subdirectories.
+/// The multi-module cases use this instead of [`build_go`].
+/// Their artifacts are several files by design (that is what the case is about).
+/// So there is no single source to key a cache on, and each case gets a fresh directory anyway.
 pub fn build_go_dir(dir: &std::path::Path) -> Result<PathBuf, Output> {
     let go =
         find_go().expect("go toolchain not found on PATH (or $DEWASM_GO): see docs/testing.md");
@@ -108,14 +130,16 @@ fn run_build(
     cmd.arg("build").arg("-o").arg(out).arg(target);
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
-        // A stray `go.work` above the temp dir would otherwise pull this throwaway module into a workspace that does not list it.
+        // A stray `go.work` may sit above the temp dir.
+        // It would otherwise pull this throwaway module into a workspace that does not list it.
         cmd.env("GOWORK", "off");
     }
     cmd.output().expect("spawn go build")
 }
 
 /// The package `source` declares.
-/// The first line starting with `package ` is the clause itself: everything before it in generated output is `//` comments.
+/// The first line starting with `package ` is the clause itself.
+/// Everything before it in generated output is `//` comments.
 pub fn package_clause(source: &str) -> &str {
     source
         .lines()

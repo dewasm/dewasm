@@ -1,4 +1,7 @@
-//! The module-name policy for Codon: a library name is one identifier taken verbatim (and carried into the `<Class>Rt` runtime name), an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program`.
+//! The module-name policy for Codon.
+//! A library name is one identifier taken verbatim, and carried into the `<Class>Rt` runtime name.
+//! An invalid one is a conversion-time error.
+//! Standalone output ignores the name for a fixed `Program`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_codon::CodonBackend;
@@ -19,7 +22,8 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["class Program"],
 );
 
-/// A name is used exactly as given (no capitalization, no case folding), the per-artifact runtime is named after it, and the boxed export surface runs.
+/// A name is used exactly as given, with no capitalization and no case folding.
+/// The per-artifact runtime is named after it, and the boxed export surface runs.
 #[test]
 fn library_name_is_verbatim_and_runs() {
     let source = convert("sqlite3", Mode::Library).expect("convert");

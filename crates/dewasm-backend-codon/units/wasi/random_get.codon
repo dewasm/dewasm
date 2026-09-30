@@ -1,5 +1,6 @@
 # requires: rt/trap
-# getentropy is the portable libc entropy call (macOS 10.12+, glibc 2.25+), capped at 256 bytes per call.
+# getentropy is the portable libc entropy call (macOS 10.12+, glibc 2.25+).
+# It is capped at 256 bytes per call.
 def wasi_random_get(self, buf: UInt[32], ln: UInt[32]) -> UInt[32]:
     from C import getentropy(Ptr[byte], int) -> int
     m = self.memory

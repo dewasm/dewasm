@@ -1,10 +1,14 @@
 # requires: wasi/fd_flush
-# WASI fd_renumber: atomically move the open fd <from> into the slot
-# <to>, closing whatever <to> was.
+# WASI fd_renumber: atomically move the open fd <from> into the slot <to>.
+# Whatever <to> was is closed.
 # Both must currently be open: an unopened endpoint is EBADF (8).
-# That is why `fd_renumber(valid, closed)` fails and why renumbering onto stdio or a preopen (both open) works.
-# Every parallel fd-table slot (kind, offset, path, name, rights, fdflags, append, dirty) and, for a regular-file fd, the whole-file byte buffer moves from <from> to <to>;
-# the destination's own buffer is flushed first (it is being closed) and any readdir cache on either side is dropped so a later fd_readdir rebuilds.
+# That is why `fd_renumber(valid, closed)` fails.
+# It is also why renumbering onto stdio or a preopen (both open) works.
+# Every parallel fd-table slot moves from <from> to <to>.
+# The slots are kind, offset, path, name, rights, fdflags, append, and dirty.
+# For a regular-file fd, the whole-file byte buffer moves too.
+# The destination's own buffer is flushed first, since it is being closed.
+# Any readdir cache on either side is dropped, so a later fd_readdir rebuilds.
 wasi_fd_renumber() {
   local __p=$1 __from=$2 __to=$3
   local -n __fds=${__p}wfds

@@ -1,8 +1,11 @@
 // requires: rt/link_error
 // Resolve one import from the embedder's imports object.
-// The source under a module name is either a name -> value map or an ImportProvider that resolves names itself; the parameter is wildcarded so both a
-// `Map<String, Map<String, Object>>` and a mixed `Map<String, Object>` are accepted.
-// Returns null when the module, or the name within it, is absent, so the caller falls through to its bundled-WASI / ENOSYS / link-error fallback.
+// The source under a module name is either a name -> value map or an ImportProvider.
+// An ImportProvider resolves names itself.
+// The parameter is wildcarded, so it accepts both of these:
+// `Map<String, Map<String, Object>>` and a mixed `Map<String, Object>`.
+// Returns null when the module, or the name within it, is absent.
+// So the caller falls through to its bundled-WASI / ENOSYS / link-error fallback.
 static Object resolve_import(java.util.Map<String, ?> imports, String mod, String name) {
     if (imports == null) {
         return null;

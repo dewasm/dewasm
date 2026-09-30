@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build the dewasm-converted SQLite library that backs the sqlite3 shim gem.
 #
-# Ensures the pinned libsqlite3.wasm exists in examples/apps/cache (building it if needed), converts it to Ruby with dewasm in library mode, and drops the result where the shim gem loads it from (sqlite3/lib/sqlite3/sqlite3_wasm.rb, gitignored).
+# Ensures the pinned libsqlite3.wasm exists in examples/apps/cache, building it if needed.
+# Then converts it to Ruby with dewasm in library mode.
+# The result goes where the shim gem loads it from.
+# That is sqlite3/lib/sqlite3/sqlite3_wasm.rb, gitignored.
 set -euo pipefail
 cd "$(dirname "$0")"
 

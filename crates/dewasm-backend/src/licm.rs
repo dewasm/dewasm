@@ -1,10 +1,18 @@
 //! Hoist constant-address loads out of loops, with a runtime store guard instead of an alias proof.
 //!
-//! Code compiled to wasm re-reads memory-resident globals every loop iteration because its own compiler could not prove the loop's stores leave them alone, and neither can this pass.
-//! What it can check is the run-time address: hoist each constant-address load into a local before the loop, and after every store inside the loop compare the store's address against the hoisted address window, reloading the locals on overlap.
-//! A few compares per store buy back a load per hoisted address per iteration, and the reload path keeps an aliasing program exact.
+//! Code compiled to wasm re-reads memory-resident globals every loop iteration.
+//! Its own compiler could not prove the loop's stores leave them alone, and neither can this pass.
+//! What it can check is the run-time address.
+//! It hoists each constant-address load into a local before the loop.
+//! After every store inside the loop, it compares the store's address against the hoisted window.
+//! On overlap it reloads the locals.
+//! A few compares per store buy back a load per hoisted address per iteration.
+//! The reload path keeps an aliasing program exact.
 //!
-//! Hoisting runs a load earlier, possibly on paths that would have skipped it, so only loads that can never trap are hoisted: the constant address plus access width must fit inside the memory's minimum size, which a memory never shrinks below.
+//! Hoisting runs a load earlier, possibly on paths that would have skipped it.
+//! So only loads that can never trap are hoisted.
+//! The constant address plus access width must fit inside the memory's minimum size.
+//! A memory never shrinks below that size.
 
 use std::collections::BTreeMap;
 
@@ -26,13 +34,16 @@ use crate::extract::{for_each_expr, for_each_expr_mut};
 /// Hoisting thresholds; each backend picks its own values.
 #[derive(Clone, Copy, Debug)]
 pub struct Params {
-    /// Minimum number of distinct hoistable loads in a loop that contains stores: below it the per-store guard costs more than the hoisted loads save.
+    /// Minimum number of distinct hoistable loads in a loop that contains stores.
+    /// Below it, the per-store guard costs more than the hoisted loads save.
     /// A loop without stores needs no guards and hoists from one load up.
     pub min_hoisted_with_stores: usize,
 }
 
 /// Rewrite `funcs` in place, hoisting invariant constant-address loads out of eligible loops.
-/// `types` resolves each function's parameter count; `mem_min_bytes` is the memory's minimum size (`None` when the module has no memory, which disables the pass).
+/// `types` resolves each function's parameter count.
+/// `mem_min_bytes` is the memory's minimum size.
+/// It is `None` when the module has no memory, which disables the pass.
 pub fn hoist(funcs: &mut [Func], types: &[FuncType], mem_min_bytes: Option<u64>, params: &Params) {
     let Some(mem_min) = mem_min_bytes else {
         return;
@@ -110,7 +121,8 @@ fn walk_seq(seq: &mut Vec<Stmt>, cx: &mut Cx) {
     }
 }
 
-/// Try to hoist out of the loop at `seq[at]`; returns the number of preheader statements inserted before it.
+/// Try to hoist out of the loop at `seq[at]`.
+/// Returns the number of preheader statements inserted before it.
 fn try_hoist_loop(seq: &mut Vec<Stmt>, at: usize, cx: &mut Cx) -> usize {
     let Stmt::Loop { body, .. } = &seq[at] else {
         return 0;
@@ -170,7 +182,8 @@ fn try_hoist_loop(seq: &mut Vec<Stmt>, at: usize, cx: &mut Cx) -> usize {
     n
 }
 
-/// Statements that can write memory beyond a plain store (or run code that does): a loop containing one is not hoisted from.
+/// Statements that can write memory beyond a plain store (or run code that does).
+/// A loop containing one is not hoisted from.
 fn has_barrier(stmts: &[Stmt]) -> bool {
     Stmt::any(stmts, &mut |s| {
         matches!(
@@ -192,7 +205,9 @@ fn collect_const_loads(stmts: &[Stmt], mem_min: u64, out: &mut BTreeMap<(u32, u6
         if let Expr::Load { op, addr, offset } = e {
             if let Expr::I32Const(a) = **addr {
                 let end = a as u64 + offset + load_width(*op) as u64;
-                // In bounds forever (so it may run early), and comfortably below the 4 GiB edge so the guard arithmetic cannot wrap.
+                // In bounds forever, so it may run early.
+                // It also stays comfortably below the 4 GiB edge.
+                // So the guard arithmetic cannot wrap.
                 if end <= mem_min && end <= (1u64 << 32) - 8 {
                     out.insert((a, *offset, *op), ());
                 }
@@ -289,8 +304,13 @@ fn replace_loads(stmts: &mut [Stmt], hoisted: &[Hoisted]) {
     }
 }
 
-/// Rewrite every store in the loop body: spill its address to a temp, store through the temp, then compare the address against the hoisted window and reload on overlap.
-/// The guard sits after the store: if the store traps the loop is gone and staleness cannot be observed, and if it succeeds its effective address is below the memory size, so the compare arithmetic cannot wrap.
+/// Rewrite every store in the loop body.
+/// Each store spills its address to a temp and stores through the temp.
+/// Then it compares the address against the hoisted window and reloads on overlap.
+/// The guard sits after the store.
+/// If the store traps, the loop is gone and staleness cannot be observed.
+/// If it succeeds, its effective address is below the memory size.
+/// So the compare arithmetic cannot wrap.
 fn guard_stores(stmts: &mut Vec<Stmt>, hoisted: &[Hoisted], lo: u64, hi: u64, cx: &mut Cx) {
     let mut i = 0;
     while i < stmts.len() {
@@ -312,7 +332,8 @@ fn guard_stores(stmts: &mut Vec<Stmt>, hoisted: &[Hoisted], lo: u64, hi: u64, cx
         };
         let spill = cx.spill();
         let eff = |cx_offset: u64| -> Expr {
-            // Effective address of the store; the addr operand wraps to 32 bits, the static offset does not.
+            // Effective address of the store.
+            // The addr operand wraps to 32 bits; the static offset does not.
             let base = Expr::Bin(
                 BinOp::I32And,
                 Box::new(Expr::Temp(spill)),
@@ -493,7 +514,8 @@ mod tests {
         ])];
         hoist(&mut funcs, &module_types(), Some(65536), &TEST_PARAMS);
         let f = &funcs[0];
-        // Two hoisted locals, a preheader of two loads, and the store rewritten to spill + store + guard.
+        // Two hoisted locals and a preheader of two loads.
+        // The store is rewritten to spill + store + guard.
         assert_eq!(f.locals, vec![ValType::I32, ValType::I32]);
         assert_eq!(f.temps.len(), 1);
         assert!(matches!(f.body[0], Stmt::LocalSet { idx: 1, .. }));

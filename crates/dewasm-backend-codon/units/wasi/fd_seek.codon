@@ -13,7 +13,8 @@ def wasi_fd_seek(self, fd: UInt[32], offset: UInt[64], whence: UInt[32], out_ptr
         return UInt[32](self.ERRNO_INVAL)
     r = lseek(f.host_fd, int(Int[64](offset)), w)
     if r < 0:
-        # A negative resulting offset is EINVAL, which WASI reports as INVAL (not the generic IO used for other seek failures).
+        # A negative resulting offset is EINVAL.
+        # WASI reports it as INVAL, not the generic IO used for other seek failures.
         if Rt.cerr() == 22:
             return UInt[32](self.ERRNO_INVAL)
         return UInt[32](self.ERRNO_IO)

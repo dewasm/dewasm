@@ -1,25 +1,32 @@
 //! Adjacent active-data-segment merging.
 //!
-//! Toolchains split initialized data across thousands of tiny active segments (ruby.wasm ships 7871); merging runs of near-adjacent ones into a single zero-filled blob shrinks every backend's output.
+//! Toolchains split initialized data across thousands of tiny active segments.
+//! For example, ruby.wasm ships 7871.
+//! Merging runs of near-adjacent ones into one zero-filled blob shrinks every backend's output.
 //! Runs at the end of module building.
 //!
-//! Four properties keep the rewrite sound. 1, 3 and 4 are checked up front and failing any bails the whole pass; 2 holds by construction, since the pass rebuilds the list in declaration order.
+//! Four properties keep the rewrite sound.
+//! Properties 1, 3 and 4 are checked up front, and failing any bails the whole pass.
+//! Property 2 holds by construction, since the pass rebuilds the list in declaration order.
 //!
 //! 1. **No `memory.init`/`data.drop`**: they address segments by index.
 //! 2. **Declaration order is preserved**: segments apply in order, later writes win.
-//! 3. **Active `i32.const` segments are ascending and non-overlapping**, so no const-offset segment sits inside a zero-filled gap.
-//! 4. **No `global.get` offsets**: such a segment's runtime-unknown target could sit inside a gap and be clobbered by the blob's zeros (issue #28).
+//! 3. **Active `i32.const` segments are ascending and non-overlapping**.
+//!    So no const-offset segment sits inside a zero-filled gap.
+//! 4. **No `global.get` offsets**: such a segment's target is unknown until runtime.
+//!    It could sit inside a gap and be clobbered by the blob's zeros (issue #28).
 //!
 //! Passive segments carry no memory effect once 1 holds and pass through without closing a run.
 
 use crate::ir::{DataSegment, Expr, Module, Stmt};
 
 /// Largest gap worth bridging with zero fill.
-/// Tuned to the always-on inline cost (the core cannot see `GenOptions`), not wasm2go's externalize-only 4096.
+/// Tuned to the always-on inline cost, since the core cannot see `GenOptions`.
+/// It is not wasm2go's 4096, which applies only when data is externalized.
 const MAX_MERGE_GAP: u64 = 64;
 
 pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
-    // Property 1: any body that references a segment by index (bulk memory) makes renumbering unsafe.
+    // Property 1: a body that references a segment by index (bulk memory) makes renumbering unsafe.
     if module.funcs.iter().any(|f| body_refs_segment(&f.body)) {
         return;
     }
@@ -51,7 +58,8 @@ pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
                     None => run = Some((start, data)),
                     Some((run_start, mut acc)) => {
                         let run_end = run_start + acc.len() as u64;
-                        // Property 3 guarantees `start >= run_end`; the gap bound is the only real merge condition.
+                        // Property 3 guarantees `start >= run_end`.
+                        // The gap bound is the only real merge condition.
                         if start >= run_end && start - run_end < MAX_MERGE_GAP {
                             acc.resize(acc.len() + (start - run_end) as usize, 0);
                             acc.extend_from_slice(&data);
@@ -93,14 +101,16 @@ fn active_segment(start: u64, data: Vec<u8>) -> DataSegment {
     }
 }
 
-/// Whether any statement (recursing into nested control flow) references a data segment by index via `memory.init` or `data.drop`.
+/// Whether any statement references a data segment by index via `memory.init` or `data.drop`.
+/// The search recurses into nested control flow.
 fn body_refs_segment(stmts: &[Stmt]) -> bool {
     Stmt::any(stmts, &mut |s| {
         matches!(s, Stmt::MemoryInit { .. } | Stmt::DataDrop { .. })
     })
 }
 
-/// Whether every active `i32.const` segment starts at or after the running maximum end of all earlier such segments (globally ascending, non-overlapping in declaration order).
+/// Whether every active `i32.const` segment starts at or after the end of all earlier ones.
+/// That is, the segments are globally ascending and non-overlapping in declaration order.
 /// `global.get`-offset and passive segments are ignored.
 fn active_const_segments_ascending(datas: &[DataSegment]) -> bool {
     let mut max_end: u64 = 0;

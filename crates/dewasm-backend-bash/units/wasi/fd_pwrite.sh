@@ -1,5 +1,10 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
-# WASI fd_pwrite: byte-wise binary-safe write into a file fd's whole-file buffer at an explicit offset, leaving <p>wtell untouched and ignoring APPEND (pwrite is explicitly positioned per WASI/POSIX, unlike write); zero-fills any gap and marks the buffer dirty, same as fd_write's kind-2 path. stdio (kind 1) is ESPIPE; a directory fd is EBADF.
+# WASI fd_pwrite: byte-wise binary-safe write into a file fd's whole-file buffer.
+# The write is at an explicit offset.
+# It leaves <p>wtell untouched and ignores APPEND.
+# Unlike write, pwrite is explicitly positioned per WASI/POSIX.
+# It zero-fills any gap and marks the buffer dirty, same as fd_write's kind-2 path.
+# stdio (kind 1) is ESPIPE; a directory fd is EBADF.
 wasi_fd_pwrite() {
   local __p=$1 __fd=$2 __iovs=$3 __iovs_len=$4 __offset=$5 __nwritten_ptr=$6
   local -n __m=${__p}mem

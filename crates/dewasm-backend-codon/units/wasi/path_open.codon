@@ -7,7 +7,8 @@ def wasi_path_open(self, dirfd: UInt[32], dirflags: UInt[32], path_ptr: UInt[32]
     if err != 0:
         return UInt[32](err)
     dm = self.fd_entry(int(dirfd))
-    # The dirfd must itself carry PATH_OPEN; a rights-narrowed dir fd that dropped it can no longer open beneath itself.
+    # The dirfd must itself carry PATH_OPEN.
+    # A rights-narrowed dir fd that dropped it can no longer open beneath itself.
     if dm.base & self.RIGHTS_PATH_OPEN == 0:
         return UInt[32](self.ERRNO_NOTCAPABLE)
     ofl = int(oflags)
@@ -24,7 +25,8 @@ def wasi_path_open(self, dirfd: UInt[32], dirflags: UInt[32], path_ptr: UInt[32]
         flags = 1  # O_WRONLY
     else:
         flags = 0  # O_RDONLY
-    # Without SYMLINK_FOLLOW a final symlink must not be traversed: O_NOFOLLOW turns that into ELOOP, matching wasmtime's O_NOFOLLOW default.
+    # Without SYMLINK_FOLLOW a final symlink must not be traversed.
+    # O_NOFOLLOW turns that into ELOOP, matching wasmtime's O_NOFOLLOW default.
     if not follow:
         flags |= 0x100 if __apple__ else 0x20000  # O_NOFOLLOW
     if ofl & 0x2 != 0:  # oflags::DIRECTORY
@@ -35,7 +37,8 @@ def wasi_path_open(self, dirfd: UInt[32], dirflags: UInt[32], path_ptr: UInt[32]
         flags |= 0x800 if __apple__ else 0x80  # O_EXCL
     if ofl & 0x8 != 0:  # oflags::TRUNC
         flags |= 0x400 if __apple__ else 0x200  # O_TRUNC
-    # O_CREAT must not create through a trailing slash; per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+    # O_CREAT must not create through a trailing slash.
+    # Per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
     if host.endswith("/") and not Rt.lexists(host[:len(host) - 1]):
         if ofl & 0x1 == 0:
             return UInt[32](self.ERRNO_NOENT)

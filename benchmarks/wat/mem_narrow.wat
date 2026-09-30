@@ -1,22 +1,37 @@
 ;; mem_narrow: 8-bit and 16-bit loads and stores.
 ;;
-;; The mem_rw access pattern at the narrow widths: two 8-bit loads (zero and sign extending), two 16-bit loads (likewise), one i32.store8 and one i32.store16 per iteration, over the same 256 KiB window.
-;; mem_rw's traffic is 32-bit only, so it pays neither for assembling a value out of bytes nor for sign extension, and the difference between the two cases is what those cost.
+;; The mem_rw access pattern at the narrow widths, over the same 256 KiB window.
+;; Each iteration does two 8-bit loads (zero and sign extending) and two 16-bit loads (likewise).
+;; It also does one i32.store8 and one i32.store16.
+;; mem_rw's traffic is 32-bit only.
+;; So it pays neither for assembling a value out of bytes nor for sign extension.
+;; The difference between the two cases is what those cost.
 ;; The 16-bit offsets are 2-byte aligned; the 8-bit offsets are anywhere in the window.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
-;; Duplicated verbatim in every hand-written microbenchmark so each
-;; .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;; Duplicated verbatim in every hand-written microbenchmark.
+;; So each .wat stays a standalone module that wat2wasm and dewasm can consume directly.
 ;;
 ;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
-;; It does
-;; <iterations> units of work, writes exactly one line (the decimal result followed by a newline) to stdout, and exits 0. <iterations> = 0 does no work but still prints, which is how the harness measures startup in isolation.
-;; Only args_sizes_get / args_get / fd_write / proc_exit are imported, and a body stays inside i32/i64/f64 except for the one axis its case exists to measure: f32 in f32_alu, exception handling in eh_throw and eh_try.
-;; That keeps every other case within reach of the pure-Ruby and pure-Python interpreters this suite compares, and a runner that cannot execute a case's axis is excluded for that case in the harness workload table, with the reason stated there.
+;; It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+;; The line is the decimal result followed by a newline.
+;; <iterations> = 0 does no work but still prints.
+;; That is how the harness measures startup in isolation.
+;; Only args_sizes_get / args_get / fd_write / proc_exit are imported.
+;; A body stays inside i32/i64/f64 except for the one axis its case exists to measure.
+;; That axis is f32 in f32_alu, and exception handling in eh_throw and eh_try.
+;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
+;; Those are the interpreters this suite compares.
+;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0 because wasm3 traps with "out of bounds memory access" whenever a WASI out param is written to linear-memory address 0: address 0 is perfectly valid linear memory and every other runtime in the matrix accepts it, so the whole block is simply moved up out of wasm3's way:
+;; It starts at 0x1000 rather than at 0.
+;; wasm3 traps whenever a WASI out param is written to linear-memory address 0.
+;; The trap message is "out of bounds memory access".
+;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
+;; So the whole block is simply moved up out of wasm3's way:
 ;;
 ;; 0x1000   4  argc                     (args_sizes_get out param)
 ;; 0x1004   4  argv buffer size         (args_sizes_get out param)
@@ -43,7 +58,8 @@
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
   ;; Every argv problem lands here.
-  ;; The harness always passes exactly one argument, so anything else is a caller bug, not an input to guess at.
+  ;; The harness always passes exactly one argument.
+  ;; So anything else is a caller bug, not an input to guess at.
   (func $die
     (i32.store (i32.const 0x1400) (i32.const 0x1800))
     (i32.store (i32.const 0x1404) (i32.const 29))
@@ -108,7 +124,9 @@
         (local.set $h
           (i32.add (i32.mul (local.get $h) (i32.const 1664525))
                    (i32.const 1013904223)))
-        ;; The masks keep every access inside the 256 KiB window that starts one page in, clear of the preamble's scratch area, and keep the 16-bit ones 2-byte aligned.
+        ;; The masks keep every access inside the 256 KiB window that starts one page in.
+        ;; That window is clear of the preamble's scratch area.
+        ;; The masks also keep the 16-bit accesses 2-byte aligned.
         (local.set $p
           (i32.add (i32.const 0x10000)
                    (i32.and (local.get $h) (i32.const 0x3ffff))))

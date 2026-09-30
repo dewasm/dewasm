@@ -1,17 +1,39 @@
-//! Developer-facing workspace tasks, run as `cargo xtask <command>` (aliased in `.cargo/config.toml`).
-//! Replaces the former snapshot-regeneration env-var toggles on the `support_docs` and `apps_wasmtime` tests with explicit subcommands: those tests are now compare-only and point here when they fail.
+//! Developer-facing workspace tasks, run as `cargo xtask <command>`.
+//! The alias is in `.cargo/config.toml`.
+//! Explicit subcommands replace the former snapshot-regeneration env-var toggles.
+//! Those toggles sat on the `support_docs` and `apps_wasmtime` tests.
+//! The tests are now compare-only and point here when they fail.
 //!
-//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command: the nine WASI-runner files (app stdout, the gzip stream, the filesystem-app stdout, the interactive-REPL transcript) plus the DOOM and NES frames, whose custom export/import interfaces are driven directly instead (issue #114).
-//! All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`, so regeneration reproduces the same bytes on every host.
-//! `update-support-docs` stays separate: `docs/support.md` is generated documentation, not an execution snapshot.
+//! `update-snapshots` regenerates *every* checked-in execution snapshot from one command.
+//! Those are the nine WASI-runner files plus the DOOM and NES frames (issue #114).
+//! The WASI-runner files hold app stdout, the gzip stream, and the filesystem-app stdout.
+//! They also hold the interactive-REPL transcript.
+//! The frames have custom export/import interfaces, which are driven directly instead.
+//! All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`.
+//! Regeneration then reproduces the same bytes on every host.
+//! `update-support-docs` stays separate.
+//! `docs/support.md` is generated documentation, not an execution snapshot.
 //!
-//! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are the same executions as commands, for the snapshot freshness suite to spawn: it compares the checked-in files against what this binary produces, and must not embed the engine itself.
+//! `test-wasmtime-wasi`, `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame` are commands.
+//! They run the same executions, for the snapshot freshness suite to spawn.
+//! That suite compares the checked-in files against what this binary produces.
+//! It must not embed the engine itself.
 //!
-//! The two measurements are `record-speed` (every dewasm backend against wasmtime and against the wasm interpreters written in the same host languages) and `record-size` (per app, the wasm binary against every backend's converted source, beside the installed size of each native runtime).
-//! Each writes a dated record under `records/` and renders nothing; `render-speed` and `render-size` turn a record into `docs/benchmarks/results.md` and `docs/sizes/results.md`.
-//! Unlike the commands above, none of those outputs is a compared snapshot: neither a timing nor an installed size is reproducible byte-for-byte, so no freshness test guards them.
+//! The two measurements are `record-speed` and `record-size`.
+//! `record-speed` runs every dewasm backend against wasmtime.
+//! It also runs them against the wasm interpreters written in the same host languages.
+//! `record-size` compares, per app, the wasm binary against every backend's converted source.
+//! It lists the installed size of each native runtime beside them.
+//! Each writes a dated record under `records/` and renders nothing.
+//! `render-speed` and `render-size` turn a record into a results page.
+//! Those are `docs/benchmarks/results.md` and `docs/sizes/results.md`.
+//! Unlike the commands above, none of those outputs is a compared snapshot.
+//! Neither a timing nor an installed size is reproducible byte-for-byte.
+//! So no freshness test guards them.
 //!
-//! `feature-audit` is the app audit test: it reports each candidate app binary's post-baseline feature needs and WASI p1 import surface, with the verdicts recorded in `agents/apps-audit.md`.
+//! `feature-audit` is the app audit test.
+//! It reports each candidate app binary's post-baseline feature needs and WASI p1 import surface.
+//! The verdicts are recorded in `agents/apps-audit.md`.
 //!
 //! No `clap` dependency: a couple of subcommands and a help message do not need one.
 
@@ -104,7 +126,8 @@ fn write_stdout(bytes: &[u8]) -> Result<()> {
 }
 
 /// Render `docs/support.md` from the backends' own declarations and write it to disk.
-/// The corresponding `support_docs_in_sync` unit test (`src/support_docs.rs`) is compare-only and names this command in its failure message.
+/// The corresponding `support_docs_in_sync` unit test (`src/support_docs.rs`) is compare-only.
+/// Its failure message names this command.
 fn update_support_docs() -> Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
     let rendered = support_docs::render_support_docs();
@@ -114,25 +137,35 @@ fn update_support_docs() -> Result<()> {
 }
 
 /// A capture closure's output: the `(path, bytes)` files to write for one target.
-/// Most targets yield one file; the DOOM and NES frames yield two (the compared PPM plus a human-facing PNG of the same frame).
+/// Most targets yield one file.
+/// The DOOM and NES frames yield two: the compared PPM plus a human-facing PNG of the same frame.
 type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
 
-/// One regenerable execution snapshot: its repo-relative `label` (used for the substring filter) and a `capture` closure that reruns the case and returns the files to write.
-/// Capture fails loud on a missing cache / missing wasmtime: the underlying runners carry the exact setup message.
+/// One regenerable execution snapshot.
+/// Its repo-relative `label` is used for the substring filter.
+/// Its `capture` closure reruns the case and returns the files to write.
+/// Capture fails loud on a missing cache or missing wasmtime.
+/// The underlying runners carry the exact setup message.
 struct SnapshotTarget {
     label: String,
     capture: Box<dyn Fn() -> Result<CapturedFiles>>,
 }
 
-/// Every execution snapshot `update-snapshots` regenerates: the nine WASI-runner targets from the shared registry (`dewasm_test_helper::wasmtime_snapshots`) plus the DOOM and NES frames, folded in here rather than in the helper crate so that crate keeps no `wasmtime`-crate dependency.
-/// Each of those two targets emits two files: the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`) and a PNG rendering of the same frame for human inspection (never compared by a test).
+/// Every execution snapshot `update-snapshots` regenerates.
+/// Those are the nine WASI-runner targets from `dewasm_test_helper::wasmtime_snapshots`.
+/// The DOOM and NES frames are added here rather than in the helper crate.
+/// That crate then keeps no `wasmtime`-crate dependency.
+/// Each of the two frame targets emits two files.
+/// One is the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`).
+/// The other is a PNG of the same frame for human inspection, never compared by a test.
 fn snapshot_targets() -> Vec<SnapshotTarget> {
     let mut targets: Vec<SnapshotTarget> =
         dewasm_test_helper::wasmtime_snapshots(&EmbeddedWasmtime)
             .into_iter()
             .map(|snap| SnapshotTarget {
                 label: snap.label,
-                // Wrap the fail-loud capture (it panics with a setup message) in `Ok` so every target shares one `Result` signature.
+                // Wrap the fail-loud capture (it panics with a setup message) in `Ok`.
+                // Every target then shares one `Result` signature.
                 capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
             })
             .collect();

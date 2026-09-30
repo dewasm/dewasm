@@ -2,9 +2,9 @@ require_relative "sqlite3_wasm"
 
 module SQLite3
   # Low-level bridge to the dewasm-generated Sqlite3Wasm module.
-  # One driver
-  # (one wasm instance, one linear memory, one guest heap) per Database, so a
-  # Rails connection pool gets naturally isolated instances; the mutex guards against interleaved calls into the same guest from multiple Ruby threads.
+  # One driver (one wasm instance, one linear memory, one guest heap) per Database.
+  # So a Rails connection pool gets naturally isolated instances.
+  # The mutex guards against interleaved calls into the same guest from multiple Ruby threads.
   class WasmDriver
     SQLITE_TRANSIENT = 0xffffffff # -1: sqlite copies the buffer before returning
     U64_MASK = (1 << 64) - 1
@@ -12,7 +12,9 @@ module SQLite3
     attr_reader :mem
 
     def initialize
-      # Preopening "/" at "/" makes guest paths identical to host paths, so the database file lands wherever Rails configured it (sandbox caveats accepted: this is a demo embedding, not a sandbox).
+      # Preopening "/" at "/" makes guest paths identical to host paths.
+      # So the database file lands wherever Rails configured it.
+      # Sandbox caveats are accepted: this is a demo embedding, not a sandbox.
       @mod = Sqlite3Wasm.new({}, preopens: { "/" => "/" })
       @mod.invoke("_initialize")
       @mem = @mod.memory
@@ -46,7 +48,8 @@ module SQLite3
 
     # Copy raw bytes (no terminator) into the guest.
     # Caller frees.
-    # Returns [ptr, bytesize]; ptr is 0 only for the empty string, in which case a 1-byte allocation still gives sqlite a non-NULL base pointer.
+    # Returns [ptr, bytesize]; ptr is 0 only for the empty string.
+    # In that case a 1-byte allocation still gives sqlite a non-NULL base pointer.
     def bytes_in(str)
       bytes = str.to_s.b
       size = bytes.bytesize
@@ -88,7 +91,8 @@ module SQLite3
       chunks.force_encoding(Encoding::UTF_8)
     end
 
-    # A 4-byte out-parameter slot: yields the pointer, returns the i32 read back from it after the block.
+    # A 4-byte out-parameter slot.
+    # It yields the pointer, and returns the i32 read back from it after the block.
     def with_out_i32
       p = malloc(4)
       begin

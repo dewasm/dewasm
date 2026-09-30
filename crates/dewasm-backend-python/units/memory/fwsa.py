@@ -1,6 +1,7 @@
 # requires: memory/iwsa, rt/f32_bits
 # Packing "<f" is bit-exact for every non-NaN value.
-# A NaN takes the bit path because the double-to-float conversion quietens it, and wasm's f32.store is bit-preserving.
+# A NaN takes the bit path because the double-to-float conversion quietens it.
+# wasm's f32.store is bit-preserving.
 def fwsa(self, a, b, v):
     if v != v:
         self.iwsa(a, b, Rt.f32_bits(v))

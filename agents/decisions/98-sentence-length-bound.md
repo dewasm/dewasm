@@ -3,9 +3,9 @@
 Status: **Accepted, 2026-09-28.**
 Landed: [`AGENTS.md`](../../AGENTS.md) states the rules in its Writing style section and meets them.
 The measure and the clause rule were settled on 2026-09-30.
-The rest of the text was written before the bound.
-That is `agents/`, `docs/`, the README, the comments in source code, and the `xtask` templates.
-A dedicated pass brings them under the bound, and a mechanical check then keeps them there.
+The pass in #341 brought the rest of the text under the bound on 2026-09-30.
+That is `agents/`, `docs/`, the README files, the comments in source code, and the `xtask` templates.
+`cargo test -p xtask` now checks every tracked text file, and `cargo xtask check-prose` reports one.
 
 ## Context
 
@@ -119,9 +119,9 @@ What remains is to remove words that carry nothing, or to split.
   Bringing it under is a pass over every document, checking each sentence's meaning as it shortens.
 - Negative: counting characters as read needs a Markdown parser in the check.
   A plain substitution miscounts a `*` or `_` inside a code span.
-- Carry-over: that pass adds three checks to `cargo test -p xtask`.
+- Carry-over: that pass added two checks to `cargo test -p xtask`.
   One counts a Markdown sentence as read, and skips table rows and fenced code.
   Another counts the columns of a comment line in source code.
-  The third reports a use of a word listed in [`agents/vocabulary.md`](../vocabulary.md).
+  A third, still to come, reports a use of a word listed in [`agents/vocabulary.md`](../vocabulary.md).
   That list is a table, so a linter's rule files can be generated from it later.
-  Before they land, only edited text is brought under the rules.
+  No check detects a sentence wrapped across lines, or a third clause; a reader checks those.

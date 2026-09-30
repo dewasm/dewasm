@@ -1,7 +1,20 @@
-//! Java end-to-end suites: the shared library / WASI / apps case consts (`dewasm-test-helper`) wired up for the Java backend.
-//! This file holds ONLY the [`BackendUnderTest`] impl, named glue string constants, and per-case macro invocations; glue is a plain `&str` argument at the callsite, and which macros this file invokes is the capability declaration (with a REASON comment at any non-invocation).
+//! Java end-to-end suites.
+//! They run the shared case consts (`dewasm-test-helper`) on the Java backend.
+//! Those consts cover the library, WASI, and apps cases.
+//! This file holds ONLY the following:
 //!
-//! Java is a compiled backend, so it overrides `BackendUnderTest::run` to compile-and-execute: `javac` the generated `Main.java` into a content-addressed class-dir cache (so identical sources compile once), then run `java -cp <dir> Main`.
+//! - the [`BackendUnderTest`] impl;
+//! - named glue string constants;
+//! - per-case macro invocations.
+//!
+//! Glue is a plain `&str` argument at the callsite.
+//! Which macros this file invokes is the capability declaration.
+//! Any non-invocation carries a REASON comment.
+//!
+//! Java is a compiled backend, so it overrides `BackendUnderTest::run` to compile-and-execute.
+//! It `javac`s the generated `Main.java` into a content-addressed class-dir cache.
+//! So identical sources compile once.
+//! Then it runs `java -cp <dir> Main`.
 //! Java covers full WASI preview 1 incl. the filesystem.
 
 use std::path::Path;
@@ -26,8 +39,11 @@ impl BackendUnderTest for Java {
         &JavaBackend
     }
 
-    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache and run it with `args`/`stdin`.
-    /// A missing `javac`/`java` is a loud failure; a compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
+    /// Compile `source` (a single `Main.java`) to a content-addressed class-dir cache.
+    /// Then run it with `args`/`stdin`.
+    /// A missing `javac`/`java` is a loud failure.
+    /// A compile failure is surfaced as the `javac` `Output`.
+    /// The caller's `status.success()` assertion then reports it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
@@ -45,7 +61,8 @@ impl BackendUnderTest for Java {
     }
 
     /// Compile `source` and run `java -cp <classdir> Main <args...>` under a pty.
-    /// A compile failure fails loud: there is no `status` for the caller to inspect on the pty path, so panic with the `javac` output.
+    /// A compile failure fails loud, since the pty path has no `status` for the caller to inspect.
+    /// It panics with the `javac` output.
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
@@ -68,10 +85,19 @@ impl BackendUnderTest for Java {
         }
     }
 
-    /// Write each `.wat` module of a multi-module case into `dir` as its own default-package `.java` file.
-    /// Java has no load statement, so the preamble is empty: [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation, which is exactly how an embedder drops several converted artifacts into a project.
-    /// `shared_runtime` mirrors the spec harness's `register` path: each module class comes from `generate_program_with_units` and the union of the units they reference is bundled once into `Rt.java` as top-level classes, the shape `Alias` linkage has.
-    /// Otherwise each file is a self-contained library conversion whose runtime classes are `static` members of its own module class, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
+    /// Write each `.wat` module of a multi-module case into `dir`.
+    /// Each becomes its own default-package `.java` file.
+    /// Java has no load statement, so the preamble is empty.
+    /// [`Self::run_in_dir`] hands every file in the directory to one `javac` invocation.
+    /// That is how an embedder drops several converted artifacts into a project.
+    ///
+    /// `shared_runtime` mirrors the spec harness's `register` path.
+    /// Each module class comes from `generate_program_with_units`.
+    /// The union of the units they reference is bundled once into `Rt.java` as top-level classes.
+    /// That is the shape `Alias` linkage has.
+    /// Otherwise each file is a self-contained library conversion.
+    /// Its runtime classes are `static` members of its own module class.
+    /// So `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
     fn compose_modules(
         &self,
         dir: &Path,
@@ -89,7 +115,8 @@ impl BackendUnderTest for Java {
                 units.extend(u);
                 std::fs::write(dir.join(format!("{name}.java")), src).unwrap();
             }
-            // One file holding the whole runtime: `javac` only ties a file name to a *public* class, and these are all package-private.
+            // One file holds the whole runtime.
+            // `javac` only ties a file name to a *public* class, and these are all package-private.
             std::fs::write(
                 dir.join("Rt.java"),
                 dewasm_backend_java::bundler()
@@ -114,8 +141,12 @@ impl BackendUnderTest for Java {
         String::new()
     }
 
-    /// Compile every `.java` file in `dir` (the module files `compose_modules` wrote plus the driver, written here as `Main.java`) in one `javac` invocation, then run `Main` from that directory.
-    /// No content-addressed cache: each case gets a fresh directory, and there are only a handful of small files.
+    /// Compile every `.java` file in `dir` in one `javac` invocation.
+    /// Those are the module files from `compose_modules` plus the driver.
+    /// The driver is written here as `Main.java`.
+    /// Then run `Main` from that directory.
+    /// There is no content-addressed cache: each case gets a fresh directory.
+    /// The directory holds only a handful of small files.
     fn run_in_dir(&self, dir: &Path, driver: &str) -> Output {
         let java =
             find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
@@ -132,7 +163,8 @@ impl BackendUnderTest for Java {
             .args(&sources)
             .output()
             .expect("spawn javac");
-        // A compile failure is surfaced as the `javac` `Output` so the caller's `status.success()` assertion reports it.
+        // A compile failure is surfaced as the `javac` `Output`.
+        // The caller's `status.success()` assertion then reports it.
         if !build.status.success() {
             return build;
         }
@@ -140,7 +172,8 @@ impl BackendUnderTest for Java {
     }
 }
 
-// --------------------------------------------------------------------- Library-case glue (a `public class Main` appended after the generated module class).
+// --------------------------------------------------------------------- Library-case glue.
+// Each is a `public class Main` appended after the generated module class.
 
 /// `add.wat`: call the exported functions and print each result.
 const JAVA_ADD_GLUE: &str = r#"public class Main {
@@ -153,8 +186,10 @@ const JAVA_ADD_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The override/fallback glue: an explicit `fd_write` import wins, `random_get` falls back to the bundled WASI.
-/// Mirrors the other backends' override glues: intercept fd_write and print the actual bytes written.
+/// The override/fallback glue: an explicit `fd_write` import wins.
+/// `random_get` falls back to the bundled WASI.
+/// It mirrors the other backends' override glues.
+/// It intercepts fd_write and prints the actual bytes written.
 const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -181,7 +216,10 @@ const JAVA_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale: `wasmImport(name)` resolves every function and `attach(instance)` binds the memory (the Java shape of Ruby's `import`/`attach`), so no import falls back and `p.wasi` stays null.
+/// The `custom_wasi_provider` glue: a provider *object* replaces the bundled WASI wholesale.
+/// `wasmImport(name)` resolves every function and `attach(instance)` binds the memory.
+/// That is the Java shape of Ruby's `import`/`attach`.
+/// So no import falls back, and `p.wasi` stays null.
 const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
     static class MyWasi implements Prog.Rt.ImportProvider {
         Prog inst;
@@ -223,7 +261,10 @@ const JAVA_CUSTOM_PROVIDER_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: the override glue above (fd_write intercepted, random_get falling back) plus the probe that the bundled WASI *was* built for that one fallback: `wasiInstance()` constructs it as the constructor takes the adapter.
+/// The `partial_override_falls_back_to_bundled_wasi` glue.
+/// It is the override glue above (fd_write intercepted, random_get falling back) plus one probe.
+/// The probe checks that the bundled WASI *was* built for that one fallback.
+/// `wasiInstance()` constructs it as the constructor takes the adapter.
 const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
@@ -251,7 +292,12 @@ const JAVA_PARTIAL_OVERRIDE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The `wasi_stdio_capture` glue: Java's bundled WASI is built by the module ctor's `fd_write` fallback and holds an `OutputStream` at fd 1, so inject a `ByteArrayOutputStream` into the (package-private, default-package-reachable) `wasi.fds` map after construction, the Java mirror of Ruby's `$stdout` redirect.
+/// The `wasi_stdio_capture` glue.
+/// Java's bundled WASI is built by the module ctor's `fd_write` fallback.
+/// It holds an `OutputStream` at fd 1.
+/// So the glue injects a `ByteArrayOutputStream` into the `wasi.fds` map after construction.
+/// The map is package-private and reachable from the default package.
+/// This is the Java mirror of Ruby's `$stdout` redirect.
 /// Run `_start` (swallowing a clean `proc_exit`), then flush the captured bytes to the real stdout.
 const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -270,7 +316,11 @@ const JAVA_STDIO_CAPTURE_GLUE: &str = r#"public class Main {
 
 // --------------------------------------------------------------------- WASI filesystem glue.
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`), run `_start`, and surface a `proc_exit` code (Rt.Exit) as a trailing decimal line. rt/exit is always seeded for library-mode WASI output, so `Rt.Exit` is defined even for fixtures that never import proc_exit.
+/// The shared filesystem template.
+/// Preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`).
+/// Then run `_start`, and surface a `proc_exit` code (Rt.Exit) as a trailing decimal line.
+/// rt/exit is always seeded for library-mode WASI output.
+/// So `Rt.Exit` is defined even for fixtures that never import proc_exit.
 const JAVA_FS_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog p = new Prog(null, null, null, java.util.Map.of("{guest}", "{host}"));
@@ -283,7 +333,9 @@ const JAVA_FS_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The root-preopen containment probe: probe the WASI sandbox resolver directly (no guest run): with `/` preopened at host `/`, resolving a relative path off the preopen fd (3) must stay contained (errno WASI_OK == 0).
+/// The root-preopen containment probe: probe the WASI sandbox resolver directly (no guest run).
+/// `/` is preopened at host `/`.
+/// Resolving a relative path off the preopen fd (3) must then stay contained (errno WASI_OK == 0).
 const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Prog.WASI w = new Prog.WASI(null, null, java.util.Map.of("/", "/"));
@@ -293,7 +345,9 @@ const JAVA_CONTAINMENT_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- Filesystem app glue: class/argv/env/preopen-guest-paths are literals; only the host scratch dir comes through {scratch}.
+// --------------------------------------------------------------------- Filesystem app glue.
+// Class, argv, env, and preopen guest paths are literals.
+// Only the host scratch dir comes through {scratch}.
 
 const JAVA_QJS_FILE_IO_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -328,7 +382,8 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The whole app cache is preopened at `/apps` because the guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// The whole app cache is preopened at `/apps`.
+/// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
 const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Toywasm inst = new Toywasm(null, new String[]{"toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
@@ -340,8 +395,11 @@ const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly (its meta-WASI build always forwards the guest's WASI).
-/// Plain glue on the main thread, unlike every other converted-interpreter case here: the official asset's dispatch is a tail call, so the trampoline runs the whole chain in one JVM frame and the default stack is enough.
+/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
+/// Its meta-WASI build always forwards the guest's WASI.
+/// Plain glue on the main thread, unlike every other converted-interpreter case here.
+/// The official asset's dispatch is a tail call.
+/// So the trampoline runs the whole chain in one JVM frame, and the default stack is enough.
 const JAVA_WASM3_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Wasm3 inst = new Wasm3(null, new String[]{"wasm3", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
@@ -376,11 +434,14 @@ const JAVA_CRUBY_HELLO_GLUE: &str = r#"public class Main {
 }
 "#;
 
-// --------------------------------------------------------------------- C-API drive glue (sqlite3): malloc/pointer plumbing via Memory.
-// No wasmtime snapshot (the results live in guest memory), so each drive's output is pinned in the shared case const.
+// --------------------------------------------------------------------- C-API drive glue (sqlite3).
+// It does malloc/pointer plumbing via Memory.
+// There is no wasmtime snapshot, since the results live in guest memory.
+// So each drive's output is pinned in the shared case const.
 // Only the file-backed case uses {scratch}.
 
-/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing, open/exec/prepare/step/column/finalize/close.
+/// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + `Memory` pointer plumbing.
+/// Then open/exec/prepare/step/column/finalize/close.
 const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -445,7 +506,9 @@ const JAVA_LIBSQLITE3_MEM: &str = r#"public class Main {
 }
 "#;
 
-/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select: the file lifecycle through the C API (same fs stack as the shell), leaving a nonzero DB file on the host.
+/// The sqlite3 C API against a file preopen: create+insert, close, reopen, select.
+/// That is the file lifecycle through the C API (same fs stack as the shell).
+/// It leaves a nonzero DB file on the host.
 const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libsqlite3 inst;
@@ -513,7 +576,10 @@ const JAVA_LIBSQLITE3_FILE: &str = r#"public class Main {
 }
 "#;
 
-/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`, which calls `sqlite3_exec` with a C callback forwarding each row to the *imported* `env.host_row` (a `void(argc, argv_ptr)`, so the lambda returns null).
+/// Guest->host callback round trip: the committed `sqlite3-binding.wasm` exports `run_query`.
+/// `run_query` calls `sqlite3_exec` with a C callback.
+/// The callback forwards each row to the *imported* `env.host_row`.
+/// That import is a `void(argc, argv_ptr)`, so the lambda returns null.
 /// The glue provides `host_row` via the import-provider mechanism and collects the rows.
 const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
@@ -583,11 +649,23 @@ const JAVA_SQLITE3_CALLBACK: &str = r#"public class Main {
 }
 "#;
 
-/// zeroperl Perl-5.42 eval (issue #67): instantiate the reactor with a zero-returning `env.call_host_function` import stub (only invoked when the guest registers host callbacks, and this program registers none) and a
-/// `/dev/null` preopen (`zeroperl_init` returns 1 without it), then
-/// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory → `zeroperl_eval` → `zeroperl_flush`.
+/// zeroperl Perl-5.42 eval (issue #67).
+/// The glue instantiates the reactor with a zero-returning `env.call_host_function` import stub.
+/// The stub is only invoked when the guest registers host callbacks.
+/// This program registers none.
+/// The reactor also gets a `/dev/null` preopen (`zeroperl_init` returns 1 without it).
+/// Then the glue calls, in order:
+///
+/// 1. `_initialize`;
+/// 2. `zeroperl_init`;
+/// 3. `malloc`, and copies a Perl program into guest memory;
+/// 4. `zeroperl_eval`;
+/// 5. `zeroperl_flush`.
+///
 /// The program is a regex capture and a `printf`, so its stdout is deterministic.
-/// Java has no raw string literal at the JDK 11 baseline, so the Perl source is concatenated with its backslashes doubled: every `\` below belongs to Perl.
+/// Java has no raw string literal at the JDK 11 baseline.
+/// So the Perl source is concatenated with its backslashes doubled.
+/// Every `\` below belongs to Perl.
 const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
     static Zeroperl inst;
 
@@ -620,15 +698,17 @@ const JAVA_ZEROPERL_EVAL: &str = r#"public class Main {
 }
 "#;
 
-/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver
-/// (`{cache}/exiftool-lib/exiftool`, preopened at `/work`) run on the same
-/// `cache/zeroperl.wasm` reactor, whose SFS blob embeds the `Image::ExifTool`
-/// module tree, so `use Image::ExifTool` resolves in-guest with no module preopen.
-/// Instantiated like [`JAVA_ZEROPERL_EVAL`] (the `call_host_function`
-/// stub + a `/dev/null` preopen), plus the staged image at `/img`.
-/// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script; it first overrides
-/// `CORE::GLOBAL::exit` to a `die` so ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`, then `zeroperl_flush`
-/// pushes ExifTool's buffered stdout out through fd 1.
+/// ExifTool on zeroperl (issue #70).
+/// It runs the flattened `exiftool` CLI driver on the same `cache/zeroperl.wasm` reactor.
+/// The driver is `{cache}/exiftool-lib/exiftool`, preopened at `/work`.
+/// The reactor's SFS blob embeds the `Image::ExifTool` module tree.
+/// So `use Image::ExifTool` resolves in-guest with no module preopen.
+/// It is instantiated like [`JAVA_ZEROPERL_EVAL`].
+/// That is the `call_host_function` stub + a `/dev/null` preopen, plus the staged image at `/img`.
+/// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script.
+/// It first overrides `CORE::GLOBAL::exit` to a `die`.
+/// So ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`.
+/// Then `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1.
 /// Only deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
 const JAVA_EXIFTOOL: &str = r#"public class Main {
     static Zeroperl inst;
@@ -666,8 +746,13 @@ const JAVA_EXIFTOOL: &str = r#"public class Main {
 }
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535), then walk the serialized program `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]` in guest memory, printing each instruction as `code jt jf k`.
-/// The allocator here is plain `malloc`/`free` (libpcap is not sqlite), and `free` returns void, so it goes through `Rt.Fn.invoke` directly rather than the int-returning `call` helper.
+/// libpcap BPF filter compilation.
+/// Drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535).
+/// Then walk the serialized program in guest memory, printing each instruction as `code jt jf k`.
+/// The program's layout is `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`.
+/// The allocator here is plain `malloc`/`free` (libpcap is not sqlite).
+/// `free` returns void, so it does not go through the int-returning `call` helper.
+/// It goes through `Rt.Fn.invoke` directly.
 const JAVA_PCAP_COMPILE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Libpcap inst;
@@ -710,7 +795,9 @@ const JAVA_PCAP_COMPILE: &str = r#"public class Main {
 }
 "#;
 
-/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}` and print the parse tree's S-expression (a malloc'd NUL-terminated C string) from guest memory.
+/// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}`.
+/// Then print the parse tree's S-expression from guest memory.
+/// The S-expression is a malloc'd NUL-terminated C string.
 const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
     static final java.nio.charset.Charset UTF_8 = java.nio.charset.StandardCharsets.UTF_8;
     static Treesitter inst;
@@ -755,7 +842,10 @@ const JAVA_TREESITTER_PARSE: &str = r#"public class Main {
 
 // --------------------------------------------------------------------- Multi-module drive glue.
 
-/// Instantiate the table exporter, then the importer with the exporter's `Exports` map as its `"a"` import provider (the exporter's `"tab"` table), and print the `call0` result (call_indirect through the shared table → 42).
+/// Instantiate the table exporter, then the importer.
+/// The importer's `"a"` import provider is the exporter's `Exports` map.
+/// It provides the exporter's `"tab"` table.
+/// Print the `call0` result (call_indirect through the shared table → 42).
 const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         TableExp exp = new TableExp(null, null, null, null);
@@ -767,8 +857,14 @@ const JAVA_SHARED_TABLE_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// Driver for the Embedded-coexistence case: two independently converted classes in one default package, each carrying its runtime as `static` nested classes, so `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types and Alpha's trap is catchable by name.
-/// `Class` objects of two unrelated types are incomparable with `!=` in Java (the compiler rejects `Class<Alpha.Rt.Trap> != Class<Beta.Rt.Trap>`), so the distinctness check goes through `equals`.
+/// Driver for the Embedded-coexistence case.
+/// Two independently converted classes sit in one default package.
+/// Each carries its runtime as `static` nested classes.
+/// So `Alpha.Rt.Trap` and `Beta.Rt.Trap` are different types.
+/// Alpha's trap is then catchable by name.
+/// `Class` objects of two unrelated types are incomparable with `!=` in Java.
+/// The compiler rejects `Class<Alpha.Rt.Trap> != Class<Beta.Rt.Trap>`.
+/// So the distinctness check goes through `equals`.
 const JAVA_EMBEDDED_COEXIST_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Alpha alpha = new Alpha(null, null, null, null);
@@ -785,7 +881,8 @@ const JAVA_EMBEDDED_COEXIST_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// DOOM: deterministic drive (synthetic clock, no input) dumping the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// DOOM: a deterministic drive (synthetic clock, no input).
+/// It dumps the framebuffer as a P6 PPM matching the wasmtime snapshot.
 /// `{ticks}`/`{clock_step}` filled by the runner.
 const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -834,9 +931,11 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// NES (issue #114, mirrors the DOOM glue above): load the pinned ROM into
-/// `allocRom`'s buffer, tick `{frames}` times with no input, compose the frame from agnes's palette-index screen buffer and its palette (issue #117; the
-/// `& 0x3f` mask is load-bearing) and dump it as a P6 PPM matching the wasmtime snapshot.
+/// NES (issue #114, mirrors the DOOM glue above).
+/// Load the pinned ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
+/// Compose the frame from agnes's palette-index screen buffer and its palette (issue #117).
+/// The `& 0x3f` mask is load-bearing.
+/// Then dump the frame as a P6 PPM matching the wasmtime snapshot.
 /// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
@@ -882,7 +981,9 @@ dewasm_test_helper::wasi_suite!(Java, Poll);
 dewasm_test_helper::wasi_suite!(Java, Fs, JAVA_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Java);
-// The standalone entrypoint runs the guest on a dedicated 64 MiB thread (mirroring Python's mitigation), since Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
+// Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
+// So the standalone entrypoint runs the guest on a dedicated 64 MiB thread.
+// This mirrors Python's mitigation.
 dewasm_test_helper::deep_recursion_e2e!(Java);
 dewasm_test_helper::folded_temp_reuse_e2e!(Java);
 
@@ -897,12 +998,17 @@ dewasm_test_helper::gzip_e2e!(Java);
 dewasm_test_helper::qjs_file_io_e2e!(Java, JAVA_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Java, JAVA_SQLITE3_SHELL_GLUE);
 dewasm_test_helper::rg_search_e2e!(Java, JAVA_RG_SEARCH_GLUE);
-// The three interpreter giants (issue #142), excluded until the splitter learned to subdivide an oversized `br_table` (CPython's largest function holds a 3202-target table, one statement with no boundary to split at) and to spread funcref-table fillers over `ElemF{c}` classes (CRuby's 8737-entry table saturated one 65535-entry pool).
+// The three interpreter giants (issue #142) were excluded until the splitter learned two things.
+// One is to subdivide an oversized `br_table`.
+// CPython's largest function holds a 3202-target table: one statement with no boundary to split at.
+// The other is to spread funcref-table fillers over `ElemF{c}` classes.
+// CRuby's 8737-entry table saturated one 65535-entry pool.
 // Ultra: the giant `javac` builds cost both wall time and `javac` heap.
 dewasm_test_helper::cpython_hello_e2e!(Java, JAVA_CPYTHON_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Java, JAVA_CRUBY_HELLO_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Java, ultra);
-// Slow, like the other filesystem app cases (convert the interpreter, then interpret the cowsay guest; `javac` dominates).
+// Slow, like the other filesystem app cases.
+// The case converts the interpreter, then interprets the cowsay guest; `javac` dominates.
 dewasm_test_helper::toywasm_cowsay_e2e!(Java, JAVA_TOYWASM_GLUE);
 // Slow for the same reason as the toywasm case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Java, JAVA_WASM3_GLUE);
@@ -911,8 +1017,10 @@ dewasm_test_helper::qjs_repl_pty_e2e!(Java);
 dewasm_test_helper::libsqlite3_c_api_e2e!(Java, JAVA_LIBSQLITE3_MEM);
 dewasm_test_helper::sqlite3_file_c_api_e2e!(Java, JAVA_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Java, JAVA_SQLITE3_CALLBACK);
-// The zeroperl reactor cases (issue #139) are Java's `ultra` ones: the reactor's `javac` dominates the run.
-// They also drove `FN_PARTITION_THRESHOLD` down to 2000: zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
+// The zeroperl reactor cases (issue #139) are Java's `ultra` ones.
+// The reactor's `javac` dominates the run.
+// They also drove `FN_PARTITION_THRESHOLD` down to 2000.
+// zeroperl's ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 dewasm_test_helper::zeroperl_eval_e2e!(Java, JAVA_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Java, JAVA_EXIFTOOL, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Java, JAVA_PCAP_COMPILE);

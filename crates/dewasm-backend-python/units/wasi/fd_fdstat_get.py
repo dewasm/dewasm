@@ -5,7 +5,9 @@ def wasi_fd_fdstat_get(self, fd, out_ptr):
         return self.ERRNO_BADF
     meta = self.fd_meta[fd]
     base, inheriting, fdflags = meta[0], meta[1], meta[2]
-    # isatty() is a host syscall, and an open descriptor's filetype cannot change while it is open, so it runs at most once per fd (see the fourth meta slot in wasi/_class): a guest polling isatty in a loop would otherwise pay one syscall per call.
+    # isatty() is a host syscall, and an open descriptor's filetype cannot change while it is open.
+    # So it runs at most once per fd (see the fourth meta slot in wasi/_class).
+    # A guest polling isatty in a loop would otherwise pay one syscall per call.
     filetype = meta[3]
     if filetype is None:
         if isinstance(io, self.WasiDir):

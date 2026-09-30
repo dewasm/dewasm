@@ -1,25 +1,42 @@
-//! Multi-module scenarios: each module is written to its own file in a fresh directory and loaded the way that language loads a file: concatenating them instead would make the coexistence case prove nothing.
-//! Composition (how a backend emits several modules against one runtime, or as independent self-contained ones, and what its driver preamble has to say to load them) is backend-specific, supplied via [`BackendUnderTest::compose_modules`] with [`BackendUnderTest::run_in_dir`] running the result, since this crate cannot depend on a concrete backend.
-//! What stays shared is the case content: which fixtures, the linkage model, and the one fixed expectation each backend's driver is engineered to produce (normalized so it is identical across languages).
+//! Multi-module scenarios: each module is written to its own file in a fresh directory.
+//! Each is loaded the way that language loads a file.
+//! Concatenating them instead would make the coexistence case prove nothing.
+//! Composition is backend-specific, since this crate cannot depend on a concrete backend.
+//! It covers how a backend emits several modules against one runtime, or as self-contained ones.
+//! It also covers what the backend's driver preamble has to say to load them.
+//! [`BackendUnderTest::compose_modules`] supplies it, and [`BackendUnderTest::run_in_dir`] runs it.
+//! What stays shared is the case content: which fixtures, the linkage model, and one expectation.
+//! Each backend's driver is engineered to produce that fixed expectation.
+//! It is normalized so it is identical across languages.
 //!
-//! Each case is a `pub const` [`MultiModuleCase`] driven by a per-case macro (`shared_table_e2e!`, `embedded_coexist_e2e!`); which backends invoke it is the capability declaration, with a REASON comment at any non-invocation.
+//! Each case is a `pub const` [`MultiModuleCase`] driven by a per-case macro.
+//! The macros are `shared_table_e2e!` and `embedded_coexist_e2e!`.
+//! Which backends invoke it is the capability declaration.
+//! Any non-invocation carries a REASON comment.
 
 use crate::backend::BackendUnderTest;
 
-/// A multi-module case: the modules to emit, the linkage between them, and the one fixed expected output.
+/// A multi-module case: the modules to emit, the linkage between them, and the expected output.
+/// The expected output is fixed.
 pub struct MultiModuleCase {
     pub name: &'static str,
     /// `(wat filename in examples/wat, class/type name)` for each module.
     pub modules: &'static [(&'static str, &'static str)],
-    /// `true`: emit every module against ONE shared runtime, so an imported table crosses modules (structural call_indirect typing).
+    /// `true`: emit every module against ONE shared runtime.
+    /// So an imported table crosses modules (structural call_indirect typing).
     /// `false`: emit independent self-contained (Embedded) runtimes that coexist without colliding.
     pub shared_runtime: bool,
-    /// The one fixed output every backend's driver is engineered to produce (normalized: e.g. `distinct-rt`/`trapped` tokens rather than a language-specific `true`/trap message).
+    /// The one fixed output every backend's driver is engineered to produce.
+    /// It is normalized: e.g. `distinct-rt`/`trapped` tokens.
+    /// It is never a language-specific `true` or trap message.
     pub expect: &'static str,
 }
 
-/// A table shared across two modules whose type sections order the same structural type differently: the call_indirect check must compare types structurally, never via a module-local id.
-/// Cross-module linking runs on one shared runtime (Ruby's Alias linkage / Go's & Java's shared program bundle, as the spec harness's `register` path does).
+/// A table shared across two modules.
+/// Their type sections order the same structural type differently.
+/// The call_indirect check must compare types structurally, never via a module-local id.
+/// Cross-module linking runs on one shared runtime, as the spec harness's `register` path does.
+/// That is Ruby's Alias linkage, or Go's and Java's shared program bundle.
 /// Every backend invokes `shared_table_e2e!`.
 pub const SHARED_TABLE: MultiModuleCase = MultiModuleCase {
     name: "shared_table_call_indirect",
@@ -31,8 +48,16 @@ pub const SHARED_TABLE: MultiModuleCase = MultiModuleCase {
     expect: "42\n",
 };
 
-/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime, so runtime types (the trap type above all) never collide.
-/// This is a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there: Ruby nests `module Rt` in each class, Java nests its runtime classes, Perl and Python rename the runtime per artifact, Bash prefixes its runtime function names, Go gets it from the per-package library output.
+/// Two self-contained artifacts must coexist in one namespace, each carrying its own runtime.
+/// So runtime types (the trap type above all) never collide.
+/// This is a requirement of `RuntimeLinkage::Embedded` on every backend, whatever isolates there:
+///
+/// * Ruby nests `module Rt` in each class;
+/// * Java nests its runtime classes;
+/// * Perl and Python rename the runtime per artifact;
+/// * Bash prefixes its runtime function names;
+/// * Go gets it from the per-package library output.
+///
 /// Every backend invokes it (issue #141).
 /// The driver normalizes output to `distinct-rt`/`trapped`.
 pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
@@ -42,7 +67,9 @@ pub const EMBEDDED_COEXIST: MultiModuleCase = MultiModuleCase {
     expect: "3\n4294967293\ndistinct-rt\ntrapped\n",
 };
 
-/// Write `case`'s modules into a fresh directory with the backend, append its driver `glue` to the preamble that loads them, run from that directory, and check stdout against the case's fixed expectation.
+/// Write `case`'s modules into a fresh directory with the backend.
+/// Append its driver `glue` to the preamble that loads them, and run from that directory.
+/// Check stdout against the case's fixed expectation.
 pub fn run_multi_module_case(lang: &dyn BackendUnderTest, case: &MultiModuleCase, glue: &str) {
     let dir = crate::fresh_scratch_dir(&format!("multimodule-{}-{}", lang.name(), case.name));
     let driver = lang.compose_modules(&dir, case.modules, case.shared_runtime);

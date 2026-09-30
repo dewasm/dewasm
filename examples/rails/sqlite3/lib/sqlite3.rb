@@ -1,4 +1,6 @@
-# A drop-in replacement for the sqlite3 gem's Rails-facing API, backed not by the native libsqlite3 but by SQLite compiled to wasm32-wasi and converted to pure Ruby by dewasm (see ../../README.md).
+# A drop-in replacement for the sqlite3 gem's Rails-facing API.
+# It is backed not by the native libsqlite3 but by SQLite compiled to wasm32-wasi.
+# dewasm converts that to pure Ruby (see ../../README.md).
 # `build.sh` generates the sqlite3_wasm.rb this loads.
 require_relative "sqlite3/version"
 require_relative "sqlite3/constants"

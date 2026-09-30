@@ -206,7 +206,7 @@ fn tracked_files(root: &Path) -> Vec<String> {
 }
 
 /// `cargo xtask check-prose [path]...`: reports every defect in the named files.
-/// With no path, it reports every tracked prose file, including the exempt ones.
+/// With no path, it reports every tracked prose file.
 pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
     let root = repo_root();
     let mut paths: Vec<String> = args.collect();
@@ -256,55 +256,18 @@ fn file_defects(root: &Path, path: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    /// Files that predate the bound, and that the check skips until each is brought under it.
-    /// A listed file that already passes fails the check, so the list only shrinks.
-    const EXEMPT: &str = include_str!("prose_check_exempt.txt");
-
-    fn exempt_paths() -> Vec<&'static str> {
-        EXEMPT
-            .lines()
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .collect()
-    }
-
     #[test]
     fn prose_meets_the_writing_style() {
         let root = repo_root();
-        let exempt = exempt_paths();
-        let mut report = Vec::new();
-        let mut stale = Vec::new();
-        for path in tracked_files(&root) {
-            let found = file_defects(&root, &path);
-            if exempt.contains(&path.as_str()) {
-                if found.is_empty() {
-                    stale.push(path);
-                }
-            } else {
-                report.extend(found);
-            }
-        }
-        assert!(
-            report.is_empty(),
-            "prose breaks the AGENTS.md writing style (100 characters, one sentence per line):\n{}",
-            report.join("\n")
-        );
-        assert!(
-            stale.is_empty(),
-            "these files now pass; remove them from prose_check_exempt.txt:\n{}",
-            stale.join("\n")
-        );
-    }
-
-    #[test]
-    fn exempt_paths_are_tracked() {
-        let tracked = tracked_files(&repo_root());
-        let missing: Vec<_> = exempt_paths()
-            .into_iter()
-            .filter(|p| !tracked.iter().any(|t| t == p))
+        let report: Vec<String> = tracked_files(&root)
+            .iter()
+            .flat_map(|path| file_defects(&root, path))
             .collect();
         assert!(
-            missing.is_empty(),
-            "exempt paths that are not tracked prose: {missing:?}"
+            report.is_empty(),
+            "prose breaks the AGENTS.md writing style (100 characters, one sentence per line):\n{}\n\
+             Run `cargo xtask check-prose <path>` to recheck a file.",
+            report.join("\n")
         );
     }
 

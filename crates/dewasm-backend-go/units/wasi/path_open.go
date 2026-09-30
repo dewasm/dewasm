@@ -6,23 +6,26 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     if err != wasiOk {
         return err
     }
-    // The base fd must carry PATH_OPEN; a rights-narrowed dir fd that dropped it can no longer open beneath itself.
+    // The base fd must carry PATH_OPEN.
+    // A rights-narrowed dir fd that dropped it can no longer open beneath itself.
     if e := w.checkRight(dirfd, rightPathOpen); e != wasiOk {
         return e
     }
-    // OFLAGS_TRUNC truncates on open; that spends the directory's
-    // PATH_FILESTAT_SET_SIZE right, checked before the OS open can touch the file.
+    // OFLAGS_TRUNC truncates on open; that spends the directory's PATH_FILESTAT_SET_SIZE right.
+    // The right is checked before the OS open can touch the file.
     if oflags&0x8 != 0 { // oflags::TRUNC
         if e := w.checkRight(dirfd, rightPathFilestatSetSize); e != wasiOk {
             return e
         }
     }
-    // Opening a directory read/write is ISDIR; the suite requires it for
-    // O_DIRECTORY with FD_WRITE requested, before the directory is even stat'd.
+    // Opening a directory read/write is ISDIR.
+    // The suite requires it for O_DIRECTORY with FD_WRITE requested.
+    // It applies before the directory is even stat'd.
     if oflags&0x2 != 0 && fsRightsBase&rightFdWrite != 0 {
         return wasiIsdir
     }
-    // Without SYMLINK_FOLLOW, a final symlink component is ELOOP: resolve_path left it unfollowed, so a plain Lstat detects it.
+    // Without SYMLINK_FOLLOW, a final symlink component is ELOOP.
+    // resolve_path left it unfollowed, so a plain Lstat detects it.
     if !symlinkFollow {
         if fi, e := os.Lstat(hostPath); e == nil && fi.Mode()&os.ModeSymlink != 0 {
             return wasiLoop
@@ -37,17 +40,18 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
     grantedBase := fsRightsBase & inheritMask
     grantedInheriting := fsRightsInheriting & inheritMask
 
-    // A trailing slash forces directory semantics; on a non-directory it is
-    // NOTDIR (routed through the O_DIRECTORY path below), on a directory it opens the directory.
+    // A trailing slash forces directory semantics.
+    // On a non-directory it is NOTDIR (routed through the O_DIRECTORY path below).
+    // On a directory it opens the directory.
     hasTrailingSlash := len(rel) > 0 && rel[len(rel)-1] == '/'
 
     if oflags&0x2 != 0 || hasTrailingSlash { // oflags::DIRECTORY
-        // O_DIRECTORY distinguishes "missing" (ENOENT) from "not a directory"
-        // (ENOTDIR); guests (wasi-libc's opendir) branch on the difference.
+        // O_DIRECTORY distinguishes "missing" (ENOENT) from "not a directory" (ENOTDIR).
+        // Guests (wasi-libc's opendir) branch on the difference.
         info, e := os.Stat(hostPath)
         if e != nil {
-            // O_CREAT must not create through a trailing slash; per wasmtime:
-            // EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
+            // O_CREAT must not create through a trailing slash.
+            // Per wasmtime: EINVAL on macOS, EISDIR on Linux, plain open ENOENT.
             if hasTrailingSlash && oflags&0x2 == 0 && oflags&0x1 != 0 {
                 if runtime.GOOS == "darwin" {
                     return wasiInval
@@ -59,8 +63,9 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         if !info.IsDir() {
             return wasiNotdir
         }
-        // A directory can never hold the per-file rights (FD_SEEK,
-        // FD_FILESTAT_SET_SIZE, ...) even when requested: cap the grant to the directory masks, so e.g. requesting FD_SEEK on a dir yields a fd whose base lacks it.
+        // A directory can never hold the per-file rights (FD_SEEK, FD_FILESTAT_SET_SIZE, ...).
+        // That holds even when they are requested: cap the grant to the directory masks.
+        // So e.g. requesting FD_SEEK on a dir yields a fd whose base lacks it.
         w.fds[w.nextFd] = &wasiDir{hostPath: hostPath}
         w.meta[w.nextFd] = &wasiFdMeta{
             base:       grantedBase & dirRightsBase,
@@ -86,7 +91,8 @@ func (w *WASI) wasi_path_open(dirfd, dirflags, pathPtr, pathLen, oflags uint32, 
         if oflags&0x8 != 0 { // oflags::TRUNC
             flag |= os.O_TRUNC
         }
-        // APPEND is NOT passed to the OS: it is tracked in fdflags so fd_fdstat_set_flags can toggle it at runtime (fd_write seeks to end).
+        // APPEND is NOT passed to the OS: it is tracked in fdflags.
+        // So fd_fdstat_set_flags can toggle it at runtime (fd_write seeks to end).
         f, e := os.OpenFile(hostPath, flag, 0o644)
         if e != nil {
             return w.fs_errno(e)

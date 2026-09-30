@@ -1,5 +1,7 @@
 // requires: rt/trap
-// `call`'s checks, raised at the same point in execution order, but handing back the whole slot so the caller can see whether it owns the tail entry.
+// `call`'s checks, raised at the same point in execution order.
+// Unlike `call`, it hands back the whole slot.
+// So the caller can see whether it owns the tail entry.
 Rt.Funcref tailSlot(int index, String ty) {
     if (index < 0 || index >= slots.length) {
         Rt.trap("undefined element");

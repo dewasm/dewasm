@@ -1,5 +1,7 @@
 //! Fixture paths and the one conversion policy the e2e suites share.
-//! Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`; every crate that uses this helper sits at `crates/<x>/`, so `../../` still reaches the repo root.
+//! Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`.
+//! Every crate that uses this helper sits at `crates/<x>/`.
+//! So `../../` still reaches the repo root.
 
 use std::path::{Path, PathBuf};
 
@@ -15,17 +17,23 @@ pub fn apps_cache_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache")
 }
 
-/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures: the QuickJS `.js` script the filesystem app cases run, the `rg`/`gzip` search-and-compress fixture trees, and the ExifTool image fixture.
+/// `examples/apps/fixtures/`, home of our own committed app-driver fixtures:
+///
+/// * the QuickJS `.js` script the filesystem app cases run;
+/// * the `rg`/`gzip` search-and-compress fixture trees;
+/// * the ExifTool image fixture.
 pub fn apps_fixtures_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/fixtures")
 }
 
-/// `examples/apps/snapshots/`, the checked-in snapshot outputs captured once from `wasmtime` so the suite does not need it installed.
+/// `examples/apps/snapshots/`, the checked-in snapshot outputs captured once from `wasmtime`.
+/// So the suite does not need it installed.
 pub fn apps_snapshot_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/snapshots")
 }
 
-/// A fresh, empty scratch directory under the temp dir keyed by `name`, so cases running in parallel never share host state.
+/// A fresh, empty scratch directory under the temp dir keyed by `name`.
+/// So cases running in parallel never share host state.
 pub fn fresh_scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dewasm-app-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -49,7 +57,9 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
         .expect("generate")
         .remove(0)
         .contents;
-    // The primary source is always UTF-8 (generated code); only the optional data file is raw bytes, and this helper only ever asks for the primary file (`data_file: None`).
+    // The primary source is always UTF-8 (generated code).
+    // Only the optional data file is raw bytes.
+    // This helper only ever asks for the primary file (`data_file: None`).
     String::from_utf8(source).expect("generated source is valid UTF-8")
 }
 
@@ -58,7 +68,9 @@ pub fn convert(backend: &dyn Backend, wat_path: &Path, mode: Mode, name: &str) -
     convert_bytes(backend, &bytes, mode, name)
 }
 
-/// Codegen recurses with the IR's control-flow nesting; SQLite's deepest functions exceed the 2 MiB test-thread default stack, so app conversion runs on a roomier stack.
+/// Codegen recurses with the IR's control-flow nesting.
+/// SQLite's deepest functions exceed the 2 MiB test-thread default stack.
+/// So app conversion runs on a roomier stack.
 pub fn convert_on_big_stack(
     backend: &(dyn Backend + Sync),
     bytes: &[u8],

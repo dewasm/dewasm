@@ -3,11 +3,12 @@
 #
 # 1. build the converted SQLite library (build.sh)
 # 2. shim unit smoke (sqlite3 gem API surface)
-# 3.
-# ActiveRecord standalone smoke
+# 3. ActiveRecord standalone smoke
 # 4. the Rails app: bundle, migrate, boot, drive it over HTTP
 #
-# Requires: ruby >= 3.4 with the rails gem installed, wasi-sdk with WASI_SDK_PATH set (for the wasm build), network access for the first bundle install.
+# Requires: ruby >= 3.4 with the rails gem installed.
+# Also requires wasi-sdk with WASI_SDK_PATH set (for the wasm build).
+# The first bundle install needs network access.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -48,7 +49,8 @@ echo
 echo "--- GET /stats (sqlite_version() answered by the wasm-converted SQLite)"
 stats=$(curl -sf "http://127.0.0.1:$PORT/stats")
 echo "$stats"
-# The -wasm suffix is patched into the wasm build (../apps/scripts/sqlite3.sh): its absence means the answer came from a native SQLite, not the converted engine.
+# The -wasm suffix is patched into the wasm build (../apps/scripts/sqlite3.sh).
+# Its absence means the answer came from a native SQLite, not the converted engine.
 case "$stats" in
   *3.53.3-wasm*) ;;
   *)

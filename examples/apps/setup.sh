@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 
-# Populate examples/apps/cache/ with the real-world example apps: prebuilt wasm binaries fetched from upstream, or (sqlite3, libpcap, tree-sitter, minigzip, ripgrep) version-pinned source releases built locally with wasi-sdk or cargo.
-# Third-party artifacts are never committed; the apps e2e test fails loudly when the cache is absent.
+# Populate examples/apps/cache/ with the real-world example apps.
+# Most are prebuilt wasm binaries fetched from upstream.
+# Some are version-pinned source releases built locally with wasi-sdk or cargo.
+# Those are sqlite3, libpcap, tree-sitter, minigzip, and ripgrep.
+# Third-party artifacts are never committed.
+# The apps e2e test fails loudly when the cache is absent.
 #
-# Each app is a standalone, directly-runnable script under scripts/ (e.g.
-# `scripts/sqlite3.sh` to (re)build just sqlite3 after bumping its pin); this driver simply runs them all.
+# Each app is a standalone, directly-runnable script under scripts/.
+# For example, `scripts/sqlite3.sh` (re)builds just sqlite3 after bumping its pin.
+# This driver runs them all.
 # Shared boilerplate lives in scripts/common.sh.
 
-# `--check` verifies instead of fetching: every app whose cached copy does not match its pin is named, and the exit status is nonzero.
-# It needs no network, so a consumer can call it before reading the cache and refuse to proceed on a stale one rather than measure or test the wrong artifact.
+# `--check` verifies instead of fetching.
+# Every app whose cached copy does not match its pin is named, and the exit status is nonzero.
+# It needs no network, so a consumer can call it before reading the cache.
+# The consumer can then refuse to proceed on a stale cache.
+# It does not measure or test the wrong artifact.
 
 set -euo pipefail
 

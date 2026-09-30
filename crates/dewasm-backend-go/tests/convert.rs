@@ -1,4 +1,6 @@
-//! Go side of the whole-cache convert suite: converts every cached real-world app with the Go backend and requires the conversion to complete with non-empty source, without compiling or running it.
+//! Go side of the whole-cache convert suite.
+//! It converts every cached real-world app with the Go backend, without compiling or running it.
+//! The conversion must complete with non-empty source.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend_go::GoBackend;

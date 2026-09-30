@@ -1,10 +1,19 @@
-//! Snapshot freshness: re-validates the checked-in `examples/apps/snapshots/` against wasmtime through the same shared app/gzip/fs runners every backend uses; the per-backend `apps`/`gzip`/`fs_apps` suites cover the other half (generated output vs. snapshot).
+//! Snapshot freshness: re-validates the checked-in `examples/apps/snapshots/` against wasmtime.
+//! It goes through the same shared app/gzip/fs runners every backend uses.
+//! The per-backend `apps`/`gzip`/`fs_apps` suites cover the other half.
+//! That half is generated output vs. snapshot.
 //!
-//! Every case here runs wasm through the `xtask` binary, which embeds the `wasmtime` crate pinned by `Cargo.lock` (`cargo xtask test-wasmtime-wasi`, plus the `test-wasmtime-doom-frame`/`test-wasmtime-nes-frame` captures).
-//! Build it once with `cargo build -p xtask`; this suite never builds it and never skips when it is missing.
+//! Every case here runs wasm through the `xtask` binary.
+//! That binary embeds the `wasmtime` crate pinned by `Cargo.lock`.
+//! The cases use `cargo xtask test-wasmtime-wasi` and the two frame captures.
+//! Those are `test-wasmtime-doom-frame` and `test-wasmtime-nes-frame`.
+//! Build it once with `cargo build -p xtask`.
+//! This suite never builds it and never skips when it is missing.
 //!
-//! Named `apps_wasmtime` for the family: a future engine-under-test (wasmer, wasmedge) would join here the same way.
-//! Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise: this suite exists to check the checker, not to run on every `cargo test`.
+//! Named `apps_wasmtime` for the family.
+//! A future engine-under-test (wasmer, wasmedge) would join here the same way.
+//! Conditional behind the `wasmtime_test` feature and `#[ignore]`d otherwise.
+//! This suite exists to check the checker, not to run on every `cargo test`.
 //!
 //! Run it with:
 //!
@@ -13,9 +22,16 @@
 //! $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 //! ```
 
-// Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros: those macros take a bare `$lang:expr` and forwarding an optional leading attribute onto the generated fn is a local macro-parsing ambiguity (`#` can begin an expr fragment).
-// Calling the shared runners directly is the simplest honest way to attach the `wasmtime_test` `#[ignore]` attribute while still routing through the exact same runners the real backends use.
-// The runners themselves run unconditionally (the slow per-case macros carry their own `slow_test`-feature `#[ignore]` instead), so `wasmtime_test` alone decides whether every test in this file runs.
+// Hand-written `#[test]` fns rather than the per-case `*_e2e!` macros.
+// Those macros take a bare `$lang:expr`.
+// Forwarding an optional leading attribute onto the generated fn is a macro-parsing ambiguity.
+// It is local: `#` can begin an expr fragment.
+// Calling the shared runners directly is the simplest honest way to attach the attribute.
+// The attribute is the `wasmtime_test` `#[ignore]`.
+// This still routes through the exact same runners the real backends use.
+// The runners themselves run unconditionally.
+// The slow per-case macros carry their own `slow_test`-feature `#[ignore]` instead.
+// So `wasmtime_test` alone decides whether every test in this file runs.
 
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
@@ -59,7 +75,10 @@ fn sqlite3_shell() {
     );
 }
 
-// The wasi-vfs-packed CRuby: its `AppCase` expectation is an inline string (deterministic one-liner, same convention as the interpreter fs hellos), so this run is what validates it against a live engine, with zero preopens, which is the point of the packed shape.
+// The wasi-vfs-packed CRuby: its `AppCase` expectation is an inline string.
+// It is a deterministic one-liner, the same convention as the interpreter fs hellos.
+// So this run is what validates it against a live engine.
+// It runs with zero preopens, which is the point of the packed shape.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn cruby_packed_hello() {
@@ -75,11 +94,19 @@ fn gzip() {
     dewasm_test_helper::run_gzip_cases(&dewasm_test_helper::Wasmtime);
 }
 
-// The filesystem app cases: the `wasmtime_test` feature is already the opt-in, and `run_fs_app_case` runs unconditionally, so wasmtime runs every case it can here; its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string.
-// `TOYWASM_COWSAY` is the one exclusion: wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with EBADF and toywasm's WASI setup treats that as fatal, so wasmtime cannot run that binary.
+// The filesystem app cases: the `wasmtime_test` feature is already the opt-in.
+// `run_fs_app_case` runs unconditionally, so wasmtime runs every case it can here.
+// Its `run_app_fs` override ignores the glue, so each case is driven with an empty glue string.
+// `TOYWASM_COWSAY` is the one exclusion.
+// wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with EBADF.
+// toywasm's WASI setup treats that as fatal.
+// So wasmtime cannot run that binary.
 // The case takes its ground truth from the `cowsay_args` snapshot instead (see the case const).
-// `WASM3_COWSAY` has no such problem and runs below: cowsay through wasm3 under wasmtime, against the same snapshot.
-// Hand-written rather than via the per-case `*_e2e!` macros because those cannot carry the `wasmtime_test` `#[ignore]` attribute (the same reason `apps`/`gzip` above are hand-written).
+// `WASM3_COWSAY` has no such problem and runs below.
+// It runs cowsay through wasm3 under wasmtime, against the same snapshot.
+// Hand-written rather than via the per-case `*_e2e!` macros.
+// Those cannot carry the `wasmtime_test` `#[ignore]` attribute.
+// That is the same reason `apps`/`gzip` above are hand-written.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn fs_apps() {
@@ -115,7 +142,9 @@ fn fs_apps() {
     );
 }
 
-// The standalone `--dir` interface run against wasmtime as ground truth: `run_standalone_dir`'s wasmtime path consumes `--dir` as a host flag, the exact behavior the generated backends' own `--dir` parsing must reproduce.
+// The standalone `--dir` interface run against wasmtime as ground truth.
+// `run_standalone_dir`'s wasmtime path consumes `--dir` as a host flag.
+// That is the exact behavior the generated backends' own `--dir` parsing must reproduce.
 // Uses no cached app, only the committed `wasi_standalone_dir.wat`.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
@@ -123,7 +152,9 @@ fn standalone_dir() {
     dewasm_test_helper::run_standalone_dir(&dewasm_test_helper::Wasmtime);
 }
 
-// The two framebuffer snapshots: neither module runs as a WASI command (each has its own export/import interface), so the runner exposes their capture as its own subcommand and the frame arrives on stdout.
+// The two framebuffer snapshots: neither module runs as a WASI command.
+// Each has its own export/import interface.
+// So the runner exposes their capture as its own subcommand, and the frame arrives on stdout.
 // Compare-only, like every other case here.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
@@ -175,8 +206,12 @@ fn assert_frame_snapshot(subcommand: &str, path: &std::path::Path) {
     );
 }
 
-// Snapshot freshness for the interactive-REPL transcript: re-capture the bare qjs REPL under a real pty and require it to equal the checked-in `qjs_repl_interactive.transcript`.
-// Compare-only; regenerate with `cargo xtask update-snapshots` when the pinned qjs binary or the scripted session changes.
+// Snapshot freshness for the interactive-REPL transcript.
+// Re-capture the bare qjs REPL under a real pty.
+// Require it to equal the checked-in `qjs_repl_interactive.transcript`.
+// Compare-only.
+// Regenerate with `cargo xtask update-snapshots` when the pinned qjs binary changes.
+// Regenerate the same way when the scripted session changes.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn qjs_repl_interactive_snapshot() {
@@ -189,7 +224,11 @@ fn qjs_repl_interactive_snapshot() {
             )
         });
     let got = dewasm_test_helper::capture_qjs_repl_transcript(&dewasm_test_helper::Wasmtime);
-    // Under Linux the engine leaves one extra trailing CRLF on pty teardown that macOS (where the snapshot was captured) does not; the converted backends match the snapshot byte-for-byte on both hosts, so the difference is in the engine's exit path, outside the transcript's meaningful content (it ends at the `\q` echo).
+    // Under Linux the engine leaves one extra trailing CRLF on pty teardown.
+    // macOS, where the snapshot was captured, does not.
+    // The converted backends match the snapshot byte-for-byte on both hosts.
+    // So the difference is in the engine's exit path.
+    // It is outside the transcript's meaningful content, which ends at the `\q` echo.
     // Compare modulo trailing CRLFs here only: the per-backend comparison stays exact (issue #33).
     dewasm_test_helper::assert_transcript_eq(
         trim_trailing_crlfs(&got),

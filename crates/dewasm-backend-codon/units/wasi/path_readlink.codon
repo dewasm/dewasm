@@ -9,7 +9,8 @@ def wasi_path_readlink(self, fd: UInt[32], path_ptr: UInt[32], path_len: UInt[32
     r = readlink(host.c_str(), tmp, 4096)
     if r < 0:
         return self.fs_errno()
-    # The content is truncated to buf_len (no NUL terminator); bufused reports how many bytes were written.
+    # The content is truncated to buf_len, with no NUL terminator.
+    # bufused reports how many bytes were written.
     n = r if r < int(buf_len) else int(buf_len)
     m = self.memory
     if int(buf_ptr) + n > m.n:

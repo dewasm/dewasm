@@ -1,7 +1,11 @@
-//! The engine `update-snapshots` captures with: the [`BackendUnderTest`] surface the shared case runners expect, backed by [`crate::wasi_run`] in this process.
-//! The freshness suite spawns the same runner as a child instead, so capture and comparison execute the identical wasm under the identical WASI configuration.
+//! The engine `update-snapshots` captures with.
+//! It is the [`BackendUnderTest`] surface the shared case runners expect.
+//! It is backed by [`crate::wasi_run`] in this process.
+//! The freshness suite spawns the same runner as a child instead.
+//! So capture and comparison execute the identical wasm under the identical WASI configuration.
 //!
-//! The interactive-REPL transcript is the one case that still needs a child process (a pty session has to hand its slave to one), and there it runs this very binary as the runner.
+//! The interactive-REPL transcript is the one case that still needs a child process.
+//! A pty session has to hand its slave to one, and there it runs this very binary as the runner.
 
 use std::path::Path;
 use std::process::{ExitStatus, Output};
@@ -64,7 +68,8 @@ impl BackendUnderTest for EmbeddedWasmtime {
     }
 }
 
-/// Run `argv` (as built for `xtask test-wasmtime-wasi`) in this process and shape the result like a child process's [`Output`], which is what the shared runners compare.
+/// Run `argv` (as built for `xtask test-wasmtime-wasi`) in this process.
+/// Shape the result like a child process's [`Output`], which is what the shared runners compare.
 fn capture(argv: Vec<String>, stdin: &[u8]) -> Output {
     let run = WasiRun::parse(argv.into_iter()).expect("runner arguments");
     let captured = run

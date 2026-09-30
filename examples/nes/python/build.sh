@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Regenerate the dewasm-generated NES library and byte-compile the terminal frontend. nes_gen.py is generated code and is gitignored, so this step has to run before main.py can import it from a clean checkout.
-# The byte-compile check runs under the same interpreter run.sh will use: PyPy when installed, unless $PYTHON says otherwise.
+# Regenerate the dewasm-generated NES library and byte-compile the terminal frontend.
+# nes_gen.py is generated code and is gitignored.
+# So this step has to run before main.py can import it from a clean checkout.
+# The byte-compile check runs under the same interpreter run.sh will use.
+# That is PyPy when installed, unless $PYTHON says otherwise.
 set -euo pipefail
 cd "$(dirname "$0")"
 

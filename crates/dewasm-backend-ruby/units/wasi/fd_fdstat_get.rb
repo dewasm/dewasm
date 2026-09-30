@@ -4,7 +4,9 @@ def wasi_fd_fdstat_get(fd, out_ptr)
   return ERRNO_BADF unless io
   meta = @fd_meta[fd]
   base, inheriting, fdflags = meta || [Rt::M64, Rt::M64, 0]
-  # `tty?` is a host syscall, and an open descriptor's filetype cannot change while it is open, so it runs at most once per fd (see the fourth meta slot in wasi/_class): a guest polling isatty in a loop would otherwise pay one syscall per call.
+  # `tty?` is a host syscall, and an open descriptor's filetype cannot change while it is open.
+  # So it runs at most once per fd (see the fourth meta slot in wasi/_class).
+  # A guest polling isatty in a loop would otherwise pay one syscall per call.
   filetype = meta && meta[3]
   unless filetype
     filetype =

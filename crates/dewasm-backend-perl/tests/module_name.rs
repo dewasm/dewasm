@@ -1,4 +1,8 @@
-//! The module-name policy for Perl: library names are package names taken verbatim, a nested one namespaces the embedded runtime under itself, an invalid one is a conversion-time error, and standalone output ignores the name for a fixed `Program`.
+//! The module-name policy for Perl:
+//! - library names are package names taken verbatim;
+//! - a nested one namespaces the embedded runtime under itself;
+//! - an invalid one is a conversion-time error;
+//! - standalone output ignores the name for a fixed `Program`.
 
 use dewasm_backend::Mode;
 use dewasm_backend_perl::{find_perl, PerlBackend};

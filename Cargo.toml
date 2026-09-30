@@ -22,7 +22,8 @@ dewasm-backend-codon = { path = "crates/dewasm-backend-codon", version = "0.1.0"
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 anyhow = "1"
 wasmparser = "0.254"
-# DWARF reader, core-only (backends never see it): parses `.debug_line` for the opt-in `--dwarf-line` source back-mapping.
+# DWARF reader, core-only (backends never see it).
+# It parses `.debug_line` for the opt-in `--dwarf-line` source back-mapping.
 # Read side only.
 gimli = { version = "0.31", default-features = false, features = ["read", "std"] }
 wat = "1"
@@ -37,7 +38,9 @@ serde_json = "1"
 all = { level = "warn", priority = -1 }
 
 # The crates that compile a guest module inside the xtask snapshot runner.
-# Unoptimized they take ~60 s over a 34 MB app rather than ~7 s, which the snapshot capture and the freshness suite pay on every heavy case; the runner itself stays on the plain dev profile the tests resolve it in.
+# Unoptimized they take ~60 s over a 34 MB app rather than ~7 s.
+# The snapshot capture and the freshness suite pay that on every heavy case.
+# The runner itself stays on the plain dev profile the tests resolve it in.
 [profile.dev.package.cranelift-codegen]
 opt-level = 3
 

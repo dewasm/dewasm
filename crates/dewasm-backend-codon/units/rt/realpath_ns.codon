@@ -1,6 +1,10 @@
 # requires: rt/realpath
-# Non-strict canonicalization: C realpath(3) requires every component to exist, but the sandbox containment check must resolve paths whose tail is missing (a create target, an escaped-to parent that does not exist).
-# The longest existing prefix is resolved by the host; the missing suffix is appended with "." and ".." collapsed lexically, matching the dynamic backends' non-strict realpath.
+# Non-strict canonicalization: C realpath(3) requires every component to exist.
+# But the sandbox containment check must resolve paths whose tail is missing.
+# Examples are a create target, or an escaped-to parent that does not exist.
+# The host resolves the longest existing prefix.
+# The missing suffix is appended with "." and ".." collapsed lexically.
+# This matches the dynamic backends' non-strict realpath.
 @staticmethod
 def realpath_ns(path: str) -> str:
     r = Rt.realpath(path)

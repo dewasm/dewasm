@@ -1,7 +1,15 @@
-//! Regression tests for issue #27's memory-size overflow: Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes, so a spec-legal size of 32768+ pages (2 GiB+) cannot be represented.
-//! `memory.grow` must answer -1 (never `NegativeArraySizeException` from the overflowing int multiply), and instantiating a module whose *initial* size already exceeds the cap must fail with a clear trap, not the raw exception.
+//! Regression tests for issue #27's memory-size overflow.
+//! Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes.
+//! So a spec-legal size of 32768+ pages (2 GiB+) cannot be represented.
+//! `memory.grow` must answer -1.
+//! It must never throw `NegativeArraySizeException` from the overflowing int multiply.
+//! A module whose *initial* size already exceeds the cap can also not be instantiated.
+//! That failure must be a clear trap, not the raw exception.
 //!
-//! These cases are Java-only (the cap is a JVM artifact: the other backends can grow to 32768 pages for real, which a shared case must not force), so they live here, running on the crate's shared compile-and-cache recipe.
+//! These cases are Java-only, so they live here.
+//! They run on the crate's shared compile-and-cache recipe.
+//! The cap is a JVM artifact: the other backends can grow to 32768 pages for real.
+//! A shared case must not force that.
 //! A missing `javac`/`java` fails loud.
 
 use std::process::{Command, Output};
@@ -11,8 +19,10 @@ use dewasm_backend_java::{find_java, JavaBackend};
 
 mod common;
 
-/// Convert `wat` in library mode, append `glue` (a `public class Main`), compile the single compilation unit, and run `java -cp <classdir> Main`.
-/// Generated code that does not compile is a bug here, not an observable, so a `javac` failure panics.
+/// Convert `wat` in library mode, and append `glue` (a `public class Main`).
+/// Then compile the single compilation unit, and run `java -cp <classdir> Main`.
+/// Generated code that does not compile is a bug here, not an observable.
+/// So a `javac` failure panics.
 fn convert_and_run(wat: &str, glue: &str) -> Output {
     let java = find_java().expect("java not found on PATH (or $DEWASM_JAVA): see docs/testing.md");
 
@@ -33,7 +43,10 @@ fn convert_and_run(wat: &str, glue: &str) -> Output {
         .expect("spawn java")
 }
 
-/// `memory.grow` to 32768 pages (2^31 bytes, one past the `byte[]` cap) must return -1 and leave the memory intact and still growable: with no declared max, `maxPages` defaults to 65536, so only the byte-size guard stands between the request and the overflowing allocation.
+/// `memory.grow` to 32768 pages (2^31 bytes, one past the `byte[]` cap) must return -1.
+/// It must also leave the memory intact and still growable.
+/// With no declared max, `maxPages` defaults to 65536.
+/// So only the byte-size guard stands between the request and the overflowing allocation.
 #[test]
 fn grow_beyond_byte_array_cap_returns_minus_one() {
     let wat = r#"(module
@@ -59,7 +72,10 @@ fn grow_beyond_byte_array_cap_returns_minus_one() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), "-1\n1\n2\n");
 }
 
-/// A module declaring an *initial* memory past the `byte[]` cap cannot be instantiated on the JVM; that failure must be a clear `Rt.Trap` naming the page count, not a `NegativeArraySizeException` (which would escape `Main` and fail the run's exit status here).
+/// A module declaring an *initial* memory past the `byte[]` cap cannot be instantiated on the JVM.
+/// That failure must be a clear `Rt.Trap` naming the page count.
+/// It must not be a `NegativeArraySizeException`.
+/// That exception would escape `Main` and fail the run's exit status here.
 #[test]
 fn initial_memory_beyond_byte_array_cap_traps_clearly() {
     let wat = r#"(module (memory 32768) (func (export "f")))"#;

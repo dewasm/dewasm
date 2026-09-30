@@ -55,30 +55,40 @@ BIT_RIGHT = 128
 
 # A pressed key is held down-active until this many seconds pass without seeing it again.
 # Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
-# This matches the Python NES frontend's window; it has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+# This matches the Python NES frontend's window.
+# It has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
 RELEASE_TIMEOUT = 0.4
 
 FRAME_W = 256
 FRAME_H = 240
 
-# The NTSC NES runs at ~60.0988Hz; 60 exactly is close enough that no separate calibration is needed (unlike DOOM's internal 35Hz pacing, which the host has no say over at all).
+# The NTSC NES runs at ~60.0988Hz.
+# 60 exactly is close enough that no separate calibration is needed.
+# DOOM differs: the host has no say at all over its internal 35Hz pacing.
 # Here pacing is entirely the host's job.
 TARGET_FPS = 60
 FRAME_SECONDS = 1.0 / TARGET_FPS
 
-# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs: the smallest input-free tick count that clears Alter Ego's boot into its stable credits screen, which also lets a smoke run's screenshot.ppm be diffed directly against examples/apps/snapshots/nes_frame.ppm.
+# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs.
+# It is the smallest input-free tick count that clears Alter Ego's boot.
+# That run reaches its stable credits screen.
+# It also lets a smoke run's screenshot.ppm be diffed directly against the snapshot.
+# The snapshot is examples/apps/snapshots/nes_frame.ppm.
 SMOKE_FRAMES = 40
 
 
 def emit(s: str):
-    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes, so len(s) is not the byte count write() needs.
+    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes.
+    # So len(s) is not the byte count write() needs.
     b = s.encode()
     write(1, Ptr[byte](b._ptr.as_byte()), b._len)
 
 
 # --- Terminal control ----------------------------------------------------
 
-# `ioctl` is variadic, and on darwin arm64 a variadic argument is passed on the stack rather than in a register, so the call has to be spelled as variadic for the buffer pointer to reach the kernel.
+# `ioctl` is variadic.
+# On darwin arm64 a variadic argument is passed on the stack rather than in a register.
+# So the call has to be spelled as variadic for the buffer pointer to reach the kernel.
 @llvm
 def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
     declare i32 @ioctl(i32, i64, ...)
@@ -89,7 +99,9 @@ def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
 
 
 TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
-# struct termios has a different layout on darwin and linux (72 and 60 bytes), so the saved state is only ever copied as opaque bytes and edited through cfmakeraw; this covers both.
+# struct termios has a different layout on darwin and linux (72 and 60 bytes).
+# So the saved state is only ever copied as opaque bytes and edited through cfmakeraw.
+# This covers both.
 TERMIOS_SIZE = 128
 TCSADRAIN = 1
 POLLIN = 1
@@ -131,7 +143,9 @@ class Terminal:
         emit("\x1b[?1049h\x1b[?25l")
 
     def leave(self):
-        # SGR reset first: the fixed status-line colors otherwise persist past leaving the alternate screen and tint the shell prompt underneath.
+        # SGR reset first.
+        # Otherwise the fixed status-line colors persist past leaving the alternate screen.
+        # They would tint the shell prompt underneath.
         emit("\x1b[0m\x1b[?25h\x1b[?1049l")
         tcsetattr(0, TCSADRAIN, self.saved)
 
@@ -218,13 +232,18 @@ class Emulator:
 
 # --- Terminal rendering --------------------------------------------------
 #
-# Each character cell shows two vertically-stacked pixels via the upper-half block character, foreground = top pixel, background = bottom pixel.
-# Unlike DOOM's 640x400 framebuffer (a 2x upscale of its native 320x200), agnes's 256x240 framebuffer already is the native NES resolution, so pixels are read 1:1 and nearest-neighbor sampled down to however many columns/rows actually fit.
+# Each character cell shows two vertically-stacked pixels via the upper-half block character.
+# Its foreground is the top pixel, and its background is the bottom pixel.
+# DOOM's 640x400 framebuffer is a 2x upscale of its native 320x200.
+# Unlike it, agnes's 256x240 framebuffer already is the native NES resolution.
+# So pixels are read 1:1.
+# They are nearest-neighbor sampled down to however many columns/rows actually fit.
 
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left active, flickering with the game.
+# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
@@ -332,8 +351,11 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin: arrow keys as 3-byte escape sequences, everything else as 1 byte.
-# A lone ESC keypress is indistinguishable from the first byte of an escape sequence until either more bytes show up (they arrive together, already buffered, for a real escape sequence) or a short timeout passes with nothing more arriving (a real ESC keypress).
+# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
+# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# - more bytes show up; they arrive together, already buffered, for a real escape sequence;
+# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
 ESC_TIMEOUT_MS = 10
 
 # read_key's out-of-band results; every controller bit is positive.
@@ -402,7 +424,9 @@ def run_interactive(rom_path: str):
 
     terminal.enter()
     try:
-        # Fixed-timestep pacing: sleep when running ahead of schedule; when the host can't keep up, never sleep and just resync the schedule to "now" instead of trying to burn through a backlog of missed frames.
+        # Fixed-timestep pacing: sleep when running ahead of schedule.
+        # When the host can't keep up, never sleep and just resync the schedule to "now".
+        # That avoids trying to burn through a backlog of missed frames.
         next_frame_at = time.monotonic()
         while True:
             events = List[int]()
@@ -483,7 +507,9 @@ def run_smoke(rom_path: str):
     rate = "{:.2f}".format(SMOKE_FRAMES / elapsed) if elapsed > 0 else "inf"
     print("smoke: ran", SMOKE_FRAMES, "frames in", "{:.3f}".format(elapsed) + "s (" + rate + " frames/sec)")
 
-    # Measure render cost without a real terminal: build the escape string for a representative fixed size and throw it away instead of writing it to a screen.
+    # Measure render cost without a real terminal.
+    # Build the escape string for a representative fixed size and throw it away.
+    # It is not written to a screen.
     render_start = time.monotonic()
     width, rows = fit(FRAME_W, FRAME_H, FALLBACK_COLS, FALLBACK_ROWS)
     cells = build_cells(emu.data(), emu.screen_off, FRAME_W, FRAME_H, width, rows)
@@ -501,8 +527,14 @@ def run_smoke(rom_path: str):
         "wrote screenshot.ppm (" + str(distinct) + " distinct colors)",
     )
 
-    # The NES PPU palette tops out at 64 colors, and agnes's frame is a small, mostly-flat subset of it (Alter Ego's title screen settles at 7, per NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs), so a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce; a degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
-    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs) and the sibling frontends.
+    # The NES PPU palette tops out at 64 colors.
+    # agnes's frame is a small, mostly-flat subset of it.
+    # Alter Ego's title screen settles at 7.
+    # NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs records that.
+    # So a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce.
+    # A degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
+    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs).
+    # The sibling frontends use it too.
     if distinct <= 4:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)
         sys.exit(1)

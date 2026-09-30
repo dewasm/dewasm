@@ -3,7 +3,10 @@
 # shellcheck source=common.sh
 
 # toywasm: a WebAssembly interpreter written in C, from its official wasm32-wasi release asset.
-# The default (non-`full-`) configuration is the one pinned here: `--print-build-options` reports tail-call, threads, multi-memory, extended-const and custom-page-sizes off, and the binary itself audits as baseline wasm.
+# The default (non-`full-`) configuration is the one pinned here.
+# `--print-build-options` reports these options off:
+# tail-call, threads, multi-memory, extended-const, and custom-page-sizes.
+# The binary itself audits as baseline wasm.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

@@ -1,9 +1,12 @@
 //! Rewrite a tail call to the function's own index into a loop.
 //!
 //! A `return_call` to self is a jump back to the top with new arguments, which is what a loop is.
-//! Written that way it needs no trampoline at all, and a function whose tail calls are all self-calls leaves the tail-caller set entirely, so it also loses the body/entry split and the parked-call machinery.
+//! Written that way, it needs no trampoline.
+//! A function whose tail calls are all self-calls leaves the tail-caller set.
+//! So it also loses the body/entry split and the parked-call machinery.
 //!
-//! This is not the mechanism tail calls are lowered by: it covers direct self-recursion only, and the conformance suite's `even`/`odd` pair is mutual, so the trampoline stays for everything else.
+//! This is not the mechanism tail calls are lowered by: it covers direct self-recursion only.
+//! The conformance suite's `even`/`odd` pair is mutual, so everything else keeps the trampoline.
 
 use std::collections::BTreeSet;
 
@@ -11,7 +14,7 @@ use dewasm_core::ir::{BrTarget, Expr, Func, FuncType, Label, Stmt, Temp, ValType
 
 use crate::terminates;
 
-/// Rewrite every self tail call in `funcs` into a branch back to a loop wrapping the function's body.
+/// Rewrite every self tail call in `funcs` into a branch back to a loop wrapping the body.
 /// `num_imported` is the offset between a position in `funcs` and its function index.
 pub fn rewrite(funcs: &mut [Func], types: &[FuncType], num_imported: u32) {
     for (i, func) in funcs.iter_mut().enumerate() {
@@ -26,8 +29,11 @@ pub fn rewrite(funcs: &mut [Func], types: &[FuncType], num_imported: u32) {
 /// Whether wrapping `func`'s body in a loop preserves its meaning.
 ///
 /// Two conditions beyond having a self tail call at all.
-/// The body must terminate, because a body that can fall off its end would spin in the loop rather than return.
-/// And every declared local must have a constant zero, because a fresh call zeroes the locals and the loop has to do the same; a reference-typed local has no such expression in the IR.
+/// The body must terminate.
+/// A body that can fall off its end would spin in the loop rather than return.
+/// And every declared local must have a constant zero.
+/// The reason is that a fresh call zeroes the locals and the loop has to do the same.
+/// A reference-typed local has no such expression in the IR.
 fn eligible(func: &Func, idx: u32) -> bool {
     Stmt::any(
         &func.body,
@@ -99,7 +105,8 @@ fn replace(stmts: &mut Vec<Stmt>, cx: &mut Cx) {
         }
         match stmt {
             Stmt::ReturnCall { func, args } if func == cx.idx => {
-                // The arguments land in fresh temps before any parameter is written: an argument may read a parameter an earlier assignment would already have overwritten.
+                // The arguments land in fresh temps before any parameter is written.
+                // Otherwise an argument could read a parameter an earlier assignment overwrote.
                 let mut slots = Vec::with_capacity(args.len());
                 for (arg, param) in args.into_iter().zip(cx.params) {
                     let slot = Temp {
@@ -133,7 +140,8 @@ fn replace(stmts: &mut Vec<Stmt>, cx: &mut Cx) {
     *stmts = out;
 }
 
-/// One past the largest label id the body uses, so the new frame cannot collide with an existing one.
+/// One past the largest label id the body uses.
+/// The new frame then cannot collide with an existing one.
 fn next_label(stmts: &[Stmt]) -> u32 {
     let mut ids: BTreeSet<u32> = BTreeSet::new();
     Stmt::any(stmts, &mut |s| {

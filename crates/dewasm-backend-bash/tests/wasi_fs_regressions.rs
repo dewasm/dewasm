@@ -1,7 +1,20 @@
-//! Bash-only WASI filesystem regression pins (the issue-29 fixes, plus the issue-143 single-file preopen): drive a converted library-mode module plus its bundled units directly under bash, the same direct-drive shape as `softfloat.rs`.
-//! These cases do not join the shared `WASI_CASES` conformance table because the other backends inherit the probed errnos from the host OS (which differs between Linux and macOS on some of them) while the bash units implement each choice deterministically; the exact codes pinned here are bash's own contract (`crates/dewasm-backend-bash/units/wasi/path_rename.sh` / `fd_close.sh` / `fd_allocate.sh` / `init_preopens.sh`).
+//! Bash-only WASI filesystem regression tests.
+//! They cover the issue-29 fixes, plus the issue-143 single-file preopen.
+//! Each drives a converted library-mode module plus its bundled units directly under bash.
+//! That is the same direct-drive shape as `softfloat.rs`.
+//! These cases do not join the shared `WASI_CASES` conformance table.
+//! The other backends inherit the probed errnos from the host OS.
+//! The host OS differs between Linux and macOS on some of them.
+//! The bash units instead implement each choice deterministically.
+//! So the exact codes pinned here are bash's own contract.
+//! That contract lives in `crates/dewasm-backend-bash/units/wasi/path_rename.sh`.
+//! It also lives in `fd_close.sh`, `fd_allocate.sh`, and `init_preopens.sh`.
 //!
-//! The permission-based cases (a read-only parent to fail `rmdir`, a read-only file to fail the close-time flush) assume a non-root test user: root ignores permission bits and would see the operations succeed.
+//! Two cases are permission-based.
+//! In one, a read-only parent fails `rmdir`.
+//! In the other, a read-only file fails the close-time flush.
+//! They assume a non-root test user.
+//! Root ignores permission bits and would see the operations succeed.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
@@ -10,7 +23,8 @@ use std::process::Command;
 use dewasm_backend::Mode;
 use dewasm_backend_bash::{find_bash5, BashBackend};
 
-/// A fresh, empty scratch directory keyed by `name`, so cases running in parallel never share host state (the `wasi.rs` helper's shape).
+/// A fresh, empty scratch directory keyed by `name` (the `wasi.rs` helper's shape).
+/// So cases running in parallel never share host state.
 fn scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dewasm-bash-wasi-reg-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -18,7 +32,8 @@ fn scratch_dir(name: &str) -> PathBuf {
     dir
 }
 
-/// Convert `wat_src` in library mode (module name `prog`, embedded runtime, bundled WASI), append `glue`, run the script under bash >= 5, and return its stdout.
+/// Convert `wat_src` in library mode, with module name `prog`, embedded runtime, and bundled WASI.
+/// Then append `glue`, run the script under bash >= 5, and return its stdout.
 /// The script itself must exit 0 (the glue ends in `exit 0`).
 fn run_module(name: &str, wat_src: &str, glue: &str) -> String {
     let bash = find_bash5().expect("bash >= 5 not found: see docs/testing.md");
@@ -42,7 +57,10 @@ fn run_module(name: &str, wat_src: &str, glue: &str) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// The standard `_start` glue (`e2e.rs`'s `BASH_FS_GLUE` with the preopen inlined): preopen `host` at guest `/`, run `_start`, surface a `proc_exit` code (`invoke` returns status 133 with the code in `$EXIT_CODE`) as a trailing decimal line.
+/// The standard `_start` glue: `e2e.rs`'s `BASH_FS_GLUE` with the preopen inlined.
+/// It preopens `host` at guest `/` and runs `_start`.
+/// It surfaces a `proc_exit` code as a trailing decimal line.
+/// For that code, `invoke` returns status 133 with the code in `$EXIT_CODE`.
 fn start_glue(host: &Path) -> String {
     format!(
         r#"WASI_DIRS=('{}::/')
@@ -58,7 +76,8 @@ exit 0
     )
 }
 
-/// A module whose `_start` calls `path_rename(3, old, 3, new)` against the first preopen and exits with the errno.
+/// A module whose `_start` calls `path_rename(3, old, 3, new)` against the first preopen.
+/// It exits with the errno.
 fn rename_wat(old: &str, new: &str) -> String {
     format!(
         r#"(module
@@ -78,7 +97,8 @@ fn rename_wat(old: &str, new: &str) -> String {
     )
 }
 
-/// A module whose `_start` opens (CREAT) the file `f` with FD_READ|FD_WRITE|FD_ALLOCATE rights, calls `fd_allocate(fd, offset, len)`, and exits with the errno.
+/// A module whose `_start` opens (CREAT) the file `f` with FD_READ|FD_WRITE|FD_ALLOCATE rights.
+/// It then calls `fd_allocate(fd, offset, len)` and exits with the errno.
 fn allocate_wat(offset: i64, len: i64) -> String {
     format!(
         r#"(module
@@ -157,7 +177,8 @@ fn rename_trailing_slash_on_file_destination_is_enotdir() {
     assert_eq!(std::fs::read_to_string(dir.join("dst")).unwrap(), "d");
 }
 
-/// A trailing slash on a *nonexistent* destination is stripped and the rename proceeds onto the bare name, which is wasmtime's behavior.
+/// A trailing slash on a *nonexistent* destination is stripped.
+/// The rename then proceeds onto the bare name, which is wasmtime's behavior.
 /// The raw hosts diverge here (macOS ENOENT / Linux ENOTDIR), hence the pin.
 #[test]
 fn rename_trailing_slash_missing_destination_strips_and_renames() {
@@ -177,7 +198,8 @@ fn rename_trailing_slash_missing_destination_strips_and_renames() {
     );
 }
 
-/// Trailing slashes on directories keep working: rename("d1/", "d2/") with a directory source and a nonexistent destination succeeds.
+/// Trailing slashes on directories keep working.
+/// rename("d1/", "d2/") with a directory source and a nonexistent destination succeeds.
 #[test]
 fn rename_trailing_slash_on_directories_still_renames() {
     let dir = scratch_dir("slash-dirs-ok");
@@ -192,9 +214,13 @@ fn rename_trailing_slash_on_directories_still_renames() {
     assert!(dir.join("d2").is_dir(), "destination must be the directory");
 }
 
-/// When the `rmdir` clearing an empty destination directory fails (here: its parent is read-only), path_rename must report the failure.
-/// Before the fix the unchecked `rmdir` was followed by an unconditional `mv`, which nested the source *inside* the surviving destination and reported success.
-/// The destination is still empty afterwards, so the errno is the unit's default EIO (29); a destination that gained entries would be ENOTEMPTY (55), but that race cannot be staged deterministically here.
+/// The `rmdir` clearing an empty destination directory can fail; here its parent is read-only.
+/// path_rename must then report the failure.
+/// Before the fix the unchecked `rmdir` was followed by an unconditional `mv`.
+/// That `mv` nested the source *inside* the surviving destination and reported success.
+/// The destination is still empty afterwards, so the errno is the unit's default EIO (29).
+/// A destination that gained entries would be ENOTEMPTY (55).
+/// That race cannot be staged deterministically here.
 #[test]
 fn rename_rmdir_failure_is_reported_and_moves_nothing() {
     use std::os::unix::fs::PermissionsExt;
@@ -218,7 +244,9 @@ fn rename_rmdir_failure_is_reported_and_moves_nothing() {
     );
 }
 
-/// offset+len past i64::MAX must not wrap bash's signed-64 arithmetic into a silent no-op success: it is EIO (29), the code Ruby/Python surface when the host refuses an unsatisfiable size (their unmapped EFBIG falls through to ERRNO_IO).
+/// offset+len past i64::MAX must not wrap bash's signed-64 arithmetic into a silent no-op success.
+/// It is EIO (29), the code Ruby/Python surface when the host refuses an unsatisfiable size.
+/// Their unmapped EFBIG falls through to ERRNO_IO.
 #[test]
 fn fd_allocate_overflowing_size_is_eio() {
     let dir = scratch_dir("alloc-overflow");
@@ -230,7 +258,8 @@ fn fd_allocate_overflowing_size_is_eio() {
     assert_eq!(out, "29\n");
 }
 
-/// A negative (u64 >= 2^63) len keeps its existing EINVAL (28): the overflow guard must not shadow the sign check.
+/// A negative (u64 >= 2^63) len keeps its existing EINVAL (28).
+/// The overflow guard must not shadow the sign check.
 #[test]
 fn fd_allocate_negative_len_is_einval() {
     let dir = scratch_dir("alloc-negative");
@@ -238,8 +267,10 @@ fn fd_allocate_negative_len_is_einval() {
     assert_eq!(out, "28\n");
 }
 
-/// A flush failure at close (the buffered file was made unwritable between the write and the close) must surface its errno.
-/// Before the fix fd_close unconditionally reported 0 and the guest never learned its writes were lost.
+/// A flush failure at close must surface its errno.
+/// Here the buffered file was made unwritable between the write and the close.
+/// Before the fix fd_close unconditionally reported 0.
+/// The guest then never learned its writes were lost.
 /// The fd state must still be released: a second close is EBADF (8).
 #[test]
 fn fd_close_flush_failure_propagates_errno_and_releases_fd() {
@@ -270,7 +301,9 @@ fn fd_close_flush_failure_propagates_errno_and_releases_fd() {
     (local.get $fd))
   (func (export "closefd") (param i32) (result i32)
     (call $fd_close (local.get 0))))"#;
-    // Glue: open+write, then make the file unwritable *behind the buffer* so the close-time flush fails (file_flush's truncate-open reports EIO, 29), then close twice: the second close must see a released fd (EBADF, 8).
+    // Glue: open+write, then make the file unwritable *behind the buffer*.
+    // So the close-time flush fails: file_flush's truncate-open reports EIO (29).
+    // Then close twice: the second close must see a released fd (EBADF, 8).
     let glue = format!(
         r#"WASI_DIRS=('{host}::/')
 prog_init || {{ echo "init failed" >&2; exit 1; }}
@@ -289,9 +322,15 @@ exit 0
     assert_eq!(out, "29\n8\n");
 }
 
-/// A preopen whose host path is a *file*, not a directory, is accepted, and the `"."` wasi-libc addresses that preopen with resolves back to the file itself: `path_filestat_get(3, ".")` is 0, not an errno.
-/// This is the shape the zeroperl reactor's mandatory `/dev/null` preopen takes (issue #143); before the fix `cd -P` could not enter a non-directory, so init failed outright and the `"."` was ENOENT.
-/// Ruby and Perl inherit this from `File.realpath`/`Cwd::realpath`, which resolve `"/dev/null/."` to `/dev/null` already; bash's own `cd -P` resolution is why it needed pinning here.
+/// A preopen whose host path is a *file*, not a directory, is accepted.
+/// wasi-libc addresses that preopen with `"."`, which resolves back to the file itself.
+/// So `path_filestat_get(3, ".")` is 0, not an errno.
+/// This is the shape the zeroperl reactor's mandatory `/dev/null` preopen takes (issue #143).
+/// Before the fix `cd -P` could not enter a non-directory.
+/// So init failed outright and the `"."` was ENOENT.
+/// Ruby and Perl inherit this from `File.realpath`/`Cwd::realpath`.
+/// Those resolve `"/dev/null/."` to `/dev/null` already.
+/// Bash's own `cd -P` resolution is why it needed pinning here.
 #[test]
 fn single_file_preopen_resolves_dot_to_itself() {
     let dir = scratch_dir("file-preopen");

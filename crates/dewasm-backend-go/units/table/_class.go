@@ -1,5 +1,8 @@
-// One table slot: a funcref (type key + the Go func value) or nil for a null slot. call_indirect compares type keys, so a table shared across modules stays consistent.
-// `body` is set only for a tail-calling function: it is that function's tail entry, which reads the parked slots of the instance named by `owner`, so `table/tail_ref` hands it back only to that instance.
+// One table slot: a funcref (type key + the Go func value) or nil for a null slot.
+// call_indirect compares type keys, so a table shared across modules stays consistent.
+// `body` is set only for a tail-calling function: it is that function's tail entry.
+// The tail entry reads the parked slots of the instance named by `owner`.
+// So `table/tail_ref` hands it back only to that instance.
 type funcref struct {
     ty    string
     fn    any

@@ -1,24 +1,53 @@
-//! `cargo xtask record-speed` and `cargo xtask render-speed`: the cross-runtime benchmark suite and the document it feeds.
+//! `cargo xtask record-speed` and `cargo xtask render-speed`.
+//! They are the cross-runtime benchmark suite and the document it feeds.
 //!
-//! It answers one question with numbers: what does a wasm program cost once dewasm has turned it into Ruby, Python, Perl, Go, Java, or Bash source, measured against the AOT ceiling (wasmtime) and against the wasm interpreters written in those same languages (pywasm, wardite).
-//! The `wasm3-*` runners add the same-category counterpart to those interpreters: the converted wasm3 build interpreting the workload at run time, so "a runtime-loading wasm runtime in pure Ruby/Python" is compared hand-written against converted.
-//! Measuring and rendering are separate commands: `record-speed` writes a dated record under `records/`, `render-speed` turns a record into `docs/benchmarks/results.md` with its charts.
-//! A full run takes tens of minutes, so a wording fix in the renderer must not require re-measuring: the JSON is the record, the markdown is only a view of it.
-//! Neither is a compared snapshot: a timing is not reproducible byte-for-byte, so unlike `docs/support.md` there is no freshness test (contrast the checked-in execution snapshots).
+//! It answers one question with numbers.
+//! What does a wasm program cost once dewasm has converted it?
+//! The targets are Ruby, Python, Perl, Go, Java, and Bash source.
+//! The cost is measured against the AOT ceiling (wasmtime).
+//! It is also measured against the wasm interpreters in those same languages (pywasm, wardite).
+//! The `wasm3-*` runners add the same-category counterpart to those interpreters.
+//! They are the converted wasm3 build, interpreting the workload at run time.
+//! So "a runtime-loading wasm runtime in pure Ruby/Python" is compared both ways.
+//! One is hand-written, and the other is converted.
+//! Measuring and rendering are separate commands.
+//! `record-speed` writes a dated record under `records/`.
+//! `render-speed` turns a record into `docs/benchmarks/results.md` with its charts.
+//! A full run takes tens of minutes.
+//! So a wording fix in the renderer must not require re-measuring.
+//! The JSON is the record, and the markdown is only a view of it.
+//! Neither is a compared snapshot: a timing is not reproducible byte-for-byte.
+//! So unlike `docs/support.md` and the checked-in execution snapshots, there is no freshness test.
 //!
 //! The modules:
 //!
-//! * [`workload`] is what is measured: `<module> <iterations>` microbenchmarks discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`, and real cached apps with fixed argv/stdin (cowsay for startup on a mid-sized module, SQLite for sustained work).
-//! * [`runner`] is where it is measured: availability probing, dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait, and the `go build` / `javac` steps the compiled backends need.
-//! * [`measure`] is how it is measured: per-runner iteration calibration, the subtracted `<iterations> = 0` run, repetitions reported as min *and* median, and a hard timeout.
+//! * [`workload`] is what is measured.
+//!   It covers `<module> <iterations>` microbenchmarks and real cached apps with fixed argv/stdin.
+//!   The microbenchmarks are discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`.
+//!   The apps are cowsay for startup on a mid-sized module and SQLite for sustained work.
+//! * [`runner`] is where it is measured.
+//!   It covers availability probing.
+//!   It covers dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait.
+//!   It also covers the `go build` / `javac` steps the compiled backends need.
+//! * [`measure`] is how it is measured.
+//!   It covers per-runner iteration calibration and the subtracted `<iterations> = 0` run.
+//!   It also covers a hard timeout.
+//!   Repetitions are reported as min *and* median.
 //! * [`report`]: the JSON record and the markdown rendering of it.
-//! * [`chart`]: the static SVGs `docs/benchmarks/results.md` embeds, one per workload, regenerated from the same record.
+//! * [`chart`]: the static SVGs `docs/benchmarks/results.md` embeds, one per workload.
+//!   They are regenerated from the same record.
 //!
 //! Two rules run through all of it.
-//! Every runner's stdout is diffed against wasmtime's at the same iteration count, and a mismatch is a **hard failure** that makes the command exit non-zero: a wrong answer produced quickly is not a result.
-//! And nothing is silently dropped: an uninstalled runner, an unbuilt module, and a deliberately excluded pair are each reported with a reason in both outputs, so an empty cell can never be mistaken for a covered one.
+//! Every runner's stdout is diffed against wasmtime's at the same iteration count.
+//! A mismatch is a **hard failure** that makes the command exit non-zero.
+//! A wrong answer produced quickly is not a result.
+//! And nothing is silently dropped.
+//! An uninstalled runner and an unbuilt module each get a reason in both outputs.
+//! So does a deliberately excluded pair.
+//! An empty cell can then never be mistaken for a covered one.
 
-// `chart`, `report` and `runner` are also what the size record is built on: the same lollipop drawing, the same host block, the same runtime table.
+// `chart`, `report` and `runner` are also what the size record is built on.
+// That is the same lollipop drawing, the same host block, and the same runtime table.
 pub mod chart;
 mod measure;
 pub mod report;
@@ -37,12 +66,15 @@ use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
 
 /// Default timed repetitions per measurement, after one discarded warmup.
-/// Across the 219 measured pairs of the 2026-08-21 full record, the spread between the fastest and slowest of 5 samples had a median of 0.9% and a 90th percentile of 3.1%, so 3 loses little.
+/// The 2026-08-21 full record has 219 measured pairs, each with 5 samples.
+/// The spread between the fastest and slowest sample had a median of 0.9%.
+/// Its 90th percentile was 3.1%, so 3 loses little.
 const DEFAULT_REPS: usize = 3;
 /// Default compute time the iteration calibrator aims each sample at.
 const DEFAULT_TARGET_MS: u64 = 300;
 /// Default per-process wall-clock ceiling.
-/// Generous (a Bash sample legitimately takes minutes) but finite, so a runner that turns out slower than expected costs one timeout instead of hanging the suite.
+/// Generous (a Bash sample legitimately takes minutes) but finite.
+/// So a runner that turns out slower than expected costs one timeout instead of hanging the suite.
 const DEFAULT_TIMEOUT_S: u64 = 900;
 
 struct Options {
@@ -101,7 +133,8 @@ impl Options {
 }
 
 /// Regenerate `docs/benchmarks/results.md` and its charts from a stored speed record.
-/// Rendering needs neither the runner probes nor the workloads on disk: everything it reports already lives in the record.
+/// Rendering needs neither the runner probes nor the workloads on disk.
+/// Everything it reports already lives in the record.
 pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
     let path = record_to_render(args, SPEED_SUFFIX)?;
     let report = report::load(&path)?;
@@ -133,8 +166,11 @@ pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
 
 /// Refuse to measure an app cache that does not match its pin.
 ///
-/// The harness reads `cache/<app>.wasm` directly, so a copy left over from an earlier pin would be measured as the current one and its numbers committed as a record.
-/// The pins live in the fetch scripts, which already compare them against the cached stamp, so this asks them rather than keeping a second copy that could drift.
+/// The harness reads `cache/<app>.wasm` directly.
+/// So a copy left over from an earlier pin would be measured as the current one.
+/// Its numbers would then be committed as a record.
+/// The pins live in the fetch scripts, which already compare them against the cached stamp.
+/// So this asks them rather than keeping a second copy that could drift.
 /// `--check` needs no network: it reports and fails instead of fetching.
 fn verify_app_pins() -> Result<()> {
     let script = repo_root().join("examples/apps/setup.sh");
@@ -155,7 +191,8 @@ fn verify_app_pins() -> Result<()> {
 }
 
 /// Whether `workload` has at least one runner selected by `filter`.
-/// A filter matches on either side of the pair: it can name a workload (`sqlite`), a runner (`bash`), or a family (`wat/`, `c/`, `app/`).
+/// A filter matches on either side of the pair.
+/// It can name a workload (`sqlite`), a runner (`bash`), or a family (`wat/`, `c/`, `app/`).
 fn matches(filter: &Option<String>, workload: &Workload, runners: &[Runner]) -> bool {
     let Some(needle) = filter else {
         return true;
@@ -245,8 +282,10 @@ fn describe(workload: &Workload) -> String {
 }
 
 fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
-    // wasmtime is not optional: it is both the ceiling every ratio is taken against and the oracle every runner's stdout is diffed against.
-    // Without it the suite would produce numbers with nothing to check them, so it fails loud instead.
+    // wasmtime is not optional: it is the ceiling every ratio is taken against.
+    // It is also the oracle every runner's stdout is diffed against.
+    // Without it the suite would produce numbers with nothing to check them.
+    // So it fails loud instead.
     if let Err(reason) = runners
         .iter()
         .find(|runner| matches!(runner.kind, Kind::Wasmtime))
@@ -325,7 +364,8 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     );
 }
 
-/// Charts not covered by the record are deleted: an orphan SVG looks current while nothing links it.
+/// Charts not covered by the record are deleted.
+/// An orphan SVG looks current while nothing links it.
 /// The doc and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);
@@ -368,7 +408,8 @@ fn prune_charts(written: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Appends a [`Cell`] per (workload, runner) pair, the skips included: a gap must never read as coverage.
+/// Appends a [`Cell`] per (workload, runner) pair, the skips included.
+/// A gap must never read as coverage.
 fn measure_workload(
     opts: &Options,
     runners: &[Runner],
@@ -377,7 +418,8 @@ fn measure_workload(
     workshop: &mut Workshop,
     results: &mut Vec<Cell>,
 ) {
-    // wasmtime always runs: it supplies the baseline ratio and the reference stdout, whatever the filter selected.
+    // wasmtime always runs, whatever the filter selected.
+    // It supplies the baseline ratio and the reference stdout.
     let selected: Vec<&Runner> = runners
         .iter()
         .filter(|runner| {
@@ -392,7 +434,8 @@ fn measure_workload(
         return;
     }
 
-    // The wasmtime stdout for each iteration count another runner calibrated to, memoized so N runners at the same N cost one reference run.
+    // The wasmtime stdout for each iteration count another runner calibrated to.
+    // It is memoized, so N runners at the same N cost one reference run.
     let mut references: HashMap<u64, Vec<u8>> = HashMap::new();
     for runner in selected {
         if let Some(reason) = runtimes
@@ -448,7 +491,8 @@ fn skipped(workload: &Workload, runner: &Runner, kind: SkipKind, reason: String)
     }
 }
 
-/// A declared exclusion's class as the record states it; the record's third class, [`SkipKind::Setup`], never comes from an exclusion table.
+/// A declared exclusion's class as the record states it.
+/// The record's third class, [`SkipKind::Setup`], never comes from an exclusion table.
 fn skip_kind(kind: workload::ExclusionKind) -> SkipKind {
     match kind {
         workload::ExclusionKind::Cost => SkipKind::Cost,
@@ -516,7 +560,8 @@ fn measure_cell(
     };
 
     let verification = if matches!(runner.kind, Kind::Wasmtime) {
-        // The reference run for this iteration count is already in hand: it is this very measurement.
+        // The reference run for this iteration count is already in hand.
+        // It is this very measurement.
         references.insert(iterations.unwrap_or(0), last.stdout.clone());
         Verification::Reference
     } else {
@@ -557,7 +602,9 @@ fn measure_cell(
 }
 
 /// wasmtime's stdout for `workload` at `iterations`, run on demand and memoized.
-/// This is what makes the cross-check exact: the reference is produced at the *same* iteration count the runner was benchmarked at, not at some separate nominal count.
+/// This is what makes the cross-check exact.
+/// The reference is produced at the *same* iteration count the runner was benchmarked at.
+/// It is not produced at some separate nominal count.
 fn reference_stdout(
     workload: &Workload,
     iterations: Option<u64>,
@@ -600,13 +647,16 @@ fn samples_of(min_s: f64, median_s: f64, samples_s: Vec<f64>) -> Samples {
     }
 }
 
-/// The repo root, canonicalized so the `crates/xtask/../..` spelling never reaches a message a human reads.
+/// The repo root, canonicalized.
+/// The `crates/xtask/../..` spelling then never reaches a message a human reads.
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     raw.canonicalize().unwrap_or(raw)
 }
 
-/// `path` relative to the repo root when it is inside it, for readable diagnostics ("benchmarks/cache/i32_alu.wasm not built" rather than an absolute path with `../..` in the middle).
+/// `path` relative to the repo root when it is inside it, for readable diagnostics.
+/// An example is "benchmarks/cache/i32_alu.wasm not built".
+/// The alternative is an absolute path with `../..` in the middle.
 pub fn display_path(path: &Path) -> String {
     path.strip_prefix(repo_root())
         .unwrap_or(path)
@@ -614,12 +664,18 @@ pub fn display_path(path: &Path) -> String {
         .to_string()
 }
 
-/// `benchmarks/`, the suite's own tree: `wat/` and `c/` (microbenchmark sources, one `build.sh` each), `cache/` (built modules under a subdirectory per family, plus the pywasm venv and the wardite `GEM_HOME`), `drivers/`.
+/// `benchmarks/`, the suite's own tree:
+///
+/// * `wat/` and `c/`: microbenchmark sources, one `build.sh` each.
+/// * `cache/`: built modules under a subdirectory per family.
+///   It also holds the pywasm venv and the wardite `GEM_HOME`.
+/// * `drivers/`.
 fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
 
-/// `benchmarks/cache/`: built microbenchmark modules, one subdirectory per family (`wat/`, `c/`), *and* the interpreter dependencies `benchmarks/setup.sh` provisions.
+/// `benchmarks/cache/`: built microbenchmark modules, one subdirectory per family (`wat/`, `c/`).
+/// It *also* holds the interpreter dependencies `benchmarks/setup.sh` provisions.
 pub fn bench_cache_dir() -> PathBuf {
     bench_root().join("cache")
 }
@@ -629,7 +685,8 @@ pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
 
-/// The filename suffix that names a speed record's kind; a `.json` under `records/` without a kind suffix is an error wherever the kind is read.
+/// The filename suffix that names a speed record's kind.
+/// A `.json` under `records/` without a kind suffix is an error wherever the kind is read.
 pub const SPEED_SUFFIX: &str = "-speed.json";
 /// The size counterpart of [`SPEED_SUFFIX`].
 pub const SIZE_SUFFIX: &str = "-size.json";
@@ -644,7 +701,8 @@ fn records_readme() -> PathBuf {
     records_dir().join("README.md")
 }
 
-/// The record a render command works from: the path given on the command line, or the newest record of `suffix`'s kind.
+/// The record a render command works from.
+/// It is the path given on the command line, or the newest record of `suffix`'s kind.
 /// ISO timestamps sort lexicographically, so the newest record is the greatest filename.
 /// A path of the other kind is rejected here rather than deserialized into a confusing parse error.
 pub fn record_to_render(args: impl Iterator<Item = String>, suffix: &str) -> Result<PathBuf> {
@@ -698,7 +756,8 @@ fn newest_record(suffix: &str) -> Result<PathBuf> {
     })
 }
 
-/// The kind a record filename declares: the name the `record-`/`render-` commands carry for it, and its heading in `records/README.md`.
+/// The kind a record filename declares.
+/// It is the name the `record-`/`render-` commands carry, and its heading in `records/README.md`.
 fn record_kind(name: &str) -> Result<(&'static str, &'static str)> {
     if name.ends_with(SPEED_SUFFIX) {
         Ok(("speed", "## Speed records"))
@@ -711,8 +770,10 @@ fn record_kind(name: &str) -> Result<(&'static str, &'static str)> {
 
 /// Give the record just written a line in `records/README.md`, unless it already has one.
 ///
-/// The occasion is the one thing a measurement does not know about itself, so it is written as a TODO for whoever commits the record.
-/// Appending it here is what makes an undocumented record show up in the diff instead of accumulating unnoticed.
+/// The occasion is the one thing a measurement does not know about itself.
+/// So it is written as a TODO for whoever commits the record.
+/// Appending it here makes an undocumented record show up in the diff.
+/// It then does not accumulate unnoticed.
 pub fn note_record(json_path: &Path) -> Result<()> {
     let name = json_path
         .file_name()
@@ -727,7 +788,8 @@ pub fn note_record(json_path: &Path) -> Result<()> {
     }
 }
 
-/// `existing` with a one-line `TODO` entry for `name` appended to its kind's list, or `None` when the file already mentions `name`.
+/// `existing` with a one-line `TODO` entry for `name` appended to its kind's list.
+/// `None` when the file already mentions `name`.
 fn with_placeholder_line(existing: &str, name: &str) -> Result<Option<String>> {
     if existing.contains(&format!("`{name}`")) {
         return Ok(None);
@@ -736,7 +798,8 @@ fn with_placeholder_line(existing: &str, name: &str) -> Result<Option<String>> {
     let entry = format!("- `{name}`: TODO: describe the occasion.");
     let mut lines: Vec<&str> = existing.lines().collect();
     let start = match lines.iter().position(|line| line.trim_end() == heading) {
-        // A missing list heading still fails loud in the diff: the heading and the entry both appear.
+        // A missing list heading still fails loud in the diff.
+        // The heading and the entry both appear.
         None => {
             let mut updated = existing.to_string();
             if !updated.ends_with('\n') {
@@ -859,7 +922,8 @@ pub fn utc_timestamp() -> String {
     )
 }
 
-/// Days since the Unix epoch to a civil `(year, month, day)`: Howard Hinnant's `civil_from_days`, which is exact for the whole proleptic Gregorian range.
+/// Days since the Unix epoch to a civil `(year, month, day)`.
+/// This is Howard Hinnant's `civil_from_days`, exact for the whole proleptic Gregorian range.
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let shifted = days + 719_468;
     let era = if shifted >= 0 {

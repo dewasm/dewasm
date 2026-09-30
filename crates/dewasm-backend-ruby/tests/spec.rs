@@ -1,4 +1,8 @@
-//! Ruby side of the shared spec harness: converts modules with the Ruby backend, phrases assertions as Ruby (`check`/`check_trap`/ `check_exhaust` helpers, bit-exact float comparison via `Rt.f32_bits`/ `Rt.f64_bits`), and runs the script with the `ruby` on PATH.
+//! Ruby side of the shared spec harness.
+//! It converts modules with the Ruby backend and phrases assertions as Ruby.
+//! The helpers are `check`/`check_trap`/`check_exhaust`.
+//! Float comparison is bit-exact via `Rt.f32_bits`/`Rt.f64_bits`.
+//! It runs the script with the `ruby` on PATH.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use std::collections::BTreeSet;
@@ -12,12 +16,27 @@ use dewasm_test_helper::BackendUnderTest;
 use wast::core::{NanPattern, WastArgCore, WastRetCore};
 use wast::{WastArg, WastRet};
 
-/// Known assertion-level failures with their attribution; the file still runs so regressions in the passing assertions are caught.
+/// Known assertion-level failures with their attribution.
+/// The file still runs, so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind* (func/global/table/memory/tag) but not the finer-grained wasm type: a function's param/result types, a global's mutability, a tag's parameter types, or a table/memory's min/max limits against the import site's declared bounds.
-///   Every `assert_unlinkable` case testing one of those (not a kind mismatch, which is caught) stays a known gap.
-///   imports.wast contributes 59 of them: its fixture module exports tags, so it converts only now that tags are represented, and every type-mismatch check downstream of it became reachable at once (28 before).
-/// - `linking` (module `linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature (multi-memory) inside a module that also happens to use `register`; that module never converts, so a later assertion against the module it would have written into observes stale state.
+/// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind*.
+///   The kinds are func/global/table/memory/tag.
+///   It does not validate the finer-grained wasm type:
+///   - a function's param/result types;
+///   - a global's mutability;
+///   - a tag's parameter types;
+///   - a table/memory's min/max limits against the import site's declared bounds.
+///
+///   Every `assert_unlinkable` case testing one of those stays a known gap.
+///   A kind mismatch is not among them, since it is caught.
+///   imports.wast contributes 59 of them: its fixture module exports tags.
+///   So it converts only now that tags are represented.
+///   Every type-mismatch check downstream of it became reachable at once (28 before).
+/// - `linking` (module `linking0`/`load1`).
+///   It is downstream of an *unrelated* declared-unsupported feature.
+///   That feature is multi-memory, inside a module that also happens to use `register`.
+///   That module never converts.
+///   So a later assertion against the module it would have written into observes stale state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
@@ -57,7 +76,8 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable's rescue clause references Rt::LinkError even when the converted modules themselves don't.
+            // check_unlinkable's rescue clause references Rt::LinkError.
+            // It does so even when the converted modules themselves don't.
             "rt/link_error",
             // Same for check_exception and Rt::WasmException.
             "rt/wasm_exception",
@@ -65,7 +85,8 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the $spectest fixture (PREAMBLE below), not necessarily by the converted module itself.
+            // Referenced by the $spectest fixture (PREAMBLE below).
+            // It is not necessarily referenced by the converted module itself.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -226,7 +247,8 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     }
 }
 
-/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name: each instance doubles as an import provider (`Gen::body`'s generated `import(name)` method).
+/// `$spectest`, plus any currently-`register`ed instances merged in under their registered name.
+/// Each instance doubles as an import provider (`Gen::body`'s generated `import(name)` method).
 fn imports_expr(registered: &[(String, String)]) -> String {
     if registered.is_empty() {
         return "$spectest".to_string();
@@ -301,7 +323,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),
-        // A specific function's identity: not expressible without an export map; no top-level testsuite file uses it.
+        // A specific function's identity: not expressible without an export map.
+        // No top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(
             WastRetCore::RefAny

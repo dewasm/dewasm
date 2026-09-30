@@ -1,4 +1,6 @@
-//! Python side of the whole-cache convert suite: converts every cached real-world app with the Python backend and requires the conversion to complete with non-empty source, without running it.
+//! Python side of the whole-cache convert suite.
+//! It converts every cached real-world app with the Python backend, without running it.
+//! The conversion must complete with non-empty source.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend_python::PythonBackend;

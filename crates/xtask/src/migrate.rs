@@ -1,7 +1,11 @@
-//! `cargo xtask migrate-records`: upgrade every record under `records/` to its kind's current schema, in place.
+//! `cargo xtask migrate-records`: upgrade every record under `records/` in place.
+//! Each record moves to its kind's current schema.
 //!
 //! All cross-version knowledge lives here.
-//! Every reader (`render-speed`, `render-size`, and any future record-consuming command) supports only the current schema and names this command when it meets an older record, so compatibility never spreads across readers.
+//! Every reader supports only the current schema.
+//! Readers are `render-speed`, `render-size`, and any future record-consuming command.
+//! A reader names this command when it meets an older record.
+//! So compatibility never spreads across readers.
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
@@ -57,7 +61,8 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// The v1 speed record: identical to the current one except that a skipped cell carried its class inside the reason string.
+/// The v1 speed record.
+/// It is identical to the current one except that a skipped cell carried its class in the reason.
 mod v1 {
     use serde::Deserialize;
 
@@ -119,7 +124,10 @@ fn migrate_speed_v1(text: &str) -> Result<bench::report::Report> {
 }
 
 /// A v1 skipped reason's class, and the reason with the class boilerplate stripped.
-/// One legacy reason states a cost gap without the "on cost" phrasing (bash on the SQL cases, "do not finish in a practical time"), so it is matched on that content; a reason with no exclusion prefix is a host setup gap, kept verbatim.
+/// One legacy reason states a cost gap without the "on cost" phrasing.
+/// That is bash on the SQL cases: "do not finish in a practical time".
+/// It is matched on that content.
+/// A reason with no exclusion prefix is a host setup gap, kept verbatim.
 fn classify_v1_reason(reason: &str) -> (SkipKind, String) {
     if let Some(rest) = reason.strip_prefix("excluded on cost, not capability: ") {
         (SkipKind::Cost, rest.to_string())

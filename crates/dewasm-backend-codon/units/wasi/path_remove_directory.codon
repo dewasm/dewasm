@@ -6,7 +6,8 @@ def wasi_path_remove_directory(self, dirfd: UInt[32], path_ptr: UInt[32], path_l
     host, err = self.resolve_path(int(dirfd), rel, False)
     if err != 0:
         return UInt[32](err)
-    # rmdir through a trailing slash on an existing directory is EINVAL per wasmtime; other shapes come from the host call.
+    # rmdir through a trailing slash on an existing directory is EINVAL per wasmtime.
+    # Other shapes come from the host call.
     if host.endswith("/") and Rt.isdir(host[:len(host) - 1]):
         return UInt[32](self.ERRNO_INVAL)
     if rmdir(host.c_str()) != 0:

@@ -13,7 +13,8 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
   follow = dirflags & 0x1 != 0 # lookupflags::SYMLINK_FOLLOW
   host_path, err = resolve_path(dirfd, rel, follow_last: follow)
   return err if err
-  # This unit's branches decide the slash shapes, so strip the preserved slash (issue #42): stat on "file/" fails ENOTDIR and misreads probes.
+  # This unit's branches decide the slash shapes, so strip the preserved slash (issue #42).
+  # stat on "file/" fails ENOTDIR and misreads probes.
   trailing = host_path.end_with?("/")
   host_path = host_path.delete_suffix("/")
   # Without SYMLINK_FOLLOW, a symlink at the final component is an error
@@ -39,7 +40,9 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
     # POSIX O_DIRECTORY distinguishes them (ENOENT vs ENOTDIR).
     return ERRNO_NOENT if wants_dir && !exists
     return ERRNO_NOTDIR if wants_dir && !File.directory?(host_path)
-    # Opening a directory read/write is EISDIR; only reject when the guest explicitly asked for a directory (a bare open of a dir path just drops the write right below).
+    # Opening a directory read/write is EISDIR.
+    # Only reject when the guest explicitly asked for a directory.
+    # A bare open of a dir path just drops the write right below.
     return ERRNO_ISDIR if wants_dir && (base & RIGHT_FD_WRITE != 0)
     @fds[@next_fd] = WasiDir.new(host_path, nil, nil)
     @fd_meta[@next_fd] = [
@@ -65,7 +68,8 @@ def wasi_path_open(dirfd, dirflags, path_ptr, path_len, oflags, base, inheriting
     io = File.open(host_path, mode, 0o644)
     io.binmode
     @fds[@next_fd] = io
-    # APPEND is honored by fd_write (seek-to-end) rather than O_APPEND, so fd_fdstat_set_flags can toggle it; store the whole fdflags word.
+    # APPEND is honored by fd_write (seek-to-end) rather than O_APPEND.
+    # So fd_fdstat_set_flags can toggle it; store the whole fdflags word.
     @fd_meta[@next_fd] = [granted, inheriting & parent_inheriting & FILE_BASE_RIGHTS, fdflags & 0x1f, nil]
   end
   @memory.iws(opened_fd_ptr, @next_fd)

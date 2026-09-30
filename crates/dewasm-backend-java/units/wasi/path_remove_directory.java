@@ -9,7 +9,8 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
-    // A missing target is ENOENT before any shape check (Files.isDirectory is false for "missing" and "not a directory" alike).
+    // A missing target is ENOENT before any shape check.
+    // Files.isDirectory is false for "missing" and "not a directory" alike.
     if (!java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOENT;
     }
