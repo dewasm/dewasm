@@ -5,7 +5,8 @@ Gosu is the SDL2-backed 2D game library for Ruby.
 The parent [`../`](../) frontend draws the same game into a terminal; this one takes a real window.
 
 Both frontends share one generated library.
-`../build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`../build.sh` fetches `jacobenget/doom.wasm` into the shared apps cache.
+It checks the file against a fixed checksum.
 It converts the module to Ruby with dewasm, into `../doom_gen.rb`.
 That file is ~11MB, ignored by Git, and regenerated on every build.
 `main.rb` implements the module's ten host imports.
@@ -15,7 +16,7 @@ They cover console logging, save-game I/O, the game clock, and frame delivery.
 ## Requirements
 
 `run.sh` installs the `gosu` gem with Bundler into this directory's `vendor/bundle`, ignored by Git.
-`Gemfile.lock` fixes the version.
+`Gemfile.lock` records the exact version.
 Nothing is installed globally.
 The parent terminal frontend still uses the standard library only.
 

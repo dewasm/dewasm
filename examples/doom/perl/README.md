@@ -3,7 +3,7 @@
 An interactive frontend for the DOOM shareware episode that renders straight into the terminal.
 It needs no window and no GPU.
 See `../go` and `../java` for the frontends that draw pixels in a window.
-`build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`build.sh` fetches `jacobenget/doom.wasm`, checked against a fixed checksum, into the shared apps cache.
 It converts the module to Perl with dewasm, into `doom_gen.pl`.
 That file is ~12MB, ignored by Git, and regenerated on every build.
 `main.pl` implements the module's ten host imports.
@@ -33,7 +33,7 @@ DOOM's renderer is all integer math.
 So the usual Perl-backend cost center (float operations as `sub` calls) barely applies.
 What's left is that plain Perl has no JIT.
 Every generated function call also pays the backend's recursion-depth accounting.
-This is not a playable game: it shows a new frame every ~1.4 seconds.
+This is not a playable game: it is a slideshow with an aiming mark.
 
 It's still worth running, for the same reason the Python frontend is.
 The same unmodified wasm binary plays smoothly through Go and Java.
@@ -53,7 +53,7 @@ Only cells that changed since the previous frame are redrawn.
 An SGR code is skipped whenever a cell's color matches the previous cell's.
 At this tick rate the diffing is far from necessary.
 But it's the reference pattern shared with the Ruby/Python/Bash frontends.
-It also keeps a slow link (e.g. SSH) usable.
+It also keeps a slow link (for example, SSH) usable.
 
 ## Controls
 

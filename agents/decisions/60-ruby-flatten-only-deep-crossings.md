@@ -34,7 +34,7 @@ It puts both measured workloads on the side each prefers:
 - `sqlite3-shell` reaches 278 and was 2.08× faster flattened (decision 58's original result).
   It still has 22 flattened functions after this change.
 
-Mechanically, `FrameSets` now records one frame *path*, ends included, per branch to an outer frame.
+Mechanically, `FrameSets` now records one frame *path*, ends included, per outward branch.
 Frames are dissolved until two closure rules together reach a fixed point:
 
 - A branch is all-or-nothing.
@@ -65,7 +65,7 @@ Relay and dispatch can both appear in one function.
 - Positive: NES 11.2 → 13.0 t/s (+16%, Alter Ego).
   The gain drops on ROMs whose dots cost more memory traffic, since the dispatch share is smaller.
   The specification harness, DOOM and NES snapshots, and SQLite's flattening are all unchanged.
-- Negative: `DEEP_CROSSING` is a fixed judgement inside a measured band, not a law.
+- Negative: `DEEP_CROSSING` is a constant chosen by judgement inside a measured band, not a law.
   A workload whose hot loop sits under a ≥16-deep crossing would still dissolve it.
   The rejected nested form is the way out.
 - Carry-over: the tests on the shape of generated code check both sides of the threshold.

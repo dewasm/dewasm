@@ -61,7 +61,7 @@ Go adds two problems they never face:
   That is an intended break with Go's PascalCase convention.
   So a unit identifier maps to its reference without case conversion.
   The units lint then stays a direct name match.
-  Correctness and tools come before Go's usual naming ([decision 1](1-ir-design.md)).
+  Correctness and tools come before Go's usual style ([decision 1](1-ir-design.md)).
   All bundler scope wrappers are empty.
   Go methods and types are package-level whatever `struct` they belong to.
   So the bundle is a flat declaration list.
@@ -82,7 +82,7 @@ Go adds two problems they never face:
   It is either a name-to-value `map[string]any` or an `ImportProvider` (`WasmImport(name string) any`).
   An `ImportProvider` stands in for the module.
   It is optionally also an `ImportAttacher` (`Attach(instance any)`), called once the instance is built.
-  That is the Go spelling of Ruby's `attach`, which any object may define.
+  That is the Go spelling of Ruby's duck-typed `attach`.
   It is also the only way a provider that is a `struct` reaches the instance's memory.
   Otherwise the embedder would have to set up a back-reference.
   The bundled WASI is built on first *fallback*, not in the constructor and not on first call.
@@ -139,7 +139,7 @@ Go adds two problems they never face:
   Each does three things, for a cost of 16 to 18:
   - it checks the address against a length mirrored into a field;
   - it reads through the mirrored base pointer once in host byte order;
-  - it raises the trap as a value built in advance.
+  - it raises the trap as a prebuilt value.
 
   A unit that calls another unit costs 24 to 27.
   So the sign extensions, the i64 narrow forms, and the float reinterpretations are casts.
@@ -166,7 +166,7 @@ Go-specific:
 
 - The file descriptor table is `map[uint32]any` holding an `*os.File` or a `*wasiDir`.
   So every system call that takes a file descriptor asserts the type.
-  Special cases for the standard streams key on pointer identity with `os.Stdin`/`Stdout`/`Stderr`.
+  Stdio special cases key on pointer identity with `os.Stdin`/`Stdout`/`Stderr`.
   `fd_datasync` falls back to a full `Sync`, since Go exposes no portable `fdatasync`.
 - Preopens are the constructor's fourth parameter, since Go has no keyword arguments.
   File descriptors are assigned in sorted key order, so map iteration order does not change results.
@@ -238,7 +238,7 @@ Go-specific:
 - `cowsay` output is identical to the Wasmtime snapshot.
   Other cases match the same snapshots the Ruby/Python cases use.
   They are the WASI `Fs` suite, `gzip_e2e!`, and the file system app cases.
-  `gzip_e2e!` checks byte-level standard input/output through compiled output.
+  `gzip_e2e!` checks byte-level stdio through compiled output.
   Native integers and floats keep the generated arithmetic smaller than the interpreted backends'.
   They keep the runtime smaller too.
   The cost is long source with casts everywhere (decision 1), always importing `fmt` in library mode.

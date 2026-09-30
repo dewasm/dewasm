@@ -17,7 +17,7 @@ Implemented in:
 ## Context
 
 Reference types is the first post-1.0 proposal to land.
-It is the opening move of the wasm 2.0+ / component-model plan.
+It is the opening move of the wasm 2.0+ / component-model roadmap.
 It is also the first to put non-numeric values on the wasm stack.
 `funcref` and `externref` flow through locals, block results, `select`, and globals.
 They also flow through the new table instructions.

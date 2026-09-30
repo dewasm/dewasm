@@ -14,7 +14,7 @@ Element access then costs O(distance from the previous access).
 Measured with 4M elements set:
 - ~100k operations/sec in order;
 - ~767 operations/sec random;
-- ~180/sec for the far-apart, back-and-forth pattern a real heap produces.
+- ~180/sec for the alternating far-apart pattern a real heap produces.
 
 Specification testsuite modules never showed this: their memories are small and access is local.
 A module of several MB (DOOM, SQLite) spends ~85% of its samples in two Bash functions.
@@ -37,9 +37,9 @@ Consequences of the representation, fixed here:
   Inside `(( ))`, `__m[$k]` with `$k` already expanded stays on the fast path.
 - Keys are canonical automatically because they all come from `$(( ))`.
   The invariant is stated in `runtime/bash/units/mem/check.sh`.
-- Reads of unset elements still default to 0 (no `set -u` anywhere in the backend or harness).
+- Sparse reads still default to 0 (no `set -u` anywhere in the backend or harness).
 - Data segments and tables **stay indexed**.
-  Their elements sit next to each other, and (for segments) they are staging data that never changes.
+  Their elements sit next to each other, and (for segments) they are immutable staging data.
   There the linked list with cursor is optimal.
 - The emitter declares memory with `declare -gA <p>mem=()`.
   This both forces the associative kind and empties a re-instantiated prefix.
@@ -51,11 +51,11 @@ Consequences of the representation, fixed here:
   Bounds the list walk to a page but stays O(distance) within it.
   It also adds a nameref dispatch per access; the hash is both faster and simpler.
 - **Word-packed cells (8 bytes per element).**
-  Up to another ~4-8x on traffic at an 8-byte boundary.
-  But every sub-word access, or one off that boundary, becomes a two-cell splice.
-  Several paths operate on bytes: softfloat bit paths, byte-wise WASI standard input and output.
+  Up to another ~4-8x on aligned traffic.
+  But every unaligned or sub-word access becomes a two-cell splice.
+  Several paths operate on bytes: softfloat bit paths, byte-wise WASI stdio.
   Data-segment loading is a third.
-  The byte-wise WASI standard input and output is [decision 12](12-bash-wasi.md)'s.
+  The byte-wise WASI stdio is [decision 12](12-bash-wasi.md)'s.
   Left as a possible later decision on top of this one.
   The complexity is not needed to make real modules run.
 - **Inline the bounds check / load-store bodies into generated code.**

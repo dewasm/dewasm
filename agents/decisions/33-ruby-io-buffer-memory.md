@@ -96,7 +96,7 @@ That is the version available in this environment.
   `IO::Buffer` does raise `ArgumentError` on out-of-range access.
   That could in principle replace the explicit `check`.
   It was rejected for two reasons.
-  First, the specification harness fixes an exact trap *message*, `"out of bounds memory access"`.
+  First, the specification harness requires an exact trap *message*, `"out of bounds memory access"`.
   `ArgumentError`'s wording does not produce it.
   Second, relying on the accessor's own bounds behavior would couple correctness to it.
   Correctness would then depend on an experimental API's error text.

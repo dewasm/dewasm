@@ -41,7 +41,7 @@ This file holds what a user of the numbers never needs and whoever takes them al
   `app/cowsay` on `dewasm-jruby` read 6.15 s once and 3.7 s on each re-measurement.
   The first figure was therefore dropped.
 - `runs_per_sample` of 1 on a fast cell is a hint to check, not a verdict.
-  The harness groups runs until a sample reaches the target compute time.
+  The harness batches runs until a sample reaches the target compute time.
   A calibration against a cold artifact can then settle on 1.
   That leaves a whole process start in the figure.
   `dewasm-go` read 10.6 ms that way on 2026-09-17, and 3.0 ms at 64 runs per sample once warm.

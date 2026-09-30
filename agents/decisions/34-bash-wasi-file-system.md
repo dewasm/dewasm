@@ -17,14 +17,14 @@ The ground is namespace mutation, plus the capability-completeness clause for `r
 `fd_advise`/`fd_allocate`/`fd_renumber` and the rights model per descriptor are implemented in pure Bash.
 Four declared gaps remain:
 
-- file times (`touch` fails the D2 criterion);
+- timestamps (`touch` fails the D2 criterion);
 - `d_ino` and `dev`/`ino` (D6, no `stat`);
 - the D1 read-back across descriptors;
 - following a *file* symbolic link (D3, ELOOP).
 
 ## Context
 
-[Decision 12](12-bash-wasi.md) built the Bash WASI surface (standard streams, arguments, environment, clock, random).
+[Decision 12](12-bash-wasi.md) built the Bash WASI surface (stdio, arguments, environment, clock, random).
 It left every `path_*` call, and each `fd_*` call only a file system needs, out of scope as ENOSYS.
 That left a 15-function gap versus Ruby.
 [Decision 14](14-ruby-wasi-file-system.md) answered those questions for Ruby.
@@ -169,7 +169,7 @@ They are the file system equivalent of decision 12's clock fallback.
   A module importing the four mutation system calls now also depends on `mkdir`/`rmdir`/`rm`/`mv`.
   The D1/D3/D6 limits are standing deviations, not bugs.
   They are the difference between two descriptors on one file, non-atomic flush, and TOCTOU.
-  They also include ELOOP on a file symbolic link and zeroed file times and `dev`/`ino`.
+  They also include ELOOP on a file symbolic link and zeroed timestamps and `dev`/`ino`.
 - After the decision 40 revision above, two WASI p1 functions are still ENOSYS on Bash.
-  They are the file time setters `fd_filestat_set_times` and `path_filestat_set_times` (`docs/support.md`).
-  The reason is that `touch` fails D2's criterion: setting a file time is not namespace mutation.
+  They are the timestamp setters `fd_filestat_set_times` and `path_filestat_set_times` (`docs/support.md`).
+  The reason is that `touch` fails D2's criterion: setting a timestamp is not namespace mutation.

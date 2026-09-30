@@ -2,7 +2,7 @@
 
 An interactive DOOM frontend that renders into the terminal instead of a window.
 See `../go` and `../java` for the frontends that draw pixels in a window.
-`build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`build.sh` fetches `jacobenget/doom.wasm`, checked against a fixed checksum, into the shared apps cache.
 It converts the module to Ruby with dewasm, into `doom_gen.rb`.
 That file is ~11MB, ignored by Git, and regenerated on every build.
 `main.rb` implements the module's ten host imports.
@@ -37,7 +37,7 @@ Each cell is `▀` colored via 24-bit color SGR.
 `\e[38;2;R;G;Bm` sets the text color (top pixel), and `\e[48;2;R;G;Bm` the background (bottom pixel).
 Target width is `min(terminal columns, 320)`.
 Height in cells follows from that at DOOM's aspect ratio, minus one row for the status line.
-At a typical 160-column terminal that's 160x100 logical pixels, i.e. 160x50 character cells.
+At a typical 160-column terminal that's 160x100 logical pixels, that is, 160x50 character cells.
 
 Only changed cells are redrawn.
 DOOM's software renderer is paletted (VGA Mode 13h, ≤256 colors).

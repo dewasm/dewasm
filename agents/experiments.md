@@ -153,12 +153,12 @@ A flat dispatch wrapped in a `lambda` loses in every JIT configuration.
 
 - **Tried**: emitting a flat-dispatch function's `case state` inside `__step = lambda do ... end`.
   The states then run in a closure called repeatedly.
-  The first variant called it once per transition, and the second ran 1024 transitions per call.
+  The first variant called it once per transition, and the second batched 1024 transitions per call.
   YJIT compiles that closure even though the outer function is entered once.
   The measurement used sqlite3-shell's interpreter function, which has 453 states.
   That function takes 34.6% self time in the `query` workload profile.
 - **Verdict**: rejected; per-transition calls measured 83 M JIT-boundary crossings.
-  They measured 9.51 s to 10.21 s under `--yjit`, and the second variant only recovered to 9.96 s.
+  They measured 9.51 s to 10.21 s under `--yjit`, and batching only recovered to 9.96 s.
   The interpreter measured 19.63 s to 20.67 s.
   It loses because two costs survive.
   One is closure-environment variable access.
@@ -167,7 +167,7 @@ A flat dispatch wrapped in a `lambda` loses in every JIT configuration.
   `optcarrot`'s generated core shows the same large-compiled-method loss against its small-method core.
 - **Invalidated when**: YJIT gains on-stack replacement, which makes the whole approach unnecessary.
   Or compiled closure-environment access stops costing more than the interpreter saves.
-- **Details**: measurements in this experiment were taken before any issue existed.
+- **Details**: measurements in this experiment were taken before there was an issue for them.
   The step emission itself was removed again, and only this entry records it.
 
 ## `jit-coverage-per-case` (2026-08-21)
@@ -247,7 +247,7 @@ DOOM's hot loop is dominated by rehoistable loads and a 32-bit store split into 
   They differ because the frontend feeds DOOM a real monotonic clock.
   So correctness comparisons belong at the static 60-tick frame or the deterministic snapshot harness.
 - **Details**: measured in-session on the extracted artifact; no issue yet.
-  The measurements used Ruby 4.0.4 with `--yjit`, the 300-tick smoke run, and runs taken in turn.
+  The measurements used Ruby 4.0.4 with `--yjit`, the 300-tick smoke run, and alternating runs.
 
 ## `call-crossing-licm-ceiling` (2026-08-21)
 

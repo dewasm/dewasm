@@ -34,11 +34,11 @@ Each backend crate takes it as a development dependency.
   `BackendUnderTest` is `name` / `backend` / `run(source, args, stdin)`.
   `run` defaults to "write a temp file, exec an interpreter", and compiled targets override it.
   `SpecBackend` adds the script-phrasing surface, the per-file failure list, and the selected-file list.
-  Criterion: **a backend must be able to run app/e2e suites before it phrases specification assertions**.
+  Criterion: **app/e2e suites must run on a backend before it can phrase specification assertions**.
   That is the "cowsay first" bring-up path of [decision 24](24-01-scope-reset.md).
 - **Case content is shared; glue is not.**
   Fixtures, expectations, and run/assert logic are `pub const` cases plus runners in the helper crate.
-  WASI cases are grouped by feature: standard I/O, arguments/environment, clock/random, file system.
+  WASI cases are grouped by feature: stdio, arguments/environment, clock/random, file system.
   They form the project's own WASI p1 conformance suite.
   That matters because WASI has no official one.
   A backend supplies per-language glue plus the hooks the helper cannot write for it.

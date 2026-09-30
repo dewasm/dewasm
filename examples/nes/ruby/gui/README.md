@@ -11,7 +11,7 @@ Bundler installs the `gosu` gem for this directory only.
 ## Requirements
 
 `run.sh` installs the `gosu` gem with Bundler into this directory's `vendor/bundle`, ignored by Git.
-`Gemfile.lock` fixes the version.
+`Gemfile.lock` records the exact version.
 Nothing is installed globally.
 The parent terminal frontend still uses the standard library only.
 The gem builds a native extension against SDL2.

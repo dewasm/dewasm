@@ -77,13 +77,13 @@ It checks the kind, a function's structural signature, and a global's value type
 
 Full wasm core 1.0 plus the universal baseline.
 The baseline is non-function imports, multiple tables, and table bulk operations.
-**Full WASI Preview 1 including the file system**, built on `libc` through Codon's `from C import`.
+**Full WASI Preview 1 including the file system**, built on `libc` by calling C from Codon.
 The final exception-handling proposal is supported.
 A thrown wasm exception is a native exception carrying its tag.
 `catch_all` cannot observe traps.
 Tail calls are supported through a typed trampoline.
 A pending call carries its arguments in per-slot fields.
-Its target is an entry object built in advance.
+Its target is a prebuilt entry object.
 So a chain of tail calls runs in one frame with nothing boxed.
 The official support table: [`docs/support.md`](../support.md).
 

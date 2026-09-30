@@ -74,11 +74,11 @@ The specification harness, which never sets the flag, still binds (decision 3).
   Both stay byte-identical to a non-flag build.
 
 The two folded-code details both flow from decision 32's expression folding.
-A folded function often collapses to a single `Return` at the end of the body.
+A folded function often collapses to a single fallthrough `Return`.
 That `Return` is emitted off the function `end` operator.
 That operator's offset sits on a line-table gap.
 So the tracker holds the *last known* position across gaps rather than clearing it.
-The path for that end-of-body `Return` does not route through `emit`, so it adds its marker explicitly.
+The fallthrough `Return` path does not route through `emit`, so it adds its marker explicitly.
 Without both, a whole small function would carry no marker.
 
 ## Rejected alternatives
@@ -122,7 +122,7 @@ That is the honest picture of a `-g -O1` binary.
 Limits: the address base is calibrated against Clang/LLD output (`zig cc`).
 A toolchain emitting a different code-address convention would need a new `address_base` value.
 That is a one-line change, guarded by the fixture test.
-Most *released* wasm ships stripped of DWARF, e.g. the cached `qjs.wasm`, `ruby.wasm`.
+Most *released* wasm ships stripped of DWARF, for example the cached `qjs.wasm`, `ruby.wasm`.
 So `--dwarf-line` yields no markers there.
 The feature pays off for locally built, debug modules.
 Column information is emitted for Go where present; Ruby/Python drop it.

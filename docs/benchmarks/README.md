@@ -26,7 +26,7 @@ Useful options:
 | Command | Effect |
 | --- | --- |
 | `cargo xtask record-speed --list` | Show the matrix and each runner's availability without running anything. |
-| `cargo xtask record-speed <filter>` | Only pairs whose workload or runner label contains the filter text, e.g. `dewasm-ruby` or `app/`. A record from a filtered run covers only those pairs, so publish from a full run. |
+| `cargo xtask record-speed <filter>` | Only pairs whose workload or runner label contains the filter text, for example `dewasm-ruby` or `app/`. A record from a filtered run covers only those pairs, so publish from a full run. |
 | `--reps N`, `--target-ms MS`, `--timeout SECS` | Timed runs per measurement (default 3), calibration target per sample (default 300), per-process time limit (default 900). |
 | `cargo xtask render-speed <record>` | Render an older record instead of the newest one; a `-size.json` path is refused. |
 | `cargo xtask migrate-records` | Upgrade every stored record to its kind's current schema, in place; the render commands read only the current schema. |

@@ -50,7 +50,7 @@ It need not restate set-up instructions inline.
 The alternative was adding it to the list of tools now required.
 Their historical role for `wasmtime` was purely as a comparison oracle.
 They ran the same wasm binary both ways and diffed standard output and exit code.
-For a fixed binary and fixed input, that comparison's *result* doesn't change from run to run.
+For the same binary and the same input, that comparison's *result* doesn't change from run to run.
 So it can be captured once and checked in as `examples/apps/snapshots/<case>.stdout`.
 An actual `wasmtime run` generates the file.
 `docs/testing.md` documents that for whoever regenerates one after moving an app to a new version.

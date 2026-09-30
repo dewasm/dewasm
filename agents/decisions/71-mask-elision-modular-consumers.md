@@ -12,7 +12,7 @@ The limit judgement and the measurements are in the consequences below.
 - constant AND folding;
 - the `Reducing` context;
 - identity-mask elision;
-- the constant-equality rewrite where the interval fixes one value.
+- the constant-equality rewrite where the interval holds exactly one candidate.
 
 This is stage 1 of issue #164: elision within one expression tree only.
 [Decision 73](73-mask-elision-variable-dataflow.md) extends it across statements.
@@ -117,7 +117,7 @@ So the guard failing at a node never forces masks back into the tree below it.
 
 ## Rejected alternatives
 
-- **Keep every mask (the state before this decision).**
+- **Keep every mask (the current state).**
   Simplest, but the inner masks a modular consumer restores are pure overhead at every stage.
   The stages are file size, parse, ISeq, runtime.
 - **Elide without the bound guard.**

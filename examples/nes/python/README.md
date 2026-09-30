@@ -37,7 +37,7 @@ Set `PYTHON` to pick an interpreter explicitly (`PYTHON=python3 ./run.sh --smoke
 Both ran headless (`--smoke`) on an Apple Silicon Mac.
 The NES frame rate is ~60Hz.
 `run.sh` prefers PyPy, but even there this is not playable.
-Movement looks like a series of still pictures.
+Movement looks like a slideshow.
 The [DOOM Python frontend](../../doom/python/) runs ~45 ticks/sec under PyPy, above DOOM's rate of 35Hz.
 Unlike it, this one stays well under its target rate on both interpreters.
 The tick always limits the speed, so the 60Hz pacing sleep never fires in practice.

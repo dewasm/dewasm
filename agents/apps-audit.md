@@ -27,29 +27,29 @@ The entry then records that evidence so the investigation is not repeated.
 
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
-| `cowsay.wasm` 0.2.0 (`cowsay` 3.03 in C) | our own release, fixed in `setup.sh` | none | ✅ in scope (shipping) |
-| `quickjs-ng` v0.15.1 | fixed in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
-| sqlite3 3.53.3 (three shapes) | fixed in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
-| CPython 3.14.6 | fixed in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
-| CRuby 3.4 (ruby.wasm 2.9.4) | fixed in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
+| `cowsay.wasm` 0.2.0 (`cowsay` 3.03 in C) | our own release, at a fixed version in `setup.sh` | none | ✅ in scope (shipping) |
+| `quickjs-ng` v0.15.1 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
+| sqlite3 3.53.3 (three shapes) | fixed version in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
+| CPython 3.14.6 | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
+| CRuby 3.4 (ruby.wasm 2.9.4) | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 packed with `wasi-vfs` | derived in-cache by `setup.sh`¹³ | none (audited 2026-08-04) | ✅ in scope (shipping, **executes on every backend**¹³) |
-| `mruby` 3.4.0 | `wasi-sdk` build of a fixed source release in `setup.sh` | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
+| `mruby` 3.4.0 | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
 | Pandoc | see below | **`simd`** | ⛔ deferred |
-| `zeroperl` (Perl 5.42) | [`6over3/zeroperl`](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` `npm` package, fixed in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on every backend**¹²) |
+| `zeroperl` (Perl 5.42) | [`6over3/zeroperl`](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` `npm` package at a fixed version in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on every backend**¹²) |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
-| `ripgrep` 14.1.1 | Cargo build of a fixed source release in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, file access on every backend⁶) |
-| `minigzip` (`zlib` 1.3.1) | `wasi-sdk` build of a fixed source release in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
-| `libpcap` 1.10.6 (BPF filter compiler) | `wasi-sdk` reactor build of a fixed source release in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
-| tree-sitter 0.26.11 + `tree-sitter-json` 0.24.8 | `wasi-sdk` reactor build of a fixed source release in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
-| Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes `wasm-ld`, published builds broken) | ⛔ deferred |
+| `ripgrep` 14.1.1 | Cargo build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, file access on every backend⁶) |
+| `minigzip` (`zlib` 1.3.1) | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
+| `libpcap` 1.10.6 (BPF filter compiler) | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
+| tree-sitter 0.26.11 + `tree-sitter-json` 0.24.8 | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
+| Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes `wasm-ld`, prebuilts broken) | ⛔ deferred |
 | PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
-| `toywasm` 76.0.0 | fixed in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
-| wasm3 0.9.0 | official `wasm3-wasi.wasm` release asset, fixed in `setup.sh` | **tail calls** (accepted input¹⁶) | ✅ in scope (shipping, **executes on every backend**¹⁶) |
+| `toywasm` 76.0.0 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
+| wasm3 0.9.0 | official `wasm3-wasi.wasm` release asset at a fixed version in `setup.sh` | **tail calls** (accepted input¹⁶) | ✅ in scope (shipping, **executes on every backend**¹⁶) |
 
 
 ¹ **Reference-types encoding tolerance.**
 The `reference-types` target feature is enabled by default since LLVM 19.
-With it, LLVM-based toolchains (Clang/`wasi-sdk`, Zig, `rustc`) emit LEBs with more bytes than needed.
+With it, LLVM-based toolchains (Clang/`wasi-sdk`, Zig, `rustc`) emit overlong LEBs.
 These LEBs encode the type and table-index immediates of `call_indirect`.
 Such binaries use **no construct** from the reference-types proposal.
 Even so, they *validate* only with its feature bit.
@@ -105,13 +105,13 @@ The `wasmtime_test`-conditional `qjs_repl_interactive_snapshot` freshness test r
 
 Making Ruby and Python match required one fix to their `fd_read`.
 It used a buffered read that blocks until it has the full requested length or EOF.
-A terminal sends one line at a time and never EOF, so that read blocked forever.
+On a line-buffered terminal that never sends EOF, that read blocked forever.
 So `stdin` now uses a short read (`IO#readpartial` / `os.read`).
 That is the WASI semantics Wasmtime already follows.
 
 ⁴ **sqlite3 deepened.**
-The fixed source release yields **three** artifacts.
-The existing set of WASI file system calls covers the full life of a DB *file*.
+The source release of version 3.53.3 yields **three** artifacts.
+The existing set of WASI file system calls covers the life of a DB *file*.
 It also covers a guest→host callback.
 They need no new WASI unit.
 Every backend runs all three cases below on the same fixtures and snapshots.
@@ -176,7 +176,7 @@ So CPython's boot otherwise exhausts the 8 MB process stack and dies of SIGSEGV.
 The generated standalone entry point raises it already; a library-mode embedder has to do it itself.
 
 ⁶ **`ripgrep`.**
-`ripgrep` 14.1.1 built from the fixed source release.
+`ripgrep` built from the source release of version 14.1.1.
 The build uses `cargo build --release --target wasm32-wasip1`.
 It uses default features, which already exclude pcre2.
 So it needs no changes.
@@ -195,14 +195,14 @@ So its functions are partitioned across five nested `P{k}` classes, each with it
 The table is built in a nested `Elem` class, which also has its own pool.
 
 ⁷ **`minigzip` / `zlib` (`gzip` CLI).**
-`zlib` 1.3.1's `minigzip` built from the fixed source release.
+`minigzip` built from the source release of `zlib` 1.3.1.
 The build uses `wasi-sdk clang --target=wasm32-wasip1`.
 The build compiles the `zlib` translation units + `test/minigzip.c`.
 `-DZ_HAVE_UNISTD_H` makes the shipped `zconf.h` declare `lseek`.
 It is integer-only and tiny, with **binary** `stdin`/`stdout`.
-It is the byte-exact stress case for standard input and output, and it runs under **every** backend.
+It is the byte-exact stdio stress case, and it runs under **every** backend.
 The cases are `run_gzip_cases`, called through `gzip_e2e!` in each crate.
-Go and Java prove the binary standard I/O path exact through compiled output too.
+Go and Java prove the binary stdio path exact through compiled output too.
 There are two cases:
 
 - *compress*: `stdin` text → `.gz` on `stdout`, byte-identical to the `wasmtime` snapshot.
@@ -217,20 +217,20 @@ So these live in a dedicated `run_gzip_cases` that each backend calls.
 It uses the bytes-capable `run_bytes`/`run_command_bytes` helpers.
 
 ⁸ **`libpcap` (Track A).**
-`libpcap` 1.10.6 built from the fixed upstream release as a C-API library.
+`libpcap` built from the upstream release of version 1.10.6 as a C-API library.
 The build uses `wasi-sdk clang --target=wasm32-wasip1 -mexec-model=reactor`.
 It compiles only the platform-independent BPF-filter-compilation translation units.
 It has no capture backend.
 1.10.x no longer ships pre-generated `grammar.c`/`scanner.c`.
 So the parser is regenerated with Bison and Flex.
 Audit: baseline only after the `wasm-opt` pass¹¹, in scope.
-That pass re-encodes the `call_indirect` immediates to their short form.
+That pass re-encodes the overlong `call_indirect` immediates.
 Our own `examples/apps/src/pcap_binding.c` exports `compile_filter`, which runs `pcap_compile_nopcap`.
 It writes the resulting BPF program into guest memory.
 The layout is `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`.
 The C-API case is `pcap_compile` (`pcap_compile_e2e!`).
 It drives `compile_filter("tcp port 80", DLT_EN10MB, 65535)` on every backend.
-It checks the expected `tcp port 80` program (deterministic: BPF holds offsets and constants only).
+It checks the canonical `tcp port 80` program (deterministic: BPF holds offsets and constants only).
 Like the other reactor-library C-API cases it is `slow_test`-conditional.
 Bash drives it like the rest.
 A guest pointer is a decimal in the `R0` result global.
@@ -259,7 +259,7 @@ Each stub reports "not found".
 ¹⁰ **tree-sitter (Track A).**
 The tree-sitter incremental parsing runtime 0.26.11, as the one-file amalgamation `lib/src/lib.c`.
 It comes with the pre-generated `tree-sitter-json` 0.24.8 grammar (`src/parser.c`).
-Both are built from the fixed upstream releases as a C-API library.
+Both are built from upstream releases at fixed versions as a C-API library.
 The build uses `wasi-sdk clang -mexec-model=reactor`.
 Audit: baseline only after the `wasm-opt` pass¹¹, in scope.
 Unlike `libpcap`, the runtime needs no shim (no `setjmp`, no host lookups).
@@ -274,7 +274,7 @@ It checks this S-expression:
 (document (object (pair key: (string (string_content)) value: (array (number) (true) (null)))))
 ```
 
-The S-expression is deterministic: tree-sitter's node naming is fixed by the grammar version.
+The S-expression is deterministic: tree-sitter's node naming depends only on the grammar version.
 It is `slow_test`-conditional like the other reactor-library C-API cases, Bash included.
 Footnote 8 shows how the pointer handling reads in shell.
 
@@ -283,7 +283,7 @@ Every module `setup.sh` builds from source is run through `wasm-opt -O2` before 
 The pass uses baseline features only and no `--ctor-eval`.
 Those modules are the three sqlite3 shapes, `minigzip`, `libpcap`, tree-sitter, and `ripgrep`.
 The DWARF fixture is not among them, since it keeps its debug information.
-Besides making them smaller, `wasm-opt` re-encodes the `call_indirect` immediates to their short form.
+Besides making them smaller, `wasm-opt` re-encodes the overlong `call_indirect` immediates.
 The LLVM toolchain emits those immediates.
 So these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹.
 The fetched release artifacts (`qjs`, CPython, CRuby) still carry that bit.
@@ -298,14 +298,14 @@ Asyncify is a Binaryen transform built into the wasm.
 The `setjmp` implementation is a port of ruby.wasm's `rb_wasm_setjmp`.
 It lowers to ordinary baseline instructions.
 (2) The imported **`env.call_host_function`** is only called when the guest registers a host callback.
-The `zeroperl_eval` path never does that.
+The evaluation path never does that.
 So a stub that returns zero, as an import provider, satisfies the link with no host glue.
 (3) No **standard library preopen** is needed.
 The Perl core is embedded in the module as "SFS" data served from guest memory.
 The only preopen `zeroperl_init` requires is `/dev/null`, mapped guest→host `/dev/null`.
 Without it `zeroperl_init` returns 1.
 
-The published reactor exposes an embedding C API.
+The prebuilt reactor exposes an embedding C API.
 So it is driven exactly like the other reactor-library C-API cases (footnotes ⁸/¹⁰).
 The `zeroperl_eval` case (`zeroperl_eval_e2e!`) evaluates a regular expression + `printf` Perl program.
 It checks that program's `stdout`.
@@ -339,8 +339,8 @@ Its ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 `javac` then reports *too many constants*.
 
 ¹³ **CRuby packed with `wasi-vfs` (audited 2026-08-04).**
-This is the shape ruby.wasm intends for release.
-`setup.sh` packs the two CRuby artifacts it already fetched.
+This is the shape ruby.wasm intends for use.
+`setup.sh` packs the two CRuby artifacts whose versions it already fixes.
 It uses the `wasi-vfs` CLI at a fixed version.
 The artifacts are `cache/ruby.wasm` plus the `cache/ruby-lib/usr` standard library tree.
 The result is the self-contained `cache/ruby-packed.wasm`.
@@ -358,7 +358,7 @@ But the speed categories still vary by backend.
 On Python the constraint is host memory rather than the clock.
 
 ¹⁴ **`mruby` (audited 2026-08-14).**
-`mruby` 3.4.0 built from the fixed source release with `wasi-sdk` Clang for wasm32-wasip1.
+`mruby` built from the source tarball of version 3.4.0 with `wasi-sdk` Clang for wasm32-wasip1.
 `setjmp`/`longjmp` lowers onto the final exception-handling proposal (`-mllvm -wasm-enable-sjlj`).
 So this is the app that exercises `try_table`/`throw` end to end.
 Exception handling is accepted input lowered per backend.
@@ -414,7 +414,7 @@ It forwards the guest's WASI calls straight to the outer host.
 That is exactly the shape a converted interpreter needs.
 It is also the reason this app takes the guest module directly with no `--wasi` flag.
 Audit: baseline plus tail calls, and nothing else.
-It carries the reference-types bit for long-form `call_indirect` immediates but uses no construct.
+It carries the reference-types bit for overlong `call_indirect` immediates but uses no construct.
 
 Every backend lowers the proposal, so every backend runs the case.
 The old per-opcode stack growth is gone with the source build that caused it.
@@ -453,7 +453,7 @@ The speed benchmark suite measures that comparison.
   The GHC 9.12 wasm backend output is otherwise baseline-shaped.
   So SIMD support alone would unblock it.
 - Revisit when/if SIMD enters scope.
-  The binary is otherwise a pure wasip1 converter over standard input and output.
+  The binary is otherwise a pure wasip1 stdio converter.
   It would make a strong example.
 
 ## Deferred: LightningCSS
@@ -464,7 +464,7 @@ The speed benchmark suite measures that comparison.
   The published artifact is therefore unverified against an upstream release.
 - Audit: **not yet run**, deferred pending audit.
   The artifact built from the fork is not trusted enough to promote as-is.
-- Revisit with a reproducible from-source recipe in `setup.sh`, not the fork's published wasm.
+- Revisit with a reproducible from-source recipe at a fixed version, not the fork's prebuilt wasm.
   Then run the feature-audit on the resulting binary before promoting it in scope.
 
 ## Deferred: Lua
@@ -498,7 +498,7 @@ The speed benchmark suite measures that comparison.
 ## Deferred: PHP
 
 - Source: no maintained WASI build exists.
-  VMware WLR's is the only published one, `php/8.2.6+20230714`, three years out of date.
+  VMware WLR's is the only prebuilt one, `php/8.2.6+20230714`, three years out of date.
   Its own notes state it strips `setjmp`/`longjmp`.
   That breaks exceptions and the handling of errors that end the script.
   It also strips all networking and makes many file system and process system calls do nothing.
@@ -510,7 +510,7 @@ The speed benchmark suite measures that comparison.
 - Audit: **no artifact to audit, and no realistic build path.**
   PHP's Zend engine uses `zend_try`/`zend_catch` for essentially all error and exception control flow.
   These are built on `setjmp` and used everywhere, not optional the way Lua's `pcall` is.
-  The only published build strips exactly that machinery.
+  The only prebuilt strips exactly that machinery.
   A from-source build would be a multi-week port, not a build-flag fix like `mruby`'s¹⁴.
 - Revisit only if upstream `php-src` ships a maintained wasm32-wasi target.
   That target must have working exception handling.

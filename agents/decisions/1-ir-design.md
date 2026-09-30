@@ -22,7 +22,7 @@ Its constructs are `block` / `loop` / `if` / `br` / `br_table`; branches only ju
 - **Flatten the value stack into temps keyed by (depth, type)**, the wasm2c approach.
   It uses the type information tracked during translation.
   The same slot is one target-language variable.
-- **Store every pushed value into a temp immediately.**
+- **Materialize every pushed value into a temp immediately.**
   The criterion: *evaluation order and trap points must be provably identical to wasm's.*
   *The proof must not need any effect analysis.*
   A `drop` of a loaded value still traps on out-of-bounds; call/store ordering needs no reasoning.

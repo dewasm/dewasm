@@ -23,7 +23,7 @@ They list their inputs at runtime as named trials.
   It holds its `WASI_TESTSUITE_EXPECTED_FAILURES` list.
   It runs the `c` + `rust` + `assemblyscript` `wasm32-wasip1` trees.
   The Rust `wasm32-wasip3` tree is excluded, since the component model is out of scope.
-  Each trial converts the `.wasm` file the upstream testsuite provides, in `--mode standalone`.
+  Each trial converts the prebuilt `.wasm` of the upstream testsuite in `--mode standalone`.
   It executes the output through the standalone interface.
   The manifest beside each trial gives its `args`/`env`/`root`.
   They become guest `argv`, child environment, and a `--dir` preopen.

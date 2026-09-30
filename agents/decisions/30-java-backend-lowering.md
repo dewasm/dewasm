@@ -163,7 +163,7 @@ Only larger modules exercise the machinery.
   That left its function unsplit.
 - **Data segments are chunked Base64** (`Rt.data_from_b64`).
   A chunk is 32KB raw, to stay under the string limit.
-  Each is built in its own `initData{i}()`, so `<init>` never accumulates bytecode that fills data.
+  Each is materialized in its own `initData{i}()`, so `<init>` never accumulates bytecode that fills data.
   Hexadecimal text was rejected, as it doubles the constant size for no benefit.
   Honest finding: the predicted overflow of many MB does not occur for the listed binaries.
   `ripgrep`'s largest segment is about 36 chunks at roughly 8 bytes of bytecode each.
@@ -200,14 +200,14 @@ Only larger modules exercise the machinery.
   With partitioning off, the output is identical to the unpartitioned shape.
   So the specification suite and `qjs`/SQLite stay on their proven path.
   Only modules the size of `ripgrep` exercise the new one.
-  `rg_search_java`'s snapshot, matched exactly, proves it.
+  `rg_search_java`'s snapshot, matched exactly, checks it.
   Converting takes about 2 s, and `javac` about 10 s over 5 partition classes.
 
 ### WASI: where Java's standard library forced a different shape
 
 - **The file descriptor table** is a `Map<Integer, Object>`.
   A value is one of:
-  - an `InputStream`/`OutputStream` (standard input/output inherited from the parent process);
+  - an `InputStream`/`OutputStream` (inherited stdio);
   - a `Handle` (a guest-opened file over a seekable `FileChannel`);
   - a `Dir`.
 

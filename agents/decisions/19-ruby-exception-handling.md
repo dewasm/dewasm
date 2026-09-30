@@ -19,7 +19,7 @@ Implemented in:
 
 ## Context
 
-Wasm 3.0 exception handling (`try_table`/`throw`/`throw_ref`, tags, `exnref`) is the plan's third phase.
+Wasm 3.0 exception handling (`try_table`/`throw`/`throw_ref`, tags, `exnref`) is the third roadmap phase.
 The testsuite commit in use contains only the final `try_table` design.
 It has no legacy `try`/`catch`/`rethrow`/`delegate` anywhere.
 So full `Supported` was reachable without a `Partial` label.

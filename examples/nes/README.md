@@ -42,7 +42,7 @@ go/run.sh    # or: java/run.sh, ruby/run.sh, ruby/gui/run.sh, ...
 go/run.sh path/to/other.nes   # any ROM agnes's mappers cover
 ```
 
-`build.sh` fetches `agnes` and the Alter Ego ROM, both fixed by checksum.
+`build.sh` fetches `agnes` and the Alter Ego ROM, both checked against fixed checksums.
 It compiles `nes.wasm` with `clang` from `wasi-sdk` into the apps cache, which Git ignores.
 It does so via `../apps/scripts/nes.sh`.
 Each frontend also has a headless `-smoke`/`--smoke` mode.

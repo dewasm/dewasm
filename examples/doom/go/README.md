@@ -1,7 +1,7 @@
 # DOOM (Go, Ebitengine)
 
 An interactive frontend for the DOOM shareware episode, running as pure Go code.
-`build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`build.sh` fetches `jacobenget/doom.wasm`, checked against a fixed checksum, into the shared apps cache.
 It converts the module to Go with dewasm, into `doom/doom_gen.go`.
 That file is ~10MB, ignored by Git, and regenerated on every build.
 `build.sh` then links it against a small host program in `doom/host.go`.

@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-07-23.**
 Implemented in `examples/apps/setup.sh` and the `apps` cases of the `e2e` test.
-The script's fetches are fixed by version and sha256-verified.
+The script fetches at fixed versions and checks each file's sha256.
 They land in `examples/apps/cache/`, which Git ignores.
 The `apps` cases compare converted output against a snapshot reference.
 They live in `crates/dewasm-test-helper/src/apps.rs`.
@@ -38,7 +38,7 @@ Criterion: *distribution stays upstream's.*
 This criterion never named a specific registry.
 So per-app source diversity is a refinement, not a reversal.
 The `fetch_app` helper in `examples/apps/scripts/common.sh` supports both source kinds.
-Those kinds are a `tar` file with a path inside it, and a plain `.wasm` release asset.
+Those kinds are a tarball with an inner path, and a plain `.wasm` release asset.
 Not every upstream qualifies.
 sqlite.org's own "WebAssembly" file is an Emscripten bundle for the web or Node.js.
 `wasmtime run` cannot execute it, so SQLite stays on the Wasmer Registry build.
@@ -47,7 +47,7 @@ Per decision 15, the e2e test *fails* rather than skips when the cache is missin
 But reaching that state requires the one-time, explicit `setup.sh` step first.
 
 App selection is constrained by the declared WASI surface (`docs/support.md`).
-Originally that was standard input and output, arguments, environment, clock and random only.
+Originally that was stdio, arguments, environment, clock and random only.
 WASI file system support (decision 14) later widened this for Ruby.
 `wasi_unstable` (snapshot 0) is accepted as an alias of WASI Preview 1 for the implemented functions.
 The original Wasmer Registry QuickJS build (since replaced) needed it.
@@ -60,7 +60,7 @@ None of the current apps seek.
   Registry packages often lack license information.
 - **Building from crates.io sources at test time**: works for Rust apps.
   But it demands local toolchains (`wasi-sdk` for C apps like QuickJS) and long builds.
-  The registry serves exactly the built artifact that users would run (user's call).
+  The registry serves exactly the prebuilt artifact that users would run (user's call).
 
 ## Consequences
 

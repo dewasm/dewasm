@@ -107,9 +107,12 @@ Nothing else does.
 
 - **Discover the cache directory at runtime instead of a fixed manifest.**
   This would need no edit when an app is added.
-  But it cannot tell an entry missing on purpose from a genuinely-empty set.
-  A missing entry means the cache is not fetched, which must fail (decision 15).
-  It also has no place to record each artifact's `Mode`.
+  But a directory listing sees only the `.wasm` files present in the cache.
+  An app whose file was never fetched then gets no trial, and nothing reports it.
+  A cache that was never fetched at all yields no trials, so the suite passes.
+  Both cases must fail instead (decision 15).
+  The manifest names every app, so a missing file fails that app's trial.
+  A listing also has no place to record each artifact's `Mode`.
   The fetch scripts are the source of truth for what exists; the manifest tracks them explicitly.
 
 - **Also assert the generated source compiles/runs.**
@@ -132,6 +135,6 @@ Nothing else does.
 - Carry-over: the manifest is hand-maintained.
   A new app needs a manifest row with its `Mode`.
   A `.wasm` the scripts stop producing needs its row removed.
-  The heavy set is fixed by today's measurement.
+  The heavy set comes from today's measurement.
   Revisit if a backend's conversion cost shifts.
   An example is an artifact version update that moves its size across the ~2 s line.

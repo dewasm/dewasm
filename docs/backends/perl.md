@@ -97,7 +97,7 @@ The official support table: [`docs/support.md`](../support.md).
   Division and the rest stay helper calls.
 - Numeric conventions are the shared masked-unsigned model.
   `use integer` appears only inside tightly-scoped runtime helpers.
-- **File times are capped below nanosecond precision.**
+- **File timestamps are capped below nanosecond precision.**
   Core Perl's only sub-second time APIs (`Time::HiRes` `utime`/`stat`) pass NV seconds.
   That is ~400ns resolution for present-day times.
   Core Perl also has no `lutimes`/`utimensat`, so a symbolic link cannot carry its own times.

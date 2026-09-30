@@ -38,11 +38,11 @@ So the older kind read as the default and the newer one as a variant.
 Each kind had one command that measured and then rendered.
 A `--render FILE` flag did only the second half.
 Rendering, the cheap and repeatable half, was reachable only as an option of the expensive one.
-The useful case meant typing the path of a record again, time of the run included.
+The useful case meant retyping a timestamped path.
 That case is rendering the newest record after editing the renderer's text.
 
 A record carries no account of itself either.
-The JSON states the host and the time of the run, which is what a measurement can know.
+The JSON states the host and the timestamp, which is what a measurement can know.
 It cannot state why it was taken.
 Three of the stored records were taken within two and a half hours of one day.
 They differ only by the code between them.
@@ -66,7 +66,7 @@ A record command writes its record and renders nothing.
 It closes with the line that names the render command for its kind.
 A render command reads one record and writes the document with its figures.
 A render command with no argument takes the newest record of its own kind.
-With ISO times in the names, the newest record sorts last by name.
+With ISO timestamps in the names, the newest record sorts last by name.
 So the ordinary case needs no path at all.
 That case is rendering what was just measured, or re-rendering after editing the renderer.
 The suffix is what tells the kinds apart, so it is checked rather than trusted to a parse error.

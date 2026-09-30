@@ -71,7 +71,7 @@ So a "bulk without reftypes" suite never existed.
   The pass count went 19,446 → 24,338 just from previously-excluded files.
   `fail=23` are all linking-attributed.
   All 33k skips carry a feature identifier.
-  The plan of future work is the `unsupported:` table sorted by count.
+  The roadmap is the `unsupported:` table sorted by count.
 - Negative / limits: the `wast` crate's policy on confusing Unicode rejects `names.wast` whole.
   It is counted `unknown-proposal`.
   Attribution of *validation* failures depends on `wasmparser` knowing the proposal.

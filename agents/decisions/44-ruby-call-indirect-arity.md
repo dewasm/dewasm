@@ -63,7 +63,7 @@ Wasm 1.0 returns (zero or one value) flow through `func.call`'s return exactly a
 
 ## Rejected alternatives
 
-- **One `call` for any argument count, with `func.call(*args)` (decision 4, the current state).**
+- **One variadic `call` with `func.call(*args)` (decision 4, the current state).**
   It allocates two `T_ARRAY`s per indirect call.
   The 0.4M-array measurement above is the direct cost on a `call_indirect`-saturated workload.
 - **A single `call` taking a splat but forwarding fixed via a `case args.size` inside.**

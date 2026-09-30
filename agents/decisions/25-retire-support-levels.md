@@ -44,13 +44,13 @@ It waits until the Python/Go/Java backends exist and show what actually varies.
 - **Keep the levels**: collapses as described.
   It also forces every new test case to be level-classified.
   Decision 23's own experience showed that goes wrong when done by guessing instead of running.
-- **A numeric coverage score** (e.g. "38/42 WASI functions"): false precision.
-  The per-function table already says this without pretending the functions are of equal worth.
+- **A numeric coverage score** (for example, "38/42 WASI functions"): false precision.
+  The per-function table already says this without pretending one function can stand in for another.
 
 ## Consequences
 
 - Positive: one less set of categories to keep true.
-  New-backend authors read a list of things to check, not a specification of levels.
+  New-backend authors read a checklist, not a specification of levels.
 - Negative: README/support.md lose a one-glance maturity summary.
   "production-ready?" now takes reading two tables.
 - Carry-over: the decision 23 lesson survives in the support.md snapshot test and the harness.

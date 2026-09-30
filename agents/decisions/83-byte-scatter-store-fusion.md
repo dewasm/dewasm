@@ -55,7 +55,7 @@ None of the existing analyses carry that fact.
 ## Rejected alternatives
 
 - **Proving the trip count via path-sensitive analysis and unrolling.**
-  It needs guard facts (`flag & 1 == 1`) carried onto the path that falls through.
+  It needs guard facts (`flag & 1 == 1`) carried onto the fallthrough path.
   It also needs bit-level value tracking through a Boolean, and a small-loop unroller.
   That is three new analyses for one pattern; a three-compare runtime precondition covers it exactly.
 - **Merging stores next to each other in straight-line code only.**

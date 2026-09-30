@@ -42,7 +42,7 @@ A gap is bridged by *refusing*, never by shimming what is measured.
   - JRuby is probed by one `-e` run of the `source_offset` forms of `IO::Buffer#copy`/`#set_string`.
     The upstream issue is `jruby/jruby#9588`.
     Which release first carries the fix is not the probe's to predict.
-    A fix carried back to an older release passes the probe just the same.
+    A backport passes the probe just the same.
   - CPython's experimental JIT is probed by `sys._jit.is_enabled()` under `PYTHON_JIT=1`.
     Distribution builds carry `sys._jit` but were compiled without the JIT.
 - A compiled engine that shares a backend keys its artifact separately.

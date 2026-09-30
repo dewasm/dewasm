@@ -14,13 +14,13 @@ The extension came once their snapshots were re-verified against the optimized o
 
 The example apps split into two kinds ([decision 9](9-example-apps-from-registry.md), [decision 22](22-sqlite3-built-from-source.md)):
 
-- upstream artifacts built in advance, which we only fetch;
+- prebuilt upstream artifacts, which we only fetch;
 - modules we build ourselves from source at a fixed version.
   Those are the sqlite3 shapes, `minigzip`, `ripgrep`, and the Track A pair `libpcap` and tree-sitter.
 
 The locally-built ones ship as the raw toolchain output, which is bigger than it needs to be.
 It also carries two unusual encodings from Zig/Clang.
-They emit DWARF debug information and LEB `call_indirect` immediates longer than needed.
+They emit DWARF debug information and overlong LEB `call_indirect` immediates.
 The latter is the "reference-types encoding only" artifact the audit accepts.
 See the [decision 8](8-latest-testsuite-support-matrix.md) footnote.
 Every extra byte is paid again at conversion time.
@@ -37,7 +37,7 @@ The `libpcap`/tree-sitter modules are converted on every heavy-conditional e2e r
 As a side effect it re-encodes the `call_indirect` immediates.
 So the modules audit as *pure* baseline rather than baseline + the reference-types bit.
 Only modules we build qualify.
-A fetched upstream artifact is fixed by its published checksum.
+A fetched upstream artifact is checked against its published checksum.
 It must not be silently rewritten.
 
 ## Decision
@@ -53,7 +53,8 @@ The exceptions are these:
 - The DWARF fixture (`dwarf-fixture.sh`) is skipped.
   Its `-g` debug information is the whole point of the case (decision 38), and `wasm-opt` would strip it.
 - `mruby` (`mruby.sh`) is skipped.
-  The fixed baseline flag set below cannot parse its exception-handling instructions.
+  The flag set below enables only baseline features.
+  So it cannot parse its exception-handling instructions.
   See [decision 69](69-exception-handling-accepted-input.md).
   So that build strips debug information at link time with `-Wl,--strip-debug` instead.
 
@@ -103,7 +104,7 @@ See [decision 15](15-tests-fail-not-skip.md).
 ## Rejected alternatives
 
 - **Optimize every cached module, including fetched artifacts.**
-  Rewriting an upstream binary fixed by checksum breaks a contract of decision 9.
+  Rewriting an upstream binary checked against a checksum breaks a contract of decision 9.
   The contract is "the cache is exactly the pinned artifact".
   The sha256 verification at fetch time would then check nothing.
   Fetched modules are out of scope.

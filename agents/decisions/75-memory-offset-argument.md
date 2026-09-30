@@ -75,7 +75,7 @@ The workload has three parts:
 - aggregates over them;
 - an unindexed self-join.
 
-Times are the stable user CPU medians of 5 runs, before and after taken in turn.
+Times are the stable user CPU medians of 5 alternating runs.
 Source bytes stay neutral by the naming rule above.
 The resident ISeq, which is what stays in memory, gets smaller.
 

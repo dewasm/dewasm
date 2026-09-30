@@ -50,7 +50,7 @@ Failing **any** stops the whole pass, leaving `module.datas` identical to what w
 2. **Never reorder across a barrier.**
    Only segments that already follow one another in declaration order merge.
    A `global.get`-offset active segment writes to a runtime-unknown address.
-   So it is a barrier the pass cannot see through: it flushes the current run and passes unchanged.
+   So it is an opaque barrier that flushes the current run and passes unchanged.
    That keeps its order against the constant segments.
    A passive segment carries no standalone effect, since guard 1 has ruled out `memory.init`.
    So it passes through *without* closing the run: the actives on either side still merge around it.
@@ -61,7 +61,7 @@ Failing **any** stops the whole pass, leaving `module.datas` identical to what w
    So filling it cannot erase a byte some other segment wrote.
 
 **Merge threshold.**
-An active segment merges into the run when `next.offset >= run_end && next.offset - run_end < 64`.
+Two active segments in a row merge when `next.offset >= run_end && next.offset - run_end < 64`.
 The arithmetic is u64.
 The 64-byte bound is the deciding rule.
 The fill bytes are emitted **inline by every backend unconditionally**.
@@ -90,7 +90,7 @@ Tuning to the always-on inline cost is the only choice available here.
   Doing it once on the shared IR keeps one audited implementation under the specification harness.
 - **Merge regardless of gap size (bridge any hole).**
   A single pair of segments could sit on both sides of a hole of several thousand bytes.
-  It would then emit thousands of zero bytes inline in every backend.
+  It would then materialize thousands of zero bytes inline in every backend.
   That is strictly worse than two initializers.
   The threshold caps that blow-up.
 

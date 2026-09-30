@@ -99,7 +99,7 @@ Remove the two commands made for one snapshot each.
   That fragmentation is what left eight snapshots on manual redirection.
   One command with a filter gives the same targeting without N commands.
 
-- **An environment variable to update the compare-only tests** (`DEWASM_UPDATE_SNAPSHOTS=1 cargo test …`).
+- **An update mode on the compare-only tests** (`DEWASM_UPDATE_SNAPSHOTS=1 cargo test …`).
   Tempting because the test already computes the fresh bytes.
   Rejected on standing policy (decision 27, `docs/testing.md`).
   A compare test that can rewrite its own reference can turn a broken capture into a passing run.

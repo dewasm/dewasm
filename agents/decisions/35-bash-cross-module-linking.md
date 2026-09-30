@@ -41,7 +41,7 @@ Three uses resolve through the nameref to the shared variable:
 
 - reads (`(( x = <p>g<i> ))`);
 - mutable writes (`(( <p>g<i> = v ))`);
-- `global.get` in the initial expressions of offsets.
+- offsets whose initializer expression is a `global.get`.
 
 So mutation is visible in both modules with no boxing.
 Defined globals keep their literal `<p>g<num_imported_globals + i>` slot in the unified index space.

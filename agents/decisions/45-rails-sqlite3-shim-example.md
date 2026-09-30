@@ -53,7 +53,7 @@ The stamp now covers the export lists, so edits retrigger the build.
   It still cannot register runtime-chosen callbacks (`busy_handler`, `create_function`).
   It is fine as a linking proof, but wrong as a compatibility layer.
 - **One shared wasm instance for all connections.**
-  It uses less memory, but Ruby threads switch at arbitrary points.
+  It uses less memory, but Ruby threads interleave at arbitrary points.
   So guest-global SQLite state would need one big lock.
   That lock would let one connection of the whole pool run at a time and lose isolation.
 

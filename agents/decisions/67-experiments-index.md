@@ -56,4 +56,4 @@ That memory is unreachable from other machines, subagents, and other harnesses.
   It names the re-test condition, so no one has to guess whether an entry still holds.
 - This settles decision 66's carry-over.
   The non-decision knowledge layer is an index over Issues and PRs.
-  It is not a related directory of full entries.
+  It is not a second directory of full entries beside the decisions.

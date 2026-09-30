@@ -41,15 +41,16 @@ Add such a term to a table below; write the plainer word otherwise.
 
 | Area | Terms |
 | --- | --- |
-| Programs and builds | `app`, `archive`, `backend`, `baseline`, `browser`, `builtin`, `cache`, `compatible`, `compile`, `copyright`, `crate`, `default`, `dependency`, `directory`, `fetch`, `fork`, `frontend`, `gem`, `legacy`, `linkage`, `manifest`, `milestone`, `patch`, `registry`, `repository`, `reproducible`, `runtime`, `script`, `standalone`, `subagent`, `subcommand`, `submodule`, `toolchain`, `upstream`, `workflow`, `workspace` |
-| Code | `accessor`, `alias`, `arithmetic`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `constructor`, `dataflow`, `debug`, `defer`, `dispatch`, `elide`, `elision`, `epilogue`, `exhaustive`, `fallback`, `fuse`, `generic`, `hash`, `header`, `heap`, `hoist`, `identifier`, `incremental`, `inherit`, `initialize`, `initializer`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `mutex`, `namespace`, `numeric`, `offset`, `operand`, `optimization`, `optimize`, `override`, `peephole`, `pending`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `thunk`, `token`, `trampoline`, `tuple`, `unsigned`, `virtual`, `wildcard` |
+| Programs and builds | `app`, `archive`, `backend`, `backport`, `baseline`, `browser`, `builtin`, `cache`, `compatible`, `compile`, `copyright`, `crate`, `default`, `dependency`, `directory`, `fetch`, `fork`, `frontend`, `gem`, `legacy`, `linkage`, `manifest`, `milestone`, `patch`, `prebuilt`, `registry`, `repository`, `reproducible`, `roadmap`, `runtime`, `script`, `standalone`, `subagent`, `subcommand`, `submodule`, `tarball`, `timestamp`, `toolchain`, `upstream`, `vendor`, `workflow`, `workspace` |
+| Code | `accessor`, `alias`, `arithmetic`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `co-inductive`, `constructor`, `dataflow`, `debug`, `defer`, `dispatch`, `duck-typed`, `elide`, `elision`, `epilogue`, `exhaustive`, `fallback`, `fallthrough`, `fuse`, `generic`, `hash`, `header`, `heap`, `hoist`, `identifier`, `immutable`, `incremental`, `inherit`, `initialize`, `initializer`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `materialize`, `mutex`, `namespace`, `numeric`, `offset`, `operand`, `optimization`, `optimize`, `override`, `peephole`, `pending`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `sparse`, `spill`, `stub`, `subclass`, `thunk`, `token`, `trampoline`, `tuple`, `unsigned`, `variadic`, `virtual`, `wildcard` |
 | Languages | `associative`, `associativity`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
-| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decimal`, `decode`, `dividend`, `exponent`, `gradual`, `hexadecimal`, `instantiate`, `instantiation`, `little-endian`, `modular`, `modulo`, `mutability`, `mutable`, `normalization`, `normalize`, `opcode`, `overflow`, `passive`, `payload`, `remainder`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `uninitialized`, `validate`, `validation`, `width` |
-| Systems and WASI | `ambient`, `buffer`, `checksum`, `console`, `cursor`, `deterministic`, `flush`, `headless`, `interactive`, `monotonic`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `subscription` |
+| WebAssembly and numbers | `align`, `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decimal`, `decode`, `dividend`, `exponent`, `gradual`, `hexadecimal`, `instantiate`, `instantiation`, `little-endian`, `modular`, `modulo`, `mutability`, `mutable`, `normalization`, `normalize`, `opcode`, `overflow`, `overlong`, `passive`, `payload`, `radicand`, `remainder`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `uninitialized`, `validate`, `validation`, `width` |
+| Systems and WASI | `ambient`, `buffer`, `checksum`, `console`, `cursor`, `deterministic`, `flush`, `headless`, `interactive`, `monotonic`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `stdio`, `subscription` |
 | Data and records | `amalgamation`, `collation`, `compress`, `compression`, `decompress`, `invalidate`, `invalidation`, `query`, `rollback`, `schema`, `verdict` |
-| Tests and tools | `benchmark`, `bug`, `calibrate`, `calibration`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `median`, `microbenchmark`, `microsecond`, `millisecond`, `nanosecond`, `oracle`, `parse`, `parser`, `sanity`, `shim`, `snapshot`, `suite`, `testsuite`, `verify`, `workload` |
+| Tests and tools | `acceptance`, `benchmark`, `bug`, `calibrate`, `calibration`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `median`, `microbenchmark`, `microsecond`, `millisecond`, `nanosecond`, `oracle`, `parse`, `parser`, `sanity`, `shim`, `snapshot`, `suite`, `testsuite`, `verify`, `workload` |
 | Graphics and games | `dot`, `emulator`, `framebuffer`, `palette`, `pixel`, `shareware`, `texture`, `tick` |
 | Text and markup | `digit`, `font`, `indentation`, `interpolate`, `interpolation`, `kebab-case`, `markup`, `placeholder`, `prefix`, `slug`, `suffix`, `template` |
+| General | `alternating`, `ambiguous`, `batch`, `checklist`, `circular`, `circularity`, `falsifiable`, `interleave`, `opaque`, `optimistic`, `outward`, `pessimistic`, `slideshow` |
 
 A term of the field is used only in the sense its document gives it.
 Used for anything else, it is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
@@ -80,7 +81,7 @@ An abbreviation below is written in this one form, and no other.
 
 | Abbreviation |
 | --- |
-| `e.g.`, `i.e.`, `etc.`, `vs.` |
+| `etc.`, `vs.` |
 
 ### Terms with one meaning
 
@@ -159,6 +160,7 @@ The lists do not apply to this file.
 | `status quo` | the current state | — |
 | `verbatim` | unchanged | — |
 | `cf`, `cf.` | see, refer to | — |
+| `e.g.`, `i.e.` | for example, that is | — |
 | `v.s.`, `vs`, `etc` | `vs.`, `etc.` | `vs.`, `etc.` |
 
 ### Intensifiers

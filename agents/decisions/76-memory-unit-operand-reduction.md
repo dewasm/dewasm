@@ -74,7 +74,7 @@ Comparisons, call arguments, returns, and every other observation point are unch
 
 Measured on the converted sqlite3-shell (standalone Ruby, Ruby 4.0.4 arm64-darwin).
 The workload is a recursive CTE inserting 30,000 rows plus aggregates.
-Times are user CPU medians of 3 runs, before and after taken in turn.
+Times are user CPU medians of 3 alternating runs.
 
 | Measure | Before (decision 75) | After | Delta |
 | --- | --- | --- | --- |
@@ -87,7 +87,7 @@ Times are user CPU medians of 3 runs, before and after taken in turn.
 
 ## Rejected alternatives
 
-- **Keep the call-site masks (the state before this decision).**
+- **Keep the call-site masks (the current state).**
   It keeps 9,745 resident mask sites on sqlite3-shell.
   A one-instruction reduction inside 46 shared units replaces them.
 - **Interval-chosen non-wrapping variants.**

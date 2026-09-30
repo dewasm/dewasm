@@ -10,13 +10,12 @@ The `toywasm` work revealed that this shape differs from Wasmtime.
 
 Decision 49 copies Wasmtime's observed behavior where the WASI specification is silent.
 Wasmtime's preview1 layer routes `fd_fdstat_set_flags` through its file system interface.
-So it accepts the call on regular files only and answers EBADF on standard input, output and error.
+So it accepts the call on regular files only and answers EBADF on stdio.
 The next interface specifies the function for the non-blocking flag on file system handles.
 So upstream regards the strict shape as intended (`bytecodealliance/wasmtime#6713`).
 
 The `toywasm` app at its recorded version is a WASI implementation itself.
-Its instance set-up step sets NONBLOCK on every host file descriptor that is not a TTY.
-That includes standard input, output and error.
+Its instance set-up step sets NONBLOCK on every non-TTY host file descriptor, stdio included.
 The set-up step is `wasi_instance_add_hostfd` in `libwasi/wasi.c`.
 A failure there stops the instance from starting.
 The binary at that version therefore does not run under Wasmtime at all.
@@ -64,7 +63,7 @@ Concretely, `fd_fdstat_set_flags` does four things:
   Makes the recorded `toywasm` binary unrunnable on every backend.
   The strict shape is an artifact of Wasmtime routing preview1 through its file system interface.
   The calling side's own host implementation contradicts it.
-- **Accept the call on standard input, output and error only.**
+- **Accept the call on stdio only.**
   A third shape with no reference implementation anywhere.
   The host of `toywasm` accepts any user file descriptor, and narrowing it buys nothing.
 - **Drop the `toywasm` app instead.**
@@ -73,8 +72,7 @@ Concretely, `fd_fdstat_set_flags` does four things:
 ## Consequences
 
 - The converted `toywasm` runs on every backend, and the units state the constraint in place.
-- Wasmtime cannot provide ground truth for an app that calls the function on standard input.
-  The same holds for standard output and error.
+- Wasmtime cannot provide ground truth for an app that calls the function on stdio.
   So such a case needs a different oracle.
   The `toywasm` case checks against the existing `cowsay_args` snapshot.
   `crates/dewasm-test-helper/tests/apps_wasmtime.rs` records its exclusion from the Wasmtime app suite.

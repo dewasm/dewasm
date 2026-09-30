@@ -2,7 +2,7 @@
 
 An interactive frontend for the DOOM shareware episode that renders straight into the terminal.
 It needs no window and no GPU.
-`build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`build.sh` fetches `jacobenget/doom.wasm`, checked against a fixed checksum, into the shared apps cache.
 It converts the module to Python with dewasm, into `doom_gen.py`.
 That file is ~11MB, ignored by Git, and regenerated on every build.
 `build.sh` then links it against a small host program in `main.py`.
@@ -37,7 +37,7 @@ Under PyPy the game is playable.
 The rate sits between Ruby with YJIT (~15, `../ruby/`) and Go/Java (55-70, `../go/`, `../java/`).
 CPython has no JIT and interprets the generated source line by line.
 DOOM's software renderer and game logic are thousands of lines of hot loops per tic.
-So under CPython, movement looks like a series of still pictures, not motion.
+So under CPython, movement looks like a slideshow, not motion.
 The self-check is only 15 ticks.
 That is short enough that PyPy's warm-up (about a second) sometimes falls inside it.
 The reported rate then drops to ~10.
@@ -63,7 +63,7 @@ Repeated colors within a redrawn run don't re-emit their escape code.
 Under CPython the frame rate is far too low for this to matter.
 Under PyPy a tick costs ~22ms, and a full redraw of a 73x23-cell frame ~8ms.
 So there it does matter.
-Either way, it keeps a slow link (e.g. SSH) usable.
+Either way, it keeps a slow link (for example, SSH) usable.
 
 ## Controls
 

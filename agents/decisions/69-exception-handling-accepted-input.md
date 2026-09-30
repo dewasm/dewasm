@@ -100,6 +100,6 @@ Code this governs:
   They keep it even past the flattening threshold (`flat::plan` refuses them).
   No shipped app hits a measurable cost today.
 - Carry-over: `wasm-opt` run before conversion ([decision 39](39-running-wasm-opt.md)) cannot parse the proposal.
-  It cannot with its fixed baseline flag set.
+  It cannot while its flag set enables only baseline features.
   So the mruby build strips debug information at link time (`-Wl,--strip-debug`) and skips `wasm-opt`.
   That is the second exception after the DWARF fixture.

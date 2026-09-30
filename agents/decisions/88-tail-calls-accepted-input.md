@@ -111,7 +111,7 @@ Code this governs:
 ## Rejected alternatives
 
 - **Keep building wasm3 with `-DM3_HAS_TAIL_CALL=0`.**
-  It is the state before this decision.
+  It is the current state.
   It makes the converted interpreter's host stack proportional to the guest program's opcode count.
   The stack is then not proportional to the program's call depth.
   Every backend then needs its own way to work around stack that the guest never actually asked for.

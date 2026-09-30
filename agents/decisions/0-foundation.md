@@ -19,7 +19,7 @@ Existing source-to-source converters remove that requirement, but each targets o
 
 No tool covers multiple target languages from one code base.
 `dewasmify`'s goal is to translate wasm binaries into source code of *many* languages.
-A tool built once (e.g. in Rust) can then run anywhere the target language runs.
+A tool built once (for example, in Rust) can then run anywhere the target language runs.
 That includes places with no wasm runtime at all, such as a plain Bash environment.
 
 ## Decision

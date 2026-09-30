@@ -49,9 +49,9 @@ The per-block dispatch loop decision 4 feared is unnecessary.
   Every frame the branch crosses carries a land-or-relay epilogue, emitted *after* its scope.
   So the `break` skips any code left in the crossed body.
   If `__br` names this frame, the epilogue clears it (the branch lands).
-  Otherwise it does `break` again to relay the branch to the parent frame.
+  Otherwise it does `break` again to relay the branch outward.
   The deciding rule for needing an epilogue concerns *crossed* frames.
-  A frame is crossed if and only if some `br` to an outer frame has it on the stack path.
+  A frame is crossed if and only if some outward `br` has it on the stack path.
   The path runs from the target up to and including the frame that directly holds the branch.
   That frame counts because its plain `break` would otherwise land mid-body in its parent.
 - **A loop targeted from a strictly nested frame is *wrapped***.

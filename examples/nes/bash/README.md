@@ -1,7 +1,8 @@
 # NES (Bash, ANSI terminal)
 
 An NES emulator running in pure GNU Bash.
-`build.sh` builds the [`agnes`](https://github.com/kgabis/agnes) emulator, fixed by checksum, into a single import-free wasm module.
+`build.sh` builds the [`agnes`](https://github.com/kgabis/agnes) emulator into a single import-free wasm module.
+It checks the emulator source against a fixed checksum.
 Our own [`nes_demo.c`](../../apps/src/nes_demo.c) wraps the emulator.
 The build goes via [`../../apps/scripts/nes.sh`](../../apps/scripts/nes.sh).
 `dewasm --target bash --mode library` then converts the module to `nes_gen.sh`.

@@ -22,7 +22,7 @@ The composed pixels are identical, so the recorded snapshot is unchanged.
 Extended with `ruby/gui/`, a windowed Ruby frontend on `gosu`.
 It shares the terminal frontend's generated library.
 The reasons for a second frontend and the bundler scoping are recorded in [decision 50](50-doom-example-shape.md).
-That decision records them with the matching change to the DOOM example.
+That decision records them for the DOOM example's matching frontend.
 
 ## Context
 

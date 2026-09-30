@@ -44,7 +44,8 @@ The compared oracle is `doom_frame.ppm`; this PNG is the same frame for human ey
 go/run.sh    # or: java/run.sh, ruby/gui/run.sh
 ```
 
-`build.sh` fetches the wasm binary, fixed by checksum, into the apps cache, which Git ignores.
+`build.sh` fetches the wasm binary into the apps cache, which Git ignores.
+It checks the binary against a fixed checksum.
 It does so via `../apps/scripts/doom.sh`, and no other assets are needed.
 Each frontend also has a headless `-smoke`/`--smoke` mode that ticks the game without a window.
 That mode sanity-checks the rendered frame and writes it to `screenshot.png`.

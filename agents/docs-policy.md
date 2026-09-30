@@ -24,7 +24,7 @@ It belongs under `agents/` even when it describes user-facing behavior.
 | [`agents/test-authoring.md`](test-authoring.md) | How the test suites are structured and what a new case must look like | Agents and developers writing tests | By hand |
 | [`agents/apps-audit.md`](apps-audit.md) | The real-world app test record and feature verdicts | Agents and developers adding an app target | By hand |
 | [`agents/alternative-ruby-runtimes.md`](alternative-ruby-runtimes.md) | How to run the Ruby suites on a Ruby other than CRuby, and how to read and narrow what fails | Agents measuring another Ruby implementation | By hand |
-| [`agents/measurement-records.md`](measurement-records.md) | The steps to check before and after a speed or size run, and what makes a result suspect | Agents taking a record | By hand |
+| [`agents/measurement-records.md`](measurement-records.md) | The checklist around a speed or size run, and what makes a result suspect | Agents taking a record | By hand |
 | [`agents/vocabulary.md`](vocabulary.md) | The sources of allowed words, the project's terms, and the excluded words with what to write in their place | Agents writing text | By hand |
 | [`docs/getting-started.md`](../docs/getting-started.md) | Tutorial: verified end-to-end steps | New users | By hand (verify every command) |
 | [`docs/backends/`](../docs/backends/) | Per-target reference: output shape, requirements, limits, provider usage | Users of a specific target | By hand |
@@ -50,14 +50,14 @@ It belongs under `agents/` even when it describes user-facing behavior.
 - **Nothing outside `agents/` references anything under it.**
   `AGENTS.md`, `CLAUDE.md`, and `.claude/` are the exceptions.
   Code and user-facing documents state their constraint in place.
-  An `agents/` document links out to the code and documents it concerns, never the reverse.
+  An `agents/` document links outward to the code and documents it concerns, never the reverse.
   The app audit tooling is a further exception.
   That tooling is the `feature-audit` `xtask` command and the `examples/apps` fetch scripts.
   It cites `agents/apps-audit.md` because that record is where its verdicts land.
 - **A skill under `.claude/skills/` is a router, not a store.**
   Claude Code picks a skill by its description without being asked, which is what a skill is for.
   The substance it routes to belongs under `agents/`.
-  The test is whether removing `.claude/` would lose information rather than a shorter way to reach it.
+  The test is whether removing `.claude/` would lose information rather than ease of use.
   If it would, the file is holding content it should be pointing at.
   A project-local skill is named with a `dewasm-` prefix.
   It needs one because the skill namespace is shared with the user's global skills.

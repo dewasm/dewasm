@@ -3,7 +3,7 @@
 As far as we know, this is the first time DOOM has run in Bash.
 It is not an emulator, and not a port of the C source translated by hand.
 `build.sh` fetches the unmodified [`jacobenget/doom.wasm`](https://github.com/jacobenget/doom.wasm) v0.1.0 binary.
-The binary is fixed by checksum and stored in the shared apps cache.
+The binary is checked against a fixed checksum and stored in the shared apps cache.
 `dewasm --target bash --mode library` converts it to `doom_gen.sh`, ~19MB of generated Bash.
 Git ignores that file, and every build regenerates it.
 `main.sh` implements the module's ten host imports.
@@ -64,7 +64,7 @@ It prints a progress line before every phase, so a few minutes of silence never 
 `./dist.sh` builds `doom.bash`.
 It is the frontend with the generated library inlined, behind a header that states its source.
 That makes one 19MB script that runs anywhere with Bash >= 5, with no dewasm repository needed.
-A copy built in advance is published as a **[Gist](https://gist.github.com/makenowjust/b1e9c2a585183f41a5f8f61b4bc9924c)**.
+A prebuilt copy is published as a **[Gist](https://gist.github.com/makenowjust/b1e9c2a585183f41a5f8f61b4bc9924c)**.
 
 It is a Gist rather than a file in this repository on purpose.
 dewasm is MIT, but the built artifact embeds the GPL-2.0 DOOM engine and the shareware WAD.

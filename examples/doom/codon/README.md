@@ -2,7 +2,7 @@
 
 An interactive frontend for the DOOM shareware episode that renders straight into the terminal.
 It needs no window and no GPU.
-`build.sh` fetches `jacobenget/doom.wasm`, fixed by checksum, into the shared apps cache.
+`build.sh` fetches `jacobenget/doom.wasm`, checked against a fixed checksum, into the shared apps cache.
 It converts the module to Codon with dewasm, into `doom_gen.codon`.
 That file is ~10MB, ignored by Git, and regenerated on every build.
 `build.sh` then compiles it together with the host program in `main.codon` into one native binary.
@@ -49,7 +49,7 @@ Almost all of that is Codon's IR capture analysis, run once per folding round.
 ```
 
 builds and takes over the terminal (alternate screen, hidden cursor, raw input) until you exit.
-In a new copy of the repository, that first line converts the module and compiles the result.
+In a fresh clone of the repository, that first line converts the module and compiles the result.
 This takes about half a minute once dewasm itself is built.
 `./run.sh --smoke` instead runs a headless self-check.
 It initializes the game and ticks it 15 times without taking over the terminal.

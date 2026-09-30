@@ -52,7 +52,7 @@ Filling the remaining gaps honestly meant deciding each one, not just coding it.
    The clause is *a deliberately added capability must be complete*.
    Creating links but not reading them back makes no sense.
    The line holds against `stat`: `dev`/`ino` stays zeroed (D6).
-   It also holds against `touch`: file times stay ENOSYS, since setting them is not namespace mutation.
+   It also holds against `touch`: timestamps stay ENOSYS, since setting them is not namespace mutation.
 4. **The conformance runner clears the child environment** and sets exactly the manifest's environment.
    The code is `run_standalone_wasi`.
    This reverses decision 36's rejected alternative.
@@ -80,7 +80,7 @@ Filling the remaining gaps honestly meant deciding each one, not just coding it.
   It also adds nothing: escape is only possible at follow time, where the existing check already sits.
 - **Licensing `stat`/`touch` for Bash alongside `ln`.**
   Neither is required by a capability this decision adds.
-  D6 already accepts zeroed `dev`/`ino`, and file-time system calls stay declared as ENOSYS on Bash.
+  D6 already accepts zeroed `dev`/`ino`, and timestamp system calls stay declared as ENOSYS on Bash.
 - **Keeping the `environ` rows attributed to decision 31.**
   The interface passes the environment through faithfully.
   After the runner fix the remaining mismatch is host injection.
@@ -96,7 +96,7 @@ Filling the remaining gaps honestly meant deciding each one, not just coding it.
   | `environ` ×3 | the four interpreted backends | host injection; Go's compiled binaries pass |
   | `path_link` | Java | hard-linking a symbolic link whose target is missing needs `linkat(2)` without following, which NIO cannot express; Ruby reaches it via Fiddle, Go by recreating the link |
   | `rust/symlink_filestat` | Go | no portable `lutimes` in the Go standard library that needs no build tag |
-  | the declared set | Bash | file times ×2 under D4, `d_ino` and `dev`/`ino` ×3 under D6, read-back across `fd`s under D1, and three ELOOP rows for following a file symbolic link, re-attributed under D3 |
+  | the declared set | Bash | timestamps ×2 under D4, `d_ino` and `dev`/`ino` ×3 under D6, read-back across `fd`s under D1, and three ELOOP rows for following a file symbolic link, re-attributed under D3 |
 
 - Positive: real-app suites (SQLite, QuickJS, CPython, CRuby, `ripgrep`) keep passing under the checks.
   The reason is that preopens seed the canonical directory rights with full `rights_inheriting` sets.

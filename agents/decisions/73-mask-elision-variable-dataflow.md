@@ -50,7 +50,7 @@ This preserves decision 2's ABI by construction.
 Function boundaries, helper calls, and globals only ever see masked values.
 A parameter is defined by its caller at full masked width.
 The scan starts from every integer local and temp and only removes.
-So copies between variables resolve as a greatest fixed point: each stays qualified until removed.
+So copies between variables resolve co-inductively.
 Such copies are `BrTarget::Label`'s branch-result moves.
 A plain `local.get` on a store's right-hand side is one too.
 A copy is a modular read exactly while its destination still qualifies.
@@ -102,8 +102,8 @@ It is the same careful choice decision 71 made for i64, applied per variable.
 - **A per-backend dataflow.**
   Same reasoning as decision 71: qualification and intervals follow from the shared convention.
   Only the limit and the emission differ, and a copy per backend lets the copies come to differ.
-- **Copies that assume the worst (a copy always removes qualification from its source).**
-  Simpler than the removal fixed point that assumes the best.
+- **Pessimistic copy handling (a copy always removes qualification from its source).**
+  Simpler than the optimistic removal fixed point.
   But branch-result moves are exactly copies between temps.
   So block and loop results would almost never qualify.
 - **Qualification without the interval fixed point.**

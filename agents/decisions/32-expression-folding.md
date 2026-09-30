@@ -26,7 +26,7 @@ The cost is paid by every backend and at every stage:
 `Expr` was already a nested tree (`Un`/`Bin`/`Load`/`Select` hold `Box<Expr>`).
 Every backend's `expr()` already walked the tree by recursion.
 So the machinery to *emit* folded expressions existed on the backend side.
-Only the builder stored every value in a temp at once.
+Only the builder materialized every value at once.
 
 The hard part is correctness: folding a value into a later consumer moves *when* it is evaluated.
 wasm evaluates strictly, left to right.
@@ -47,7 +47,7 @@ A consumer pops its operands as expressions and composes them.
 A pending is **spilled** to a temp (`sN = <expr>`) only when keeping it folded is unsafe or unprofitable.
 Besides call/branch results, a spill is the only thing that now creates a temp.
 No IR types change.
-`Func.temps` ends up listing exactly the temps that are written.
+`Func.temps` ends up listing exactly the materialized temps.
 So every backend's temp declarations get smaller for free.
 
 **Spill discipline.**
@@ -69,7 +69,7 @@ Also spill the pendings whose trap must fire first, per statement kind:
   `return` / `br` to the function frame / fall-through instead *fold* the return values.
   They do so after spilling any deeper trapping pending.
 - block/loop/if entry, `else`, `end`: spill everything.
-  So values that cross a control boundary stay in temps.
+  So values that cross a control boundary stay materialized.
   The `if` condition is folded into the frame first.
 - `select`: `cond` folds freely, but a trapping `then`/`els` arm is spilled.
   wasm always evaluates both arms.
@@ -133,7 +133,7 @@ Folded expressions now reach code that assumed plain-variable operands:
   | ISeq compile | 10.7 s | 6.4 s | −40 % |
   | run (`--dir …::/usr -- -e 'puts "hello #{6*7}"'`) | 63 s | 37.9 s | 1.66× |
 
-- `Func.temps` now holds only temps that are written (spills, call results, branch-assign destinations).
+- `Func.temps` now holds only materialized temps (spills, call results, branch-assign destinations).
   Backends that walk it to declare variables get smaller automatically.
   No backend changed for declarations.
 - Correctness is bound by the specification harness, as always (decision 3).
@@ -144,7 +144,7 @@ Folded expressions now reach code that assumed plain-variable operands:
 - New invariants a backend may rely on (documented in `ir.rs`):
   - an `Expr` tree preserves wasm's left-to-right evaluation order and trap points;
   - a `Select`'s `then`/`els` expressions are pure and non-trapping;
-  - `Func.temps` lists exactly the temps that are written.
+  - `Func.temps` lists exactly the materialized temps.
 - The `Effects` local set is a 64-bit mask plus an `any_high_local` catch-all for indices ≥ 64.
   It is conservative: a set of a high local spills all pendings reading any high local.
   That is rare and never wrong.

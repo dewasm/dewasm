@@ -31,7 +31,7 @@ A name that will be typed for years should be short and pronounceable.
 This one is verified free.
 
 Reserving the crates.io name with an early publish is recommended at release time.
-The 0.1 list of release steps owns that call.
+The 0.1 checklist owns that call.
 
 ## Rejected alternatives
 

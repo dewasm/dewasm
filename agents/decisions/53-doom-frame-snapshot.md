@@ -42,7 +42,7 @@ Two facts make a snapshot possible where the module first looks untestable:
 - **`ui.drawFrame(bufOff)` hands the host an offset into linear memory.**
   There `FRAME_W*FRAME_H*4` bytes live in `B,G,R,A` order, the `A` byte unused.
   The layout is read at `examples/doom/go/doom/host.go:107-122`.
-  For this fixed binary FRAME is 640×400, so the frame is 1,024,000 bytes.
+  For the binary at this checksum FRAME is 640×400, so the frame is 1,024,000 bytes.
   Dropping the unused `A` byte yields a 640×400 RGB image, a P6 PPM.
   That is the exact format the frontends' own writers of screen images already emit.
   One writer is at `examples/doom/ruby/main.rb:339-354`.
@@ -93,13 +93,13 @@ Three specifics:
   It is never pulled into the normal `cargo test` build.
 - **Fetch as a shared fixture.**
   `doom.wasm` moves into the apps cache via a new `examples/apps/scripts/doom.sh`.
-  It is fixed by checksum through `fetch_app`.
+  `fetch_app` checks it against a fixed checksum.
   That replaces `examples/doom/fetch.sh`, which checked no checksum.
   The example build scripts read it from `examples/apps/cache/` like the harness does.
 
 **Deciding criterion:** *a module driven by custom host imports can still be snapshot-tested.*
 *It can when its output is a deterministic function of an injectable clock.*
-*Then fix the clock and the inputs, and diff the rendered artifact.*
+*Then hold the clock and the inputs constant, and diff the rendered artifact.*
 The oracle is an independent embedder (Wasmtime), not backend consensus.
 The value of the test is catching a bug the backends could share.
 
@@ -144,9 +144,9 @@ A convert-only assertion would be a pattern no other suite uses.
 ## Consequences
 
 - Positive: the converter gains regression coverage on its largest, most import-heavy real module.
-  The coverage is fixed to a pixel-exact frame an independent runtime produced.
+  The check compares against a pixel-exact frame an independent runtime produced.
   That is the strongest oracle available for it.
-- Positive: `doom.wasm` becomes a fixture fixed by checksum like every other app.
+- Positive: `doom.wasm` becomes a fixture checked against a checksum like every other app.
   This closes the decision 9 gap the old `examples/doom/fetch.sh` left open.
 - Negative: a new heavy `wasmtime`-crate dependency, kept to `xtask`.
   The snapshot must be regenerated (and reviewed) whenever the `doom.wasm` version changes.

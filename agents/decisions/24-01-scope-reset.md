@@ -17,7 +17,7 @@ Replaces:
 
 Revises the target-language plan of [decision 10](10-csharp-target.md).
 The criterion below for keeping a feature is unchanged.
-Later, `mruby` became a target app (decision 69).
+Later, `mruby` became an app at a fixed version (decision 69).
 The criterion's first condition then let exception handling back in.
 The "everything else stays out" list no longer includes exception handling.
 
@@ -51,7 +51,7 @@ IR variants, lowering, feature tests, runtime units, harness support, and docume
 Unsupported input keeps failing at conversion time with a clear error (decision 0).
 
 The app audit (`agents/apps-audit.md`) found one detail at the validation level.
-LLVM-based toolchains encode `call_indirect` immediates as LEBs longer than needed.
+LLVM-based toolchains encode `call_indirect` immediates as overlong LEBs.
 They do so when the reference-types *target feature* is on (their default).
 So real wasip1 binaries only validate with the reference-types feature bit enabled.
 That includes the already shipping `qjs` and sqlite3.
@@ -111,7 +111,7 @@ Future work recorded, deliberately out of 0.1 scope:
   A five-backend project whose backends accept different inputs reintroduces uneven support.
   It is exactly the uneven support decision 23 tried to manage.
 - **Specification-coverage goals**: coverage numbers do not answer "what can I convert?"; apps do.
-  Each app fixes an exact WASI surface to implement.
+  Each app determines an exact WASI surface to implement.
   The specification testsuite stays as the test underneath.
 
 ## Consequences

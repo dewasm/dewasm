@@ -32,7 +32,7 @@ These remove the wasm engine like dewasm does, but emit **bytecode for one VM**,
 | [wasm2cil](https://github.com/ericsink/wasm2cil) | .NET CIL assemblies | WASI support; work-in-progress, but notably ran SQLite and a ray tracer on the CLR, prior art for "SQLite on a managed runtime via wasm", which dewasm pursues at the source level on Ruby (the README's stated goal). Also why the planned C# backend still has an open niche: CIL is not C# source. |
 
 Bytecode is hidden from the target language's tooling.
-It cannot be read, patched, or copied into a repository as a plain file.
+It cannot be read, patched, or vendored into a repository as a plain file.
 It also only exists where the VM has a bytecode format at all.
 That rules out Bash and shipping a plain `.rb`/`.py`.
 
@@ -52,7 +52,7 @@ A small runtime is bundled inside it.
    Then it must pass the shared specification harness.
    So the semantics knowledge (numerics, NaN bit-exactness, trap points) is paid for once.
 2. **Source output, deliberately.**
-   The output is readable, reviewable and debuggable, and it can be copied into a repository as a file.
+   The output is readable, reviewable, debuggable, and vendorable as a file.
    The run site needs no build toolchain or VM contract.
 3. **Targets that cannot run wasm any other way.**
    The defining example is Bash: C/Rust tools running where the only dependency is a shell.

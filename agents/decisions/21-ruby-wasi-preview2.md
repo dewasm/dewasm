@@ -22,7 +22,7 @@ That is enough to run real `wasm32-wasip2` binaries; `sockets`/`http` and 0.3 `a
 
 - **One resource table** (`@res`, integer handles) holds streams, descriptors, and pollables.
   The wrapper's `canon resource.drop` lambdas call `resource_drop(id, handle)`.
-  It closes IOs the host opened and never the process's standard input, output, or error.
+  It closes IOs the host opened and never the process stdio.
   **File system descriptors hold a host path, not an open IO**.
   Each `*-via-stream` call opens its own handle.
   So stream offsets never interfere and drop order cannot double-close.
@@ -60,7 +60,7 @@ That is enough to run real `wasm32-wasip2` binaries; `sockets`/`http` and 0.3 `a
   It also covers open-at/`stat`/via-stream file I/O, clocks, and random.
   A user host object can replace `Rt::WASIP2` whole by implementing `import(name)` + `resource_drop`.
 - Negative / carry-over: rights/permissions are not modelled at all (beyond the sandbox containment).
-  Time values in `stat` are `none`; `metadata-hash` is `ino`/`dev`, not a real hash.
+  Timestamps in `stat` are `none`; `metadata-hash` is `ino`/`dev`, not a real hash.
   Bash has no p2 story (and per decision 20 would need the host vocabulary first).
 
 See also: [decision 20](20-component-model-core-ir-adapters.md), [decision 14](14-ruby-wasi-file-system.md), [decision 7](7-import-providers.md).
