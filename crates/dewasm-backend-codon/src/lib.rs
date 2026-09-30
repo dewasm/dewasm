@@ -1,5 +1,5 @@
 //! Codon backend: translates dewasm IR into a Codon module.
-//! The module is a class plus a bundled lightweight runtime.
+//! The module is a class plus a bundled small runtime.
 //! The Codon toolchain compiles it ahead of time.
 //!
 //! Lowering conventions:
@@ -11,7 +11,7 @@
 //! - f32/f64 are native `float32`/`float`.
 //!   Float division goes through an `@llvm` `fdiv` unit.
 //!   Codon's `/` raises on a zero divisor.
-//!   A float add/sub/mul/div with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q`.
+//!   A float `add`/`sub`/`mul`/`div` with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q`.
 //!   Under `-release`, LLVM folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x`.
 //!   This was measured on Codon 0.20.1.
 //!   That would skip the signaling-NaN quieting wasm requires.
@@ -54,7 +54,7 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Codon (see crates/dewasm-backend-codon/units/).
+/// The runtime unit bundler for Codon (see `crates/dewasm-backend-codon/units/`).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -94,7 +94,7 @@ pub fn bundler() -> &'static RuntimeBundler {
                     prelude: Some("wasi/_class"),
                 },
                 // This is last on purpose.
-                // Extern's field annotations name Fn, Global, Table, Memory and Tag.
+                // `Extern`'s field annotations name `Fn`, `Global`, `Table`, `Memory` and `Tag`.
                 // Codon resolves nested-class field and signature annotations in definition order.
                 // It allows no forward references.
                 RuntimeScope {
@@ -144,7 +144,7 @@ fn find_codon_uncached() -> Option<std::path::PathBuf> {
 
 /// The directory holding Codon's runtime dylibs (`libcodonrt`, `libomp`).
 /// A built binary needs it on the loader path.
-/// It is resolved relative to the `codon` binary, following symlinks.
+/// It is resolved relative to the `codon` binary, following symbolic links.
 /// `<prefix>/bin/codon` maps to `<prefix>/lib/codon`.
 pub fn codon_lib_dir(codon: &std::path::Path) -> Option<std::path::PathBuf> {
     let resolved = codon.canonicalize().ok()?;
@@ -170,7 +170,7 @@ impl Backend for CodonBackend {
 
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         match feature {
-            // Native float32/float with @llvm bit paths.
+            // Native `float32`/`float` with `@llvm` bit paths.
             // NaN payload handling mirrors the Go backend's units.
             Feature::Floats => SupportStatus::Supported,
             Feature::ImportedGlobals
@@ -179,13 +179,13 @@ impl Backend for CodonBackend {
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects.
-            // A thrown exception is a native exception that doubles as the exnref.
+            // A thrown exception is a native exception that doubles as the `exnref`.
             // Traps stay uncatchable: the Python backend's model under Codon's typing.
             Feature::ExceptionHandling => SupportStatus::Supported,
             // A trampoline with a body/entry split.
             // It is the Go backend's shape under Codon's nominal typing.
             // A parked call is typed per argument slot and per result signature.
-            // So a chain bounces in one frame with nothing boxed.
+            // So a chain runs in one frame, with nothing boxed.
             Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
@@ -370,7 +370,7 @@ pub fn generate_class_with_units(
     )
 }
 
-/// The spec-harness variant: shared `Rt` linkage and the reflective dispatchers.
+/// The variant for the specification harness: shared `Rt` linkage and the by-name dispatchers.
 /// The dispatchers are `invoke` and `global_get`.
 /// It also adds the recursion guard.
 /// The guard turns a fatal native stack overflow into a catchable "call stack exhausted" trap.
@@ -429,8 +429,8 @@ fn generate_class_inner(
                     }
                 }
                 Stmt::ReturnCallIndirect { type_idx, .. } => {
-                    // An indirect site can park boxed (a foreign funcref).
-                    // So it needs every param slot of its signature.
+                    // An indirect site can park boxed (a foreign `funcref`).
+                    // So it needs every parameter slot of its signature.
                     let ty = &module.types[*type_idx as usize];
                     tail_sig_set.insert(ty.results.clone());
                     boxed_sig_set.insert(ty.results.clone());
@@ -489,8 +489,8 @@ fn generate_class_inner(
                 // Namespace the runtime under the generated class.
                 // The units reference the runtime only as `Rt.<name>`.
                 // They never reference it inside a string literal.
-                // The units lint enforces that.
-                // So one textual replace moves every reference onto the per-artifact name.
+                // The units lint checks that.
+                // So one text replace moves every reference onto the per-artifact name.
                 out.push_str(&format!("class {rt_name}:\n"));
                 out.push_str(
                     &bundler()
@@ -525,7 +525,7 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
 /// It is fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a single identifier and is used verbatim.
+/// The library-mode module name must be a single identifier and is used unchanged.
 /// It names the generated class and, suffixed `Rt`, its embedded runtime.
 fn check_module_name(name: &str) -> Result<()> {
     if is_ident(
@@ -582,9 +582,9 @@ fn codon_type(ty: ValType) -> &'static str {
         ValType::I64 => "UInt[64]",
         ValType::F32 => "float32",
         ValType::F64 => "float",
-        // Spelled by Gen::ty_str, which knows the runtime name.
+        // Spelled by `Gen::ty_str`, which knows the runtime name.
         ValType::ExnRef => unreachable!("exnref is spelled by ty_str"),
-        // funcref as a value type needs reference types, rejected at conversion time.
+        // `funcref` as a value type needs reference types, rejected at conversion time.
         ValType::FuncRef => unreachable!("reference-typed value"),
     }
 }
@@ -595,7 +595,7 @@ fn zero_value(ty: ValType) -> &'static str {
         ValType::I64 => "UInt[64](0)",
         ValType::F32 => "float32(0.0)",
         ValType::F64 => "0.0",
-        // A wasm exnref local/temp defaults to the null reference.
+        // A wasm `exnref` local/temp defaults to the null reference.
         ValType::ExnRef => "None",
         ValType::FuncRef => unreachable!("reference-typed value"),
     }
@@ -611,9 +611,9 @@ pub fn i32_const(v: u32) -> String {
 }
 
 /// A `UInt[64]` constant expression.
-/// Values above `i64::MAX` are spelled in hex.
+/// Values above `i64::MAX` are spelled in hexadecimal.
 /// Codon rejects a decimal literal outside the signed 64-bit range.
-/// But it parses the hex form (wrapping).
+/// But it parses the hexadecimal form (wrapping).
 /// `UInt[64]` reinterprets the bits.
 pub fn i64_const(v: u64) -> String {
     if v > i64::MAX as u64 {
@@ -684,7 +684,7 @@ fn tail_arg_slot(i: usize, ty: ValType) -> String {
     format!("_ta{i}_{}", ty_suffix(ty))
 }
 
-/// The recursion-guard budget (spec builds only), the Go backend's model.
+/// The recursion-guard budget (specification builds only), the Go backend's model.
 /// Each generated function adds its frame's slot count to a shared counter on entry.
 /// It traps once the running total exceeds this budget.
 /// That turns an otherwise-fatal native stack overflow into a catchable trap.
@@ -716,8 +716,8 @@ struct Gen<'a> {
     /// The module-level name of the runtime this artifact references (see [`runtime_name`]).
     rt_name: String,
     class_name: String,
-    /// Spec-harness mode.
-    /// Emit the reflective `invoke`/`global_get` dispatchers and the recursion guard.
+    /// Specification-harness mode.
+    /// Emit the by-name `invoke`/`global_get` dispatchers and the recursion guard.
     spec: bool,
 }
 
@@ -733,7 +733,7 @@ impl<'a> Gen<'a> {
     }
 
     /// The Codon spelling of a value type.
-    /// exnref is the runtime's own nullable exception class.
+    /// `exnref` is the runtime's own nullable exception class.
     /// So it carries the per-artifact runtime name.
     fn ty_str(&self, ty: ValType) -> String {
         if ty == ValType::ExnRef {
@@ -768,7 +768,7 @@ impl<'a> Gen<'a> {
     /// Every defined function a direct `return_call` targets is one too.
     /// A tail call always parks, so every parkable direct target needs an entry.
     /// Running the callee inline would keep this frame's exception handlers alive.
-    /// The proposal forbids that.
+    /// The proposal does not allow that.
     fn tail_entries(&self) -> &BTreeSet<u32> {
         &self.tail_entry_set
     }
@@ -1042,7 +1042,7 @@ impl<'a> Gen<'a> {
                         "def invoke(self, a: List[{rt}.Val]) -> List[{rt}.Val]:"
                     ));
                     w.indent();
-                    // ENOSYS for the single-i32-result syscall shape, zero values otherwise.
+                    // ENOSYS for the single-i32-result system call shape, zero values otherwise.
                     if ty.results == [ValType::I32] {
                         w.line(format!("return [{rt}.Val.of_i32(UInt[32](52))]"));
                     } else if ty.results.is_empty() {
@@ -1196,7 +1196,7 @@ impl<'a> Gen<'a> {
             ));
         }
         // Entry tables are built before anything that parks a target.
-        // They are also built before anything that stores a funcref in a table.
+        // They are also built before anything that stores a `funcref` in a table.
         // A tail call reads its target out of here rather than building a closure per hop.
         for sig in self.tail_signatures() {
             let id = sig_id(sig);
@@ -1309,7 +1309,7 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Tags: imported first, then defined (index space is imported_tags ++ tags).
+        // Tags: imported first, then defined (index space is `imported_tags ++ tags`).
         // A defined tag is a fresh identity object; wasm tag equality is identity, never structure.
         for (i, import) in m.imported_tags.iter().enumerate() {
             self.use_unit("ext/import_tag");
@@ -1337,8 +1337,8 @@ impl<'a> Gen<'a> {
                     // The optimizer's compile time is superlinear in `__init__`'s statement count.
                     // Every item is wrapped in `Optional[...]` explicitly.
                     // Codon types the literal from its elements alone.
-                    // `List[Funcref]` never coerces to the field's `List[Optional[Funcref]]`.
-                    // Null items are anchored too.
+                    // `List[Funcref]` never converts to the field's `List[Optional[Funcref]]`.
+                    // Null items are wrapped too.
                     // So an all-null segment does not depend on free-variable unification.
                     if elem.items.is_empty() {
                         w.line(format!("self.elem{i} = List[Optional[{rt}.Funcref]]()"));
@@ -1373,8 +1373,9 @@ impl<'a> Gen<'a> {
         for (i, data) in m.datas.iter().enumerate() {
             self.use_unit("rt/data");
             self.use_unit("rt/unhex");
-            // The hex alphabet needs no escaping.
-            // So the segment skips `codon_string`'s per-character scan (segments run to megabytes).
+            // The hexadecimal digits need no escaping.
+            // So the segment skips `codon_string`'s per-character scan.
+            // A segment can be megabytes long.
             let payload = hex_literals(&data.data, DATA_LITERAL_HEX_DIGITS);
             match &data.offset {
                 Some(offset) => {
@@ -1468,7 +1469,7 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// The spec-harness reflective dispatcher: boxed args in, boxed results out.
+    /// The by-name dispatcher of the specification harness: boxed arguments in, boxed results out.
     /// So the harness needs no per-signature phrasing.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         let m = self.module;
@@ -1506,8 +1507,8 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// The spec-harness global reader: the boxed current value in a one-element list.
-    /// The harness treats it exactly like a single-result invoke.
+    /// The specification harness's global reader: the boxed current value in a one-element list.
+    /// The harness treats it exactly like a single-result `invoke`.
     fn emit_global_get_method(&self, w: &mut CodeWriter) {
         let m = self.module;
         let rt = &self.rt_name;
@@ -1535,7 +1536,7 @@ impl<'a> Gen<'a> {
         w.dedent();
     }
 
-    /// A funcref value for a table slot / element item.
+    /// A `funcref` value for a table slot / element item.
     fn elem_item(&self, item: &ElemItem) -> String {
         let rt = &self.rt_name;
         match item {
@@ -1545,7 +1546,7 @@ impl<'a> Gen<'a> {
                 } else {
                     format!("{}_W{idx}(self)", self.class_name)
                 };
-                // A tail-calling function's funcref carries its entry-table position.
+                // A tail-calling function's `funcref` carries its entry-table position.
                 // So a chain through the table stays flat within the owning instance.
                 let slot = self.tail_slot(*idx).map(|k| k as i64).unwrap_or(-1);
                 format!(
@@ -1554,13 +1555,13 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "None".to_string(),
-            // A `global.get` element item needs a ref-typed immutable global.
+            // A `global.get` element item needs a reference-typed immutable global.
             // That means reference types, which are rejected at conversion; unreachable here.
             ElemItem::Global(_) => unreachable!("ref-typed global element item"),
         }
     }
 
-    /// A statement calling function `func_idx` with no arguments and discarding results.
+    /// A statement calling function `func_idx` with no arguments and ignoring its results.
     /// This is the start function.
     fn call_only(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
@@ -1634,7 +1635,7 @@ impl<'a> Gen<'a> {
         w.line(format!("def {fname}(self{params}){ret}:"));
         w.indent();
 
-        // Recursion guard (spec builds only): see SPEC_STACK_LIMIT.
+        // Recursion guard (specification builds only): see `SPEC_STACK_LIMIT`.
         let guard_cost = 1 + ty.params.len() + func.locals.len() + func.temps.len();
         if self.spec {
             w.line("global _rt_stack");
@@ -1727,7 +1728,7 @@ impl<'a> Gen<'a> {
     /// `tail` says nothing runs after this sequence before the function falls off.
     /// A landing marker there writes a register nothing reads again, so it is skipped.
     /// Returns the sequence's free branch targets.
-    /// Those are the label ids it branches to that are not bound within it.
+    /// Those are the labels it branches to that are not bound within it.
     fn emit_seq(
         &self,
         w: &mut CodeWriter,
@@ -1786,7 +1787,8 @@ impl<'a> Gen<'a> {
                         free.extend(inner);
                         escapes
                     } else {
-                        // No br targets this loop, so it never repeats: the body is spliced inline.
+                        // No `br` targets this loop, so it never repeats.
+                        // The body is spliced inline.
                         let mut inner_guarded = false;
                         let mut inner = self.emit_seq(w, body, &mut inner_guarded, stmt_tail);
                         inner.remove(&label.id);
@@ -1968,7 +1970,7 @@ impl<'a> Gen<'a> {
         )
     }
 
-    /// The boxed invoke of imported function `func`.
+    /// The boxed call of imported function `func`.
     fn boxed_call(&self, func: u32, args: &[Expr]) -> String {
         let rt = &self.rt_name;
         self.use_unit("rt/boxed");
@@ -1986,7 +1988,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The boxed invoke of a table slot.
+    /// The boxed call of a table slot.
     fn indirect_invoke(
         &self,
         type_idx: u32,
@@ -2016,8 +2018,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Emit the statements `stmt_emits` deems code-free.
-    /// A comment renders, and an empty construct vanishes.
+    /// Emit the statements `stmt_emits` treats as code-free.
+    /// A comment renders, and an empty construct emits nothing.
     fn simple_stmt_or_skip(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::SourceLine(_) => self.simple_stmt(w, stmt),
@@ -2243,7 +2245,7 @@ impl<'a> Gen<'a> {
                             fs.push(r);
                             ss.push("float32(0.0)".to_string());
                         }
-                        // Tag parameters of reference type are not carried (see rt/boxed).
+                        // Tag parameters of reference type are not carried (see `rt/boxed`).
                         ValType::FuncRef | ValType::ExnRef => {
                             unreachable!("reference-typed tag parameter")
                         }
@@ -2269,7 +2271,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("{}({})", self.rt("throw_ref"), self.expr(exn)));
             }
             // Parked, never called: the callee must run once this frame is gone.
-            // That includes any enclosing handler, and returning is what unwinds them.
+            // That includes any outer handler, and returning is what unwinds them.
             // The target is the callee's tail entry, built once at instantiation.
             // So a hop allocates nothing.
             Stmt::ReturnCall { func, args } => {
@@ -2286,7 +2288,7 @@ impl<'a> Gen<'a> {
                     // An imported callee has no typed entry: park it boxed.
                     None => {
                         let vals = self.boxed_vals(&args_r, &fty.params);
-                        // This goes through an annotated local.
+                        // This goes through a local with a type annotation.
                         // Codon upcasts a subclass into a base-typed binding.
                         // But it does not upcast directly into an Optional[base] field.
                         w.line(format!(
@@ -2329,10 +2331,10 @@ impl<'a> Gen<'a> {
                 w.dedent();
                 w.line("else:");
                 w.indent();
-                // Another instance's function (or an own funcref without an entry): park it boxed.
+                // Park another instance's function (or an own `funcref` without an entry) boxed.
                 // So the frame and its handlers are still gone before the callee runs.
                 let vals = self.boxed_vals(&args_r, &ty.params);
-                // This goes through an annotated local.
+                // This goes through a local with a type annotation.
                 // Codon upcasts a subclass into a base-typed binding.
                 // But it does not upcast directly into an Optional[base] field.
                 w.line(format!(
@@ -2419,7 +2421,7 @@ impl<'a> Gen<'a> {
     /// A catch-all runs unconditionally.
     /// `branch()` alone never leaves the `except` suite.
     /// So this appends the `break` that exits the `try_table`'s wrapping `while True:` itself.
-    /// The `break` is dead, but harmless, right after a `return`.
+    /// The `break` is dead, but does no harm, right after a `return`.
     fn catch_clause(&self, w: &mut CodeWriter, clause: &dewasm_core::ir::CatchClause) {
         let bind_and_branch = |gen: &Self, w: &mut CodeWriter| {
             for (i, t) in clause.value_temps.iter().enumerate() {
@@ -2476,8 +2478,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`.
-    /// Returns whether it has any, i.e. whether it may leave `_br` set on fall-through.
+    /// Add the labels a non-structured statement branches to into `free`.
+    /// Returns whether it has any, that is, whether it may leave `_br` set on fall-through.
     fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
         match stmt {
             Stmt::Br(t) | Stmt::BrIf { target: t, .. } => self.collect_target_free(t, free),
@@ -2754,9 +2756,9 @@ fn stmt_emits(stmt: &Stmt) -> bool {
 /// Lint for the runtime units.
 /// Every reference a unit body makes to another unit must be declared in its `# requires:` header.
 /// Mirrors the Python backend's units lint, adjusted for this runtime's shapes:
-/// - `Rt.<name>` staticmethod/class references;
+/// - `Rt.<name>` `staticmethod`/class references;
 /// - `m.<name>` memory-method calls in the WASI units;
-/// - `self.<name>(...)` sibling calls within a scope.
+/// - `self.<name>(...)` calls to other methods within a scope.
 #[cfg(test)]
 mod units {
     use super::*;

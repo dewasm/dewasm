@@ -14,13 +14,13 @@ mod common;
 
 /// Known trial failures with their attribution `(trial, tag)`.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // No socket layer in a demo runtime (out of scope, docs/support.md).
+    // No socket layer in an example runtime (out of scope, `docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
-/// The pull-request category: no filesystem fixture, one trial per always-on interface.
-/// Those interfaces are args, environ, stdout, exit, random, and stdio round-trip.
+/// The pull-request category: no file system fixture, one trial per always-on interface.
+/// Those interfaces are `args`, `environ`, `stdout`, exit, random, and `stdio` round-trip.
 const FAST_TRIALS: &[&str] = &[
     "assemblyscript/args_get-multiple-arguments",
     "assemblyscript/environ_get-multiple-variables",
@@ -31,15 +31,16 @@ const FAST_TRIALS: &[&str] = &[
 ];
 
 /// What `slow_test` adds on top of [`FAST_TRIALS`].
-/// The union is built in `curated_trials`, so the slow category is a superset by construction.
+/// The union is built in `curated_trials`.
+/// So the slow category contains the fast one by construction.
 /// The added trials are:
-/// - the trials pinning the layout-decode paths (stat and dirent);
+/// - the trials that cover the layout-decode paths (`stat` and `dirent`);
 ///   those are this backend's platform-conditional risk area;
 /// - the open/read/write core;
-/// - the `sock_shutdown` rows, so the failure ledger stays exercised.
+/// - the `sock_shutdown` rows, so [`WASI_TESTSUITE_EXPECTED_FAILURES`] stays exercised.
 ///
 /// It is sized against the slow category's budget.
-/// Each trial pays a codon build, so breadth beyond this list belongs to the ultra sweep.
+/// Each trial pays a `codon build`, so any trial beyond this list belongs to `ultra_slow_test`.
 const SLOW_EXTRA_TRIALS: &[&str] = &[
     "c/sock_shutdown-invalid_fd",
     "c/sock_shutdown-not_sock",
@@ -82,7 +83,7 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
     }
 
     /// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into every process environment.
-    /// So count-exact environ assertions cannot hold there.
+    /// So count-exact `environ` assertions cannot hold there.
     /// A Codon binary on Linux inherits exactly the manifest environment.
     /// So these pass there and must not be listed.
     fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
@@ -102,10 +103,11 @@ impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
         ]
     }
 
-    /// Every trial is a codon build, so the suite is split into categories like the spec harness.
-    /// A pull request runs a handful of no-fixture trials.
+    /// Every trial is a `codon build`.
+    /// So the suite is split into categories like the specification harness.
+    /// A pull request runs a few no-fixture trials.
     /// Under `slow_test` it runs one representative per interface area.
-    /// The full sweep runs only under `ultra_slow_test`.
+    /// The full suite runs only under `ultra_slow_test`.
     fn curated_trials(&self) -> Option<&'static [&'static str]> {
         if cfg!(feature = "ultra_slow_test") {
             None

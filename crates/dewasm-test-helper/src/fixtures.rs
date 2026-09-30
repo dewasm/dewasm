@@ -1,7 +1,7 @@
 //! Fixture paths and the one conversion policy the e2e suites share.
 //! Paths resolve from the consuming crate via `CARGO_MANIFEST_DIR`.
 //! Every crate that uses this helper sits at `crates/<x>/`.
-//! So `../../` still reaches the repo root.
+//! So `../../` still reaches the repository root.
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +19,7 @@ pub fn apps_cache_dir() -> PathBuf {
 
 /// `examples/apps/fixtures/`, home of our own committed app-driver fixtures:
 ///
-/// * the QuickJS `.js` script the filesystem app cases run;
+/// * the QuickJS `.js` script the file system app cases run;
 /// * the `rg`/`gzip` search-and-compress fixture trees;
 /// * the ExifTool image fixture.
 pub fn apps_fixtures_dir() -> PathBuf {
@@ -32,7 +32,7 @@ pub fn apps_snapshot_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/snapshots")
 }
 
-/// A fresh, empty scratch directory under the temp dir keyed by `name`.
+/// A fresh, empty scratch directory under the system temporary directory keyed by `name`.
 /// So cases running in parallel never share host state.
 pub fn fresh_scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dewasm-app-{name}"));
@@ -70,7 +70,7 @@ pub fn convert(backend: &dyn Backend, wat_path: &Path, mode: Mode, name: &str) -
 
 /// Codegen recurses with the IR's control-flow nesting.
 /// SQLite's deepest functions exceed the 2 MiB test-thread default stack.
-/// So app conversion runs on a roomier stack.
+/// So app conversion runs on a larger stack.
 pub fn convert_on_big_stack(
     backend: &(dyn Backend + Sync),
     bytes: &[u8],

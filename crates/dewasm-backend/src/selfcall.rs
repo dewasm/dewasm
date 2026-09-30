@@ -29,7 +29,7 @@ pub fn rewrite(funcs: &mut [Func], types: &[FuncType], num_imported: u32) {
 /// Whether wrapping `func`'s body in a loop preserves its meaning.
 ///
 /// Two conditions beyond having a self tail call at all.
-/// The body must terminate.
+/// The body must never fall off its end.
 /// A body that can fall off its end would spin in the loop rather than return.
 /// And every declared local must have a constant zero.
 /// The reason is that a fresh call zeroes the locals and the loop has to do the same.
@@ -106,7 +106,7 @@ fn replace(stmts: &mut Vec<Stmt>, cx: &mut Cx) {
         match stmt {
             Stmt::ReturnCall { func, args } if func == cx.idx => {
                 // The arguments land in fresh temps before any parameter is written.
-                // Otherwise an argument could read a parameter an earlier assignment overwrote.
+                // Otherwise an argument could read a parameter an earlier assignment changed.
                 let mut slots = Vec::with_capacity(args.len());
                 for (arg, param) in args.into_iter().zip(cx.params) {
                     let slot = Temp {

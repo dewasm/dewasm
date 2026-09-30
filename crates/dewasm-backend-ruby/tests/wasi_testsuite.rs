@@ -11,7 +11,7 @@ use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution: `(trial, tag)`.
 /// Two kinds remain, both attributed:
-/// - Declared out-of-scope syscalls (`sock_shutdown`; docs/support.md).
+/// - Declared out-of-scope system calls (`sock_shutdown`; `docs/support.md`).
 ///   Filling the gap later flips the entry to a hard failure.
 /// - Environment variables the host interpreter itself injects.
 ///   One is macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`.
@@ -19,15 +19,15 @@ use dewasm_test_helper::BackendUnderTest;
 ///   So count-exact `environ_*` assertions cannot hold.
 ///   That holds even though the harness runs trials with a cleared environment.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared out-of-scope syscalls.
+    // Declared out-of-scope system calls.
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
 /// Host-scoped failures on a macOS host.
-/// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into the CF-linked ruby process.
-/// So the guest sees one extra environ entry, and count-exact `environ_*` assertions cannot hold.
-/// Plain Linux ruby injects nothing, so these pass there.
+/// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into the `ruby` process, which links it.
+/// So the guest sees one extra `environ` entry, and count-exact `environ_*` assertions cannot hold.
+/// Plain Linux `ruby` injects nothing, so these pass there.
 const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
     (
         "assemblyscript/environ_get-multiple-variables",

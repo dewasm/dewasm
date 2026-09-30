@@ -15,10 +15,10 @@ use dewasm_backend_ruby::RubyBackend;
 #[derive(Parser)]
 #[command(name = "dewasm", version)]
 struct Cli {
-    /// Input file (.wasm or .wat)
+    /// Input file (.wasm binary or WAT text)
     input: PathBuf,
 
-    /// Target language: ruby, bash, python, perl, go, java, or codon.
+    /// Target language: "ruby", "bash", "python", "perl", "go", "java", or "codon".
     #[arg(short, long)]
     target: String,
 
@@ -27,28 +27,28 @@ struct Cli {
     #[arg(short, long, default_value = "library")]
     mode: String,
 
-    /// Output file path ("-" for stdout)
+    /// Output file path ("-" for standard output)
     #[arg(short, long, default_value = "-")]
     output: PathBuf,
 
-    /// Library-mode name of the generated class/module/package, used verbatim.
+    /// Library-mode name of the generated class/module/package, used unchanged.
     /// A name that does not fit the target language's grammar is rejected.
     /// Required for --mode library.
-    /// Incompatible with --mode standalone, whose internal name is fixed.
+    /// Not compatible with --mode standalone, whose internal name is fixed.
     #[arg(long)]
     module_name: Option<String>,
 
     /// Do not bundle the built-in WASI implementation for wasi_snapshot_preview1 imports.
-    /// Incompatible with --mode standalone.
+    /// Not compatible with --mode standalone.
     #[arg(long)]
     no_default_wasi: bool,
 
-    /// Externalize data-segment bytes into a binary data file written to this path.
+    /// Write data-segment bytes into a separate binary data file at this path.
     /// Without it they are embedded as literals in the source.
     #[arg(long)]
     data_file: Option<PathBuf>,
 
-    /// Parse the module's DWARF `.debug_*` sections and emit source-position markers.
+    /// Parse the module's DWARF .debug_* sections and emit source-position markers.
     #[arg(long)]
     dwarf_line: bool,
 }
@@ -83,8 +83,8 @@ fn main() -> Result<()> {
         bail!("standalone output has a fixed internal name; --module-name applies to library mode");
     }
 
-    // Data-segment externalization is opt-in and supported for ruby/go/python/java/perl only.
-    // It needs a real data-file path (not stdout).
+    // The data file is optional and supported for the Ruby, Go, Python, Java and Perl targets only.
+    // It needs a real data-file path (not standard output).
     // Reject unsupported combinations first with a clear, attributed error instead of mis-emitting.
     let data_file = match &cli.data_file {
         Some(path) => {
@@ -137,7 +137,7 @@ fn main() -> Result<()> {
 
     let input = std::fs::read(&cli.input)
         .with_context(|| format!("failed to read {}", cli.input.display()))?;
-    // Accept .wat text input as well; wat::parse_bytes passes .wasm through.
+    // Accept `.wat` text input as well; `wat::parse_bytes` passes `.wasm` through.
     let bytes = wat::parse_bytes(&input).context("failed to parse input")?;
 
     let opts = GenOptions {
@@ -165,10 +165,10 @@ fn main() -> Result<()> {
     let files = backend.generate(&module, &opts)?;
 
     // Route by name: the data file goes to `--data-file`'s path, the primary source to `-o`.
-    // The data file is the one whose `name` is the configured `data_file_name`.
+    // The data file is the one whose `name` equals the options' `data_file_name`.
     let data_file_name = opts.data_file.as_ref().map(|c| c.data_file_name.as_str());
-    // A generated source sharing `data_file_name` would be misrouted and clobbered.
-    // An example is java's fixed `Main.java`.
+    // A generated source sharing `data_file_name` would go to the wrong path and be clobbered.
+    // An example is the Java backend's fixed `Main.java`.
     // `matching > 1` means the source and the data file collide.
     // `matching == files.len()` means no data file was emitted and the match is the source itself.
     if let Some(name) = data_file_name {
@@ -203,7 +203,7 @@ fn main() -> Result<()> {
 }
 
 /// Canonicalize for the --data-file/-o collision check, so differently spelled paths compare equal.
-/// It tries the file, else parent + final component, else the cwd-anchored absolute path.
+/// It tries the file, else parent + final component, else the path joined to the current directory.
 fn resolve_for_collision(path: &Path) -> PathBuf {
     if let Ok(resolved) = path.canonicalize() {
         return resolved;

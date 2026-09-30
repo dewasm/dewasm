@@ -1,4 +1,4 @@
-//! `cargo xtask migrate-records`: upgrade every record under `records/` in place.
+//! `cargo xtask migrate-records`: update every record under `records/` in place.
 //! Each record moves to its kind's current schema.
 //!
 //! All cross-version knowledge lives here.
@@ -123,11 +123,11 @@ fn migrate_speed_v1(text: &str) -> Result<bench::report::Report> {
     })
 }
 
-/// A v1 skipped reason's class, and the reason with the class boilerplate stripped.
+/// A v1 skipped reason's class, and the reason with the class prefix stripped.
 /// One legacy reason states a cost gap without the "on cost" phrasing.
-/// That is bash on the SQL cases: "do not finish in a practical time".
+/// That is Bash on the SQL cases: "do not finish in a practical time".
 /// It is matched on that content.
-/// A reason with no exclusion prefix is a host setup gap, kept verbatim.
+/// A reason with no exclusion prefix is a host set-up gap, kept unchanged.
 fn classify_v1_reason(reason: &str) -> (SkipKind, String) {
     if let Some(rest) = reason.strip_prefix("excluded on cost, not capability: ") {
         (SkipKind::Cost, rest.to_string())

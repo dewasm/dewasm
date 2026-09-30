@@ -1,15 +1,15 @@
 //! The `go build` step the Go crate's test binaries share.
 //! It compiles generated source to a content-addressed cache binary and hands back the path.
-//! Identical sources (e.g. cowsay's args and stdin cases) then build once.
+//! Identical sources (for example, `cowsay_args_e2e!` and `cowsay_stdin_e2e!`) then build once.
 //! The cache is keyed on the source alone.
-//! Every suite in the crate shares it (e2e, spec, wasi-testsuite, module-name).
+//! Every suite in the crate shares it (`e2e`, `spec`, `wasi_testsuite`, `module_name`).
 //! So a program two of them happen to agree on is built once.
 //!
 //! The artifact's own `package` clause selects one of two layouts.
 //! It is the one fact that decides how Go can build the artifact.
 //!
 //! - `package main`: one file, `go build` it directly.
-//!   This covers standalone output and the spec-style multi-module compositions.
+//!   This covers standalone output and multi-module compositions in the specification's style.
 //!   The test crate assembles those compositions itself.
 //! - `package <name>` (library output): a Go *package*, which can only be built from a module.
 //!   The source is the artifact plus whatever host glue the shared runner appended to it.
@@ -35,7 +35,7 @@ static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 
 /// Compile `source` to a content-addressed cache binary and return its path.
 /// `Err(Output)` carries the `go build` failure.
-/// A piped run can then report it via `status.success()`, while a pty run panics on it.
+/// A piped run can then report it via `status.success()`, while a pseudo-terminal run panics on it.
 /// A missing `go` toolchain is a loud failure.
 pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     let go =
@@ -53,7 +53,7 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     }
 
     // Both the sources and the binary get per-attempt unique names.
-    // Two threads with the same hash (cowsay's args and stdin cases) may build concurrently.
+    // Two threads with the same hash (the two `cowsay_*_e2e!` cases) may build at the same time.
     // A shared source path would let one truncate the file mid-read of the other's `go build`.
     // That was issue #19.
     // Only the final rename onto the cache key is shared, and that is atomic.
@@ -104,7 +104,7 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
 
 /// Build the Go module the caller has already laid out in `dir` and return the binary's path.
 /// The layout is a `go.mod` at its root and `package main` files beside it.
-/// Library packages the caller wrote go into subdirectories.
+/// Library packages the caller wrote go into directories below it.
 /// The multi-module cases use this instead of [`build_go`].
 /// Their artifacts are several files by design (that is what the case is about).
 /// So there is no single source to key a cache on, and each case gets a fresh directory anyway.
@@ -130,8 +130,8 @@ fn run_build(
     cmd.arg("build").arg("-o").arg(out).arg(target);
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
-        // A stray `go.work` may sit above the temp dir.
-        // It would otherwise pull this throwaway module into a workspace that does not list it.
+        // An unrelated `go.work` may sit above the temporary directory.
+        // It would otherwise pull this temporary module into a workspace that does not list it.
         cmd.env("GOWORK", "off");
     }
     cmd.output().expect("spawn go build")

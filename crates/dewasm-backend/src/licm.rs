@@ -12,7 +12,7 @@
 //! Hoisting runs a load earlier, possibly on paths that would have skipped it.
 //! So only loads that can never trap are hoisted.
 //! The constant address plus access width must fit inside the memory's minimum size.
-//! A memory never shrinks below that size.
+//! A memory never gets smaller than that size.
 
 use std::collections::BTreeMap;
 
@@ -20,7 +20,7 @@ use dewasm_core::ir::{
     BinOp, Expr, Func, FuncType, Label, LoadOp, Module, Stmt, StoreOp, Temp, ValType,
 };
 
-/// The memory's minimum size in bytes: the floor a memory never shrinks below, imported or not.
+/// The memory's minimum size in bytes: the floor a memory never goes below, imported or not.
 pub fn memory_min_bytes(module: &Module) -> Option<u64> {
     module
         .memory
@@ -40,7 +40,7 @@ pub struct Params {
     pub min_hoisted_with_stores: usize,
 }
 
-/// Rewrite `funcs` in place, hoisting invariant constant-address loads out of eligible loops.
+/// Rewrite `funcs` in place, hoisting invariant constant-address loads out of loops that qualify.
 /// `types` resolves each function's parameter count.
 /// `mem_min_bytes` is the memory's minimum size.
 /// It is `None` when the module has no memory, which disables the pass.
@@ -110,7 +110,7 @@ fn walk_seq(seq: &mut Vec<Stmt>, cx: &mut Cx) {
             0
         };
         if inserted > 0 {
-            // The loop moved to `i + inserted` and its interior is fully processed.
+            // The loop moved to `i + inserted` and its interior is processed.
             i += inserted + 1;
             continue;
         }
@@ -122,7 +122,7 @@ fn walk_seq(seq: &mut Vec<Stmt>, cx: &mut Cx) {
 }
 
 /// Try to hoist out of the loop at `seq[at]`.
-/// Returns the number of preheader statements inserted before it.
+/// Returns the number of statements inserted before the loop.
 fn try_hoist_loop(seq: &mut Vec<Stmt>, at: usize, cx: &mut Cx) -> usize {
     let Stmt::Loop { body, .. } = &seq[at] else {
         return 0;
@@ -308,7 +308,7 @@ fn replace_loads(stmts: &mut [Stmt], hoisted: &[Hoisted]) {
 /// Each store spills its address to a temp and stores through the temp.
 /// Then it compares the address against the hoisted window and reloads on overlap.
 /// The guard sits after the store.
-/// If the store traps, the loop is gone and staleness cannot be observed.
+/// If the store traps, the loop is gone and no out-of-date value can be observed.
 /// If it succeeds, its effective address is below the memory size.
 /// So the compare arithmetic cannot wrap.
 fn guard_stores(stmts: &mut Vec<Stmt>, hoisted: &[Hoisted], lo: u64, hi: u64, cx: &mut Cx) {
@@ -333,7 +333,7 @@ fn guard_stores(stmts: &mut Vec<Stmt>, hoisted: &[Hoisted], lo: u64, hi: u64, cx
         let spill = cx.spill();
         let eff = |cx_offset: u64| -> Expr {
             // Effective address of the store.
-            // The addr operand wraps to 32 bits; the static offset does not.
+            // The `addr` operand wraps to 32 bits; the static offset does not.
             let base = Expr::Bin(
                 BinOp::I32And,
                 Box::new(Expr::Temp(spill)),
@@ -514,7 +514,7 @@ mod tests {
         ])];
         hoist(&mut funcs, &module_types(), Some(65536), &TEST_PARAMS);
         let f = &funcs[0];
-        // Two hoisted locals and a preheader of two loads.
+        // Two hoisted locals, and two loads inserted before the loop.
         // The store is rewritten to spill + store + guard.
         assert_eq!(f.locals, vec![ValType::I32, ValType::I32]);
         assert_eq!(f.temps.len(), 1);

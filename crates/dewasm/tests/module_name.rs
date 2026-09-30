@@ -16,9 +16,9 @@ fn run_dewasm(args: &[&str]) -> Output {
         .expect("spawn dewasm")
 }
 
-/// A fixture `.wat` named `stem.wat` in a fresh temp dir, so the default module name is `stem`.
-/// The counter keeps parallel test threads off each other's dirs.
-/// It does the same for concurrent `cargo test` processes.
+/// A fixture `stem.wat` in a fresh temporary directory, so the default module name is `stem`.
+/// The counter keeps parallel test threads off each other's directories.
+/// It does the same for `cargo test` processes running at the same time.
 fn fixture(stem: &str) -> PathBuf {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -60,7 +60,7 @@ fn module_name_with_standalone_is_rejected() {
     );
 }
 
-/// Standalone conversion of a hyphenated stem still works: the stem is not a module name there.
+/// Standalone conversion of a stem containing `-` still works: the stem is not a module name there.
 #[test]
 fn standalone_accepts_any_stem() {
     let wat = fixture("sqlite3-shell");
@@ -82,7 +82,7 @@ fn standalone_accepts_any_stem() {
 }
 
 /// Library mode has no default name.
-/// Omitting --module-name is an error before any backend runs.
+/// Leaving out --module-name is an error before any backend runs.
 #[test]
 fn library_requires_module_name() {
     let wat = fixture("sqlite3-shell");

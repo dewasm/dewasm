@@ -1,7 +1,7 @@
 //! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate.
-//! The report also lists its WASI preview 1 import surface.
+//! The report also lists its WASI p1 import surface.
 //!
-//! This is the app audit test: run it on an app's binary before the app is pinned as a target.
+//! This is the app audit test: run it on an app's binary before the app is added as a target.
 //! The accepted input is wasm 1.0, the universally-emitted baseline, and final exception handling.
 //! An app that needs a proposal outside it is deferred and documented in `agents/apps-audit.md`.
 //! Exception handling never defers an app by itself.
@@ -27,8 +27,8 @@ fn baseline() -> WasmFeatures {
         | WasmFeatures::BULK_MEMORY
 }
 
-/// Every post-baseline proposal this toolchain's validator knows, with the extra bits it implies.
-/// For example, relaxed-simd needs simd.
+/// Every post-baseline proposal this toolchain's `Validator` knows, with the extra bits it implies.
+/// For example, `relaxed-simd` needs `simd`.
 fn proposals() -> Vec<(&'static str, WasmFeatures)> {
     vec![
         ("reference-types", WasmFeatures::REFERENCE_TYPES),
@@ -98,15 +98,15 @@ fn import_surface(bytes: &[u8]) -> BTreeMap<String, Vec<String>> {
     by_module
 }
 
-/// LLVM keeps `call_indirect` immediates as padded (overlong) LEBs when reference-types is enabled.
-/// So wasip1 binaries from clang/zig/rustc commonly *validate* only with the reference-types bit.
+/// LLVM keeps `call_indirect` immediates as overlong LEBs when reference-types is enabled.
+/// So `wasip1` binaries from Clang, Zig, or `rustc` often need the reference-types bit to validate.
 /// They still use no construct from the proposal.
 /// Distinguish that encoding artifact from a real use.
 /// Return a description of the first genuine reference-types construct.
 /// Return `None` if the module is MVP-shaped.
 fn first_ref_types_construct(bytes: &[u8]) -> Option<String> {
     use wasmparser::{AbstractHeapType, CompositeInnerType, HeapType, Operator, ValType};
-    // exnref (and its non-null form) belongs to the exception-handling proposal.
+    // `exnref` (and its non-null form) belongs to the exception-handling proposal.
     // This scan must not claim it for reference-types.
     let is_ref = |ty: &ValType| match ty {
         ValType::Ref(r) => !matches!(
@@ -252,7 +252,7 @@ fn audit(path: &str) -> Result<bool> {
                     "{name}: needs {}, outside the accepted input",
                     blocking.join(", ")
                 );
-                // Name the first offending construct.
+                // Name the first construct the accepted input rejects.
                 // The audit record can then say *why* the proposal is required.
                 // It does not just say that it is.
                 if let Err(err) =

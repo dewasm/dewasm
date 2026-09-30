@@ -1,5 +1,5 @@
 //! The module-name policy for Ruby:
-//! - Library names are Ruby constant paths taken verbatim.
+//! - Library names are Ruby constant paths taken unchanged.
 //! - A nested one defines its ancestors under a guard.
 //! - An invalid one is a conversion-time error.
 //! - Standalone output ignores the name for a fixed `Program`.
@@ -19,7 +19,7 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["class Program\n"],
 );
 
-/// Run `source` under ruby and return its stdout, failing loud on a nonzero exit.
+/// Run `source` under `ruby` and return its `stdout`, failing loud on a nonzero exit.
 fn run(source: &str) -> String {
     let ruby =
         find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");

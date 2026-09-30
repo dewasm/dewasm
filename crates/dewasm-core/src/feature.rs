@@ -1,8 +1,8 @@
-//! Feature taxonomy for the support matrix.
+//! Feature classification for the support matrix.
 //!
 //! Every "unsupported" conversion error is attributed to one or more `Feature`s.
-//! The spec harness can then tell declared gaps from regressions.
-//! It also lets docs/support.md be generated from code.
+//! The specification harness can then tell declared gaps from regressions.
+//! It also lets `docs/support.md` be generated from code.
 
 use std::fmt;
 
@@ -40,7 +40,7 @@ pub enum Feature {
     ExceptionHandling,
     WideArithmetic,
     CustomPageSizes,
-    /// The component model (and with it WASI preview 2).
+    /// The component model (and with it WASI Preview 2).
     /// It is a layer-1 binary wrapping core modules with canonical-ABI adapters.
     ComponentModel,
 }
@@ -73,7 +73,7 @@ impl Feature {
         Feature::ALL.iter().copied().find(|f| f.id() == id)
     }
 
-    /// Stable kebab-case id used in harness reports and docs.
+    /// Stable kebab-case id used in harness reports and documents.
     pub fn id(self) -> &'static str {
         match self {
             Feature::ImportedGlobals => "imported-globals",
@@ -124,7 +124,7 @@ impl Feature {
         }
     }
 
-    /// Validator feature bits that this proposal controls, for attributing validation failures.
+    /// `Validator` feature bits that this proposal controls, for attributing validation failures.
     /// `None` for capabilities that validate under the base feature set.
     /// Those are rejected during IR building.
     pub fn validator_bits(self) -> Option<WasmFeatures> {
@@ -154,7 +154,7 @@ impl fmt::Display for Feature {
 }
 
 /// A conversion refusal attributed to declared-unsupported features.
-/// The spec harness treats as a bug anything the converter rejects *without* this attribution.
+/// The specification harness counts any rejection *without* this attribution as a bug.
 #[derive(Debug)]
 pub struct UnsupportedError {
     pub features: Vec<Feature>,

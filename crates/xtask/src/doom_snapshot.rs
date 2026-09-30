@@ -1,9 +1,9 @@
 //! The DOOM framebuffer-snapshot oracle.
-//! It runs the *original* `doom.wasm` under the wasmtime crate with the deterministic contract.
+//! It runs the *original* `doom.wasm` under the `wasmtime` crate with the deterministic contract.
 //! It writes the rendered frame to `examples/apps/snapshots/doom_frame.ppm`.
-//! wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
+//! `wasmtime` lives here, in development tooling, not in `dewasm-test-helper`.
 //! The per-backend comparison never needs an embedder, only the committed snapshot this produces.
-//! A PNG rendering of the same frame is emitted alongside it for human inspection.
+//! A PNG rendering of the same frame is emitted alongside it for people to view.
 //! The DOOM README shows it; only the PPM is the compared oracle.
 
 use anyhow::{ensure, Context, Result};
@@ -21,7 +21,7 @@ struct DoomState {
 
 /// Instantiate and drive `doom.wasm` under the deterministic contract.
 /// Return the captured framebuffer bytes (`B,G,R,A`) and its dimensions.
-/// Kept in `wasmtime::Result` so wasmtime's `?` composes; the caller lifts it to anyhow.
+/// Kept in `wasmtime::Result` so `wasmtime`'s `?` composes; the caller lifts it to `anyhow`.
 fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     let engine = Engine::default();
     let module = Module::new(&engine, bytes)?;
@@ -37,8 +37,8 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
 
     // The ten host imports follow the deterministic contract.
     // There is no console output, no save state, and a synthetic clock.
-    // The WAD is embedded: wad imports are no-ops that leave their out-params zero.
-    // Dims and offset are recorded.
+    // The WAD is embedded: WAD imports are no-ops that leave their output parameters zero.
+    // Dimensions and offset are recorded.
     let mut linker = Linker::new(&engine);
     linker.func_wrap(
         "console",
@@ -108,7 +108,7 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
         .get_memory(&mut store, "memory")
         .expect("doom.wasm has no `memory` export");
 
-    // initGame (fires onGameInit), then N ticks: no key events.
+    // `initGame` (fires `onGameInit`), then N ticks: no key events.
     // The clock self-advances on every read, so nothing is stepped here.
     init.call(&mut store, ())?;
     for _ in 0..dewasm_test_helper::DOOM_TICKS {
@@ -124,8 +124,8 @@ fn capture_frame(bytes: &[u8]) -> wasmtime::Result<(Vec<u8>, u32, u32)> {
     Ok((frame, w, h))
 }
 
-/// Recapture the DOOM framebuffer from the embedded wasmtime.
-/// Return the compared P6-PPM bytes plus a PNG for human inspection.
+/// Recapture the DOOM framebuffer from the embedded Wasmtime.
+/// Return the compared P6-PPM bytes plus a PNG for people to view.
 ///
 /// `update-snapshots` writes both; the per-backend test compares only the PPM.
 pub fn capture_doom_frame() -> Result<(Vec<u8>, Vec<u8>)> {

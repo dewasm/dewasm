@@ -5,7 +5,8 @@
 //! So capture and comparison execute the identical wasm under the identical WASI configuration.
 //!
 //! The interactive-REPL transcript is the one case that still needs a child process.
-//! A pty session has to hand its slave to one, and there it runs this very binary as the runner.
+//! A pseudo-terminal session has to hand its slave to one.
+//! The session runs this very binary as the runner in that child.
 
 use std::path::Path;
 use std::process::{ExitStatus, Output};
@@ -15,7 +16,7 @@ use dewasm_test_helper::{wasi_runner_argv, BackendUnderTest, PtyCommand, Wasmtim
 
 use crate::wasi_run::WasiRun;
 
-/// The wasmtime engine behind every regenerated execution snapshot.
+/// The Wasmtime engine behind every regenerated execution snapshot.
 pub struct EmbeddedWasmtime;
 
 impl BackendUnderTest for EmbeddedWasmtime {

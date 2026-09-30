@@ -1,20 +1,20 @@
-//! The interactive-REPL transcript case: drive the *bare* QuickJS REPL under a real pty.
-//! There is no script argument, so `_start` sees only argv[0].
+//! The interactive-REPL transcript case: QuickJS with no arguments, under a real pseudo-terminal.
+//! There is no script argument, so `_start` sees only `argv[0]`.
 //! QuickJS then drops into its interactive loop.
-//! The transcript must be byte-identical to the one wasmtime produces.
+//! The transcript must be byte-identical to the one Wasmtime produces.
 //!
-//! The bare no-args invocation is the interactive REPL.
-//! A standalone backend runs `_start` with the host process's real argv.
-//! So the converted program spawned under the pty with no extra arguments is exactly `qjs`.
+//! Running with no arguments is the interactive REPL.
+//! A standalone backend runs `_start` with the host process's real `argv`.
+//! So the converted program spawned under the pseudo-terminal with no extra arguments is `qjs`.
 //! It runs with an empty argument list.
-//! That is the same shape `wasmtime run qjs.wasm` (no trailing args) takes.
+//! That is the same shape `wasmtime run qjs.wasm` (no trailing arguments) takes.
 //! The scripted session is fed with CR line endings because that is what a terminal sends on Enter.
-//! The pty driver's ICRNL then delivers NL to the guest.
-//! The guest's stdin reads a character device (matching wasmtime).
+//! The pseudo-terminal driver's ICRNL then delivers NL to the guest.
+//! The guest's `stdin` reads a character device (matching Wasmtime).
 //!
 //! The snapshot lives at `examples/apps/snapshots/qjs_repl_interactive.transcript`.
 //! It holds raw bytes, ANSI escapes included.
-//! A `wasmtime_test`-conditional freshness test re-validates it against a live wasmtime.
+//! A `wasmtime_test`-conditional freshness test re-validates it against a live `wasmtime`.
 //! That test is in `crates/dewasm-test-helper/tests/apps_wasmtime.rs`.
 
 use std::path::PathBuf;
@@ -27,19 +27,19 @@ use crate::fixtures::{apps_cache_dir, apps_snapshot_dir};
 use crate::pty::run_under_pty;
 
 /// The scripted interactive session: three expressions and the `\q` quit command.
-/// Each is terminated by CR, which is what a tty sends on Enter.
-/// That was verified against wasmtime, whose guest sees the driver's CR->NL translation.
+/// Each ends with CR, which is what a TTY sends on Enter.
+/// That was verified against Wasmtime, whose guest sees the driver's CR->NL translation.
 pub const QJS_REPL_SESSION: &[u8] = b"1+2\r[3,1,2].sort()\rMath.max(4,9)\r\\q\r";
 
 /// The QuickJS REPL prompt.
-/// The pty driver is prompt-driven off this.
+/// The pseudo-terminal driver is prompt-driven off this.
 /// Each scripted line is sent only after the prompt reappears.
 /// So the transcript is identical no matter how long a backend takes to start.
 /// See [`crate::run_under_pty`].
 const QJS_PROMPT: &[u8] = b"qjs > ";
 
-/// Hard cap on the pty session (fail loud).
-/// Generous: the interactive loop is I/O-bound line editing, not the slow batch qjs cases.
+/// Hard cap on the pseudo-terminal session (fail loud).
+/// Large: the interactive loop is I/O-bound line editing, not the slow batch `qjs` cases.
 /// But the compiled backends may pay a one-time build inside `pty_command` first.
 const PTY_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -48,8 +48,9 @@ pub fn qjs_repl_snapshot_path() -> PathBuf {
 }
 
 /// Convert the cached `qjs.wasm` to a standalone program for `lang`.
-/// Drive its interactive REPL under a pty with [`QJS_REPL_SESSION`], returning the raw transcript.
-/// Shared by the conditional per-backend runner and the wasmtime snapshot capture/freshness path.
+/// Drive its interactive REPL under a pseudo-terminal with [`QJS_REPL_SESSION`].
+/// Return the raw transcript.
+/// Shared by the conditional per-backend runner and the Wasmtime snapshot capture/freshness path.
 pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
     let wasm = apps_cache_dir().join("qjs.wasm");
     assert!(
@@ -62,10 +63,10 @@ pub fn capture_qjs_repl_transcript(lang: &dyn BackendUnderTest) -> Vec<u8> {
     run_under_pty(cmd, QJS_REPL_SESSION, Some(QJS_PROMPT), PTY_TIMEOUT)
 }
 
-/// The per-backend runner: convert qjs to a standalone program for `lang`.
-/// Drive its REPL under a pty, and require the transcript to be byte-identical to the snapshot.
-/// The snapshot is the wasmtime one.
-/// The perf opt-out lives at the macro/feature level, so this runner runs unconditionally.
+/// The per-backend runner: convert `qjs` to a standalone program for `lang`.
+/// Drive its REPL under a pseudo-terminal, and require a transcript byte-identical to the snapshot.
+/// The snapshot is the Wasmtime one.
+/// The skip for speed lives at the macro/feature level, so this runner runs unconditionally.
 /// `qjs_repl_pty_e2e!` expands its `#[test]` as `#[ignore]`d unless the `slow_test` feature is on.
 pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
     let snapshot = std::fs::read(qjs_repl_snapshot_path()).unwrap_or_else(|e| {
@@ -86,7 +87,7 @@ pub fn run_qjs_repl_pty(lang: &dyn BackendUnderTest) {
 
 /// Byte-compare two transcripts.
 /// On mismatch, panic with an escaped, human-readable dump and the first differing offset.
-/// `assert_eq!` would instead spew the raw byte array for hundreds of bytes of ANSI escapes.
+/// `assert_eq!` would instead print the raw byte array for hundreds of bytes of ANSI escapes.
 pub fn assert_transcript_eq(got: &[u8], want: &[u8], who: &str) {
     if got == want {
         return;

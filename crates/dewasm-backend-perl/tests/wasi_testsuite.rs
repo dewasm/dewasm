@@ -10,14 +10,14 @@ use dewasm_backend_perl::PerlBackend;
 use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution, `(trial, tag)`.
-/// Like Ruby/Python, one is the out-of-scope `sock_shutdown` syscall (docs/support.md).
-/// Unlike the Ruby/Python hosts, perl injects no environ entries of its own.
+/// Like Ruby/Python, one is the out-of-scope `sock_shutdown` system call (`docs/support.md`).
+/// Unlike the Ruby/Python hosts, Perl injects no `environ` entries of its own.
 /// So the `environ_*` trials pass without host-scoped entries.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared out-of-scope syscall (docs/support.md).
+    // Declared out-of-scope system call (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // Core perl's only sub-second file-time APIs (Time::HiRes utime/stat) pass NV seconds.
+    // Core Perl's only sub-second file-time APIs (`Time::HiRes` `utime`/`stat`) pass NV seconds.
     // Their resolution at the current epoch is ~400ns.
     // So the suite's set-then-get of `mtim - 100` nanoseconds cannot round-trip exactly.
     // The runtime unit comments carry the same attribution.
@@ -29,10 +29,10 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
         "rust/path_filestat",
         "filestat times: perl NV-seconds utime caps precision below ns",
     ),
-    // Core perl has no lutimes/utimensat(AT_SYMLINK_NOFOLLOW).
-    // So a final-component symlink cannot carry its own times.
-    // The suite's set-then-lstat on the link itself then cannot hold.
-    // The Linux JDK list has the microsecond analog of this gap.
+    // Core Perl has no `lutimes`/`utimensat(AT_SYMLINK_NOFOLLOW)`.
+    // So a final-component symbolic link cannot carry its own times.
+    // The suite's set followed by `lstat` on the link itself then cannot hold.
+    // The Linux JDK list has the microsecond counterpart of this gap.
     (
         "rust/symlink_filestat",
         "path_filestat_set_times NOFOLLOW: core perl lacks lutimes/utimensat",

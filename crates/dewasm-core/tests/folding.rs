@@ -1,5 +1,5 @@
 //! Build-time expression folding.
-//! Assert the IR shapes the func builder produces from small wat inputs.
+//! Assert the IR shapes the `FuncBuilder` produces from small WAT inputs.
 //! The cases cover single-use folding, the spill rules, and the node-count cap.
 //! They also cover what ends up in `Func.temps`.
 
@@ -153,7 +153,7 @@ fn a_call_spills_pending_memory_reads() {
 
 #[test]
 fn local_tee_folds_its_value_and_leaves_a_local_read() {
-    // tee lowers to a local.set with the value inlined.
+    // `local.tee` lowers to a `local.set` with the value inlined.
     // The value left on the stack folds on into the following add.
     let f = func(
         "(module (func (param i32) (result i32)
@@ -180,7 +180,7 @@ fn local_tee_folds_its_value_and_leaves_a_local_read() {
 #[test]
 fn select_spills_a_trapping_arm() {
     // The backends lower select to a conditionally-evaluated ternary.
-    // So a trapping `then` arm (a load) must be spilled to keep its trap eager.
+    // So a trapping `then` arm (a load) must be spilled to trap even when not selected.
     let f = func(
         "(module (memory 1)
             (func (param i32) (result i32)

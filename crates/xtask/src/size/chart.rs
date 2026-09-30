@@ -2,7 +2,7 @@
 //!
 //! Drawn by [`crate::bench::chart::lollipop`] with a bytes axis.
 //! So a size figure and a benchmark figure are the same picture in different units.
-//! They share the palette, the geometry, and the log10 axis.
+//! They share the palette, the layout, and the log10 axis.
 //! They also share the light/dark pair behind a `<picture>`.
 //! Rows are smallest first.
 //! Color carries what the row *is* (the wasm binary, converted source, a native runtime).
@@ -11,7 +11,7 @@
 use crate::bench::chart::{fmt_ratio, lollipop, Family, Row, Units, DARK, LIGHT};
 use crate::size::report::{fmt_byte_tick, fmt_bytes_f, App, Report};
 
-/// One figure, rendered in both modes plus the alt text they share.
+/// One figure, rendered in both modes plus the `alt` text they share.
 pub struct Chart {
     /// What this illustrates (`"runtimes"` or an app's cache stem).
     /// It is used to place the figure above the matching table.
@@ -29,7 +29,7 @@ const BYTES: Units = Units {
 };
 
 /// Every figure the record supports, in document order.
-/// A section the record does not cover simply produces none.
+/// A section the record does not cover produces none.
 /// `--render` has to work on an older record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
     let mut charts: Vec<Chart> = Vec::new();
@@ -110,8 +110,8 @@ fn app_chart(app: &App) -> Option<Chart> {
     })
 }
 
-/// Alt text derived from the data rather than written by hand.
-/// It then states the finding and cannot go stale when the record is remade.
+/// `alt` text derived from the data rather than written by hand.
+/// It then states the finding and cannot go out of date when the record is remade.
 fn alt_text(subject: &str, rows: &[Row]) -> String {
     let smallest = &rows[0];
     let largest = &rows[rows.len() - 1];

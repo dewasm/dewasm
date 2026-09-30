@@ -1,4 +1,4 @@
-//! Python side of the shared spec harness.
+//! Python side of the shared specification harness.
 //! It converts modules with the Python backend and phrases assertions as Python.
 //! The helpers are `check`/`check_trap`/`check_exhaust`/`check_unlinkable`.
 //! Float comparison is bit-exact via `Rt.f32_bits`/`Rt.f64_bits`.
@@ -6,17 +6,17 @@
 //! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Python facts shape the phrasing:
-//! - Assertions are passed as zero-arg lambdas because Python has no statement blocks.
+//! - Assertions are passed as lambdas with no arguments because Python has no statement blocks.
 //!   The value under test is bound inside the lambda.
 //!   An inner `(lambda __r: (<cmp>, __r))(<call>)` binds it.
-//! - Deep guest recursion (call/fac) and `assert_exhaustion` cases need a stack beyond the default.
+//! - Deep guest recursion (`call`/`fac`) and `assert_exhaustion` cases need a larger stack.
 //!   The whole assertion body runs in a thread with a large `threading.stack_size`.
 //!   The thread also raises `sys.setrecursionlimit`.
-//!   So a runaway recursion surfaces as a catchable `RecursionError` instead of a C-stack crash.
+//!   So an unbounded recursion surfaces as a catchable `RecursionError` instead of a C-stack crash.
 //!   The error is mapped to `call stack exhausted`.
-//!   This is the guest-side analogue of the harness's `convert_on_big_stack`.
+//!   This is the guest-side counterpart of the harness's `convert_on_big_stack`.
 //!   `check_exhaust` lowers the limit around itself.
-//!   There the limit is not headroom but the entire cost of the check.
+//!   There the limit is not a margin but the entire cost of the check.
 //!   See the comment on `_EXHAUST_RECURSION_LIMIT`.
 
 use std::collections::BTreeSet;
@@ -34,9 +34,10 @@ use wast::{WastArg, WastRet};
 /// The file still runs, so regressions in the passing assertions are caught.
 /// Identical in shape to the Ruby list: the only open gap is `import-limits`.
 /// `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type.
-/// That type is a global's mutability, a table/memory's min/max limits, or a function's signature.
+/// That type is a global's mutability, a table/memory's limits, or a function's signature.
 /// So the `assert_unlinkable` cases that test those stay known gaps.
-/// So do the two `linking`-tagged stale-state cases downstream of a declared-unsupported feature.
+/// So do the two `linking`-tagged cases that observe out-of-date state.
+/// They are downstream of a declared-unsupported feature.
 /// That feature is multi-memory, in a module that also happens to `register`.
 /// `imports.wast` moved 28 -> 59 for the same reason it did for Ruby (decision 19).
 /// Its "test" fixture module exports a tag, so it did not convert before exception handling landed.
@@ -74,9 +75,9 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     }
 
     /// Python executes wasm several times slower than Ruby.
-    /// The cost spreads thinly over per-file `python3` startup and the pure-Python numeric runtime.
+    /// The cost spreads thinly over per-file `python3` start and the pure-Python numeric runtime.
     /// No single file dominates.
-    /// So, like Bash, a plain `cargo test` runs only the shared curated list.
+    /// So, like Bash, a plain `cargo test` runs only the shared `CURATED_SPEC_FILES` list.
     /// It adds the exception-handling files this backend now supports.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
@@ -88,16 +89,16 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable references Rt.LinkError.
+            // `check_unlinkable` references `Rt.LinkError`.
             // It does so even when the converted modules themselves don't.
             "rt/link_error",
-            // Same for check_exception and Rt.WasmException.
+            // Same for `check_exception` and `Rt.WasmException`.
             "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE below).
+            // Referenced by the `_spectest` fixture (`PREAMBLE` below).
             // It is not necessarily referenced by the converted module itself.
             "global/_class",
             "table/_class",
@@ -256,7 +257,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         body: &str,
     ) -> anyhow::Result<String> {
         // The runtime units use `math`/`struct`; the harness uses `sys` and `threading` (PREAMBLE).
-        // shared_runtime emits only `class Rt`.
+        // `shared_runtime` emits only `class Rt`.
         let mut script = String::from("import math\nimport struct\nimport sys\n\n");
         script.push_str(
             &dewasm_backend_python::shared_runtime(units)
@@ -264,7 +265,7 @@ impl dewasm_test_helper::SpecBackend for PythonSpec {
         );
         script.push('\n');
         script.push_str(PREAMBLE);
-        // The whole body (module class defs, instantiations, and assertions) runs inside `_main`.
+        // The whole body (module classes, instantiations, and assertions) runs inside `_main`.
         // So it can execute on a large-stack thread.
         script.push_str("\ndef _main():\n");
         for line in body.lines() {
@@ -308,7 +309,8 @@ fn arg_py(arg: &WastArg<'_>) -> Result<String, String> {
                 Err(dewasm_test_helper::heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself.
+        // An `externref` (or legacy `hostref`) with identity `n`.
+        // The host value is the Integer itself.
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -351,14 +353,14 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
             Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
         },
         WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
-        // `(ref.extern)`: any non-null externref.
+        // `(ref.extern)`: any non-null `externref`.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("{value} is not None")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref, the `[type_string, callable]` pair.
+        // `(ref.func)`: any non-null `funcref`, the `[type_string, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "(isinstance({value}, list) and isinstance({value}[0], str))"
         )),
-        // A specific function's identity: not expressible without an export map.
+        // A specific function's identity: it cannot be expressed without an export map.
         // No top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(

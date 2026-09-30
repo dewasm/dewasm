@@ -1,11 +1,11 @@
 //! Core coverage for DWARF `.debug_line` source back-mapping.
-//! The `BuildOptions::debug_line` opt-in produces [`ir::Stmt::SourceLine`] markers.
+//! The optional `BuildOptions::debug_line` flag produces [`ir::Stmt::SourceLine`] markers.
 //! They are resolved through the interned [`ir::Module::debug_files`].
 //! The default build stays marker-free.
 //!
 //! The fixture is `examples/apps/src/dwarf_fixture.c`.
 //! setup.sh builds it into the cache with `-g -O1`.
-//! It pins the one calibration constant this feature has: the DWARF address base.
+//! It checks the one calibration constant this feature has: the DWARF address base.
 //! `add_mul` is a folded, single-statement function.
 //! Its only marker must land on the exact source line of its first statement.
 //! A wrong base shifts that line or drops the marker, so this test fails for any miscalibration.
@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use dewasm_core::ir::{ExportKind, SourcePos, Stmt};
 use dewasm_core::{build_module_with_options, BuildOptions};
 
-/// Cached DWARF fixture; a missing cache fails loud with a setup instruction, never skips.
+/// Cached DWARF fixture; a missing cache fails loud with a set-up instruction, never skips.
 fn fixture_bytes() -> Vec<u8> {
     let path: PathBuf =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/apps/cache/dwarf-fixture.wasm");
@@ -30,7 +30,7 @@ fn fixture_bytes() -> Vec<u8> {
 /// The `[Stmt::SourceLine]` positions anywhere in the body of the exported function named `export`.
 /// Nested statements are included.
 /// The toolchain decides how much of a function's control flow nests.
-/// The positions are `(file_path, line, col)` in traversal order.
+/// The positions are `(file_path, line, col)` in walk order.
 fn export_source_positions<'m>(
     module: &'m dewasm_core::ir::Module,
     export: &str,

@@ -5,10 +5,10 @@
 //! Each case converts the cached DWARF fixture both with and without the flag, then asserts:
 //!
 //! - (a) the flagged output carries fixture markers;
-//! - (b) it renders and runs to the same stdout/exit as the plain output;
+//! - (b) it renders and runs to the same standard output and exit status as the plain output;
 //! - (c) stripping the marker lines from the flagged source yields a source equal to the plain one.
 //!
-//! The Go case additionally pins the two `//line` gotchas:
+//! The Go case also checks two rules of `//line`:
 //!
 //! - the directive is emitted at column 1, since Go honors it nowhere else;
 //! - it is never emitted with a `line 0`, which `go build` rejects.
@@ -34,7 +34,7 @@ fn fixture_wasm() -> PathBuf {
     p
 }
 
-/// add_mul(3,5)=23, sum_prefix([2,4,6,8],4)=20, so main prints their sum.
+/// `add_mul(3,5) = 23` and `sum_prefix([2,4,6,8],4) = 20`, so `main` prints their sum.
 const FIXTURE_STDOUT: &str = "43\n";
 
 fn tempdir(tag: &str) -> PathBuf {
@@ -56,7 +56,7 @@ fn run_dewasm(args: &[&str]) -> Output {
         .expect("spawn dewasm")
 }
 
-/// Convert the fixture to `target` at `out`, with `--dwarf-line` iff `dwarf`.
+/// Convert the fixture to `target` at `out`, with `--dwarf-line` if and only if `dwarf`.
 fn convert(target: &str, out: &Path, dwarf: bool) -> String {
     let wasm = fixture_wasm();
     let mut args = vec![
@@ -80,7 +80,7 @@ fn convert(target: &str, out: &Path, dwarf: bool) -> String {
     std::fs::read_to_string(out).unwrap()
 }
 
-/// `go build` a program in its own directory and run it, returning (stdout, exit code).
+/// `go build` a program in its own directory and run it, returning (`stdout`, exit code).
 /// A missing toolchain fails loud.
 fn run_go(prog: &Path) -> (String, i32) {
     let go =
@@ -133,7 +133,7 @@ fn strip_markers(src: &str, is_marker: impl Fn(&str) -> bool) -> String {
         .collect()
 }
 
-/// A Ruby source-line marker: `# <path>:<line>` (possibly indented).
+/// A Ruby source-line marker: `# <path>:<line>` (possibly after indentation).
 fn is_comment_marker(line: &str) -> bool {
     let t = line.trim_start();
     let Some(rest) = t.strip_prefix("# ") else {
@@ -148,7 +148,7 @@ fn is_comment_marker(line: &str) -> bool {
 #[test]
 fn go_dwarf_line_markers_are_neutral_and_build() {
     let dir = tempdir("go");
-    // Distinct dirs so each program builds in isolation.
+    // Distinct directories so each program builds in isolation.
     let pdir = dir.join("plain");
     let ddir = dir.join("dwarf");
     std::fs::create_dir_all(&pdir).unwrap();
@@ -167,7 +167,7 @@ fn go_dwarf_line_markers_are_neutral_and_build() {
         !fixture_markers.is_empty(),
         "expected //line directives into dwarf_fixture.c"
     );
-    // Go honors `//line` only at column 1: never indented, never `line 0`.
+    // Go honors `//line` only at column 1: no indentation, never `line 0`.
     for l in dwarf
         .lines()
         .filter(|l| l.trim_start().starts_with("//line "))

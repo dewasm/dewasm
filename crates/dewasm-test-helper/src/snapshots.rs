@@ -9,11 +9,11 @@
 //! The DOOM and NES frames are deliberately **not** here.
 //! Each drives a custom-import interface through the `wasmtime` crate directly (issue #114).
 //! This test-only helper crate must not depend on that crate.
-//! So xtask appends those targets itself.
+//! So `xtask` appends those targets itself.
 //!
 //! The compare-only `apps`/`gzip`/`fs_apps` suites never touch this module.
-//! Capture stays a separate, explicit code path, with no env-var "update mode" on the tests.
-//! That keeps the freshness comparison honest (docs/testing.md).
+//! Capture stays a separate, explicit code path, with no environment-variable "update mode".
+//! That keeps the freshness comparison honest (`docs/testing.md`).
 
 use std::path::PathBuf;
 
@@ -25,12 +25,13 @@ use crate::backend::BackendUnderTest;
 use crate::fixtures::apps_snapshot_dir;
 use crate::qjs_repl::{capture_qjs_repl_transcript, qjs_repl_snapshot_path};
 
-/// One regenerable execution snapshot.
-/// Its repo-relative `label` is used for the optional substring filter and the printed line.
+/// One execution snapshot that can be regenerated.
+/// Its `label` is a path relative to the repository root.
+/// The optional substring filter and the printed line use it.
 /// Its absolute `path` is where to write.
 /// Its `capture` closure reruns the case and returns the bytes.
 /// `capture` fails loud on a missing cache or a missing runner.
-/// The underlying runners carry the exact setup message.
+/// The underlying runners carry the exact set-up message.
 pub struct WasmtimeSnapshot {
     pub label: String,
     pub path: PathBuf,
@@ -40,8 +41,8 @@ pub struct WasmtimeSnapshot {
 /// Every execution snapshot the WASI runner can regenerate.
 /// Those are the nine targets excluding DOOM and NES.
 /// Each maps to its snapshot file by the `<case>.stdout`/`.gz`/`.transcript` convention.
-/// xtask iterates these (plus the DOOM and NES frames) for `update-snapshots`.
-/// It passes the wasmtime `engine` that runs each case.
+/// `xtask` loops over these (plus the DOOM and NES frames) for `update-snapshots`.
+/// It passes the Wasmtime `engine` that runs each case.
 pub fn wasmtime_snapshots(engine: &'static dyn BackendUnderTest) -> Vec<WasmtimeSnapshot> {
     let dir = apps_snapshot_dir();
     let app = |file: &str, capture: Box<dyn Fn() -> Vec<u8>>| WasmtimeSnapshot {

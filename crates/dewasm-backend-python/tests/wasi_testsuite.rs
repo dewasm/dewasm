@@ -10,17 +10,17 @@ use dewasm_backend_python::PythonBackend;
 use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution, `(trial, tag)`.
-/// One cause is the out-of-scope `sock_shutdown` syscall.
-/// The other is the environ entries the CPython host injects itself.
+/// One cause is the out-of-scope `sock_shutdown` system call.
+/// The other is the `environ` entries the CPython host injects itself.
 /// Count-exact `environ_*` assertions cannot absorb those entries.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared out-of-scope syscall (docs/support.md).
+    // Declared out-of-scope system call (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // The CPython host injects environ entries of its own.
-    // One is macOS CoreFoundation's __CF_USER_TEXT_ENCODING.
-    // The other comes from the PEP 538 LC_CTYPE locale coercion.
-    // So count-exact environ assertions cannot hold even under the harness's cleared environment.
+    // The CPython host injects `environ` entries of its own.
+    // One is macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`.
+    // The other is the `LC_CTYPE` entry that PEP 538 makes CPython set.
+    // So count-exact `environ` assertions cannot hold even under the harness's cleared environment.
     (
         "assemblyscript/environ_get-multiple-variables",
         "environ: host-interpreter env injection",

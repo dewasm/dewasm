@@ -1,10 +1,10 @@
-//! Bash end-to-end suites: the shared library / WASI / apps case consts (`dewasm-test-helper`).
+//! Bash end-to-end suites: the shared library / WASI / apps case constants (`dewasm-test-helper`).
 //! They run here against the Bash backend.
 //! This file holds ONLY these:
 //!
-//! - the [`BackendUnderTest`] impl;
+//! - the [`BackendUnderTest`] implementation;
 //! - named glue string constants;
-//! - per-case macro invocations.
+//! - per-case macro calls.
 //!
 //! Glue is Bash function calls over the R0.. result globals and the `${prefix}mem` byte array.
 //! That is enough to drive the C-API and multi-module cases as well.
@@ -34,7 +34,7 @@ impl BackendUnderTest for Bash {
     /// Write each `.wat` module of a multi-module case into `dir` as its own `.sh` file.
     /// Return the `source` preamble that loads them.
     /// It uses absolute paths, so the driver does not depend on where it is run from.
-    /// Sourcing only defines functions, so the only order that matters is runtime-before-init.
+    /// Sourcing only defines functions, so the one order that matters is the runtime before `init`.
     /// The preamble's order gives it.
     /// `shared_runtime` builds the Alias shape.
     /// It generates each module against the flat unprefixed runtime.
@@ -100,7 +100,7 @@ impl BackendUnderTest for Bash {
 // ---------------------------------------------------------------------
 // Library-case glue: results come back through the R0 global.
 
-/// `add.wat`: call the exported functions and echo each result global.
+/// `add.wat`: call the exported functions and `echo` each result global.
 const BASH_ADD_GLUE: &str = r#"add_init || exit 1
 add_invoke add 2 3; echo $R0
 add_invoke add 4294967295 1; echo $R0
@@ -138,12 +138,12 @@ prog_init || { echo "init failed" >&2; exit 1; }
 prog_invoke '_start'
 "#;
 
-/// The `custom_wasi_provider` glue: a provider *prefix* replaces the bundled WASI wholesale.
+/// The `custom_wasi_provider` glue: a provider *prefix* replaces all of the bundled WASI.
 /// `PROVIDERS[wasi_snapshot_preview1]` points at `my_`, whose `my_EXPORTS` map covers both imports.
-/// That map is the bash shape of a provider object.
+/// That map is the Bash shape of a provider object.
 /// So no import falls back, and `<p>init` never builds the bundled WASI's prefix-scoped state.
 /// The probe is a real existence test on one of those variables (`declare -p prog_wfds`).
-/// It is the bash counterpart of Ruby's `@wasi.nil?`.
+/// It is the Bash counterpart of Ruby's `@wasi.nil?`.
 const BASH_CUSTOM_PROVIDER_GLUE: &str = r#"my_fd_write() {
   # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
   prog_mem_i32_load prog_ "$2" || return $?
@@ -177,7 +177,7 @@ echo "bundled wasi constructed: $built"
 
 /// The `partial_override_falls_back_to_bundled_wasi` glue.
 /// It is `BASH_OVERRIDE_GLUE` plus the same probe.
-/// In `BASH_OVERRIDE_GLUE`, fd_write is intercepted through IMPORTS and random_get falls back.
+/// In `BASH_OVERRIDE_GLUE`, `fd_write` is intercepted through IMPORTS and `random_get` falls back.
 /// The probe now finds the state: `<p>init` builds it for that one fallback.
 const BASH_PARTIAL_OVERRIDE_GLUE: &str = r#"my_fd_write() {
   # Same interception and byte-reconstruction as `BASH_OVERRIDE_GLUE`.
@@ -205,14 +205,15 @@ if declare -p prog_wfds &>/dev/null; then built=true; else built=false; fi
 echo "bundled wasi constructed: $built"
 "#;
 
-/// The `wasi_stdio_capture` glue: bash's embedder-controlled sink is a command substitution.
-/// Run init and `_start` inside `$( … )`, and the guest's fd 1 writes land in a shell variable.
-/// They do not reach the script's stdout.
-/// This is the same fd-level redirect Perl's glue uses, rather than an in-memory object.
+/// The `wasi_stdio_capture` glue: Bash's embedder-controlled sink is a command substitution.
+/// Run `init` and `_start` inside `$( … )`.
+/// The guest's writes to file descriptor 1 then land in a shell variable.
+/// They do not reach the script's `stdout`.
+/// This is the same file-descriptor redirect Perl's glue uses, rather than an in-memory object.
 /// `$()` strips the trailing newlines.
 /// So the captured text is printed back with `%s\n` to restore the one the guest wrote.
-/// The subshell's `_start` ends in `proc_exit`, i.e. the status-133 cascade.
-/// That status is simply not propagated: this case asserts stdout only.
+/// The subshell's `_start` ends in `proc_exit`, that is, the status-133 chain.
+/// That status is not passed on: this case asserts `stdout` only.
 const BASH_STDIO_CAPTURE_GLUE: &str = r#"captured=$(
   prog_init || { echo "init failed" >&2; exit 1; }
   prog_invoke '_start'
@@ -234,10 +235,10 @@ echo $R0
 /// Two self-contained artifacts sourced into one shell.
 /// Each carries its own runtime under its own prefix.
 /// So `alpha_rt_trap` and `beta_rt_trap` are two functions.
-/// They are not one function that the second `source` overwrote.
+/// They are not one function that the second `source` replaced.
 /// `declare -F` on both names is the structural probe.
-/// It is the bash counterpart of Ruby comparing `Alpha::Rt::Trap` with `Beta::Rt::Trap`.
-/// The trap that follows is raised by Alpha's own copy through the status-134 cascade.
+/// It is the Bash counterpart of Ruby comparing `Alpha::Rt::Trap` with `Beta::Rt::Trap`.
+/// The trap that follows is raised by Alpha's own copy through the status-134 chain.
 /// `TRAP_MSG` stays the shared protocol both artifacts write.
 const BASH_EMBEDDED_COEXIST_GLUE: &str = r#"alpha_init || { echo "alpha_init failed" >&2; exit 1; }
 beta_init || { echo "beta_init failed" >&2; exit 1; }
@@ -256,10 +257,10 @@ exit 0
 "#;
 
 /// The `wasi_suite!(Bash, Fs, ...)` template: fill `WASI_DIRS` with the one preopen pair.
-/// Then init and invoke `_start`.
+/// Then run `prog_init`, and call `prog_invoke` on `_start`.
 /// Then surface a `proc_exit` call as a trailing decimal line.
 /// That is the same way the standalone main does it.
-/// There `invoke` returns status 133 with the code in `$EXIT_CODE`.
+/// There `prog_invoke` returns status 133 with the code in `$EXIT_CODE`.
 /// It is the same observable the Ruby glue's `rescue Prog::Rt::Exit` produces.
 /// A case that never calls `proc_exit` just falls off the end of `_start`.
 /// So nothing is appended and the script exits 0.
@@ -273,10 +274,10 @@ fi
 exit 0
 "#;
 
-/// The root-preopen containment probe's glue: preopen the filesystem root at guest `/`.
+/// The root-preopen containment probe's glue: preopen the file system root at guest `/`.
 /// Then call the WASI resolver directly instead of running a guest.
 /// The call is `<p>wasi_resolve_path <p> <dirfd> <path> <follow>`.
-/// It is the bash analogue of Ruby's `wasi.send(:resolve_path, ...)`.
+/// It is the Bash counterpart of Ruby's `wasi.send(:resolve_path, ...)`.
 /// `follow=1` matches Ruby's `resolve_path`'s `follow_last: true` default.
 const BASH_CONTAINMENT_GLUE: &str = r#"WASI_DIRS=('/::/')
 prog_init || { echo "init failed" >&2; exit 1; }
@@ -289,13 +290,13 @@ fi
 "#;
 
 // ---------------------------------------------------------------------
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals.
+// File system app glue: the class, `argv`, environment, and preopen guest paths are literals.
 // They are `WASI_ARGS`/`WASI_ENV`/`WASI_DIRS`.
-// Those are the Bash analogue of Ruby's `args:`/`env:`/`preopens:` kwargs.
-// Only the host scratch dir comes through `{scratch}`.
-// `invoke`'s status-133 cascade is discarded (`exit 0`).
-// The Ruby glue's empty `rescue ...::Rt::Exit` swallows it the same way.
-// These cases assert stdout/host state, never the guest's own exit code.
+// Those are the Bash counterpart of Ruby's `args:`/`env:`/`preopens:` keyword arguments.
+// Only the host scratch directory comes through `{scratch}`.
+// The status 133 that `<p>invoke` passes up the status chain is ignored (`exit 0`).
+// The Ruby glue's empty `rescue ...::Rt::Exit` ignores it the same way.
+// These cases assert `stdout`/host state, never the guest's own exit code.
 
 const BASH_QJS_FILE_IO_GLUE: &str = r#"WASI_ARGS=(qjs /work/qjs_file_io.js)
 WASI_ENV=()
@@ -331,10 +332,10 @@ toywasm_invoke '_start'
 exit 0
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
-/// Its meta-WASI build always forwards the guest's WASI.
-/// Plain glue, unlike the toywasm one: the official asset's dispatch is a tail call.
-/// So the trampoline runs the whole chain in one bash frame, and no stack rlimit is raised.
+/// Like the `toywasm` glue; wasm3's CLI takes the guest module directly.
+/// Its MetaWASI build always forwards the guest's WASI.
+/// Plain glue, unlike the `toywasm` one: the official asset's dispatch is a tail call.
+/// So the trampoline runs the whole chain in one Bash frame, and no stack-size limit is raised.
 const BASH_WASM3_GLUE: &str = r#"WASI_ARGS=(wasm3 /apps/cowsay.wasm Hello from 'dewasm!')
 WASI_ENV=()
 WASI_DIRS=('{cache}::/apps')
@@ -343,16 +344,16 @@ wasm3_invoke '_start'
 exit 0
 "#;
 
-/// CPython reading its stdlib from the cache-preopened tree at `/lib`.
+/// CPython reading its standard library from the cache-preopened tree at `/lib`.
 /// `WASI_ENV` carries `PYTHONHOME`/`PYTHONPATH` as `NAME=value` strings.
 /// The standalone main also builds those strings.
 ///
-/// These two interpreters need the leading `ulimit`; the smaller filesystem apps do not.
-/// Each wasm call nests one native bash call.
+/// These two interpreters need the leading `ulimit`; the smaller file system apps do not.
+/// Each wasm call nests one native Bash call.
 /// CPython's boot recurses far enough to exhaust the 8 MB default process stack.
 /// That is a real SIGSEGV, not a trappable wasm stack overflow.
-/// Measured: without this line the trial dies of signal 11 partway through the boot.
-/// The generated *standalone* entrypoint raises the soft rlimit for this reason.
+/// Measured: without this line the trial dies of signal 11 before the boot ends.
+/// The generated *standalone* entrypoint raises the soft stack-size limit for this reason.
 /// A library-mode embedder has to do it itself, and the glue is that embedder.
 /// So it repeats the line, with the same `unlimited`-then-hard-limit fallback.
 /// It also has the same silent degradation if a sandbox refuses both.
@@ -365,8 +366,8 @@ cpython_invoke '_start'
 exit 0
 "#;
 
-/// CRuby reading its stdlib from the cache-preopened tree at `/usr`: Ruby on Bash.
-/// Raises the stack rlimit for the same reason [`BASH_CPYTHON_GLUE`] does.
+/// CRuby reading its standard library from the cache-preopened tree at `/usr`: Ruby on Bash.
+/// Raises the stack-size limit for the same reason [`BASH_CPYTHON_GLUE`] does.
 const BASH_CRUBY_GLUE: &str = r#"ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -Hs)" 2>/dev/null || true
 WASI_ARGS=(ruby -e 'puts "hello from cruby #{6*7}"')
 WASI_ENV=()
@@ -387,16 +388,16 @@ exit 0
 //   An artifact's runtime carries that artifact's prefix.
 //   `$P` is the very prefix these drives already carry.
 //
-// No wasmtime snapshot exists, because the results live in guest memory.
-// So each drive's output is pinned in the shared case const.
+// No Wasmtime snapshot exists, because the results live in guest memory.
+// So each drive's output is stated in the shared case constant.
 // Only the file-backed case uses {scratch}.
 
 /// The front matter every C-API glue below shares.
-/// It is parameterized by the module's generation prefix and its allocator export.
-/// The allocator is `sqlite3_malloc` for the sqlite artifacts.
+/// Its parameters are the module's generation prefix and its exported allocation function.
+/// The allocation function is `sqlite3_malloc` for the SQLite artifacts.
 /// It is plain `malloc` for the reactor libraries.
-/// It is a macro rather than a plain const.
-/// So the pieces can be `concat!`ed into a `&'static str` glue const.
+/// It is a macro rather than a plain constant.
+/// So the pieces can be `concat!`ed into a `&'static str` glue constant.
 /// That keeps each case's drive readable as one literal.
 macro_rules! bash_capi_prelude {
     ($prefix:literal, $malloc:literal) => {
@@ -453,7 +454,7 @@ capi_read_cstr() {
 }
 
 /// The sqlite3 C API driven in memory: `_initialize`, `sqlite3_malloc` + pointer plumbing.
-/// Then open/exec/prepare/step/column/finalize/close.
+/// Then `open`/`exec`/`prepare`/`step`/`column`/`finalize`/`close`.
 /// `sqlite3_prepare_v2`'s -1 length is written as its masked-unsigned i32.
 const BASH_LIBSQLITE3_MEM: &str = concat!(
     bash_capi_prelude!("libsqlite3_", "sqlite3_malloc"),
@@ -504,7 +505,7 @@ echo 'C-API-OK'
 );
 
 /// The sqlite3 C API against a file preopen: create+insert, close, reopen, select.
-/// That is the file lifecycle through the C API (same fs stack as the shell).
+/// That is the file's life cycle through the C API (same file system stack as the shell).
 /// It leaves a nonzero DB file on the host.
 const BASH_LIBSQLITE3_FILE: &str = concat!(
     r#"WASI_ARGS=(libsqlite3)
@@ -565,7 +566,7 @@ echo 'FILE-OK'
 /// `run_query` calls `sqlite3_exec` with a C callback.
 /// The callback forwards each row to the *imported* `env.host_row`.
 /// The glue provides `host_row` through the `IMPORTS` array and collects the rows.
-/// `host_row` is a void import, so it leaves `R0` empty.
+/// `host_row` is a `void` import, so it leaves `R0` empty.
 const BASH_SQLITE3_CALLBACK: &str = concat!(
     bash_capi_prelude!("sqlite3_binding_", "sqlite3_malloc"),
     r#"
@@ -610,8 +611,8 @@ echo 'CALLBACK-OK'
 "#
 );
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80".
-/// The link type is DLT_EN10MB, with snaplen 65535.
+/// `libpcap` BPF filter compilation: drive `compile_filter` on "tcp port 80".
+/// The link type is `DLT_EN10MB`, with `snaplen` 65535.
 /// Then walk the serialized program in guest memory:
 /// `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`.
 /// Each instruction prints as `code jt jf k`.
@@ -645,7 +646,7 @@ echo 'BPF-OK'
 
 /// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}`.
 /// Then print the parse tree's S-expression from guest memory.
-/// It is a malloc'd NUL-terminated C string.
+/// It is a NUL-terminated C string from `malloc`.
 const BASH_TREESITTER_PARSE: &str = concat!(
     bash_capi_prelude!("treesitter_", "malloc"),
     r#"
@@ -664,9 +665,9 @@ echo 'TS-OK'
 "#
 );
 
-/// zeroperl Perl-5.42 eval (issue #67).
+/// `zeroperl` Perl-5.42 `eval` (issue #67).
 /// Instantiate the reactor with a zero-returning `env.call_host_function` import stub.
-/// The stub is only invoked when the guest registers host callbacks.
+/// The stub is only called when the guest registers host callbacks.
 /// This program registers none.
 /// The reactor also gets a `/dev/null` preopen; `zeroperl_init` returns 1 without it.
 /// The Bash runtime accepts a single-file preopen since issue #143.
@@ -674,7 +675,7 @@ echo 'TS-OK'
 ///
 /// `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory
 /// → `zeroperl_eval` → `zeroperl_flush`.
-/// The guest program is a quoted heredoc, so its bytes are identical to the other backends'.
+/// The guest program is a quoted here-document, so its bytes are identical to the other backends'.
 const BASH_ZEROPERL_EVAL: &str = concat!(
     r#"WASI_ARGS=(zeroperl)
 WASI_ENV=()
@@ -702,7 +703,7 @@ capi_call zeroperl_flush
 "#
 );
 
-/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver.
+/// ExifTool on `zeroperl` (issue #70): the flattened `exiftool` CLI driver.
 /// The driver is `{cache}/exiftool-lib`, preopened at `/work`.
 /// It runs on the same `cache/zeroperl.wasm` reactor.
 /// That reactor's SFS blob embeds the `Image::ExifTool` module tree.
@@ -711,7 +712,7 @@ capi_call zeroperl_flush
 /// It overrides `CORE::GLOBAL::exit` to a `die`.
 /// So ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`.
 /// The snippet then sets `@ARGV`/`$0` and `do`es the script.
-/// `zeroperl_flush` then pushes ExifTool's buffered stdout out through fd 1.
+/// `zeroperl_flush` then pushes ExifTool's buffered `stdout` out through file descriptor 1.
 const BASH_EXIFTOOL: &str = concat!(
     r#"WASI_ARGS=(zeroperl)
 WASI_ENV=()
@@ -739,9 +740,9 @@ capi_call zeroperl_flush
 "#
 );
 
-/// DOOM: the frame snapshot, modelled on the Bash frontend (examples/doom/bash/main.sh).
+/// DOOM: the frame snapshot, modelled on the Bash frontend (`examples/doom/bash/main.sh`).
 ///
-/// - imp_* handlers set `R0`, and `IMPORTS[mod.name]` registers them;
+/// - `imp_*` handlers set `R0`, and `IMPORTS[mod.name]` registers them;
 /// - `doom_init`/`doom_invoke` drive;
 /// - `doom_mem` holds the pixels.
 ///
@@ -797,18 +798,19 @@ done
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the pinned ROM into `allocRom`'s buffer via `nes_mem_init`.
+/// Load the ROM into `allocRom`'s buffer via `nes_mem_init`.
+/// The ROM is checked against a fixed checksum.
 /// Then tick `{frames}` times with no input.
-/// Compose the frame from agnes's palette-index screen buffer against a 64-entry lookup table.
+/// Compose the frame from `agnes`'s palette-index screen buffer against a 64-entry lookup table.
 /// The table maps to `\xNN\xNN\xNN` and is built once (issue #117).
 /// The `& 0x3f` mask is load-bearing.
-/// Then dump the frame through the same chunked `printf` pipeline as DOOM.
+/// Then dump the frame through the same chunked `printf` output as DOOM.
 /// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 /// The trailing `exit 0` matters here in a way it doesn't for DOOM.
 /// At 256x240 the pixel count divides the 4096-pixel flush chunk exactly.
 /// So the final `[[ -n $fmt ]]` is false.
 /// Without `exit 0` it would leave the script's status at 1.
-/// That happens despite a byte-correct frame on stdout.
+/// That happens despite a byte-correct frame on `stdout`.
 const BASH_NES_FRAME_GLUE: &str = r#"mapfile -t ROM_BYTES < <(od -An -v -tu1 "{rom}" | tr -s ' \n' '\n' | sed '/^$/d')
 
 nes_init || { echo "nes_init failed" >&2; exit 1; }
@@ -860,61 +862,63 @@ dewasm_test_helper::wasi_suite!(Bash, Poll);
 dewasm_test_helper::wasi_suite!(Bash, Fs, BASH_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Bash, BASH_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Bash);
-// The standalone entrypoint already raises the process stack rlimit before running any guest code.
+// The standalone entrypoint already raises the process's stack-size limit before guest code runs.
 // That covers 5000 guest frames too.
 dewasm_test_helper::deep_recursion_e2e!(Bash);
 dewasm_test_helper::folded_temp_reuse_e2e!(Bash);
 
 dewasm_test_helper::cowsay_args_e2e!(Bash);
 dewasm_test_helper::cowsay_stdin_e2e!(Bash);
-// qjs_eval_e2e! / sqlite3_shell_e2e!: invoked, but slow.
+// `qjs_eval_e2e!` / `sqlite3_shell_e2e!`: called, but slow.
 // Bash's softfloat makes QuickJS/SQLite take tens of seconds.
 // So the generated tests are `#[ignore]`d by default.
 // `--features slow_test` runs them anyway (same as every other backend).
 dewasm_test_helper::qjs_eval_e2e!(Bash);
 dewasm_test_helper::sqlite3_shell_e2e!(Bash);
-// minigzip is integer-only (no softfloat), so it runs under Bash by default.
+// `minigzip` is integer-only (no softfloat), so it runs under Bash by default.
 // The slow floating-point apps (QuickJS/SQLite) do not.
 dewasm_test_helper::gzip_e2e!(Bash);
 
-// Filesystem app cases: Bash's WASI filesystem now covers preopens, path_open, and positioned I/O.
-// So the small-fixture fs apps are invoked.
+// File system app cases: Bash's WASI file system now covers preopens and `path_open`.
+// It also covers positioned I/O.
+// So the small-fixture file system app macros are called.
 // All are slow: softfloat-bound QuickJS/SQLite, see qjs_eval_e2e! above.
 dewasm_test_helper::qjs_file_io_e2e!(Bash, BASH_QJS_FILE_IO_GLUE);
 dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GLUE);
-// ripgrep: bash parses the generated script and then walks the fixture tree.
+// `ripgrep`: `bash` parses the generated script and then walks the fixture tree.
 // It is the slowest of the Bash `slow` cases.
-// It is in the same cluster as qjs_eval and sqlite3_shell_dbfile, short of the `ultra` cases.
+// It is in the same cluster as `qjs_eval` and `sqlite3_shell_dbfile`, short of the `ultra` cases.
 dewasm_test_helper::rg_search_e2e!(Bash, BASH_RG_SEARCH_GLUE);
-// qjs_repl_pty is invoked here.
-// It shares the filesystem cases' standalone QuickJS conversion, though it has no preopens.
-// Ultra: every keystroke re-enters QuickJS's interactive line editor.
-// Each successive evaluation is slower than the last.
+// `qjs_repl_pty` is called here.
+// It shares the file system cases' standalone QuickJS conversion, though it has no preopens.
+// `ultra`: every key press re-enters QuickJS's interactive line editor.
+// Each later evaluation is slower than the last.
 // That exceeds the shared per-prompt `PTY_TIMEOUT`, and the case timed out on CI (#22).
 dewasm_test_helper::qjs_repl_pty_e2e!(Bash, ultra);
 // The two language-runtime giants and the packed CRuby run under Bash too (issue #143).
-// All three are ultra: a single arithmetic op costs a bash function call under Bash's softfloat.
-// The wasi-vfs-packed CRuby serves its stdlib from guest memory, so it needs no preopens.
+// All three are `ultra`: each arithmetic operation costs a Bash function call under the softfloat.
+// The `wasi-vfs`-packed CRuby serves its standard library from guest memory.
+// So it needs no preopens.
 // All three run at `slow` on the other backends, so the apps stay CI-covered.
 dewasm_test_helper::cpython_hello_e2e!(Bash, BASH_CPYTHON_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Bash, BASH_CRUBY_GLUE, ultra);
 dewasm_test_helper::cruby_packed_hello_e2e!(Bash, ultra);
-// Ultra: interpreting the cowsay guest through the converted interpreter is slow.
+// `ultra`: interpreting the `cowsay` guest through the converted interpreter is slow.
 // It costs the same order as the language-runtime giants above.
-// An interpreter's dispatch loop is one bash function call per executed guest instruction.
+// An interpreter's dispatch loop is one Bash function call per executed guest instruction.
 // It runs at `slow` on every other backend, so the case itself stays CI-covered.
 dewasm_test_helper::toywasm_cowsay_e2e!(Bash, BASH_TOYWASM_GLUE, ultra);
-// Ultra for the same reason as the toywasm case above.
-// wasm3 interprets the same cowsay guest one bash function call at a time.
+// `ultra` for the same reason as the `toywasm` case above.
+// wasm3 interprets the same `cowsay` guest one Bash function call at a time.
 // It runs at `slow` on every other backend, so the case itself stays CI-covered.
 dewasm_test_helper::wasm3_cowsay_e2e!(Bash, BASH_WASM3_GLUE, ultra);
 
 dewasm_test_helper::doom_frame_e2e!(Bash, BASH_DOOM_FRAME_GLUE, ultra);
-// Ultra-slow category: tens of seconds per tick locally.
-// A tick is mem_init's own copy loop over the 41 KB ROM, then agnes's per-frame interpretation.
-// The full 40-frame run takes ~20 min, well past the ~1-minute CI-runner line.
+// The `ultra` category: tens of seconds per tick locally.
+// A tick is `mem_init`'s own copy loop over the 41 KB ROM, then `agnes`'s per-frame interpretation.
+// The full 40-frame run takes ~20 minutes, well past the ~1-minute CI-runner line.
 // That is like the DOOM case above.
-// It was ~25 min before issue #117 moved the per-pixel frame composition out of the guest.
+// It was ~25 minutes before issue #117 moved the per-pixel frame composition out of the guest.
 dewasm_test_helper::nes_frame_e2e!(Bash, BASH_NES_FRAME_GLUE, ultra);
 
 dewasm_test_helper::shared_table_e2e!(Bash, BASH_SHARED_TABLE_GLUE);
@@ -930,9 +934,9 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Bash, BASH_LIBSQLITE3_FILE);
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Bash, BASH_SQLITE3_CALLBACK);
 dewasm_test_helper::pcap_compile_e2e!(Bash, BASH_PCAP_COMPILE);
 dewasm_test_helper::treesitter_parse_e2e!(Bash, BASH_TREESITTER_PARSE);
-// The two zeroperl reactor cases (issue #143) are ultra instead.
-// The reactor's module init alone dominates the eval case's run.
-// That init is the SFS blob carrying the whole Perl core into `zeroperl_mem`.
+// The two `zeroperl` reactor cases (issue #143) are `ultra` instead.
+// The reactor's module initialization alone dominates the `eval` case's run.
+// That initialization is the SFS blob carrying the whole Perl core into `zeroperl_mem`.
 // ExifTool has no completion evidence at all.
 // A hand-run was cut while still inside `zeroperl_eval`.
 // So its wall time is unknown rather than merely long.

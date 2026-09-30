@@ -1,5 +1,5 @@
 //! The module-name policy for Codon.
-//! A library name is one identifier taken verbatim, and carried into the `<Class>Rt` runtime name.
+//! A library name is one identifier taken unchanged, and carried into the `<Class>Rt` runtime name.
 //! An invalid one is a conversion-time error.
 //! Standalone output ignores the name for a fixed `Program`.
 

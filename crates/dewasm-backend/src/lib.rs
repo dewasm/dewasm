@@ -25,7 +25,7 @@ pub enum Mode {
     /// Emit a module that is instantiated with an imports object.
     /// It exposes its exports to the host language.
     Library,
-    /// Emit a runnable program that wires up WASI and calls `_start`.
+    /// Emit a runnable program that sets up WASI and calls `_start`.
     Standalone,
 }
 
@@ -49,7 +49,7 @@ pub struct GenOptions {
     /// Class/package/module name for the generated code.
     /// It is also the stem of the returned [`OutputFile`]'s name.
     /// In `Library` mode the backend validates it against its own grammar.
-    /// It then uses the name verbatim, with no sanitization.
+    /// It then uses the name unchanged.
     /// In `Standalone` mode the internal name is fixed per backend (`Program`/`program_`).
     /// This option then only names the output file.
     pub module_name: String,
@@ -58,8 +58,8 @@ pub struct GenOptions {
     /// It serves the imports the embedder does not provide.
     /// Disable to keep generated libraries free of ambient authority.
     pub default_wasi: bool,
-    /// Externalize data-segment bytes into a binary data file.
-    /// The bytes are then not embedded as hex literals.
+    /// Write data-segment bytes into a separate binary data file.
+    /// The bytes are then not embedded as hexadecimal literals.
     /// When `Some`, the backend emits code that loads the data file.
     /// It also returns a second `OutputFile` carrying the blob.
     /// Only backends that declare support honor it; the CLI rejects it for the rest.
@@ -70,7 +70,7 @@ pub struct GenOptions {
 #[derive(Clone, Debug)]
 pub struct DataFileConfig {
     /// The filename the generated program references relative to itself.
-    /// The reference goes through, e.g., `__dir__` or `//go:embed`.
+    /// The reference goes through, for example, `__dir__` or `//go:embed`.
     /// The matching data-file `OutputFile` carries this exact `name`.
     /// The CLI routes it to the requested path.
     pub data_file_name: String,
@@ -87,15 +87,15 @@ pub trait Backend {
     fn generate(&self, module: &ir::Module, opts: &GenOptions) -> anyhow::Result<Vec<OutputFile>>;
 
     /// Declared support per feature.
-    /// The spec harness only tolerates skips attributable to features that are not `Supported`.
+    /// The specification harness accepts only skips attributed to features not marked `Supported`.
     /// Flipping a feature to `Supported` makes its skips hard failures.
     fn feature_status(&self, feature: Feature) -> SupportStatus {
         let _ = feature;
         SupportStatus::Unsupported
     }
 
-    /// Whether the backend bundles a WASI preview 1 runtime unit for `name` (e.g. `"fd_write"`).
-    /// Feeds the generated support docs.
+    /// Whether the backend bundles a WASI Preview 1 runtime unit for `name`, such as `"fd_write"`.
+    /// Feeds the generated support documents.
     fn has_wasi_p1(&self, name: &str) -> bool {
         let _ = name;
         false
@@ -104,7 +104,7 @@ pub trait Backend {
 
 /// Reject any construct the shared IR now represents but `backend` has not declared `Supported`.
 /// The rejection carries the same `UnsupportedError` attribution the core converter uses.
-/// The core builder is backend-agnostic and accepts every wasm-1.0-scoped construct.
+/// The core builder is independent of any backend and accepts every wasm-1.0-scoped construct.
 /// A backend that has not implemented one of them yet must refuse it itself.
 /// It refuses at conversion time, rather than mis-lowering it.
 pub fn check_module_support(backend: &dyn Backend, module: &ir::Module) -> Result<()> {
@@ -199,7 +199,7 @@ pub fn stmts_use_tail_calls(stmts: &[ir::Stmt]) -> bool {
 }
 
 /// Whether the module contains any exception-handling construct.
-/// A construct is a tag, an exnref-typed value anywhere, or one of the proposal's instructions.
+/// A construct is a tag, an `exnref`-typed value anywhere, or one of the proposal's instructions.
 /// A tag counts whether defined or imported, which every tag export implies.
 /// Same exhaustiveness contract as [`stmts_use_table_bulk_ops`].
 fn module_uses_exception_handling(module: &ir::Module) -> bool {
@@ -222,7 +222,7 @@ fn module_uses_exception_handling(module: &ir::Module) -> bool {
 }
 
 fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
-    // Exhaustive on purpose (see stmts_use_table_bulk_ops).
+    // Exhaustive on purpose (see `stmts_use_table_bulk_ops`).
     ir::Stmt::any(stmts, &mut |stmt| match stmt {
         ir::Stmt::TryTable { .. } | ir::Stmt::Throw { .. } | ir::Stmt::ThrowRef { .. } => true,
         ir::Stmt::SourceLine(_)
@@ -254,9 +254,9 @@ fn stmts_use_exception_handling(stmts: &[ir::Stmt]) -> bool {
 }
 
 /// Reject a library-mode module name that does not fit `language`'s grammar.
-/// `grammar` is the prose form of the rule, quoted verbatim in the message.
+/// `grammar` is the text form of the rule, quoted unchanged in the message.
 /// An invalid name is a conversion-time error, never a silent transformation.
-/// So the message must be enough to fix the invocation without reading the source.
+/// So the message must be enough to fix the command without reading the source.
 pub fn module_name_error(language: &str, name: &str, grammar: &str) -> anyhow::Error {
     anyhow::anyhow!(
         "invalid {language} module name {name:?}: it must be {grammar}. \
@@ -360,7 +360,7 @@ pub fn is_boolean(e: &ir::Expr) -> bool {
     }
 }
 
-/// The maximal runs of consecutive locals that share `key`, as index ranges into `locals`.
+/// Runs of adjacent locals sharing `key`, each as long as possible, as index ranges into `locals`.
 /// This grouping lets a run be initialized in one statement.
 /// What a run is worth sharing differs per language (a rendered default value, a type name).
 /// So the caller supplies `key` and renders each range itself.
@@ -454,9 +454,9 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
 ///
 /// The backends' `mem_call` appends `o` (static-offset form) or `a` (wrapping-add form).
 /// That reaches a unit's two-argument twins.
-/// Memory call sites dominate a converted artifact's source (443k sites on merman).
+/// Memory call sites dominate a converted artifact's source (443k sites on `merman`).
 /// So these names spend one character per distinction.
-/// The descriptively named units stay for the other backends ([`load_method`]).
+/// The units with longer names stay for the other backends ([`load_method`]).
 pub fn load_code(op: ir::LoadOp) -> &'static str {
     use ir::LoadOp::*;
     match op {
@@ -496,7 +496,7 @@ pub fn store_code(op: ir::StoreOp) -> &'static str {
 }
 
 /// The wasm spelling of a value type.
-/// The backends whose type keys and diagnostics use it verbatim are Ruby, Python, and Perl.
+/// The backends whose type keys and diagnostics use it unchanged are Ruby, Python, and Perl.
 /// The identifier-named backends keep their own tables.
 /// Bash keeps a local copy, so its exception-handling arm can stay a loud refusal.
 /// Only the backend's own artifacts ever read these, so the spelling is free.
@@ -523,7 +523,7 @@ pub fn default_value(ty: ir::ValType, null: &'static str) -> &'static str {
     }
 }
 
-/// A structural key for a function type, e.g. `i32,i64->f32`.
+/// A structural key for a function type, for example `i32,i64->f32`.
 /// It has the form `params->results`, each value type spelled by `name_of`.
 /// `call_indirect` compares types structurally.
 /// A table can be shared between separately generated artifacts.
@@ -541,7 +541,7 @@ pub fn type_key(ty: &ir::FuncType, name_of: fn(ir::ValType) -> &'static str) -> 
     format!("{}->{}", names(&ty.params), names(&ty.results))
 }
 
-/// `data` as lowercase two-digit-per-byte hex.
+/// `data` as lower-case hexadecimal, two digits per byte.
 /// This is the payload every backend's embedded data-segment literal wraps.
 /// The wrappers are `pack("H*")`, `bytes.fromhex`, and `Rt.unhex`.
 /// Written without a per-byte `format!`: a real app's segments run to megabytes.
@@ -556,7 +556,8 @@ pub fn hex_string(data: &[u8]) -> String {
     out
 }
 
-/// `hex_string(data)` as space-separated double-quoted literals of at most `chunk` hex digits each.
+/// `hex_string(data)` split into double-quoted literals of at most `chunk` hexadecimal digits each.
+/// The literals are separated by spaces.
 pub fn hex_literals(data: &[u8], chunk: usize) -> String {
     assert!(
         chunk > 0 && chunk.is_multiple_of(2),
@@ -579,8 +580,8 @@ pub fn hex_literals(data: &[u8], chunk: usize) -> String {
 }
 
 /// WASI import module names a bundled runtime answers for.
-/// `wasi_unstable` (snapshot 0) shares preview 1's ABI for everything implemented here.
-/// The exception is `fd_seek`'s whence encoding.
+/// `wasi_unstable` (snapshot 0) shares WASI Preview 1's ABI for everything implemented here.
+/// The exception is `fd_seek`'s `whence` encoding.
 /// So a snapshot 0 module that actually seeks may misbehave.
 /// This is accepted until snapshot 0 gets its own units.
 pub const WASI_MODULES: &[&str] = &["wasi_snapshot_preview1", "wasi_unstable"];
@@ -590,7 +591,7 @@ pub fn is_wasi_module(name: &str) -> bool {
 }
 
 /// Whether the generated artifact carries the built-in WASI as an import fallback.
-/// If so, it takes the backend's args/env/preopens entry points.
+/// If so, it takes the backend's arguments/environment/preopens entry points.
 /// Its standalone main then parses `--dir`.
 /// True when `default_wasi` is on and `bundler` has a unit for at least one imported WASI function.
 pub fn wasi_bundled(module: &ir::Module, default_wasi: bool, bundler: &RuntimeBundler) -> bool {
@@ -636,12 +637,12 @@ fn stmts_use_table_bulk_ops(stmts: &[ir::Stmt]) -> bool {
     })
 }
 
-/// The full WASI preview 1 surface, for the generated support docs.
+/// The full WASI Preview 1 surface, for the generated support documents.
 /// Which of these a backend implements is derived from its runtime units.
 /// The test is `bundler().has_unit("wasi/<name>")`.
-/// The bool marks whether the function is in scope.
+/// The `bool` marks whether the function is in scope.
 /// It is `false` for the out-of-scope surface (sockets, `proc_raise`).
-/// No toolchain output exercises that surface, and even wasmtime leaves it unimplemented.
+/// No toolchain output exercises that surface, and even Wasmtime leaves it unimplemented.
 pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("args_get", true),
     ("args_sizes_get", true),
@@ -691,7 +692,7 @@ pub const WASI_PREVIEW1_FUNCTIONS: &[(&str, bool)] = &[
     ("sock_shutdown", false),
 ];
 
-/// One runtime unit: a single method (or an inseparable scope prelude).
+/// One runtime unit: a single method (or a scope prelude that cannot be split).
 /// Its dependencies are declared in `<comment> requires:` header lines.
 pub struct RuntimeUnit {
     pub id: String,
@@ -699,19 +700,19 @@ pub struct RuntimeUnit {
     pub body: String,
 }
 
-/// A named scope units can live in (e.g. a class nested in the runtime module).
+/// A named scope units can live in (for example a class nested in the runtime module).
 /// `prefix` is the unit-id path segment.
 /// `open`/`close` wrap the scope's units; the root scope uses empty wrappers.
 pub struct RuntimeScope {
     pub prefix: &'static str,
     pub open: &'static str,
     pub close: &'static str,
-    /// Unit implicitly required by every unit of this scope (class skeleton, constants).
+    /// Unit implicitly required by every unit of this scope (the class declaration, constants).
     /// It is also force-included for the root scope.
     pub prelude: Option<&'static str>,
 }
 
-/// A scope member rendered from the bundle's own contents (the unit ids it carries).
+/// A scope member rendered from the bundle's own contents (which units it carries).
 /// It is not written as a unit.
 /// It serves a member a fixed unit source cannot express.
 /// Such a member's body has to name the units that ended up in the bundle.
@@ -720,7 +721,7 @@ pub type ScopeMember = fn(&BTreeSet<String>) -> String;
 /// Resolves `requires:` closures over runtime units and emits the bundle.
 /// The bundle is grouped by scope in declaration order.
 /// It is deterministically sorted within a scope.
-/// Language-agnostic.
+/// It is the same for every language.
 /// Syntax comes from the scopes and the caller-provided wrapper around the whole bundle.
 pub struct RuntimeBundler {
     scopes: Vec<RuntimeScope>,
@@ -731,8 +732,8 @@ pub struct RuntimeBundler {
 }
 
 impl RuntimeBundler {
-    /// `indent_str` is one indent level of the emitted bundle.
-    /// `unit_indent` is the width of one indent level *in the unit sources*.
+    /// `indent_str` is one indentation level of the emitted bundle.
+    /// `unit_indent` is the width of one indentation level *in the unit sources*.
     /// So their own indentation can be re-emitted in `indent_str`.
     /// 0 leaves body lines exactly as written.
     pub fn new(
@@ -849,7 +850,7 @@ impl RuntimeBundler {
     }
 
     /// Emit the bundle for `seeds`' closure.
-    /// `base_indent` is the indent level of the bundle's root-scope members.
+    /// `base_indent` is the indentation level of the bundle's root-scope members.
     /// The caller wraps the result in the runtime module/namespace itself.
     pub fn bundle(&self, seeds: &BTreeSet<String>, base_indent: usize) -> Result<String> {
         let closure = self.closure(seeds)?;
@@ -904,7 +905,7 @@ impl RuntimeBundler {
     }
 
     /// Emit one line at `indent` levels.
-    /// A unit source is written space-indented at `unit_indent` per level.
+    /// A unit source uses spaces for indentation, `unit_indent` per level.
     /// Each such leading run becomes one `indent_str` here.
     /// So the bundle carries the caller's indentation style throughout.
     /// It does not mix that style with the sources'.

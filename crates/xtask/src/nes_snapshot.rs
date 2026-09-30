@@ -1,19 +1,19 @@
 //! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one.
-//! It runs the *original* `nes.wasm` under the wasmtime crate with the deterministic contract.
-//! That contract loads the pinned ROM and ticks [`NES_FRAMES`] frames with no input.
+//! It runs the *original* `nes.wasm` under the `wasmtime` crate with the deterministic contract.
+//! That contract loads the ROM at its fixed version and ticks [`NES_FRAMES`] frames with no input.
 //! The oracle writes the rendered frame to `examples/apps/snapshots/nes_frame.ppm`.
-//! wasmtime lives here, in dev tooling, not in `dewasm-test-helper`.
-//! A PNG rendering is emitted alongside for human inspection; only the PPM is the compared oracle.
+//! `wasmtime` lives here, in development tooling, not in `dewasm-test-helper`.
+//! A PNG rendering is emitted alongside for people to view; only the PPM is the compared oracle.
 //!
 //! Unlike DOOM, `nes.wasm` has *no* imports (verified by nes.sh): it is a plain reactor library.
-//! So the oracle only calls `_initialize` plus the demo exports.
+//! So the oracle only calls `_initialize` plus the exports of `nes_demo.c`.
 //! The ROM is copied into guest memory through `allocRom`.
 
 use anyhow::{ensure, Context, Result};
 use wasmtime::{Engine, Instance, Linker, Module, Store};
 
 /// Instantiate and drive `nes.wasm` under the deterministic contract.
-/// Return agnes's own frame representation.
+/// Return `agnes`'s own frame representation.
 /// That is the palette-index screen buffer, the palette, and the frame dimensions.
 fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>, u32, u32)> {
     let engine = Engine::default();
@@ -22,7 +22,7 @@ fn capture_frame(bytes: &[u8], rom: &[u8]) -> wasmtime::Result<(Vec<u8>, Vec<u8>
     let linker = Linker::new(&engine);
     let instance = linker.instantiate(&mut store, &module)?;
 
-    // Reactor init before any other export (nothing else runs it without WASI).
+    // Reactor initialization before any other export (nothing else runs it without WASI).
     instance
         .get_typed_func::<(), ()>(&mut store, "_initialize")?
         .call(&mut store, ())?;
@@ -75,8 +75,8 @@ fn read_frame(
     Ok((screen, palette, w, h))
 }
 
-/// Recapture the NES framebuffer from the embedded wasmtime.
-/// Return the compared P6-PPM bytes plus a PNG for human inspection.
+/// Recapture the NES framebuffer from the embedded Wasmtime.
+/// Return the compared P6-PPM bytes plus a PNG for people to view.
 pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
     let wasm_path = dewasm_test_helper::nes_wasm_path();
     let bytes = std::fs::read(&wasm_path).with_context(|| {
@@ -103,7 +103,7 @@ pub fn capture_nes_frame() -> Result<(Vec<u8>, Vec<u8>)> {
 
     // Guard against a degenerate (blank/near-blank) capture.
     // NES palettes are tiny, so the DOOM oracle's >50 threshold is wrong here.
-    // The Alter Ego credits screen this pins measures 7 distinct colors.
+    // The Alter Ego credits screen this snapshot records measures 7 distinct colors.
     // The near-black boot frame is a single color.
     // A >4 threshold cleanly separates the two.
     // Counted over colors, not raw indices: distinct indices can alias onto one palette entry.

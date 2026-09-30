@@ -18,7 +18,7 @@
 //!   The free functions below are its no-variables form.
 //! - [`fold_and_chain`] folds the constants of an AND chain at conversion time.
 //! - [`eq_const_rewrite`] drops the mask of a site compared for equality against a constant.
-//!   It does so when the interval pins a unique raw preimage.
+//!   It does so when exactly one raw value in the interval masks to the constant.
 //! - [`shift_count_mode`] is the count-position counterpart.
 //!   The `& (width - 1)` a backend emits on a shift count implements wasm's semantic reduction.
 //!   It folds for a constant count.
@@ -49,7 +49,7 @@ use dewasm_core::ir::{BinOp, BrTarget, Expr, Func, LoadOp, Stmt, Temp, UnOp, Val
 ///   So an unmasked operand serves.
 /// - `Reducing`: it additionally reduces what it is handed.
 ///   The reduction is at least as strong as the operand's own mask would be.
-///   Examples are a bitwise AND with a constant operand and the pinned equality of
+///   Examples are a bitwise AND with a constant operand and the single-candidate equality of
 ///   [`eq_const_rewrite`].
 ///   So the operand's mask drops with no bound guard.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -60,21 +60,21 @@ pub enum MaskContext {
 }
 
 /// The context in which `op` consumes its operand `k` (0-based).
-/// The operand's sibling is `sibling`, and `op`'s own result is consumed in `ctx`.
+/// The other operand is `sibling`, and `op`'s own result is consumed in `ctx`.
 ///
 /// An operation with its own result mask reads its operands modularly regardless of `ctx`.
-/// Those operations are wrapping add/sub/mul, `shl`, and the wrap.
+/// Those operations are wrapping `add`/`sub`/`mul`, `shl`, and the wrap.
 /// The site's mask restores the invariant even when its own elision guard fails.
 ///
 /// A shift count is read through the semantic `& (w - 1)`, so it is modular for every shift.
 /// A backend that renders counts through [`shift_count_mode`] consults that instead.
 /// The reason is that a skipped count reduction demands the `Masked` context.
 ///
-/// An AND with a constant sibling reduces its other operand into `[0, constant]` itself.
+/// An AND whose other operand is a constant reduces this operand into `[0, constant]` itself.
 /// This holds because every IR constant sits inside its width.
 /// In every `ctx`, that is at least as strong a reduction as the operand's own mask.
 ///
-/// The other maskless bitwise operators pass `ctx` through, except for a reducing consumer.
+/// Other bitwise operators have no mask and pass `ctx` through, except for a reducing consumer.
 /// A reducing consumer weakens to `Modular`: it reduces the operator's result.
 /// That result needs only congruent operands.
 /// But the raw operands feed the operator itself, so the bound guard must still hold for them.
@@ -145,9 +145,9 @@ fn may_skip_mask(raw: Bound, bits: u32, ctx: MaskContext, limit: i128) -> bool {
 /// It is dropped exactly when the reduction is provably the identity on the rendered value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ShiftCountMode {
-    /// A constant count, already reduced modulo the width: emit the value bare.
+    /// A constant count, already reduced modulo the width: emit the value as is.
     Constant(u32),
-    /// The count's `Masked` rendering provably sits in `0..bits`: emit that rendering bare.
+    /// The count's `Masked` rendering provably sits in `0..bits`: emit that rendering as is.
     InRange,
     /// Emit the count's `Modular` rendering under `& (bits - 1)`.
     Masked,
@@ -160,7 +160,7 @@ pub enum ShiftCountMode {
 /// So a kept reduction takes the count's `Modular` rendering.
 /// Skipping it hands the rendered value straight to the target's shift operator.
 /// That operator observes the exact count.
-/// A negative or oversized count would shift the wrong way or too far.
+/// A negative or out-of-range count would shift the wrong way or too far.
 /// So the in-range proof is judged on the `Masked` rendering.
 /// An `InRange` site must then emit that rendering.
 pub fn shift_count_mode(e: &Expr, bits: u32, limit: i128) -> ShiftCountMode {
@@ -246,16 +246,16 @@ impl Bound {
 /// - a memory unit's address or stored-value operand (the unit reduces it itself);
 /// - a copy into another qualifying variable.
 ///
-/// Some positions disqualify: a comparison, a division, a signed or unsigned view, a call argument.
-/// So do a return, a global set, and any position the model does not cover.
-/// That keeps the function boundary (decision 2's ABI) and every helper call fully masked.
+/// Some positions do not qualify: a comparison, a division, a signed or unsigned view.
+/// Nor do a call argument, a return, a global set, or any position the model does not cover.
+/// That keeps the function boundary (decision 2's ABI) and every helper call masked.
 /// A function parameter is defined by the caller at full masked width.
 ///
 /// And its interval converges within `limit`.
-/// Each definition's bound is joined to a fixpoint.
+/// Each definition's bound is joined to a fixed point.
 /// That bound is the expression bound with qualifying variables read at their current intervals.
 /// An external definition, such as a call result, counts at full masked width.
-/// A loop-carried definition whose unmasked updates compound past the limit is then demoted.
+/// A loop-carried definition whose unmasked updates compound past the limit returns to must-mask.
 /// It keeps its masks.
 pub struct Elision {
     limit: i128,
@@ -287,8 +287,8 @@ impl Elision {
                 el.temps.insert(*t, Bound::exact(0));
             }
         }
-        // A demotion turns a variable's stores back into masked observation roots.
-        // Those roots can disqualify further variables.
+        // Returning a variable to must-mask turns its stores back into masked observation roots.
+        // Those roots can remove further variables.
         // So both halves rerun until neither changes anything.
         loop {
             qualify(&mut el, func);
@@ -355,8 +355,8 @@ impl Elision {
         c: u64,
     ) -> Option<(&'a Expr, MaskContext, i128)> {
         let (raw, bits) = self.raw_bound(e)?;
-        // An interval touching the analysis ceiling may have been clamped.
-        // The clamp may hide candidates beyond the ceiling.
+        // An interval touching `CEILING` may have been clamped.
+        // The clamp may hide candidates beyond `CEILING`.
         if raw.lo <= -CEILING || raw.hi >= CEILING {
             return None;
         }
@@ -383,7 +383,7 @@ impl Elision {
                     _ => None,
                 },
                 Expr::Bin(I32Sub | I64Sub, x, y) => match (int_const(x), int_const(y)) {
-                    // `c1 - v == t` pins `v == c1 - t`.
+                    // `c1 - v == t` gives `v == c1 - t`.
                     (Some(c1), None) => Some((&**y, i128::from(c1) - target)),
                     (None, Some(c1)) => Some((&**x, target + i128::from(c1))),
                     _ => None,
@@ -414,7 +414,7 @@ impl Elision {
     /// Growth too slow to wait out then ends in a bounded number of steps.
     /// An example of such growth is a loop counter gaining 1 per pass.
     /// A bitwise `&` is a definition whose bound is narrow on its own.
-    /// Such a definition still settles at the masked width instead of being demoted.
+    /// Such a definition still settles at the masked width instead of returning to must-mask.
     fn join(&mut self, var: Var, b: Bound, bits: u32, pass: usize) -> bool {
         let cur = match var {
             Var::Local(i) => self.locals.get_mut(&i),
@@ -598,7 +598,7 @@ pub fn fold_and_chain<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     folded.then_some((e, c))
 }
 
-/// The non-constant operand of an AND and its constant sibling.
+/// The non-constant operand of an AND, and the constant operand beside it.
 /// It is `Some` only when exactly one operand is an integer constant.
 fn and_const_split<'a>(a: &'a Expr, b: &'a Expr) -> Option<(&'a Expr, u64)> {
     match (int_const(a), int_const(b)) {
@@ -815,10 +815,10 @@ fn remove_read(el: &mut Elision, read: &Expr) -> bool {
 /// The qualification half: remove every variable one of whose reads observes the exact value.
 /// It starts from everything tracked and only removes.
 /// A store root or a copy counts as modular exactly while its destination is still tracked.
-/// So removals cascade.
+/// So one removal can cause more.
 /// Each changing pass removes at least one variable, which bounds the passes.
 /// The surviving set is consistent as a whole.
-/// Copy cycles among survivors are sound because no survivor is ever observed exactly.
+/// Copy cycles among the remaining variables are sound because none is ever observed exactly.
 fn qualify(el: &mut Elision, func: &Func) {
     loop {
         let mut changed = false;
@@ -871,10 +871,10 @@ const WIDEN_AFTER: usize = 3;
 /// The iteration joins every definition's bound until a pass changes nothing.
 /// Joins only grow, and widening caps how often each variable can change.
 /// So the iteration ends.
-/// The unchanged pass certifies that every tracked interval contains all its definitions' bounds.
+/// The unchanged pass confirms that every tracked interval contains all its definitions' bounds.
 /// That is what makes the recorded intervals hold at runtime.
-/// Variables whose interval breached the limit are then demoted to must-mask.
-/// The count of demotions is returned.
+/// Variables whose interval went past the limit then return to must-mask.
+/// The count of `demoted` variables is returned.
 fn solve(el: &mut Elision, params: &[ValType], func: &Func) -> usize {
     for (i, b) in el.locals.iter_mut() {
         let i = *i as usize;
@@ -1134,7 +1134,7 @@ mod tests {
         let inner = bin(BinOp::I32Add, local(0), local(1));
         assert!(elides_modular(&bin(BinOp::I32Add, inner, local(2))));
         // ((l0 + l1) * l2) unmasked reaches 2^65.
-        // So the mul keeps its mask even though its operand elides.
+        // So the `mul` keeps its mask even though its operand elides.
         let inner = bin(BinOp::I32Add, local(0), local(1));
         assert!(!elides_modular(&bin(BinOp::I32Mul, inner, local(2))));
     }
@@ -1213,7 +1213,7 @@ mod tests {
         // Only AND reduces its other operand; OR and XOR pass the high bits through.
         assert_eq!(bin_operand_context(BinOp::I32Or, 0, &c, Masked), Masked);
         assert_eq!(bin_operand_context(BinOp::I32Xor, 0, &c, Masked), Masked);
-        // A reducing consumer weakens to modular through a maskless bitwise operator.
+        // A reducing consumer weakens to modular through a bitwise operator without a mask.
         assert_eq!(bin_operand_context(BinOp::I32Xor, 0, &l, Reducing), Modular);
         assert_eq!(bin_operand_context(BinOp::I32And, 0, &l, Reducing), Modular);
     }
@@ -1228,7 +1228,7 @@ mod tests {
         let wrap = Expr::Un(UnOp::I32WrapI64, Box::new(local(0)));
         assert!(!elides_mask(&wrap, Modular, LIMIT));
         assert!(elides_mask(&wrap, Reducing, LIMIT));
-        // A maskless site has nothing to drop in any context.
+        // A site without a mask has nothing to drop in any context.
         assert!(!elides_mask(&local(0), Reducing, LIMIT));
     }
 
@@ -1289,38 +1289,43 @@ mod tests {
     }
 
     #[test]
-    fn eq_rewrite_pins_a_unique_preimage_and_migrates_the_constant() {
+    fn eq_rewrite_finds_the_one_matching_value_and_migrates_the_constant() {
         // `(l0 - 5) & 0xffffffff == 7` has raw interval [-5, 2^32 - 6], and only 7 fits.
         // The constant migrates to `l0 == 12`.
         let sub = bin(BinOp::I32Sub, local(0), Expr::I32Const(5));
-        let (e, ctx, t) = eq_const_rewrite(&sub, 7, LIMIT).expect("unique preimage");
+        let (e, ctx, t) =
+            eq_const_rewrite(&sub, 7, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::LocalGet(0)));
         assert_eq!(ctx, Modular);
         assert_eq!(t, 12);
         // `5 - l0` flips the migration: `l0 == 5 - 7` lands on the wrapped candidate 7 - 2^32.
         let rsub = bin(BinOp::I32Sub, Expr::I32Const(5), local(0));
-        let (e, _, t) = eq_const_rewrite(&rsub, 7, LIMIT).expect("unique preimage");
+        let (e, _, t) =
+            eq_const_rewrite(&rsub, 7, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::LocalGet(0)));
         assert_eq!(t, 5 - (7 - (1i128 << 32)));
-        // Migration walks through nested elided layers: `(l0 + 3) - 5 == 7` pins `l0 == 9`.
+        // Migration walks through nested elided layers: `(l0 + 3) - 5 == 7` gives `l0 == 9`.
         let nested = bin(
             BinOp::I32Sub,
             bin(BinOp::I32Add, local(0), Expr::I32Const(3)),
             Expr::I32Const(5),
         );
-        let (e, _, t) = eq_const_rewrite(&nested, 7, LIMIT).expect("unique preimage");
+        let (e, _, t) =
+            eq_const_rewrite(&nested, 7, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::LocalGet(0)));
         assert_eq!(t, 9);
-        // The wrap peels away like an add/sub layer, leaving its operand in modular context.
+        // The wrap comes off like an add/sub layer, leaving its operand in modular context.
         let wrap = Expr::Un(UnOp::I32WrapI64, Box::new(load8u()));
-        let (e, ctx, t) = eq_const_rewrite(&wrap, 7, LIMIT).expect("unique preimage");
+        let (e, ctx, t) =
+            eq_const_rewrite(&wrap, 7, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::Load { .. }));
         assert_eq!(ctx, Modular);
         assert_eq!(t, 7);
-        // A site with no peelable layer compares its whole raw form in reducing context.
+        // A site with no layer to remove compares its whole raw form in reducing context.
         // `i64.shr_s` raw is within [-2^63, 2^63), so only the candidate 7 fits.
         let shr = bin(BinOp::I64ShrS, local(0), local(1));
-        let (e, ctx, t) = eq_const_rewrite(&shr, 7, LIMIT).expect("unique preimage");
+        let (e, ctx, t) =
+            eq_const_rewrite(&shr, 7, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::Bin(BinOp::I64ShrS, ..)));
         assert_eq!(ctx, Reducing);
         assert_eq!(t, 7);
@@ -1331,14 +1336,15 @@ mod tests {
         // The sub's open interval (-2^32, 2^32) holds exactly one multiple of 2^32: zero itself.
         // So `eqz(x - y)` reads the raw difference.
         let sub = bin(BinOp::I32Sub, local(0), local(1));
-        let (e, ctx, t) = eq_const_rewrite(&sub, 0, LIMIT).expect("unique preimage");
+        let (e, ctx, t) =
+            eq_const_rewrite(&sub, 0, LIMIT).expect("one raw value masks to the constant");
         assert!(matches!(e, Expr::Bin(BinOp::I32Sub, ..)));
         assert_eq!(ctx, Reducing);
         assert_eq!(t, 0);
     }
 
     #[test]
-    fn eq_rewrite_keeps_the_mask_without_a_unique_preimage() {
+    fn eq_rewrite_keeps_the_mask_without_one_matching_value() {
         // A two-sided sub spans almost 2^33: both 7 and 7 - 2^32 fit.
         let sub = bin(BinOp::I32Sub, local(0), local(1));
         assert!(eq_const_rewrite(&sub, 7, LIMIT).is_none());
@@ -1346,7 +1352,7 @@ mod tests {
         // But the operand must still run, so the mask stays.
         let narrow = bin(BinOp::I32Add, load8u(), Expr::I32Const(1));
         assert!(eq_const_rewrite(&narrow, 500, LIMIT).is_none());
-        // A maskless expression is no rewrite site.
+        // An expression without a mask is no rewrite site.
         assert!(eq_const_rewrite(&local(0), 7, LIMIT).is_none());
     }
 }
@@ -1504,7 +1510,7 @@ mod dataflow {
     #[test]
     fn a_bit_test_under_a_constant_mask_reads_modularly() {
         // `l1 & 1` in a condition observes only bit 0, which congruence preserves.
-        // So it does not disqualify l1.
+        // So it does not remove `l1`.
         let f = func(
             vec![ValType::I32],
             vec![],

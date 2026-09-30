@@ -4,7 +4,7 @@
 //! The cache is keyed on the source alone and shared by every suite in the crate.
 //!
 //! A built binary links Codon's runtime dylibs (`libcodonrt`, `libomp`) by `@rpath`/`@loader_path`.
-//! So [`run_codon_binary`] puts the toolchain's lib directory on every spawned run's loader path.
+//! So [`run_codon_binary`] puts the toolchain's `lib` directory on every spawned run's loader path.
 
 // Shared by several test binaries, each of which uses a subset.
 #![allow(dead_code)]
@@ -33,7 +33,7 @@ const LOADER_PATH_VAR: &str = if cfg!(target_os = "macos") {
 /// Every suite builds *debug*, for three reasons:
 /// - `-release` costs ~8x the compile time.
 ///   It is superlinearly worse on huge single generated functions.
-/// - CI pays every codon build fresh.
+/// - CI pays every `codon build` fresh.
 /// - The build is semantically identical, so no release-mode verification pass is kept either.
 ///   The one optimizer-sensitive path is identity-fold NaN quieting.
 ///   It is handled at emission via the quiet-if-NaN wrappers.
@@ -53,7 +53,7 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
     }
 
     // Both the sources and the binary get per-attempt unique names.
-    // Two threads with the same hash may build concurrently.
+    // Two threads with the same hash may build at the same time.
     // A shared source path would let one truncate the file mid-read of the other's build.
     // Only the final rename onto the cache key is shared, and that is atomic.
     let unique = format!(
@@ -85,7 +85,7 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
 /// A built binary references them relative to itself (`@loader_path` on macOS).
 /// So a copy beside it runs without any loader-path environment variable.
 /// That matters to the WASI-testsuite runs, whose child environment is exactly the manifest's.
-/// A loader-path variable added there would leak into the guest's environ.
+/// A loader-path variable added there would also reach the guest's `environ`.
 fn ensure_runtime_dylibs(cache: &std::path::Path) {
     let Some(lib) = find_codon().and_then(|c| codon_lib_dir(&c)) else {
         return;

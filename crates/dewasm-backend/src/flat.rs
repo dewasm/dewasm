@@ -1,7 +1,7 @@
 //! Flat dispatch: give a branch an address instead of a lexical position.
 //!
 //! A structured lowering addresses a branch target by *position*.
-//! Ruby's cascade addresses it by scope (`break` leaves the innermost one).
+//! Ruby's chain addresses it by scope (`break` leaves the innermost one).
 //! Python's register addresses it by label id (the branch only sets `_br`).
 //! Reaching the target is the job of every frame in between, each of which tests once.
 //! A branch crossing N frames costs O(N) tests.
@@ -22,7 +22,7 @@
 //! ```
 //!
 //! **Only crossed frames are dissolved.**
-//! A `next`/`continue` binds to the innermost enclosing native loop.
+//! A `next`/`continue` binds to the innermost native loop around it.
 //! So any frame a branch escapes that is a native loop must stop being one.
 //! In Ruby both `begin … end while false` and `while true` count.
 //! In Python blocks are already spliced inline but dissolve with the rest of the path anyway.
@@ -33,7 +33,7 @@
 //! Keeping uncrossed loops structured is not just economy; it is required for performance.
 //! A back-edge turned into a state transition replaces one `next`/`continue`.
 //! It becomes an assignment, a jump and a dispatch probe.
-//! Measured against a tight Ruby inner loop, it loses to the cascade outright.
+//! Measured against a tight Ruby inner loop, it loses to the chain outright.
 //! That happens once the loop runs enough trips per entry.
 //! Flatten branches, not loops.
 //!
@@ -48,11 +48,11 @@ use std::collections::{HashMap, HashSet};
 
 use dewasm_core::ir::{BrTarget, Stmt};
 
-/// Whether a native `break` out of a loop lands where a branch to the loop's enclosing block lands.
+/// Whether a native `break` out of a loop lands where a branch to the loop's outer block lands.
 /// The one place a backend's own scope semantics enter [`frames`].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BreakToBlockEnd {
-    /// Ruby: leaving the loop continues after the enclosing `begin ... end while false`.
+    /// Ruby: leaving the loop continues after the outer `begin ... end while false`.
     /// That is where such a branch was going.
     /// So the shape costs nothing, and neither frame has to dissolve.
     Available,
@@ -74,13 +74,13 @@ pub struct Frames {
     /// Loops that a `br` targets from a *strictly nested* capturing frame.
     /// The branch reaches the loop head by leaving an inner scope, not by a direct back-edge.
     pub wrapped: HashSet<u32>,
-    /// Loops that are the sole statement in an enclosing *block*'s direct body.
+    /// Loops that are the only statement in an outer *block*'s direct body.
     /// A `break` out of such a loop lands exactly where a `br` to that block lands.
     /// A branch of that shape needs neither a relay nor a state transition.
     /// So neither frame has to dissolve.
     /// Empty unless the backend declares [`BreakToBlockEnd::Available`].
     pub break_ok: HashSet<u32>,
-    /// One entry per outward `br`: the inclusive frame path it crosses.
+    /// One entry per outward `br`: the frame path it crosses, both ends included.
     /// The path lists the target first and the branch's own innermost frame last.
     /// `crossed` is the union of these.
     /// The paths themselves are kept because [`plan`] weighs the individual branch.
@@ -96,11 +96,11 @@ pub struct Frames {
 ///
 /// - A self-branch: `pos` is the top.
 ///   It is a plain exit from the innermost frame, crossing nothing.
-/// - An outward branch: `pos < top`, which must traverse `stack[pos..]`.
+/// - An outward branch: `pos < top`, which must cross `stack[pos..]`.
 ///   The path holds the target frame and all pass-through frames.
 ///   It *also* holds the innermost frame, whose own exit otherwise lands mid-body in its parent.
 ///
-/// Every frame on that inclusive path is `crossed`.
+/// Every frame on that path, both ends included, is `crossed`.
 /// If `T` is a loop reached this way, it is also `wrapped`.
 /// A `Block`, a `Loop` and a `TryTable` always capture; an `If` captures only when `referenced`.
 /// An unreferenced `If` emits no landing marker and is not a frame anything can name.
@@ -109,7 +109,7 @@ pub struct Frames {
 /// `br_if`/`br_table` feed every target through the same routine.
 ///
 /// The one outward shape that marks nothing is `break_ok` under [`BreakToBlockEnd::Available`].
-/// It is a branch crossing a single loop that is the **sole** statement of the block it targets.
+/// It is a branch crossing a single loop that is the **only** statement of the block it targets.
 pub fn frames(body: &[Stmt], break_to_block_end: BreakToBlockEnd) -> Frames {
     let mut walk = Walk {
         break_to_block_end,
@@ -129,7 +129,7 @@ struct Walk {
 
 impl Walk {
     /// `direct` marks a sequence that is a frame's own body rather than an `if` arm.
-    /// `break_ok` is not propagated through `if` arms.
+    /// `break_ok` is not carried through `if` arms.
     /// A `break` from inside an `if` lands after the `if`.
     /// Proving that is still the block's end is more than the rule needs to claim.
     fn seq(&mut self, stmts: &[Stmt], direct: bool) {
@@ -181,10 +181,10 @@ impl Walk {
                     self.stack.push((label.id, false));
                     self.seq(body, true);
                     // A catch clause's branch is emitted in the handler.
-                    // The handler is inside the try_table's own scope.
+                    // The handler is inside the `try_table`'s own scope.
                     // So it crosses that frame like a branch from the body would.
-                    // [`plan`] never dissolves a function holding a try_table.
-                    // So this is inert for the flat lowering.
+                    // [`plan`] never dissolves a function holding a `try_table`.
+                    // So this has no effect on the flat lowering.
                     // It is kept so the walk describes every frame a branch can cross.
                     // The structured lowering does consult that description.
                     for clause in catches {
@@ -204,7 +204,7 @@ impl Walk {
                 // Every other statement carries no frame and no branch.
                 // So `Stmt::child_seqs` yields nothing for it today.
                 // A future variant that does carry a body is still walked.
-                // The walk uses the enclosing frame's context, with `direct` off.
+                // The walk uses the outer frame's context, with `direct` off.
                 // That can only over-report crossings.
                 // It never claims a branch stays structured when it does not.
                 other => {
@@ -265,7 +265,8 @@ impl Plan {
 
 /// Decide which frames to dissolve.
 /// `paths` holds one entry per outward branch.
-/// Each entry is the inclusive frame path from the target down to the branch's own innermost frame.
+/// Each entry is the frame path from the target down to the branch's own innermost frame.
+/// Both ends are included.
 /// That is the set of frames that must stop existing if the branch is to become a state transition.
 /// `deep_crossing` is the crossing depth from which a branch is worth a dispatch.
 /// It is the backend's own calibration.
@@ -278,7 +279,7 @@ impl Plan {
 /// So it cannot be split across states.
 pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<Plan> {
     // `mark_ancestors` and `assign` below never look inside a `try_table`.
-    // That is sound only because this bail comes first.
+    // That is sound only because this early return comes first.
     if contains_try_table(body) {
         return None;
     }
@@ -291,13 +292,13 @@ pub fn plan(body: &[Stmt], paths: &[Vec<u32>], deep_crossing: usize) -> Option<P
     if dissolved.is_empty() {
         return None;
     }
-    // Two closures, to a joint fixpoint.
+    // Two closures, to a joint fixed point.
     //
     // *Paths.* A `state = N; next` must not be captured on its way to the dispatch loop.
     // So once any frame a branch crosses is dissolved, every frame it crosses has to go.
     // The branch can no longer be a relay.
     //
-    // *Ancestors.* Dissolution is transitive up the spine for the same reason.
+    // *Ancestors.* Dissolving a frame dissolves every ancestor, for the same reason.
     // A frame that still exists would capture a jump aimed at the dispatch loop.
     // It would also have to run its landing marker after a body that no longer falls out of it.
     // What survives is the leaves: loops and blocks with no escaping branch anywhere inside them.

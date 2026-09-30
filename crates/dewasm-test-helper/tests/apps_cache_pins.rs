@@ -1,17 +1,17 @@
-//! The app cache matches the pins the fetch scripts hold.
+//! The app cache matches the fixed input versions the fetch scripts hold.
 //!
 //! Every suite that runs a real app reads `examples/apps/cache/<app>.wasm`.
 //! It reads it through [`dewasm_test_helper::apps_cache_dir`].
 //! That function says nothing about *which* build is there.
-//! A copy left over from an earlier pin is a different program.
+//! A copy left over from an earlier input version is a different program.
 //! It may fail in ways that look like a code regression.
-//! Or it may pass and prove nothing about what is pinned now.
+//! Or it may pass and prove nothing about the version the scripts hold now.
 //!
-//! Checking on every `apps_cache_dir()` call would cost a subprocess per case.
+//! Checking on every `apps_cache_dir()` call would cost a child process per case.
 //! So the check is one test instead, and `cargo test` runs it once.
-//! A stale cache is named here rather than diagnosed from whatever the app did afterwards.
+//! An out-of-date cache is named here rather than diagnosed from whatever the app did afterwards.
 //!
-//! The pins live in the fetch scripts and `setup.sh --check` asks them.
+//! The versions live in the fetch scripts and `setup.sh --check` asks them.
 //! So nothing is duplicated here, and it needs no network.
 
 use std::process::Command;

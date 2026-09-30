@@ -1,4 +1,4 @@
-//! Perl side of the shared spec harness.
+//! Perl side of the shared specification harness.
 //! It converts modules with the Perl backend and phrases assertions as Perl.
 //! The assertions are `check`/`check_trap`/`check_exhaust`/`check_unlinkable` subs.
 //! Floats compare bit-exact via `Rt::f32_bits`/`Rt::f64_bits`.
@@ -6,11 +6,11 @@
 //! The generic harness lives in `dewasm-test-helper`.
 //!
 //! Two Perl facts shape the phrasing:
-//! - Assertions are passed as zero-arg closures (`sub { ... }`).
+//! - Assertions are passed as zero-argument closures (`sub { ... }`).
 //!   The value under test is captured in list context (`my @r = (<call>)`).
 //!   So multi-value returns compare per slot.
-//! - Deep guest recursion is heap-allocated in perl and only stops at the OOM killer.
-//!   So exhaustion is the generated code's own `$Rt::DEPTH` cutoff.
+//! - Deep guest recursion is heap-allocated in Perl and only stops at the OOM killer.
+//!   So exhaustion is the generated code's own `$Rt::DEPTH` limit.
 //!   `check_exhaust` matches the resulting `call stack exhausted` trap, not any interpreter error.
 
 use std::collections::BTreeSet;
@@ -30,12 +30,12 @@ use wast::{WastArg, WastRet};
 /// `Rt::check_import_kind` validates the *kind* of a resolved import but not its finer wasm type.
 /// The finer wasm type is one of these:
 /// - a global's mutability;
-/// - a table/memory's min/max limits;
+/// - a table/memory's minimum/maximum limits;
 /// - a function's signature;
 /// - a tag's parameter types.
 ///
 /// The `assert_unlinkable` cases that test those stay known gaps.
-/// So do the `linking`-tagged stale-state cases downstream of a declared-unsupported feature.
+/// So do the `linking`-tagged out-of-date-state cases downstream of a declared-unsupported feature.
 /// That feature (multi-memory) also happens to `register`.
 /// `imports.wast` contributes 59 of them (28 before tags were represented).
 /// Its fixture module exports tags, so it only converts now.
@@ -72,8 +72,8 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
     }
 
     /// Perl executes wasm in the same interpreter-speed class as Python.
-    /// The cost is per-file `perl` startup plus a pure-perl numeric runtime.
-    /// So, like Python and Bash, a plain `cargo test` runs only the shared curated list.
+    /// The cost is per-file `perl` start plus a numeric runtime in pure Perl.
+    /// So, like Python and Bash, a plain `cargo test` runs only the shared `CURATED_SPEC_FILES`.
     /// It adds the exception-handling files, small and otherwise only covered under `slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[
@@ -85,15 +85,15 @@ impl dewasm_test_helper::SpecBackend for PerlSpec {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable references Rt::LinkError even when the converted modules don't.
+            // `check_unlinkable` references `Rt::LinkError` even when the converted modules don't.
             "rt/link_error",
-            // Same for check_exception and Rt::WasmException.
+            // Same for `check_exception` and `Rt::WasmException`.
             "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the $spectest fixture (PREAMBLE below).
+            // Referenced by the `$spectest` fixture (PREAMBLE below).
             // The converted module itself does not necessarily reference them.
             "global/_package",
             "table/_package",
@@ -285,7 +285,7 @@ fn arg_perl(arg: &WastArg<'_>) -> Result<String, String> {
                 Err(dewasm_test_helper::heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value is the integer itself.
+        // An `externref` (or legacy `hostref`) with identity `n`: the host value is the integer.
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -328,12 +328,12 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
             Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
         },
         WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
-        // `(ref.extern)`: any non-null externref.
+        // `(ref.extern)`: any non-null `externref`.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("defined({value})")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref, the `[type_string, coderef]` pair.
+        // `(ref.func)`: any non-null `funcref`, the `[type_string, coderef]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!("ref({value}) eq 'ARRAY'")),
-        // A specific function's identity: not expressible without an export map.
+        // A specific function's identity: it cannot be expressed without an export map.
         // No top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(

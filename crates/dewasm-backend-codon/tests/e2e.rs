@@ -1,14 +1,14 @@
-//! Codon end-to-end suites: the shared case consts (`dewasm-test-helper`) set up for Codon.
+//! Codon end-to-end suites: the shared case constants (`dewasm-test-helper`) set up for Codon.
 //! This file holds ONLY:
-//! - the [`BackendUnderTest`] impl;
+//! - the [`BackendUnderTest`] implementation;
 //! - named glue string constants;
-//! - per-case macro invocations.
+//! - per-case macro calls.
 //!
-//! Codon covers full WASI preview 1 incl. the filesystem, exception handling, and tail calls.
-//! So it invokes the suite of every WASI kind and the `apps`/`fs_apps`/`capi` suites.
-//! It also invokes both multi-module cases.
+//! Codon covers full WASI p1 including the file system, exception handling, and tail calls.
+//! So it runs the suite of every WASI kind and the `apps`/`fs_apps`/`capi` suites.
+//! It also runs both multi-module cases.
 //!
-//! Every codon build in the test suites is debug (see tests/common).
+//! Every `codon build` in the test suites is debug (see `tests/common`).
 //! Debug builds are ~8x faster, and the emission-level NaN quieting preserves semantics.
 
 use std::path::Path;
@@ -32,7 +32,7 @@ impl BackendUnderTest for Codon {
         &CodonBackend
     }
 
-    /// Compile `source` to the crate's shared cache binary (debug; see the module docs).
+    /// Compile `source` to the crate's shared cache binary (debug; see the module documentation).
     /// Then run it with the Codon runtime dylibs beside it.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         match common::build_codon(source) {
@@ -41,7 +41,7 @@ impl BackendUnderTest for Codon {
         }
     }
 
-    /// Build `source` (debug) and return the run recipe for a pty (the QuickJS REPL case).
+    /// Build `source` (debug) and return the run recipe for a pseudo-terminal (QuickJS REPL case).
     fn pty_command(&self, source: &str, args: &[&str]) -> dewasm_test_helper::PtyCommand {
         let bin = common::build_codon(source).unwrap_or_else(|build| {
             panic!(
@@ -138,7 +138,7 @@ print(_i.exports["add"].fn.invoke([AddRt.Val.of_i32(UInt[32](4294967295)), AddRt
 print(_i.exports["fib"].fn.invoke([AddRt.Val.of_i32(UInt[32](10))])[0].i32())
 "#;
 
-/// The boxed fd_write interceptor the three override glues share.
+/// The boxed glue that intercepts `fd_write`, shared by the three override glues.
 /// It is identical in each; only the driver code after it differs.
 /// It captures the written bytes, with memory bound after construction.
 const CAP_FD_CLASS: &str = r#"from C import write(int, Ptr[byte], int) -> int
@@ -160,8 +160,8 @@ class _CapFd(ProgRt.Fn):
         return [ProgRt.Val.of_i32(UInt[32](0))]
 "#;
 
-/// The override/fallback glue: fd_write intercepted by a boxed `Fn`.
-/// random_get falls back to the bundled WASI.
+/// The override/fallback glue: `fd_write` intercepted by a boxed `Fn`.
+/// `random_get` falls back to the bundled WASI.
 /// Prints the actual bytes written.
 static CODON_OVERRIDE_GLUE: LazyLock<String> = LazyLock::new(|| {
     format!(
@@ -183,9 +183,9 @@ write(1, _buf, len(_cap.out))
     )
 });
 
-/// The `custom_wasi_provider` glue: the imports dict *is* the provider contract for Codon.
+/// The `custom_wasi_provider` glue: the imports `Dict` *is* the provider contract for Codon.
 /// The dynamic backends' duck-typed provider objects have no equivalent.
-/// So a dict covering every WASI import stands in for the provider object.
+/// So a `Dict` covering every WASI import stands in for the provider object.
 /// The bundled WASI (`_wasi`) is never lazily constructed.
 static CODON_CUSTOM_PROVIDER_GLUE: LazyLock<String> = LazyLock::new(|| {
     format!(
@@ -215,8 +215,8 @@ print("bundled wasi constructed:", "true" if _inst._wasi is not None else "false
     )
 });
 
-/// The `partial_override_falls_back_to_bundled_wasi` glue: fd_write intercepted.
-/// random_get falls back, so the bundled WASI *was* lazily constructed.
+/// The `partial_override_falls_back_to_bundled_wasi` glue: `fd_write` intercepted.
+/// `random_get` falls back, so the bundled WASI *was* lazily constructed.
 static CODON_PARTIAL_OVERRIDE_GLUE: LazyLock<String> = LazyLock::new(|| {
     format!(
         "{CAP_FD_CLASS}{}",
@@ -238,9 +238,9 @@ print("bundled wasi constructed:", "true" if _inst._wasi is not None else "false
     )
 });
 
-/// The `wasi_stdio_capture` glue: the bundled WASI writes straight to the process fd 1.
-/// So the capture is an fd-level pipe redirect (dup/dup2).
-/// That is the Go backend's `os.Pipe` idiom on libc.
+/// The `wasi_stdio_capture` glue: the bundled WASI writes straight to file descriptor 1.
+/// So the capture is a pipe redirect at the file-descriptor level (`dup`/`dup2`).
+/// That is the Go backend's `os.Pipe` approach, on `libc`.
 const CODON_STDIO_CAPTURE_GLUE: &str = r#"from C import pipe(Ptr[byte]) -> int
 from C import dup(int) -> int
 from C import dup2(int, int) -> int
@@ -270,7 +270,7 @@ if _n > 0:
     write(1, _buf, _n)
 "#;
 
-/// The shared filesystem template: preopen the scratch dir (`{host}`) at guest `{guest}`.
+/// The shared file system template: preopen the scratch directory (`{host}`) at guest `{guest}`.
 /// `{guest}` is always `/`.
 /// Then run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const CODON_FS_GLUE: &str = r#"_pre = Dict[str, str]()
@@ -291,9 +291,9 @@ _host, _err = _w.resolve_path(3, "etc", True)
 print("contained" if _err == 0 else "rejected")
 "#;
 
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals.
-// Only the host scratch/cache dirs come through {scratch}/{cache}.
-// All of them run `_start` through the boxed export and swallow the Exit.
+// File system app glue: the class, `argv`, environment, and preopen guest paths are literals.
+// Only the host scratch/cache directories come through `{scratch}`/`{cache}`.
+// All of them run `_start` through the boxed export, and catch and ignore the `Exit`.
 
 const CODON_QJS_FILE_IO_GLUE: &str = r#"_pre = Dict[str, str]()
 _pre["/work"] = "{scratch}"
@@ -333,7 +333,7 @@ except ToywasmRt.Exit:
     pass
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
+/// Like the `toywasm` glue; wasm3's CLI takes the guest module directly.
 /// Its dispatch is a tail call the trampoline runs flat.
 const CODON_WASM3_GLUE: &str = r#"_pre = Dict[str, str]()
 _pre["/apps"] = "{cache}"
@@ -365,7 +365,7 @@ except CrubyRt.Exit:
     pass
 "#;
 
-// C-API drive glue (sqlite3): malloc/pointer plumbing via the artifact's raw memory.
+// C-API drive glue (sqlite3): `malloc`/pointer plumbing via the artifact's raw memory.
 // Only the file-backed case uses {scratch}.
 
 const CODON_LIBSQLITE3_MEM: &str = r#"
@@ -539,8 +539,8 @@ for _r in _rows:
 print("CALLBACK-OK")
 "#;
 
-/// libpcap BPF filter compilation: drive `compile_filter` on "tcp port 80".
-/// It uses DLT_EN10MB and snaplen 65535.
+/// `libpcap` BPF filter compilation: drive `compile_filter` on "tcp port 80".
+/// It uses `DLT_EN10MB` and `snaplen` 65535.
 /// Then walk the serialized program in guest memory, printing each instruction as `code jt jf k`.
 /// The program layout is `[u32 bf_len][bf_len x {u16 code; u8 jt; u8 jf; u32 k}]`.
 const CODON_PCAP_COMPILE: &str = r#"
@@ -575,7 +575,7 @@ print("BPF-OK")
 
 /// tree-sitter JSON parse: drive `parse_source` on the fixed snippet.
 /// Then print the parse tree's S-expression from guest memory.
-/// The S-expression is a malloc'd NUL-terminated C string.
+/// The S-expression is a NUL-terminated C string from `malloc`.
 const CODON_TREESITTER_PARSE: &str = r#"
 _i = Treesitter(Dict[str, Dict[str, TreesitterRt.Extern]](), List[str](), Dict[str, str](), Dict[str, str]())
 _i.exports["_initialize"].fn.invoke(List[TreesitterRt.Val]())
@@ -605,7 +605,7 @@ _c("free", [_v(_r)])
 print("TS-OK")
 "#;
 
-/// zeroperl Perl-5.42 eval: instantiate the reactor with a `/dev/null` preopen.
+/// `zeroperl` Perl-5.42 `eval`: instantiate the reactor with a `/dev/null` preopen.
 /// It also gets a zero-returning `env.call_host_function` import stub.
 /// Then run `_initialize` -> `zeroperl_init` -> `malloc` + copy a Perl program into guest memory.
 /// Then run `zeroperl_eval` -> `zeroperl_flush`.
@@ -640,7 +640,7 @@ _i.exports["zeroperl_eval"].fn.invoke([_v(_ptr), _v(0), _v(0), _v(0)])
 _i.exports["zeroperl_flush"].fn.invoke(List[ZeroperlRt.Val]())
 "#;
 
-/// ExifTool on zeroperl: the flattened `exiftool` CLI driver run on the same reactor.
+/// ExifTool on `zeroperl`: the flattened `exiftool` CLI driver run on the same reactor.
 /// The Python backend's callsite has the full contract.
 /// Only deterministic tags are requested.
 const CODON_EXIFTOOL: &str = r#"
@@ -675,15 +675,15 @@ _i.exports["zeroperl_flush"].fn.invoke(List[ZeroperlRt.Val]())
 "#;
 
 /// Driver for the shared-table case: instantiate the exporter and the importer linked against it.
-/// Then print `call0` (call_indirect through the shared table -> 42).
+/// Then print `call0` (`call_indirect` through the shared table -> 42).
 const CODON_SHARED_TABLE_GLUE: &str = r#"_a = TableExp(Dict[str, Dict[str, Rt.Extern]](), List[str](), Dict[str, str](), Dict[str, str]())
 _b = TableImp({"a": _a.exports}, List[str](), Dict[str, str](), Dict[str, str]())
 print(_b.exports["call0"].fn.invoke(List[Rt.Val]())[0].i32())
 "#;
 
-/// Driver for the embedded-coexistence case: two independent Embedded artifacts in one namespace.
+/// Driver for the case where two independent Embedded artifacts coexist in one namespace.
 /// Each carries its own runtime class (`AlphaRt`/`BetaRt`), so their trap types are distinct.
-/// Beta's except arm must not catch Alpha's trap.
+/// `Beta`'s `except` arm must not catch `Alpha`'s trap.
 const CODON_EMBEDDED_COEXIST_GLUE: &str = r#"_a = Alpha(Dict[str, Dict[str, AlphaRt.Extern]](), List[str](), Dict[str, str](), Dict[str, str]())
 _b = Beta(Dict[str, Dict[str, BetaRt.Extern]](), List[str](), Dict[str, str](), Dict[str, str]())
 print(_a.exports["div"].fn.invoke([AlphaRt.Val.of_i32(UInt[32](7)), AlphaRt.Val.of_i32(UInt[32](2))])[0].i32())
@@ -703,7 +703,7 @@ except AlphaRt.Trap:
 "#;
 
 /// DOOM: drive the converted library under the deterministic contract (synthetic clock, no input).
-/// Then dump the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// Then dump the framebuffer as a P6 PPM matching the Wasmtime snapshot.
 /// `{ticks}`/`{clock_step}` are filled by the runner.
 const CODON_DOOM_FRAME_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
 
@@ -798,11 +798,12 @@ for _k in range(_w * _h):
 write(1, _rgb, _w * _h * 3)
 "#;
 
-/// NES (mirrors the DOOM glue): load the pinned ROM into `allocRom`'s buffer.
+/// NES (mirrors the DOOM glue): load the ROM into `allocRom`'s buffer.
+/// The ROM is checked against a fixed checksum.
 /// Then tick `{frames}` times with no input.
-/// Compose the frame from agnes's palette-index screen buffer and its palette.
+/// Compose the frame from the palette-index screen buffer of `agnes` and its palette.
 /// The `& 0x3f` mask is load-bearing.
-/// Dump the frame as a P6 PPM matching the wasmtime snapshot.
+/// Dump the frame as a P6 PPM matching the Wasmtime snapshot.
 /// The runner fills `{rom}` (the cached ROM's host path) and `{frames}`.
 const CODON_NES_FRAME_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
 from C import read(int, Ptr[byte], int) -> int
@@ -864,20 +865,20 @@ dewasm_test_helper::stdio_capture_e2e!(Codon, CODON_STDIO_CAPTURE_GLUE);
 dewasm_test_helper::wasi_suite!(Codon, Stdio);
 dewasm_test_helper::wasi_suite!(Codon, ArgsEnv);
 dewasm_test_helper::wasi_suite!(Codon, Poll);
-// The eight filesystem fixtures each pay a codon build.
-// The WASI conformance suite's slow category already covers the filesystem paths.
-// So the fixture suite runs only in the local ultra pass.
+// The eight file system fixtures each pay a `codon build`.
+// The WASI conformance suite's slow category already covers the file system paths.
+// So the fixture suite runs only in the local `ultra` pass.
 dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE, ultra);
 dewasm_test_helper::wasi_root_containment_e2e!(Codon, CODON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Codon);
-// The native 8 MB main stack carries the 5000-frame recursion unmitigated (like Ruby's host stack).
+// The native 8 MB main stack carries the 5000-frame recursion as is (like Ruby's host stack).
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 
-// The codon category criterion is the build cost the case's own artifact pays.
-// CI has no persistent codon build cache, so every run pays it fresh.
-// Only the cheapest app case (nes) stays `slow`, as the slow category's one converted-app run.
-// Everything else, minigzip and treesitter included, is `ultra`, run locally.
+// The Codon category criterion is the build cost the case's own artifact pays.
+// CI keeps no `codon build` cache between runs, so every run pays it fresh.
+// Only the cheapest app case (`nes`) stays `slow`, as the slow category's one converted-app run.
+// Everything else, `minigzip` and `treesitter` included, is `ultra`, run locally.
 // The convert suite still converts every app there.
 // Every `ultra` case still runs at slow on the interpreted backends.
 // So CI keeps covering the cases themselves.
@@ -894,9 +895,9 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Codon, CODON_SQLITE3_SHELL_GLUE, u
 dewasm_test_helper::rg_search_e2e!(Codon, CODON_RG_SEARCH_GLUE, ultra);
 dewasm_test_helper::cpython_hello_e2e!(Codon, CODON_CPYTHON_GLUE, ultra);
 dewasm_test_helper::cruby_hello_e2e!(Codon, CODON_CRUBY_GLUE, ultra);
-// Ultra-slow category on every backend that runs it.
+// The `ultra` category on every backend that runs it.
 // That is issue #126's memory criterion for the host-compile of a CRuby-class artifact.
-// For Codon the equivalent cost is the giant `codon build`, shared with the zeroperl pair below.
+// For Codon the equivalent cost is the giant `codon build`, shared with the `zeroperl` pair below.
 dewasm_test_helper::cruby_packed_hello_e2e!(Codon, ultra);
 dewasm_test_helper::toywasm_cowsay_e2e!(Codon, CODON_TOYWASM_GLUE, ultra);
 dewasm_test_helper::wasm3_cowsay_e2e!(Codon, CODON_WASM3_GLUE, ultra);
@@ -907,13 +908,13 @@ dewasm_test_helper::sqlite3_file_c_api_e2e!(Codon, CODON_LIBSQLITE3_FILE, ultra)
 dewasm_test_helper::sqlite3_callback_binding_e2e!(Codon, CODON_SQLITE3_CALLBACK, ultra);
 dewasm_test_helper::pcap_compile_e2e!(Codon, CODON_PCAP_COMPILE, ultra);
 dewasm_test_helper::treesitter_parse_e2e!(Codon, CODON_TREESITTER_PARSE, ultra);
-// Ultra-slow category, the Python backend's issue #139 criterion translated.
-// The 25 MB zeroperl reactor's generated source is the biggest single `codon build` in the suite.
-// The two cases share the one oversized module.
+// The `ultra` category, the Python backend's issue #139 criterion translated.
+// The 25 MB `zeroperl` reactor's generated source is the biggest single `codon build` in the suite.
+// The two cases share that one large module.
 dewasm_test_helper::zeroperl_eval_e2e!(Codon, CODON_ZEROPERL_EVAL, ultra);
 dewasm_test_helper::exiftool_extract_e2e!(Codon, CODON_EXIFTOOL, ultra);
 
-// Ultra-slow category: the DOOM build does not fit the slow category's budget.
+// The `ultra` category: the DOOM build does not fit the slow category's budget.
 // NES stays its one converted-app run.
 dewasm_test_helper::doom_frame_e2e!(Codon, CODON_DOOM_FRAME_GLUE, ultra);
 dewasm_test_helper::nes_frame_e2e!(Codon, CODON_NES_FRAME_GLUE);

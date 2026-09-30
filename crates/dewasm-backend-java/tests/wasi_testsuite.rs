@@ -1,9 +1,9 @@
 //! Java side of the official WASI p1 conformance harness.
 //! It drives the prebuilt `WebAssembly/wasi-testsuite` modules through the standalone interface.
 //! Java is compiled, so it overrides `pty_command`.
-//! The override `javac`s the generated `Main.java` to a content-addressed class-dir cache.
+//! The override `javac`s the generated `Main.java` to a content-addressed class directory cache.
 //! That is the launch recipe the shared `run_standalone_wasi` runs.
-//! It runs it with the manifest's env/args/dirs applied.
+//! It runs it with the manifest's environment, arguments, and directories applied.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
@@ -15,16 +15,16 @@ mod common;
 use common::build_java;
 
 /// Known trial failures with their attribution: `(trial, tag)`.
-/// Host-specific ones live in the two consts below.
+/// Host-specific ones live in the two constants below.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // Declared ENOSYS / out-of-scope syscalls (docs/support.md).
+    // Declared ENOSYS / out-of-scope system calls (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
 ];
 
-/// Host-scoped failures on a macOS host: the JVM host injects environ entries of its own.
+/// Host-scoped failures on a macOS host: the JVM host injects `environ` entries of its own.
 /// One is macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`.
-/// So count-exact environ assertions cannot hold even under the harness's cleared environment.
+/// So count-exact `environ` assertions cannot hold even under the harness's cleared environment.
 /// A plain Linux JVM injects nothing, so these pass there.
 const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
     (
@@ -42,11 +42,11 @@ const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
 ];
 
 /// Host-scoped failures on a Linux host.
-/// The unit passes ns-precision FileTime to `BasicFileAttributeView.setTimes`.
+/// The unit passes nanosecond-precision FileTime to `BasicFileAttributeView.setTimes`.
 /// It passes `NOFOLLOW_LINKS` too.
 /// But the Linux JDK routes the NOFOLLOW case through µs-precision `lutimes`.
-/// So the suite's ns `mtim` round-trip is truncated and fails; macOS preserves ns.
-/// Symmetric to the Go backend's listed lutimes gap.
+/// So the suite's nanosecond `mtim` round-trip is truncated and fails; macOS preserves nanoseconds.
+/// The counterpart of the Go backend's listed `lutimes` gap.
 const WASI_TESTSUITE_EXPECTED_FAILURES_LINUX: &[(&str, &str)] = &[(
     "rust/symlink_filestat",
     "path_filestat_set_times: Linux JDK sets NOFOLLOW symlink times via microsecond lutimes, truncating ns",
@@ -63,7 +63,7 @@ impl BackendUnderTest for JavaWasi {
         &JavaBackend
     }
 
-    /// Compile `source` (one `Main.java`) to the content-addressed class-dir cache.
+    /// Compile `source` (one `Main.java`) to the content-addressed cache of class directories.
     /// Return the run recipe.
     /// A missing `javac`/`java` fails loud; a compile failure panics.
     /// Generated code that does not compile is a bug, not a WASI gap.

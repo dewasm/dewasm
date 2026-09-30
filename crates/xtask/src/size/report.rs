@@ -4,7 +4,7 @@
 //!
 //! Same discipline as the benchmark record: a measurement, not a compared snapshot.
 //! So no freshness test guards either file.
-//! The JSON is the record, and the markdown is a rendering of it: numbers, not prose.
+//! The JSON is the record, and the Markdown is a rendering of it: numbers, not text.
 //! The record holds the host, every counted file, and every runtime's version string.
 //! Each version string is captured by executing the runtime.
 //! The hand-written `docs/sizes/README.md` holds what the numbers mean and how to run the command.
@@ -19,8 +19,8 @@ use crate::bench::report::Host;
 use crate::size::chart::Chart;
 
 /// The current size-record schema.
-/// Bumps follow the speed record's rule.
-/// `cargo xtask migrate-records` learns the upgrade, and readers support only this version.
+/// Raising it follows the speed record's rule.
+/// `cargo xtask migrate-records` learns the migration, and readers support only this version.
 pub const SCHEMA: u32 = 1;
 
 /// The full size record.
@@ -39,7 +39,7 @@ pub struct Report {
 #[derive(Serialize, Deserialize)]
 pub struct Runtime {
     pub runtime: String,
-    /// Captured by running the runtime, not hardcoded.
+    /// Captured by running the runtime, not written in the source.
     pub version: Option<String>,
     /// Every file counted into the total, so the accounting can be checked against the host.
     #[serde(default)]
@@ -57,7 +57,7 @@ pub struct Component {
 
 #[derive(Serialize, Deserialize)]
 pub struct App {
-    /// Cache stem, e.g. `cowsay`.
+    /// Cache stem, for example `cowsay`.
     pub app: String,
     /// The file in `examples/apps/cache/`.
     pub file: String,
@@ -101,7 +101,7 @@ impl Outcome {
 }
 
 impl Report {
-    /// Pretty-printed JSON, newline-terminated.
+    /// Pretty-printed JSON, ending in a newline.
     pub fn to_json(&self) -> anyhow::Result<String> {
         let mut text = serde_json::to_string_pretty(self)?;
         text.push('\n');
@@ -136,7 +136,7 @@ pub fn load(path: &std::path::Path) -> anyhow::Result<Report> {
 /// Render `docs/sizes/results.md` in the layout of `docs/benchmarks/results.md`.
 /// That is the generated-file marker and two sentences pointing at the hand-written README.
 /// Then come the environment and the numbers.
-/// No explanatory prose: what the figures mean belongs in `docs/sizes/README.md`.
+/// No explanation: what the figures mean belongs in `docs/sizes/README.md`.
 /// A person edits that file.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
@@ -264,7 +264,7 @@ fn render_gaps(out: &mut String, report: &Report) {
 }
 
 /// A chart, above the table it summarizes.
-/// `<picture>` rather than a bare `<img>`: dark mode is a *selected* variant with its own file.
+/// `<picture>` rather than a plain `<img>`: dark mode is a *selected* variant with its own file.
 /// Paths are relative to `docs/sizes/results.md`.
 /// That file sits beside the `figs/` directory the SVGs are written into.
 fn render_chart(out: &mut String, chart: &Chart) {
@@ -307,15 +307,15 @@ pub fn fmt_bytes_f(bytes: f64) -> String {
     format!("{mantissa:.decimals$} {unit}")
 }
 
-/// A power-of-ten gridline label: `1 kB`, `10 MB`.
-/// Bare mantissa and unit, no decimals.
+/// A power-of-ten grid line label: `1 kB`, `10 MB`.
+/// Only the number and the unit, no decimals.
 pub fn fmt_byte_tick(bytes: f64) -> String {
     let (scale, unit) = si_unit(bytes);
     format!("{:.0} {unit}", bytes / scale)
 }
 
-/// The SI prefix a size reads best in: the largest unit that still leaves a mantissa of at least 1.
-/// The slack absorbs the float error in a power of ten.
+/// The SI prefix a size reads best in: the largest unit that still leaves a value of at least 1.
+/// The margin absorbs the float error in a power of ten.
 /// So a tick one ULP low is not labelled `1000 kB`.
 fn si_unit(bytes: f64) -> (f64, &'static str) {
     const UNITS: [(f64, &str); 4] = [(1e9, "GB"), (1e6, "MB"), (1e3, "kB"), (1.0, "B")];
@@ -325,7 +325,7 @@ fn si_unit(bytes: f64) -> (f64, &'static str) {
         .unwrap_or((1.0, "B"))
 }
 
-/// Escape the one character that would break a markdown table row.
+/// Escape the one character that would break a Markdown table row.
 fn md_cell(text: &str) -> String {
     text.replace('|', "\\|")
 }
@@ -335,7 +335,7 @@ fn code_cell(text: &str) -> String {
     format!("`{}`", md_cell(text))
 }
 
-/// Escape text going into a double-quoted HTML attribute (the chart alt text, which is generated).
+/// Escape text going into a double-quoted HTML attribute (the generated chart `alt` text).
 fn html_attr(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

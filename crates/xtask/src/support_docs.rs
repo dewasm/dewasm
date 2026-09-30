@@ -2,7 +2,7 @@
 //! The support matrix is rendered from the code's own declarations.
 //! So the document cannot drift from reality.
 //! `cargo xtask update-support-docs` writes the rendered output to disk.
-//! The compare-only `support_docs_in_sync` unit test below fails while that file is stale.
+//! The compare-only `support_docs_in_sync` unit test below fails while that file is out of date.
 
 use std::fmt::Write as _;
 

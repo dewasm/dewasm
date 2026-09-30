@@ -4,23 +4,23 @@
 //!
 //! Five families:
 //!
-//! * **wasmtime**: the AOT ceiling and the correctness reference.
-//! * **native runtimes** (wasmer, wasmedge, wazero, wasm3): consume the `.wasm` directly.
+//! * **`wasmtime`**: the AOT baseline and the correctness reference.
+//! * **native runtimes** (`wasmer`, `wasmedge`, `wazero`, `wasm3`): consume the `.wasm` directly.
 //!   [`Native`] holds the per-runtime command-line spelling.
 //!   Cross-checked like everything else.
 //! * **dewasm-\***: generated source on the host language.
 //!   Codegen goes through the [`Backend`] trait, never the CLI binary.
 //!   Go and Java build first, mirroring their e2e suites.
-//!   `go run` swallows the guest exit code.
+//!   `go run` hides the guest exit code.
 //!   Generated Java requires the file to be named `Main.java`.
-//! * **wasm3-\***: the meta-WASI wasm3 build from the app cache.
+//! * **wasm3-\***: the MetaWASI wasm3 build from the app cache.
 //!   A dewasm backend converts it to host-language source.
 //!   It then interprets the workload at run time.
 //!   It is the runtime-loading counterpart the pure-source interpreters below are compared against.
-//! * **pywasm / wardite**: third-party interpreters, driven via `benchmarks/drivers/`.
+//! * **`pywasm` / `wardite`**: third-party interpreters, driven via `benchmarks/drivers/`.
 //!   `benchmarks/setup.sh` provisions them.
 //!
-//! Availability is a `Result<(), String>` whose error is the setup instruction that would fix it.
+//! Availability is a `Result<(), String>` whose error is the set-up instruction that would fix it.
 //! The harness keeps going, and the gap is named in both outputs.
 
 use std::collections::hash_map::DefaultHasher;
@@ -36,7 +36,7 @@ use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use crate::bench::{apps_cache_dir, bench_cache_dir, display_path, drivers_dir};
 
 /// A launchable recipe: `program args... <workload args...>`.
-/// `env` is overlaid on the inherited environment.
+/// `env` is applied over the inherited environment.
 #[derive(Clone)]
 pub struct Launch {
     pub program: PathBuf,
@@ -67,11 +67,11 @@ pub enum Target {
 /// Which third-party wasm interpreter a driver runner drives, and on which host interpreter.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Driver {
-    /// `benchmarks/drivers/pywasm.py` on the `benchmarks/setup.sh` venv.
+    /// `benchmarks/drivers/pywasm.py` on the `benchmarks/setup.sh` virtual environment.
     PywasmCPython,
     /// The same driver on a host PyPy, which needs `pywasm` importable there.
     PywasmPyPy,
-    /// `benchmarks/drivers/wardite.rb` with the given ruby JIT flag.
+    /// `benchmarks/drivers/wardite.rb` with the given Ruby JIT flag.
     /// It runs against the `GEM_HOME` under `benchmarks/cache/`.
     Wardite(&'static str),
 }
@@ -90,9 +90,9 @@ pub enum Driver {
 pub struct Native {
     /// Executable name, overridable through `DEWASM_<NAME uppercased>` like [`wasmtime_bin`].
     bin: &'static str,
-    /// Argv between the executable and the module path.
+    /// `argv` between the executable and the module path.
     lead: &'static [&'static str],
-    /// Argv between the module path and the guest's own arguments.
+    /// `argv` between the module path and the guest's own arguments.
     separator: &'static [&'static str],
     /// How this runtime is asked for its version.
     version_args: &'static [&'static str],
@@ -101,15 +101,15 @@ pub struct Native {
 const WASMER: Native = Native {
     bin: "wasmer",
     lead: &["run"],
-    // Without `--`, wasmer parses the guest's arguments as its own.
+    // Without `--`, `wasmer` parses the guest's arguments as its own.
     separator: &["--"],
     version_args: &["--version"],
 };
 
 /// Measured at its default, which is the interpreter: each runtime runs as shipped.
 /// `--run-mode jit` was tried: it is 13x faster on `wat/i32_alu`.
-/// But it segfaults on `sqlite3-shell.wasm` (exit 139, reproducible).
-/// It also logs to stdout, which needs `--log-level=off`.
+/// But it crashes with SIGSEGV on `sqlite3-shell.wasm` (exit 139, reproducible).
+/// It also logs to `stdout`, which needs `--log-level=off`.
 /// A JIT column, if ever wanted, would be a separately labeled runner like `dewasm-ruby-yjit`.
 /// It would not be a substitution.
 const WASMEDGE: Native = Native {
@@ -137,7 +137,7 @@ pub enum Kind {
     Wasmtime,
     Native(Native),
     Dewasm(Target),
-    /// A wasm interpreter (the meta-WASI wasm3 from the app cache).
+    /// A wasm interpreter (the MetaWASI wasm3 from the app cache).
     /// The [`Target`]'s backend converts it standalone, and it interprets the workload.
     /// The launch preopens the workload's directory and passes the module's guest path through.
     /// So the workload contract holds unchanged one interpretation layer down.
@@ -151,7 +151,7 @@ pub struct Runner {
 }
 
 /// The full matrix, in report order.
-/// The ceiling comes first, then the other native runtimes beside it, then dewasm's backends.
+/// The baseline comes first, then the other native runtimes beside it, then dewasm's backends.
 /// Last come the third-party interpreters we are actually competing with.
 pub fn runners() -> Vec<Runner> {
     let r = |label, kind| Runner { label, kind };
@@ -196,8 +196,8 @@ pub fn runners() -> Vec<Runner> {
 
 impl Runner {
     /// `Ok(())` when this runner can run here.
-    /// Otherwise the setup instruction that would make it available.
-    /// Never silently downgraded: the caller reports the reason in both outputs.
+    /// Otherwise the set-up instruction that would make it available.
+    /// The caller skips an unavailable runner and records this reason in both outputs.
     pub fn availability(&self) -> Result<(), String> {
         match &self.kind {
             Kind::Wasmtime => wasmtime_bin()
@@ -222,7 +222,7 @@ impl Runner {
     }
 
     /// The executable this runner launches, for the runners that *are* one executable.
-    /// Those are wasmtime and the other native runtimes.
+    /// Those are `wasmtime` and the other native runtimes.
     /// `None` for a dewasm backend or a driver.
     /// Their "runner" is a generated artifact plus a host interpreter.
     /// The size record weighs what this returns.
@@ -235,7 +235,7 @@ impl Runner {
     }
 
     /// A version string captured by *executing* the runtime.
-    /// So the result file records what actually ran rather than what was pinned.
+    /// So the result file records what actually ran rather than the expected version.
     pub fn version(&self) -> Option<String> {
         match &self.kind {
             Kind::Wasmtime => capture_version(&wasmtime_bin()?, &["--version"]),
@@ -256,14 +256,14 @@ impl Native {
 
     /// The executable, if it runs at all here.
     /// Probed with the version command.
-    /// That is the one invocation every one of these accepts without a module.
+    /// That is the one command line every one of these accepts without a module.
     fn bin_path(&self) -> Option<PathBuf> {
         let candidate =
             std::env::var_os(self.env_var()).map_or_else(|| PathBuf::from(self.bin), PathBuf::from);
         probe(&candidate, self.version_args).then_some(candidate)
     }
 
-    /// The argv prefix that runs `wasm` on this runtime.
+    /// The `argv` prefix that runs `wasm` on this runtime.
     /// It goes up to but excludes the guest's own arguments.
     fn launch(&self, wasm: &Path) -> Result<Launch> {
         let bin = self
@@ -380,7 +380,7 @@ impl Target {
             ),
             Target::Go => capture_version(&dewasm_backend_go::find_go()?, &["version"]),
             Target::TinyGo => capture_version(&tinygo_bin()?, &["version"]),
-            // `java -version` writes to stderr on every JDK that predates the `--version` spelling.
+            // `java -version` writes to `stderr` on every JDK older than the `--version` spelling.
             // `capture_version` reads both streams for exactly this reason.
             Target::Java => capture_version(&dewasm_backend_java::find_java()?, &["-version"]),
             Target::Codon => capture_version(&dewasm_backend_codon::find_codon()?, &["--version"]),
@@ -401,7 +401,7 @@ impl Target {
     }
 
     /// The dewasm backend behind this target.
-    /// Ruby's three JIT modes with monoruby and JRuby share one backend.
+    /// Ruby's three JIT modes with `monoruby` and JRuby share one backend.
     /// Python and PyPy share one too.
     /// Each group then also shares one generated artifact.
     fn backend(&self) -> &'static (dyn Backend + Sync) {
@@ -519,7 +519,7 @@ impl Driver {
 /// The `/tmp` cache is keyed by the hash of the **generated source**, never the input wasm.
 /// A wasm-keyed cache once served artifacts generated by an older backend build.
 /// It silently measured the wrong lowering across three separate comparison runs.
-/// Conversion is cheap enough to redo every run.
+/// Conversion is cheap enough to repeat every run.
 /// Only the expensive `go build`/`javac` step is worth remembering.
 /// The source hash invalidates it exactly when the backend's output changes.
 #[derive(Default)]
@@ -565,7 +565,7 @@ impl Workshop {
     /// It is the interpreter artifact's launch plus `--dir <wasm's dir>::/work`.
     /// The module's guest path follows.
     /// So the caller-appended guest arguments reach the module one interpretation layer down.
-    /// No host stack is raised: the pinned asset's dispatch is a tail call.
+    /// No host stack is raised: at its fixed version, the asset's dispatch is a tail call.
     /// So the trampoline runs the whole chain in one host frame.
     fn converted_interpreter_launch(&mut self, target: Target, wasm: &Path) -> Result<Launch> {
         let interpreter = converted_wasm3()
@@ -653,7 +653,7 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             args: vec![path_arg(&path)],
             env: Vec::new(),
         },
-        // `go run` prints "exit status N" and exits 1 instead of propagating the guest's exit code.
+        // `go run` prints "exit status N" and exits 1 instead of passing on the guest's exit code.
         // So the built binary is executed directly, for the same reason the Go e2e suite does.
         (Target::Go | Target::TinyGo, Artifact::Binary(bin)) => Launch {
             program: bin,
@@ -670,8 +670,8 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
             args: vec!["-cp".to_string(), path_arg(&dir), "Main".to_string()],
             env: Vec::new(),
         },
-        // The built binary links Codon's runtime dylibs (libcodonrt, libomp).
-        // So the toolchain's lib directory goes on the loader path (docs/backends/codon.md).
+        // The built binary links Codon's runtime dylibs (`libcodonrt`, `libomp`).
+        // So the toolchain's `lib` directory goes on the loader path (`docs/backends/codon.md`).
         (Target::Codon, Artifact::Binary(bin)) => {
             let codon = dewasm_backend_codon::find_codon().context("codon not found")?;
             let loader_var = if cfg!(target_os = "macos") {
@@ -730,7 +730,7 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 let tinygo =
                     tinygo_bin().context("tinygo not found on PATH (or $DEWASM_TINYGO)")?;
                 let tmp = cache.join(format!("{stem}.tinygo.bin.tmp"));
-                // -opt=2 is TinyGo's speed setting; its default -opt=z optimizes for size.
+                // `-opt=2` is TinyGo's speed setting; its default `-opt=z` optimizes for size.
                 let out = Command::new(tinygo)
                     .arg("build")
                     .arg("-opt=2")
@@ -876,8 +876,8 @@ fn convert(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<String> {
     String::from_utf8(source).context("generated source is not valid UTF-8")
 }
 
-/// Write `contents` to `path` via a unique temp file plus a rename.
-/// So two concurrent suites never let one read a half-written script.
+/// Write `contents` to `path` via a unique temporary file plus a rename.
+/// So two suites running at once never let one read a half-written script.
 fn write_if_absent(path: &Path, contents: &str) -> Result<()> {
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
     std::fs::write(&tmp, contents).with_context(|| format!("failed to write {}", tmp.display()))?;
@@ -886,7 +886,7 @@ fn write_if_absent(path: &Path, contents: &str) -> Result<()> {
 
 /// The launch recipe for a third-party interpreter.
 /// It holds its host interpreter, the driver script, and the module path.
-/// The caller appends guest args, matching the drivers' `<module.wasm> [guest-args...]` contract.
+/// The caller appends guest arguments per the drivers' `<module.wasm> [guest-args...]` contract.
 fn driver_launch(driver: Driver, wasm: &Path) -> Result<Launch> {
     let script = path_arg(&driver.script());
     Ok(match driver {
@@ -944,7 +944,7 @@ fn pypy_bin() -> Option<PathBuf> {
     .clone()
 }
 
-/// A host monoruby.
+/// A host `monoruby`.
 /// Deliberately not provisioned by `benchmarks/setup.sh`.
 /// It is a whole alternative Ruby, built from its own Rust workspace.
 /// So its absence is a normal, reported skip.
@@ -1041,7 +1041,8 @@ fn spinel_bin() -> Option<PathBuf> {
     .clone()
 }
 
-/// The interpreter inside `benchmarks/cache/venv`, where `benchmarks/setup.sh` pins pywasm.
+/// The interpreter inside `benchmarks/cache/venv`.
+/// `benchmarks/setup.sh` installs `pywasm` there at a fixed version.
 fn venv_python() -> Option<PathBuf> {
     let bin = bench_cache_dir().join("venv/bin");
     ["python3", "python"]
@@ -1059,7 +1060,7 @@ fn converted_wasm3() -> Option<PathBuf> {
 
 /// The converted interpreter's version.
 /// It is captured by running the converted artifact's own `--version`.
-/// So it records what actually ran rather than what was pinned.
+/// So it records what actually ran rather than the expected version.
 fn converted_interpreter_version(target: Target) -> Option<String> {
     let bytes = std::fs::read(converted_wasm3()?).ok()?;
     let launch = host_launch(target, build_artifact(target, &bytes).ok()?).ok()?;
@@ -1072,8 +1073,8 @@ fn converted_interpreter_version(target: Target) -> Option<String> {
     first_line(&out)
 }
 
-/// The `GEM_HOME` under `benchmarks/cache/` that holds wardite.
-/// Found by the `<gem_home>/gems/wardite-*` layout rather than by a hardcoded directory name.
+/// The `GEM_HOME` under `benchmarks/cache/` that holds `wardite`.
+/// Found by the `<gem_home>/gems/wardite-*` layout, not by a directory name in the source.
 /// So the exact name `benchmarks/setup.sh` picks does not matter here.
 fn wardite_gem_home() -> Option<PathBuf> {
     let entries = std::fs::read_dir(bench_cache_dir()).ok()?;
@@ -1085,7 +1086,7 @@ fn wardite_gem_home() -> Option<PathBuf> {
     })
 }
 
-/// The pywasm version as the installed distribution metadata reports it.
+/// The `pywasm` version as `importlib.metadata` reports it for the installed distribution.
 /// It is read under whichever host interpreter is asked.
 fn pywasm_version(python: &Path, extra: &[&str]) -> Option<String> {
     let out = Command::new(python)
@@ -1100,7 +1101,7 @@ fn pywasm_version(python: &Path, extra: &[&str]) -> Option<String> {
     (!v.is_empty()).then_some(v)
 }
 
-/// The temp directory holding generated sources and built binaries.
+/// The temporary directory holding generated sources and built binaries.
 fn bench_tmp_dir() -> Result<PathBuf> {
     let dir = std::env::temp_dir().join("dewasm-bench");
     std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
@@ -1109,7 +1110,7 @@ fn bench_tmp_dir() -> Result<PathBuf> {
 
 /// Whether `ruby <flag>` actually delivers the JIT the flag names.
 /// Exit codes cannot be trusted here.
-/// A ruby built without YJIT accepts `--yjit`, prints a warning, and exits 0.
+/// A `ruby` built without YJIT accepts `--yjit`, prints a warning, and exits 0.
 /// That would put no-JIT timings in a JIT column.
 /// So ask the VM itself.
 fn ruby_jit_available(ruby: &Path, flag: &str) -> Result<(), String> {
@@ -1127,7 +1128,7 @@ fn ruby_jit_available(ruby: &Path, flag: &str) -> Result<(), String> {
 
 /// Whether this JRuby's `IO::Buffer` carries the `source_offset` argument forms.
 /// The generated runtime uses them (`memory/copy.rb`, `memory/init.rb`).
-/// A JRuby without jruby/jruby#9588 accepts only 1..3 arguments there.
+/// A JRuby without `jruby/jruby#9588` accepts only 1..3 arguments there.
 /// It would fail every workload at run time, so refuse it up front.
 /// Probed by behavior rather than by version.
 /// Which release first carries the fix is not this probe's to predict.
@@ -1140,7 +1141,7 @@ fn jruby_io_buffer_available(jruby: &Path) -> Result<(), String> {
     })
 }
 
-/// Whether this python actually runs its experimental JIT under `PYTHON_JIT=1`.
+/// Whether this `python` actually runs its experimental JIT under `PYTHON_JIT=1`.
 /// Distribution builds usually carry `sys._jit` but were compiled without the JIT.
 /// There the flag enables nothing; only the VM's own answer separates the two.
 fn python_jit_available(python: &Path) -> Result<(), String> {
@@ -1165,7 +1166,7 @@ fn probe(program: &Path, args: &[&str]) -> bool {
         .is_ok_and(|out| out.status.success())
 }
 
-/// The first non-empty line of `program args...`, reading stdout and stderr both.
+/// The first non-empty line of `program args...`, reading `stdout` and `stderr` both.
 /// `java -version` and `perl -v` each pick a different one.
 fn capture_version(program: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new(program).args(args).output().ok()?;
@@ -1190,7 +1191,7 @@ fn hash_bytes(bytes: &[u8]) -> u64 {
 
 /// A path as a process argument.
 /// Benchmark artifacts live under paths the harness itself chose.
-/// So a lossy conversion cannot lose anything real here.
+/// So `to_string_lossy` cannot lose anything real here.
 fn path_arg(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
