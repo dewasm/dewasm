@@ -53,6 +53,12 @@ So a short form such as `spec` or `docs` needs no entry, and a sentence writes t
 The terms for writing are allowed only in the documents about writing.
 Elsewhere a use of `subordinate` or `idiom` would most likely be a metaphor.
 
+A project term can be held to one meaning, as ASD-STE100 holds each approved word.
+`temp` names a variable of the IR, and it never shortens "temporary".
+A short form is allowed as the name of one thing, not as a shorter way to write a longer word.
+Of 170 uses of `temp` in text and comments, 17 meant a file or a directory.
+Those 17 are now excluded.
+
 The excluded words stay, and they apply on top of every source.
 The base list itself holds `gate`, `green`, `sweep`, and `wire`, because a metaphor is made of plain words.
 The two kinds of list catch different things: one the known metaphors, the other each new word.

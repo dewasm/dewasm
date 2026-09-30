@@ -33,9 +33,18 @@ Add such a term to a table below; write the plainer word otherwise.
 | Area | Terms |
 | --- | --- |
 | Programs and builds | `app`, `backend`, `baseline`, `cache`, `compatible`, `compile`, `crate`, `directory`, `fetch`, `linkage`, `repository`, `runtime`, `standalone`, `submodule`, `toolchain`, `upstream` |
-| Code | `alias`, `arithmetic`, `byte`, `callsite`, `dataflow`, `dispatch`, `exhaustive`, `fuse`, `hash`, `header`, `hoist`, `identifier`, `integer`, `invariant`, `iteration`, `literal`, `lookup`, `macro`, `mask`, `namespace`, `numeric`, `operand`, `precondition`, `recursion`, `temp`, `token`, `unsigned`, `wildcard` |
+| Code | `alias`, `arithmetic`, `byte`, `callsite`, `dataflow`, `dispatch`, `exhaustive`, `fuse`, `hash`, `header`, `hoist`, `identifier`, `integer`, `invariant`, `iteration`, `literal`, `lookup`, `macro`, `mask`, `namespace`, `numeric`, `operand`, `precondition`, `recursion`, `token`, `unsigned`, `wildcard` |
 | Tests and tools | `benchmark`, `conformance`, `diff`, `harness`, `lint`, `linter`, `parse`, `parser`, `snapshot`, `suite`, `testsuite`, `verify` |
 | Text and markup | `indentation`, `markup`, `placeholder`, `prefix`, `template` |
+
+### Terms with one meaning
+
+A term below has one meaning here, and a sentence uses it for nothing else.
+A short form is allowed as the name of one thing, never as a shorter way to write a longer word.
+
+| Term | Means | For another meaning, write |
+| --- | --- | --- |
+| `temp` | The variable that holds one slot of the wasm value stack: the `Temp` of the IR. | temporary, as in "temporary file" |
 
 ### Terms for writing
 
@@ -89,6 +98,8 @@ The lists do not apply to this file.
 | Do not write | Write | Except |
 | --- | --- | --- |
 | `tier`, `tiers`, `tiered`, `lane`, `lanes`, `speed token` | category | — |
+| `tmp` | temp for the variable of the IR, temporary for a file; a path or a variable name goes in a code span | — |
+| `temp file`, `temp files`, `temp dir`, `temp dirs`, `temp directory`, `temp directories`, `temp copy`, `temp copies`, `temp path`, `temp paths` | temporary file, temporary directory, temporary copy, temporary path | — |
 | `invoke`, `invokes`, `invoked`, `invoking` | call for a function or a macro, run for a command | — |
 | `opt in`, `opt-in`, `opt out`, `opt-out` | enable, optional: the words Cargo uses | — |
 | `prose` | text | — |
