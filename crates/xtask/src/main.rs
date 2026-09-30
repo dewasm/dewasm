@@ -42,7 +42,6 @@ mod doom_snapshot;
 mod feature_audit;
 mod migrate;
 mod nes_snapshot;
-mod prose_check;
 mod size;
 mod snapshot_engine;
 mod support_docs;
@@ -81,8 +80,8 @@ Commands:
         Regenerate docs/sizes/results.md and its figures from the named size record, or from the newest one.
     feature-audit <file.wasm>...
         Report each binary's post-baseline feature needs and WASI p1 import surface; fails when one needs a proposal outside the 0.1 scope (verdicts are recorded in agents/apps-audit.md).
-    check-prose [path]...
-        Report the prose lines that break the AGENTS.md writing style, in the named files or in all.
+    check-text [path]...
+        Report the lines of text that break the AGENTS.md writing style, in the named files or in all.
     migrate-records
         Upgrade every record under records/ to its kind's current schema, in place; the render commands read only the current schema.
 ";
@@ -101,7 +100,7 @@ fn main() -> Result<()> {
         Some("render-size") => size::render(args),
         Some("feature-audit") => feature_audit::main(args),
         Some("migrate-records") => migrate::run(),
-        Some("check-prose") => prose_check::main(args),
+        Some("check-text") => check_text(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
@@ -215,6 +214,29 @@ fn update_snapshots(filter: Option<&str>) -> Result<()> {
             Some(needle) => bail!("no snapshot label matched filter {needle:?}"),
             None => bail!("no snapshots to regenerate"),
         }
+    }
+    Ok(())
+}
+
+/// `check-text [path]...`: prints every defect in the named files, or in every tracked text file.
+fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths: Vec<String> = args.collect();
+    if paths.is_empty() {
+        paths = text_check::tracked_files(&root);
+    }
+    let mut count = 0;
+    for path in &paths {
+        if !text_check::is_checked_text(path) {
+            bail!("{path} is neither Markdown nor a source file with known comment markers");
+        }
+        for defect in text_check::file_defects(&root, path) {
+            println!("{defect}");
+            count += 1;
+        }
+    }
+    if count > 0 {
+        bail!("{count} text defects");
     }
     Ok(())
 }

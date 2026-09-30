@@ -1,23 +1,21 @@
 //! Checks the AGENTS.md writing style rules that a program can check.
-//! Prose is every tracked Markdown file and every comment line in a tracked source file.
-//! Each prose line holds one sentence.
+//! The text is every tracked Markdown file and every comment line in a tracked source file.
+//! Each line of text holds one sentence.
 //! A Markdown sentence has at most 100 read characters: the text and code a reader sees.
 //! A comment line has at most 100 columns, counting its indentation and comment marker.
-//! Table rows, code blocks, and HTML are not prose.
+//! Table rows, code blocks, and HTML are not text in this sense.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-
-use anyhow::{bail, Result};
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 const MAX_LENGTH: usize = 100;
 
-/// One prose line: the length the bound applies to, and the text the sentence check reads.
+/// One line of text: the length the bound applies to, and the text the sentence check reads.
 /// That text masks each code span to `` `x` ``, so a period inside code never ends a sentence.
 #[derive(Debug, Default, PartialEq)]
-struct ProseLine {
+struct TextLine {
     number: usize,
     length: usize,
     text: String,
@@ -35,15 +33,15 @@ fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-fn markdown_lines(text: &str) -> Vec<ProseLine> {
+fn markdown_lines(text: &str) -> Vec<TextLine> {
     let line_starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect();
     let line_of = |offset: usize| line_starts.partition_point(|&start| start <= offset) - 1;
-    let mut lines: Vec<ProseLine> = (0..line_starts.len())
-        .map(|index| ProseLine {
+    let mut lines: Vec<TextLine> = (0..line_starts.len())
+        .map(|index| TextLine {
             number: index + 1,
-            ..ProseLine::default()
+            ..TextLine::default()
         })
         .collect();
     let options = Options::ENABLE_TABLES
@@ -87,12 +85,12 @@ fn markdown_lines(text: &str) -> Vec<ProseLine> {
     lines
 }
 
-fn append(line: &mut ProseLine, read: &str, masked: &str) {
+fn append(line: &mut TextLine, read: &str, masked: &str) {
     line.length += read.chars().count();
     line.text.push_str(masked);
 }
 
-fn comment_lines(markers: &[&str], text: &str) -> Vec<ProseLine> {
+fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
     let mut in_fence = false;
     let mut out = Vec::new();
     for (index, line) in text.lines().enumerate() {
@@ -117,7 +115,7 @@ fn comment_lines(markers: &[&str], text: &str) -> Vec<ProseLine> {
         if in_fence || content.starts_with('|') {
             continue;
         }
-        out.push(ProseLine {
+        out.push(TextLine {
             number: index + 1,
             length: line.chars().count(),
             text: mask_code_spans(content),
@@ -190,52 +188,31 @@ fn strip_list_number(text: &str) -> &str {
     }
 }
 
-fn tracked_files(root: &Path) -> Vec<String> {
+/// The tracked files the checks read: Markdown, and source files with known comment markers.
+pub fn tracked_files(root: &Path) -> Vec<String> {
     let output = Command::new("git")
         .args(["ls-files", "-z"])
         .current_dir(root)
         .output()
-        .expect("the prose check lists tracked files with `git ls-files`");
+        .expect("the text check lists tracked files with `git ls-files`");
     assert!(output.status.success(), "`git ls-files` failed");
     String::from_utf8(output.stdout)
         .expect("tracked paths are UTF-8")
         .split('\0')
-        .filter(|path| path.ends_with(".md") || comment_markers(path).is_some())
+        .filter(|path| is_checked_text(path))
         .map(str::to_owned)
         .collect()
 }
 
-/// `cargo xtask check-prose [path]...`: reports every defect in the named files.
-/// With no path, it reports every tracked prose file.
-pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
-    let root = repo_root();
-    let mut paths: Vec<String> = args.collect();
-    if paths.is_empty() {
-        paths = tracked_files(&root);
-    }
-    let mut count = 0;
-    for path in &paths {
-        if !path.ends_with(".md") && comment_markers(path).is_none() {
-            bail!("{path} is neither Markdown nor a source file with known comment markers");
-        }
-        for defect in file_defects(&root, path) {
-            println!("{defect}");
-            count += 1;
-        }
-    }
-    if count > 0 {
-        bail!("{count} prose defects");
-    }
-    Ok(())
+/// Whether the checks read `path`.
+pub fn is_checked_text(path: &str) -> bool {
+    path.ends_with(".md") || comment_markers(path).is_some()
 }
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn file_defects(root: &Path, path: &str) -> Vec<String> {
+/// Each defect of the text file `path` under `root`, as `path:line: what`.
+pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
     let text = std::fs::read_to_string(root.join(path))
-        .unwrap_or_else(|e| panic!("{path} is tracked prose and must read as UTF-8: {e}"));
+        .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
     let (lines, unit) = match comment_markers(path) {
         Some(markers) => (comment_lines(markers, &text), "columns"),
         None => (markdown_lines(&text), "read characters"),
@@ -254,10 +231,16 @@ fn file_defects(root: &Path, path: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
+    fn repo_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
     #[test]
-    fn prose_meets_the_writing_style() {
+    fn text_meets_the_writing_style() {
         let root = repo_root();
         let report: Vec<String> = tracked_files(&root)
             .iter()
@@ -265,8 +248,8 @@ mod tests {
             .collect();
         assert!(
             report.is_empty(),
-            "prose breaks the AGENTS.md writing style (100 characters, one sentence per line):\n{}\n\
-             Run `cargo xtask check-prose <path>` to recheck a file.",
+            "text breaks the AGENTS.md writing style (100 characters, one sentence per line):\n{}\n\
+             Run `cargo xtask check-text <path>` to check a file again.",
             report.join("\n")
         );
     }
@@ -281,7 +264,7 @@ mod tests {
         assert!(!holds_two_sentences("## 3. Library mode: call the exports"));
     }
 
-    fn texts(lines: Vec<ProseLine>) -> Vec<(usize, usize, String)> {
+    fn texts(lines: Vec<TextLine>) -> Vec<(usize, usize, String)> {
         lines
             .into_iter()
             .map(|l| (l.number, l.length, l.text))
