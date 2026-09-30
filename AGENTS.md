@@ -12,12 +12,12 @@ Block-level HTML comments are stripped before this file enters an agent's contex
 # AGENTS.md
 
 Agent contract for dewasm.
-Project docs are written in English.
+Project documents are written in English.
 `tests/spec` and `tests/wasi-testsuite` are upstream submodules: never edit them.
 
 ## Development environment
 
-The Rust toolchain is pinned by `rust-toolchain.toml`; plain `cargo` commands pick it up.
+The Rust toolchain is fixed by `rust-toolchain.toml`; plain `cargo` commands pick it up.
 Everything else the test suite needs is in [`docs/testing.md`](docs/testing.md).
 That covers the interpreters, the submodules, the apps cache, and the fail-loud-not-skip policy.
 
@@ -25,25 +25,25 @@ That covers the interpreters, the submodules, the apps cache, and the fail-loud-
 
 | Command | What it does |
 | --- | --- |
-| `cargo test` | The baseline check for every change: unit + e2e + curated spec harness. |
+| `cargo test` | The baseline check for every change: unit + `e2e` + the specification harness on selected files. |
 | `cargo fmt --check` | Verify Rust code formatting. |
 | `cargo clippy --all-targets -- -D warnings` | Run the linter on all targets, failing on any warning. |
-| `cargo test -p dewasm-backend-ruby --test spec i32` | Spec harness on `.wast` files whose name contains the filter; swap the crate to switch backend. |
+| `cargo test -p dewasm-backend-ruby --test spec i32` | Specification harness on `.wast` files whose name contains the filter; swap the crate to switch backend. |
 | `cargo test -p dewasm-backend-ruby --test convert` | Convert every cached app with that backend, without running the output. |
 | `cargo run -p dewasm -- input.wasm --target ruby --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
 | `cargo xtask record-speed [filter]` | Measure the cross-runtime benchmark suite into a record under `records/`; see [`docs/benchmarks/README.md`](docs/benchmarks/README.md). |
 | `cargo xtask record-size` | Measure the distribution sizes into a record under `records/`; see [`docs/sizes/README.md`](docs/sizes/README.md). |
-| `examples/apps/setup.sh` | Fetch/build the pinned real-world apps into the gitignored cache; `--check` verifies without fetching and names anything stale. Tool requirements are in docs/testing.md. |
+| `examples/apps/setup.sh` | Fetch/build the real-world apps, at fixed versions, into the cache that Git ignores; `--check` verifies without fetching and names anything out of date. Tool requirements are in `docs/testing.md`. |
 
-After any non-trivial change, run the first three commands of the table: fmt, clippy, and test.
-The slower test categories are opt-in cargo features.
-`--features slow_test`, CI's main run, adds the slow app cases and the full spec testsuite.
-Codon, whose per-file cost is a compile, runs a curated spec list there instead.
+After any non-trivial change, run the first three commands of the table: `fmt`, `clippy`, and `test`.
+The slower test categories are optional Cargo features.
+`--features slow_test`, CI's main run, adds the slow app cases and the full specification testsuite.
+Codon, whose per-file cost is a compile, runs a selected specification list there instead.
 `--features ultra_slow_test` adds the cases CI cannot afford, run in local pre-release verification.
-Do not use `-- --include-ignored`; opt in through the features instead.
+Do not use `-- --include-ignored`; enable the features instead.
 The set it selects is not a designed configuration, so what it runs can change without notice.
-Which case sits in which category, and why, is pinned at its callsite in that backend's `e2e.rs`.
-The mechanism is in docs/testing.md.
+Which case sits in which category, and why, is stated at its callsite in that backend's `e2e.rs`.
+The mechanism is in `docs/testing.md`.
 How the suites are laid out, and what a new case must look like, is in [`agents/test-authoring.md`](agents/test-authoring.md).
 That is the `e2e.rs` contract, the category tokens, and the `EXPECTED_FAILURES` policy.
 When support declarations or WASI units change, regenerate `docs/support.md`.
@@ -56,15 +56,15 @@ Its README holds the index, the authoring procedure, and the quality bar.
 An entry is `agents/decisions/<N>-<slug>.md`, cited as "decision N".
 Nothing outside `agents/` references anything under it: no decision citation, no link.
 The exceptions are this file, `CLAUDE.md`, and `.claude/`.
-The app audit tooling is one more: it cites `agents/apps-audit.md`, the record its verdicts land in.
-Code and user-facing docs state their constraints in place.
+The app audit tooling is one more: it cites `agents/apps-audit.md`, the record of its results.
+Code and user-facing documents state their constraints in place.
 The decision links out to the code it governs, never the reverse.
 `agents/` is for documents an agent reads while working; `docs/` is for documents a human reads.
-The taxonomy is in [`agents/docs-policy.md`](agents/docs-policy.md).
+Which document holds what is in [`agents/docs-policy.md`](agents/docs-policy.md).
 
 ## Writing style
 
-Applies to all prose: docs, comments, PR text.
+Applies to all text: documents, comments, PR text.
 The rules form one set.
 A sentence has a length bound, and the other rules remove every way to meet it except saying less.
 
@@ -78,10 +78,10 @@ A sentence has a length bound, and the other rules remove every way to meet it e
   A sentence still too long states two things: split it at a sentence or at a `;`.
   A table row is one line by syntax, so the bound does not apply to it.
 - A sentence holds at most two clauses, joined once.
-  The joint is one connective, a `;`, or a `:`; a third clause starts a new sentence.
+  The joint is one linking word, a `;`, or a `:`; a third clause starts a new sentence.
   A clause that only identifies a noun ("the spelling that compiles") does not count.
-- Remove words, not connectives.
-  "So", "since" and "then" make short sentences read as prose rather than as a list.
+- Remove words, not linking words.
+  "So", "since" and "then" make short sentences read as connected text rather than as a list.
 - Do not coin metaphor-based vocabulary.
   Write "CI passes", not "CI is green"; "snapshot test", not "golden test".
   A term must be understandable without knowing the image behind it.
@@ -89,14 +89,15 @@ A sentence has a length bound, and the other rules remove every way to meet it e
   Do not vary wording for style, and do not swap in a shorter word that means less.
 - State facts, not intensifiers: a size, a count, a version.
   "Byte for byte" and "fully" add nothing a reader can check.
-- [`agents/vocabulary.md`](agents/vocabulary.md) lists the words these three rules exclude so far.
-  Add a word there when a review finds a new one.
+- A word in a sentence comes from the lists in [`agents/vocabulary.md`](agents/vocabulary.md) (decision 99).
+  Those are a base list for learners of English, the project's terms, and the excluded words.
+  A command, a path, or an identifier goes in a code span.
 - Do not use dashes (`—`, `–`, or a spaced `--`) as punctuation.
   Use a colon, a comma, parentheses, or a new sentence instead.
   Hyphens in words and ranges, `--` in command lines, and `—` as a table placeholder stay.
 - One paragraph explains one thing.
-  A side note worth keeping gets its own paragraph; usually it is worth deleting instead.
-- Prefer a self-contained example, a table, or a figure over prose describing one.
+  A side note worth keeping gets its own paragraph; usually it is worth removing instead.
+- Prefer a self-contained example, a table, or a figure over text describing one.
 - Existing text is brought under the rules when it is edited, not in passing.
 
 ## Coding style
@@ -104,11 +105,12 @@ A sentence has a length bound, and the other rules remove every way to meet it e
 - Express behavior through names, types, and control structure before reaching for a comment.
   A comment never describes what the code does.
 - The comments that remain state constraints the code cannot express.
-  Those are an external spec's requirement, a compatibility target, or a non-obvious invariant.
-- A doc comment is the minimal statement of contract.
+  One is an external specification's requirement or a compatibility target.
+  Another is a non-obvious invariant.
+- A documentation comment is the minimal statement of contract.
   When a function's name, parameters, and return type cannot carry its meaning, it may do too much.
 
-## Commit etiquette
+## Commit rules
 
 - Imperative subject in sentence case; **no** Conventional-Commits `type:` prefixes.
 - Body explains the *why*, wrapped at ~72 columns; the diff already shows the what.
@@ -116,16 +118,16 @@ A sentence has a length bound, and the other rules remove every way to meet it e
 
 ## Implementation guidelines
 
-Each rule is stated here in full; the cited decision holds its rationale and rejected alternatives.
+Each rule is stated here in full; the cited decision holds its reasons and rejected alternatives.
 
-- The spec testsuite binds (decision 3).
-  Correctness of generated code outranks its readability.
+- The specification testsuite binds (decision 3).
+  Correctness of generated code matters more than its readability.
   Readability improvements go into optional passes, never into semantics-relevant lowering.
-- Where WASI is silent, copy wasmtime's behavior as measured on both CI hosts (decision 49).
+- Where WASI is silent, copy `wasmtime`'s behavior as measured on both CI hosts (decision 49).
   An exception is recorded as a decision (decision 80 is the one to date) and needs all three of:
-  - wasmtime's shape breaks an in-scope app;
+  - `wasmtime`'s shape breaks an in-scope app;
   - the alternative has a reference implementation;
-  - the conformance suite does not assert wasmtime's shape.
+  - the conformance suite does not assert `wasmtime`'s shape.
 - Numeric representation conventions are shared across backends (decision 2).
   Those are masked-unsigned integers, f32 re-rounding, and NaN bit paths.
   A backend skips a result mask only through the shared analyses in `dewasm_backend::masking`.
@@ -159,17 +161,17 @@ Each rule is stated here in full; the cited decision holds its rationale and rej
   `--mode library` is the mode for output other code loads.
 - Runtime code is per-method units under `crates/dewasm-backend-<lang>/units/` (decisions 6/85).
   A unit carries a `# requires:` header, and the runtime is referenced as `Rt`.
-  Keep the headers in sync when editing a unit.
-  The units lint enforces most of it.
+  Keep the headers up to date when editing a unit.
+  The units lint checks most of it.
 - `Embedded` linkage isolates the runtime per artifact (decision 62).
-  Two artifacts then coexist in one namespace.
+  Two artifacts can then exist together in one namespace.
   `embedded_coexist_e2e!` is the check.
-  A backend that does not invoke it is unfinished, not incapable.
-- A new backend is done when the shared spec harness passes for it, not before.
+  A backend that does not call it is unfinished, not unable.
+- A new backend is done when the shared specification harness passes for it, not before.
   The standard goal is wasm 1.0 + full WASI p1 (decision 24).
   Two more are accepted input: final exception handling (decision 69) and tail calls (decision 88).
   Each is declared per backend, and a backend without the lowering rejects it at conversion time.
-  Other wasm 2.0+ proposals and the component model are rejected outright, not per backend.
+  Other wasm 2.0+ proposals and the component model are rejected for every backend.
 - A backend declares its capabilities in `Backend::feature_status` and `Backend::has_wasi_p1`.
   These render into `docs/support.md` (decision 25); there is no per-backend support maturity level.
 - An unsupported wasm feature fails at conversion time with a clear error, never at runtime.
@@ -193,8 +195,8 @@ Each rule is stated here in full; the cited decision holds its rationale and rej
 - A tail call to a function's own index becomes a loop in `dewasm_backend::selfcall` (decision 90).
   The pass is shared and runs before the other passes.
   It leaves alone a function that can fall off its end or declares a reference-typed local.
-- A library-mode `--module-name` is used verbatim or rejected with its grammar (decision 63).
+- A library-mode `--module-name` is used unchanged or rejected with its grammar (decision 63).
   A standalone artifact's internal name is fixed, and the option is refused there.
-  Validate in `Backend::generate` only, never in the `*_with_units` APIs.
-  Test tables carry kebab-case names, converted with `dewasm_test_helper::derive_module_name`.
+  Check the name in `Backend::generate` only, never in the `*_with_units` APIs.
+  Test tables carry `kebab-case` names, converted with `dewasm_test_helper::derive_module_name`.
   No name transformation belongs in the product.
