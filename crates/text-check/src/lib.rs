@@ -8,6 +8,8 @@
 use std::path::Path;
 use std::process::Command;
 
+pub mod vocabulary;
+
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 const MAX_LENGTH: usize = 100;
@@ -33,7 +35,10 @@ fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
     })
 }
 
-fn markdown_lines(text: &str) -> Vec<TextLine> {
+/// Each line of Markdown `text` that holds text a reader sees.
+/// Table rows are read only with `read_tables`.
+/// The length bound exempts them, and the vocabulary does not.
+pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
     let line_starts: Vec<usize> = std::iter::once(0)
         .chain(text.match_indices('\n').map(|(i, _)| i + 1))
         .collect();
@@ -50,9 +55,13 @@ fn markdown_lines(text: &str) -> Vec<TextLine> {
     let mut skipped_depth = 0;
     for (event, range) in Parser::new_ext(text, options).into_offset_iter() {
         match event {
-            Event::Start(Tag::CodeBlock(_) | Tag::Table(_)) => skipped_depth += 1,
-            Event::End(TagEnd::CodeBlock | TagEnd::Table) => skipped_depth -= 1,
+            Event::Start(Tag::CodeBlock(_)) => skipped_depth += 1,
+            Event::End(TagEnd::CodeBlock | TagEnd::MetadataBlock(_)) => skipped_depth -= 1,
+            Event::Start(Tag::Table(_)) if !read_tables => skipped_depth += 1,
+            Event::End(TagEnd::Table) if !read_tables => skipped_depth -= 1,
             _ if skipped_depth > 0 => {}
+            // Cells are separate, so a word never runs across a cell border.
+            Event::End(TagEnd::TableCell) => append(&mut lines[line_of(range.start)], "", " "),
             Event::Start(Tag::MetadataBlock(_)) => {
                 // A metadata block is YAML, so each of its lines is read as written.
                 let block = &text[range.clone()];
@@ -215,7 +224,7 @@ pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
         .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
     let (lines, unit) = match comment_markers(path) {
         Some(markers) => (comment_lines(markers, &text), "columns"),
-        None => (markdown_lines(&text), "read characters"),
+        None => (markdown_lines(&text, false), "read characters"),
     };
     let mut report = Vec::new();
     for line in lines {
@@ -254,6 +263,40 @@ mod tests {
         );
     }
 
+    /// Files written before the vocabulary rules, which the check skips until each is rewritten.
+    /// A listed file that already passes fails the check, so the list only shrinks.
+    const VOCABULARY_EXEMPT: &str = include_str!("vocabulary_exempt.txt");
+
+    #[test]
+    fn text_uses_the_vocabulary() {
+        let root = repo_root();
+        let vocabulary = vocabulary::Vocabulary::load(&root).unwrap_or_else(|e| panic!("{e}"));
+        let exempt: Vec<&str> = VOCABULARY_EXEMPT
+            .lines()
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .collect();
+        let mut report = Vec::new();
+        let mut stale = Vec::new();
+        for path in tracked_files(&root) {
+            let found = vocabulary.file_defects(&root, &path);
+            if !exempt.contains(&path.as_str()) {
+                report.extend(found);
+            } else if found.is_empty() {
+                stale.push(path);
+            }
+        }
+        assert!(
+            report.is_empty(),
+            "text uses words that agents/vocabulary.md does not allow:\n{}",
+            report.join("\n")
+        );
+        assert!(
+            stale.is_empty(),
+            "these files now pass; remove them from vocabulary_exempt.txt:\n{}",
+            stale.join("\n")
+        );
+    }
+
     #[test]
     fn two_sentences_are_found() {
         assert!(holds_two_sentences("One thing. Another thing."));
@@ -287,7 +330,7 @@ mod tests {
             (1, 22, "A link and `xxx` and em.".to_owned()),
             (2, 21, "Item with with_units.".to_owned()),
         ];
-        assert_eq!(texts(markdown_lines(md)), expected);
+        assert_eq!(texts(markdown_lines(md, false)), expected);
     }
 
     #[test]

@@ -6,7 +6,7 @@ What the tests need and how to run them.
 
 > [!IMPORTANT]
 > A test whose required tool or setup step is missing **fails**; it never silently skips.
-> Run `git submodule update --init` and `examples/apps/setup.sh` before the first `cargo test`.
+> Before the first `cargo test`, run `git submodule update --init` and the two setup scripts below.
 > Otherwise a fresh checkout reports failures that look like broken code.
 
 The following tools and setup steps are required to run all tests correctly:
@@ -35,12 +35,16 @@ The following tools and setup steps are required to run all tests correctly:
       Local dev and CI use wasi-sdk-34.
     - A host Ruby with `rake`, for mruby.
   * Each `scripts/*.sh` fails loudly naming what it is missing.
+- **The word lists of the text check**: fetch them once with `crates/text-check/setup.sh`.
+  `cargo test -p text-check` reads them from `crates/text-check/cache`.
+  `crates/text-check/setup.sh --check` names any that do not match their sha256.
 
 ## Commands
 
 ```console
 $ git submodule update --init
 $ examples/apps/setup.sh
+$ crates/text-check/setup.sh
 $ cargo test
 ```
 

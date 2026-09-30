@@ -30,7 +30,7 @@ That covers the interpreters, the submodules, the apps cache, and the fail-loud-
 | `cargo clippy --all-targets -- -D warnings` | Run the linter on all targets, failing on any warning. |
 | `cargo test -p dewasm-backend-ruby --test spec i32` | Specification harness on `.wast` files whose name contains the filter; swap the crate to switch backend. |
 | `cargo test -p dewasm-backend-ruby --test convert` | Convert every cached app with that backend, without running the output. |
-| `cargo run -p dewasm -- input.wasm --target ruby --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for stdout. |
+| `cargo run -p dewasm -- input.wasm --target ruby --mode standalone -o out.rb` | Convert; `.wat` input works too, `-o -` for standard output. |
 | `cargo xtask record-speed [filter]` | Measure the cross-runtime benchmark suite into a record under `records/`; see [`docs/benchmarks/README.md`](docs/benchmarks/README.md). |
 | `cargo xtask record-size` | Measure the distribution sizes into a record under `records/`; see [`docs/sizes/README.md`](docs/sizes/README.md). |
 | `examples/apps/setup.sh` | Fetch/build the real-world apps, at fixed versions, into the cache that Git ignores; `--check` verifies without fetching and names anything out of date. Tool requirements are in `docs/testing.md`. |
