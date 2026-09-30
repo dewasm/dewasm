@@ -1,7 +1,7 @@
 # Decision 2: Numeric Semantics Strategy for Dynamically-Typed Targets
 
 Status: **Accepted, 2026-07-23.**
-Backfilled; implemented for Ruby in `runtime/ruby/runtime.rb`.
+Recorded afterwards; implemented for Ruby in `runtime/ruby/runtime.rb`.
 The conventions below bind every backend whose language lacks fixed-width/unsigned integers.
 They also bind every backend whose language lacks 32-bit floats.
 Those are Ruby, Python, PHP, and Bash; Java/Go map to native types instead.
@@ -18,7 +18,7 @@ Wasm requires bit-exact numerics:
 - precise trap conditions.
 
 Ruby/Python have arbitrary-precision integers and only doubles.
-The spec testsuite (decision 3) checks all of it.
+The specification testsuite (decision 3) checks all of it.
 That includes NaN payloads through `reinterpret` and memory.
 
 ## Decision
@@ -27,43 +27,43 @@ That includes NaN payloads through `reinterpret` and memory.
   The signed view is derived only where an instruction needs it (`div_s`, `lt_s`, `shr_s`, ...).
   The `s32`/`s64` helpers derive it.
   Criterion: the *storage* representation should make the more mechanical operation free.
-  Masking after add/sub/mul is unavoidable either way.
-  Unsigned compare/div/shift, however, come for free on non-negative integers.
+  Masking after `add`/`sub`/`mul` is unavoidable either way.
+  Unsigned comparison, division and shift, however, come for free on non-negative integers.
   Memory stores need no sign fix-up.
-  This convention is shared by all bignum-style backends so lowering tables stay parallel.
+  This convention is shared by all bignum-style backends, so lowering tables stay parallel.
 - **f32/f64 are host doubles; every f32 operation result is re-rounded to single precision.**
-  Sound for add/sub/mul/div/sqrt because 53 ≥ 2·24 + 2.
-  Double rounding is innocuous at that precision gap.
+  Sound for `add`/`sub`/`mul`/`div`/`sqrt` because 53 ≥ 2·24 + 2.
+  Double rounding causes no error at that precision gap.
   Integer→f32 conversions of values above 2^53 pre-round to odd before the double→single step.
   The reason is the same.
-- **Software bit conversions give NaN bit-exactness exactly where the host rounds through a lossy path.**
+- **Software bit conversions give NaN bit-exactness where the host's rounding path loses bits.**
   Measured on MRI: `pack("e")` canonicalizes NaN sign and payload.
   It also overflows straight to infinity instead of rounding near f32-max.
   So f32 bit extraction/injection takes a software path for NaNs.
   Memory traffic of f32 values goes through those helpers.
   The overflow boundary (2^128 − 2^103) is handled explicitly.
-  Some operations are required by the spec to *quiet* NaNs: floor/ceil/trunc/nearest/sqrt/promote.
-  They set the quiet bit via bit manipulation.
+  The specification requires some operations to *quiet* NaNs.
+  Those are `floor`/`ceil`/`trunc`/`nearest`/`sqrt`/`promote`, and they set the quiet bit via bit manipulation.
 - **Trap conditions are explicit checks in helpers.**
   They cover `div` by zero, `INT_MIN / −1`, out-of-range `trunc`, and memory bounds.
-  The checks use the spec interpreter's trap message strings, which the harness matches.
+  The checks use the reference interpreter's trap message strings, which the harness matches.
 
 ## Rejected alternatives
 
 - **Representing floats as bit-pattern integers everywhere.**
-  It makes every arithmetic op a pack/unpack round-trip.
-  It is only needed at the (few) lossy conversion points.
+  It makes every arithmetic operation a pack/unpack round-trip.
+  It is only needed at the (few) conversion points that lose bits.
 - **Signed storage representation**: every memory store would need a fix-up.
-  So would every unsigned compare and unsigned div/shift.
+  So would every unsigned comparison and unsigned division and shift.
   The testsuite is dominated by unsigned-view operations.
 
 ## Consequences
 
-- Positive: the f32/f64/f32_bitwise/float_memory/conversions spec files pass on Ruby.
+- Positive: the `f32`/`f64`/`f32_bitwise`/`float_memory`/`conversions` specification files pass on Ruby.
   That includes their NaN sign/payload assertions.
-- Known limitation: a *signaling* NaN can be quieted by hardware float↔double conversion.
-  This happens on paths we do not intercept.
-  No spec test currently catches this on the Ruby backend.
-  But it is a standing caveat for future backends.
+- Known limitation: a *signaling* NaN can be quieted by the processor's float↔double conversion.
+  This happens on paths our helpers do not cover.
+  No specification test currently catches this on the Ruby backend.
+  But it is a standing limit for future backends.
 - Exported function results are unsigned integers by ABI.
   Embedders wanting signed views apply `s32`/`s64` themselves.

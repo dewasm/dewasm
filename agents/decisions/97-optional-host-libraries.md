@@ -1,4 +1,4 @@
-# Decision 97: A Host Library the Runtime May Lack Is Optional, and Its Absence Is Refused, Not Faked
+# Decision 97: A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Stubbed
 
 Status: **Accepted, 2026-09-20.**
 Landed: the Ruby WASI `path_link` unit ([`crates/dewasm-backend-ruby/units/wasi/path_link.rb`](../../crates/dewasm-backend-ruby/units/wasi/path_link.rb)).
@@ -8,9 +8,9 @@ Nothing changes under CRuby, which has Fiddle.
 
 ## Context
 
-`path_link` without `SYMLINK_FOLLOW` must hardlink a symlink itself rather than its target.
-`link(2)` does that on Linux, but follows the symlink on macOS/BSD.
-So the unit reached for `linkat(..., 0)`, which is nofollow everywhere, through Fiddle.
+`path_link` without `SYMLINK_FOLLOW` must hard-link a symbolic link itself rather than its target.
+`link(2)` does that on Linux, but follows the symbolic link on macOS/BSD.
+So the unit reached through Fiddle for `linkat(..., 0)`, which follows no link on any platform.
 It did so with `require "fiddle"` at the top of the helper and `Fiddle::Function.new` under it.
 
 Fiddle is a dynamic FFI, and a runtime need not have one.
@@ -24,42 +24,43 @@ That is a worse answer than generated output that says what it cannot do.
 ## Decision
 
 A host library the runtime may lack is optional.
-The unit tests for it, and keeps the full-fidelity path when it is there.
-When it is not there, the unit takes the best faithful fallback.
+The unit tests for it, and keeps the path with the full behavior when it is there.
+When it is not there, the unit takes the best fallback that stays correct.
 
 What decides the fallback is whether it can still be *correct*.
 Whether it can still produce an answer does not decide it.
-`File.link` is the same call with the same result for every hardlink of a regular file.
-On Linux it is the same for a symlink too, so that is the fallback.
-It cannot serve a single case: a symlink source on a platform whose `link(2)` follows.
-That case is refused with `ENOTSUP` rather than quietly hardlinking the target.
-Hardlinking the target would silently link a wrong file.
+`File.link` is the same call with the same result for every hard link to a regular file.
+On Linux it is the same for a symbolic link too, so that is the fallback.
+It cannot serve a single case: a symbolic link source on a platform whose `link(2)` follows.
+That case is refused with `ENOTSUP` rather than quietly making a hard link to the target.
+A hard link to the target would silently link a wrong file.
 
 The test is the constant, not the `require`.
 A runtime that ignores an unavailable `require` still has to fail the `Fiddle::Function` lookup.
-So the unit rescues that failure (`LoadError`, `NameError`, `NoMethodError`) and memoizes `false`.
+So the unit rescues that failure (`LoadError`, `NameError`, `NoMethodError`) and caches `false`.
 
 ## Rejected alternatives
 
 - **Keep the hard Fiddle dependency.**
   It is correct on CRuby and broken everywhere else.
-  The breakage arrives mid-run as a `NameError` from inside a syscall.
+  The failure arrives mid-run as a `NameError` from inside a system call.
 - **Fall back to `File.link` unconditionally.**
-  It silently hardlinks the symlink's target on macOS, so a guest asking for one file gets another.
+  On macOS it silently hard-links the symbolic link's target.
+  A guest asking for one file then gets another.
   The conformance suite cannot see the difference, because the call succeeds.
 - **Refuse `path_link` entirely without Fiddle.**
-  It gives up every correct hardlink to avoid one incorrect case.
+  It gives up every correct hard link to avoid one wrong case.
   Those are all of Linux, and every regular file on macOS.
 - **Declare `path_link` unsupported for Ruby.**
   It is supported, on the runtime the project measures against.
   A capability declaration describes the backend.
-  It does not describe the host library inventory of whatever runs the output.
+  It does not describe the host libraries of whatever runs the output.
 
 ## Consequences
 
 - Positive: converted Ruby with a `path_link` import compiles and runs on a runtime without Fiddle.
-  For such a runtime, that is the whole of the WASI filesystem surface rather than one syscall.
-- Negative: on macOS without Fiddle, hardlinking a symlink answers `ENOTSUP`.
+  For such a runtime, that is the whole of the WASI file system surface rather than one system call.
+- Negative: on macOS without Fiddle, a hard link to a symbolic link answers `ENOTSUP`.
   That is a documented gap in [`docs/backends/ruby.md`](../../docs/backends/ruby.md) rather than a silent wrong answer.
   The conformance suite runs under CRuby, so the suite does not cover the fallback.
 - Carry-over: the same rule applies to any later unit that reaches for an optional host library.
@@ -67,5 +68,5 @@ So the unit rescues that failure (`LoadError`, `NameError`, `NoMethodError`) and
 
 See also:
 - [decision 96](96-generated-code-compiles-ahead-of-time.md) (the same concern for language constructs rather than libraries);
-- [decision 14](14-ruby-wasi-filesystem.md) (the filesystem model this sits in);
-- [decision 49](49-spec-silent-follow-wasmtime.md) (whose behavior the syscalls copy).
+- [decision 14](14-ruby-wasi-file-system.md) (the file system model this sits in);
+- [decision 49](49-spec-silent-follow-wasmtime.md) (whose behavior the system calls copy).

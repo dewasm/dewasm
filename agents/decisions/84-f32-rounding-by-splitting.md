@@ -13,22 +13,22 @@ Every f32 operation is computed in double precision.
 It is re-rounded once through `Rt.f32` ([decision 2](2-numeric-semantics.md)).
 So that unit sits on the hot path of every f32-heavy program.
 It costs one `pack` plus one `unpack` per arithmetic result.
-Each is a C call that allocates a String (Ruby) or a `bytes` and a tuple (Python).
+Each is a C call that allocates a String (Ruby) or a `bytes` and a `tuple` (Python).
 
 The cost is the gap between the two arithmetic microbenchmarks.
 They differ only in operand width (`benchmarks/wat/f32_alu.wat` against `benchmarks/wat/f64_alu.wat`).
-In `records/2026-08-22T06-26-23Z-speed.json`:
+In `records/2026-08-22T06-26-23Z-speed.json`, in nanoseconds per operation:
 
-| runner | wat/f64_alu | wat/f32_alu |
+| runner | `wat/f64_alu` | `wat/f32_alu` |
 | --- | --- | --- |
-| dewasm-ruby | 102 ns/op | 677 ns/op |
-| dewasm-python | 152 ns/op | 849 ns/op |
-| dewasm-perl | 831 ns/op | 1547 ns/op |
+| `dewasm-ruby` | 102 | 677 |
+| `dewasm-python` | 152 | 849 |
+| `dewasm-perl` | 831 | 1547 |
 
-Replacing the byte round trip with a reusable `IO::Buffer` scratch was tried and rejected.
-The record is #261 and PR #263 (closed unmerged), and `agents/experiments.md`, float-bits-scratch.
-A scratch buffer is state.
-It became one per receiver after the module-level placement corrupted floats across threads.
+Replacing the byte round trip with a reusable `IO::Buffer` was tried and rejected.
+The record is #261 and PR #263 (closed unmerged), and `agents/experiments.md`, `float-bits-scratch`.
+The reused `IO::Buffer` is state.
+It became one per receiver after the module-level placement produced wrong floats across threads.
 The instance-variable read plus the `IO::Buffer` call pair then cost more than the `pack` pair.
 That was measured on a real app.
 
@@ -72,18 +72,18 @@ The measurement is on `wat/f32_alu`.
 It was verified against the previous implementation over 2.4 million values per language.
 There were zero mismatches.
 The values are:
-- random f32 sums, products, differences and quotients;
+- random f32 results of addition, subtraction, multiplication and division;
 - random doubles across the full exponent range;
 - exact 24-bit ties;
 - the neighbours of every boundary named above.
 
-The spec harness passes for all three backends as well.
+The specification harness passes for all three backends as well.
 
 ## Rejected alternatives
 
-- **The reusable `IO::Buffer` scratch (#261, PR #263).**
-  Rejected on its own measurements, and the splitting sidesteps what killed it.
-  The splitting is stateless.
+- **The reusable `IO::Buffer` (#261, PR #263).**
+  Rejected on its own measurements, and the splitting avoids what ended it.
+  The splitting keeps no state.
   So the thread-sharing constraint that forced the per-receiver placement does not arise.
   The bit-conversion units stay on `pack` untouched.
   They are `f32_bits`, `f32_from_bits`, `f64_bits`, and `f64_from_bits`.
@@ -96,8 +96,8 @@ The spec harness passes for all three backends as well.
   Keeping every intermediate there restores the correct result.
   That was verified over the same 2.4 million values.
   It costs a multiplication in and a multiplication out.
-  Measured on `wat/f32_alu`, it was 1553 ns/op before against 1701 ns/op after.
-  So perl keeps the pack path.
+  Measured on `wat/f32_alu`, it went from 1553 to 1701 ns per operation.
+  So Perl keeps the pack path.
 - **Widening the fast path to the whole finite range.**
   Above 2^127 the 24-bit rounding can produce 2^128.
   The mapping of the boundary region back to the largest finite f32 differs per language.
@@ -111,24 +111,24 @@ The spec harness passes for all three backends as well.
 ## Consequences
 
 - Measured on `wat/f32_alu` on the same host as the record.
-  Iteration counts are calibrated per runner, and startup is subtracted.
+  Iteration counts are calibrated per runner, and start time is subtracted.
 
-  | runner | before | after |
+  | runner | before (nanoseconds per operation) | after (nanoseconds per operation) |
   | --- | --- | --- |
-  | dewasm-ruby | 626 ns/op | 367 ns/op |
-  | dewasm-ruby-yjit | 545 ns/op | 229 ns/op |
-  | dewasm-python | 850 ns/op | 549 ns/op |
-  | dewasm-pypy | 336 ns/op | 6.7 ns/op |
-  | dewasm-perl | 1553 ns/op | (unchanged) |
+  | `dewasm-ruby` | 626 | 367 |
+  | `dewasm-ruby-yjit` | 545 | 229 |
+  | `dewasm-python` | 850 | 549 |
+  | `dewasm-pypy` | 336 | 6.7 |
+  | `dewasm-perl` | 1553 | (unchanged) |
 
   PyPy's factor is the interesting one.
   The whole f32 loop becomes float arithmetic its JIT can trace, which `struct.pack` blocked.
   `wat/f64_alu` is unchanged for every runner, as it must be.
 - NaN still reaches `pack`, so the f32 half of [decision 47](47-ruby-f64-sub-quiet-guard.md) still holds.
-  `f32.sub` needs no quiet-NaN guard because the re-round quietens a signaling operand.
+  `f32.sub` needs no quiet NaN guard because the re-round quietens a signaling operand.
 - Three languages now round f32 by two different mechanisms.
   A future backend has to pick one by measuring rather than by copying.
-- Two things invalidate this.
+- Two things would make this no longer hold.
   One is a host whose float multiplication or subtraction is not IEEE double.
   Perl built with long-double NVs is the near case, and its unit does not use the splitting anyway.
   The other is an interpreter whose conversion primitive becomes cheaper than three float operations.

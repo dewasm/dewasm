@@ -11,14 +11,14 @@ What a body leaves behind is parked in per-instance slots rather than allocated.
 That is the shape Bash had from the start, and [decision 89](89-park-the-pending-tail-call.md) brought the rest to it.
 Perl differs only in the two places its language forces:
 
-- a parked call leaves through the `try_table` outcome table rather than a bare `return`.
-  That is because perl's `return` inside an `eval` exits only the `eval`.
+- a parked call leaves through the `try_table` outcome table rather than a plain `return`.
+  That is because Perl's `return` inside an `eval` exits only the `eval`.
 - the trampoline is list-aware.
-  That is because perl flattens a multi-value return into its caller's argument list.
+  That is because Perl flattens a multi-value return into its caller's argument list.
 
-It had been superseded by [decision 24](24-01-scope-reset.md) between 2026-07-26 and 2026-08-31.
+It had been replaced by [decision 24](24-01-scope-reset.md) between 2026-07-26 and 2026-08-31.
 It was kept as the design record that made the restoration cheap.
-The original acceptance note and implementation pointers below are retained as history.
+The original status note and implementation pointers below are retained as history.
 "ADR-18" in them is this decision.
 The runtime units now live inside their backend crates ([decision 85](85-crates-io-publish-layout.md)).
 
@@ -41,7 +41,7 @@ Ruby has no dependable tail-call elimination, so the lowering itself must keep c
 
 ## Decision
 
-A trampoline, shaped so that no per-hop stack frame survives:
+A trampoline, shaped so that no stack frame per step survives:
 
 - Every defined function that **contains** a tail call is split.
   The shared, exhaustive `stmts_use_tail_calls` walk computes that set.
@@ -49,14 +49,14 @@ A trampoline, shaped so that no per-hop stack frame survives:
   `Rt::TailCall` is a `Struct(:target, :args)`; `Rt.trampoline` re-dispatches while the result is one.
   That is in `runtime/ruby/units/rt/tail_call.rb`.
   All existing call sites (exports, `Stmt::Call`, tables, `start`) keep using `_fN`.
-  So the split is invisible outside.
+  So the split cannot be seen outside.
 - **Every `return_call` produces a thunk, never a plain call.**
   To a tail-calling callee the thunk targets the *body* (`method(:_fM_body)`).
-  So mutual chains bounce in the one outermost trampoline with zero intermediate frames.
+  So mutual chains loop in the one outer trampoline, with zero frames in between.
   To anything else (imports, plain functions) it targets the ordinary callable.
-  That costs one completing frame per such hop.
+  That costs one completing frame per such step.
   **Criterion: the callee must run after the caller's frame (including its `rescue` blocks) is gone.**
-  A "plain call for non-tail-calling callees" shortcut passed every stack-depth test.
+  A "plain call for non-tail-calling callees" short path passed every stack-depth test.
   It was observably wrong under exception handling, though.
   `try_table.wast`'s `return-call-in-try-catch` shows it.
   An exception thrown by the tail-called function must *escape* the caller's `try_table`.
@@ -81,14 +81,14 @@ A trampoline, shaped so that no per-hop stack frame survives:
 - **Self-tail-call → loop rewrite in the IR**: only covers direct self-recursion.
   `even`/`odd` mutual recursion still overflows.
   It is viable later as a readability/speed optimization layered on top, never as the mechanism.
-  It would simply shrink the tail-caller set.
+  It would only make the tail-caller set smaller.
 - **Thunks holding the public `_fM` entry (no body split).**
-  Each hop enters a fresh trampoline one frame deeper.
-  10⁶ hops = 10⁶ frames.
+  Each step enters a fresh trampoline one frame deeper.
+  10⁶ steps = 10⁶ frames.
   The body split is precisely what makes the chain flat.
 - **`RubyVM::InstructionSequence.compile_option = {tailcall_optimization: true}`**: MRI-only.
-  It requires routing generated code through explicit iseq compilation.
-  It is silently absent on JRuby/TruffleRuby.
+  It requires routing generated code through explicit instruction-sequence compilation.
+  It is silently missing on JRuby/TruffleRuby.
   Generated code must not depend on an interpreter flag for correctness.
 
 ## Consequences
@@ -97,13 +97,13 @@ A trampoline, shaped so that no per-hop stack frame survives:
   That includes the 10⁶-deep chains.
   Full Ruby run pass 29,516 → 29,598, fail stays 40.
   Bash is unchanged, since `check_module_support` controls it.
-  Its `tail-call` skips re-appear unchanged in its histogram.
+  Its `tail-call` skips re-appear unchanged in its skip counts.
 - Positive: `stmts_use_tail_calls` lives in `dewasm-backend` because conditioning needs it anyway.
   A future backend implementing tail calls reuses the same tail-caller analysis.
   Examples are C#'s real `tail.` prefix and Java trampolines.
-- Negative / carry-over: tail-calling functions allocate one `Rt::TailCall` per hop.
+- Negative / carry-over: tail-calling functions allocate one `Rt::TailCall` per step.
   Every tail-caller pays the extra wrapper frame even when called normally.
-  A host externref that is itself an `Rt::TailCall` instance could confuse a trampoline.
+  A host `externref` that is itself an `Rt::TailCall` instance could confuse a trampoline.
   That happens only if a wasm function could *return* it from a body.
   It cannot (bodies only produce thunks at `return_call` sites), so this is theoretical.
   `return_call_ref` stays rejected under `function-references`.

@@ -1,19 +1,19 @@
-# Decision 72: Ruby Backend Omits Dead Method-Level `__br` Clears
+# Decision 72: Ruby Backend Drops Dead Method-Level `__br` Clears
 
 Status: **Accepted, 2026-08-15.**
 Implemented as `dead_clears` in [`crates/dewasm-backend-ruby/src/lib.rs`](../../crates/dewasm-backend-ruby/src/lib.rs).
-It refines the method-body-level spelling of [decision 42](42-ruby-label-variable-cascade.md)'s land-or-relay epilogue.
-The relaying spelling inside an enclosing frame is untouched.
+It refines the method-body-level spelling of [decision 42](42-ruby-label-variable-chain.md)'s land-or-relay epilogue.
+The relaying spelling inside an outer frame is untouched.
 
 ## Context
 
 Decision 42's epilogue has two spellings.
-Inside an enclosing frame it lands or relays.
+Inside an outer frame it lands or relays.
 At method-body level nothing outer exists to relay to.
-So it degenerates to `__br = nil if __br == {id}`.
+So it reduces to `__br = nil if __br == {id}`.
 At that spelling a pending `__br` can only name the frame itself.
-An outer frame a branch could target would be on that branch's inclusive path.
-[Decision 60](60-ruby-flatten-only-deep-crossings.md)'s dissolution is all-or-nothing per path.
+An outer frame a branch could target would be on that branch's path, both ends included.
+[Decision 60](60-ruby-flatten-only-deep-crossings.md) dissolves frames all-or-nothing per path.
 So no surviving frame has a dissolved lexical ancestor a branch still relays toward.
 The statement therefore never redirects control; it only resets `__br` for later reads.
 Where nothing later reads `__br`, it is dead text.
@@ -52,7 +52,7 @@ Skipping can only keep a droppable clear.
   The remainder does not justify a second flow analysis to keep correct.
 - **A text post-pass over the generated Ruby.**
   It recovers control flow the IR already has.
-  It is rejected on the ground decision 58 rejected its cleanup pass.
+  It is rejected on the ground decision 58 rejected its own text post-pass.
   That ground: structure it in the IR or not at all.
 
 ## Consequences
@@ -60,11 +60,12 @@ Skipping can only keep a droppable clear.
 - `sqlite3-shell`: 928 → 267 clears, 17,323 bytes (0.22%) smaller.
   `ruby.wasm`: 9,174 → 239, 232,477 bytes (0.32%) smaller.
   No semantic change: the diffs are purely removed clear lines.
-  The spec harness and the slow app set pass unchanged.
-- The symmetric refinement is not taken.
+  The specification harness and the slow app set pass unchanged.
+- The matching refinement of the other spelling is not taken.
   The relaying spelling's land arm can likewise be dead.
   But the relay arm is protocol-required, and the spelling is a single line either way.
-- The codegen-shape tests pin both sides and the conservatism.
+- Tests of the generated code's shape check both sides.
+  They also check the cases where the rule keeps a clear it could drop.
   They are in `crates/dewasm-backend-ruby/src/lib.rs`:
   - `dead_method_level_clear_is_dropped`;
   - `method_level_clear_before_a_later_reader_is_kept`;

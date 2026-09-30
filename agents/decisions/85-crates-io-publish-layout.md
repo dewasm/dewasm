@@ -10,7 +10,7 @@ The actual `cargo publish` of the nine crates is a release step, not part of thi
 
 ## Context
 
-0.1.0 publishes the workspace to crates.io so `cargo install dewasm` works without a checkout.
+0.1.0 publishes the workspace to crates.io so `cargo install dewasm` works without a clone.
 `cargo package` only includes files under a crate's own directory.
 But each backend's `build.rs` embedded its units from the repository-level `runtime/<lang>/units/`.
 That layout is decision 6's, and a packaged backend crate could not build with it.
@@ -29,20 +29,21 @@ The path-only `[workspace.dependencies]` entries did not.
   `cargo install dewasm` is the installation story; no separate `dewasm-cli` name exists on crates.io.
 - The publishable `[workspace.dependencies]` entries carry `version = "<workspace version>"` beside `path`.
   `dewasm-test-helper` stays path-only: it is `publish = false`.
-  Cargo drops path-only dev-dependencies from published manifests.
+  Cargo drops path-only `dev-dependencies` from published manifests.
   That is exactly the intended shape.
 
 ## Rejected alternatives
 
-- **Symlink `crates/dewasm-backend-<lang>/units` → `../../runtime/<lang>/units`.**
+- **A symbolic link from `crates/dewasm-backend-<lang>/units` → `../../runtime/<lang>/units`.**
   Verified to work: `cargo package` follows the link and packages real files.
-  But a symlinked tree breaks builds on Windows checkouts without symlink support.
-  It also makes the package contents invisible in the checkout.
+  But a tree with symbolic links breaks builds on a Windows clone without support for them.
+  It also hides the package contents in the repository.
 - **Copy the units into each crate at publish time.**
   Two copies of the truth.
-  The breakage (a stale or missing copy) only surfaces during a publish, the rarest operation.
+  The failure (an out-of-date or missing copy) only surfaces during a publish, the rarest operation.
 - **Keep `dewasm-cli` and reserve `dewasm` with a stub crate.**
-  Two crates.io names for one artifact, and the stub is a permanent redirection page users hit first.
+  Two crates.io names for one artifact.
+  The stub is a permanent redirection page that users hit first.
 
 ## Consequences
 
@@ -51,7 +52,7 @@ The path-only `[workspace.dependencies]` entries did not.
   The bundler and the units lint are path-independent, and did not change.
   The bundler is `RuntimeBundler` in `crates/dewasm-backend/src/lib.rs`.
 - Every reference to the old paths was rewritten in place.
-  Those are in `AGENTS.md`, CI's shellcheck exclusion, and unit-internal cross-language comments.
-  `cargo run -p dewasm` in docs and example build scripts was also rewritten.
+  Those are in `AGENTS.md`, CI's ShellCheck exclusion, and unit-internal cross-language comments.
+  `cargo run -p dewasm` in documents and example build scripts was also rewritten.
   Older decisions keep their historical paths.
-- Related: decision 6 (the unit mechanism), decision 26 (the previous rename, dewasmify → dewasm).
+- Related: decision 6 (the unit mechanism), decision 26 (the previous rename, `dewasmify` → `dewasm`).

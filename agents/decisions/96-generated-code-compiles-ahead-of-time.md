@@ -5,11 +5,11 @@ Landed:
 - The Ruby provider dispatch (`Rt::WASI#import`) and the export accessors are literal dispatches.
   They are in [`crates/dewasm-backend-ruby/src/lib.rs`](../../crates/dewasm-backend-ruby/src/lib.rs).
   They use the bundler's `ScopeMember` hook in [`crates/dewasm-backend/src/lib.rs`](../../crates/dewasm-backend/src/lib.rs).
-- The filesystem errno mapping is a `rescue` dispatch.
+- The file system `errno` mapping is a `rescue` dispatch.
   It is in [`crates/dewasm-backend-ruby/units/wasi/errno_fs.rb`](../../crates/dewasm-backend-ruby/units/wasi/errno_fs.rb).
 - `--mode standalone` output carries no main guard in Ruby, Python, Codon, and Bash.
 
-The other backends keep their reflective provider dispatch.
+The other backends keep their provider dispatch under a computed name.
 They keep it until a compiler for their language needs otherwise.
 
 ## Context
@@ -18,13 +18,13 @@ Generated code was written for an interpreter.
 Such an interpreter resolves a method, an instance variable, or a constant under a computed name.
 It also knows which file it was started from.
 Four shapes relied on that.
-Spinel (matz/spinel) is a Ruby ahead-of-time compiler.
+Spinel (`matz/spinel`) is a Ruby ahead-of-time compiler.
 The four shapes were measured while compiling dewasm's Ruby output with it:
 
 - `Rt::WASI#import` resolved `method(:"wasi_#{name}")` behind a `respond_to?`.
-  Yet the bundled syscalls are chosen at conversion time.
+  Yet the bundled system calls are chosen at conversion time.
 - `global_get`, `global_export`, `table_export` and `tag_export` resolved `instance_variable_get` over a hash.
-  The hash mapped names to ivars, though the export table is written into the same file.
+  The hash mapped names to instance variables, though the export table is written into the same file.
 - `FS_ERRNO` keyed a hash by `Errno` *class objects*.
   That raised `NameError` at class-definition time under Spinel, killing the program before it ran.
 - Every standalone program ran its main behind a guard.
@@ -52,9 +52,9 @@ That is because nothing at conversion time knows its contents.
 Naming an `Errno` class as a value (a hash key, a `case/when` operand) is one spelling.
 Naming it in a `rescue` clause is another, and the two are the same test to an interpreter.
 Only the `rescue` clause is dependable once the source is compiled.
-So the errno mapping is a dispatch over `rescue` clauses.
+So the `errno` mapping is a dispatch over `rescue` clauses.
 This costs one re-raise on a path that already raised.
-It keeps the single shared mapping the syscall units call.
+It keeps the single shared mapping the system call units call.
 
 A `--mode standalone` artifact is a program: it runs on load, in every backend.
 The guard defended against loading a program as a library.
@@ -63,7 +63,7 @@ So the guard protected nothing the mode system did not already express.
 
 The bundler grew one mechanism for the first rule.
 A scope may register a [`ScopeMember`](../../crates/dewasm-backend/src/lib.rs).
-That is a function of the bundle's unit ids, emitted after that scope's units.
+That is a function of the bundle's unit identifiers, emitted after that scope's units.
 Some members must name the units that ended up in the bundle.
 Such a member cannot be a fixed unit source (decision 6).
 
@@ -74,7 +74,7 @@ Such a member cannot be a fixed unit source (decision 6).
   That makes the mode mean two things, and every backend would have to answer it separately.
   The mode already distinguishes "run it" from "load it".
   The standalone interface is deliberately uniform across backends (decision 31).
-- **Reflective dispatch behind an AOT-only code path.**
+- **Dispatch under a computed name behind an AOT-only code path.**
   There is no such path.
   dewasm emits source.
   Which compiler or interpreter consumes it is the user's choice, unknown at conversion time.
@@ -82,16 +82,17 @@ Such a member cannot be a fixed unit source (decision 6).
   An example entry is `IMPORTS["fd_write"] = instance_method(:wasi_fd_write)`.
   The literal names come back, but the lookup becomes a method object bound per call.
   That is paid at every instantiation, for no gain over a `case`.
-- **`case e when Errno::ENOENT` for the errno mapping.**
+- **`case e when Errno::ENOENT` for the `errno` mapping.**
   It is the same class-as-a-value shape in another spelling.
   Its failure is also worse than the hash's.
   Under Spinel it compiles and then silently takes the `else` branch.
   That turns every host error into `EIO` with nothing to see; the hash at least raised.
 - **Reading `e.errno` and comparing numbers.**
-  The numbers are the platform's, so the mapping would have to carry an errno table per host.
+  The numbers are the platform's, so the mapping would have to carry an `errno` table per host.
   The `Errno` classes already are that table.
-- **Name-to-ivar hashes kept beside the literal accessors.**
-  The accessors resolve the ivar themselves, so the symbols in those hashes are dead data.
+- **Hashes from names to instance variables kept beside the literal accessors.**
+  The accessors resolve the instance variable themselves.
+  So the symbols in those hashes are dead data.
   `GLOBAL_EXPORTS`, `TABLE_EXPORTS` and `TAG_EXPORTS` are now frozen name arrays, tested with `include?`.
   That matches `MEMORY_EXPORTS`.
 
@@ -100,18 +101,18 @@ Such a member cannot be a fixed unit source (decision 6).
 - Positive: compiling the Ruby output under Spinel required local patches.
   Those patches are gone from the product.
   The compile-and-run check itself lives in that project, not here.
-- Positive: `Rt::WASI#import` now answers for the WASI preview 1 surface only.
+- Positive: `Rt::WASI#import` now answers for the WASI Preview 1 surface only.
   The `respond_to?` form also matched the class's own helpers.
   So `import("filetype")` used to hand out the internal `wasi_filetype`.
 - Negative: a standalone artifact can no longer be loaded from other code without running the guest.
   That is what `--mode library` is for.
   [`docs/standalone-interface.md`](../../docs/standalone-interface.md) states it.
-- Negative: the errno mapping is now ordered, where a hash was keyed.
+- Negative: the `errno` mapping is now ordered, where a hash was keyed.
   Two `Errno` constants can name one class (`EWOULDBLOCK`/`EAGAIN` on Linux).
   They would resolve to the first clause rather than the last entry.
   None of the twelve mapped errors alias each other.
   That was checked by mapping every `Errno` constant through both forms.
-- Carry-over: Python, Go, Java and Perl still resolve provider imports reflectively.
+- Carry-over: Python, Go, Java and Perl still resolve provider imports under a computed name.
   In Python that is `getattr` in [`crates/dewasm-backend-python/units/wasi/_class.py`](../../crates/dewasm-backend-python/units/wasi/_class.py).
   Codon is the one backend already compiled ahead of time.
   It has no `import` on its WASI class at all.

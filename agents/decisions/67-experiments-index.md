@@ -10,8 +10,8 @@ The conclusion moved out of the heading into the entry's first sentence (#341).
 An experiment that ends in "change nothing" leaves its record in a closed Issue or PR.
 That follows the decisions quality bar.
 A survey or measurement with no decision attached stays out of `agents/decisions/`.
-Agents browse the repository tree, not the issue tracker.
-So those verdicts are invisible at exactly the moment they matter.
+Agents read the repository tree, not the issue tracker.
+So those verdicts are not seen at exactly the moment they matter.
 That moment is when the same idea is about to be proposed again.
 The same knowledge also accumulates in one machine's local agent memory.
 That memory is unreachable from other machines, subagents, and other harnesses.
@@ -29,21 +29,21 @@ That memory is unreachable from other machines, subagents, and other harnesses.
   It has the fixed keys Tried / Verdict / Invalidated when / Details.
 - The quality bar: an entry earns its place only if it changes what a future agent would do.
 
-**Discriminating criterion:** *store the conclusion where agents look (the tree).*
+**Deciding criterion:** *store the conclusion where agents look (the tree).*
 *Leave the evidence where it already accumulated (the Issue or PR).*
 
 ## Rejected alternatives
 
 - **A per-file `agents/experiments/` directory.**
-  Full-text entries duplicate what the Issue or PR already holds.
+  Full-text entries repeat what the Issue or PR already holds.
   The directory also grows without bound.
   The conclusion is the only part an agent needs at proposal time.
 
 - **Leaving results only in Issues and PRs.**
-  That was the status quo: correct storage, no discoverability.
+  That was the current state: correct storage, no discoverability.
 
 - **Recording experiments as decisions.**
-  An experiment decides nothing; forcing one into the decision skeleton pads it.
+  An experiment decides nothing; in the decision template, its sections would say nothing.
   The decisions quality bar rightly rejects it.
 
 ## Consequences
@@ -51,9 +51,9 @@ That memory is unreachable from other machines, subagents, and other harnesses.
 - Positive: a rejected idea stays rejected visibly.
   A re-proposal meets the verdict in the tree before any work starts.
 - Positive: machine-local agent memory about this repository can migrate here entry by entry.
-- Negative: an entry can go stale silently.
-  The required "Invalidated when" key is the mitigation.
-  It names the re-test condition instead of leaving staleness to intuition.
+- Negative: an entry can go out of date silently.
+  The required "Invalidated when" key reduces that risk.
+  It names the re-test condition, so no one has to guess whether an entry still holds.
 - This settles decision 66's carry-over.
   The non-decision knowledge layer is an index over Issues and PRs.
-  It is not a sibling directory of full entries.
+  It is not a related directory of full entries.

@@ -1,17 +1,17 @@
-# Decision 22: Build the sqlite3 Apps From Pinned Source With zig, Both Standalone and Library
+# Decision 22: Build the sqlite3 Apps From Fixed Source With Zig, Both Standalone and Library
 
 Status: **Accepted, 2026-07-24.**
 Implemented:
-- `examples/apps/setup.sh` (amalgamation download + two `zig cc` builds);
+- `examples/apps/setup.sh` (amalgamation fetch + two `zig cc` builds);
 - `crates/dewasm-test-helper/src/apps.rs` (`sqlite3-shell` case, `libsqlite3_c_api_ruby`);
 - `examples/apps/snapshot/sqlite3_shell.stdout`.
 
-The build toolchain has since moved from zig to wasi-sdk ([decision 92](92-wasi-sdk-c-toolchain.md)).
+The build toolchain has since moved from Zig to `wasi-sdk` ([decision 92](92-wasi-sdk-c-toolchain.md)).
 That reverses the "wasi-sdk/clang instead of zig" rejection below.
-The pinned-source criterion, the artifact set, and the stamp policy are unchanged.
+The fixed-source criterion, the artifact set, and the stamp policy are unchanged.
 
 Extended (Phase 5a, 2026-07-26) with a third `zig cc` build, `sqlite3-binding.wasm`.
-It is compiled from the same pinned source plus our own `examples/apps/src/sqlite3_binding.c`.
+It is compiled from the same fixed source plus our own `examples/apps/src/sqlite3_binding.c`.
 That file exports `run_query`, which calls `sqlite3_exec` with a C callback.
 The callback forwards each row to an imported `env.host_row`.
 The build exercises the guest→host `sqlite3_exec` function-pointer callback.
@@ -20,7 +20,7 @@ Ruby's `sqlite3_callback_binding_ruby` drives it.
 
 ## Context
 
-The apps e2e's SQLite was a wasmer-CDN binary of SQLite 3.26.0 (2018).
+The apps e2e's SQLite was a binary from the Wasmer CDN of SQLite 3.26.0 (2018).
 It was a CLI shell with no C API exported.
 That is why the sqlite3-gem-shim milestone (the Rails goal) was blocked.
 The blocker was "obtain a wasm32-wasi libsqlite3 that exports the C API".
@@ -30,50 +30,50 @@ With `-mexec-model=reactor` plus `-Wl,--export=...` it produces exactly that mis
 
 ## Decision
 
-`setup.sh` downloads the version-pinned, checksum-verified amalgamation source zip (3.53.3).
+`setup.sh` fetches the amalgamation source ZIP (3.53.3) fixed by version and checksum.
 It builds **two artifacts from the one source**:
 
-- `sqlite3-shell.wasm`: the CLI shell, `_start` + stdio.
-  It replaces the wasmer binary in the snapshot-diffed standalone cases.
+- `sqlite3-shell.wasm`: the CLI shell, `_start` + standard input/output.
+  It replaces the Wasmer binary in the snapshot-diffed standalone cases.
 - `libsqlite3.wasm`: a reactor exporting the sqlite3 C API, driven from Ruby in `libsqlite3_c_api_ruby`.
-  It exercises `_initialize` and guest-memory pointer plumbing through `sqlite3_malloc`/`Rt::Memory`.
+  It exercises `_initialize` and guest-memory pointer passing through `sqlite3_malloc`/`Rt::Memory`.
   It also exercises the prepare/step/column flow the future gem shim will use.
 
-**Criterion: what is pinned is the upstream *source*, not the build product**.
+**Criterion: what is fixed is the upstream *source*, not the build product**.
 The decision 9 rule ("version-pinned, checksum-verified, never committed") is unchanged.
 The stamp records the source checksum; only the producing step moved from "extract" to "compile".
-The library test's expectation is a fixed string rather than a wasmtime snapshot.
-The wasmtime CLI cannot drive a C API whose results live in guest memory.
-Every expected value is determined by the pinned source version.
+The library test's expectation is a fixed string rather than a Wasmtime snapshot.
+The `wasmtime` CLI cannot drive a C API whose results live in guest memory.
+Every expected value is determined by the fixed source version.
 
-Cost accepted: `setup.sh` now requires `zig` and `unzip`, failing loudly per decision 15 when absent.
+Cost accepted: `setup.sh` now requires `zig` and `unzip`, failing loudly per decision 15 when missing.
 Only `setup.sh` requires them, never `cargo test` with a warm cache.
-Build output bytes vary across zig versions.
-That is fine because nothing pins the *artifact*.
-The snapshots compare program behavior, which the pinned source fixes.
+Build output bytes vary across Zig versions.
+That is fine because nothing fixes the *artifact*.
+The snapshots compare program behavior, which the fixed source decides.
 
 ## Rejected alternatives
 
-- **Keep the wasmer-CDN binary and add a library build beside it**: two SQLites of two vintages.
-  3.26 vs 3.53 doubles the shell coverage without adding any.
-  It also keeps a CDN dependency the source zip on sqlite.org makes unnecessary.
-- **Commit the built `.wasm` artifacts**: violates decision 9.
-  At ~11 MB it would bloat the repository for something reproducible in seconds.
-- **wasi-sdk/clang instead of zig**: works.
-  But wasi-sdk is a versioned SDK tarball to install and point at.
-  zig is a single brew-installable binary with the wasi sysroot built in.
-  zig also matches how the artifact was first validated.
+- **Keep the Wasmer CDN binary and add a library build beside it**: two SQLite releases years apart.
+  3.26 vs. 3.53 doubles the shell coverage without adding any.
+  It also keeps a CDN dependency the source ZIP on sqlite.org makes unnecessary.
+- **Commit the built `.wasm` artifacts**: breaks decision 9.
+  At ~11 MB it would grow the repository for something reproducible in seconds.
+- **`wasi-sdk`/`clang` instead of Zig**: works.
+  But `wasi-sdk` is a versioned SDK package to install and point at.
+  Zig is a single binary that Homebrew can install, with the WASI system root built in.
+  Zig also matches how the artifact was first validated.
 
 ## Consequences
 
 - Positive: the stated goal's last technical unknown is gone.
   The C API round-trip runs in pure Ruby in the always-on test (~3 s).
-  That round-trip is open/exec/prepare/step/column_text/finalize/close, on an in-memory DB.
+  That round-trip is `open`/`exec`/`prepare`/`step`/`column_text`/`finalize`/`close`, on an in-memory DB.
   SQLite is current (3.53.3) and its build flags are ours to change.
   Examples are `SQLITE_OMIT_LOAD_EXTENSION` and future VFS experiments.
 - Negative / carry-over: one more tool in `setup.sh`'s requirements.
-  The snapshot for the shell changed shape (batch-mode output).
-  The 3.26 wasmer build printed interactive prompts.
+  The snapshot for the shell changed shape (output with no prompts).
+  The 3.26 Wasmer build printed interactive prompts.
   The two original artifacts left `sqlite3_exec`-style function-pointer callbacks unexercised.
   The prepare/step flow avoids them.
   The Phase 5a `sqlite3-binding.wasm` artifact now covers exactly that guest→host callback path.

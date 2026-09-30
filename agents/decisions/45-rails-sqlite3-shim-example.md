@@ -1,4 +1,4 @@
-# Decision 45: Rails Demo via a sqlite3-Gem Shim over Converted libsqlite3
+# Decision 45: Rails Example via a sqlite3-Gem Shim over Converted libsqlite3
 
 Status: **Accepted, 2026-07-28.**
 `examples/rails` runs an unmodified Rails 8 app on `libsqlite3.wasm` converted to Ruby.
@@ -10,12 +10,12 @@ Three parts landed:
 
 ## Context
 
-The Ruby backend's goal demo (`docs/backends/ruby.md`) is real software using converted SQLite.
+The Ruby backend's goal example (`docs/backends/ruby.md`) is real software using converted SQLite.
 Rails is the strongest form of that claim.
 But something must bridge ActiveRecord's SQLite3Adapter to the converted module's interface.
 That interface is `invoke`/`Rt::Memory`.
 The converted library cannot call back into arbitrary host Ruby.
-A guest function pointer cannot be conjured for a host lambda.
+A guest function pointer cannot be created for a host lambda.
 Only declared imports can, per decision 7's provider table.
 
 ## Decision
@@ -36,7 +36,7 @@ Every gem feature that would need a guest→host callback is re-expressed on gue
 - `execute_batch2` → a prepare/`remainder` loop instead of `sqlite3_exec`.
 
 Each `SQLite3::Database` instantiates its own wasm module (isolated heap).
-A mutex serializes entry.
+A mutex lets one thread enter at a time.
 So a connection-pool entry is an isolated SQLite.
 Thread-safety then never depends on guest-global state.
 The C surface this requires is exported by extending `SQLITE_EXPORTS` in `examples/apps/setup.sh`.
@@ -44,18 +44,18 @@ The stamp now covers the export lists, so edits retrigger the build.
 
 ## Rejected alternatives
 
-- **Patch/replace the ActiveRecord adapter.**
+- **Patch or replace the ActiveRecord adapter.**
   It chases Rails internals across releases.
-  It also weakens the demo ("Rails, if you modify it").
-  The gem API is the narrower, slower-moving seam.
+  It also weakens the example ("Rails, if you modify it").
+  The gem API is the narrower, slower-moving boundary.
 - **Host-callback binding shape (`sqlite3-binding.wasm`, decision 22).**
-  It needs bespoke C per feature.
+  It needs custom C per feature.
   It still cannot register runtime-chosen callbacks (`busy_handler`, `create_function`).
   It is fine as a linking proof, but wrong as a compatibility layer.
 - **One shared wasm instance for all connections.**
-  Smaller footprint, but Ruby threads interleave at arbitrary points.
-  So guest-global sqlite state would need one big lock.
-  That lock would serialize the whole pool and lose isolation.
+  It uses less memory, but Ruby threads switch at arbitrary points.
+  So guest-global SQLite state would need one big lock.
+  That lock would let one connection of the whole pool run at a time and lose isolation.
 
 ## Consequences
 
@@ -67,6 +67,6 @@ The stamp now covers the export lists, so edits retrigger the build.
   It can drift with new Rails releases.
   `strict:`, extensions, custom functions and collations are unsupported (callback-free rule).
   WAL silently degrades to rollback journal, since there is no WASI shared memory.
-  Cross-process locking is absent: single-process embedding only.
-- Carry-over: performance work on converted SQLite (decision 32/33/41-44) directly improves this demo.
+  Cross-process locking is missing: single-process embedding only.
+- Carry-over: performance work on converted SQLite (decision 32/33/41-44) improves this example.
   A future backend can reuse the same shim design against its own runtime.
