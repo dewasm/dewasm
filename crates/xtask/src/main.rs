@@ -42,7 +42,6 @@ mod doom_snapshot;
 mod feature_audit;
 mod migrate;
 mod nes_snapshot;
-mod prose_check;
 mod size;
 mod snapshot_engine;
 mod support_docs;
@@ -101,7 +100,7 @@ fn main() -> Result<()> {
         Some("render-size") => size::render(args),
         Some("feature-audit") => feature_audit::main(args),
         Some("migrate-records") => migrate::run(),
-        Some("check-prose") => prose_check::main(args),
+        Some("check-prose") => check_prose(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
@@ -215,6 +214,29 @@ fn update_snapshots(filter: Option<&str>) -> Result<()> {
             Some(needle) => bail!("no snapshot label matched filter {needle:?}"),
             None => bail!("no snapshots to regenerate"),
         }
+    }
+    Ok(())
+}
+
+/// `check-prose [path]...`: prints every defect in the named files, or in every tracked prose file.
+fn check_prose(args: impl Iterator<Item = String>) -> Result<()> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths: Vec<String> = args.collect();
+    if paths.is_empty() {
+        paths = prose_check::tracked_files(&root);
+    }
+    let mut count = 0;
+    for path in &paths {
+        if !prose_check::is_prose(path) {
+            bail!("{path} is neither Markdown nor a source file with known comment markers");
+        }
+        for defect in prose_check::file_defects(&root, path) {
+            println!("{defect}");
+            count += 1;
+        }
+    }
+    if count > 0 {
+        bail!("{count} prose defects");
     }
     Ok(())
 }

@@ -43,8 +43,7 @@ wasmparser.workspace = true
 # Encodes the human-facing PNG of the DOOM frame snapshot.
 # Default settings are kept fixed so regeneration is byte-stable.
 png = "0.18.1"
-# `check-prose` counts the characters a reader sees in Markdown, which takes a CommonMark parser.
-pulldown-cmark = { version = "0.13", default-features = false }
+prose-check = { path = "../prose-check" }
 # std makes `wasmtime::Error` an `anyhow::Error`, so `?` composes with our anyhow flow.
 # cranelift+runtime is the embedder.
 # gc is what compiles in the exception-handling proposal.

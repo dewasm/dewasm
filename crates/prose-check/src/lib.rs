@@ -5,10 +5,8 @@
 //! A comment line has at most 100 columns, counting its indentation and comment marker.
 //! Table rows, code blocks, and HTML are not prose.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-
-use anyhow::{bail, Result};
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
@@ -190,7 +188,8 @@ fn strip_list_number(text: &str) -> &str {
     }
 }
 
-fn tracked_files(root: &Path) -> Vec<String> {
+/// The tracked files the checks read: Markdown, and source files with known comment markers.
+pub fn tracked_files(root: &Path) -> Vec<String> {
     let output = Command::new("git")
         .args(["ls-files", "-z"])
         .current_dir(root)
@@ -200,40 +199,18 @@ fn tracked_files(root: &Path) -> Vec<String> {
     String::from_utf8(output.stdout)
         .expect("tracked paths are UTF-8")
         .split('\0')
-        .filter(|path| path.ends_with(".md") || comment_markers(path).is_some())
+        .filter(|path| is_prose(path))
         .map(str::to_owned)
         .collect()
 }
 
-/// `cargo xtask check-prose [path]...`: reports every defect in the named files.
-/// With no path, it reports every tracked prose file.
-pub fn main(args: impl Iterator<Item = String>) -> Result<()> {
-    let root = repo_root();
-    let mut paths: Vec<String> = args.collect();
-    if paths.is_empty() {
-        paths = tracked_files(&root);
-    }
-    let mut count = 0;
-    for path in &paths {
-        if !path.ends_with(".md") && comment_markers(path).is_none() {
-            bail!("{path} is neither Markdown nor a source file with known comment markers");
-        }
-        for defect in file_defects(&root, path) {
-            println!("{defect}");
-            count += 1;
-        }
-    }
-    if count > 0 {
-        bail!("{count} prose defects");
-    }
-    Ok(())
+/// Whether the checks read `path`.
+pub fn is_prose(path: &str) -> bool {
+    path.ends_with(".md") || comment_markers(path).is_some()
 }
 
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn file_defects(root: &Path, path: &str) -> Vec<String> {
+/// Each defect of the prose file `path` under `root`, as `path:line: what`.
+pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
     let text = std::fs::read_to_string(root.join(path))
         .unwrap_or_else(|e| panic!("{path} is tracked prose and must read as UTF-8: {e}"));
     let (lines, unit) = match comment_markers(path) {
@@ -254,7 +231,13 @@ fn file_defects(root: &Path, path: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
+
+    fn repo_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
 
     #[test]
     fn prose_meets_the_writing_style() {
@@ -266,7 +249,7 @@ mod tests {
         assert!(
             report.is_empty(),
             "prose breaks the AGENTS.md writing style (100 characters, one sentence per line):\n{}\n\
-             Run `cargo xtask check-prose <path>` to recheck a file.",
+             Run `cargo xtask check-prose <path>` to check a file again.",
             report.join("\n")
         );
     }

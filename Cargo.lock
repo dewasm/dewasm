@@ -1308,6 +1308,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "prose-check"
+version = "0.1.0"
+dependencies = [
+ "pulldown-cmark",
+]
+
+[[package]]
 name = "pulldown-cmark"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2454,7 +2461,7 @@ dependencies = [
  "dewasm-core",
  "dewasm-test-helper",
  "png",
- "pulldown-cmark",
+ "prose-check",
  "serde",
  "serde_json",
  "wasmparser 0.254.0",
