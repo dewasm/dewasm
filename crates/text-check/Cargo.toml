@@ -1,5 +1,5 @@
 [package]
-name = "prose-check"
+name = "text-check"
 description = "The checks of the AGENTS.md writing style that a program can run over the repository's text"
 version.workspace = true
 edition.workspace = true

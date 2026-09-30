@@ -21,14 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7 # no submodules: fmt, clippy, and the prose check don't read them
+      - uses: actions/checkout@v7 # no submodules: fmt, clippy, and the text check don't read them
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: lint
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       # The writing style rules that a program can check: text only, so it needs no other cache.
-      - run: cargo test -p prose-check
+      - run: cargo test -p text-check
       - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
 
   apps-cache:
