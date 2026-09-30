@@ -43,8 +43,8 @@ Do not use `-- --include-ignored`; opt in through the features instead.
 The set it selects is not a designed configuration, so what it runs can change without notice.
 Which case sits in which category, and why, is pinned at its callsite in that backend's `e2e.rs`.
 The mechanism is in docs/testing.md.
-Suite layout and the shape of a new case: [`agents/test-authoring.md`](agents/test-authoring.md).
-It holds the `e2e.rs` contract, the category tokens, and the `EXPECTED_FAILURES` policy.
+How the suites are laid out, and what a new case must look like, is in [`agents/test-authoring.md`](agents/test-authoring.md).
+That is the `e2e.rs` contract, the category tokens, and the `EXPECTED_FAILURES` policy.
 When support declarations or WASI units change, regenerate `docs/support.md`.
 `cargo xtask update-support-docs` does it.
 
@@ -68,10 +68,11 @@ The rules form one set.
 A sentence has a length bound, and the other rules remove every way to meet it except saying less.
 
 - Start each sentence on its own line, and never wrap one.
-  A line is then a sentence, so a long line shows a long sentence.
   Commit message bodies keep their ~72-column convention.
-- A sentence fits in 100 columns (decision 98).
-  Shorten it by removing words that add no information.
+- A sentence is at most 100 characters as read (decision 98).
+  Markup, link targets, indentation, and list markers do not count.
+  In source code, its line also fits in 100 columns, indentation and comment marker included.
+  Shorten a sentence by removing words that add no information.
   If it is still too long, it states two things: split it at a sentence or at a `;`.
   A table row is one line by syntax, so the bound does not apply to it.
 - Remove words, not connectives.
