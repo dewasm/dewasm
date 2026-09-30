@@ -1,11 +1,15 @@
 # Getting started
 
-A hands-on tour of dewasm: convert a wasm module to a real language, run it standalone, then call it as a library and override one of its imports.
-Every command here is verified against the repository; the `dewasm` binary is built with `cargo build --release` (`target/release/dewasm`) or run in place with `cargo run -p dewasm --`.
+A hands-on tour of dewasm: convert a wasm module to a real language and run it standalone.
+Then call it as a library and override one of its imports.
+Every command here is verified against the repository.
+The `dewasm` binary is built with `cargo build --release` (`target/release/dewasm`).
+You can also run it in place with `cargo run -p dewasm --`.
 
 ## 1. A binary to convert
 
-You can point dewasm at any `wasm32-wasip1` binary, but the repository ships small `.wat` examples so you need no toolchain to follow along.
+You can point dewasm at any `wasm32-wasip1` binary.
+But the repository ships small `.wat` examples, so you need no toolchain to follow along.
 We will use [`examples/wat/hello.wat`](../examples/wat/hello.wat), which writes a line via WASI's `fd_write` and exits:
 
 ```wat
@@ -66,7 +70,8 @@ $ javac Main.java && java Main
 Hello, WASI!
 ```
 
-Codon compiles a statically typed Python dialect ahead of time; `codon run` builds and runs in one step:
+Codon compiles a statically typed Python dialect ahead of time.
+`codon run` builds and runs in one step:
 
 ```console
 $ dewasm examples/wat/hello.wat --target codon --mode standalone -o hello.codon
@@ -90,9 +95,12 @@ $ echo "moo" | bash cowsay.sh
                 ||     ||
 ```
 
-Standalone programs share one runtime interface across every backend, modelled on wasmtime's CLI: pass the guest arguments after the program, and mount host directories with repeatable `--dir HOST::GUEST` flags.
+Standalone programs share one runtime interface across every backend, modelled on wasmtime's CLI.
+Pass the guest arguments after the program.
+Mount host directories with repeatable `--dir HOST::GUEST` flags.
 A `proc_exit(N)` becomes exit code `N`, and a trap prints to stderr and exits 134.
-The full reference (argv, env, exit/trap, and per-backend runner lines) is [docs/standalone-interface.md](standalone-interface.md).
+The full reference is [docs/standalone-interface.md](standalone-interface.md).
+It covers argv, env, exit/trap, and per-backend runner lines.
 
 ```console
 $ dewasm examples/wat/wasi_standalone_dir.wat --target ruby --mode standalone -o rt.rb
@@ -103,11 +111,14 @@ hello, wasi fs!
 
 ## 3. Library mode: call the exports
 
-`--mode library` (the default) exposes the module's exports to the host language instead of running `_start`.
+`--mode library` (the default) exposes the module's exports to the host language.
+It does not run `_start`.
 We will use [`examples/wat/add.wat`](../examples/wat/add.wat), which exports `add` and a recursive `fib`.
 
 `--module-name` names the generated class/package and is required in library mode.
-It is used exactly as written: a name that does not fit the target language's grammar is a conversion-time error, never a silently reshaped name.
+It is used exactly as written.
+A name that does not fit the target language's grammar is a conversion-time error.
+It is never silently reshaped.
 
 ### Ruby
 
@@ -139,7 +150,8 @@ print(inst.invoke("fib", 10))     # 55
 
 ### Go
 
-Library output is a Go **package** named after `--module-name`, so put it in a directory of that name and import it.
+Library output is a Go **package** named after `--module-name`.
+So put it in a directory of that name and import it.
 Exports are typed callables in `Exports`:
 
 ```console
@@ -170,7 +182,10 @@ $ go run .
 
 ### Java
 
-The generated module class is package-private and carries the runtime as `static` nested classes (hence `Add.Rt.Fn`), so put your `public class Main` in the *same* `.java` file (generate with `--module-name Add`, then append):
+The generated module class is package-private.
+It carries the runtime as `static` nested classes (hence `Add.Rt.Fn`).
+So put your `public class Main` in the *same* `.java` file.
+Generate it with `--module-name Add`, then append the class below:
 
 ```java
 public class Main {
@@ -187,16 +202,20 @@ $ dewasm examples/wat/add.wat --target java --mode library --module-name Add -o 
 $ javac Main.java && java Main   # after appending the class above
 ```
 
-The compiled backends take the constructor arguments `(imports, argv, env, preopens)` positionally (`nil`/`null` for none).
-Ruby, Python, and Perl take the imports table as the first positional argument and the rest by name: Ruby `preopens:`, Python `preopens=`, Perl `preopens =>`.
+The compiled backends take the constructor arguments `(imports, argv, env, preopens)` positionally.
+Pass `nil`/`null` for none.
+Ruby, Python, and Perl take the imports table as the first positional argument and the rest by name.
+So preopens are `preopens:` in Ruby, `preopens=` in Python, and `preopens =>` in Perl.
 See [docs/backends/](backends/) for the exact per-language shape.
 
 ## 4. Overriding an import (provider)
 
-In library mode any WASI import the embedder does not provide falls back to a bundled WASI implementation.
-You can intercept individual imports to capture output, sandbox the module, or supply host functions it imports.
+In library mode, any WASI import the embedder does not provide falls back to the bundled WASI.
+You can intercept individual imports to capture output or sandbox the module.
+You can also supply host functions it imports.
 
-Convert `hello.wat` as a library and provide our own `fd_write`, letting `proc_exit` fall back to the bundled WASI (which raises `Rt::Exit`):
+Convert `hello.wat` as a library and provide our own `fd_write`.
+Let `proc_exit` fall back to the bundled WASI, which raises `Rt::Exit`:
 
 ```console
 $ dewasm examples/wat/hello.wat --target ruby --mode library --module-name Hello -o hello_lib.rb
@@ -226,12 +245,17 @@ end
 print "captured: ", captured   # captured: Hello, WASI!
 ```
 
-An imports-table value can also be a whole *provider object* (implement `import(name)` and optionally `attach(instance)`) to replace an entire namespace, for example a custom WASI.
-Any WASI import the table leaves unresolved falls back to the bundled WASI; every backend's provider snippet is in [docs/backends/](backends/).
+An imports-table value can also be a whole *provider object* that replaces an entire namespace.
+A custom WASI is one example.
+The object implements `import(name)` and optionally `attach(instance)`.
+Any WASI import the table leaves unresolved falls back to the bundled WASI.
+Every backend's provider snippet is in [docs/backends/](backends/).
 
 ## Where to go next
 
 - [docs/backends/](backends/): output shape, requirements, and idioms per target language.
-- [docs/standalone-interface.md](standalone-interface.md): the standalone runtime interface (argv, `--dir`, env, exit/trap) shared by every backend.
+- [docs/standalone-interface.md](standalone-interface.md): the standalone runtime interface shared by every backend.
+  It covers argv, `--dir`, env, and exit/trap.
 - [docs/support.md](support.md): which features and WASI calls each backend supports.
-- [README](../README.md): what dewasm is, plus the real-world examples it converts (Rails on converted SQLite, DOOM, NES).
+- [README](../README.md): what dewasm is, plus the real-world examples it converts.
+  Those are Rails on converted SQLite, DOOM, and NES.

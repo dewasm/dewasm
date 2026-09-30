@@ -12,11 +12,15 @@ $ cargo xtask record-speed           # measures every workload on every runner
 $ cargo xtask render-speed           # renders results.md and its charts from that record
 ```
 
-Measuring and rendering are two commands: a run writes a dated `<timestamp>Z-speed.json` to [`records/`](../../records/README.md) and nothing else, and rendering turns a record into `docs/benchmarks/results.md` with its charts.
+Measuring and rendering are two commands.
+A run writes a dated `<timestamp>Z-speed.json` to [`records/`](../../records/README.md) and nothing else.
+Rendering turns a record into `docs/benchmarks/results.md` with its charts.
 That way a wording fix in the document costs a second, not a re-measurement of the whole suite.
 
-`record-speed` verifies the app cache against its pins before it measures anything, and refuses to start if a cached copy came from an earlier pin.
-A stale copy is a different program, and its numbers would be committed as a record of the current one.
+`record-speed` verifies the app cache against its pins before it measures anything.
+It refuses to start if a cached copy came from an earlier pin.
+A stale copy is a different program.
+Its numbers would be committed as a record of the current one.
 Useful options:
 
 | Command | Effect |
@@ -27,16 +31,21 @@ Useful options:
 | `cargo xtask render-speed <record>` | Render an older record instead of the newest one; a `-size.json` path is refused. |
 | `cargo xtask migrate-records` | Upgrade every stored record to its kind's current schema, in place; the render commands read only the current schema. |
 
-`wasmtime` is required; any other missing runner is reported as skipped with the reason, and the run continues.
+`wasmtime` is required.
+Any other missing runner is reported as skipped with the reason, and the run continues.
 
 ## How measurement works
 
-- The fastest and slowest runners differ by factors in the tens of thousands, so no fixed iteration count fits everyone.
-  Each microbenchmark takes an iteration count in `argv[1]`, and the harness calibrates it per runner until one sample reaches the target compute time.
+- The fastest and slowest runners differ by factors in the tens of thousands.
+  So no fixed iteration count fits everyone.
+  Each microbenchmark takes an iteration count in `argv[1]`.
+  The harness calibrates it per runner until one sample reaches the target compute time.
   Compare the per-iteration figures, never the raw wall times.
 - Every microbenchmark is also run at zero iterations.
-  That run is the cold start column (process startup plus module load), and subtracting it from the timed run isolates compute.
-  Application benchmarks are the opposite: one fixed input for everyone, whole wall time, because that is what a user of the converted program experiences.
+  That run is the cold start column: process startup plus module load.
+  Subtracting it from the timed run isolates compute.
+  Application benchmarks are the opposite: one fixed input for everyone, whole wall time.
+  They use whole wall time because that is what a user of the converted program experiences.
   Fast runners average several back-to-back executions per sample (the Runs/sample column).
 - Each measurement is one warmup plus the timed repetitions, reported as minimum and median.
   The charts plot the median.

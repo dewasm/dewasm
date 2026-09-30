@@ -1,5 +1,8 @@
-//! Rendering for `docs/support.md`: the support matrix is rendered from the code's own declarations, so the document cannot drift from reality.
-//! `cargo xtask update-support-docs` writes the rendered output to disk; the compare-only `support_docs_in_sync` unit test below fails while the checked-in file is stale.
+//! Rendering for `docs/support.md`.
+//! The support matrix is rendered from the code's own declarations.
+//! So the document cannot drift from reality.
+//! `cargo xtask update-support-docs` writes the rendered output to disk.
+//! The compare-only `support_docs_in_sync` unit test below fails while that file is stale.
 
 use std::fmt::Write as _;
 
@@ -13,8 +16,12 @@ use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
 use dewasm_core::feature::Feature;
 
-/// The features a backend can meaningfully differ on: everything the core IR accepts unconditionally and leaves to each backend to reject or implement.
-/// The remaining `Feature` variants (SIMD, reference types, the component model, ...) are rejected by the core for every backend, so a per-backend row for them would always read "unsupported" and says nothing.
+/// The features a backend can meaningfully differ on.
+/// Those are everything the core IR accepts unconditionally and leaves to each backend.
+/// Each backend rejects or implements them.
+/// The core rejects the remaining `Feature` variants for every backend.
+/// Those are SIMD, reference types, the component model, and so on.
+/// A per-backend row for them would always read "unsupported" and says nothing.
 const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::ImportedGlobals,
     Feature::ImportedMemories,
@@ -43,7 +50,7 @@ pub fn render_support_docs() -> String {
         "<!-- AUTO-GENERATED from the backend declarations; do not edit by hand. Regenerate: cargo xtask update-support-docs -->\n\n",
     );
     out.push_str(
-        "The spec harness only tolerates test skips attributable to a feature that is not `Supported` here; an unattributable failure is treated as a bug. Flipping a feature to supported turns its remaining skips into hard failures until the tests pass.\n\n",
+        "The spec harness only tolerates test skips attributable to a feature that is not `Supported` here.\nAn unattributable failure is treated as a bug.\nFlipping a feature to supported turns its remaining skips into hard failures until the tests pass.\n\n",
     );
 
     let feature_cell =
@@ -55,7 +62,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("## Features\n\n");
     out.push_str(
-        "The features a backend can meaningfully differ on; every other `Feature` variant is rejected by the core for every backend.\n\n",
+        "These are the features a backend can meaningfully differ on.\nThe core rejects every other `Feature` variant for every backend.\n\n",
     );
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");
@@ -74,7 +81,7 @@ pub fn render_support_docs() -> String {
 
     out.push_str("\n## WASI preview 1\n\n");
     out.push_str(
-        "Derived from the runtime units; unimplemented syscalls resolve to an ENOSYS stub. `—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.\n\n",
+        "The table is derived from the runtime units.\nUnimplemented syscalls resolve to an ENOSYS stub.\n`—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.\n\n",
     );
     let mut header = String::from("| Function ");
     let mut rule = String::from("| --- ");

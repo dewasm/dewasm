@@ -1,12 +1,20 @@
 # NES (Java, Swing)
 
-An interactive NES frontend built on a pure-Java library that dewasm generated from `nes.wasm`, an import-free reactor (`examples/apps/scripts/nes.sh`, `examples/apps/src/nes_demo.c`) wrapping [kgabis/agnes](https://github.com/kgabis/agnes), built from source with wasi-sdk.
-`Main.java` reads the ROM, copies it into the module's linear memory via `allocRom`, then drives `setInput`/`tickGame` and composes each frame into a `BufferedImage` straight out of guest memory: one palette *index* per pixel at `screenOffset()` against the fixed palette at `paletteOffset()`, decoded once into ARGB ints.
-The module has no host callbacks at all (unlike DOOM's console/save/UI import surface), so the frontend just pulls state after every tick, paced to 60 Hz on a dedicated game thread.
+An interactive NES frontend built on a pure-Java library that dewasm generated from `nes.wasm`.
+`nes.wasm` is an import-free reactor wrapping [kgabis/agnes](https://github.com/kgabis/agnes), built from source with wasi-sdk.
+Its sources are `examples/apps/scripts/nes.sh` and `examples/apps/src/nes_demo.c`.
+`Main.java` reads the ROM and copies it into the module's linear memory via `allocRom`.
+It then drives `setInput`/`tickGame`.
+It composes each frame into a `BufferedImage` straight out of guest memory.
+The frame is one palette *index* per pixel at `screenOffset()`.
+The indices resolve against the fixed palette at `paletteOffset()`, decoded once into ARGB ints.
+The module has no host callbacks at all, unlike DOOM's console/save/UI import surface.
+So the frontend just pulls state after every tick, paced to 60 Hz on a dedicated game thread.
 
 Zero external dependencies: only the JDK (`javac`/`java`, AWT/Swing, NIO).
 
-The default ROM is [Alter Ego](https://shiru.untergrund.net/nesdev.shtml) by Shiru, released into the public domain, fetched and pinned by `examples/apps/scripts/nes.sh`.
+The default ROM is [Alter Ego](https://shiru.untergrund.net/nesdev.shtml) by Shiru, released into the public domain.
+`examples/apps/scripts/nes.sh` fetches and pins it.
 
 ## Run
 
@@ -14,11 +22,13 @@ The default ROM is [Alter Ego](https://shiru.untergrund.net/nesdev.shtml) by Shi
 ./run.sh
 ```
 
-This fetches/builds the wasm module, regenerates the Java library with dewasm, compiles, and launches the window.
+This fetches and builds the wasm module and regenerates the Java library with dewasm.
+It then compiles and launches the window.
 `./build.sh` alone does the fetch/generate/compile without launching.
 Pass a `.nes` file path to run a different ROM: `./run.sh path/to/game.nes`.
 
-`java -cp classes Main --smoke` runs a headless self-test (no window): it ticks the game, writes the final frame to `screenshot.png`, and prints measured ticks/sec.
+`java -cp classes Main --smoke` runs a headless self-test, with no window.
+It ticks the game, writes the final frame to `screenshot.png`, and prints measured ticks/sec.
 
 ## Controls
 

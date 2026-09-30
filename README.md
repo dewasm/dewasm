@@ -23,7 +23,7 @@ $ echo "Hello from Bash" | bash cowsay.sh
                 ||     ||
 ```
 
-Even, [QuickJS-NG](https://quickjs-ng.github.io/quickjs/), a JavaScript engine written in C, can be converted just as well, this time to **pure Ruby**:
+Even [QuickJS-NG](https://quickjs-ng.github.io/quickjs/), a JavaScript engine written in C, can be converted, this time to **pure Ruby**:
 
 ```console
 $ dewasm examples/apps/cache/qjs.wasm --target ruby --mode standalone -o qjs.rb
@@ -48,16 +48,18 @@ inst.invoke("add", 2, 3) # => 5
 
 Beyond simple examples, `dewasm` scales to *real libraries and applications* too:
 
-- [examples/rails](examples/rails) demonstrates that **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, can be used as the database engine for a Rails app.
-- [examples/doom](examples/doom) shows how `dewasm` can port the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple programming languages, *including Bash*.
-- [examples/nes](examples/nes) converts a **NES emulator** ([agnes](https://github.com/kgabis/agnes)) once and turns every backend language into a native NES player.
+- [examples/rails](examples/rails) uses **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, as a Rails app's database engine.
+- [examples/doom](examples/doom) ports the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple languages, *including Bash*.
+- [examples/nes](examples/nes) converts a **NES emulator** ([agnes](https://github.com/kgabis/agnes)) once.
+  It turns every backend language into a native NES player.
 
 Here is a quick summary of what `dewasm` can do:
 
-- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs, plus the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends.
-- **Target multiple languages**: Translates one WebAssembly binary to several target languages, such as Ruby, Bash, and Go.
+- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs.
+  It also implements the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends.
+- **Target multiple languages**: Translates one WebAssembly binary to Ruby, Bash, Go, and other languages.
 - **Adapt to your needs**: Generates either standalone scripts or importable library source code.
-- **Keep it minimal**: Bundles only the specific runtime code that the WebAssembly binary actually requires.
+- **Keep it minimal**: Bundles only the runtime code that the WebAssembly binary requires.
 
 ## Installation
 
@@ -89,11 +91,17 @@ $ dewasm input.<wasm|wat>
   * `--mode library` exposes the module's exports to the target language.
 - `--output` (or `-o`) sets the output file (default: `-`).
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
-- `--module-name` names the generated class/package and is required in library mode (standalone output has a fixed internal name and rejects it).
+- `--module-name` names the generated class/package, and is required in library mode.
+  * Standalone output has a fixed internal name and rejects it.
 
 Please see `dewasm --help` for the full list of options.
 
-Next: [getting started](docs/getting-started.md), the [per-target reference](docs/backends/), [what each backend supports](docs/support.md), and [projects built on dewasm](docs/users.md).
+Next:
+
+- [getting started](docs/getting-started.md);
+- the [per-target reference](docs/backends/);
+- [what each backend supports](docs/support.md);
+- [projects built on dewasm](docs/users.md).
 
 ## Copyright
 

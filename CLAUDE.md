@@ -4,5 +4,8 @@
 
 ## Claude Code
 
-- Skills are auto-discovered from [`.claude/skills/`](.claude/skills/); each `SKILL.md`'s `description:` routes to it, so no catalogue is kept here. `dewasm-decision-author` routes to the authoring procedure for a new decision under `agents/decisions/`.
-- A subagent does not inherit this contract; restate what binds it (the spec harness must pass, the `tests/spec` read-only rule) in its prompt.
+- Skills are auto-discovered from [`.claude/skills/`](.claude/skills/).
+  Each `SKILL.md`'s `description:` routes to it, so no catalogue is kept here.
+  `dewasm-decision-author` routes to the authoring procedure for a new decision under `agents/decisions/`.
+- A subagent does not inherit this contract.
+  Restate what binds it in its prompt: the spec harness must pass, and `tests/spec` is read-only.

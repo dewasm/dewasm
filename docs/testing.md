@@ -6,19 +6,35 @@ What the tests need and how to run them.
 
 > [!IMPORTANT]
 > A test whose required tool or setup step is missing **fails**; it never silently skips.
-> Run `git submodule update --init` and `examples/apps/setup.sh` before the first `cargo test`, or a fresh checkout reports failures that look like broken code.
+> Run `git submodule update --init` and `examples/apps/setup.sh` before the first `cargo test`.
+> Otherwise a fresh checkout reports failures that look like broken code.
 
 The following tools and setup steps are required to run all tests correctly:
 
-- **Rust toolchain**: `rustup` applies the pin in `rust-toolchain.toml` automatically; a non-rustup `cargo` ignores the pin.
-- **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states; a full `cargo test` needs all of them.
+- **Rust toolchain**: `rustup` applies the pin in `rust-toolchain.toml` automatically.
+  A non-rustup `cargo` ignores the pin.
+- **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states.
+  A full `cargo test` needs all of them.
   * Each tool should be found under `PATH` (the `bash` lookup also tries the common Homebrew install paths).
-  * These environment variables override the lookup: `$DEWASM_RUBY`, `$DEWASM_PYTHON`, `$DEWASM_PERL`, `$DEWASM_BASH`, `$DEWASM_GO`, `$DEWASM_JAVA`, `$DEWASM_JAVAC`, `$DEWASM_CODON`.
+  * These environment variables override the lookup:
+    - ruby: `$DEWASM_RUBY`
+    - python: `$DEWASM_PYTHON`
+    - perl: `$DEWASM_PERL`
+    - bash: `$DEWASM_BASH`
+    - go: `$DEWASM_GO`
+    - java: `$DEWASM_JAVA`, `$DEWASM_JAVAC`
+    - codon: `$DEWASM_CODON`
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
-  Re-run it after pulling a change that re-pins an app: a cached copy from the previous pin is a different program, and `examples/apps/setup.sh --check` names any that are stale without fetching.
+  Re-run it after pulling a change that re-pins an app.
+  A cached copy from the previous pin is a different program.
+  `examples/apps/setup.sh --check` names any that are stale without fetching.
   * Cached `.wasm` files are located in `examples/apps/cache`.
-  * Building some apps from source needs more: [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases) with `WASI_SDK_PATH` set to its root (sqlite3 and others; local dev and CI use wasi-sdk-34), a host Ruby with `rake` (mruby); each `scripts/*.sh` fails loudly naming what it is missing.
+  * Building some apps from source needs more:
+    - [wasi-sdk](https://github.com/WebAssembly/wasi-sdk/releases) with `WASI_SDK_PATH` set to its root, for sqlite3 and others.
+      Local dev and CI use wasi-sdk-34.
+    - A host Ruby with `rake`, for mruby.
+  * Each `scripts/*.sh` fails loudly naming what it is missing.
 
 ## Commands
 
@@ -38,7 +54,8 @@ There are some features for testing:
 
 ## Snapshots
 
-Checked-in snapshots are code-derived, never hand-written; a stale one fails a comparing test with the exact command to regenerate it.
+Checked-in snapshots are code-derived, never hand-written.
+A stale one fails a comparing test with the exact command to regenerate it.
 
 | Snapshot | Regenerate with |
 | --- | --- |
@@ -47,12 +64,16 @@ Checked-in snapshots are code-derived, never hand-written; a stale one fails a c
 
 A snapshot claims "this is what wasmtime produces", so it can go stale.
 The opt-in freshness check reruns the cached binaries and compares against the checked-in files.
-Both it and the capture embed the `wasmtime` crate pinned by `Cargo.lock` (no `wasmtime` install is involved) and reach it through the `xtask` binary, which the suite never builds for you:
+Both it and the capture embed the `wasmtime` crate pinned by `Cargo.lock`.
+No `wasmtime` install is involved.
+They reach it through the `xtask` binary, which the suite never builds for you:
 
 ```console
 $ cargo build -p xtask
 $ cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime
 ```
 
-`cargo xtask update-snapshots [filter]` captures the execution snapshots the same way, so it needs only the apps cache.
-On a clean tree it must reproduce every file byte-for-byte: a resulting `git status` diff is a capture bug or genuine nondeterminism, not a routine update.
+`cargo xtask update-snapshots [filter]` captures the execution snapshots the same way.
+So it needs only the apps cache.
+On a clean tree it must reproduce every file byte-for-byte.
+A resulting `git status` diff is a capture bug or genuine nondeterminism, not a routine update.

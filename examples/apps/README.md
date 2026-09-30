@@ -1,14 +1,21 @@
 # Real-world example apps
 
-Prebuilt wasm binaries of real applications, each fetched from its own upstream, for demos and end-to-end tests.
+Prebuilt wasm binaries of real applications, for demos and end-to-end tests.
+Each is fetched from its own upstream.
 
 **No third-party artifact is committed to this repository.**
-`./setup.sh` downloads version-pinned, sha256-verified files into `cache/` (gitignored); licensing of the binaries stays entirely with their upstream distribution.
-The `apps` cases (`crates/dewasm-test-helper/src/apps.rs`, plus `apps_capi.rs` and `apps_fs.rs` for the C-API and filesystem shapes) convert each cached app and compare its output against the snapshot files in `snapshots/` (captured once from wasmtime; re-validated via `--features wasmtime_test`), run per backend as that backend's `e2e` test, e.g. `cargo test -p dewasm-backend-ruby --test e2e apps`.
+`./setup.sh` downloads version-pinned, sha256-verified files into `cache/` (gitignored).
+Licensing of the binaries stays entirely with their upstream distribution.
+The `apps` cases convert each cached app and compare its output with the snapshot files in `snapshots/`.
+They live in `crates/dewasm-test-helper/src/apps.rs`.
+`apps_capi.rs` and `apps_fs.rs` beside it hold the C-API and filesystem shapes.
+The snapshots were captured once from wasmtime, and `--features wasmtime_test` re-validates them.
+Each backend runs the cases as its `e2e` test, e.g. `cargo test -p dewasm-backend-ruby --test e2e apps`.
 A missing cache or `ruby` fails the test loudly rather than skipping.
 Run `./setup.sh` first.
 
-`setup.sh` just runs the per-app scripts in `scripts/` (shared boilerplate in `scripts/common.sh`); run one directly (e.g. `scripts/sqlite3.sh`) to rebuild a single app after bumping its pin.
+`setup.sh` runs the per-app scripts in `scripts/`, with shared boilerplate in `scripts/common.sh`.
+Run one directly (e.g. `scripts/sqlite3.sh`) to rebuild a single app after bumping its pin.
 
 | App | Source | What it demonstrates |
 | --- | --- | --- |
@@ -34,4 +41,5 @@ JS on Ruby: 42
 ```
 
 Candidates need only the implemented WASI surface (see [docs/support.md](../../docs/support.md)).
-With WASI filesystem support now landed for Ruby, that includes real file-backed I/O, not just stdio/args/environ/clocks/random.
+With WASI filesystem support now landed for Ruby, that includes real file-backed I/O.
+It is not limited to stdio/args/environ/clocks/random.
