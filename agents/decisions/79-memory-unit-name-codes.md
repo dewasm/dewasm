@@ -12,11 +12,11 @@ Each can adopt the codes with its own measurement.
 ## Context
 
 Memory load/store calls dominate a converted artifact's source.
-The converted merman (`--target ruby --mode library --no-default-wasi`) has 433,438 such call sites.
+The converted `merman` (`--target ruby --mode library --no-default-wasi`) has 433,438 such call sites.
 Their method names alone (`i32_load`, `i64_load32_uo`, …) take 4,073,915 bytes.
 That is 8.5% of the whole 47.7 MB file.
 Decisions 75 and 78 already chose one-letter `o`/`a` suffixes for their two-argument twins.
-The suffixes hold source size at parity per site.
+The suffixes keep source size the same per site.
 The base names stayed at the wasm spelling, eight to twelve characters each.
 The names are interior to the artifact.
 The generated code and the bundled runtime are the only callers.
@@ -24,7 +24,7 @@ The one addition is the host glue a user writes against `instance.memory`.
 
 ## Decision
 
-**A name that recurs once per call site in a multi-megabyte artifact is priced in bytes.
+**A name that appears once per call site in an artifact of several MB is priced in bytes.
 It gets the shortest spelling that still encodes every distinction the unit family needs.
 Readability belongs to names read where they are defined.
 These names are read at generated call sites.**
@@ -39,16 +39,16 @@ Each load/store unit is named by a code, one character per distinction:
    So `i32_load8_s` has value width `w`.
 3. Operation: `l` load, `s` store.
 4. Memory width for the narrow operations, same `b`/`h`/`w`/`d` codes.
-   It is absent when it equals the value width.
-5. Appended by `mem_call`: `o` for the static-offset twin (decision 75).
+   It is missing when it equals the value width.
+5. Added last by `mem_call`: `o` for the static-offset twin (decision 75).
    `a` is for the wrapping-add twin (decision 78).
-   The suffix is absent for the one-argument form.
+   The suffix is missing for the one-argument form.
 
 The table below is the full base mapping.
 It is applied in [`runtime/ruby/units/memory/`](../../runtime/ruby/units/memory/) and [`runtime/python/units/memory/`](../../runtime/python/units/memory/).
 Each row also renames its `o` and `a` twins, for example `i32_loado` → `iwlo`.
 
-| Wasm op | Code | Wasm op | Code |
+| Wasm operation | Code | Wasm operation | Code |
 | --- | --- | --- | --- |
 | `i32_load` | `iwl` | `i32_store` | `iws` |
 | `i64_load` | `idl` | `i64_store` | `ids` |
@@ -66,29 +66,29 @@ Each row also renames its `o` and `a` twins, for example `i32_loado` → `iwlo`.
 | `i64_load32_u` | `udlw` | | |
 
 The other memory units keep their names.
-`copy` (9,064 merman sites) is already as short as a code.
+`copy` (9,064 `merman` sites) is already as short as a code.
 `fill` (129), `init` (489), `grow` (1), `size`, and `read_string` are too rare for a rename to buy anything.
-`read_string` is additionally the host-glue API the docs teach.
+`read_string` is additionally the host-glue API the documents teach.
 
-Measured on the converted sqlite3-shell (standalone Ruby) and merman (as above), before to after.
+Measured on the converted `sqlite3-shell` (standalone Ruby) and `merman` (as above), before to after.
 Before is decision 78's state.
-ISeq is via `RubyVM::InstructionSequence.compile_file` on ruby 4.0.4 arm64-darwin, children included:
+ISeq is via `RubyVM::InstructionSequence.compile_file` on Ruby 4.0.4 `arm64-darwin`, children included:
 
-| Metric | sqlite3-shell before | sqlite3-shell after | merman before | merman after |
+| Measure | `sqlite3-shell` before | `sqlite3-shell` after | `merman` before | `merman` after |
 | --- | --- | --- | --- | --- |
 | Source bytes | 7,732,176 | 7,295,696 | 47,707,217 | 45,315,890 |
 | Load/store method-name bytes | — | — | 4,073,915 | 1,683,020 |
 | ISeq instructions | 1,286,867 | 1,286,867 | — | — |
 
 A rename cannot change the compiled instruction stream, and the unchanged ISeq count confirms it.
-The saving is source bytes, 5.6% of sqlite3-shell and 5.0% of merman.
+The saving is source bytes, 5.6% of `sqlite3-shell` and 5.0% of `merman`.
 
 ## Rejected alternatives
 
-- **Keep the wasm spellings (status quo).**
-  4.07 MB of method-name bytes on merman, recurring at every future artifact.
-- **Readable abbreviations** (`ld32`, `st8u`, …).
-  Every character above the minimum recurs 433k times on merman, and buys nothing back.
+- **Keep the wasm spellings (the state before this decision).**
+  4.07 MB of method-name bytes on `merman`, repeated in every future artifact.
+- **Readable short names** (`ld32`, `st8u`, …).
+  Every character above the minimum repeats 433k times on `merman`, and buys nothing back.
   Once the name is not the wasm spelling, the reader consults the scheme either way.
 - **Codes for `copy`/`fill`/`init`/`grow`/`size`/`read_string` too.**
   The site counts above are three orders of magnitude below the load/store family's.
@@ -100,9 +100,10 @@ The saving is source bytes, 5.6% of sqlite3-shell and 5.0% of merman.
 
 ## Consequences
 
-- Positive: 2.4 MB off merman and 436 KB off sqlite3-shell at zero semantic and zero runtime cost.
+- Positive: 2.4 MB off `merman` and 436 KB off `sqlite3-shell` at zero semantic and zero runtime cost.
   Every future load/store site is born about five bytes cheaper.
 - Negative: generated call sites and host glue read as codes (`mem.iwl(p)`).
-  The docs' glue examples carry a one-line decoding comment, and the scheme above is the reference.
+  The glue examples in the documents carry a one-line decoding comment.
+  The scheme above is the reference.
 - Carry-over: the `o`/`a` suffix rule of decisions 75 and 78 composes with the codes unchanged.
   A backend adopting those decisions later can take the codes in the same step.

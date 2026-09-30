@@ -12,7 +12,7 @@ The limit judgement and the measurements are in the consequences below.
 - constant AND folding;
 - the `Reducing` context;
 - identity-mask elision;
-- the pinned constant-equality rewrite.
+- the constant-equality rewrite where the interval fixes one value.
 
 This is stage 1 of issue #164: elision within one expression tree only.
 [Decision 73](73-mask-elision-variable-dataflow.md) extends it across statements.
@@ -51,7 +51,7 @@ The non-modular consumers are:
 
 Some consumers read only a value's congruence class modulo 2^w:
 
-- a wrapping add/sub/mul operand;
+- a wrapping `add`/`sub`/`mul` operand;
 - a bitwise operand;
 - `shl`'s shifted operand;
 - any shift's count;
@@ -73,7 +73,7 @@ That mask reduces the value back to the stored representation.
 **The consumption table and the bound analysis are shared**, in `crates/dewasm-backend/src/masking.rs`.
 The table says which operand each `BinOp`/`UnOp` reads modularly.
 That is `bin_operand_context`/`un_operand_context`.
-The maskless bitwise operators pass the consumer's context through.
+The bitwise operators that need no mask pass the consumer's context through.
 The bound analysis is a bottom-up interval bound over `ir::Expr` (`elides_mask`).
 It treats locals, temps, globals, and calls as their full masked width.
 It treats constants and zero-extending loads exactly, and shift counts by constant where known.
@@ -88,21 +88,21 @@ Consequences of the bound:
 
 - i32 add and sub always elide under a modular consumer (raw magnitude at most 2^33).
 - Three sites keep their masks unless the interval analysis narrows the operands:
-  - a full-range i32 mul (up to 2^64);
+  - a full-range i32 `mul` (up to 2^64);
   - `shl` by an unknown count (up to 2^63);
   - the wrap of a full-range i64.
 
 **i64 uses the same Fixnum limit, not a wider one.**
-A wider allowance could be 2^64, "no wider than the masked value".
-It looks harmless because masked i64 values already reach 2^64.
+A wider limit could be 2^64, "no wider than the masked value".
+It looks safe because masked i64 values already reach 2^64.
 But it cuts both ways:
 
 - An elided raw sum can be a guaranteed bignum.
   The masked value would have wrapped back into Fixnum range.
-- Each unmasked mul doubles the width, so a chain grows without bound.
+- Each unmasked `mul` doubles the width, so a chain grows without bound.
 
 Under the uniform limit an elided i64 site is provably allocation-free, the same claim as i32.
-The cost: full-range i64 add/sub and `shr_s` keep `Rt.m64` even under a modular consumer.
+The cost: full-range i64 `add`/`sub` and `shr_s` keep `Rt.m64` even under a modular consumer.
 So i64 elision fires mainly on chains the analysis can narrow.
 Those are zero-extending loads, constants, and values shifted down.
 `i64.shr_s` is the known near-miss.
@@ -113,24 +113,24 @@ Loosening that one site is left for a later stage, with measurement.
 **Operand context is independent of the elision outcome.**
 Operands of a site that keeps its own mask are still rendered in modular context.
 The kept mask restores the invariant.
-So the guard failing at a node never forces masks back into its subtree.
+So the guard failing at a node never forces masks back into the tree below it.
 
 ## Rejected alternatives
 
-- **Keep every mask (status quo).**
+- **Keep every mask (the state before this decision).**
   Simplest, but the inner masks a modular consumer restores are pure overhead at every stage.
   The stages are file size, parse, ISeq, runtime.
 - **Elide without the bound guard.**
   Congruence still holds, so it is correct.
-  But a mul chain's intermediates grow past Fixnum.
+  But a `mul` chain's intermediates grow past Fixnum.
   Two full i32 products multiplied together already reach 2^128.
   Every operation on them becomes multi-word bignum arithmetic.
-  That trades a cheap mask for unpredictable slowdowns.
+  That trades a cheap mask for unpredictable loss of speed.
 - **A per-backend analysis.**
   The consumption table and the interval logic follow from the shared convention of decision 2.
   That is the masked-unsigned convention, not any one language.
   Only the limit and the emission differ.
-  So duplicating them per backend invites divergence for no flexibility gained.
+  So a copy per backend lets the copies come to differ, for no flexibility gained.
 - **Cross-statement elision (unmasked locals or temps).**
   Storage is where every consumer, including future ones, reads the value.
   Proving all of them modular needs a dataflow analysis over the whole function.
@@ -141,18 +141,18 @@ So the guard failing at a node never forces masks back into its subtree.
 
 - The measurements on the converted `sqlite3-shell` (standalone Ruby):
 
-  | Metric | Before | After | Change |
+  | Measure | Before | After | Change |
   | --- | --- | --- | --- |
   | File size | 7,937,554 bytes | 7,868,630 bytes | 0.87% smaller |
   | ISeq instructions | 1,370,047 | 1,360,259 | 0.71% fewer |
-  | ISeq memsize | 47,605,992 bytes | 47,212,640 bytes | 0.83% smaller |
+  | ISeq `memsize` | 47,605,992 bytes | 47,212,640 bytes | 0.83% smaller |
 
   ISeq figures are from `RubyVM::InstructionSequence.compile_file` on MRI 4.0.4, children included.
   4,822 of 36,622 `& 0xffffffff` sites (13.2%) and 72 of 2,443 `m64` calls (2.9%) are elided.
-  That is above the rough 4% ceiling issue #219 estimated for this stage.
+  That is above the rough 4% upper limit issue #219 estimated for this stage.
   It is small in absolute terms, as expected.
 - The Python backend (issue #221) uses the same 2^62 limit.
-  CPython integers are heap-allocated 30-bit-digit bignums at every size.
+  CPython integers are heap-allocated bignums of 30-bit digits at every size.
   So no unboxed range makes elision allocation-free as Fixnum does for Ruby.
   Under the shared limit every exposed intermediate still fits in three digits.
   That is at most one more than the masked value it replaces.
@@ -161,12 +161,12 @@ So the guard failing at a node never forces masks back into its subtree.
   That file size is 0.88% smaller.
   4,822 of 36,624 i32 and 72 of 2,440 i64 inline mask sites are elided.
   They are the same sites as Ruby, since the analysis and the limit are shared.
-  A sqlite workload timing measured no change.
-  The Python backend's `mod masks` tests pin the same three shape directions.
-- The spec harness (decision 3) binds as always and passes for the Ruby backend under this lowering.
-  Codegen-shape tests pin both directions.
+  An SQLite workload timing measured no change.
+  The Python backend's `mod masks` tests check the same three shape directions.
+- The specification harness (decision 3) binds and passes for the Ruby backend under this lowering.
+  Tests of the generated code's shape check both directions.
   They are `mod masks` in the Ruby backend, plus unit tests in `masking.rs`.
-  They pin an elided site, a site kept by a non-modular consumer, and a site kept by the bound guard.
+  They check an elided site, a site a non-modular consumer keeps, and a site the bound guard keeps.
 - Decision 2's storage representation is unchanged.
   Only the point at which the mask is applied moved, from every producer to every observation point.
 - A module whose only `m64` references were elided arithmetic sites no longer bundles the `rt/m64` unit.

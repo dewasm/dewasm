@@ -2,9 +2,9 @@
 
 Status: **Accepted, 2026-07-28.**
 Implemented in `crates/dewasm-backend-ruby/src/lib.rs` + `runtime/ruby/units/table/call{0..8}.rb`.
-Amends [decision 4](4-ruby-backend-lowering.md)'s `call_indirect` bullet.
+Changes [decision 4](4-ruby-backend-lowering.md)'s `call_indirect` bullet.
 The structural type-symbol comparison that bullet fixed still binds.
-Only the splat-array *dispatch* it used is superseded here.
+Only the splat-array *dispatch* it used is replaced here.
 
 ## Context
 
@@ -18,15 +18,15 @@ Its `*args` array came to ~0.4M `T_ARRAY` allocations per run (5.2% of the run's
 The argument count is a static property of the call site's type signature.
 So the splat is avoidable: the arity is known at conversion time.
 The two `call_indirect`-heavy real-world apps were measured.
-A small fixed ceiling covers every site (arity = signature parameter count):
+A small fixed limit covers every site (arity = signature parameter count):
 
 | arity | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | >8 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| sqlite3-shell (2018 sites) | 31 | 1390 | 184 | 166 | 183 | 29 | 35 | 0 | 0 | 0 |
-| qjs (1317 sites) | 0 | 522 | 524 | 239 | 13 | 8 | 7 | 1 | 3 | 0 |
+| `sqlite3-shell` (2018 sites) | 31 | 1390 | 184 | 166 | 183 | 29 | 35 | 0 | 0 | 0 |
+| `qjs` (1317 sites) | 0 | 522 | 524 | 239 | 13 | 8 | 7 | 1 | 3 | 0 |
 
-Arity 1 alone is 68.9% of sqlite's sites; qjs tops out at 8.
-A ceiling of 8 covers 100% of both.
+Arity 1 alone is 68.9% of the sites of `sqlite3-shell`; `qjs` tops out at 8.
+A limit of 8 covers 100% of both.
 
 ## Decision
 
@@ -34,18 +34,18 @@ A ceiling of 8 covers 100% of both.
   The units are `runtime/ruby/units/table/call0.rb` … `call8.rb`.
   Each takes the index, the type symbol, and exactly `N` positional parameters.
   So the caller side has no `*args`.
-  Each invokes the callee with a fixed argument list (`func.call(a0, a1)`).
+  Each calls the callee with a fixed argument list (`func.call(a0, a1)`).
   So the callee side has no splat either.
   The dispatch and trap contract is **identical** to `call`, in this order:
   1. `undefined element` (out of bounds);
   2. `uninitialized element` (null slot);
   3. `indirect call type mismatch` (structural symbol `!=`);
   4. the call.
-- **The backend emits `@tT.callN(index, type_sym, a0, …)`** for a site whose signature has `N` args.
+- **The backend emits `@tT.callN(index, type_sym, a0, …)`** for a site whose signature has `N` arguments.
   It does so when `N ≤ MAX_FIXED_ARITY`.
   It `use_unit`s only the `callN` actually referenced.
   So a module bundles just the arities it uses.
-  This matches the existing per-method unit granularity (decision 6).
+  This matches the existing split into one unit per method (decision 6).
 - **The splat `call` stays as the fallback** for signatures wider than `MAX_FIXED_ARITY`.
   No such site appears in the measured apps.
   But general wasm permits any arity, so the path is kept for correctness.
@@ -63,7 +63,7 @@ Wasm 1.0 returns (zero or one value) flow through `func.call`'s return exactly a
 
 ## Rejected alternatives
 
-- **One variadic `call` with `func.call(*args)` (decision 4, status quo).**
+- **One `call` for any argument count, with `func.call(*args)` (decision 4, the current state).**
   It allocates two `T_ARRAY`s per indirect call.
   The 0.4M-array measurement above is the direct cost on a `call_indirect`-saturated workload.
 - **A single `call` taking a splat but forwarding fixed via a `case args.size` inside.**
@@ -71,7 +71,7 @@ Wasm 1.0 returns (zero or one value) flow through `func.call`'s return exactly a
   The caller-side array is the larger share.
   It is only removable by generating fixed positional arguments at the call site.
 - **Unbounded `callN` generation (a unit per distinct arity seen).**
-  The measured ceiling is 8.
+  The measured limit is 8.
   A fixed constant with a splat fallback is simpler.
   The alternative threads the module's arity set into the runtime bundler.
   The fallback covers the (unobserved) tail with no correctness gap.
@@ -81,12 +81,12 @@ Wasm 1.0 returns (zero or one value) flow through `func.call`'s return exactly a
 - Positive: no `T_ARRAY` is built for any `call_indirect` at arity ≤ 8.
   On the `sqlite3-shell` benchmark workload, total object allocations fell 2,570,922 → 2,117,639.
   That is −453,283, ~17.6%, with byte-identical output.
-  The wall-clock gain is modest: ~1% on this bench, which is dominated by other work.
+  The wall-clock gain is small: ~1% on this benchmark, which is dominated by other work.
   The win is allocation/GC pressure, which the profile attributed to the splat.
 - Negative: nine near-identical small units instead of one.
   They share the trap contract by copy.
   So a change to that contract touches all nine (and the fallback `call`).
-  The units lint (decision 6) keeps their `# requires:` headers honest but does not dedupe the bodies.
-- The spec harness (decision 3) binds correctness.
+  The units lint (decision 6) keeps their `# requires:` headers honest but leaves the repeated bodies.
+- The specification harness (decision 3) binds correctness.
   It passes for the Ruby backend under this lowering, `call_indirect.wast` included.
   The `qjs`/`sqlite3-shell` heavy e2e cases pass.

@@ -1,7 +1,7 @@
 # Decision 10: Add C# to the Target Languages, Paired with Java
 
 Status: **Accepted, 2026-07-23.**
-Amends decision 0's target list; no backend work has started.
+Changes decision 0's target list; no backend work has started.
 Planned order: Ruby → Bash → Java → C# → Go → Python → PHP.
 Java and C# are designed as one "managed static languages" pair.
 *Revised by [decision 24](24-01-scope-reset.md) (2026-07-25): the 0.1 backends are Python, Go, and Java.*
@@ -10,11 +10,11 @@ Java and C# are designed as one "managed static languages" pair.
 
 ## Context
 
-C# was simply missing from the original target list (user call-out).
+C# was missing from the original target list (the user pointed it out).
 It fits the decision 0 criterion.
-C# is a mainstream language whose ecosystem does not ship a wasm runtime by default.
-That holds in the places dewasmify targets.
-And no wasm→C# *source* translator exists.
+C# is a widely used language whose tools do not ship a wasm runtime by default.
+That holds in the places `dewasmify` targets.
+And no wasm→C# *source* converter exists.
 
 ## Decision
 
@@ -25,7 +25,7 @@ So the marginal cost of the second one is small.
 Where they differ, C# is the easier half:
 
 - Native unsigned integers (`uint`/`ulong`).
-  So decision 2's masked-unsigned strategy is bypassed entirely.
+  So decision 2's masked-unsigned strategy is not needed.
 - `goto` for multi-level `br`.
 - `Span<byte>`/`BinaryPrimitives` for little-endian memory access.
 - No hard method-size limit like the JVM's 64 KB.
@@ -35,14 +35,14 @@ A shared lowering-conventions decision for the pair is expected when that milest
 
 ## Rejected alternatives
 
-- **Not adding it**: the omission was an oversight, not a decision.
+- **Not adding it**: leaving it out was a mistake, not a decision.
 - **Revisiting JavaScript on the same grounds**: unchanged from decision 0.
   wasm2js exists, and every JS runtime ships a wasm engine.
 
 ## Consequences
 
-- README target table and roadmap gain C#.
-  The support matrix (docs/support.md) grows a column when the backend lands.
+- The README target table and the plan of future work gain C#.
+  The support matrix (`docs/support.md`) grows a column when the backend lands.
 - The Java/C# milestone produces one design and two emitters.
   It is a first test of how much backend machinery is reusable across similar languages.
   Examples are decision 6 units and lowering tables.

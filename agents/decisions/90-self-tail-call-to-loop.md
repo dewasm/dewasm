@@ -13,7 +13,7 @@ It covers direct self-recursion only, and the conformance suite's `even`/`odd` p
 Decision 18 then recorded it as viable later, in these words:
 "as a readability/speed optimization layered on top (it would simply shrink the tail-caller set)".
 
-[Decision 89](89-park-the-pending-tail-call.md) took the per-hop cost down to a parked write and a call through a table.
+[Decision 89](89-park-the-pending-tail-call.md) took the per-step cost down to a parked write and a call through a table.
 What remains is the call itself.
 For a self tail call there is nothing to call: the frame it would replace is the frame it is in.
 
@@ -27,11 +27,11 @@ With that it loses the body/entry split, the parked slots and the trampoline.
 Three details the rewrite has to get right, and one it declines:
 
 - The arguments land in fresh temps before any parameter is written.
-  That is because an argument may read a parameter that an earlier assignment would overwrite.
+  That is because an argument may read a parameter that an earlier assignment would write over.
 - The declared locals are reset to their zero, because a fresh call zeroes them.
   The loop has to do the same.
 - The loop's label is one past the largest the body already uses.
-  So the new frame cannot collide with an existing one.
+  So the new frame cannot share a label with an existing one.
 - A function whose body can fall off its end is left alone.
   That is because it would spin in the loop rather than return.
   A function declaring a reference-typed local is also left alone.
@@ -45,11 +45,11 @@ Code this governs: `crates/dewasm-backend/src/selfcall.rs`, and each backend's d
 ## Rejected alternatives
 
 - **Do it in the core IR rather than as a backend pass.**
-  The core builder is backend-agnostic, and this is an optimization.
+  The core builder does not depend on the backend, and this is an optimization.
   So it belongs with the other optimizing passes.
   A backend that has some better way to lower a self tail call is then free not to run it.
 - **Extend it to a cycle of two or three functions by inlining them into one loop.**
-  That is defunctionalization on a small scale, and it was measured.
+  That is decision 89's merged dispatch loop on a small scale, and it was measured.
   It is worth having only under a size threshold.
   It is worth its own decision if it is ever taken.
   Issue 295 holds the measurements.

@@ -1,8 +1,8 @@
 # Decision 41: Merge Adjacent Active Data Segments at Build Time
 
 Status: **Accepted, 2026-07-28.**
-A core pass collapses runs of consecutive, near-adjacent active data segments.
-Each run becomes a single zero-filled blob.
+A core pass collapses runs of near-adjacent active data segments that follow one another.
+Each run becomes a single zero-filled segment.
 It is always on and identical for every backend.
 Landed in `crates/dewasm-core/src/data_merge.rs`.
 It runs unconditionally at the end of `build_module_with_options`.
@@ -14,9 +14,9 @@ Toolchains split a program's initialized data across many active segments.
 There is one segment per `.data`-like region.
 Every backend emits one initializer per active segment, index-keyed off `module.datas`.
 The extreme case in the app corpus is `ruby.wasm`, with **7871 active segments**.
-Each generates its own memory-init call and its own offset/length constants.
-Most of those segments sit a handful of bytes apart.
-Concatenating a run of them into one blob (zero-filling the small holes) cuts the initializer count.
+Each generates its own call to initialize memory and its own offset/length constants.
+Most of those segments sit a few bytes apart.
+Joining a run of them into one segment (zero-filling the small holes) cuts the initializer count.
 The cut is more than an order of magnitude.
 The reduction is on the shared `module.datas`, so it composes with every backend for free.
 This is the follow-up decision 37 flagged.
@@ -26,8 +26,8 @@ Three wasm rules bear on that:
 
 - wasm initializes active segments in declaration order, and later writes win on overlap.
 - A passive segment writes nothing on its own; only `memory.init` does.
-- Bulk-memory ops (`memory.init` / `data.drop`) name segments **by index**.
-  So renumbering them silently corrupts a program.
+- Bulk-memory operations (`memory.init` / `data.drop`) name segments **by index**.
+  So renumbering them silently breaks a program.
 
 A merge must respect all three.
 
@@ -35,42 +35,42 @@ A merge must respect all three.
 
 Add a crate-private pass, `merge_adjacent_data_segments`, over `module.datas`.
 It walks the segments in declaration order.
-It merges a run of active `i32.const`-offset segments into one blob.
-The blob's offset is the run start.
-Its bytes are the segments concatenated, with each inter-segment hole zero-filled.
+It merges a run of active `i32.const`-offset segments into one segment.
+The new segment's offset is the run start.
+Its bytes are the segments joined in order, with each hole between segments zero-filled.
 Three conditions guard the merge.
-Failing **any** bails the whole pass, leaving `module.datas` byte-for-byte as built.
+Failing **any** stops the whole pass, leaving `module.datas` identical to what was built.
 
 1. **No segment-by-index reference.**
-   Bail if any function body contains `Stmt::MemoryInit` or `Stmt::DataDrop`.
+   Stop if any function body contains `Stmt::MemoryInit` or `Stmt::DataDrop`.
    The walk is recursive through `Block`/`Loop`/`If`.
    Merging drops and renumbers indices.
-   A bulk op would then address the wrong (or a nonexistent) segment.
+   A bulk operation would then address the wrong (or a missing) segment.
    Active segments are valid `memory.init` sources too, so this is all-or-nothing, not per-segment.
 2. **Never reorder across a barrier.**
-   Only segments already consecutive in declaration order merge.
+   Only segments that already follow one another in declaration order merge.
    A `global.get`-offset active segment writes to a runtime-unknown address.
-   So it is an opaque barrier that flushes the current run and passes through unchanged.
-   That keeps its order against the constant segments intact.
+   So it is a barrier the pass cannot see through: it flushes the current run and passes unchanged.
+   That keeps its order against the constant segments.
    A passive segment carries no standalone effect, since guard 1 has ruled out `memory.init`.
    So it passes through *without* closing the run: the actives on either side still merge around it.
 3. **Zero-fill soundness.**
-   Require the active `i32.const` segments to be *globally* monotonically ascending and non-overlapping.
-   That is, each start is ≥ the running max end of all earlier ones; else bail.
+   Require the active `i32.const` segments to be *globally* monotonically increasing and non-overlapping.
+   That is, each start is ≥ the largest end of all earlier ones; else stop.
    This proves that no other constant-offset segment occupies a hole we zero-fill.
    So filling it cannot erase a byte some other segment wrote.
 
 **Merge threshold.**
-Two consecutive active segments merge when `next.offset >= run_end && next.offset - run_end < 64`.
+An active segment merges into the run when `next.offset >= run_end && next.offset - run_end < 64`.
 The arithmetic is u64.
-The 64-byte bound is the discriminating rule.
+The 64-byte bound is the deciding rule.
 The fill bytes are emitted **inline by every backend unconditionally**.
 So the break-even weighs the always-on cost of a few zero bytes.
 It weighs them against a second initializer's per-segment overhead, a small figure.
-wasm2go's analogous constant is 4096, but that is an *externalize-only* threshold.
+wasm2go's similar constant is 4096, but that threshold applies only to data moved out.
 It concerns bytes moved to a data file (decision 37), a different trade-off.
 Also, this pass lives in the core, which cannot see `GenOptions`.
-So the pass cannot know whether externalization is even on.
+So the pass cannot know whether `--data-file` is even on.
 Tuning to the always-on inline cost is the only choice available here.
 64 captures the dense runs without inventing large stretches of zero.
 `ruby.wasm`'s segments are packed far tighter than that.
@@ -84,13 +84,13 @@ Tuning to the always-on inline cost is the only choice available here.
   Declaration order is the only order whose memory image is guaranteed.
   Sorting trades a proven-correct pass for an unprovable one.
 - **A backend-side merge during lowering.**
-  Each backend already iterates `module.datas`.
-  Merging there would multiply the delicate ordering/soundness reasoning by the backend count.
-  It would also invite divergence.
-  Doing it once on the shared IR keeps a single audited implementation under one spec-harness test.
+  Each backend already walks over `module.datas`.
+  Merging there would multiply the hard ordering/soundness reasoning by the backend count.
+  It would also invite differences between backends.
+  Doing it once on the shared IR keeps one audited implementation under the specification harness.
 - **Merge regardless of gap size (bridge any hole).**
-  A single pair of segments could straddle a multi-kilobyte hole.
-  It would then materialize kilobytes of zero bytes inline in every backend.
+  A single pair of segments could sit on both sides of a hole of several thousand bytes.
+  It would then emit thousands of zero bytes inline in every backend.
   That is strictly worse than two initializers.
   The threshold caps that blow-up.
 
@@ -108,20 +108,20 @@ Tuning to the always-on inline cost is the only choice available here.
 
   The largest app, `ruby.wasm`, collapses 7871 → 352 (a 22× reduction).
   The code-dominated `cpython`/`qjs` have only two segments and merge to one.
-- Correctness is bound by the spec harness (decision 3).
+- Correctness is bound by the specification harness (decision 3).
   The pass is always on.
   So the full testsuite passing for every backend *is* the execution-equivalence proof.
-  Targeted IR-shape unit tests pin the merge and the zero-fill.
+  Targeted IR-shape unit tests check the merge and the zero-fill.
   They are in `crates/dewasm-core/tests/data_merge.rs`.
-  They also pin the gap threshold, the barrier, and each bail.
-- Modules that use bulk data ops (`rg.wasm`, `libpcap.wasm`, treesitter) hit guard 1.
-  They are passed through untouched: the pass never regresses them.
-- Composes with decision 37: `--data-file` externalizes the *merged* blobs.
+  They also check the gap threshold, the barrier, and each case where the pass stops.
+- Modules that use bulk data operations (`rg.wasm`, `libpcap.wasm`, tree-sitter) hit guard 1.
+  They are passed through untouched: the pass never makes them worse.
+- Composes with decision 37: `--data-file` moves the *merged* segments to the data file.
   So the data file carries fewer, larger segments, and the source fewer prefix-sum constants.
 
-Cross-refs:
+Related decisions:
 
 - decision 1 (semantics-preserving transforms belong in the core IR);
 - decision 3 (the harness binds);
-- decision 32 (the sibling always-on core pass, expression folding);
-- decision 37 (data-segment externalization, whose follow-up this is).
+- decision 32 (the related always-on core pass, expression folding);
+- decision 37 (moving data segments to a file, whose follow-up this is).

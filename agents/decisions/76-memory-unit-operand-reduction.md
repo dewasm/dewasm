@@ -26,9 +26,9 @@ The sum is checked against the memory size.
 `memory_trap.wast` binds the reduction.
 A store at `memory.size * 0x10000 + (-4)` must succeed: the wrapped address lands back in bounds.
 The same shape at `-3..-1` traps.
-So the call-site mask in front of the bounds check cannot simply be dropped.
-The reduction has to move, not vanish.
-A full-width store, by contrast, observes only the value's low bits, so a congruent value suffices.
+So the call-site mask in front of the bounds check cannot be dropped.
+The reduction has to move, not go away.
+A full-width store, by contrast, observes only the value's low bits, so a congruent value is enough.
 The narrow stores already reduced the value inside the unit.
 Those are `i32_store8`, `i32_store16`, `i64_store32`, and their `o` twins.
 The full-width `i32_store`/`i64_store` were the exception.
@@ -38,7 +38,7 @@ The full-width `i32_store`/`i64_store` were the exception.
 **The unit contract loosens.**
 A memory load/store unit's address and stored-value arguments may arrive unreduced.
 The unit reduces them.
-The discriminating criterion is the one from decision 75.
+The deciding criterion is the one from decision 75.
 An operation repeated at tens of thousands of call sites is resident in the artifact's ISeq.
 It moves into the shared unit, even when the unit then pays it once per call.
 
@@ -52,7 +52,7 @@ Concretely, in [`runtime/ruby/units/memory/`](../../runtime/ruby/units/memory/) 
   `i64_store`/`i64_storeo` use the `Rt.m64` fast path (decision 43).
   So an already-reduced value stays allocation-free.
   Narrow stores were already reducing, and float stores do not touch the value.
-- A delegating unit forwards the base and offset separately.
+- A unit that calls another unit forwards the base and offset separately.
   `f32_loado` calls `i32_loado(a, off)`, not `i32_load(a + off)`.
   The inner unit's wrap must see the base alone.
   Otherwise a base-plus-offset sum crossing 2^32 would wrap back into bounds instead of trapping.
@@ -72,22 +72,22 @@ Their call sites still render in masked context, so they never receive an unredu
 They pay no reduction.
 Comparisons, call arguments, returns, and every other observation point are unchanged.
 
-Measured on the converted sqlite3-shell (standalone Ruby, ruby 4.0.4 arm64-darwin).
+Measured on the converted sqlite3-shell (standalone Ruby, Ruby 4.0.4 arm64-darwin).
 The workload is a recursive CTE inserting 30,000 rows plus aggregates.
-Times are user-CPU medians of 3 alternating runs.
+Times are user CPU medians of 3 runs, before and after taken in turn.
 
-| Metric | Before (decision 75) | After | Delta |
+| Measure | Before (decision 75) | After | Delta |
 | --- | --- | --- | --- |
 | `& 0xffffffff` sites | 31,800 | 22,055 | -30.6% |
 | Source bytes | 7,870,302 | 7,744,041 | -1.6% |
 | ISeq instructions | 1,309,998 | 1,290,623 | -1.5% |
-| ISeq memsize (bytes) | 44,792,656 | 44,013,944 | -1.7% |
+| ISeq `memsize` (bytes) | 44,792,656 | 44,013,944 | -1.7% |
 | Workload, plain (s user) | 5.49 | 5.86 | +6.7% |
 | Workload, `--yjit` (s user) | 3.01 | 3.05 | +1.3% |
 
 ## Rejected alternatives
 
-- **Keep the call-site masks (status quo).**
+- **Keep the call-site masks (the state before this decision).**
   It keeps 9,745 resident mask sites on sqlite3-shell.
   A one-instruction reduction inside 46 shared units replaces them.
 - **Interval-chosen non-wrapping variants.**
@@ -110,6 +110,6 @@ Times are user-CPU medians of 3 alternating runs.
   On the sqlite3-shell workload that is +6.7% plain-interpreter and +1.3% `--yjit` user time.
   It is accepted under the criterion above, the same trade as decision 75.
 - Carry-over: the stage 2 dataflow is issue #220, decision 73 on its branch.
-  It currently disqualifies a variable read at a store's value or address position.
+  It currently removes qualification from a variable read at a store's value or address position.
   Under this contract those reads are modular, so adopting it there lets more variables qualify.
   Perl keeps call-site masks until it adopts the same contract with its own measurement.

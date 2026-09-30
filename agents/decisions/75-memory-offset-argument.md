@@ -23,16 +23,16 @@ On the converted sqlite3-shell, 50,711 of 75,845 load/store call sites (67%) car
 Each pays one `opt_plus` instruction plus its call data in the resident ISeq.
 A mechanical transformation to a two-argument form was measured.
 ISeq instructions went 1,359,849 to 1,311,311 (3.57% fewer).
-ISeq memsize went 47,196,232 to 44,854,280 bytes (4.96% smaller).
+ISeq `memsize` went 47,196,232 to 44,854,280 bytes (4.96% smaller).
 A microbenchmark measured the per-call cost of the extra argument.
 It used the real unit shape (bounds check included, `IO::Buffer`, 20M calls).
-Interpreter: 1.07 s inline vs 1.13 s two-argument (+6% per call, about 3 ns).
-Under `--yjit`: 0.657 s vs 0.648 s (neutral).
+Interpreter: 1.07 s inline vs. 1.13 s two-argument (+6% per call, about 3 ns).
+Under `--yjit`: 0.657 s vs. 0.648 s (neutral).
 
 ## Decision
 
-Resident code size and the JIT path outrank the interpreter path.
-A cost paid once per call site in a multi-megabyte artifact moves into the shared runtime units.
+Resident code size and the JIT path matter more than the interpreter path.
+A cost paid once per call site in an artifact of several MB moves into the shared runtime units.
 The interpreter-only per-call cost is accepted because JIT execution is the common case.
 
 Concretely, per site:
@@ -59,13 +59,13 @@ It is in [`crates/dewasm-backend-ruby/src/lib.rs`](../../crates/dewasm-backend-r
 The units are in [`runtime/ruby/units/memory/`](../../runtime/ruby/units/memory/) and [`runtime/python/units/memory/`](../../runtime/python/units/memory/) (decision 6).
 Only the units a module uses get bundled, as before.
 
-Measured on sqlite3-shell after landing (Ruby, ruby 4.0.4 arm64-darwin):
+Measured on sqlite3-shell after landing (Ruby, Ruby 4.0.4 arm64-darwin):
 
-| Metric | Before | After | Delta |
+| Measure | Before | After | Delta |
 | --- | --- | --- | --- |
 | Source bytes | 7,868,630 | 7,870,302 | +0.02% |
 | ISeq instructions | 1,360,259 | 1,309,998 | -3.7% |
-| ISeq memsize (bytes) | 47,212,640 | 44,792,656 | -5.1% |
+| ISeq `memsize` (bytes) | 47,212,640 | 44,792,656 | -5.1% |
 | Workload, plain (s user) | 5.91 | 6.07 | +2.7% |
 | Workload, `--yjit` (s user) | 3.35 | 3.30 | -1.5% |
 
@@ -75,37 +75,37 @@ The workload has three parts:
 - aggregates over them;
 - an unindexed self-join.
 
-Times are the stable user-CPU medians of 5 alternating runs.
+Times are the stable user CPU medians of 5 runs, before and after taken in turn.
 Source bytes stay neutral by the naming rule above.
-The resident ISeq, which is what stays in memory, shrinks.
+The resident ISeq, which is what stays in memory, gets smaller.
 
 ## Rejected alternatives
 
-- **Status quo (per-site inline addition).**
+- **Keep the per-site inline addition.**
   Keeps 50k `opt_plus` instructions and their call data resident.
   It leaves the measured ISeq savings on the table.
 - **An optional parameter on the existing units** (`def i32_load(a, off = 0)`).
-  One unit instead of two, but every offset-zero site then pays the optional-argument setup.
+  One unit instead of two, but every offset-zero site then pays the cost of the optional argument.
   The 25k offset-zero sites on sqlite3-shell must stay exactly as fast as today.
 - **Folding the addition into the unit's `get_value`/`check` call sites.**
   That is `check(a + off, 4)` then `get_value(:u32, a + off)`.
   It computes the effective address twice per call.
   `a += off` computes it once and leaves the rest of the unit body identical to its one-argument twin.
-- **A descriptive `_offset` suffix for the twin's name.**
+- **A spelled-out `_offset` suffix for the twin's name.**
   Measured +3.9% source bytes on sqlite3-shell (7,868,630 to 8,174,700).
   That is six extra bytes per site times 50k sites.
-  The `o` suffix carries the same information at byte parity.
+  The `o` suffix carries the same information at the same byte count.
 - **A `2` suffix (for the twin's arity).**
-  The same byte parity, but many unit names already end in a size digit.
-  The digit suffix collides with it.
+  The same byte count, but many unit names already end in a size digit.
+  A `2` added after it reads as part of that number.
   `i32_store82` and `i32_store162` no longer read as `i32_store8` and `i32_store16` plus a marker.
 
 ## Consequences
 
 - Positive: 3.7% fewer resident ISeq instructions and 5.1% less ISeq memory on sqlite3-shell.
-  It comes with a small `--yjit` speedup; the same shape lands in Python's bytecode.
+  It comes with a small `--yjit` gain in speed; the same shape lands in Python's bytecode.
 - Negative: the plain-interpreter path is 2.7% slower on the sqlite3-shell workload (accepted above).
   The one-letter `o` names read less plainly than a spelled-out suffix would.
 - Carry-over: 23 two-argument units per language mirror their one-argument twins.
-  They must stay in lockstep with them.
+  They must change whenever those change.
   Perl can adopt the same shape later with the same measurements.

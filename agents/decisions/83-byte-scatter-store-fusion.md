@@ -4,20 +4,21 @@ Status: **Accepted, 2026-08-21.**
 The shared pass lives in [`crates/dewasm-backend/src/fuse.rs`](../../crates/dewasm-backend/src/fuse.rs).
 The Ruby backend runs it first.
 It runs before load hoisting (decision 82) and loop-body extraction (decision 81).
-So the hoisting pass sees one store where the idiom fired, and emits one guard instead of four.
-The recognizer covers the one idiom shape measured hot (the four-byte little-endian scatter).
-Widening it is driven by profiles, not speculation.
+So the hoisting pass sees one store where the pattern matched, and emits one guard instead of four.
+The recognizer covers the one pattern measured hot (the four-byte little-endian scatter).
+Widening it is driven by profiles, not guesses.
 
 ## Context
 
-Portable C writes a 32-bit pixel byte by byte (`dest[i] = v >> (i * 8)`) to be endian-independent.
+Portable C writes a 32-bit pixel one byte at a time: `dest[i] = v >> (i * 8)`.
+That keeps it independent of byte order.
 Compiled to wasm, that survives as a four-iteration loop of `store8(base + idx, word >> shift)`.
 In the DOOM module's hottest function this loop runs once per output pixel.
 Each of the four stores costs a unit call and a bounds check.
 After decision 82, each also costs an aliasing guard.
 Proving the trip count statically needs path-sensitive bit reasoning.
 The exit condition is `(flag & (idx == 3)) != 1`.
-It only terminates because a preceding branch established that `flag` is odd.
+It only ends because a preceding branch established that `flag` is odd.
 None of the existing analyses carry that fact.
 
 ## Decision
@@ -54,14 +55,14 @@ None of the existing analyses carry that fact.
 ## Rejected alternatives
 
 - **Proving the trip count via path-sensitive analysis and unrolling.**
-  It needs guard-fact propagation (`flag & 1 == 1` on the fallthrough path).
-  It also needs bit-level value tracking through a boolean, and a small-loop unroller.
-  Those are three new analyses for one idiom that a three-compare runtime precondition covers exactly.
-- **Straight-line consecutive-store coalescing only.**
+  It needs guard facts (`flag & 1 == 1`) carried onto the path that falls through.
+  It also needs bit-level value tracking through a Boolean, and a small-loop unroller.
+  That is three new analyses for one pattern; a three-compare runtime precondition covers it exactly.
+- **Merging stores next to each other in straight-line code only.**
   Sound and general, but the hot instance is a loop, not a straight line.
   The straight-line form can be added when a profile shows it.
 - **Fusing without the memory-edge clause.**
-  Diverges from wasm's per-store trap semantics in the last three bytes of memory.
+  Differs from wasm's per-store trap semantics in the last three bytes of memory.
   There the original leaves partial writes visible, and the fused store leaves none.
 
 ## Consequences
@@ -70,19 +71,19 @@ None of the existing analyses carry that fact.
 DOOM smoke run 16.6 to 28-31 ticks/sec on top of decision 82's hoisting.
 Against the 13.5 baseline, that is a combined 2.1-2.3x.
 The frame is byte-identical at the static 60-tick point.
-This matches the hand-measured ceiling of the combined transforms (33-37 with unguarded hoisting).
-Every other suite artifact is byte-identical: the idiom fires only where it was profiled.
+This matches the hand-measured bound of the combined transforms (33-37 with unguarded hoisting).
+Every other suite artifact is byte-identical: the pattern matches only where it was profiled.
 Those artifacts are sqlite3-shell, `c/mandelbrot`, `c/sha256`, and the NES module.
 
 **Negative.**
-The recognizer is deliberately rigid.
+The recognizer deliberately accepts one exact shape.
 A compiler update can reorder the six statements or change an operand shape.
-The fusion is then lost silently; the DOOM example's throughput would show it.
+The fusion is then lost silently; the DOOM example's speed would show it.
 The precondition costs four compares and a memory-size read per entry.
 The slow path pays it too.
 
 **Carry-over.**
 The 16-bit variant (two-byte scatter) and the straight-line unrolled form are the next shapes.
 They are built if a profile surfaces them.
-The general route around per-idiom recognizers is the guard-fact propagation rejected above.
-It becomes worth building when a second idiom needs the same facts.
+The general route around one recognizer per pattern is carrying guard facts, rejected above.
+It becomes worth building when a second pattern needs the same facts.
