@@ -1,9 +1,10 @@
-# Decision 98: A Sentence Fits in 100 Columns
+# Decision 98: A Sentence Is at Most 100 Characters as Read
 
 Status: **Accepted, 2026-09-28.**
-Landed: [`AGENTS.md`](../../AGENTS.md) states the bound in its Writing style section and meets it.
+Landed: [`AGENTS.md`](../../AGENTS.md) states the rules in its Writing style section and meets them.
+The measure and the clause rule were settled on 2026-09-30.
 The rest of the prose predates the bound.
-That is `agents/`, `docs/`, the README, the Rust doc comments, and the xtask templates.
+That is `agents/`, `docs/`, the README, the comments in source code, and the xtask templates.
 A dedicated pass brings them under the bound, and a mechanical check then keeps them there.
 
 ## Context
@@ -11,21 +12,66 @@ A dedicated pass brings them under the bound, and a mechanical check then keeps 
 Prose here is written one sentence per line, with no line wrapping.
 That made sentence length visible, and nothing bounded it.
 `awk` counted `agents/`, `docs/` and the README, excluding table rows and generated results.
-2,826 lines ran past 100 columns, and 2,102 of them past 140, while 25 lines held two sentences.
+2,826 lines ran past 100 columns, and 2,102 of them past 140.
+Only 25 lines held two sentences.
 The rule was followed, and the sentences were long.
 
 The sibling project dewasm/cowsay.wasm used the same rules plus a 100-column bound.
 It applied them to its README, its specification, and its C comments.
 The bound changed what survived a rewrite.
-Modifiers went ("byte for byte", "in plain sight"), idioms went, and a two-thing sentence was split.
+Modifiers and idioms went ("byte for byte", "in plain sight"), and a two-thing sentence was split.
+
+The rules are not new, and the norms below show what a complete set holds.
+
+| Norm | What it sets |
+| --- | --- |
+| Kernighan, [UNIX for Beginners](https://rhodesmill.org/brandon/2012/one-sentence-per-line/) (1974) | Start each sentence on a new line; break at commas and semicolons. |
+| [Semantic Line Breaks](https://sembr.org/) | Break after a sentence; 80 characters recommended; a line may pass it for links, code, or markup. |
+| [ASD-STE100](https://www.asd-europe.org/standards-specifications/simplified-technical-english/), Simplified Technical English | 20 words in a procedure, 25 in a description; one meaning per word. |
+| [GOV.UK](https://insidegovuk.blog.gov.uk/2014/08/04/sentence-length-why-25-words-is-our-limit/) content guidance | Split a sentence over 25 words. |
+| Oxford Guide to Plain English | 15 to 20 words a sentence on average. |
+| [Simple English Wikipedia](https://simple.wikipedia.org/wiki/Wikipedia:How_to_write_Simple_English_pages) | At most one subordinate clause; no idioms; no length in numbers. |
+
+STE was written for readers whose first language is not English.
+It pairs a fixed vocabulary with a bound on the sentence, which is the pairing adopted here.
+Two parts of that set were already in place.
+Sentence-per-line is Kernighan's, and one term per concept is STE's.
+
+Two measurements decided what the bound counts.
+A link target spends columns without adding a word: 46 lines passed 100 columns on targets alone.
+In 3 of them a single link was longer than 100 columns, so no wording could meet a raw bound.
+A comment in source code spends columns on its prefix, the indentation and the marker.
+The prefix is at most 8 columns for 82% of the 4,408 comment lines, and more than 20 for 1.6%.
 
 ## Decision
 
-A sentence fits in 100 columns, and a line is a sentence, so a long line is the defect it shows.
-The remedies come in a fixed order.
+A sentence is at most 100 characters as read.
+Markup, link targets, indentation, and list markers do not count, since none of them is a word.
+In source code the line also fits in 100 columns, prefix included, which is rustfmt's `max_width`.
+A comment then never runs wider than the code around it, and a deeper comment is a shorter sentence.
+Markdown has no line bound.
+Its lines were never bounded, and a long target sits at the end of one.
+A table row is exempt, since Markdown puts a row on one line.
+
+The norms count words, and this bound counts characters.
+A check counts characters without defining a word, and source code already measures in columns.
+The aim is still the norms' aim, a sentence of about 16 words.
+`AGENTS.md` runs 6.3 characters a word with its space, so 100 characters hold about 16 words.
+That is the Plain English average and under STE's 20, and an identifier lowers the count further.
+A sentence that fits by an abbreviation or a dropped article has missed the aim.
+
+A sentence holds at most two clauses, joined once by a connective, a `;`, or a `:`.
+A third clause starts a new sentence.
+A clause that only identifies a noun ("the spelling that compiles") does not count.
+This is Simple English Wikipedia's limit on subordinate clauses, extended to every joint.
+The length bound cannot replace it: 100 characters are room enough for three nested clauses.
+No check parses clauses, so this rule is kept by reading.
+The length bound is kept by the check.
+
+The remedies for a long sentence come in a fixed order.
 First remove words that add no information.
-If the sentence is still too long, it states two things: split it at a sentence or at a `;`.
-Connectives stay, and a table row is exempt, since Markdown puts a row on one line.
+A sentence still too long states two things: split it at a sentence or at a `;`.
+Connectives stay.
 
 The bound works with the vocabulary rules, and only with them.
 Under a bound, a writer has four ways out that do not improve the sentence.
@@ -44,16 +90,31 @@ What remains is to remove words that carry nothing, or to split.
 - **A soft bound, "about 100".**
   It cannot be checked mechanically.
   In cowsay.wasm the check, `awk 'length($0) > 100'`, is what kept the rule alive.
-- **Count rendered text rather than raw columns.**
-  A Markdown link doubles a phrase's length, and raw columns are what a check can count.
-  A link that will not fit moves to a sentence of its own.
+- **Count words, as the norms do.**
+  A word count needs a definition of a word for a path, an identifier, and a code span.
+  A character count needs none, and source code already counts columns.
+- **Raw columns everywhere.**
+  The bound presses on the words of a sentence, and a link target is not one.
+  Under it, a sentence next to a link was bent into a label and a colon to fit.
+- **A line bound in Markdown as well.**
+  It needs reference-style links wherever a target is long: 14 of the 65 link lines that fit as read.
+  That is one more convention, for lines nobody bounded before.
+- **120 columns in source code.**
+  Nearly every comment would keep the full 100 characters, and would run 20 columns past the code.
+- **A clause rule alone**, as Simple English Wikipedia has.
+  Nothing in it can be checked, and a check is what kept the length rule alive.
 
 ## Consequences
 
 - Positive: a sentence that meets the bound under the vocabulary rules says one thing plainly.
   The rules select for the sentences worth keeping.
+- Positive: the rules rest on norms written for readers of English as a second language.
+  A future change can be weighed against those norms, not against taste.
 - Negative: existing prose does not meet the bound.
   Bringing it under is a pass over every document, checking each sentence's meaning as it shortens.
-- Carry-over: that pass adds a check to `cargo test -p xtask`.
-  It checks 100 columns and one sentence per line, with table rows exempt.
-  Until it lands, text is brought under the rules when edited, not in passing.
+- Negative: counting characters as read needs a Markdown parser in the check.
+  A plain substitution miscounts a `*` or `_` inside a code span.
+- Carry-over: that pass adds two checks to `cargo test -p xtask`.
+  One counts a Markdown sentence as read, with table rows and fenced code exempt.
+  The other counts the columns of a comment line in source code.
+  Before they land, only edited text is brought under the rules.
