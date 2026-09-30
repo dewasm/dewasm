@@ -48,7 +48,7 @@ Three rules fix what a number covers.
   The record stores every counted file with its path and size.
   So the accounting can be checked against the host rather than trusted.
 
-Two omissions cut in opposite directions:
+Two things the record leaves out favor opposite sides:
 
 - converted source presumes the target language's interpreter is already installed;
 - a runtime binary is the cost of one platform's delivery, where source covers all of them.

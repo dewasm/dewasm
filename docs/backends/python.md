@@ -1,22 +1,22 @@
 # Python backend
 
 `--target python`.
-A plain importable module with the full WASI preview 1 surface.
+A plain importable module with the full WASI Preview 1 surface.
 
 ## Output shape
 
 A single `.py` module holds the generated module as a class.
 The runtime sits at **module top level** under the name `<Class>Rt`, so `Add` gets `AddRt`.
-Python method scopes cannot see an enclosing class scope.
+Python method scopes cannot see an outer class scope.
 So the runtime cannot nest inside the class as it does for Ruby.
 Naming it after the class is what lets two artifacts share one namespace.
 Only wasm loops become real `while True`.
 Forward branches use a per-function branch register `_br`.
 That keeps them within Python's static-nesting limits.
 
-In **library** mode, `--module-name` is required and is taken verbatim as the class name.
+In **library** mode, `--module-name` is required and is taken unchanged as the class name.
 It is one identifier matching `[A-Za-z_][A-Za-z0-9_]*`.
-Anything else is a conversion-time error, nothing is sanitized.
+Anything else is a conversion-time error, nothing is rewritten.
 In **standalone** mode the class is always `Program` and `--module-name` is rejected.
 
 ## Requirements
@@ -37,8 +37,8 @@ $ dewasm prog.wasm --target python --mode standalone -o prog.py
 $ python3 prog.py --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs follow the shared runtime interface: [docs/standalone-interface.md](../standalone-interface.md).
-It covers argv, `--dir` preopens, env, and exit/trap.
+Standalone programs share one runtime interface: [`docs/standalone-interface.md`](../standalone-interface.md).
+It covers `argv`, `--dir` preopens, environment, and exit/trap.
 
 Library mode:
 
@@ -55,19 +55,19 @@ In library mode, catch it around `invoke("_start")`.
 ## Capabilities
 
 Full wasm core 1.0 plus the universal baseline.
-**Full WASI preview 1 including the filesystem**, adopting the Ruby fs model.
-Non-function imports, multiple tables, and table bulk ops are supported.
+**Full WASI Preview 1 including the file system**, adopting the Ruby file system model.
+Non-function imports, multiple tables, and table bulk operations are supported.
 The final exception-handling proposal is supported:
 
 - A thrown wasm exception is a native exception carrying its tag.
-- catch_all cannot observe traps.
-- C programs based on setjmp/longjmp convert and run; mruby is the covered app case.
+- `catch_all` cannot observe traps.
+- C programs based on `setjmp`/`longjmp` convert and run; `mruby` is the covered app case.
 
-Authoritative matrix: [docs/support.md](../support.md).
+The official support table: [`docs/support.md`](../support.md).
 
 ## Providers and library usage
 
-Any unprovided WASI import falls back to a bundled WASI (disable with `--no-default-wasi`).
+Any unprovided WASI import falls back to a bundled WASI (`--no-default-wasi` turns it off).
 Override an import by passing an imports table to the constructor.
 Unprovided entries still fall back:
 
@@ -88,10 +88,10 @@ _holder["inst"] = inst
 inst.invoke("_start")   # random_get falls back to the bundled WASI
 ```
 
-Preopen host directories for filesystem access via the constructor's `preopens` argument.
+Preopen host directories for file system access via the constructor's `preopens` argument.
 The e2e glue in `crates/dewasm-backend-python/tests/e2e.rs` is the worked reference.
 
-## Caveats
+## Limits
 
 - **Recursion / thread-stack depth.**
   Deeply recursive wasm (or deep call chains) can hit Python's recursion limit.

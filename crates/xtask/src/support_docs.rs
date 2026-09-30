@@ -50,7 +50,7 @@ pub fn render_support_docs() -> String {
         "<!-- AUTO-GENERATED from the backend declarations; do not edit by hand. Regenerate: cargo xtask update-support-docs -->\n\n",
     );
     out.push_str(
-        "The spec harness only tolerates test skips attributable to a feature that is not `Supported` here.\nAn unattributable failure is treated as a bug.\nFlipping a feature to supported turns its remaining skips into hard failures until the tests pass.\n\n",
+        "The specification harness allows a skipped test only for a feature not `Supported` here.\nAn unattributable failure is treated as a bug.\nFlipping a feature to supported turns its remaining skips into hard failures until the tests pass.\n\n",
     );
 
     let feature_cell =
@@ -67,7 +67,7 @@ pub fn render_support_docs() -> String {
     let mut header = String::from("| Feature ");
     let mut rule = String::from("| --- ");
     for backend in &backends {
-        let _ = write!(header, "| {} ", backend.name());
+        let _ = write!(header, "| `{}` ", backend.name());
         rule.push_str("| --- ");
     }
     let _ = writeln!(out, "{header}|\n{rule}|");
@@ -79,27 +79,27 @@ pub fn render_support_docs() -> String {
         let _ = writeln!(out, "{row}|");
     }
 
-    out.push_str("\n## WASI preview 1\n\n");
+    out.push_str("\n## WASI Preview 1\n\n");
     out.push_str(
-        "The table is derived from the runtime units.\nUnimplemented syscalls resolve to an ENOSYS stub.\n`—` marks the out-of-scope surface (sockets, `proc_raise`) no toolchain output exercises.\n\n",
+        "The table is derived from the runtime units.\nAn unimplemented function resolves to a stub that returns `ENOSYS`.\n`—` marks the functions out of scope: the socket functions and `proc_raise`.\nNo toolchain output calls them.\n\n",
     );
     let mut header = String::from("| Function ");
     let mut rule = String::from("| --- ");
     for backend in &backends {
-        let _ = write!(header, "| {} ", backend.name());
+        let _ = write!(header, "| `{}` ", backend.name());
         rule.push_str("| --- ");
     }
     let _ = writeln!(out, "{header}|\n{rule}|");
     for (name, in_scope) in WASI_PREVIEW1_FUNCTIONS {
         if !in_scope {
-            let mut row = format!("| {name} ");
+            let mut row = format!("| `{name}` ");
             for _ in &backends {
                 row.push_str("| — ");
             }
             let _ = writeln!(out, "{row}|");
             continue;
         }
-        let mut row = format!("| {name} ");
+        let mut row = format!("| `{name}` ");
         for backend in &backends {
             let status = if backend.has_wasi_p1(name) {
                 "✅"

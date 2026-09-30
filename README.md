@@ -1,4 +1,4 @@
-![dewasm logo](./assets/dewasm_logo_hex_gradient.png)
+![dewasm](./assets/dewasm_logo_hex_gradient.png)
 
 [![CI](https://github.com/dewasm/dewasm/actions/workflows/ci.yml/badge.svg)](https://github.com/dewasm/dewasm/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/dewasm)](https://crates.io/crates/dewasm)
@@ -48,14 +48,14 @@ inst.invoke("add", 2, 3) # => 5
 
 Beyond simple examples, `dewasm` scales to *real libraries and applications* too:
 
-- [examples/rails](examples/rails) uses **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, as a Rails app's database engine.
-- [examples/doom](examples/doom) ports the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple languages, *including Bash*.
-- [examples/nes](examples/nes) converts a **NES emulator** ([agnes](https://github.com/kgabis/agnes)) once.
+- [`examples/rails`](examples/rails) uses **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, as a Rails app's database engine.
+- [`examples/doom`](examples/doom) ports the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple languages, *including Bash*.
+- [`examples/nes`](examples/nes) converts a **NES emulator** ([`agnes`](https://github.com/kgabis/agnes)) once.
   It turns every backend language into a native NES player.
 
 Here is a quick summary of what `dewasm` can do:
 
-- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specs.
+- **Support real-world binaries**: Implements most of the [Wasm 1.0](https://www.w3.org/TR/wasm-core-1/) and [WASI Preview 1](https://github.com/WebAssembly/WASI/tree/wasi-0.1) specifications.
   It also implements the [exception-handling proposal](https://github.com/WebAssembly/exception-handling) on most backends.
 - **Target multiple languages**: Translates one WebAssembly binary to Ruby, Bash, Go, and other languages.
 - **Adapt to your needs**: Generates either standalone scripts or importable library source code.
@@ -87,7 +87,7 @@ $ dewasm input.<wasm|wat>
   * `dewasm` accepts a WebAssembly text (WAT) file too.
 - `--target` (or `-t`) selects the target language (required).
 - `--mode` (or `-m`) specifies the translation mode (default: `library`).
-  * `--mode standalone` wires up WASI and runs the module's `_start`.
+  * `--mode standalone` connects WASI and runs the module's `_start`.
   * `--mode library` exposes the module's exports to the target language.
 - `--output` (or `-o`) sets the output file (default: `-`).
   * When `-` is specified, `dewasm` outputs the result to `stdout`.
@@ -103,7 +103,7 @@ Next:
 - [what each backend supports](docs/support.md);
 - [projects built on dewasm](docs/users.md).
 
-## Copyright
+## License
 
 The MIT license.
 See the [LICENSE](./LICENSE) file.

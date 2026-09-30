@@ -17,13 +17,13 @@ The package clause follows the mode:
 | Mode | Package | Type | Constructor |
 | --- | --- | --- | --- |
 | standalone | `main` | `Program` | `NewProgram` |
-| library | `--module-name` lowercased | `--module-name` capitalized | `New` + that type |
+| library | `--module-name` in lower case | `--module-name` with a capital first letter | `New` + that type |
 
 A standalone artifact is a program, so its internal names are fixed.
 Its bytes never depend on `--module-name`.
 A library artifact is a Go *package* someone imports, so the name has to be a Go identifier.
 The grammar is `/\A[A-Za-z_][A-Za-z0-9_]*\z/`, ASCII.
-A name outside that grammar is rejected at conversion time, with no sanitization.
+A name outside that grammar is rejected at conversion time, not rewritten.
 `--module-name rg` gives `package rg` and type `Rg`.
 `--module-name my-lib` gives an error, not `Mylib`.
 
@@ -47,8 +47,8 @@ $ dewasm prog.wasm --target go --mode standalone -o prog.go
 $ go build -o prog prog.go && ./prog --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs follow the shared runtime interface: argv, `--dir` preopens, env, exit/trap.
-It is described in [docs/standalone-interface.md](../standalone-interface.md).
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 
 ## Embedding a library artifact
 
@@ -91,17 +91,17 @@ So add another `.go` file next to the generated one, declaring the same package.
 - a `main.go` importing the package.
 
 Go requires every `import` to precede all other declarations.
-So such a file cannot be *appended* to the generated file itself.
+So such a file cannot be *added to the end* of the generated file itself.
 
 ## Capabilities
 
-Full wasm core 1.0 plus the universal baseline, and **full WASI preview 1 including the filesystem**.
-Non-function imports, multiple tables, and table bulk ops are supported.
+Full wasm core 1.0 plus the universal baseline, and **full WASI Preview 1 including the file system**.
+Non-function imports, multiple tables, and table bulk operations are supported.
 The final exception-handling proposal is supported.
 A thrown wasm exception is a native exception carrying its tag.
-catch_all cannot observe traps.
-C programs based on setjmp/longjmp convert and run; mruby is the covered app case.
-Authoritative matrix: [docs/support.md](../support.md).
+`catch_all` cannot observe traps.
+C programs based on `setjmp`/`longjmp` convert and run; `mruby` is the covered app case.
+The official support table: [`docs/support.md`](../support.md).
 
 ## Providers and library usage
 
@@ -116,7 +116,7 @@ A source is one of two things:
 - an object implementing `ImportProvider` (`WasmImport(name string) any`) that resolves names itself.
 
 Such an object may also implement `ImportAttacher` (`Attach(instance any)`).
-The constructor calls `Attach` once the instance is fully built.
+The constructor calls `Attach` once the instance is built.
 The provider can then reach its memory.
 The e2e override and custom-provider glues are in `crates/dewasm-backend-go/tests/e2e.rs`.
 They are written from inside the artifact's package, so they are unqualified.
@@ -130,11 +130,11 @@ inst.Exports["_start"].(func())()   // random_get falls back to the bundled WASI
 inst = NewProg(Imports{"wasi_snapshot_preview1": &myWasi{}}, nil, nil, nil)
 ```
 
-## Caveats
+## Limits
 
 - **Build cost dominates.**
   Being compiled, the first `go build`/`go run` of a large generated file is the slow step.
   For a large binary the compile costs more than the run.
   The e2e suite compiles to a content-addressed cache binary to pay this once.
 - Native floats mean IEEE semantics come for free.
-  But Go's strict no-FMA contraction is what keeps f32/f64 bit-exact.
+  But Go's strict rule against FMA contraction is what keeps f32/f64 bit-exact.
