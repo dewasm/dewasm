@@ -222,7 +222,8 @@ fn update_snapshots(filter: Option<&str>) -> Result<()> {
 fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths: Vec<String> = args.collect();
-    if paths.is_empty() {
+    let all = paths.is_empty();
+    if all {
         paths = text_check::tracked_files(&root);
     }
     let vocabulary = text_check::vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
@@ -234,6 +235,13 @@ fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
         let mut defects = text_check::file_defects(&root, path);
         defects.extend(vocabulary.file_defects(&root, path));
         for defect in defects {
+            println!("{defect}");
+            count += 1;
+        }
+    }
+    // Whether a table word is used shows only after every file was read.
+    if all {
+        for defect in vocabulary.table_defects() {
             println!("{defect}");
             count += 1;
         }

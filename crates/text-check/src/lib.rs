@@ -267,13 +267,14 @@ mod tests {
     fn text_uses_the_vocabulary() {
         let root = repo_root();
         let vocabulary = vocabulary::Vocabulary::load(&root).unwrap_or_else(|e| panic!("{e}"));
-        let report: Vec<String> = tracked_files(&root)
+        let mut report: Vec<String> = tracked_files(&root)
             .iter()
             .flat_map(|path| vocabulary.file_defects(&root, path))
             .collect();
+        report.extend(vocabulary.table_defects());
         assert!(
             report.is_empty(),
-            "text uses words that agents/vocabulary.md does not allow:\n{}\n\
+            "text and agents/vocabulary.md disagree:\n{}\n\
              Run `cargo xtask check-text <path>` to check a file again.",
             report.join("\n")
         );

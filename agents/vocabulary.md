@@ -28,13 +28,16 @@ The derivation rules skip a stem shorter than three letters and the words in the
 
 | Not a derived form |
 | --- |
-| `arity`, `binaryen`, `fatal`, `flattering`, `outlier`, `paren`, `parity`, `refactor`, `relay`, `resume`, `retention`, `retract`, `siren`, `unwasm`, `virtual`, `wasmer` |
+| `arity`, `binaryen`, `fatal`, `flattering`, `header`, `literal`, `outlier`, `paren`, `parity`, `refactor`, `relay`, `resume`, `retention`, `retract`, `siren`, `subscription`, `unwasm`, `virtual`, `wasmer` |
 
 A word from none of these sources is a question, not an error in itself.
 Either a plainer word says the same, or the word belongs in a table below.
 A term of the field names a concept of computing.
 A reader who looks it up reaches an official document.
 A plain word outside the base list is listed when no plainer word of its length says the same.
+
+The check reports a listed word that no text uses, and one that another source already allows.
+Such an entry goes, so the tables hold only the words the text needs.
 
 ## Project terms
 
@@ -46,12 +49,12 @@ That holds where a dictionary also gives it a plain sense: `compile` never means
 | Area | Terms |
 | --- | --- |
 | Programs and builds | `app`, `backend`, `backport`, `baseline`, `builtin`, `cache`, `compile`, `crate`, `fork`, `frontend`, `gem`, `linkage`, `manifest`, `patch`, `prebuilt`, `registry`, `repository`, `runtime`, `standalone`, `subagent`, `subcommand`, `submodule`, `tarball`, `toolchain`, `upstream`, `vendor`, `workspace` |
-| Code | `accessor`, `alias`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `co-inductive`, `collide`, `collision`, `constructor`, `dataflow`, `debug`, `defunctionalize`, `dispatch`, `duck-typed`, `elide`, `elision`, `epilogue`, `exhaustive`, `fallback`, `fallthrough`, `fuse`, `hash`, `header`, `heap`, `hoist`, `identifier`, `immutable`, `inherit`, `initialize`, `initializer`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `materialize`, `mutex`, `namespace`, `offset`, `operand`, `optimization`, `optimize`, `override`, `peephole`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `substring`, `thunk`, `token`, `trampoline`, `tuple`, `unsigned`, `variadic`, `virtual`, `wildcard` |
-| Languages | `associative`, `associativity`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
-| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decode`, `gradual`, `hexadecimal`, `instantiate`, `instantiation`, `little-endian`, `modular`, `modulo`, `mutability`, `mutable`, `normalization`, `normalize`, `opcode`, `overflow`, `overlong`, `passive`, `payload`, `radicand`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `uninitialized`, `validate`, `validation` |
+| Code | `accessor`, `alias`, `arity`, `autoboxing`, `byte`, `bytecode`, `callback`, `callee`, `callsite`, `co-inductive`, `collide`, `constructor`, `dataflow`, `debug`, `defunctionalize`, `dispatch`, `duck-typed`, `elide`, `epilogue`, `exhaustive`, `fallback`, `fallthrough`, `fuse`, `hash`, `header`, `heap`, `hoist`, `immutable`, `inherit`, `initialize`, `inline`, `integer`, `interned`, `invariant`, `iteration`, `keyword`, `lambda`, `literal`, `lookup`, `macro`, `mask`, `materialize`, `mutex`, `namespace`, `offset`, `operand`, `optimize`, `override`, `peephole`, `precedence`, `precondition`, `recursion`, `recursive`, `relay`, `sanitizer`, `scalar`, `selector`, `signature`, `spill`, `stub`, `subclass`, `substring`, `thunk`, `token`, `trampoline`, `tuple`, `variadic`, `virtual`, `wildcard` |
+| Languages | `associative`, `bignum`, `fixnum`, `flonum`, `goroutine`, `nameref`, `splat`, `subscript`, `subshell`, `ternary`, `unary` |
+| WebAssembly and numbers | `big-endian`, `bitwise`, `canonical`, `canonicalize`, `clamp`, `congruence`, `decode`, `gradual`, `hexadecimal`, `instantiate`, `little-endian`, `modular`, `modulo`, `mutable`, `normalization`, `opcode`, `overflow`, `overlong`, `passive`, `payload`, `radicand`, `saturate`, `significand`, `softfloat`, `sticky`, `subnormal`, `tag`, `ulp`, `underflow`, `validate` |
 | Systems and WASI | `buffer`, `checksum`, `flush`, `headless`, `preopen`, `pseudo-terminal`, `sandbox`, `socket`, `stdio`, `subscription` |
-| Data and records | `amalgamation`, `collation`, `compress`, `compression`, `decompress`, `invalidate`, `invalidation`, `query`, `rollback`, `schema`, `verdict` |
-| Tests and tools | `benchmark`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `linter`, `lollipop`, `microbenchmark`, `oracle`, `parse`, `parser`, `shim`, `snapshot`, `suite`, `testsuite`, `workload` |
+| Data and records | `amalgamation`, `collation`, `compress`, `decompress`, `invalidate`, `query`, `rollback`, `schema`, `verdict` |
+| Tests and tools | `benchmark`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `lollipop`, `microbenchmark`, `oracle`, `parse`, `shim`, `snapshot`, `suite`, `testsuite`, `workload` |
 | Graphics and games | `dot`, `emulator`, `framebuffer`, `pixel`, `shareware`, `tick` |
 | Text and markup | `glob`, `kebab-case`, `markup`, `slug`, `whitespace` |
 
@@ -66,7 +69,7 @@ A general word such as `bug` works better with its kind: a crash, a wrong result
 
 | Words |
 | --- |
-| `acceptance`, `align`, `alternating`, `ambient`, `ambiguous`, `archive`, `arithmetic`, `batch`, `browser`, `bug`, `calibrate`, `calibration`, `checklist`, `circular`, `circularity`, `compatible`, `console`, `copyright`, `cursor`, `decimal`, `default`, `defer`, `dependency`, `deterministic`, `digit`, `directory`, `dividend`, `exponent`, `falsifiable`, `fetch`, `font`, `generic`, `incremental`, `indentation`, `interactive`, `interleave`, `interpolate`, `interpolation`, `laptop`, `legacy`, `median`, `microsecond`, `milestone`, `millisecond`, `monotonic`, `nanosecond`, `numeric`, `opaque`, `optimistic`, `outward`, `palette`, `pending`, `pessimistic`, `placeholder`, `prefix`, `remainder`, `reproducible`, `roadmap`, `sanity`, `script`, `slideshow`, `sparse`, `suffix`, `template`, `texture`, `timestamp`, `verify`, `width`, `workflow` |
+| `acceptance`, `align`, `alternating`, `ambient`, `ambiguous`, `archive`, `arithmetic`, `batch`, `browser`, `bug`, `calibrate`, `checklist`, `circularity`, `compatible`, `console`, `copyright`, `cursor`, `decimal`, `default`, `defer`, `dependency`, `deterministic`, `digit`, `directory`, `dividend`, `exponent`, `fake`, `falsifiable`, `fetch`, `font`, `generic`, `incremental`, `indentation`, `interactive`, `interleave`, `interpolate`, `laptop`, `legacy`, `median`, `microsecond`, `milestone`, `millisecond`, `monotonic`, `nanosecond`, `numeric`, `opaque`, `optimistic`, `outward`, `palette`, `pending`, `pessimistic`, `placeholder`, `prefix`, `remainder`, `reproducible`, `roadmap`, `sanity`, `script`, `slideshow`, `sparse`, `suffix`, `template`, `texture`, `timestamp`, `verify`, `width`, `workflow` |
 
 ### Terms of one context
 
@@ -77,7 +80,7 @@ Elsewhere the same word would be a term nobody defined for that text.
 | --- | --- |
 | `automap`, `demo`, `strafe`, `tic` | `examples/doom/`, `agents/decisions/50-doom-example-shape.md`, `agents/decisions/53-doom-frame-snapshot.md` |
 | `alternate` (the terminal's alternate screen) | `examples/` |
-| `balloon` (the speech balloon of `cowsay`) | `agents/decisions/95-cowsay-own-implementation.md` |
+| `balloon` (the speech balloon of the cowsay program) | `agents/decisions/95-cowsay-own-implementation.md` |
 
 ### Units
 
@@ -113,7 +116,7 @@ Anywhere else a use of one is likely a metaphor.
 
 | Terms |
 | --- |
-| `abbreviation`, `bold`, `colon`, `dash`, `hyphen`, `idiom`, `imperative`, `intensifier`, `modifier`, `punctuation`, `semicolon`, `subordinate` |
+| `abbreviation`, `bold`, `colon`, `dash`, `hyphen`, `idiom`, `imperative`, `intensifier`, `punctuation`, `semicolon`, `subordinate` |
 
 ### Names
 

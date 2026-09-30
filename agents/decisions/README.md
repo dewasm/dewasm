@@ -123,7 +123,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 94 | [Codon Backend Lowering Conventions](94-codon-backend-lowering.md) | Accepted |
 | 95 | [`cowsay` Comes From Our Own Implementation, Published Upstream](95-cowsay-own-implementation.md) | Accepted |
 | 96 | [Generated Output Must Survive Ahead-of-Time Compilation](96-generated-code-compiles-ahead-of-time.md) | Accepted |
-| 97 | [A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Hidden](97-optional-host-libraries.md) | Accepted |
+| 97 | [A Host Library the Runtime May Lack Is Optional; Its Absence Is Refused, Not Faked](97-optional-host-libraries.md) | Accepted |
 | 98 | [A Sentence Is at Most 100 Characters as Read](98-sentence-length-bound.md) | Accepted |
 | 99 | [Text Uses a Learner Word List Plus Project Terms](99-allowed-vocabulary.md) | Accepted |
 
