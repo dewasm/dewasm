@@ -3,7 +3,7 @@
 //! SVG files, not Mermaid: the span forces a log10 axis, which Mermaid's `xychart` lacks.
 //! Two files per chart, not CSS `prefers-color-scheme`.
 //! GitHub's sanitizer is unreliable about CSS inside an SVG, so a `<picture>` picks between modes.
-//! The two modes are baked into the files.
+//! Each mode is written into its own file.
 //!
 //! The form is a horizontal lollipop, fastest at the top, not bars.
 //! A bar encodes length from a zero that a log axis does not have.
@@ -12,7 +12,7 @@
 //! The axis is always seconds, never a ratio, so charts can be read against each other.
 //! It is per *iteration* for a microbenchmark and per *run* for an app; the title says which.
 //! The plotted statistic is the median.
-//! The minimum is the better estimator (noise is one-sided), but the median is what a user sees.
+//! The minimum is the better statistic (noise is one-sided), but the median is what a user sees.
 //! Here the two differ by well under 1%.
 //!
 //! [`lollipop`] and the theme around it are the drawing, with the unit left open.
@@ -30,7 +30,7 @@ const WIDTH: f64 = 820.0;
 const PAD: f64 = 14.0;
 /// Right edge of the runner-label column.
 const LABEL_RIGHT: f64 = 152.0;
-/// The plot area: gridlines, rules and dots live between these two.
+/// The plot area: grid lines, rules and dots live between these two.
 const PLOT_LEFT: f64 = 168.0;
 const PLOT_RIGHT: f64 = 726.0;
 /// Right edge of the value column.
@@ -41,7 +41,7 @@ const PLOT_TOP: f64 = 74.0;
 const ROW_H: f64 = 24.0;
 const FONT: f64 = 12.0;
 
-/// One workload's chart, rendered in both modes plus the alt text they share.
+/// One workload's chart, rendered in both modes plus the `alt` text they share.
 pub struct Chart {
     /// The workload label this illustrates, used to place it above the matching table.
     pub workload: String,
@@ -54,18 +54,18 @@ pub struct Chart {
 
 /// What one point on the axis is a duration *of*.
 /// Both arms are seconds: this only names the denominator.
-/// The title and alt text have to state it.
+/// The title and `alt` text have to state it.
 /// Otherwise the two kinds of chart would look comparable when they are not.
 #[derive(Clone, Copy, PartialEq)]
 enum Quantity {
     /// A microbenchmark: compute time `t(N) - t(0)` divided by the calibrated iteration count.
     PerIteration,
-    /// An app: the whole wall time of one run, startup included.
+    /// An app: the whole wall time of one run, start included.
     PerRun,
 }
 
 impl Quantity {
-    /// How the axis names itself, in the title and in the alt text.
+    /// How the axis names itself, in the title and in the `alt` text.
     fn phrase(self) -> &'static str {
         match self {
             Quantity::PerIteration => "seconds per iteration",
@@ -78,16 +78,16 @@ impl Quantity {
 /// Assigned by family so that a filter or a re-sort never repaints a runner.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Family {
-    /// wasmtime here; the wasm binary itself in the size record.
+    /// `wasmtime` here; the wasm binary itself in the size record.
     Baseline,
     Dewasm,
-    /// A wasm runtime executing the module natively: wasmer, wasmedge, wazero, wasm3.
+    /// A wasm runtime executing the module natively: `wasmer`, `wasmedge`, `wazero`, `wasm3`.
     /// It is split out from [`Family::Baseline`], so a reader need not know which is the reference.
     /// It is split out from [`Family::Interpreter`] too.
     /// "An interpreter written in Go" and "an interpreter written in Ruby" are different things.
     Native,
     /// A wasm interpreter running on a host language.
-    /// It is either hand-written (pywasm, wardite) or converted by dewasm (the `wasm3-*` runners).
+    /// It is hand-written (`pywasm`, `wardite`) or converted by dewasm (the `wasm3-*` runners).
     /// The comparison dewasm actually cares about.
     Interpreter,
 }
@@ -100,7 +100,7 @@ fn family(runner: &str) -> Family {
         r if r.starts_with("pywasm") || r.starts_with("wardite") || r.starts_with("wasm3-") => {
             Family::Interpreter
         }
-        // Anything later added beside wasmtime as a reference runtime.
+        // Anything later added beside `wasmtime` as a reference runtime.
         _ => Family::Baseline,
     }
 }
@@ -156,8 +156,8 @@ pub struct Row {
     pub family: Family,
 }
 
-/// How a chart spells a plotted value and a power-of-ten gridline label.
-/// The renderer is unit-agnostic.
+/// How a chart spells a plotted value and a power-of-ten grid line label.
+/// The renderer does not depend on the unit.
 /// These two functions are the whole difference between a seconds chart and a bytes chart.
 pub struct Units {
     pub value: fn(f64) -> String,
@@ -177,7 +177,7 @@ const BENCH_LEGEND: [(Family, &str); 4] = [
 ];
 
 /// A chart for every workload the record has at least two measurements for, in document order.
-/// A workload the run did not cover simply produces none.
+/// A workload the run did not cover produces none.
 /// `--render` has to work on an old or filtered record too.
 pub fn charts(report: &Report) -> Vec<Chart> {
     ordered_workloads(report)
@@ -225,7 +225,7 @@ fn rows(report: &Report, workload: &str, quantity: Quantity) -> Option<Vec<Row>>
         .filter_map(|cell| match &cell.outcome {
             Outcome::Ok(m) => {
                 let seconds = match quantity {
-                    // ns/op is what the table publishes; seconds is what the axis needs.
+                    // `ns/op` is what the table publishes; seconds is what the axis needs.
                     Quantity::PerIteration => m.ns_per_op_median.map(|ns| ns / 1e9),
                     Quantity::PerRun => Some(m.total.median_s),
                 };
@@ -245,8 +245,8 @@ fn rows(report: &Report, workload: &str, quantity: Quantity) -> Option<Vec<Row>>
     Some(rows)
 }
 
-/// Alt text derived from the data rather than written by hand.
-/// It then states the finding and cannot go stale when the suite is re-run.
+/// `alt` text derived from the data rather than written by hand.
+/// It then states the finding and cannot go out of date when the suite is re-run.
 fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
     let fastest = &rows[0];
     let slowest = &rows[rows.len() - 1];
@@ -312,7 +312,8 @@ pub fn lollipop(
         theme.surface
     );
 
-    // Gridlines and their labels are recessive: hairline, secondary ink, low opacity.
+    // Grid lines and their labels draw little attention: thin stroke, secondary text color.
+    // The lines also have a low `stroke-opacity`.
     let mut tick = first_tick;
     while 10f64.powi(tick) <= domain_max * 1.000001 {
         let value = 10f64.powi(tick);
@@ -355,7 +356,7 @@ pub fn lollipop(
                 r#"<line x1="{PLOT_LEFT:.1}" y1="{cy:.1}" x2="{x:.1}" y2="{cy:.1}" stroke="{color}" stroke-width="2" stroke-opacity="0.45"/>"#
             );
         }
-        // A 2px surface ring keeps the dot from merging into a gridline it happens to land on.
+        // A 2px surface ring keeps the dot from merging into a grid line it happens to land on.
         let _ = writeln!(
             out,
             r#"<circle cx="{x:.1}" cy="{cy:.1}" r="5.5" fill="{color}" stroke="{}" stroke-width="2"/>"#,
@@ -411,7 +412,7 @@ fn text_width(text: &str, font_size: f64) -> f64 {
     text.chars().count() as f64 * font_size * 0.55
 }
 
-/// A factor between two plotted values, used for the span sentence in the alt text.
+/// A factor between two plotted values, used for the span sentence in the `alt` text.
 /// Rounded to three significant figures above 1000x: `23100x`, not `23102x`.
 pub fn fmt_ratio(ratio: f64) -> String {
     if ratio < 10.0 {
@@ -424,8 +425,8 @@ pub fn fmt_ratio(ratio: f64) -> String {
 }
 
 /// The SI prefix a duration reads best in.
-/// That is the largest unit that still leaves a mantissa of at least 1.
-/// The `0.999999` slack is there because `10f64.powi(-6)` is not exactly `1e-6`.
+/// That is the largest unit that still leaves a value of at least 1.
+/// The `0.999999` margin is there because `10f64.powi(-6)` is not exactly `1e-6`.
 /// Without it, a tick that landed one ULP low would be labelled `1000 ns` instead of `1 µs`.
 fn si_unit(seconds: f64) -> (f64, &'static str) {
     const UNITS: [(f64, &str); 4] = [(1.0, "s"), (1e-3, "ms"), (1e-6, "µs"), (1e-9, "ns")];
@@ -451,8 +452,8 @@ fn fmt_time(seconds: f64) -> String {
     format!("{mantissa:.decimals$} {unit}")
 }
 
-/// A power-of-ten gridline label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`.
-/// Bare mantissa and unit, no decimals.
+/// A power-of-ten grid line label: `1 ns`, `10 ns`, `1 µs`, `1 ms`, `1 s`.
+/// Only the number and the unit, no decimals.
 /// An exponent (`1e-9`) is a notation a reader has to decode.
 /// These labels are read at a glance.
 fn fmt_tick(seconds: f64) -> String {
@@ -479,7 +480,7 @@ fn sig3(value: f64) -> String {
 }
 
 /// XML text escaping.
-/// Runner labels are safe, titles and generated alt text are not guaranteed to be.
+/// Runner labels are safe, titles and generated `alt` text are not guaranteed to be.
 fn escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

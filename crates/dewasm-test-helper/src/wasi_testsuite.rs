@@ -1,30 +1,30 @@
 //! Official WASI preview-1 conformance harness.
 //! It drives the prebuilt `WebAssembly/wasi-testsuite` modules through the standalone interface.
 //! They come from the submodule `tests/wasi-testsuite`, branch `prod/testsuite-base`.
-//! This mirrors `spec.rs`'s structure: one libtest-mimic [`Trial`] per `.wasm`.
+//! This mirrors `spec.rs`'s structure: one `libtest-mimic` [`Trial`] per `.wasm`.
 //! A missing submodule fails loud with an assert.
-//! An `EXPECTED_FAILURES` list is checked *both ways*, exactly like the spec harness.
+//! An `EXPECTED_FAILURES` list is checked *both ways*, exactly like the specification harness.
 //! So an unexpectedly-passing listed test is a hard failure.
 //!
-//! Each `<name>.wasm` may carry a co-located `<name>.json` manifest.
+//! Each `<name>.wasm` may carry a `<name>.json` manifest beside it.
 //! It follows the upstream v0 schema: `args`, `env`, `root`, `exit_code`, `stdout`, `stderr`.
 //! The runner converts the module in [`Mode::Standalone`].
 //! It mounts the manifest's `root` fixture at guest `/`.
-//! The mount is a fresh temp copy, so trials stay hermetic.
+//! The mount is a fresh temporary copy, so trials stay isolated.
 //! The runner sets `env`/`args`, then asserts the process exit code.
-//! When the manifest pins stdout/stderr, it asserts those too.
-//! The `root`→`/` mapping mirrors upstream's own wasmtime adapter (`--dir {root}::/`).
+//! When the manifest gives an expected `stdout`/`stderr`, it asserts those too.
+//! The `root`→`/` mapping mirrors upstream's own Wasmtime adapter (`--dir {root}::/`).
 //!
-//! These count as a *failure*: a wrong exit code, a stdout mismatch, or a conversion refusal.
+//! These count as a *failure*: a wrong exit code, a `stdout` mismatch, or a conversion refusal.
 //! The refusal is one attributed to a declared-unsupported feature.
 //! The list then decides whether the failure is expected.
 //! Every list entry names the WASI function or interface behaviour responsible.
 //!
-//! The Rust suite runs with the host-matched strict errno mode injected; see [`evaluate`].
+//! The Rust suite runs with the host-matched strict `errno` mode injected; see [`evaluate`].
 //!
-//! A list entry may be *host-scoped*: some failures depend on the host libc or interpreter.
+//! A list entry may be *host-scoped*: some failures depend on the host `libc` or interpreter.
 //! One example is macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`.
-//! Another is a Linux JDK truncating symlink times to microseconds.
+//! Another is a Linux JDK truncating symbolic link times to microseconds.
 //! A backend declares those via `expected_failures_macos()`/`expected_failures_linux()`.
 //! The runner merges the host-matching list into the base list.
 //! So an entry that only trips on one host is not flagged as an unexpected pass on the other.
@@ -43,7 +43,7 @@ use crate::backend::BackendUnderTest;
 /// It is the base [`BackendUnderTest`] plus its known-failure list.
 pub trait WasiTestsuiteBackend: BackendUnderTest {
     /// Known trial failures: `(trial name, attribution tag)`.
-    /// The trial name is `"<suite>/<stem>"` (e.g. `"rust/path_link"`).
+    /// The trial name is `"<suite>/<stem>"` (for example `"rust/path_link"`).
     /// The tag names the WASI function or interface behaviour that causes the failure.
     /// That is a declared ENOSYS gap, or a standalone-interface choice.
     /// A listed trial that *passes* is a hard failure: remove it.
@@ -51,7 +51,7 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)];
 
     /// Host-scoped list entries that only fail on a **macOS** host.
-    /// The cause is host libc or interpreter behaviour.
+    /// The cause is host `libc` or interpreter behaviour.
     /// An example is CoreFoundation injecting `__CF_USER_TEXT_ENCODING`.
     /// Merged into [`expected_failures`] only when the harness runs on macOS.
     /// Other hosts ignore them.
@@ -61,17 +61,17 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
     }
 
     /// Host-scoped list entries that only fail on a **Linux** host.
-    /// The cause is host libc or interpreter behaviour.
-    /// An example is a JDK routing NOFOLLOW symlink times through microsecond `lutimes`.
+    /// The cause is host `libc` or interpreter behaviour.
+    /// An example is a JDK routing NOFOLLOW symbolic link times through microsecond `lutimes`.
     /// Merged into [`expected_failures`] only when the harness runs on Linux.
     fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
 
-    /// The trials to run outside the full sweep, the same contract as `SpecBackend::curated_files`.
+    /// The trials to run outside the full run, the same contract as `SpecBackend::curated_files`.
     /// `None` runs every trial, and `Some(list)` marks every trial not in the list as ignored.
     /// For a backend whose per-trial cost is a compile, this keeps the suite in CI's time budget.
-    /// The full sweep still runs in the backend's slowest category.
+    /// The full set still runs in the backend's slowest category.
     fn curated_trials(&self) -> Option<&'static [&'static str]> {
         None
     }
@@ -89,8 +89,8 @@ fn testsuite_dir() -> PathBuf {
 
 /// A parsed test manifest (the upstream v0 legacy schema).
 /// Every field is optional (`#[serde(default)]`).
-/// An absent `.json` means "all defaults" (a still-valid test).
-/// Unknown keys are ignored rather than rejected: serde's default without `deny_unknown_fields`.
+/// A missing `.json` means "all defaults" (a still-valid test).
+/// Unknown keys are ignored rather than rejected: `serde`'s default without `deny_unknown_fields`.
 /// They include the v1 `operations`/`proposals` schema and the suite-level `manifest.json`.
 #[derive(Default, Deserialize)]
 #[serde(default)]
@@ -116,7 +116,7 @@ struct Case {
     manifest: Manifest,
 }
 
-/// Enumerate every `.wasm` under each suite's `wasm32-wasip1` directory.
+/// List every `.wasm` under each suite's `wasm32-wasip1` directory.
 /// Pair each with its optional `<stem>.json`.
 /// The suite-level `manifest.json` has no `.wasm`, so it is never a case.
 fn enumerate() -> anyhow::Result<Vec<Case>> {
@@ -164,7 +164,7 @@ fn enumerate() -> anyhow::Result<Vec<Case>> {
     Ok(cases)
 }
 
-/// Build one libtest-mimic [`Trial`] per prebuilt module.
+/// Build one `libtest-mimic` [`Trial`] per prebuilt module.
 /// This is the `wasi_testsuite_suite!` macro's entry point.
 /// The trial name is `"<suite>/<stem>"`.
 /// So `cargo test --test wasi_testsuite rust` filters by suite.
@@ -174,7 +174,7 @@ pub fn wasi_testsuite_trials(lang: &'static dyn WasiTestsuiteBackend) -> Vec<Tri
     // Merge the base list with the host-matching scoped entries.
     // A failure that only trips on this host is then expected.
     // Its counterpart on the other host is still flagged as a genuine unexpected pass.
-    // Leaked to `'static` because trials outlive this function.
+    // `Vec::leak` makes the list `'static`, because the trials live longer than this function.
     let mut list: Vec<(&'static str, &'static str)> = lang.expected_failures().to_vec();
     if cfg!(target_os = "macos") {
         list.extend_from_slice(lang.expected_failures_macos());
@@ -195,7 +195,7 @@ pub fn wasi_testsuite_trials(lang: &'static dyn WasiTestsuiteBackend) -> Vec<Tri
         .collect()
 }
 
-/// `harness = false` entry point: parse cargo's test arguments and run every trial.
+/// `harness = false` entry point: parse Cargo's test arguments and run every trial.
 pub fn wasi_testsuite_main(lang: &'static dyn WasiTestsuiteBackend) {
     let args = libtest_mimic::Arguments::from_args();
     libtest_mimic::run(&args, wasi_testsuite_trials(lang)).exit();
@@ -230,7 +230,8 @@ fn run_trial(
 }
 
 /// Convert, run, and check one case against its manifest.
-/// Any deviation (conversion refusal, wrong exit code, wrong stdout/stderr) is a [`Outcome::Fail`].
+/// Any deviation is a [`Outcome::Fail`].
+/// That is a conversion refusal, a wrong exit code, or a wrong `stdout`/`stderr`.
 /// The list in [`run_trial`] decides if it is expected.
 fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
     let bytes = match std::fs::read(&case.wasm) {
@@ -248,8 +249,8 @@ fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
         }
     };
 
-    // Mount the `root` fixture at guest `/` from a fresh temp copy.
-    // So a test that creates/removes files never mutates the committed submodule.
+    // Mount the `root` fixture at guest `/` from a fresh temporary copy.
+    // So a test that creates/removes files never changes the committed submodule.
     // It also re-runs cleanly.
     let m = &case.manifest;
     let _scratch = match &m.root {
@@ -270,10 +271,10 @@ fn evaluate(lang: &dyn WasiTestsuiteBackend, case: &Case) -> Outcome {
         .iter()
         .map(|(k, v)| (k.as_str(), v.as_str()))
         .collect();
-    // Pin the Rust suite's errno assertions to the host flavor.
+    // Set the Rust suite's `errno` assertions to the host's variant.
     // Unset, upstream's TestConfig is Permissive: the union of its per-OS arms.
-    // This deliberately deviates from the manifest-only-env rule, scoped to Rust.
-    // The C/assemblyscript suites assert exact environ contents.
+    // This breaks the manifest-only environment rule on purpose, scoped to Rust.
+    // The C/AssemblyScript suites assert exact `environ` contents.
     if case.trial_name.starts_with("rust/") {
         env.push((
             if std::env::consts::OS == "macos" {
@@ -387,7 +388,7 @@ impl Drop for Scratch {
     }
 }
 
-/// Copy the `root` fixture (relative to the module) into a fresh, uniquely named temp directory.
+/// Copy the module-relative `root` fixture into a fresh, uniquely named temporary directory.
 /// So parallel trials never share host state.
 fn stage_root(wasm: &Path, root: &str) -> std::io::Result<Scratch> {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

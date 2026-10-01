@@ -11,10 +11,10 @@ repository.workspace = true
 workspace = true
 
 [features]
-# Opt-in: expands the slow cross-backend `--data-file` real-app cases as active `#[test]`s.
+# Optional: expands the slow cross-backend `--data-file` real-app cases as active `#[test]`s.
 # Without it they are `#[ignore]`d.
 # They live in tests/data_file.rs and convert and run or build the cached qjs.wasm.
-# CI's main run; see docs/testing.md.
+# CI's main run; see `docs/testing.md`.
 slow_test = []
 
 [dependencies]

@@ -1,8 +1,8 @@
 //! Regression tests for issue #27's memory-size overflow.
 //! Java's linear memory is a single `byte[]`, capped at `Integer.MAX_VALUE` bytes.
-//! So a spec-legal size of 32768+ pages (2 GiB+) cannot be represented.
+//! So a size of 32768+ pages (2 GiB+), which the specification allows, cannot be represented.
 //! `memory.grow` must answer -1.
-//! It must never throw `NegativeArraySizeException` from the overflowing int multiply.
+//! It must never throw `NegativeArraySizeException` from the overflowing `int` multiply.
 //! A module whose *initial* size already exceeds the cap can also not be instantiated.
 //! That failure must be a clear trap, not the raw exception.
 //!
@@ -44,8 +44,8 @@ fn convert_and_run(wat: &str, glue: &str) -> Output {
 }
 
 /// `memory.grow` to 32768 pages (2^31 bytes, one past the `byte[]` cap) must return -1.
-/// It must also leave the memory intact and still growable.
-/// With no declared max, `maxPages` defaults to 65536.
+/// It must also leave the memory unchanged and still growable.
+/// With no declared maximum, `maxPages` defaults to 65536.
 /// So only the byte-size guard stands between the request and the overflowing allocation.
 #[test]
 fn grow_beyond_byte_array_cap_returns_minus_one() {

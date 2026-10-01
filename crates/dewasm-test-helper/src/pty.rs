@@ -1,33 +1,34 @@
-//! Real-pty process driving for the interactive-REPL transcript tests.
+//! Process driving on a real pseudo-terminal for the interactive-REPL transcript tests.
 //!
-//! Some programs behave differently when their stdin is a terminal.
-//! The qjs REPL, for one, only enters its interactive line-editing path under one condition.
-//! `fd_fdstat_get` on fd 0 must report a character device.
-//! That path covers the banner, prompts, per-keystroke echo, and result printing.
-//! So proving a converted backend byte-identical to wasmtime on that path needs a genuine pty pair.
+//! Some programs behave differently when their `stdin` is a terminal.
+//! The `qjs` REPL, for one, only enters its interactive line-editing path under one condition.
+//! `fd_fdstat_get` on file descriptor 0 must report a character device.
+//! That path covers the banner, prompts, the echo of each key press, and result printing.
+//! So proving a backend byte-identical to Wasmtime there needs a genuine pseudo-terminal pair.
 //! The pipes the rest of the suite uses are not enough.
 //!
-//! [`run_under_pty`] spawns a command on a fixed-size (80x24) pty and feeds it a scripted input.
+//! [`run_under_pty`] spawns a command on a fixed-size (80x24) pseudo-terminal.
+//! It feeds the command a scripted input.
 //! It reads the whole transcript until the child exits.
 //! It returns the raw bytes, ANSI escapes and all.
 //! Two pacing strategies exist:
 //!
 //! * *prompt-driven* (`prompt: Some(..)`): before each input line, wait for the prompt marker.
 //!   Send the line once the marker appears in the output.
-//!   This synchronizes input with the guest's readiness.
+//!   This makes input wait for the guest's readiness.
 //!   So the transcript is identical no matter how long the guest takes to start.
-//!   A Ruby backend parses a ~200 MB source before qjs even runs.
-//!   A fixed time delay would let the tty buffer every line into one.
+//!   A Ruby backend parses a ~200 MB source before `qjs` even runs.
+//!   A fixed time delay would let the TTY buffer every line into one.
 //!   That would happen before the guest read any of it.
 //! * *time-paced* (`prompt: None`): write each line with a small fixed delay.
 //!   Simpler, but only stable for fast-starting programs.
 //!
-//! WASI p1 has no `winsize`/termios surface.
-//! So the guest cannot switch the pty out of canonical mode: input stays line-buffered.
+//! WASI p1 has no `winsize`/`termios` surface.
+//! So the guest cannot switch the pseudo-terminal out of canonical mode: input stays line-buffered.
 //! The driver echoes it.
-//! The pty size is fixed, `TERM` is pinned, and pacing is prompt-driven.
+//! The pseudo-terminal size is fixed, `TERM` is set to a constant, and pacing is prompt-driven.
 //! With those, the whole transcript is deterministic across engines.
-//! That is what makes the wasmtime-vs-backend byte comparison meaningful.
+//! That is what makes the byte comparison of Wasmtime with a backend meaningful.
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -36,10 +37,10 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
-/// A command to run under a pty.
-/// It holds the program path, its arguments (argv[1..]), and an optional working directory.
+/// A command to run under a pseudo-terminal.
+/// It holds the program path, its arguments (`argv[1..]`), and an optional working directory.
 /// It mirrors the `std::process::Command` surface the rest of the helper builds.
-/// It is spawned onto a pty slave instead.
+/// It is spawned onto a pseudo-terminal slave instead.
 pub struct PtyCommand {
     pub program: PathBuf,
     pub args: Vec<String>,
@@ -49,11 +50,11 @@ pub struct PtyCommand {
 /// Per-line delay for the time-paced (`prompt: None`) strategy.
 const LINE_PACING: Duration = Duration::from_millis(120);
 
-/// Spawn `cmd` on a fresh 80x24 pty, and feed it `input`.
-/// `prompt` selects one of the two pacing strategies in the module docs.
+/// Spawn `cmd` on a fresh 80x24 pseudo-terminal, and feed it `input`.
+/// `prompt` selects one of the two pacing strategies in the module documentation.
 /// Read the full transcript until the child exits, and return the raw bytes.
 ///
-/// The pty size is fixed and `TERM` is pinned to a constant.
+/// The pseudo-terminal size is fixed and `TERM` is set to a constant.
 /// So the transcript does not vary with the developer's terminal.
 /// A child that does not exit (or a prompt that never appears) within `timeout` is killed.
 /// The call then panics (fail loud) rather than hanging the suite.
@@ -76,8 +77,8 @@ pub fn run_under_pty(
         builder.cwd(cwd);
     }
     // Deterministic terminal: `CommandBuilder::new` already inherits the parent environment.
-    // So only pin the one variable a terminal type could vary the output by.
-    // wasmtime and every backend go through this same helper, so both sides see an identical TERM.
+    // So only set the one variable a terminal type could vary the output by.
+    // Wasmtime and every backend use this same helper, so both sides see an identical `TERM`.
     builder.env("TERM", "xterm-256color");
 
     let mut child = pair.slave.spawn_command(builder).expect("spawn on pty");
@@ -101,7 +102,7 @@ pub fn run_under_pty(
                         break;
                     }
                 }
-                // On some platforms a closed pty surfaces as an EIO read error, not a clean EOF.
+                // On some platforms a closed pseudo-terminal reads as EIO, not a clean EOF.
                 // Treat it as end-of-transcript.
                 Err(_) => break,
             }
@@ -221,9 +222,9 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
-/// Split `input` into lines, keeping each line's terminating `\r` or `\n`.
-/// A bare CR is what a terminal sends on Enter.
-/// A trailing unterminated segment is yielded as its own line.
+/// Split `input` into lines, keeping each line's ending `\r` or `\n`.
+/// A lone CR is what a terminal sends on Enter.
+/// A trailing segment with no line ending is yielded as its own line.
 fn split_inclusive_newlines(input: &[u8]) -> Vec<&[u8]> {
     let mut lines = Vec::new();
     let mut start = 0;

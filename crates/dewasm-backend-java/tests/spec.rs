@@ -1,6 +1,6 @@
-//! Java side of the shared spec harness.
+//! Java side of the shared specification harness.
 //! It converts each module with the Java backend to a package-private module class.
-//! That class carries a reflective `invoke`/`globalGet` dispatcher.
+//! That class carries a name-based `invoke`/`globalGet` dispatcher.
 //! The harness phrases every assertion as compiled Java.
 //! The helpers are `check`/`check_trap`/`check_exhaust`/`check_unlinkable`.
 //! Float comparison is bit-exact via `Float.floatToRawIntBits` / `Double.doubleToRawLongBits`.
@@ -10,9 +10,9 @@
 //! Two Java facts shape the phrasing:
 //! - A JVM `StackOverflowError` is *catchable* (unlike Go's fatal goroutine overflow).
 //!   So exhaustion maps directly: `check_exhaust` catches it, as Ruby catches `SystemStackError`.
-//!   No spec-build recursion guard is instrumented into the generated functions.
+//!   The specification build instruments no recursion guard into the generated functions.
 //!   Each assertion is independent.
-//!   So unwinding a mid-call overflow cannot corrupt a later, independent check.
+//!   So unwinding a mid-call overflow cannot change the result of a later, independent check.
 //! - Type/class declarations cannot live inside a method.
 //!   So per-module classes are accumulated in the harness's file-scoped `decls` buffer.
 //!   `assemble` hoists that buffer ahead of `main`'s body.
@@ -32,16 +32,16 @@ use wast::{WastArg, WastRet};
 /// Known assertion-level failures with their attribution.
 /// The file still runs, so regressions in the passing assertions are caught.
 ///
-/// - `import-limits`: an imported func resolves through the single `Rt.Fn` boundary.
+/// - `import-limits`: an imported function resolves through the single `Rt.Fn` boundary.
 ///   No signature is checked at all.
 ///   An imported global/table/ memory/tag is checked only for its *kind* via `instanceof`.
-///   These are not checked: a func's param/result types, a global's value type or mutability.
-///   Neither are a tag's parameter types, nor a table/memory's min/max limits.
+///   Not checked: a function's parameter/result types, a global's value type or mutability.
+///   Neither are a tag's parameter types, nor a table/memory's minimum/maximum limits.
 ///   Every `assert_unlinkable` case testing one of those stays a known gap.
 ///   A kind mismatch is caught, so it is not among them.
 ///   Java's counts match Ruby's, not Go's lower ones.
 ///   Java's uniform `Rt.Fn` and `Object`-valued `Global` box carry no static wasm type.
-///   So the func-signature and global-value-type mismatches are not caught here.
+///   So the function-signature and global-value-type mismatches are not caught here.
 ///   Go's typed assertion rejects those.
 ///   imports.wast contributes 59 of them: its fixture module exports tags.
 ///   So it converts only now that tags are represented.
@@ -49,7 +49,7 @@ use wast::{WastArg, WastRet};
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
 ///   That feature is multi-memory, inside a module that also uses `register`.
 ///   That module never converts.
-///   So a later assertion against the module it would have written into observes stale state.
+///   So a later assertion against the module it would have written into observes out-of-date state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
@@ -72,7 +72,7 @@ impl BackendUnderTest for JavaSpec {
         &JavaBackend
     }
 
-    /// Compile `source` (one `Main.java`) to a content-addressed class-dir cache, and run it.
+    /// Compile `source` (one `Main.java`) to a content-addressed class directory cache, and run it.
     /// Identical programs compile once.
     /// A missing `javac`/`java` fails loud.
     /// A `javac` failure is surfaced as its `Output`, so the harness reports the compile error.
@@ -85,9 +85,9 @@ impl BackendUnderTest for JavaSpec {
         };
 
         dewasm_test_helper::run_command_bytes(
-            // A generous per-thread stack keeps deep but terminating recursions under the limit.
-            // Those are fac and deep br chains.
-            // A runaway still overflows into a catchable StackOverflowError.
+            // A large per-thread stack keeps deep but finite recursions under the limit.
+            // Those are `fac` and deep `br` chains.
+            // An unbounded one still overflows into a catchable StackOverflowError.
             Command::new(&java)
                 .arg("-Xss16m")
                 .arg("-cp")
@@ -119,11 +119,11 @@ impl dewasm_test_helper::SpecBackend for JavaSpec {
 
     fn seed_units(&self) -> &'static [&'static str] {
         &[
-            // check_trap / check_unlinkable / check_exception match these exception types.
+            // `check_trap` / `check_unlinkable` / `check_exception` match these exception types.
             "rt/trap",
             "rt/link_error",
             "rt/wasm_exception",
-            // The _spectest fixture (PREAMBLE) constructs these directly.
+            // The `_spectest` fixture (PREAMBLE) constructs these directly.
             "global/_class",
             "table/_class",
             "memory/_class",
@@ -311,7 +311,7 @@ fn imports_expr(registered: &[(String, String)]) -> String {
     format!("imps({})", entries.join(", "))
 }
 
-/// A wast arg as a boxed Java value (autoboxed inside `new Object[]{...}`).
+/// A `.wast` argument as a boxed Java value (autoboxing inside `new Object[]{...}`).
 fn arg_java(arg: &WastArg<'_>) -> Result<String, String> {
     match arg {
         WastArg::Core(WastArgCore::I32(v)) => Ok(format!("0x{:x}", *v as u32)),
@@ -334,7 +334,7 @@ fn arg_java(arg: &WastArg<'_>) -> Result<String, String> {
     }
 }
 
-/// A boolean comparison of a boxed result slot against an expected wast return.
+/// A boolean comparison of a boxed result slot against an expected `.wast` return.
 fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
     match ret {
         WastRet::Core(WastRetCore::I32(v)) => {
@@ -442,7 +442,7 @@ const PREAMBLE: &str = r#"public class Main {
 
     // A JVM StackOverflowError is catchable, so exhaustion maps to it directly.
     // Ruby's SystemStackError works the same way.
-    // Each assertion is independent, so unwinding a mid-call overflow cannot corrupt a later check.
+    // Each assertion is independent, so unwinding a mid-call overflow cannot break a later check.
     static void check_exhaust(String desc, Runnable thunk) {
         try {
             thunk.run();
@@ -471,7 +471,7 @@ const PREAMBLE: &str = r#"public class Main {
         }
     }
 
-    // Upstream's assert_unlinkable message text never matches ours.
+    // Upstream's `assert_unlinkable` message text never matches ours.
     // A raised Rt.LinkError confirms the import was rejected as unlinkable.
     // Any other throwable means the module linked and then crashed, which must fail.
     static void check_unlinkable(String desc, Runnable thunk) {

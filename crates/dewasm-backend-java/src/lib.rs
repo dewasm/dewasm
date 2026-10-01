@@ -4,21 +4,23 @@
 //!
 //! Lowering conventions:
 //! - i32/i64 are native signed `int`/`long` treated as bit patterns.
-//!   Unsigned ops use `Integer.*`/`Long.*` (`divideUnsigned`, `compareUnsigned`, ...).
+//!   Unsigned operations use `Integer.*`/`Long.*` (`divideUnsigned`, `compareUnsigned`, ...).
 //!   f32/f64 are native `float`/`double`.
 //!   Java is strict IEEE with no FMA contraction.
 //!   So f32 re-rounding and trap-free division need no helper.
 //!   NaN bit paths go through `Float.floatToRawIntBits`/`intBitsToFloat` etc.
 //! - Control flow uses the per-function branch register `_br`, mirroring Python's model.
-//!   The register is depth-insensitive and splittable across methods.
+//!   The register does not depend on depth and is splittable across methods.
 //!   Block/if exits and the function return set `_br`.
-//!   Following siblings are guarded by `if (_br == 0)`; only real loops become `while (true)`.
-//!   No bare `return`/`break` sits mid-sequence.
+//!
+//! Following statements in the same sequence are guarded by `if (_br == 0)`.
+//! Only real loops become `while (true)`.
+//!   No unguarded `return`/`break` sits mid-sequence.
 //!   So Java's "unreachable statement" error cannot arise.
 //!   It also makes the split below mechanical.
 //! - Exception handling is native.
 //!   A tag is an identity object (`Rt.Tag`).
-//!   A thrown exception is an `Rt.WasmException` that doubles as the exnref value.
+//!   A thrown exception is an `Rt.WasmException` that doubles as the `exnref` value.
 //!   A `try_table` is a Java `try`/`catch`.
 //!   Its clauses bind the payload and then set `_br` like any other branch.
 //!   Only `Rt.WasmException` is caught, never `Throwable`.
@@ -33,7 +35,7 @@
 //! The runtime is built from per-method units referenced as `Rt.<name>`/`Memory`/`Table`/`WASI`.
 //! In self-contained output those classes are nested in the module class.
 //! Two artifacts then coexist in one package.
-//! The shared-runtime path the spec harness drives keeps them top-level.
+//! The shared-runtime path the specification harness drives keeps them top-level.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap};
@@ -56,28 +58,28 @@ include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
 /// Estimated body cost above which a function is split into `part` methods.
 /// The split keeps each method under the JVM's 64KB per-method bytecode limit.
-/// Cost is an IR node count; the value is tuned so cowsay's largest functions compile.
+/// Cost is an IR node count; the value is tuned so `cowsay`'s largest functions compile.
 const SPLIT_THRESHOLD: usize = 900;
 
 /// Raw bytes per Base64 data chunk.
 /// Base64 of this (~43.7KB) stays under Java's 64KB (65535-byte) string-literal limit.
 const DATA_CHUNK: usize = 32768;
 
-/// Element-segment size above which the nested `Elem` helper class builds the funcref table.
+/// Element-segment size above which the nested `Elem` helper class builds the `funcref` table.
 /// Below it, the table is built inline in the constructor.
-/// A big table has thousands of funcref lambdas.
+/// A big table has thousands of `funcref` lambdas.
 /// They overflow both `<init>`'s 64KB limit and the module class's 65535-entry constant pool.
 /// The nested class has its own pool.
-/// Tuned so qjs/sqlite (~550 entries) stay inline and only rg-scale tables (~4900) split.
+/// Tuned so `qjs`/SQLite (~550 entries) stay inline and only `rg`-scale tables (~4900) split.
 const ELEM_SPLIT: usize = 1024;
 
-/// Funcref entries per `elem{i}_pK` part method.
+/// `funcref` entries per `elem{i}_pK` part method.
 /// At ~20 bytes of bytecode per entry, a part stays well under the 64KB method limit.
 const ELEM_PART: usize = 512;
 
-/// Funcref entries per `ElemF{c}` filler class.
+/// `funcref` entries per `ElemF{c}` filler class.
 /// Every entry costs its class's constant pool a lambda and a method reference.
-/// The lambda is an invokedynamic, a method handle and a synthetic method (~7 entries).
+/// The lambda is an `invokedynamic`, a method handle and a synthetic method (~7 entries).
 /// The reference is the `P{k}.f{idx}` method the lambda calls (~3 entries).
 /// So one filler class saturates the 65535-entry pool at well under ten thousand entries.
 /// CRuby's 8737-entry table overflowed it (issue #142).
@@ -87,29 +89,29 @@ const ELEM_PER_CLASS: usize = 2048;
 /// Defined-function count above which functions are split across nested `P{k}` helper classes.
 /// Each such class has its own 65535-entry constant pool.
 /// A single class holding thousands of functions overflows the pool.
-/// Their numeric literals, method refs, and names fill it.
-/// qjs (~1500) and sqlite (~1970) fit, but zeroperl (~2450) and rg (~7300) do not.
-/// zeroperl's Perl core is constant-dense enough to overflow under the former 3000 bound.
+/// Their numeric literals, method references, and names fill it.
+/// `qjs` (~1500) and SQLite (~1970) fit, but `zeroperl` (~2450) and `rg` (~7300) do not.
+/// `zeroperl`'s Perl core is constant-dense enough to overflow under the former 3000 bound.
 /// `javac` reported *too many constants*.
-/// The value is just above sqlite's proven single-class size.
+/// The value is just above SQLite's proven single-class size.
 /// A module then partitions only once it exceeds the largest size measured to fit.
 const FN_PARTITION_THRESHOLD: usize = 2000;
 
 /// Defined functions per partition class.
-/// Kept under sqlite's proven single-class function count so no partition's pool overflows.
+/// Kept under SQLite's proven single-class function count so no partition's pool overflows.
 const FN_PER_PARTITION: usize = 1500;
 
-/// A branch-register sentinel for "return from the function".
+/// A branch-register value reserved for "return from the function".
 /// It is distinct from any real label id, since those are small.
 /// Emitted as `-1`.
 const RETURN_SENTINEL: u32 = u32::MAX;
 
-/// The runtime unit bundler for Java (see crates/dewasm-backend-java/units/).
+/// The runtime unit bundler for Java (see `crates/dewasm-backend-java/units/`).
 /// Each scope is a *top-level* package-private class that wraps its unit bodies.
 /// The bodies are methods or nested types.
 /// Generated code refers to the classes as `Rt.*` / `Memory` / `Table` / `WASI`.
 /// This is the shared-runtime shape.
-/// The spec harness bundles one runtime for all the modules of a `.wast` file.
+/// The specification harness bundles one runtime for all the modules of a `.wast` file.
 /// The multi-module shared-runtime composition does the same.
 /// Self-contained `Embedded` output uses [`nested_bundler`] instead.
 pub fn bundler() -> &'static RuntimeBundler {
@@ -120,7 +122,7 @@ pub fn bundler() -> &'static RuntimeBundler {
 /// The bundler behind `Backend::generate`'s `Embedded` output.
 /// It wraps the same units, under the same simple names, as `static` **nested** classes.
 /// The classes then belong to the generated module class.
-/// Java resolves a simple name through enclosing class scopes.
+/// Java resolves a simple name through outer class scopes.
 /// So every `Rt.trap(...)` / `new Memory(...)` in the module class keeps its top-level spelling.
 /// This includes the units.
 /// Only an *outside* reference has to spell the module class (`Program.Rt.Fn`).
@@ -196,14 +198,14 @@ pub fn find_javac() -> Option<std::path::PathBuf> {
         .clone()
 }
 
-/// The one way dewasm's suites invoke `javac`: the located compiler.
+/// The one way dewasm's suites run `javac`: the located compiler.
 /// A missing compiler fails loud.
-/// It is capped at C1 with the serial collector and one processor.
+/// It is capped at C1 with the `UseSerialGC` collector and one processor.
 /// C2 cannot repay its compilation cost in a ~1 s run.
 /// N machine-sized JVMs also destroy parallel scaling on a small CI runner.
-/// The heap stays at the default: the slow category's qjs/DOOM sources need the headroom.
+/// The heap stays at the default: the slow category's `qjs`/DOOM sources need that room.
 /// The `.class` output is byte-identical with and without these flags.
-/// This was verified on the cowsay and qjs standalone sources.
+/// This was verified on the `cowsay` and `qjs` standalone sources.
 pub fn javac_command() -> std::process::Command {
     let javac =
         find_javac().expect("javac not found on PATH (or $DEWASM_JAVAC): see docs/testing.md");
@@ -272,7 +274,7 @@ impl Backend for JavaBackend {
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
             // Tags are identity objects.
-            // A thrown exception is a native Java exception that doubles as the exnref.
+            // A thrown exception is a native Java exception that doubles as the `exnref`.
             // Traps stay uncatchable.
             Feature::ExceptionHandling => SupportStatus::Supported,
             // A trampoline with a body/entry split.
@@ -292,8 +294,8 @@ impl Backend for JavaBackend {
         }];
         // The data file: every segment's bytes concatenated in segment order.
         // The generated `Arrays.copyOfRange(DATA_BLOB, …)` slices rely on this order.
-        // Their offsets are the `data_offsets` prefix sums baked into the code.
-        // Only emitted when there is data to externalize (otherwise nothing reads it).
+        // Their offsets are the `data_offsets` prefix sums written into the code.
+        // Only emitted when there is data for a separate file (otherwise nothing reads it).
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -310,8 +312,8 @@ impl Backend for JavaBackend {
     }
 }
 
-/// Emit just the module class, for the shared spec harness.
-/// It holds the constructor, functions, and the spec-harness `invoke`/`globalGet` dispatch methods.
+/// Emit just the module class, for the shared specification harness.
+/// It holds the constructor, functions, and the harness's `invoke`/`globalGet` dispatch methods.
 /// The harness bundles one runtime for every module in a `.wast` file.
 /// So per-module output carries no runtime classes / `Main`.
 /// Multi-value results, wasm-1.0 imports, and trapping conversions are all exercised here.
@@ -321,7 +323,7 @@ pub fn generate_program_with_units(
     type_name: &str,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&JavaBackend, module)?;
-    // The spec-harness generation path never externalizes: pass None.
+    // The specification harness's generation path never writes a data file: pass None.
     let gen = new_gen(module, type_name.to_string(), false, None);
     let mut body = CodeWriter::new("\t");
     gen.constructor(&mut body);
@@ -348,7 +350,7 @@ fn new_gen(
     data_file: Option<String>,
 ) -> Gen<'_> {
     // Prefix sums: segment `i` begins at `data_offsets[i]` in the concatenated data-file blob.
-    // Only consulted when externalizing.
+    // Only consulted when data goes to a separate file.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -385,7 +387,7 @@ fn new_gen(
 fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     // Standalone output is a self-contained program.
     // Its module class is fixed and unqualified, not derived.
-    // Library output uses the requested name verbatim.
+    // Library output uses the requested name unchanged.
     // A dotted name splits off a package declaration.
     let (package, type_name) = if opts.mode == Mode::Standalone {
         (None, STANDALONE_CLASS.to_string())
@@ -408,9 +410,9 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     // Into its own writer: `uses` must be complete before the runtime bundle is assembled.
     let mut body = CodeWriter::new("\t");
     gen.constructor(&mut body);
-    // Externalized data blob: a static field loaded once from the data file next to this program.
+    // Separate data blob: a static field loaded once from the data file next to this program.
     // The generated `Arrays.copyOfRange(DATA_BLOB, …)` calls slice it.
-    // Only emitted when there is data to externalize (otherwise the generated code never reads it).
+    // Only emitted when there is data for the file (otherwise the generated code never reads it).
     if let Some(data_file_name) = &gen.data_file {
         if !module.datas.is_empty() {
             body.line("");
@@ -440,7 +442,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     // Two artifacts in one package then own their runtime classes (trap type above all).
     // Otherwise one would silently win.
     // Nothing inside the class changes.
-    // Java resolves `Rt`/`Memory`/`Table`/`WASI` through the enclosing scope.
+    // Java resolves `Rt`/`Memory`/`Table`/`WASI` through the outer scope.
     let bundle = nested_bundler().bundle(&uses, 1)?;
 
     let mut out = String::from("// Generated by dewasm. Do not edit.\n");
@@ -460,7 +462,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
     Ok(out)
 }
 
-/// Re-indent a block of source by `levels`, leaving blank lines empty.
+/// Add `levels` of indentation to a block of source, leaving blank lines empty.
 fn reindent(src: &str, levels: usize) -> String {
     let pad = "\t".repeat(levels);
     let mut out = String::new();
@@ -477,14 +479,14 @@ fn reindent(src: &str, levels: usize) -> String {
 }
 
 /// The standalone entry point, in four steps:
-/// - Parse the runtime interface: `--dir HOST::GUEST` preopens, then the guest argv.
-///   Its argv[0] is the program name.
+/// - Parse the runtime interface: `--dir HOST::GUEST` preopens, then the guest `argv`.
+///   Its `argv[0]` is the program name.
 /// - Instantiate.
 /// - Run `_start` on a dedicated large-stack thread.
 /// - Map `proc_exit`/trap to a process exit code.
-///   A trap prints to stderr and exits 134, mirroring Ruby/Python/Go.
+///   A trap prints to `stderr` and exits 134, mirroring Ruby/Python/Go.
 ///
-/// The dedicated thread mirrors Python's mitigation of deep-but-valid guest recursion (issue #137).
+/// The dedicated thread mirrors how Python handles deep-but-valid guest recursion (issue #137).
 /// Such recursion can exceed the JVM's default main-thread stack on some hosts.
 /// So `_start` runs on a 64 MiB thread instead.
 /// Exceptions thrown on that thread do not cross `Thread.join()`.
@@ -493,11 +495,12 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     let args = if wasi { "wasiArgs" } else { "null" };
     let env = if wasi { "wasiEnv" } else { "new String[0]" };
     let preopens = if wasi { "preopens" } else { "null" };
-    // Standalone WASI parses a leading run of `--dir HOST::GUEST` flags (wasmtime-style).
-    // It stops at `--` or the first non-flag token; the rest is the guest's argv[1..].
-    // The JVM does not pass the launched file name to `main`, so argv[0] is the module class name.
+    // Standalone WASI parses a leading run of `--dir HOST::GUEST` flags (as Wasmtime does).
+    // It stops at `--` or the first non-flag token; the rest is the guest's `argv[1..]`.
+    // The JVM does not pass the launched file name to `main`.
+    // So `argv[0]` is the module class name.
     // The whole process environment passes through.
-    // Without WASI there is nothing to preopen and no argv to deliver.
+    // Without WASI there is nothing to preopen and no `argv` to deliver.
     let arg_setup = if wasi {
         format!(
             "\t\tjava.util.Map<String, String> preopens = new java.util.HashMap<>();\n\
@@ -592,17 +595,17 @@ fn main_class(type_name: &str, wasi: bool) -> String {
 
 /// The module class a `--mode standalone` program defines.
 /// It is fixed, since nothing outside a self-contained program observes it.
-/// It is also the standalone `argv[0]` the JVM cannot supply (see docs/standalone-interface.md).
+/// It is also the standalone `argv[0]` the JVM cannot supply (see `docs/standalone-interface.md`).
 pub const STANDALONE_CLASS: &str = "Program";
 
 /// Split a validated library-mode module name into `(package, class)`.
-/// The last dot-separated segment is the class name, used verbatim.
+/// The last dot-separated segment is the class name, used unchanged.
 /// The leading segments, if any, are the `package` declaration.
 /// A name like `com.github.dewasm.Sqlite3` gives a conventional package and class name.
 /// The grammar is character-level only.
 /// A segment that is a Java keyword (`int`, `package`, ...) passes here.
 /// It fails in `javac` with the compiler's own message.
-/// A maintained keyword list is not worth its upkeep.
+/// A maintained keyword list is not worth its cost.
 fn split_module_name(name: &str) -> Result<(Option<String>, String)> {
     let segs: Vec<&str> = name.split('.').collect();
     let ok = segs.iter().all(|seg| {
@@ -644,7 +647,7 @@ fn rel_op(op: BinOp) -> Option<(&'static str, Option<&'static str>)> {
     ))
 }
 
-/// A comparison as a Java boolean, from a `rel_op` mapping and the already rendered operands.
+/// A comparison as a Java `boolean`, from a `rel_op` mapping and the already rendered operands.
 fn rel((r, cmp): (&str, Option<&str>), a: &str, b: &str) -> String {
     match cmp {
         None => format!("({a}) {r} ({b})"),
@@ -681,8 +684,9 @@ fn jtype(ty: ValType) -> &'static str {
         ValType::F32 => "float",
         ValType::F64 => "double",
         ValType::FuncRef => "Rt.Funcref",
-        // A caught exception is its own exnref value.
-        // So the reference type is the exception class itself, and a null exnref is Java's null.
+        // A caught exception is its own `exnref` value.
+        // So the reference type is the exception class itself.
+        // A null `exnref` is Java's `null`.
         ValType::ExnRef => "Rt.WasmException",
     }
 }
@@ -744,7 +748,7 @@ struct Gen<'a> {
     split: Cell<bool>,
     /// Part-method counter for the current function.
     next_part: Cell<usize>,
-    /// Monotonic counter for multi-value result destructuring temps (`__mvN`).
+    /// Monotonic counter for the temps (`__mvN`) that unpack a multi-value result.
     mv_counter: Cell<usize>,
     /// Base name (`f47`) and frame type (`Frame47`) of the current function.
     cur_base: RefCell<String>,
@@ -757,7 +761,7 @@ struct Gen<'a> {
     /// When true, a function value (`func_value`) captures the module instance as `inst.`.
     /// Otherwise it references `this` implicitly.
     /// Set while emitting the nested `Elem` helper class's static methods.
-    /// Their funcref lambdas live in a separate constant pool.
+    /// Their `funcref` lambdas live in a separate constant pool.
     elem_capture: Cell<bool>,
     /// Whether this module's functions are split across nested `P{k}` classes.
     /// They are when its function count crosses `FN_PARTITION_THRESHOLD`.
@@ -767,7 +771,7 @@ struct Gen<'a> {
     /// True while emitting a function body inside a `P{k}` partition class.
     /// Instance references then resolve through the passed `inst` parameter.
     in_partition: Cell<bool>,
-    /// When `Some`, data segments are externalized into a binary data file of this filename.
+    /// When `Some`, data segments go into a separate binary data file of this filename.
     /// They are then not embedded as chunked Base64.
     /// The file is loaded once into the static `DATA_BLOB`.
     /// `data_offsets[i]` locates segment `i` in the blob.
@@ -781,7 +785,7 @@ impl<'a> Gen<'a> {
     }
 
     /// The Java expression yielding a data segment's bytes.
-    /// With `--data-file` on, it copies a slice of the externalized `DATA_BLOB`.
+    /// With `--data-file` on, it copies a slice of `DATA_BLOB`, loaded from the data file.
     /// Otherwise it is the inline chunked-Base64 decode.
     /// Both yield a fresh `byte[]`, so the segment field stays independently mutable.
     /// `data.drop` sets that field empty.
@@ -800,9 +804,9 @@ impl<'a> Gen<'a> {
 
     /// Emit the static `DATA_BLOB` field and its loader.
     /// The data file is resolved relative to this program's own code source.
-    /// That is the jar's directory (regular file) or the class directory itself.
+    /// That is the JAR's directory (regular file) or the class directory itself.
     /// So `java -cp <dir> Main` finds the data file alongside the class.
-    /// Only called when externalizing and the module has data.
+    /// Only called when a data file is in use and the module has data.
     fn emit_data_blob(&self, w: &mut CodeWriter, data_file_name: &str) {
         w.line("static final byte[] DATA_BLOB = loadDataBlob();");
         w.line("");
@@ -851,7 +855,7 @@ impl<'a> Gen<'a> {
 
     /// Reference an instance field (`memory`, `g3`, `t0`, `if5`, `data2`, `elem0`).
     /// It is `inst.<name>` when reached via a passed instance.
-    /// Otherwise it is the bare name (implicit `this`).
+    /// Otherwise it is the plain name (implicit `this`).
     fn iref(&self, name: &str) -> String {
         if self.via_inst() {
             format!("inst.{name}")
@@ -1038,7 +1042,7 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Tables: imported first, then defined (index space is imported_tables ++ tables).
+        // Tables: imported first, then defined (index space is `imported_tables` ++ `tables`).
         for (i, import) in m.imported_tables.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -1074,7 +1078,8 @@ impl<'a> Gen<'a> {
         }
 
         // Globals: imported first, then defined; every global is a boxed `Global`.
-        // Defined-global inits may read imported globals, so they resolve after the imported ones.
+        // Defined-global initializers may read imported globals.
+        // So they resolve after the imported ones.
         for (i, import) in m.imported_globals.iter().enumerate() {
             self.emit_typed_import(
                 w,
@@ -1094,7 +1099,7 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Tags: imported first, then defined (index space is imported_tags ++ tags).
+        // Tags: imported first, then defined (index space is `imported_tags` ++ `tags`).
         // A defined tag is a fresh identity object.
         // An imported one must be the very object its origin defined.
         // That is what makes `catch` match across instances.
@@ -1181,7 +1186,7 @@ impl<'a> Gen<'a> {
             ));
         }
 
-        // Let import providers bind to the fully-constructed instance.
+        // Let import providers bind to the constructed instance.
         let has_imports = !m.imported_funcs.is_empty()
             || !m.imported_globals.is_empty()
             || !m.imported_tables.is_empty()
@@ -1217,7 +1222,7 @@ impl<'a> Gen<'a> {
 
         // Per-segment data initializers, called in order from the constructor (see above).
         // Each is a self-contained method.
-        // So an oversized segment never bloats `<init>` past the 64KB method limit.
+        // So a segment of any size never pushes `<init>` past the 64KB method limit.
         for (i, data) in m.datas.iter().enumerate() {
             let blob = self.data_expr(i, &data.data);
             w.line("");
@@ -1243,10 +1248,10 @@ impl<'a> Gen<'a> {
             w.line("}");
         }
 
-        // The nested `Elem` helper class builds any oversized funcref table.
+        // The nested `Elem` helper class builds any `funcref` table that is too large.
         // See the element-segment loop above.
         // A separate class has its own 65535-entry constant pool.
-        // Its thousands of funcref lambdas land there instead of in the module class's pool.
+        // Its thousands of `funcref` lambdas land there instead of in the module class's pool.
         // Chunked `elem{i}_pK` part methods fill each table to stay under the 64KB method limit.
         if !split_elems.is_empty() {
             self.emit_elem_class(w, &split_elems);
@@ -1276,11 +1281,11 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// Emit the nested `Elem` helper class for the oversized element segments in `split_elems`.
+    /// Emit the nested `Elem` helper class for the too-large element segments in `split_elems`.
     /// Each segment `i` gets an `elem{i}(inst)` factory that allocates the array.
     /// The factory calls chunked `elem{i}_pK(inst, a)` fillers.
     /// The fillers live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` entries each.
-    /// So no single pool holds more funcref lambdas than it can address.
+    /// So no single pool holds more `funcref` lambdas than it can address.
     fn emit_elem_class(&self, w: &mut CodeWriter, split_elems: &[usize]) {
         self.elem_capture.set(true);
         let ty = &self.type_name;
@@ -1413,18 +1418,18 @@ impl<'a> Gen<'a> {
         if m.imported_memory.is_some() || m.memory.is_some() {
             w.line("Memory memory;");
         }
-        // Table index space = imported_tables ++ tables.
+        // Table index space = `imported_tables` ++ `tables`.
         for i in 0..(m.imported_tables.len() + m.tables.len()) {
             w.line(format!("Table t{i};"));
         }
-        // Global index space = imported_globals ++ globals; each is a boxed `Global`.
+        // Global index space = `imported_globals` ++ `globals`; each is a boxed `Global`.
         for i in 0..(m.imported_globals.len() + m.globals.len()) {
             w.line(format!("Global g{i};"));
         }
         for i in 0..m.imported_funcs.len() {
             w.line(format!("Rt.Fn if{i};"));
         }
-        // Tag index space = imported_tags ++ tags.
+        // Tag index space = `imported_tags` ++ `tags`.
         if !m.imported_tags.is_empty() || !m.tags.is_empty() {
             self.use_unit("rt/tag");
         }
@@ -1432,8 +1437,8 @@ impl<'a> Gen<'a> {
             w.line(format!("Rt.Tag tag{i};"));
         }
         if wasi_bundled(m, self.default_wasi, bundler()) {
-            // The bundled WASI is built on first fallback, not in the ctor.
-            // So the ctor arguments are kept for `wasiInstance()` to use.
+            // The bundled WASI is built on first fallback, not in the constructor.
+            // So the constructor arguments are kept for `wasiInstance()` to use.
             w.line("WASI wasi;");
             w.line("String[] wasiArgs;");
             w.line("String[] wasiEnv;");
@@ -1689,7 +1694,7 @@ impl<'a> Gen<'a> {
     /// The arguments go into their slots, then the target, then the branch register.
     /// The branch register unwinds the frame the way a return does.
     /// The arguments are already free of calls.
-    /// The IR spills an effectful operand before the instruction.
+    /// The IR spills an operand with side effects before the instruction.
     /// So nothing between these assignments can reach another trampoline and overwrite a slot.
     fn park_tail(
         &self,
@@ -1746,7 +1751,8 @@ impl<'a> Gen<'a> {
                 )
             }
             ElemItem::Null => "null".to_string(),
-            // ref-typed global element items imply reference types, which conversion rejects.
+            // Element items reading a global of reference type imply reference types.
+            // Conversion rejects those.
             // This arm is unreachable, but must type-check as a Funcref.
             ElemItem::Global(idx) => {
                 format!("(Rt.Funcref) {}.value", self.iref(&format!("g{idx}")))
@@ -1834,10 +1840,10 @@ impl<'a> Gen<'a> {
         let mut local_types = ty.params.clone();
         local_types.extend(func.locals.iter().copied());
 
-        // The memo is keyed by node address.
+        // The `CostMemo` is keyed by node address.
         // So it is only valid while the nodes it covers are live.
         // This is the single entry point for a function body.
-        // So clearing here bounds the memo to one function's statements.
+        // So clearing here bounds the `CostMemo` to one function's statements.
         self.costs.clear();
         let split = self.costs.seq(&func.body) > SPLIT_THRESHOLD;
         self.split.set(split);
@@ -1893,8 +1899,8 @@ impl<'a> Gen<'a> {
             w.line(self.method_head(&ret_ty, &method_name, &params_str));
             w.indent();
             // Locals start at their type's zero.
-            // A run of consecutive locals of one type becomes a single declaration.
-            // Java has no chained assignment in a declarator list.
+            // A run of adjacent locals of one type becomes a single declaration.
+            // Java has no chained assignment inside one declaration.
             // So each name keeps its own initializer and only the type name is shared.
             for run in local_runs(&local_types[nparams..], |t| t) {
                 let lt = local_types[nparams + run.start];
@@ -1928,11 +1934,11 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The spec-harness reflective dispatcher.
+    /// The specification harness's name-based dispatcher.
     /// `invoke(name, args)` boxes every result into an `Object[]`.
-    /// The array is empty for a void export and has one element for a single result.
+    /// The array is empty for a `void` export and has one element for a single result.
     /// A multi-value export returns the function's own `Object[]`.
-    /// Mirrors Go's reflective invoke under Java's static typing.
+    /// Mirrors Go's name-based `invoke` under Java's static typing.
     fn emit_invoke_method(&self, w: &mut CodeWriter) {
         w.line("Object[] invoke(String name, Object[] a) {");
         w.indent();
@@ -1976,7 +1982,7 @@ impl<'a> Gen<'a> {
         w.line("}");
     }
 
-    /// The spec-harness global reader.
+    /// The specification harness's global reader.
     /// It returns the exported boxed global's current value in a one-element `Object[]`.
     /// So the harness treats it like a single-result `invoke`.
     fn emit_global_get_method(&self, w: &mut CodeWriter) {
@@ -2006,10 +2012,10 @@ impl<'a> Gen<'a> {
     /// It becomes chained `part` methods when the function is split and the sub-body is large.
     ///
     /// Returns the sequence's *free* branch targets.
-    /// Those are the label ids it branches to that are not bound within it.
+    /// Those are the labels it branches to that are not bound within it.
     /// The caller unions that set upward, minus the label it binds itself.
     /// So the information is derived once bottom-up.
-    /// Re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
+    /// Re-deriving it top-down at every outer block made conversion quadratic in nesting depth.
     fn emit_body(&self, w: &mut CodeWriter, stmts: &[Stmt], guarded_in: bool) -> BTreeSet<u32> {
         let mut free = BTreeSet::new();
         if self.split.get() && self.costs.seq(stmts) > SPLIT_THRESHOLD {
@@ -2030,11 +2036,11 @@ impl<'a> Gen<'a> {
         free
     }
 
-    /// Split `stmts` into consecutive `part` methods, each below the threshold.
+    /// Split `stmts` into `part` methods in order, each below the threshold.
     /// The `guarded` flag is threaded across the boundaries.
     /// Parts are called unconditionally in order.
     /// Control flow is carried by the `f.br` register, and each part self-guards.
-    /// So an escaped branch simply no-ops the rest.
+    /// So an escaped branch no-ops the rest.
     fn emit_parts(
         &self,
         stmts: &[Stmt],
@@ -2063,9 +2069,9 @@ impl<'a> Gen<'a> {
         names
     }
 
-    /// Split a `br_table`'s targets into consecutive case ranges.
+    /// Split a `br_table`'s targets into adjacent case ranges.
     /// Each range has at most `SPLIT_THRESHOLD` estimated cost.
-    /// Returns every range's exclusive end index.
+    /// Returns every range's end index, one past its last.
     /// So a one-element result means the whole table fits in a single method.
     fn br_table_groups(&self, targets: &[BrTarget]) -> Vec<usize> {
         let mut ends = Vec::new();
@@ -2124,7 +2130,7 @@ impl<'a> Gen<'a> {
         // The index is read once into a scoped local.
         // An out-of-range index takes the default target.
         // The check is unsigned, so a negative `int` is out of range too.
-        // The rest is a plain range cascade over the parts.
+        // The rest is a plain range chain over the parts.
         w.line("{");
         w.indent();
         w.line(format!("int _sw = {};", self.expr(index)));
@@ -2258,7 +2264,7 @@ impl<'a> Gen<'a> {
     ) -> BTreeSet<u32> {
         let cond_s = self.cond(cond);
         if guarded {
-            // `_br == 0 &&` short-circuits.
+            // `_br == 0 &&` evaluates its right side only when the left holds.
             // So `cond` is not evaluated, and cannot trap, while a branch is pending.
             w.line(format!("if ({} == 0 && {cond_s}) {{", self.br()));
         } else {
@@ -2291,13 +2297,13 @@ impl<'a> Gen<'a> {
     /// A clause writes the payload into the target frame's slots.
     /// It then sets the branch register just as a branch out of the body would.
     /// So the handler needs no exit of its own.
-    /// `_br` skips the rest of the enclosing sequence either way.
+    /// `_br` skips the rest of the outer sequence either way.
     /// Only `Rt.WasmException` is caught.
     /// So `catch_all` structurally cannot catch a trap, exhaustion, or the exit path.
     /// The body may still be split into `part` methods.
     /// Every slot lives in the frame object.
     /// An exception unwinding out of a part reaches this `catch` up the JVM stack.
-    /// So the try region stays in one method without pinning the body to it.
+    /// So the try region stays in one method without keeping the body in that method.
     fn emit_try_table(
         &self,
         w: &mut CodeWriter,
@@ -2368,7 +2374,7 @@ impl<'a> Gen<'a> {
     /// It binds the payload into the target frame's slots, then takes the branch.
     /// The payload arrives boxed, the same convention every dynamic boundary uses.
     /// So each value is unboxed to its slot's type.
-    /// The `_ref` kinds bind the exception object itself, which *is* the exnref value.
+    /// The `_ref` kinds bind the exception object itself, which *is* the `exnref` value.
     fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause, free: &mut BTreeSet<u32>) {
         for (i, t) in clause.value_temps.iter().enumerate() {
             let src = if Some(*t) == clause.exn_temp {
@@ -2538,7 +2544,7 @@ impl<'a> Gen<'a> {
                 ));
             }
             // Parked, never called.
-            // The enclosing frame's `_br = -1` unwinds it, including any `try_table` handler.
+            // The outer frame's `_br = -1` unwinds it, including any `try_table` handler.
             // Only then does the entry's trampoline run the callee.
             // The target is the callee's tail entry, built once at instantiation.
             // So a hop allocates nothing.
@@ -2611,11 +2617,11 @@ impl<'a> Gen<'a> {
                 w.line("}");
             }
             Stmt::Unreachable => {
-                // Void method that throws.
+                // A `void` method that throws.
                 // Unlike a `throw`, a statement causes no "unreachable statement" error after it.
                 w.line(format!("{}(\"unreachable\");", self.rt("trap")));
             }
-            // Void helpers that throw.
+            // `void` helpers that throw.
             // As statements, not a Java `throw`, they avoid an "unreachable statement" error.
             // The error would hit the dead code wasm allows after them.
             Stmt::Throw { tag, args } => {
@@ -2707,7 +2713,7 @@ impl<'a> Gen<'a> {
                         self.temp_ref(*src)
                     ));
                 }
-                // is_loop is irrelevant.
+                // `is_loop` is irrelevant.
                 // The loop trailer turns `_br == <loop id>` into a `continue`.
                 // The guards resolve a block/if exit by skipping to the label's reset marker.
                 w.line(format!("{} = {};", self.br(), label));
@@ -2737,7 +2743,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Destructure a multi-value call's `Object[]` into the result temps.
+    /// Unpack a multi-value call's `Object[]` into the result temps.
     /// Each slot is unboxed to its wasm type.
     fn emit_multi_results(&self, w: &mut CodeWriter, results: &[Temp], arr: &str) {
         let n = self.mv_counter.get();
@@ -2754,7 +2760,7 @@ impl<'a> Gen<'a> {
     }
 
     /// A direct call to a function by index.
-    /// An imported one is a boxed `Fn` invoke; a defined one is a primitive method call.
+    /// An imported one is a boxed `Fn` `invoke`; a defined one is a primitive method call.
     fn call_string(&self, func_idx: u32, args: &[String]) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             let ty = self.module.func_type(func_idx);
@@ -2769,7 +2775,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Invoke an `Rt.Fn` value with boxed args.
+    /// Call an `Rt.Fn` value with boxed arguments.
     /// The single result, if any, is unboxed to its Java primitive.
     fn invoke_string(&self, fnv: &str, boxed_args: &str, result: Option<ValType>) -> String {
         let call = format!("{fnv}.invoke(new Object[]{{{boxed_args}}})");
@@ -2799,8 +2805,8 @@ impl<'a> Gen<'a> {
                 self.module.global_type(*idx),
                 &format!("{}.value", self.iref(&format!("g{idx}"))),
             ),
-            // `eqz` of something already emitted as a Java boolean.
-            // Read the wasm 0/1 straight off that boolean.
+            // `eqz` of something already emitted as a Java `boolean`.
+            // Read the wasm 0/1 straight off that `boolean`.
             // Do not materialize the operand's own 0/1 first and test it.
             Expr::Un(UnOp::I32Eqz | UnOp::I64Eqz, a) if is_boolean(a) => {
                 format!("({} ? 0 : 1)", self.cond(a))
@@ -2830,12 +2836,12 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// `expr` in a condition context, as a Java boolean.
+    /// `expr` in a condition context, as a Java `boolean`.
     ///
     /// A wasm comparison yields the i32 0 or 1.
     /// Every conditional context then compares that against 0.
-    /// So the lowering built a conditional expression only to undo it one operation later.
-    /// Emitting the comparison as a Java boolean drops both the conditional and the test.
+    /// So the lowering built a conditional expression only to reverse it one operation later.
+    /// Emitting the comparison as a Java `boolean` drops both the conditional and the test.
     /// The operands are untouched.
     /// So an unsigned view still goes through `Integer.compareUnsigned`/`Long.compareUnsigned`.
     /// Anything else keeps the `!= 0` test.
@@ -2874,7 +2880,7 @@ impl<'a> Gen<'a> {
             I64Clz => format!("(long) Long.numberOfLeadingZeros({a})"),
             I64Ctz => format!("(long) Long.numberOfTrailingZeros({a})"),
             I64Popcnt => format!("(long) Long.bitCount({a})"),
-            // abs/neg are bit ops on the sign bit: they must NOT quiet a NaN.
+            // `abs`/`neg` are bit operations on the sign bit: they must NOT quiet a NaN.
             // Math.abs would leave a negative NaN's sign set.
             F32Abs => format!("Float.intBitsToFloat(Float.floatToRawIntBits({a}) & 0x7fffffff)"),
             F32Neg => format!("Float.intBitsToFloat(Float.floatToRawIntBits({a}) ^ 0x80000000)"),
@@ -2884,9 +2890,9 @@ impl<'a> Gen<'a> {
             F64Neg => format!(
                 "Double.longBitsToDouble(Double.doubleToRawLongBits({a}) ^ 0x8000000000000000L)"
             ),
-            // ceil/floor/nearest/sqrt canonicalize a NaN result to wasm's arithmetic NaN.
+            // `ceil`/`floor`/`nearest`/`sqrt` canonicalize a NaN result to wasm's arithmetic NaN.
             // Java's Math.* may pass a signaling operand through unquieted.
-            // trunc is a helper (single operand eval).
+            // `trunc` is a helper (single operand evaluation).
             F32Ceil => format!("{}((float) Math.ceil({a}))", self.rt("f32_canon")),
             F32Floor => format!("{}((float) Math.floor({a}))", self.rt("f32_canon")),
             F32Trunc => format!("{}({a})", self.rt("f32_trunc")),
@@ -2898,7 +2904,7 @@ impl<'a> Gen<'a> {
             F64Nearest => format!("{}(Math.rint({a}))", self.rt("f64_canon")),
             F64Sqrt => format!("{}(Math.sqrt({a}))", self.rt("f64_canon")),
             I32WrapI64 => format!("((int) ({a}))"),
-            // Trapping float->int conversions go through helpers that trap on NaN/overflow.
+            // Trapping float-to-integer conversions go through helpers that trap on NaN/overflow.
             // The source is widened to double first, which is exact for f32.
             // The saturating signed forms are Java's cast.
             // The saturating unsigned forms need helpers.
@@ -2941,7 +2947,7 @@ impl<'a> Gen<'a> {
 
     fn bin(&self, op: BinOp, a: &str, b: &str) -> String {
         use BinOp::*;
-        // A comparison is a Java boolean.
+        // A comparison is a Java `boolean`.
         // Outside condition position it needs the conditional back to the i32 0 or 1 wasm expects.
         // See `cond`.
         if let Some(r) = rel_op(op) {
@@ -2976,9 +2982,10 @@ impl<'a> Gen<'a> {
             F32Sub | F64Sub => format!("(({a}) - ({b}))"),
             F32Mul | F64Mul => format!("(({a}) * ({b}))"),
             F32Div | F64Div => format!("(({a}) / ({b}))"),
-            // Java's Math.min/max pass a signaling NaN operand through unquieted.
-            // Math.copySign may treat NaN's sign inconsistently.
-            // Wasm min/max return an arithmetic NaN, and copysign is a pure sign bit op.
+            // Java's `Math.min`/`Math.max` pass a signaling NaN operand through unquieted.
+            // `Math.copySign` may read one NaN's sign as positive and another's as negative.
+            // Wasm `min`/`max` return an arithmetic NaN.
+            // Wasm `copysign` is a pure sign bit operation.
             // So both go through explicit code.
             F32Min => format!("{}({a}, {b})", self.rt("f32_min")),
             F32Max => format!("{}({a}, {b})", self.rt("f32_max")),
@@ -3034,7 +3041,7 @@ fn unbox(ty: ValType, expr: &str) -> String {
 }
 
 /// An ENOSYS stub `Rt.Fn` for an unimplemented WASI import.
-/// An i32-result syscall returns errno 52; everything else returns zero values / null.
+/// An `i32`-result system call returns `errno` 52; everything else returns zero values / `null`.
 fn enosys_stub(ty: &dewasm_core::ir::FuncType) -> String {
     match ty.results.first() {
         Some(ValType::I32) => "__a -> 52".to_string(),
@@ -3093,11 +3100,11 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
-/// Add the label ids a non-structured statement branches to into `free`.
-/// A `Return` contributes the RETURN sentinel.
+/// Add the labels a non-structured statement branches to into `free`.
+/// A `Return` contributes `RETURN_SENTINEL`.
 /// Returns whether the statement has any.
 /// Non-empty means the statement may leave `_br` set on fall-through.
-/// Following siblings must then be guarded.
+/// Later statements in the same sequence must then be guarded.
 /// Structured statements get their free set from `emit_body`.
 /// It builds the set bottom-up as it emits.
 fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
@@ -3116,7 +3123,7 @@ fn collect_leaf_free_targets(stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
             true
         }
         // A tail call ends the frame the way a return does: it writes the branch register.
-        // So following siblings must be guarded.
+        // So later statements in the same sequence must be guarded.
         Stmt::Return { .. } | Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
             free.insert(RETURN_SENTINEL);
             true
@@ -3142,14 +3149,14 @@ fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) {
 /// The split decision needs a body's cost *before* that body is emitted.
 /// `emit_body` derives the free-branch-target set bottom-up while emitting.
 /// Unlike that set, the cost cannot be derived during emission.
-/// Asked naively, it is re-derived top-down at every enclosing level.
-/// It is derived again per sibling in `emit_parts`.
+/// Asked without a cache, it is re-derived top-down at every outer level.
+/// It is derived again per statement of a sequence in `emit_parts`.
 /// That is the same O(nodes x nesting depth) shape that made the target query quadratic.
 /// See issue #62.
 ///
 /// Entries are keyed by the *address* of the `Stmt` node.
 /// That is sound because `Gen` borrows its `Module` immutably for the whole of `generate_source`.
-/// Nothing mutates the IR while emitting, and there is no threading.
+/// Nothing changes the IR while emitting, and there is no threading.
 /// So every statement reachable from a function body sits at a fixed, unique address.
 /// It stays there for at least as long as this table.
 /// `Gen::function` clears it per function anyway, to bound it.
@@ -3157,7 +3164,7 @@ fn collect_target_free(t: &BrTarget, free: &mut BTreeSet<u32>) {
 /// Only `Block`/`Loop`/`If` are memoized.
 /// That alone makes the whole query linear.
 /// A leaf's cost is recomputed a bounded number of times.
-/// A structured statement's cost would otherwise be recomputed once per enclosing level.
+/// A structured statement's cost would otherwise be recomputed once per outer level.
 /// It also keeps hashing off the hot leaf path.
 #[derive(Default)]
 struct CostMemo(RefCell<HashMap<usize, usize>>);
@@ -3185,7 +3192,7 @@ impl CostMemo {
                 self.0.borrow_mut().insert(key, c);
                 c
             }
-            // Only a statement holding a body is worth a memo entry.
+            // Only a statement holding a body is worth a `CostMemo` entry.
             // Every other one is computed directly, and `compute` matches them exhaustively.
             _ => self.compute(stmt),
         }
@@ -3276,7 +3283,7 @@ fn expr_cost(expr: &Expr) -> usize {
 /// It checks three kinds of reference:
 /// - `Rt.<name>` helper calls;
 /// - `memory.<name>` memory-method calls;
-/// - per-scope sibling calls: a bare `name(` not preceded by a `.`.
+/// - calls within one scope: an unqualified `name(` not preceded by a `.`.
 ///
 /// A second test compiles the whole bundle with `javac`.
 /// So a syntax error in any unit is caught, not just in the subset any one module uses.
@@ -3300,8 +3307,9 @@ mod units {
 
         let rt_call = Regex::new(r"Rt\.([a-z_][a-z0-9_]*)").unwrap();
         let memory_call = Regex::new(r"\bmemory\.([a-z_][a-z0-9_]*)").unwrap();
-        // One sibling-call matcher per scoped unit: a bare `name(` not preceded by a `.`.
-        // So `memory.init(` is not read as a call to the sibling `init`.
+        // One `sibling_calls` matcher per scoped unit.
+        // It matches an unqualified `name(` not preceded by a `.`.
+        // So `memory.init(` is not read as a call to the unit `init` of the same scope.
         let sibling_calls: Vec<(&str, Regex)> = unit_ids
             .iter()
             .filter_map(|id| {
@@ -3350,7 +3358,7 @@ mod units {
                 );
             }
             for (sibling, re) in &sibling_calls {
-                // Sibling calls are only in-scope (no receiver prefix).
+                // Calls in `sibling_calls` are only in-scope (no receiver prefix).
                 let Some(name) = sibling.strip_prefix(&format!("{scope}/")) else {
                     continue;
                 };

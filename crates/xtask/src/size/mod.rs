@@ -1,5 +1,5 @@
 //! `cargo xtask record-size` and `cargo xtask render-size`: the size record.
-//! It is the sibling of the speed record.
+//! It is the counterpart of the speed record.
 //!
 //! It answers the distribution question with numbers.
 //! Shipping a wasm program means shipping the binary *and* a runtime that can execute it.
@@ -47,7 +47,7 @@ const CORPUS: [&str; 4] = ["cowsay.wasm", "sqlite3-shell.wasm", "qjs.wasm", "rub
 /// Regenerate `docs/sizes/results.md` and its figures from a stored size record.
 /// Converting the corpus with six backends takes minutes.
 /// So a wording fix must not require re-measuring.
-/// The JSON is the record, and the markdown is a view of it.
+/// The JSON is the record, and the Markdown is a view of it.
 pub fn render(args: impl Iterator<Item = String>) -> Result<()> {
     let path = record_to_render(args, SIZE_SUFFIX)?;
     let report = report::load(&path)?;
@@ -120,8 +120,8 @@ fn run() -> Result<()> {
     );
 }
 
-/// Figures the record no longer covers are deleted.
-/// An orphan SVG looks current while nothing links it.
+/// Figures the record no longer covers are removed.
+/// An SVG left behind looks current while nothing links it.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);
     let mut written: Vec<String> = Vec::new();
@@ -199,7 +199,7 @@ fn measure_runtimes() -> Vec<report::Runtime> {
         .collect()
 }
 
-/// A bare executable name resolved against `$PATH`.
+/// An executable name without a directory, resolved against `$PATH`.
 /// It resolves the way the shell does when the runner launches it.
 /// Anything that already has a directory in it is returned unchanged.
 fn on_path(bin: &Path) -> PathBuf {
@@ -218,21 +218,21 @@ fn on_path(bin: &Path) -> PathBuf {
 }
 
 /// What one runtime weighs as installed.
-/// That is the executable with its symlinks resolved.
+/// That is the executable with its symbolic links resolved.
 /// It adds any shared library of its own that the executable actually loads.
 ///
-/// The library rule is not cosmetic in either direction.
+/// The library rule changes the result in both directions.
 /// Homebrew's `wasmedge` executable is 100 kB of front end over a 2.4 MB `libwasmedge`.
 /// Counting the executable alone would report it twenty times too small.
 /// The same Homebrew ships a 55 MB `lib/` beside `wasmtime`.
 /// It holds a static archive and a dylib for embedders.
 /// The statically linked CLI never opens them.
-/// Counting everything in that directory would report wasmtime twice too large.
+/// Counting everything in that directory would report `wasmtime` twice too large.
 /// What is counted is therefore what the executable names.
 /// A candidate library beside it is included only when the executable's bytes hold its filename.
 /// That is where the dynamic linker's own list of dependencies lives.
 /// It is the Mach-O load commands or ELF `DT_NEEDED`.
-/// Aliases resolve to one file, so a library reached through a `.0.dylib` symlink is counted once.
+/// Aliases resolve to one file: a library reached through a `.0.dylib` symbolic link counts once.
 fn weigh(bin: &Path) -> Result<(u64, Vec<Component>)> {
     let exe = std::fs::canonicalize(on_path(bin))
         .with_context(|| format!("failed to resolve {}", bin.display()))?;

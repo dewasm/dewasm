@@ -1,8 +1,8 @@
-//! Softfloat oracle: drives the bash float units with edge and seeded-random vectors.
+//! Softfloat oracle: drives the Bash float units with edge and seeded-random vectors.
 //! It compares every result bit-for-bit against Rust's host IEEE-754 arithmetic.
-//! Its wasm adjustments are canonical NaN results, wasm min/max, and wasm's trunc trap table.
-//! The spec harness remains the bar.
-//! This is the fast development check that pinpoints the exact op and operands on a regression.
+//! Its wasm adjustments are canonical NaN results, wasm `min`/`max`, and wasm's `trunc` trap table.
+//! The specification harness remains the bar.
+//! This is the fast development check that shows the exact operation and operands on a regression.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -136,7 +136,7 @@ fn run_cases(cases: &Cases) {
     let script = format!(
         "{runtime}\nwhile IFS=' ' read -r __op __a __b; do\n  \"rt_$__op\" \"$__a\" \"$__b\"\n  __st=$?\n  if (( __st == 134 )); then\n    echo \"T $TRAP_MSG\"\n  else\n    echo \"$(( R0 ))\"\n  fi\ndone < \"$1\"\n"
     );
-    // Tests run in parallel; keep scratch files distinct per invocation.
+    // Tests run in parallel; keep scratch files distinct per call.
     static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let dir = std::env::temp_dir();
@@ -189,7 +189,7 @@ fn run_cases(cases: &Cases) {
     );
 }
 
-/// Hex rendering for mismatch diagnostics.
+/// Hexadecimal rendering for mismatch diagnostics.
 fn diag(input: &str, got: &str, want: &str) -> String {
     let mut parts = input.split(' ');
     let _op = parts.next();
@@ -235,7 +235,7 @@ fn canon32(x: f32) -> String {
     }
 }
 
-/// Extra unary vectors around integral boundaries for the rounding ops.
+/// Extra unary vectors around integral boundaries for the rounding operations.
 const F64_ROUND_EDGES: &[u64] = &[
     0xbfe0000000000000, // -0.5
     0x4004000000000000, // 2.5
@@ -387,7 +387,7 @@ const INT_EDGES: &[i64] = &[
     0xfffffffffffffbffu64 as i64,
 ];
 
-/// f64 patterns straddling the trunc range boundaries.
+/// f64 patterns on both sides of the `trunc` range boundaries.
 const TRUNC_EDGES64: &[u64] = &[
     0x41dfffffffffffff, // just under 2^31
     0x41e0000000000000, // 2^31
@@ -421,7 +421,7 @@ const TRUNC_EDGES32: &[u32] = &[
     0x3f000000, // 0.5
 ];
 
-/// Wasm's trunc semantics: NaN and out-of-range trap; the bound check is on the truncated value.
+/// Wasm's `trunc` semantics: NaN and out-of-range trap; the bound check is on the truncated value.
 fn oracle_trunc(x: f64, lo: f64, hi_excl: f64) -> Result<f64, &'static str> {
     if x.is_nan() {
         return Err("invalid conversion to integer");
@@ -600,7 +600,7 @@ fn softfloat_conversions() {
     run_cases(&cases);
 }
 
-/// f32 arithmetic through promote/f64/demote: the empirical check of the double-rounding theorem.
+/// f32 arithmetic via `promote`/f64/`demote`: the empirical check of the double-rounding theorem.
 /// The operands are biased toward the 24-bit boundary.
 #[test]
 fn softfloat_f32_arith() {

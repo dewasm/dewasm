@@ -4,7 +4,7 @@
 //! Go is compiled, so it overrides `pty_command`.
 //! The override builds the generated program to a content-addressed cache binary with `go build`.
 //! That binary is the launch recipe the shared `run_standalone_wasi` runs.
-//! It runs with the manifest's env/args/dirs applied.
+//! It runs with the manifest's environment, arguments, and directories applied.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
@@ -14,17 +14,17 @@ use dewasm_test_helper::BackendUnderTest;
 mod common;
 
 /// Known trial failures with their attribution `(trial, tag)`.
-/// They are out-of-scope syscalls and one std-portability gap.
-/// The full WASI p1 filesystem support cannot close that gap on Go.
+/// They are out-of-scope system calls and one portability gap in Go's standard library.
+/// The full WASI p1 file system support cannot close that gap on Go.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
-    // No socket layer in a demo runtime (out of scope, docs/support.md).
+    // No socket layer in an example runtime (out of scope, `docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-    // Setting a symlink's own times (NOFOLLOW) needs lutimes.
-    // Go's std exposes no portable (darwin+linux, build-tag-free) way to call it.
+    // Setting a symbolic link's own times (NOFOLLOW) needs `lutimes`.
+    // Go's standard library exposes no portable (Darwin+Linux, build-tag-free) way to call it.
     // os.Chtimes follows the link.
     // Every regular-file times path is supported.
-    // Only the symlink-target case in this one trial is out of reach.
+    // In this one trial, only the case that targets a symbolic link is out of reach.
     (
         "rust/symlink_filestat",
         "path_filestat_set_times: no portable std lutimes for a NOFOLLOW symlink",

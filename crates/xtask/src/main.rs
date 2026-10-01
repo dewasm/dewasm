@@ -1,15 +1,15 @@
 //! Developer-facing workspace tasks, run as `cargo xtask <command>`.
 //! The alias is in `.cargo/config.toml`.
-//! Explicit subcommands replace the former snapshot-regeneration env-var toggles.
-//! Those toggles sat on the `support_docs` and `apps_wasmtime` tests.
+//! Explicit subcommands replace the former environment variables that regenerated snapshots.
+//! Those variables sat on the `support_docs` and `apps_wasmtime` tests.
 //! The tests are now compare-only and point here when they fail.
 //!
 //! `update-snapshots` regenerates *every* checked-in execution snapshot from one command.
 //! Those are the nine WASI-runner files plus the DOOM and NES frames (issue #114).
-//! The WASI-runner files hold app stdout, the gzip stream, and the filesystem-app stdout.
-//! They also hold the interactive-REPL transcript.
+//! The WASI-runner files hold app `stdout`, including that of apps that use the file system.
+//! They also hold the `gzip` stream and the interactive-REPL transcript.
 //! The frames have custom export/import interfaces, which are driven directly instead.
-//! All of them run on the embedded `wasmtime` crate pinned by `Cargo.lock`.
+//! All of them run on the embedded `wasmtime` crate, at the version `Cargo.lock` records.
 //! Regeneration then reproduces the same bytes on every host.
 //! `update-support-docs` stays separate.
 //! `docs/support.md` is generated documentation, not an execution snapshot.
@@ -20,7 +20,7 @@
 //! It must not embed the engine itself.
 //!
 //! The two measurements are `record-speed` and `record-size`.
-//! `record-speed` runs every dewasm backend against wasmtime.
+//! `record-speed` runs every dewasm backend against Wasmtime.
 //! It also runs them against the wasm interpreters written in the same host languages.
 //! `record-size` compares, per app, the wasm binary against every backend's converted source.
 //! It lists the installed size of each native runtime beside them.
@@ -28,7 +28,7 @@
 //! `render-speed` and `render-size` turn a record into a results page.
 //! Those are `docs/benchmarks/results.md` and `docs/sizes/results.md`.
 //! Unlike the commands above, none of those outputs is a compared snapshot.
-//! Neither a timing nor an installed size is reproducible byte-for-byte.
+//! Neither a timing nor an installed size is reproducible.
 //! So no freshness test guards them.
 //!
 //! `feature-audit` is the app audit test.
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
     }
 }
 
-/// Emit captured snapshot bytes on stdout, where the freshness suite reads them.
+/// Emit captured snapshot bytes on `stdout`, where the freshness suite reads them.
 fn write_stdout(bytes: &[u8]) -> Result<()> {
     let mut out = std::io::stdout().lock();
     out.write_all(bytes)?;
@@ -140,11 +140,11 @@ fn update_support_docs() -> Result<()> {
 /// The DOOM and NES frames yield two: the compared PPM plus a human-facing PNG of the same frame.
 type CapturedFiles = Vec<(PathBuf, Vec<u8>)>;
 
-/// One regenerable execution snapshot.
-/// Its repo-relative `label` is used for the substring filter.
+/// One execution snapshot to regenerate.
+/// Its `label`, a path relative to the repository, is used for the substring filter.
 /// Its `capture` closure reruns the case and returns the files to write.
-/// Capture fails loud on a missing cache or missing wasmtime.
-/// The underlying runners carry the exact setup message.
+/// Capture fails loud on a missing cache or missing `wasmtime`.
+/// The underlying runners carry the exact set-up message.
 struct SnapshotTarget {
     label: String,
     capture: Box<dyn Fn() -> Result<CapturedFiles>>,
@@ -156,14 +156,14 @@ struct SnapshotTarget {
 /// That crate then keeps no `wasmtime`-crate dependency.
 /// Each of the two frame targets emits two files.
 /// One is the compared PPM (`doom_frame.ppm`, `nes_frame.ppm`).
-/// The other is a PNG of the same frame for human inspection, never compared by a test.
+/// The other is a PNG of the same frame for people to view, never compared by a test.
 fn snapshot_targets() -> Vec<SnapshotTarget> {
     let mut targets: Vec<SnapshotTarget> =
         dewasm_test_helper::wasmtime_snapshots(&EmbeddedWasmtime)
             .into_iter()
             .map(|snap| SnapshotTarget {
                 label: snap.label,
-                // Wrap the fail-loud capture (it panics with a setup message) in `Ok`.
+                // Wrap the fail-loud capture (it panics with a set-up message) in `Ok`.
                 // Every target then shares one `Result` signature.
                 capture: Box::new(move || Ok(vec![(snap.path.clone(), (snap.capture)())])),
             })
@@ -189,9 +189,9 @@ fn snapshot_targets() -> Vec<SnapshotTarget> {
     targets
 }
 
-/// Regenerate every execution snapshot, or only those whose repo-relative label contains `filter`.
+/// Regenerate every execution snapshot, or those whose repository-relative label contains `filter`.
 /// One line per file written (path + byte count).
-/// An unmatched filter is an error, so a typo fails loud rather than silently doing nothing.
+/// An unmatched filter is an error, so a mistyped one fails loud rather than doing nothing.
 fn update_snapshots(filter: Option<&str>) -> Result<()> {
     let mut wrote = 0usize;
     for target in snapshot_targets() {

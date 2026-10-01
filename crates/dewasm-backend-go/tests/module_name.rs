@@ -1,5 +1,5 @@
 //! The module-name policy for Go output.
-//! A library artifact is a Go *package*, so its name is validated, not sanitized.
+//! A library artifact is a Go *package*, so its name is validated, not rewritten.
 //! A standalone artifact is a program with fixed internal names.
 //! So its bytes do not depend on the name at all.
 
@@ -22,8 +22,8 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["\npackage main\n", "func NewProgram(", "func main() {"],
 );
 
-/// From a valid name, both mappings are total and fully specified.
-/// The package is the name lowercased; the type is the name with its first letter uppercased.
+/// From a valid name, both mappings are total and specified.
+/// The package is the name in lower case; the type is the name with its first letter in upper case.
 #[test]
 fn library_package_and_type_come_from_the_module_name() {
     for (name, package, ty) in [

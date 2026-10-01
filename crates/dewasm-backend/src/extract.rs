@@ -4,7 +4,7 @@
 //! Ruby's JITs (and several others) compile a method only when it is entered through a call.
 //! They never compile it mid-execution.
 //! So a hot loop inside a function entered once is interpreted forever.
-//! Splitting the body across a call turns it into a method invoked every iteration.
+//! Splitting the body across a call turns it into a method called every iteration.
 //! Such a JIT does compile that method.
 //! The call costs nanoseconds per iteration.
 //! A compiled body of sufficient size saves far more than that.
@@ -30,7 +30,7 @@ use dewasm_core::ir::{BrTarget, Expr, Func, FuncType, Module, Stmt, Temp, ValTyp
 #[derive(Clone, Copy, Debug)]
 pub struct Params {
     /// Minimum region size in IR nodes (statements plus expression nodes).
-    /// Below it the per-iteration call overhead outweighs what a compiled body can save.
+    /// Below it the per-iteration call overhead costs more than a compiled body can save.
     pub min_weight: u32,
     /// Maximum number of parameters an extracted function may take.
     pub max_params: usize,
@@ -109,19 +109,19 @@ enum Var {
 struct Cx<'a> {
     params: &'a Params,
     /// Per loop-body sequence (keyed by its buffer address): the live set at each leading boundary.
-    /// Only top-level boundaries are recorded; `[k]` = live just before the k-th statement.
+    /// Only top-level boundaries are recorded; `[k]` = live just before statement `k`.
     boundaries: BTreeMap<usize, Vec<BTreeSet<Var>>>,
-    /// Types of the enclosing function's locals (params ++ locals).
+    /// Types of the outer function's locals (parameters ++ locals).
     local_tys: Vec<ValType>,
-    /// The enclosing function's temps, extended when a call needs a fresh result temp.
+    /// The outer function's temps, extended when a call needs a fresh result temp.
     temps: &'a mut Vec<Temp>,
     types: &'a mut Vec<FuncType>,
     synths: &'a mut Vec<Func>,
-    /// Function index of the first synthesized function.
+    /// Function index of the first generated function.
     base_idx: u32,
 }
 
-/// `in_try` is true inside any try_table of the same function.
+/// `in_try` is true inside any `try_table` of the same function.
 /// An exception thrown from an extracted region would then skip its write-back of values.
 /// The catch handler could observe the values that write-back skips.
 /// So throw-capable regions are refused there.
@@ -154,7 +154,7 @@ fn try_extract_loop(body: &mut Vec<Stmt>, cx: &mut Cx, in_try: bool) {
         weights.push(weights.last().unwrap().saturating_add(stmt_weight(stmt)));
     }
 
-    // Maximal runs of consecutive closed statements, heaviest first.
+    // Runs of adjacent closed statements, each as long as it can be, heaviest first.
     // The heaviest run is where the loop's work sits.
     let mut runs: Vec<(usize, usize)> = Vec::new();
     let mut start = None;
@@ -409,8 +409,8 @@ fn apply(body: &mut Vec<Stmt>, j: usize, k: usize, ext: Extraction, cx: &mut Cx)
 }
 
 /// Whether every branch inside `stmt` lands on a frame opened inside `stmt` itself.
-/// A statement that returns pins the extraction boundary in front of it.
-/// So does a branch to the enclosing loop or further out.
+/// A statement that returns forces an extraction boundary in front of it.
+/// So does a branch to the outer loop or further out.
 fn closed(stmt: &Stmt) -> bool {
     fn go(stmt: &Stmt, scope: &mut Vec<u32>) -> bool {
         let target_ok = |t: &BrTarget, scope: &Vec<u32>| match t {
@@ -423,12 +423,12 @@ fn closed(stmt: &Stmt) -> bool {
             Stmt::BrTable {
                 targets, default, ..
             } => targets.iter().chain([default]).all(|t| target_ok(t, scope)),
-            // A tail call ends the enclosing wasm frame just as a return does.
-            // So it pins the boundary the same way.
+            // A tail call ends the outer wasm frame just as a return does.
+            // So it forces a boundary the same way.
             Stmt::Return { .. } | Stmt::ReturnCall { .. } | Stmt::ReturnCallIndirect { .. } => {
                 false
             }
-            // Catch targets are resolved outside the try_table's own frame.
+            // Catch targets are resolved outside the `try_table`'s own frame.
             // So they are checked against the scope before it opens.
             Stmt::TryTable { catches, .. } => catches.iter().all(|c| target_ok(&c.target, scope)),
             _ => true,
@@ -616,7 +616,7 @@ fn target_reads(t: &BrTarget, out: &mut BTreeSet<Var>) {
     }
 }
 
-/// Syntactic reads and writes of a whole subtree.
+/// Syntactic reads and writes of `stmts` and everything nested in them.
 fn collect_seq(stmts: &[Stmt], reads: &mut BTreeSet<Var>, writes: &mut BTreeSet<Var>) {
     for stmt in stmts {
         for_each_expr(stmt, &mut |e| expr_reads(e, reads));
@@ -796,9 +796,9 @@ pub(crate) fn for_each_expr_mut(stmt: &mut Stmt, f: &mut impl FnMut(&mut Expr)) 
 /// Those are the only program points the extraction queries.
 struct Liveness {
     /// Live set at each in-scope label's continuation.
-    /// For blocks, ifs and try_tables that is after the frame; for loops it is at the head.
+    /// For blocks, ifs and `try_table`s that is after the frame; for loops it is at the head.
     labels: BTreeMap<u32, BTreeSet<Var>>,
-    /// Union of the live sets at the catch targets of enclosing try_tables.
+    /// Union of the live sets at the catch targets of outer `try_table`s.
     /// That is what an exception thrown here may expose.
     catch_live: BTreeSet<Var>,
     /// Converged head set of every loop analyzed so far, keyed by its label id.
@@ -821,7 +821,7 @@ impl Liveness {
 
     /// Live set before `stmts`, given `after` live at the fall-through exit.
     /// With `record`, stores the boundary sets for this sequence.
-    /// Enclosing loops re-analyze their bodies to a fixpoint.
+    /// Outer loops re-analyze their bodies to a fixed point.
     /// So the last visit's record is the stable one.
     fn seq(&mut self, stmts: &[Stmt], after: BTreeSet<Var>, record: bool) -> BTreeSet<Var> {
         let mut bounds: Vec<BTreeSet<Var>> = Vec::new();
@@ -869,7 +869,7 @@ impl Liveness {
                 for r in results {
                     live.remove(&Var::Temp(*r));
                 }
-                // The callee may throw to an enclosing catch clause.
+                // The callee may throw to an outer catch clause.
                 // So whatever those clauses need stays live across the call.
                 live.extend(self.catch_live.iter().copied());
                 for a in args {
@@ -920,13 +920,13 @@ impl Liveness {
                 l
             }
             Stmt::Loop { label, body } => {
-                // Fixpoint on the live set at the loop head.
+                // Fixed point on the live set at the loop head.
                 // A back edge re-enters the body, and falling off its end exits the loop.
-                // An enclosing loop re-enters this one with inputs that only grow.
-                // The transfer functions are monotone.
-                // So the previous convergence is at or below the new least fixpoint.
-                // Iterating from it then reaches that same least fixpoint.
-                // Starting over from the empty set costs one full fixpoint per entry.
+                // An outer loop re-enters this one with inputs that only grow.
+                // The transfer functions are monotonic.
+                // So the previous convergence is at or below the new least fixed point.
+                // Iteration from it then reaches that same least fixed point.
+                // Starting over from the empty set costs a full fixed-point computation per entry.
                 // That doubles the body passes per nesting level.
                 let mut head = self.loop_heads.get(&label.id).cloned().unwrap_or_default();
                 loop {
@@ -981,7 +981,7 @@ impl Liveness {
             }
             // A tail call ends this frame, so nothing after it is live.
             // `catch_live` does not survive it either.
-            // The callee runs once the enclosing handlers are gone.
+            // The callee runs once the outer handlers are gone.
             // So what it throws cannot reach them.
             Stmt::ReturnCall { args, .. } => {
                 let mut l = BTreeSet::new();

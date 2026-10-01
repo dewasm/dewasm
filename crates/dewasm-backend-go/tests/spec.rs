@@ -1,4 +1,4 @@
-//! Go side of the shared spec harness.
+//! Go side of the shared specification harness.
 //! It converts each module with the Go backend to package-level declarations.
 //! It phrases every assertion as compiled Go:
 //! `check`/`check_trap`/`check_exhaust`/`check_unlinkable`.
@@ -8,7 +8,7 @@
 //!
 //! Three Go facts shape the phrasing:
 //! - Go is statically typed and has no dynamic `invoke`.
-//!   So each generated type carries a reflective dispatcher:
+//!   So each generated type carries a name-based dispatcher:
 //!   `invoke(name, args...) []any` / `globalGet(name) any`.
 //!   It is built where the module, and hence every export's signature, is known.
 //!   The harness asserts the boxed `any` results to the expected type.
@@ -17,9 +17,9 @@
 //!   It goes into the harness's file-scoped `decls` buffer.
 //!   `assemble` hoists that buffer ahead of the body.
 //!   Only instantiation/assertion statements go in the body.
-//! - A runaway recursion overflows Go's goroutine stack *fatally*.
+//! - An unbounded recursion overflows Go's goroutine stack *fatally*.
 //!   That is uncatchable and kills the process.
-//!   So the spec build instruments every generated function with a recursion guard.
+//!   So the specification build instruments every generated function with a recursion guard.
 //!   The guard turns exhaustion into a catchable "call stack exhausted" trap the harness observes.
 
 use std::collections::BTreeSet;
@@ -39,23 +39,23 @@ mod common;
 /// The file still runs, so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: the Go type assertion that resolves an import checks its *kind*.
-///   The kinds are func/global/table/memory/tag.
+///   The kinds are `func`/`global`/`table`/`memory`/`tag`.
 ///   For functions and globals, it checks the full value/signature type too.
 ///   It does not check these against the import site's declared bounds:
 ///   - a global's mutability;
-///   - a table/memory's min/max limits;
+///   - a table/memory's minimum/maximum limits;
 ///   - a tag's parameter types (a tag is an identity object carrying no type at all).
 ///
 ///   Every `assert_unlinkable` case testing one of those stays a known gap.
 ///   The counts are *lower* than Ruby/Python's.
-///   The Go type assertion catches func-signature and global-value-type mismatches.
+///   The Go type assertion catches function-signature and global-value-type mismatches.
 ///   Those backends' kind-only check misses them.
 ///   So only the mutability/limit/tag-type cases remain.
 ///   The two `linking` failures are both global-mutability mismatches.
 /// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
 ///   That feature is multi-memory, inside a module that also uses `register`.
 ///   That module never converts.
-///   So a later assertion against the module it would have written into observes stale state.
+///   So a later assertion against the module it would have written into observes out-of-date state.
 ///   Not a cross-module-linking gap itself.
 ///
 /// `skip-stack-guard-page` is *not* here.
@@ -99,7 +99,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
         EXPECTED_FAILURES
     }
 
-    /// Go compiles each `.wast` file to one program (dominated by compile latency).
+    /// Go compiles each `.wast` file to one program (dominated by compile time).
     /// So a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`.
     /// One function in the suite has a frame cost that trips the recursion guard.
     /// It is this file's `function-with-many-locals`.
@@ -114,16 +114,16 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
 
     fn seed_units(&self) -> &'static [&'static str] {
         &[
-            // check_trap / check_exhaust / check_unlinkable match these types.
+            // `check_trap` / `check_exhaust` / `check_unlinkable` match these types.
             "rt/trap",
             "rt/link_error",
-            // Same for check_exception and rtException.
+            // Same for `check_exception` and `rtException`.
             "rt/exception",
-            // float args are reconstructed bit-exactly.
+            // float arguments are reconstructed bit-exactly.
             // This also pulls in the `math` import the float result comparisons rely on.
             "rt/f32_from_bits",
             "rt/f64_from_bits",
-            // Referenced by the _spectest fixture (PREAMBLE).
+            // Referenced by the `_spectest` fixture (PREAMBLE).
             // The converted module itself does not necessarily reference them.
             "global/_class",
             "table/_class",
@@ -377,8 +377,8 @@ fn arg_go(arg: &WastArg<'_>) -> Result<String, String> {
 /// It is `None` for a heap type this backend has no host value for.
 /// Such a case is skipped under [`dewasm_test_helper::heap_type_tag`].
 /// `exnref` is the only reference type the Go backend takes as a *value* type.
-/// Its null has to be a typed one: a bare `nil` boxes into a nil interface.
-/// The reflective `invoke`'s type assertion rejects a nil interface.
+/// Its null has to be a typed one: an untyped `nil` boxes into a `nil` interface.
+/// The name-based `invoke`'s type assertion rejects a `nil` interface.
 fn go_null_ref(hty: &HeapType<'_>) -> Option<String> {
     match hty {
         HeapType::Abstract {
@@ -421,8 +421,8 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
         }),
         WastRet::Core(WastRetCore::V128(_)) => Err("simd".to_string()),
         WastRet::Core(WastRetCore::Either(_)) => Err("either-results".to_string()),
-        // A typeless `(ref.null)` result cannot pick a Go static type to assert against.
-        // Every typed one this backend can express is an exnref.
+        // An untyped `(ref.null)` result cannot pick a Go static type to assert against.
+        // Every typed one this backend can express is an `exnref`.
         WastRet::Core(WastRetCore::RefNull(Some(hty))) if go_null_ref(hty).is_some() => {
             Ok(format!("{value}.(*rtException) == nil"))
         }
@@ -447,7 +447,7 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
 
 /// Harness helpers + the `spectest` host fixture.
 /// `rtStack` is the recursion guard's shared counter.
-/// Only spec-build generated functions reference it.
+/// Only generated functions of the specification build reference it.
 const PREAMBLE: &str = r#"var rtStack int
 
 var _pass, _fail int
@@ -535,8 +535,8 @@ func check_exception(desc string, thunk func()) {
 	fmt.Printf("FAIL(panic %v, want a wasm exception): %s\n", r, desc)
 }
 
-// Upstream's assert_unlinkable message text never matches ours.
-// A raised rtLinkError confirms the import was rejected as unlinkable.
+// Upstream's `assert_unlinkable` message text never matches ours.
+// A raised `rtLinkError` confirms the import was rejected as unlinkable.
 // Any other panic means the module linked and then crashed, which must not pass.
 func check_unlinkable(desc string, thunk func()) {
 	var r any

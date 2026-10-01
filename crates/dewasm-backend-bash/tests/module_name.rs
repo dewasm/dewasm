@@ -1,7 +1,7 @@
 //! The module-name policy for Bash: a library name is one identifier.
-//! It is lowercased into the global function/variable prefix.
+//! It becomes the global function/variable prefix in lower case.
 //! Bash has no case-carrying namespace, so the name cannot keep its case.
-//! That lowercasing is the single deliberate mapping the policy keeps.
+//! That change to lower case is the single intended mapping the policy keeps.
 //! An invalid name is a conversion-time error; standalone output uses the fixed `program_`.
 
 use dewasm_backend::Mode;
@@ -18,7 +18,7 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["program_init"],
 );
 
-/// The prefix is the name lowercased plus `_`: a total mapping, stated rather than guessed.
+/// The prefix is the name in lower case plus `_`: a total mapping, stated rather than guessed.
 #[test]
 fn prefix_is_the_lowercased_name_and_runs() {
     assert_eq!(

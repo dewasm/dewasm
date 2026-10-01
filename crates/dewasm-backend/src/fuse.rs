@@ -1,4 +1,4 @@
-//! Fuse the byte-scatter store idiom into one 32-bit store behind a runtime precondition.
+//! Fuse the byte-scatter store pattern into one 32-bit store behind a runtime precondition.
 //!
 //! Portable C writes a 32-bit value byte by byte (`dest[i] = v >> (i * 8)`).
 //! Compiled to wasm, it stays a four-iteration loop of `store8(base + i, word >> shift)`.
@@ -179,7 +179,7 @@ fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
     {
         return None;
     }
-    // done = idx == 3
+    // `done = idx == 3`
     let done = *s3;
     let Expr::Bin(BinOp::I32Eq, a, b) = e_done else {
         return None;
@@ -188,7 +188,7 @@ fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
         (Some(i), Some(3), _, _) | (_, _, Some(i), Some(3)) => i,
         _ => return None,
     };
-    // next_idx = idx + 1; idx = next_idx
+    // `next_idx = idx + 1; idx = next_idx`
     let next_idx = *s4;
     let (a, b) = add_operands(e_next)?;
     if !(local(a) == Some(idx) && konst(b) == Some(1)
@@ -199,7 +199,7 @@ fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
     if *s5 != idx || local(e_copy) != Some(next_idx) {
         return None;
     }
-    // store8(base + idx, word >> shift) with the count possibly wrapped in `& 31`
+    // `store8(base + idx, word >> shift)` with the count possibly wrapped in `& 31`
     let (a, b) = add_operands(addr)?;
     let base = match (local(a), local(b)) {
         (Some(x), Some(y)) if y == idx => x,
@@ -239,7 +239,7 @@ fn match_scatter(loop_label: u32, body: &[Stmt]) -> Option<Scatter> {
         _ => return None,
     };
 
-    // The written locals must be pairwise distinct and never the read-only ones.
+    // The written locals must all differ from one another and never be the read-only ones.
     // Otherwise the exit values would clobber an input.
     let written = [shift, done, next_idx, idx];
     for (n, w) in written.iter().enumerate() {
@@ -300,7 +300,7 @@ mod tests {
     use dewasm_core::ir::{FuncType, ValType};
 
     fn scatter_loop() -> Stmt {
-        // Locals: 0 base, 1 idx, 2 word, 3 shift, 4 done, 5 next_idx, 6 flag.
+        // Locals: 0 `base`, 1 `idx`, 2 `word`, 3 `shift`, 4 `done`, 5 `next_idx`, 6 `flag`.
         Stmt::Loop {
             label: Label {
                 id: 0,

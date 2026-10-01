@@ -1,34 +1,34 @@
-//! Perl backend: translates dewasm IR into a Perl package (plus a bundled lightweight runtime).
+//! Perl backend: translates dewasm IR into a Perl package (plus a small bundled runtime).
 //!
 //! Lowering conventions:
-//! - i32/i64 are masked-unsigned perl integers (IV/UV).
+//! - i32/i64 are masked-unsigned Perl integers (IV/UV).
 //!   Signed views via `Rt::s32`/`Rt::s64` appear only where an instruction needs them.
 //!   Some operations have intermediates beyond the NV-exact range.
-//!   These are i32 mul, all i64 add/sub/mul, div/rem, and shr_s.
+//!   These are i32 `mul`, all i64 `add`/`sub`/`mul`, `div`/`rem`, and `shr_s`.
 //!   Their runtime helpers use tightly-scoped `use integer` blocks.
-//!   Otherwise they use the exact unsigned-division idiom.
+//!   Otherwise they use the exact unsigned-division form.
 //! - f32/f64 are native NVs.
-//!   add/sub/mul are inlined as native arithmetic plus a pack round-trip.
+//!   `add`/`sub`/`mul` are inlined as native arithmetic plus a pack round-trip.
 //!   The runtime helpers are the fallback for the results the inline form cannot finish.
 //!   Those are exact zero for f64, and zero, NaN, and infinity for f32.
 //!   f32 results are re-rounded with `Rt::f32`.
 //!   It handles the pack-'f' overflow boundary in software.
 //!   NaN bit paths go through software bit conversion.
-//!   Division goes through `Rt::fdiv` because perl dies on `x / 0.0`.
-//! - Control flow lowers to perl's native labeled blocks.
+//!   Division goes through `Rt::fdiv` because Perl dies on `x / 0.0`.
+//! - Control flow lowers to Perl's native labeled blocks.
 //!   `Block` becomes `Ln: { ... }`, and `Loop` becomes `Ln: while (1) { ... last Ln; }`.
 //!   Every `br` is a direct `last Ln`/`next Ln`.
-//!   `last`/`next` escape any enclosing labeled frame at arbitrary depth.
-//!   So the flag-variable cascades Ruby and Python need do not exist here.
-//! - Call-stack exhaustion is enforced by an explicit depth counter (`local $Rt::DEPTH`).
-//!   This is because runaway perl recursion only stops at the OOM killer.
+//!   `last`/`next` escape any outer labeled frame at arbitrary depth.
+//!   So the flag-variable chains Ruby and Python need do not exist here.
+//! - The call-stack limit is an explicit depth counter (`local $Rt::DEPTH`).
+//!   This is because unbounded Perl recursion only stops at the OOM killer.
 //!
 //! The runtime is composed from per-method units in `Rt`-rooted packages.
 //! Those packages are `Rt`, `Rt::Memory`, `Rt::Table`, and `Rt::Global`.
 //! Perl package names are absolute.
 //! So `Embedded` linkage namespaces the whole runtime under the generated package (`Foo::Rt`).
 //! It does so by rewriting the `Rt::` prefix at bundle time.
-//! `Alias` linkage keeps the shared top-level `Rt` (the spec harness).
+//! `Alias` linkage keeps the shared top-level `Rt` (the specification harness).
 
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeSet;
@@ -49,7 +49,7 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Perl (see crates/dewasm-backend-perl/units/).
+/// The runtime unit bundler for Perl (see `crates/dewasm-backend-perl/units/`).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -102,7 +102,7 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("{}package main;\n", bundler().bundle(seeds, 0)?))
 }
 
-/// Locate a perl interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts.
+/// Locate a `perl` interpreter (>= 5.26, 64-bit IVs and doubles) able to run generated scripts.
 /// Honors `$DEWASM_PERL`, then `perl`.
 /// A missing or unsuitable interpreter is a loud failure at the call site, not here.
 /// This only reports what qualifies.
@@ -167,7 +167,7 @@ fn generate_package_inner(
     check_module_support(&PerlBackend, module)?;
     // Prefix sums: `data_offsets[i]` is where segment `i` begins.
     // The offset is into the concatenated data-file blob.
-    // Only consulted when externalizing.
+    // Only consulted when the data goes in a separate file.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -253,18 +253,19 @@ impl Backend for PerlBackend {
             // f32 re-rounding and the NaN paths mirror Ruby/Python's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
             // Wasm-1.0 completion mirrors Ruby/Python's model.
-            // It covers imported globals/memories/tables, multiple tables, and table bulk ops.
+            // It covers imported globals/memories/tables and multiple tables.
+            // It also covers table bulk operations.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
             | Feature::MultipleTables
             | Feature::TableBulkOps => SupportStatus::Supported,
-            // Tags are identity objects (reference equality via `==` on a blessed hashref).
-            // A thrown exception is a blessed `WasmException` that doubles as the exnref.
+            // Tags are identity objects (reference equality via `==` on a blessed hash reference).
+            // A thrown exception is a blessed `WasmException` that doubles as the `exnref`.
             // Traps stay uncatchable: see `emit_try_table`.
             Feature::ExceptionHandling => SupportStatus::Supported,
             // A flat trampoline with a body/entry split, the same shape as Ruby's.
-            // Perl's real tail call, `goto &sub`, cannot leave the `eval` a try_table body runs in.
+            // Perl's real tail call, `goto &sub`, cannot leave the `eval` of a `try_table` body.
             Feature::TailCall => SupportStatus::Supported,
             _ => SupportStatus::Unsupported,
         }
@@ -272,7 +273,7 @@ impl Backend for PerlBackend {
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         // Standalone output is a self-contained program: its package name is fixed, not derived.
-        // Library output uses the requested name verbatim, after validating it.
+        // Library output uses the requested name unchanged, after validating it.
         let package_name = if opts.mode == Mode::Standalone {
             STANDALONE_PACKAGE.to_string()
         } else {
@@ -300,9 +301,9 @@ impl Backend for PerlBackend {
         let mut w = CodeWriter::new("\t");
         w.line("#!/usr/bin/env perl");
         w.line("# Generated by dewasm. Do not edit.");
-        // Externalized data blob: read once at load time from the data file next to this file.
+        // Separate data blob: read once at load time from the data file next to this file.
         // The generated `substr($DATA_BLOB, o, len)` expressions then slice it.
-        // Only emitted when there is data to externalize.
+        // Only emitted when there is data to put in the separate file.
         // Otherwise the generated code never reads it.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -333,9 +334,9 @@ impl Backend for PerlBackend {
             w.line("");
             if wasi {
                 // The standalone runtime interface: a leading run of `--dir HOST::GUEST` flags.
-                // Each flag mounts a host directory at a guest path (wasmtime-style).
+                // Each flag mounts a host directory at a guest path, as `wasmtime` does.
                 // The run stops at `--` or the first non-flag token.
-                // The rest is the guest's argv[1..].
+                // The rest is the guest's `argv[1..]`.
                 w.line("use File::Basename ();");
                 w.line("");
                 w.line("my %_preopens;");
@@ -393,7 +394,7 @@ impl Backend for PerlBackend {
         }];
         // The data file: every segment's bytes concatenated in segment order.
         // This matches the `data_offsets` prefix sums in the generated code.
-        // Those sums are baked into the `substr($DATA_BLOB, o, len)` slices.
+        // Those sums are written into the `substr($DATA_BLOB, o, len)` slices.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
                 let mut blob = Vec::new();
@@ -414,10 +415,11 @@ impl Backend for PerlBackend {
 /// It is fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_PACKAGE: &str = "Program";
 
-/// The library-mode module name must be a Perl package name and is used verbatim.
+/// The library-mode module name must be a Perl package name and is used unchanged.
 /// A Perl package name is `::`-separated segments, each `[A-Za-z_][A-Za-z0-9_]*`.
-/// Lowercase-initial segments are legal Perl (only the *convention* reserves them for pragmas).
-/// So the grammar does not forbid them.
+/// Segments starting in lower case are legal Perl.
+/// Only the *convention* reserves them for pragmas.
+/// So the grammar does not reject them.
 /// The caller picks the case it wants and gets exactly that.
 fn check_module_name(name: &str) -> Result<()> {
     let ok = name.split("::").all(|seg| {
@@ -439,7 +441,7 @@ fn check_module_name(name: &str) -> Result<()> {
 }
 
 /// Perl single-quoted string literal.
-/// It does no interpolation, so `$`/`@` in wasm names are inert.
+/// It does no interpolation, so `$`/`@` in wasm names stay plain characters.
 /// Raw control bytes are legal inside single quotes.
 pub fn perl_string(s: &str) -> String {
     let mut out = String::from("'");
@@ -476,7 +478,7 @@ fn val_name(ty: ValType) -> &'static str {
 
 /// What a `try_table`'s outer dispatch (`emit_try_table`) does for one outcome.
 /// It is a pure control transfer, never an expression render.
-/// A deferred escape's operands are always written at the point it originates.
+/// A deferred escape's operands are always written at its point of origin.
 /// Those operands are a `Label`'s `assigns` or a `Return`'s values.
 /// The write happens before the escape ever crosses an `eval`.
 /// It is done by `materialize_escape`, called from `branch` and from `emit_classify`.
@@ -522,7 +524,7 @@ struct Gen<'a> {
     /// Defined functions (function index space) containing a tail call.
     /// These are the ones split into `_fN_body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
-    /// When `Some`, data segments are externalized into a binary data file of this filename.
+    /// When `Some`, data segments go into a separate binary data file of this filename.
     /// The file is loaded once into the file-scoped `$DATA_BLOB`.
     /// The segments are then not embedded as `pack('H*', ...)` literals.
     /// `data_offsets[i]` locates segment `i` in the blob.
@@ -542,7 +544,7 @@ struct Gen<'a> {
     /// It is 0 for none and reset per function.
     float_pair_height: Cell<u32>,
     /// Whether the body being rendered accessed linear memory inline (any load or store).
-    /// Such a body needs the `$__mem` ref to the byte string.
+    /// Such a body needs the `$__mem` reference to the byte string.
     /// It is reset per function.
     mem_ref_used: Cell<bool>,
     /// Whether the body bound a non-leaf load address to `$__ma`; reset per function.
@@ -555,7 +557,7 @@ struct Gen<'a> {
 
 impl<'a> Gen<'a> {
     /// The Perl expression yielding a data segment's bytes.
-    /// It is a slice of the externalized `$DATA_BLOB` when `--data-file` is on.
+    /// It is a slice of `$DATA_BLOB` when `--data-file` is on.
     /// Otherwise it is an inline `pack('H*', ...)` literal.
     /// Both yield a byte string.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
@@ -740,7 +742,7 @@ impl<'a> Gen<'a> {
 
         for (i, import) in m.imported_funcs.iter().enumerate() {
             // Fallback order: explicit import -> bundled WASI unit -> ENOSYS stub.
-            // Non-WASI imports stay mandatory (a missing one is a link error).
+            // Non-WASI imports stay required (a missing one is a link error).
             let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
@@ -865,7 +867,7 @@ impl<'a> Gen<'a> {
             export_entries.join(", ")
         ));
 
-        // Let import providers bind to the fully-constructed instance.
+        // Let import providers bind to the constructed instance.
         if !m.imported_funcs.is_empty() {
             w.line("for my $_p (values %$imports) {");
             w.indent();
@@ -973,7 +975,7 @@ impl<'a> Gen<'a> {
         self.type_symbol_of(&self.module.types[type_idx as usize])
     }
 
-    /// A structural type key (see [`type_key`]) as a perl string literal.
+    /// A structural type key (see [`type_key`]) as a Perl string literal.
     /// The table stores it, and `call_indirect` compares it.
     fn type_symbol_of(&self, ty: &dewasm_core::ir::FuncType) -> String {
         perl_string(&type_key(ty, val_name))
@@ -987,8 +989,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// A funcref value: the `[type_key, coderef]` pair tables store.
-    /// A tail-calling function carries a coderef for its body as a third element.
+    /// A `funcref` value: the `[type_key, coderef]` pair tables store.
+    /// A tail-calling function carries a code reference for its body as a third element.
     /// `table/tail_ref` hands it to the trampoline, so a chain through the table stays flat.
     fn func_pair(&self, func_idx: u32) -> String {
         let base = format!(
@@ -1042,11 +1044,11 @@ impl<'a> Gen<'a> {
         w.line(format!("sub {name} {{"));
         w.indent();
         w.line(format!("my ($self{params}) = @_;"));
-        // The explicit call-depth cutoff.
+        // The explicit call-depth limit.
         // `local` restores the counter on every exit path, including a trap's die-unwind.
         // Each call adds a frame-size weight, not 1.
-        // A pure count lets a fat-frame runaway heap-allocate gigabytes before tripping the limit.
-        // Spec `skip-stack-guard-page` has such a frame, with 1056 locals.
+        // A pure count lets unbounded fat-frame recursion allocate several GB before the limit.
+        // The specification's `skip-stack-guard-page` has such a frame, with 1056 locals.
         // Byte-bounded native stacks exhaust in a few hundred frames instead.
         self.use_unit("rt/exhausted");
         let frame_weight = 1 + (ty.params.len() + func.locals.len() + func.temps.len()) / 8;
@@ -1059,7 +1061,7 @@ impl<'a> Gen<'a> {
             self.rt("exhausted"),
             self.rt_name
         ));
-        // A fresh perl lexical is already `undef`.
+        // A fresh Perl lexical is already `undef`.
         // So a run defaulting to `undef` needs no initializer.
         for run in local_runs(&func.locals, default_value) {
             let default = default_value(func.locals[run.start]);
@@ -1078,7 +1080,7 @@ impl<'a> Gen<'a> {
         }
         // Temps default to 0.
         // Every temp is assigned before any reachable read (valid wasm).
-        // So the value only guards against reading undef.
+        // So the value only guards against reading `undef`.
         let mut depths: Vec<u32> = func.temps.iter().map(|t| t.depth).collect();
         depths.dedup();
         for d in depths {
@@ -1087,9 +1089,9 @@ impl<'a> Gen<'a> {
         if seq_has_br_table(&func.body) {
             w.line("my $_bt = 0;");
         }
-        // A `return` (or a branch to the function frame) may have to cross a try_table's `eval`.
+        // A `return` (or a branch to the function frame) may have to cross a `try_table`'s `eval`.
         // It then writes its values here first (`materialize_escape`).
-        // One set is shared by every try_table in the function.
+        // One set is shared by every `try_table` in the function.
         // At most one escape is ever in flight.
         // It only ever heads to this same final `return`, however many `eval`s it has to leave.
         if !ty.results.is_empty() && seq_has_try_table(&func.body) {
@@ -1129,8 +1131,9 @@ impl<'a> Gen<'a> {
             w.line(format!("my ({});", names.join(", ")));
         }
         if self.mem_ref_used.get() {
-            // One ref per call.
-            // `grow` appends to the same scalar in place, so the ref stays valid across calls.
+            // One reference per call.
+            // `grow` appends to the same scalar in place.
+            // So the reference stays valid across calls.
             w.line("my $__mem = \\$self->{memory}{data};");
         }
         if self.mem_load_addr_used.get() {
@@ -1152,7 +1155,7 @@ impl<'a> Gen<'a> {
     }
 
     /// Emit a statement sequence.
-    /// Structured frames map directly onto perl's labeled blocks/loops.
+    /// Structured frames map directly onto Perl's labeled blocks/loops.
     /// A referenced `Block` is `Ln: { ... }`.
     /// A referenced `Loop` is `Ln: while (1) { ...; last Ln; }`.
     /// A wasm loop label is a continue-target, and falling off the body exits.
@@ -1181,7 +1184,7 @@ impl<'a> Gen<'a> {
                         w.dedent();
                         w.line("}");
                     } else {
-                        // No br targets this loop, so it never repeats.
+                        // No `br` targets this loop, so it never repeats.
                         self.emit_seq(w, body);
                     }
                 }
@@ -1218,10 +1221,10 @@ impl<'a> Gen<'a> {
                     catches,
                     body,
                 } => {
-                    // Labeled only when something inside `body` targets the try_table's own frame.
+                    // Labeled only when something in `body` targets the `try_table`'s own frame.
                     // That is a direct `br`/`br_if`/`br_table` at relative depth 0.
                     // Such a branch is legal wasm.
-                    // It lands exactly where the try_table's own fallthrough would.
+                    // It lands exactly where the `try_table`'s own fallthrough would.
                     // Everything else reaches "just past the try_table" via the outcome dispatch.
                     // That dispatch is in `emit_try_table` and never needs this label.
                     if label.referenced {
@@ -1289,11 +1292,11 @@ impl<'a> Gen<'a> {
                 w.dedent();
                 w.line("}");
             }
-            // Routed through `branch`, not emitted as a bare `return` here.
+            // Routed through `branch`, not emitted as a plain `return` here.
             // Wasm's `return` is semantically "branch to the function frame".
             // So is the function's own trailing fallthrough.
-            // A bare perl `return` only exits an enclosing `eval`, not the sub.
-            // So one written directly here would silently misbehave inside a try_table's body.
+            // A plain Perl `return` only exits an outer `eval`, not the sub.
+            // So one written directly here would silently misbehave inside a `try_table`'s body.
             Stmt::Return { values } => self.branch(
                 w,
                 &BrTarget::Return {
@@ -1361,13 +1364,13 @@ impl<'a> Gen<'a> {
                 w.line(format!("$self->{{data{seg}}} = '';"));
             }
             // A thunk, never a plain call.
-            // The callee must run once this frame is gone, with every `eval` a try_table opened.
+            // The callee must run once this frame is gone, with every `eval` a `try_table` opened.
             // Escaping the thunk as a return is what unwinds them.
             // The target is the callee's *body* where it has one.
-            // So a mutual chain bounces in the one outermost trampoline.
+            // So a mutual chain runs in the one outermost trampoline.
             // It does not enter a fresh trampoline per hop.
             Stmt::ReturnCall { func, args } => {
-                // A coderef for the callee's *body* where it has one.
+                // A code reference for the callee's *body* where it has one.
                 // It is taken from the table built once at instantiation.
                 // So no closure is allocated per hop.
                 let target = match self.tail_body_slot(*func) {
@@ -1474,10 +1477,10 @@ impl<'a> Gen<'a> {
     ///
     /// One case is not a direct `last`/`next`: a target beyond an open `try_table`'s `eval`.
     /// See `cross_eval_barrier`.
-    /// perl's `last`/`next` cannot reliably cross an `eval BLOCK`.
+    /// Perl's `last`/`next` cannot reliably cross an `eval BLOCK`.
     /// The "Exiting eval via last" behavior is deprecated.
-    /// Neither can a bare `return`: it silently returns from the `eval` alone.
-    /// The enclosing sub then keeps running.
+    /// Neither can a plain `return`: it silently returns from the `eval` alone.
+    /// The outer sub then keeps running.
     /// So such a branch writes its own operands right here (`materialize_escape`).
     /// This write is still inside the `eval`.
     /// The branch then sets an outcome variable.
@@ -1511,7 +1514,7 @@ impl<'a> Gen<'a> {
     /// Park a tail call for the entry's trampoline, then leave the function.
     /// The argument array is reused rather than rebuilt.
     /// The arguments are already free of calls.
-    /// The IR spills an effectful operand before the instruction.
+    /// The IR spills an operand with side effects before the instruction.
     /// So nothing between these statements can reach another trampoline and overwrite a slot.
     fn park_tail(&self, w: &mut CodeWriter, target: &str, args: &[String]) {
         self.use_unit("rt/tail_call");
@@ -1531,7 +1534,7 @@ impl<'a> Gen<'a> {
 
     /// Leave the function carrying `thunk`, the way `branch` leaves it carrying return values.
     /// Being one value, it crosses each open `try_table`'s `eval` through its outcome table.
-    /// It does not leave as a bare `return`, which would only exit the `eval`.
+    /// It does not leave as a plain `return`, which would only exit the `eval`.
     /// The trampoline that unwraps it sits outside every barrier.
     /// That is what gives a tail call its frame-replacement semantics.
     fn tail_escape(&self, w: &mut CodeWriter) {
@@ -1552,7 +1555,7 @@ impl<'a> Gen<'a> {
     /// This is the same write `branch`'s direct case makes, only timed earlier.
     /// For a `Return` target, its values go into the function-scoped `$__tt_retN` lexicals.
     /// See `function`'s declaration and `Escape::Return`.
-    /// This runs exactly once per escape, at the point it originates.
+    /// This runs exactly once per escape, at its point of origin.
     /// That point is `branch`, or `emit_classify` for a matched catch clause.
     /// Afterwards an `Escape` may cross further barriers on its way out.
     /// Everywhere it travels is a plain control transfer over these already-written lexicals.
@@ -1574,7 +1577,7 @@ impl<'a> Gen<'a> {
 
     /// Perform an already-materialized `Escape`.
     /// This is either the control transfer itself or one more deferral.
-    /// The deferral happens if yet another `try_table` still encloses this point.
+    /// The deferral happens if yet another `try_table` still contains this point.
     /// It works exactly like `branch`'s, but with nothing left to write.
     fn perform_escape(&self, w: &mut CodeWriter, escape: &Escape) {
         if let Some((barrier_id, code)) = self.cross_eval_barrier(escape) {
@@ -1600,12 +1603,12 @@ impl<'a> Gen<'a> {
     }
 
     /// Whether reaching `escape` requires leaving the innermost open `try_table`'s `eval`.
-    /// If so, register it in that try_table's outcome table.
+    /// If so, register it in that `try_table`'s outcome table.
     /// Then return its (barrier label id, 1-based outcome code).
     ///
     /// A branch's target is always either the frame it is emitted in or one of its ancestors.
     /// Wasm's structured control flow admits nothing else.
-    /// Frame label ids are assigned in strictly increasing frame-opening order.
+    /// Frame label IDs are assigned in strictly increasing frame-opening order.
     /// Consider a target opened no later than the barrier (its label id `<= barrier_id`).
     /// It is the barrier's own frame or an ancestor of it: outside the `eval`.
     /// A target opened after the barrier is inside its body: still reachable directly.
@@ -1636,13 +1639,13 @@ impl<'a> Gen<'a> {
     /// Consider a branch that must leave the body (`cross_eval_barrier`, reached through `branch`).
     /// It sets the outcome variable and `last`s *that* label, never the `eval` itself.
     /// It lands right before the reset to outcome 0 that marks ordinary completion.
-    /// `$@` is read into a lexical the instant `eval` fails, before anything else can clobber it.
+    /// `$@` is read into a lexical the moment `eval` fails, before anything else can clobber it.
     /// `emit_classify` then classifies it.
     /// An outcome is falling off the body, a matched catch, or a branch that had to leave.
     /// What happens for each outcome is decided once, afterwards, by dispatching on it.
     fn emit_try_table(&self, w: &mut CodeWriter, id: u32, catches: &[CatchClause], body: &[Stmt]) {
-        // catch_ref/catch's classification needs the exception class.
-        // It needs it whether or not this try_table's own body ever constructs one itself.
+        // `catch_ref`/`catch`'s classification needs the exception class.
+        // It needs it whether or not this `try_table`'s own body ever constructs one itself.
         // Its tags may be caught from a throw anywhere the shared runtime reaches.
         self.use_unit("rt/wasm_exception");
 
@@ -1703,18 +1706,18 @@ impl<'a> Gen<'a> {
     ///
     /// A wasm exception is exactly a blessed `WasmException`.
     /// Anything else is re-`die`n so it keeps unwinding.
-    /// That covers a trap, the exit object, or a native perl error.
+    /// That covers a trap, the exit object, or a native Perl error.
     /// This makes traps and the exit path structurally uncatchable here.
     /// `try_table` never tests for those classes at all.
     /// Catch clauses are tried in order, and the first match wins.
     /// `Catch`/`CatchRef` compare the tag by reference identity.
-    /// Perl's `==` on a blessed hashref compares addresses.
+    /// Perl's `==` on a blessed hash reference compares addresses.
     /// `CatchAll`/`CatchAllRef` match unconditionally.
     /// A match writes its payload temps and the matching outcome code, but never branches directly.
     /// The payload is the tag's values for a plain catch.
     /// The trailing `_ref` slot gets the exception object itself.
     /// `emit_try_table`'s own dispatch does the branching once this function returns.
-    /// It does so uniformly for every outcome, catches and crossing branches alike.
+    /// It does so uniformly for every outcome, both catches and crossing branches.
     /// A wasm exception that no clause here claims is re-`die`n too, exactly like a trap.
     /// It keeps unwinding.
     fn emit_classify(&self, w: &mut CodeWriter, id: u32, catches: &[CatchClause]) {
@@ -1744,7 +1747,7 @@ impl<'a> Gen<'a> {
             // The payload already landed directly above.
             // So this only does real work for a `catch $tag 0`-style clause.
             // That is a clause whose target is the function frame.
-            // It copies the just-written value_temps into `$__tt_retN`.
+            // It copies the just-written `value_temps` into `$__tt_retN`.
             self.materialize_escape(w, &clause.target);
             w.line(format!("$__tt_out{id} = {};", i + 1));
             w.dedent();
@@ -1804,7 +1807,7 @@ impl<'a> Gen<'a> {
     /// An `Expr::Load` as an inline bounds-tested read of the `$__mem` byte string.
     /// It traps in the untaken branch.
     /// The fast branch always yields a fresh scalar (`unpack`/`vec` return values).
-    /// It never yields a bare shared lexical.
+    /// It never yields a plain shared lexical.
     fn load_expr(&self, op: LoadOp, addr: &Expr, offset: u64) -> String {
         use LoadOp::*;
         // Signed narrow loads sign-extend the unsigned read.
@@ -1877,7 +1880,7 @@ impl<'a> Gen<'a> {
     /// A leaf cannot trap and is duplicated instead.
     /// The store address binds `$__msa`, not `$__ma`.
     /// A non-leaf store value may contain loads.
-    /// Those reuse `$__ma` transiently after the store address was bound.
+    /// Those reuse `$__ma` temporarily after the store address was bound.
     fn store_stmt(&self, w: &mut CodeWriter, op: StoreOp, addr: &Expr, value: &Expr, offset: u64) {
         use StoreOp::*;
         self.mem_ref_used.set(true);
@@ -1989,7 +1992,7 @@ impl<'a> Gen<'a> {
     ///
     /// A wasm comparison yields the i32 0 or 1.
     /// Every conditional context then compares that against 0.
-    /// So the lowering built a conditional expression only to undo it one operation later.
+    /// So the lowering built a conditional expression only to reverse it one operation later.
     /// Emitting the comparison as a Perl boolean drops both the conditional and the test.
     /// The operands are untouched, so a signed view still goes through `Rt::s32`/`Rt::s64`.
     /// Anything else keeps the `!= 0` test.
@@ -2116,7 +2119,7 @@ impl<'a> Gen<'a> {
             I32Shl => format!("((({a}) << (({b}) & 31)) & 0xFFFFFFFF)"),
             I32ShrU => format!("(({a}) >> (({b}) & 31))"),
             I32ShrS => format!("{}({a}, {b})", self.rt("i32_shr_s")),
-            // UV << wraps mod 2^64 (measured), so the mask suffices.
+            // UV << wraps modulo 2^64 (measured), so the mask is enough.
             I64Shl => format!("((({a}) << (({b}) & 63)) & 0xFFFFFFFFFFFFFFFF)"),
             I64ShrU => format!("(({a}) >> (({b}) & 63))"),
             I64ShrS => format!("{}({a}, {b})", self.rt("i64_shr_s")),
@@ -2124,8 +2127,8 @@ impl<'a> Gen<'a> {
             I32Rotr => format!("{}({a}, {b})", self.rt("i32_rotr")),
             I64Rotl => format!("{}({a}, {b})", self.rt("i64_rotl")),
             I64Rotr => format!("{}({a}, {b})", self.rt("i64_rotr")),
-            // Float division stays a helper call because perl dies on `x / 0.0`.
-            // `float_fast` renders add/sub/mul, so they never reach here.
+            // Float division stays a helper call because Perl dies on `x / 0.0`.
+            // `float_fast` renders `add`/`sub`/`mul`, so they never reach here.
             F32Div => format!("{}({}({a}, {b}))", self.rt("f32"), self.rt("fdiv")),
             F64Div => format!("{}({a}, {b})", self.rt("fdiv")),
             F32Add | F32Sub | F32Mul | F64Add | F64Sub | F64Mul => {
@@ -2139,7 +2142,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The inline fast path for float add/sub/mul: the native op plus a pack round-trip.
+    /// The inline fast path for float `add`/`sub`/`mul`: native operation plus a pack round-trip.
     /// The round-trip restores IEEE rounding.
     /// Perl's operators take an integer fast path.
     /// That path keeps integer exactness beyond double precision and drops -0.0.
@@ -2157,7 +2160,7 @@ impl<'a> Gen<'a> {
         // A non-leaf operand's binding nests inside the arithmetic.
         // It never sits behind the comma operator.
         // These expressions land in list contexts.
-        // There, a parenthesized comma expression would flatten into multiple arguments.
+        // There, a comma expression in parentheses would flatten into multiple arguments.
         let h = 1 + fdepth(a).max(fdepth(b));
         let operand = |side: &str, e: &Expr| {
             let rendered = self.expr(e);
@@ -2172,10 +2175,10 @@ impl<'a> Gen<'a> {
         };
         let (a_inline, a_fallback) = operand("a", a);
         let (b_inline, b_fallback) = operand("b", b);
-        // The fast branch yields `$__ft + 0`, never the bare lexical.
-        // In a list (a call's arguments), perl aliases each element to the yielded scalar.
+        // The fast branch yields `$__ft + 0`, never the plain lexical.
+        // In a list (a call's arguments), Perl aliases each element to the yielded scalar.
         // The alias holds until the callee copies `@_`.
-        // So a later sibling fast-path expression would overwrite an earlier bare `$__ft`.
+        // So a later fast-path expression in the list would overwrite an earlier plain `$__ft`.
         // The copy is exact for every value the branch can yield.
         // `x + 0 == x` bit-for-bit except for -0.0 and signaling NaN.
         // The zero test excludes -0.0.
@@ -2195,8 +2198,8 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// The float ops with an inline fast path (`float_fast`).
-/// Each entry has the perl operator and the runtime fallback helper.
+/// The float operations with an inline fast path (`float_fast`).
+/// Each entry has the Perl operator and the runtime fallback helper.
 /// It also says whether the result re-rounds to f32.
 fn float_inline_op(op: BinOp) -> Option<(&'static str, &'static str, bool)> {
     use BinOp::*;
@@ -2211,7 +2214,7 @@ fn float_inline_op(op: BinOp) -> Option<(&'static str, &'static str, bool)> {
     }
 }
 
-/// Whether an operand is duplicated textually into multiple emission sites.
+/// Whether an operand's text is duplicated into multiple emission sites.
 /// One site is a float fast path's fallback branch.
 /// Another is a memory access's bounds test plus read or write.
 /// Such an operand must be pure and cheap to re-evaluate.
@@ -2288,8 +2291,8 @@ fn seq_has_try_table(stmts: &[Stmt]) -> bool {
 }
 
 /// Codegen-shape test for the label lowering.
-/// Multi-level branches must come out as direct `last`/`next` on perl labels.
-/// No flag-variable cascade (Ruby's `__br`) may sneak back in.
+/// Multi-level branches must come out as direct `last`/`next` on Perl labels.
+/// No flag-variable chain (Ruby's `__br`) may come back in.
 #[cfg(test)]
 mod branch_shape {
     use super::*;
@@ -2327,7 +2330,7 @@ mod branch_shape {
         assert!(source.contains("next L"), "loop back-edge:\n{source}");
         let lasts = source.matches("last L").count();
         assert!(lasts >= 3, "multi-level exits (got {lasts}):\n{source}");
-        // No flag-variable cascade (Ruby's or Python's schemes must not reappear).
+        // No flag-variable chain (Ruby's or Python's schemes must not reappear).
         assert!(!source.contains("__br"), "flag cascade leaked:\n{source}");
         assert!(!source.contains("$_br"), "flag register leaked:\n{source}");
     }
@@ -2352,9 +2355,9 @@ mod branch_shape {
     #[test]
     fn depth_accounting_is_frame_weighted() {
         // A fat frame must weigh in proportionally (1 + 32/8 = 5 here).
-        // Runaway recursion with page-sized locals then traps in ~LIMIT/weight frames.
-        // It does not hoard LIMIT full frames on the heap.
-        // See issue #75 and spec `skip-stack-guard-page`.
+        // Unbounded recursion with page-sized locals then traps in ~LIMIT/weight frames.
+        // It does not hold LIMIT full frames on the heap.
+        // See issue #75 and the specification's `skip-stack-guard-page`.
         // A small frame stays weight 1.
         let source = generate(
             r#"(module
@@ -2375,7 +2378,7 @@ mod branch_shape {
 }
 
 /// Codegen-shape test for the float fast path.
-/// add/sub/mul must come out inline (native op plus pack round-trip).
+/// `add`/`sub`/`mul` must come out inline (native operation plus pack round-trip).
 /// The runtime helper must appear only in the fallback branch.
 /// A non-leaf operand must be bound to a height-numbered lexical.
 #[cfg(test)]
@@ -2453,7 +2456,7 @@ mod float_shape {
 
 /// Codegen-shape test for inline linear memory.
 /// Loads and stores must come out as direct `unpack`/`substr`/`vec` accesses.
-/// Those access the `$__mem` byte-string ref behind an inline bounds test.
+/// Those access the `$__mem` byte-string reference behind an inline bounds test.
 /// They must never come out as `Rt::Memory` method calls.
 /// NaN-sensitive f32 loads must stay on the software bit path.
 #[cfg(test)]
@@ -2553,7 +2556,7 @@ mod memory_shape {
 /// Every reference a unit body makes to another unit must be declared in its `# requires:` header.
 /// Mirrors the Ruby/Python units lint, adjusted for Perl syntax.
 /// That syntax covers `Rt::name(...)` calls and `'Rt::Class'` names.
-/// It also covers `$self->name(...)` sibling calls within a scope's package.
+/// It also covers `$self->name(...)` calls to related units within a scope's package.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -2567,9 +2570,9 @@ mod units {
         bundler().bundle_all(0).expect("full bundle resolves");
     }
 
-    /// The whole runtime bundle must be valid perl: `perl -c` the full bundle.
-    /// This is the interpreted-language analog of the compiled backends' compile check.
-    /// Fail-loud on a missing perl.
+    /// The whole runtime bundle must be valid Perl: `perl -c` the full bundle.
+    /// This is the interpreted-language counterpart of the compiled backends' compile check.
+    /// Fail-loud on a missing `perl`.
     #[test]
     fn full_bundle_is_valid_perl() {
         let perl = find_perl()
@@ -2603,7 +2606,7 @@ mod units {
 
         // `Rt::name(` function calls and `Rt::Name` class references (in strings or arrow calls).
         let rt_ref = Regex::new(r"Rt::([A-Za-z_]\w*)").unwrap();
-        // One precompiled sibling-call matcher per unit name (`$self->name(`).
+        // One `sibling_calls` matcher per unit name (`$self->name(`), compiled once.
         let sibling_calls: Vec<(&str, Regex)> = unit_ids
             .iter()
             .map(|id| {
@@ -2653,7 +2656,7 @@ mod units {
                         "Table" => "table/_package".to_string(),
                         "Global" => "global/_package".to_string(),
                         "WASI" => continue,
-                        // Root-prelude package vars, always available.
+                        // Root-prelude package variables, always available.
                         "DEPTH" | "LIMIT" => continue,
                         other => panic!("{}: unknown runtime reference Rt::{other}", unit.id),
                     }

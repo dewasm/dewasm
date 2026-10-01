@@ -4,8 +4,8 @@
 //! It answers one question with numbers.
 //! What does a wasm program cost once dewasm has converted it?
 //! The targets are Ruby, Python, Perl, Go, Java, and Bash source.
-//! The cost is measured against the AOT ceiling (wasmtime).
-//! It is also measured against the wasm interpreters in those same languages (pywasm, wardite).
+//! The cost is measured against the AOT baseline (Wasmtime).
+//! It is also measured against the wasm interpreters in those same languages (`pywasm`, `wardite`).
 //! The `wasm3-*` runners add the same-category counterpart to those interpreters.
 //! They are the converted wasm3 build, interpreting the workload at run time.
 //! So "a runtime-loading wasm runtime in pure Ruby/Python" is compared both ways.
@@ -15,30 +15,31 @@
 //! `render-speed` turns a record into `docs/benchmarks/results.md` with its charts.
 //! A full run takes tens of minutes.
 //! So a wording fix in the renderer must not require re-measuring.
-//! The JSON is the record, and the markdown is only a view of it.
-//! Neither is a compared snapshot: a timing is not reproducible byte-for-byte.
+//! The JSON is the record, and the Markdown is only a view of it.
+//! Neither is a compared snapshot: a timing is not reproducible.
 //! So unlike `docs/support.md` and the checked-in execution snapshots, there is no freshness test.
 //!
 //! The modules:
 //!
 //! * [`workload`] is what is measured.
-//!   It covers `<module> <iterations>` microbenchmarks and real cached apps with fixed argv/stdin.
+//!   It covers `<module> <iterations>` microbenchmarks and real cached apps.
+//!   An app runs with fixed `argv` and `stdin`.
 //!   The microbenchmarks are discovered from `benchmarks/cache/wat/` and `benchmarks/cache/c/`.
-//!   The apps are cowsay for startup on a mid-sized module and SQLite for sustained work.
+//!   The apps are `cowsay` for the start cost of a mid-sized module and SQLite for sustained work.
 //! * [`runner`] is where it is measured.
 //!   It covers availability probing.
-//!   It covers dewasm codegen through the [`Backend`](dewasm_backend::Backend) trait.
+//!   It covers dewasm codegen through the [`dewasm_backend::Backend`] trait.
 //!   It also covers the `go build` / `javac` steps the compiled backends need.
 //! * [`measure`] is how it is measured.
 //!   It covers per-runner iteration calibration and the subtracted `<iterations> = 0` run.
 //!   It also covers a hard timeout.
-//!   Repetitions are reported as min *and* median.
-//! * [`report`]: the JSON record and the markdown rendering of it.
+//!   Repeated runs are reported as minimum *and* median.
+//! * [`report`]: the JSON record and the Markdown rendering of it.
 //! * [`chart`]: the static SVGs `docs/benchmarks/results.md` embeds, one per workload.
 //!   They are regenerated from the same record.
 //!
 //! Two rules run through all of it.
-//! Every runner's stdout is diffed against wasmtime's at the same iteration count.
+//! Every runner's `stdout` is diffed against `wasmtime`'s at the same iteration count.
 //! A mismatch is a **hard failure** that makes the command exit non-zero.
 //! A wrong answer produced quickly is not a result.
 //! And nothing is silently dropped.
@@ -65,14 +66,14 @@ use crate::bench::report::{Cell, Measurement, Outcome, Samples, SkipKind, Verifi
 use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
 
-/// Default timed repetitions per measurement, after one discarded warmup.
+/// Default timed runs per measurement, after one warm-up run that is not counted.
 /// The 2026-08-21 full record has 219 measured pairs, each with 5 samples.
 /// The spread between the fastest and slowest sample had a median of 0.9%.
 /// Its 90th percentile was 3.1%, so 3 loses little.
 const DEFAULT_REPS: usize = 3;
-/// Default compute time the iteration calibrator aims each sample at.
+/// Default compute time the iteration calibration aims each sample at.
 const DEFAULT_TARGET_MS: u64 = 300;
-/// Default per-process wall-clock ceiling.
+/// Default per-process wall-clock limit.
 /// Generous (a Bash sample legitimately takes minutes) but finite.
 /// So a runner that turns out slower than expected costs one timeout instead of hanging the suite.
 const DEFAULT_TIMEOUT_S: u64 = 900;
@@ -164,12 +165,12 @@ pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
     run(&opts, &runners, &workloads)
 }
 
-/// Refuse to measure an app cache that does not match its pin.
+/// Refuse to measure an app cache that does not match its fixed version.
 ///
 /// The harness reads `cache/<app>.wasm` directly.
-/// So a copy left over from an earlier pin would be measured as the current one.
+/// So a copy left over from an earlier version would be measured as the current one.
 /// Its numbers would then be committed as a record.
-/// The pins live in the fetch scripts, which already compare them against the cached stamp.
+/// The versions live in the fetch scripts, which already compare them against the cached stamp.
 /// So this asks them rather than keeping a second copy that could drift.
 /// `--check` needs no network: it reports and fails instead of fetching.
 fn verify_app_pins() -> Result<()> {
@@ -282,8 +283,8 @@ fn describe(workload: &Workload) -> String {
 }
 
 fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
-    // wasmtime is not optional: it is the ceiling every ratio is taken against.
-    // It is also the oracle every runner's stdout is diffed against.
+    // `wasmtime` is not optional: it is the baseline every ratio is taken against.
+    // It is also the oracle every runner's `stdout` is diffed against.
     // Without it the suite would produce numbers with nothing to check them.
     // So it fails loud instead.
     if let Err(reason) = runners
@@ -364,9 +365,9 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     );
 }
 
-/// Charts not covered by the record are deleted.
-/// An orphan SVG looks current while nothing links it.
-/// The doc and its charts are one output; re-rendering a full record puts everything back.
+/// Charts not covered by the record are removed.
+/// An SVG left behind looks current while nothing links it.
+/// The document and its charts are one output; re-rendering a full record puts everything back.
 fn write_doc(report: &report::Report) -> Result<()> {
     let charts = chart::charts(report);
     let mut written: Vec<String> = Vec::new();
@@ -418,8 +419,8 @@ fn measure_workload(
     workshop: &mut Workshop,
     results: &mut Vec<Cell>,
 ) {
-    // wasmtime always runs, whatever the filter selected.
-    // It supplies the baseline ratio and the reference stdout.
+    // `wasmtime` always runs, whatever the filter selected.
+    // It supplies the baseline ratio and the reference `stdout`.
     let selected: Vec<&Runner> = runners
         .iter()
         .filter(|runner| {
@@ -434,7 +435,7 @@ fn measure_workload(
         return;
     }
 
-    // The wasmtime stdout for each iteration count another runner calibrated to.
+    // The `wasmtime` `stdout` for each iteration count another runner calibrated to.
     // It is memoized, so N runners at the same N cost one reference run.
     let mut references: HashMap<u64, Vec<u8>> = HashMap::new();
     for runner in selected {
@@ -501,7 +502,7 @@ fn skip_kind(kind: workload::ExclusionKind) -> SkipKind {
 }
 
 /// The whole measurement of one (workload, runner) pair.
-/// The resulting stdout is diffed against wasmtime at the same iteration count.
+/// The resulting `stdout` is diffed against `wasmtime` at the same iteration count.
 fn measure_cell(
     opts: &Options,
     workload: &Workload,
@@ -544,7 +545,7 @@ fn measure_cell(
             )
         }
         workload::Kind::App { args, stdin } => {
-            // Apps are timed as whole wall time: no zero run, so cold_start stays `None`.
+            // Apps are timed as whole wall time: no zero run, so `cold_start` stays `None`.
             let (k, samples, last) = repeat_app(
                 &launch,
                 args,
@@ -601,7 +602,7 @@ fn measure_cell(
     }))
 }
 
-/// wasmtime's stdout for `workload` at `iterations`, run on demand and memoized.
+/// `wasmtime`'s `stdout` for `workload` at `iterations`, run on demand and memoized.
 /// This is what makes the cross-check exact.
 /// The reference is produced at the *same* iteration count the runner was benchmarked at.
 /// It is not produced at some separate nominal count.
@@ -647,14 +648,14 @@ fn samples_of(min_s: f64, median_s: f64, samples_s: Vec<f64>) -> Samples {
     }
 }
 
-/// The repo root, canonicalized.
+/// The repository root, canonicalized.
 /// The `crates/xtask/../..` spelling then never reaches a message a human reads.
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     raw.canonicalize().unwrap_or(raw)
 }
 
-/// `path` relative to the repo root when it is inside it, for readable diagnostics.
+/// `path` relative to the repository root when it is inside it, for readable diagnostics.
 /// An example is "benchmarks/cache/i32_alu.wasm not built".
 /// The alternative is an absolute path with `../..` in the middle.
 pub fn display_path(path: &Path) -> String {
@@ -667,20 +668,20 @@ pub fn display_path(path: &Path) -> String {
 /// `benchmarks/`, the suite's own tree:
 ///
 /// * `wat/` and `c/`: microbenchmark sources, one `build.sh` each.
-/// * `cache/`: built modules under a subdirectory per family.
-///   It also holds the pywasm venv and the wardite `GEM_HOME`.
+/// * `cache/`: built modules under a directory per family.
+///   It also holds the `pywasm` virtual environment and the `wardite` `GEM_HOME`.
 /// * `drivers/`.
 fn bench_root() -> PathBuf {
     repo_root().join("benchmarks")
 }
 
-/// `benchmarks/cache/`: built microbenchmark modules, one subdirectory per family (`wat/`, `c/`).
+/// `benchmarks/cache/`: built microbenchmark modules, one directory per family (`wat/`, `c/`).
 /// It *also* holds the interpreter dependencies `benchmarks/setup.sh` provisions.
 pub fn bench_cache_dir() -> PathBuf {
     bench_root().join("cache")
 }
 
-/// `benchmarks/drivers/`: the pywasm and wardite driver scripts.
+/// `benchmarks/drivers/`: the `pywasm` and `wardite` driver scripts.
 pub fn drivers_dir() -> PathBuf {
     bench_root().join("drivers")
 }
@@ -703,8 +704,8 @@ fn records_readme() -> PathBuf {
 
 /// The record a render command works from.
 /// It is the path given on the command line, or the newest record of `suffix`'s kind.
-/// ISO timestamps sort lexicographically, so the newest record is the greatest filename.
-/// A path of the other kind is rejected here rather than deserialized into a confusing parse error.
+/// ISO timestamps sort as strings, so the newest record is the greatest filename.
+/// A path of the other kind is rejected here rather than read into a confusing parse error.
 pub fn record_to_render(args: impl Iterator<Item = String>, suffix: &str) -> Result<PathBuf> {
     let given: Vec<String> = args.collect();
     let path = match given.as_slice() {
@@ -890,7 +891,7 @@ fn cpu_description() -> String {
     "unknown".to_string()
 }
 
-/// The first non-empty stdout line of `program args...`, or `None` if it does not run here.
+/// The first non-empty `stdout` line of `program args...`, or `None` if it does not run here.
 fn shell_line(program: &str, args: &[&str]) -> Option<String> {
     let out = std::process::Command::new(program)
         .args(args)
@@ -907,7 +908,7 @@ fn shell_line(program: &str, args: &[&str]) -> Option<String> {
 }
 
 /// The current UTC time as `YYYY-MM-DDTHH:MM:SSZ`.
-/// Hand-rolled rather than pulling `chrono` in for one timestamp in a dev tool.
+/// Hand-rolled rather than pulling `chrono` in for one timestamp in a development tool.
 pub fn utc_timestamp() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)

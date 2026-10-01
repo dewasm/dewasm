@@ -1,5 +1,5 @@
 //! The base backend-under-test abstraction and the process plumbing every suite shares.
-//! `BackendUnderTest` is the layer that even a pre-spec backend can implement.
+//! `BackendUnderTest` is a layer a backend can implement before passing the specification harness.
 //! That covers the "cowsay first" bring-up path.
 //! Name it, hand back its `Backend`, and say how to run generated output.
 //! Interpreted backends get `run` for free from `interpreter`.
@@ -22,20 +22,20 @@ pub enum ModuleNameStyle {
     /// Only a Pascal input yields a conventional pair.
     Pascal,
     /// `sqlite3-shell` -> `sqlite3_shell`.
-    /// Bash only, whose prefix is the name lowercased.
-    /// The underscores are what keep the prefix readable (`sqlite3_shell_`).
+    /// Bash only, whose prefix is the name in lower case.
+    /// The `_` characters are what keep the prefix readable (`sqlite3_shell_`).
     /// Its glue constants already spell it that way.
     Snake,
 }
 
 /// Turn a kebab-case test-world name into a module name valid for `style`.
-/// Test and tooling names are kebab/stem case (`sqlite3-shell`, `ruby-packed`, `prog`).
+/// Test and tooling names are kebab-case or file stems (`sqlite3-shell`, `ruby-packed`, `prog`).
 /// The product refuses to guess what such a name should become.
 /// So the test side converts explicitly.
 /// Total on the documented input domain `[a-z0-9]+(-[a-z0-9]+)*`.
 /// A name outside it panics rather than producing a name the backend would reject confusingly.
 ///
-/// This lives in the test helper on purpose: it is test infrastructure, not a product surface.
+/// This lives in the test helper on purpose: it is test support code, not a product surface.
 /// Nothing in `crates/dewasm-backend*` or the CLI performs any name transformation.
 pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
     assert!(
@@ -62,11 +62,11 @@ pub fn derive_module_name(style: ModuleNameStyle, kebab: &str) -> String {
 }
 
 /// The style each backend's grammar wants, keyed by [`Backend::name`].
-/// So a backend gets the right one without restating it in every `BackendUnderTest` impl.
+/// So a backend gets the right one without restating it in every `BackendUnderTest` implementation.
 /// Bash is the lone snake case.
 /// Everything else reads best from Pascal.
 /// That includes Go, which builds its package *and* type name out of this one string.
-/// Unknown names (the wasmtime stand-in, which never generates) take the majority style.
+/// Unknown names (the Wasmtime stand-in, which never generates) take the majority style.
 pub fn module_name_style(backend: &str) -> ModuleNameStyle {
     match backend {
         "bash" => ModuleNameStyle::Snake,
@@ -74,8 +74,8 @@ pub fn module_name_style(backend: &str) -> ModuleNameStyle {
     }
 }
 
-/// A target backend wired into the shared case tables and the spec harness.
-/// The spec layer ([`crate::SpecBackend`]) extends this with the script-phrasing surface.
+/// A target backend connected to the shared case tables and the specification harness.
+/// The specification layer ([`crate::SpecBackend`]) extends this with the script-phrasing surface.
 /// Everything a backend needs to run app/e2e suites is here.
 pub trait BackendUnderTest: Sync {
     fn name(&self) -> &'static str;
@@ -101,15 +101,15 @@ pub trait BackendUnderTest: Sync {
     }
 
     /// Run generated `source` with `args` and `stdin`, returning the raw process `Output`.
-    /// The default writes `source` to a temp file and execs `interpreter`.
-    /// The file is keyed by pid + counter.
-    /// So parallel test threads and concurrent `cargo test` processes never collide.
+    /// The default writes `source` to a temporary file and runs `interpreter` on it.
+    /// The file is keyed by process ID + counter.
+    /// So parallel test threads and parallel `cargo test` processes never collide.
     fn run(&self, source: &str, args: &[&str], stdin: &str) -> Output {
         self.run_bytes(source, args, stdin.as_bytes())
     }
 
-    /// Like `run`, but with raw-byte `stdin` (and a raw-byte stdout in the returned `Output`).
-    /// Needed by the binary-stdio app cases (minigzip), whose input and output are not valid UTF-8.
+    /// Like `run`, but with raw-byte `stdin` (and a raw-byte `stdout` in the returned `Output`).
+    /// Needed by the binary-stdio app cases (`minigzip`), whose input and output are not UTF-8.
     /// So they cannot travel through the `&str`-typed `run`/`AppCase` path.
     fn run_bytes(&self, source: &str, args: &[&str], stdin: &[u8]) -> Output {
         run_script_bytes(
@@ -122,17 +122,18 @@ pub trait BackendUnderTest: Sync {
     }
 
     /// Produce the runnable artifact for cached app `name` (bytes read from the app cache).
-    /// The app/gzip suites then hand it to `run`/`run_bytes`.
-    /// The default converts the wasm to backend source on a roomy stack (`convert_on_big_stack`).
-    /// An engine-under-test that runs the wasm binary directly (e.g. wasmtime) overrides this.
+    /// The app/`gzip` suites then hand it to `run`/`run_bytes`.
+    /// The default converts the wasm to backend source on a big stack (`convert_on_big_stack`).
+    /// An engine-under-test running the wasm binary directly (for example Wasmtime) overrides this.
     /// It skips codegen and returns a path to the cached binary instead.
     fn convert_app(&self, bytes: &[u8], mode: Mode, name: &str) -> String {
         crate::convert_on_big_stack(self.backend(), bytes, mode, name)
     }
 
-    /// Prepare a *pty* run of standalone `source` with `args` (see [`crate::run_under_pty`]).
-    /// Returns the command to spawn on a pty.
-    /// The default (for interpreted backends) writes `source` to a temp script.
+    /// Prepare a *pseudo-terminal* run of standalone `source` with `args`.
+    /// See [`crate::run_under_pty`].
+    /// Returns the command to spawn on a pseudo-terminal.
+    /// The default (for interpreted backends) writes `source` to a temporary script.
     /// It then runs `interpreter <script> <args...>`, mirroring [`Self::run_bytes`]'s default.
     /// It does not capture through pipes.
     /// Compiled backends (Go, Java) override this to build `source` first.
@@ -160,7 +161,7 @@ pub trait BackendUnderTest: Sync {
     /// So an imported table can cross modules: the `shared_table` case.
     /// `false` converts each module independently in library mode, each carrying its own runtime.
     /// That is the `embedded_coexist` case.
-    /// Only backends that invoke the multi-module macros implement this.
+    /// Only backends that call the multi-module macros implement this.
     /// Each uses its own crate's API: the test-helper crate cannot depend on a concrete backend.
     /// See [`crate::run_multi_module_case`].
     fn compose_modules(
@@ -176,7 +177,7 @@ pub trait BackendUnderTest: Sync {
     /// Run the multi-module `driver` against the module files sitting in `dir`.
     /// The driver is the preamble from [`Self::compose_modules`] plus the case glue.
     /// The default (every interpreted backend) writes the driver as `dir/driver.<ext>`.
-    /// It execs the interpreter on it with `dir` as the working directory.
+    /// It runs the interpreter on it with `dir` as the working directory.
     /// So the language's own relative loading finds the files beside it.
     /// That loading is `require_relative`, `sys.path[0]`, or `source`.
     /// The compiled backends override this to build the directory instead.
@@ -189,14 +190,14 @@ pub trait BackendUnderTest: Sync {
         )
     }
 
-    /// Run library-mode `program` (from [`Self::convert_app`]) as a filesystem app.
+    /// Run library-mode `program` (from [`Self::convert_app`]) as a file system app.
     /// Append the already-filled instantiation `glue`, feed `stdin`, and return the `Output`.
-    /// The `glue` is a named backend const.
+    /// The `glue` is a named backend constant.
     /// The runner has resolved its `{scratch}`/`{cache}` placeholders.
     /// The default runs `program` + `glue` through `run_bytes`.
     /// So the static `args`/`env`/`preopens` are written literally inside `glue` and ignored here.
-    /// An engine-under-test that runs the wasm binary directly (wasmtime) overrides this.
-    /// It execs the binary (`program` is the wasm path) with those host `args`/`env`/`preopens`.
+    /// An engine-under-test that runs the wasm binary directly (Wasmtime) overrides this.
+    /// It runs the binary (`program` is the wasm path) with those host `args`/`env`/`preopens`.
     /// It ignores `glue`.
     fn run_app_fs(
         &self,
@@ -214,10 +215,10 @@ pub trait BackendUnderTest: Sync {
     /// Run a *standalone*-mode `program` through the standalone runtime interface.
     /// The generated main parses a leading run of `--dir HOST::GUEST` flags itself.
     /// It then hands the rest to the guest as `argv[1..]`.
-    /// The default (every generated backend) execs the program with those `--dir` flags.
+    /// The default (every generated backend) runs the program with those `--dir` flags.
     /// `args` follow, exactly what a user types, via [`Self::run_bytes`].
     /// Compiled backends build first through their `run_bytes` override.
-    /// wasmtime overrides this: `--dir` is a *host* runtime flag there.
+    /// Wasmtime overrides this: `--dir` is a *host* runtime flag there.
     /// So it runs `wasmtime run --dir HOST::GUEST... <wasm> args` instead.
     /// Same case feeds both, mirroring [`Self::run_app_fs`].
     fn run_standalone_dir(
@@ -241,8 +242,8 @@ pub trait BackendUnderTest: Sync {
     /// This works like [`Self::run_standalone_dir`].
     /// Additionally set `env` on the child process and return the full [`Output`].
     /// That is the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]).
-    /// [`Self::run_standalone_dir`] cannot give it: it inherits the parent env.
-    /// Its callers also discard the exit code.
+    /// [`Self::run_standalone_dir`] cannot give it: it inherits the parent environment.
+    /// Its callers also drop the exit code.
     /// `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags.
     /// The generated `main` parses them; `args` follow as guest `argv[1..]`.
     ///
@@ -268,14 +269,14 @@ pub trait BackendUnderTest: Sync {
         argv.extend(args.iter().map(|a| a.to_string()));
         let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         let cmd = self.pty_command(program, &argv_refs);
-        // The guest must observe exactly the manifest env.
-        // Upstream's wasmtime adapter passes only `--env k=v`.
+        // The guest must observe exactly the manifest environment.
+        // Upstream's Wasmtime adapter passes only `--env k=v`.
         // That isolates the guest from the host environment.
-        // dewasm's standalone programs pass the whole process env through.
+        // dewasm's standalone programs pass the whole process environment through.
         // So the isolation has to happen here instead.
-        // With the child PATH gone, exec would fall back to the OS default path.
-        // It would pick the *system* interpreter (ruby 2.6 / bash 3.2 on macOS).
-        // So a bare program name is resolved against the parent PATH first.
+        // With the child `PATH` gone, `exec` would fall back to the OS default path.
+        // It would pick the *system* interpreter (Ruby 2.6 / Bash 3.2 on macOS).
+        // So a program name with no directory part is resolved against the parent `PATH` first.
         let resolved = resolve_in_parent_path(&cmd.program);
         let mut command = Command::new(resolved);
         command.args(&cmd.args);
@@ -290,7 +291,7 @@ pub trait BackendUnderTest: Sync {
     }
 }
 
-/// Resolve a bare program name to an absolute path using the *parent* process's PATH.
+/// Resolve a program name with no directory part to an absolute path via the *parent*'s `PATH`.
 /// So an `env_clear`ed child still runs the interpreter the test environment selected.
 /// Names already containing a separator pass through untouched.
 fn resolve_in_parent_path(program: &Path) -> PathBuf {
@@ -312,7 +313,7 @@ pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {
     run_command_bytes(cmd, stdin.as_bytes())
 }
 
-/// Like `run_command`, but pipes raw bytes to stdin (binary-stdio cases).
+/// Like `run_command`, but pipes raw bytes to `stdin` (binary-stdio cases).
 pub fn run_command_bytes(cmd: &mut Command, stdin: &[u8]) -> Output {
     let mut child = cmd
         .stdin(Stdio::piped())
@@ -335,7 +336,7 @@ pub fn run_script(
     run_script_bytes(interpreter, script, ext, args, stdin.as_bytes())
 }
 
-/// Like `run_script`, but pipes raw bytes to stdin (binary-stdio cases).
+/// Like `run_script`, but pipes raw bytes to `stdin` (binary-stdio cases).
 pub fn run_script_bytes(
     interpreter: &Path,
     script: &str,
@@ -347,9 +348,9 @@ pub fn run_script_bytes(
     run_command_bytes(Command::new(interpreter).arg(&path).args(args), stdin)
 }
 
-/// Write `script` to a fresh temp file with extension `ext` and return its path.
-/// The pid + counter pair keeps paths unique across parallel test threads.
-/// It also keeps them unique across concurrent `cargo test` processes.
+/// Write `script` to a fresh temporary file with extension `ext` and return its path.
+/// The process ID + counter pair keeps paths unique across parallel test threads.
+/// It also keeps them unique across parallel `cargo test` processes.
 pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
@@ -365,7 +366,7 @@ pub fn write_temp_script(script: &str, ext: &str) -> PathBuf {
 mod tests {
     use super::{derive_module_name, module_name_style, ModuleNameStyle};
 
-    /// The glue consts spell these names literally, so the derivation must keep producing them.
+    /// The glue constants spell these names literally, so the derivation must keep producing them.
     #[test]
     fn kebab_derivation_matches_the_names_the_glue_consts_spell() {
         for (kebab, pascal, snake) in [
@@ -389,7 +390,7 @@ mod tests {
         assert_eq!(module_name_style("bash"), ModuleNameStyle::Snake);
     }
 
-    /// A name outside the documented kebab domain is a bug in the case table.
+    /// A name outside the documented kebab-case domain is a bug in the case table.
     /// It is not something to reshape.
     #[test]
     #[should_panic(expected = "kebab-case")]

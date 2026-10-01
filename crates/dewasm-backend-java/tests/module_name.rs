@@ -1,10 +1,10 @@
 //! The module-name policy for Java:
 //!
-//! - a dotted library name splits into a `package` declaration plus a verbatim class name;
+//! - a dotted library name splits into a `package` declaration plus a unchanged class name;
 //! - an invalid name is a conversion-time error;
 //! - standalone output ignores the name for a fixed `Program`.
 //!
-//! That `Program` is also its `argv[0]` (see docs/standalone-interface.md).
+//! That `Program` is also its `argv[0]` (see `docs/standalone-interface.md`).
 
 use std::process::Command;
 
@@ -15,7 +15,7 @@ const ADD_WAT: &str = r#"(module
   (func (export "add") (param i32 i32) (result i32) (i32.add (local.get 0) (local.get 1))))"#;
 
 // Keywords like `int` are NOT rejected: the grammar is character-level only.
-// javac is the authority on the rest.
+// `javac` is the authority on the rest.
 dewasm_test_helper::module_name_policy_suite!(
     backend: JavaBackend,
     wat: ADD_WAT,
@@ -25,7 +25,7 @@ dewasm_test_helper::module_name_policy_suite!(
 );
 
 /// The whole point of the dotted form: a conventional package *and* a conventional class name.
-/// The embedder's `Main` is appended to the same compilation unit (docs/backends/java.md).
+/// The embedder's `Main` is appended to the same compilation unit (`docs/backends/java.md`).
 /// It is therefore in the same package.
 #[test]
 fn dotted_name_emits_a_package_and_runs() {

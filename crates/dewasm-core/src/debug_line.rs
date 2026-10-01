@@ -1,6 +1,6 @@
 //! Parse a wasm module's `.debug_line` DWARF program into an address-to-source-position lookup.
-//! The lookup serves the opt-in `--dwarf-line` back-mapping.
-//! gimli lives here and here only; backends never see it.
+//! The lookup serves the optional `--dwarf-line` back-mapping.
+//! `gimli` lives here and here only; backends never see it.
 
 use std::collections::HashMap;
 
@@ -11,7 +11,7 @@ use crate::ir::SourcePos;
 
 /// The wasm DWARF code-address convention.
 ///
-/// Consider a linked wasm binary produced by clang/lld (what wasi-sdk emits).
+/// Consider a linked wasm binary produced by `clang`/`lld` (what `wasi-sdk` emits).
 /// There a DWARF code address is the byte offset of the instruction.
 /// It is **relative to the start of the code section's contents**.
 /// It is not an absolute module-file offset.
@@ -23,7 +23,8 @@ fn address_base(code_section_start: u64) -> u64 {
 }
 
 /// One decoded line-program row: a code address and the source position that begins there.
-/// The position is `None` for an `end_sequence` row (an exclusive upper bound with no mapping).
+/// The position is `None` for an `end_sequence` row, which has no mapping.
+/// Its address is just past the sequence's end.
 struct Row {
     address: u64,
     pos: Option<SourcePos>,
@@ -39,7 +40,7 @@ pub struct LineTable {
 }
 
 impl LineTable {
-    /// Parse the collected `.debug_*` section blobs (keyed by section name, e.g. `.debug_line`).
+    /// Parse the collected `.debug_*` section blobs, keyed by name such as `.debug_line`.
     /// `code_section_start` is the module file offset of the code section's contents.
     /// It is used only for address-base calibration.
     /// Returns `None` when there is no line program to speak of.
@@ -76,7 +77,7 @@ impl LineTable {
                 // So does a row DWARF marks as having no source line.
                 // Such a row is line 0, a compiler-generated prologue or epilogue.
                 // Record both as a gap, so a lookup landing there yields no position.
-                // Otherwise it would yield a bogus `line 0` directive, which Go's `//line` rejects.
+                // Otherwise it would yield a `line 0` directive, which Go's `//line` rejects.
                 if row.end_sequence() || row.line().is_none() {
                     rows.push(Row {
                         address: row.address(),

@@ -1,25 +1,25 @@
-//! Filesystem-exercising app cases, shared across every backend with WASI filesystem support.
-//! All backends have that support, and wasmtime re-runs the cases as the ground-truth engine.
+//! App cases that use the file system, shared by every backend with WASI file system support.
+//! All backends have that support, and Wasmtime re-runs the cases as the ground-truth engine.
 //! Each case converts a cached app to a library-mode class.
-//! It stages fixtures into a fresh scratch dir preopened into the guest.
-//! It then runs one or more invocations and diffs their stdout against snapshots.
+//! It stages fixtures into a fresh scratch directory preopened into the guest.
+//! It then does one or more runs and diffs their `stdout` against snapshots.
 //! Those are the `examples/apps/snapshots/` files the always-on `apps` suite uses.
 //! It also asserts the host-side effects the guest was supposed to produce.
 //!
 //! Each case is a `pub const` [`FsAppCase`] driven by a per-case macro.
 //! Examples are `qjs_file_io_e2e!` and `sqlite3_shell_dbfile_e2e!`.
-//! The per-language instantiation glue is a named const passed to that macro.
-//! It writes out the class name, argv, env, and preopen *guest* paths literally.
+//! The per-language instantiation glue is a named constant passed to that macro.
+//! It writes out the class name, `argv`, environment, and preopen *guest* paths literally.
 //! It takes only the runtime host paths, through the `{scratch}`/`{cache}` placeholders.
 //! The runner fills those placeholders.
-//! wasmtime does not use the glue.
-//! It overrides [`BackendUnderTest::run_app_fs`] to exec the cached binary directly.
+//! Wasmtime does not use the glue.
+//! It overrides [`BackendUnderTest::run_app_fs`] to run the cached binary directly.
 //! It passes `--dir` preopens.
-//! So the same case consts feed both the backend macros and the wasmtime suite.
-//! The wasmtime suite calls [`run_fs_app_case`] directly.
+//! So the same case constants feed both the backend macros and the Wasmtime suite.
+//! The Wasmtime suite calls [`run_fs_app_case`] directly.
 //!
-//! These cases are slow: they reconvert qjs/sqlite and stage ripgrep's 22 MB binary.
-//! So the perf opt-out lives at the macro/feature level.
+//! These cases are slow: they reconvert `qjs`/SQLite and stage `ripgrep`'s 22 MB binary.
+//! So the skip for speed lives at the macro/feature level.
 //! Each per-case macro (`qjs_file_io_e2e!`, ...) expands its generated `#[test]` as `#[ignore]`d.
 //! It does so unless the expanding backend crate's `slow_test` feature is enabled.
 //! [`run_fs_app_case`] itself just runs the case unconditionally.
@@ -33,9 +33,9 @@ use crate::backend::BackendUnderTest;
 use crate::fixtures::{apps_cache_dir, apps_fixtures_dir, fresh_scratch_dir};
 use crate::glue::fill;
 
-/// One fixture-staging step, run into the case's fresh scratch dir before the guest runs.
+/// One fixture-staging step, run into the case's fresh scratch directory before the guest runs.
 /// `src` is relative to [`apps_fixtures_dir`].
-/// `dst` is relative to the scratch dir (`""` = the scratch root).
+/// `dst` is relative to the scratch directory (`""` = the scratch root).
 pub enum Stage {
     /// Copy a single file `src` -> `dst`.
     File {
@@ -49,47 +49,47 @@ pub enum Stage {
     },
 }
 
-/// One invocation of a filesystem-app case.
-/// Multiple runs of a case share the same scratch dir.
+/// One run of a file system app case.
+/// Multiple runs of a case share the same scratch directory.
 /// For example, sqlite3 creates the DB file, then reopens it.
 pub struct FsRun {
-    /// Full argv, argv0 included.
-    /// Backends bake it into the glue; wasmtime injects argv0 itself and uses `args[1..]`.
+    /// Full `argv`, `argv[0]` included.
+    /// Backends write it into the glue; Wasmtime injects `argv[0]` itself and uses `args[1..]`.
     pub args: &'static [&'static str],
     pub stdin: &'static str,
-    /// The `include_str!` snapshot this run's stdout must match.
-    /// `None` when only the host-side effect is asserted (e.g. the sqlite3 create run).
+    /// The `include_str!` snapshot this run's `stdout` must match.
+    /// `None` when only the host-side effect is asserted (for example the sqlite3 create run).
     pub expect_stdout: Option<&'static str>,
-    /// Host-side assertion over the scratch dir after this run.
+    /// Host-side assertion over the scratch directory after this run.
     /// An example is a file the guest was supposed to write.
     /// `assert_none` when there is nothing to check.
     pub assert_host: fn(&Path),
 }
 
-/// The static `env`/`preopens`/`cache_preopens` are used by the wasmtime override.
-/// That override execs the binary with those host mounts.
+/// The static `env`/`preopens`/`cache_preopens` are used by the Wasmtime override.
+/// That override runs the binary with those host mounts.
 /// They are also used to stage and mount the scratch and cache trees.
-/// The backends read the same facts out of the glue const, where they are written literally.
+/// The backends read the same facts out of the glue constant, where they are written literally.
 pub struct FsAppCase {
     pub name: &'static str,
     /// Cache-binary stem (`examples/apps/cache/<wasm>.wasm`).
-    /// Not the module name: `class` is, since the two diverge here (see it).
+    /// Not the module name: `class` is, since the two differ here (see it).
     pub wasm: &'static str,
     /// The library class name the glue instantiates.
     /// It is *also* the module name every backend is converted under.
     /// Unlike the other suites this is stated rather than derived from `wasm`.
-    /// The two deliberately diverge: cache file `ruby.wasm`, but class `Cruby`.
-    /// A `Ruby` class collides with MRI's predefined constant.
-    /// It is a valid module name under every backend's grammar; Bash lowercases it into its prefix.
+    /// The two differ on purpose: cache file `ruby.wasm`, but class `Cruby`.
+    /// A `Ruby` class collides with the constant MRI already defines.
+    /// Every backend's grammar accepts it; Bash puts it in lower case into its prefix.
     pub class: &'static str,
     pub env: &'static [(&'static str, &'static str)],
-    /// Guest path -> scratch-relative subdir (`""` = scratch root).
+    /// Guest path -> directory relative to scratch (`""` = scratch root).
     pub preopens: &'static [(&'static str, &'static str)],
-    /// Guest path -> cache-relative subdir, preopened **directly from the app cache**.
+    /// Guest path -> directory relative to the cache, preopened **directly from the app cache**.
     /// The cache path is `examples/apps/cache/<rel>`, and nothing is copied into scratch.
-    /// The language-runtime apps (CPython/CRuby) mount their stdlib trees this way.
+    /// The language-runtime apps (CPython/CRuby) mount their standard library trees this way.
     /// Those trees are multiple hundreds of MB.
-    /// Copying them per run would be prohibitive.
+    /// Copying them per run would cost too much.
     pub cache_preopens: &'static [(&'static str, &'static str)],
     pub stage: &'static [Stage],
     pub runs: &'static [FsRun],
@@ -98,7 +98,7 @@ pub struct FsAppCase {
 /// No host-side effect to assert for this run.
 fn assert_none(_: &Path) {}
 
-/// qjs file I/O: the guest wrote `io_out.txt` into the preopened dir.
+/// `qjs` file I/O: the guest wrote `io_out.txt` into the preopened directory.
 fn assert_qjs_io_out(scratch: &Path) {
     assert_eq!(
         std::fs::read_to_string(scratch.join("io_out.txt")).unwrap(),
@@ -107,7 +107,7 @@ fn assert_qjs_io_out(scratch: &Path) {
     );
 }
 
-/// sqlite3 dbfile create: the first run must leave a nonzero DB file behind.
+/// sqlite3 DB file create: the first run must leave a nonzero DB file behind.
 fn assert_sqlite_dbfile(scratch: &Path) {
     assert!(
         scratch
@@ -120,8 +120,8 @@ fn assert_sqlite_dbfile(scratch: &Path) {
 }
 
 /// QuickJS with file I/O.
-/// The `qjs:std` module writes a file into the preopened dir, reads it back, and prints it.
-/// Asserts both guest stdout (snapshot) and the host-side file content.
+/// The `qjs:std` module writes a file into the preopened directory, reads it back, and prints it.
+/// Asserts both guest `stdout` (snapshot) and the host-side file content.
 pub const QJS_FILE_IO: FsAppCase = FsAppCase {
     name: "qjs_file_io",
     wasm: "qjs",
@@ -144,8 +144,8 @@ pub const QJS_FILE_IO: FsAppCase = FsAppCase {
 };
 
 /// sqlite3 shell reading/writing a DB *file*.
-/// One invocation creates and populates `/db/test.db`, and a second reopens it and SELECTs.
-/// Both runs share the scratch dir.
+/// One run creates and populates `/db/test.db`, and a second reopens it and SELECTs.
+/// Both runs share the scratch directory.
 pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
     name: "sqlite3_shell_dbfile",
     wasm: "sqlite3-shell",
@@ -175,7 +175,7 @@ pub const SQLITE3_SHELL_DBFILE: FsAppCase = FsAppCase {
     ],
 };
 
-/// ripgrep searching a small fixture directory tree.
+/// `ripgrep` searching a small fixture directory tree.
 /// It walks the preopened tree recursively.
 /// `--sort path` forces a deterministic order so the `wasmtime --dir` snapshot is stable.
 pub const RG_SEARCH: FsAppCase = FsAppCase {
@@ -197,9 +197,10 @@ pub const RG_SEARCH: FsAppCase = FsAppCase {
 };
 
 /// CPython 3.14.6 executing a one-liner.
-/// It reads its stdlib from the cache-preopened `cache/cpython-lib/lib` tree at guest `/lib`.
+/// It reads its standard library from guest `/lib`.
+/// That is the cache-preopened `cache/cpython-lib/lib` tree.
 /// The heaviest interpreter case: a ~30 MB wasm.
-/// Ground truth (wasmtime):
+/// Ground truth (Wasmtime):
 ///
 /// ```console
 /// wasmtime --dir cache/cpython-lib/lib::/lib --env PYTHONHOME=/ \
@@ -222,10 +223,11 @@ pub const CPYTHON_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
-/// CRuby 3.4 executing a one-liner (the "Ruby on Ruby" goal demo).
-/// It reads its stdlib from the cache-preopened `cache/ruby-lib/usr` tree at guest `/usr`.
+/// CRuby 3.4 executing a one-liner (the "Ruby on Ruby" goal example).
+/// It reads its standard library from guest `/usr`.
+/// That is the cache-preopened `cache/ruby-lib/usr` tree.
 /// The heaviest case overall: a ~35 MB wasm.
-/// Ground truth (wasmtime):
+/// Ground truth (Wasmtime):
 ///
 /// ```console
 /// wasmtime --dir cache/ruby-lib/usr::/usr cache/ruby.wasm \
@@ -247,17 +249,17 @@ pub const CRUBY_HELLO: FsAppCase = FsAppCase {
     }],
 };
 
-/// toywasm (a WebAssembly interpreter written in C) interpreting a second wasm binary.
+/// `toywasm` (a WebAssembly interpreter written in C) interpreting a second wasm binary.
 /// The converted interpreter loads the cached `cowsay.wasm` out of the app cache.
 /// The cache is preopened at `/apps`.
 /// `--wasi` gives that guest its own WASI.
-/// The expected stdout is the [`COWSAY_ARGS`](crate::COWSAY_ARGS) snapshot.
-/// So the case asserts that running cowsay *through* the converted interpreter matches.
-/// It must produce the same bytes as running cowsay directly under wasmtime.
+/// The expected `stdout` is the [`COWSAY_ARGS`](crate::COWSAY_ARGS) snapshot.
+/// So the case asserts that running `cowsay` *through* the converted interpreter matches.
+/// It must produce the same bytes as running `cowsay` directly under Wasmtime.
 /// That indirect ground truth is the only one available.
-/// wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with `EBADF`.
-/// toywasm's WASI setup treats the failure as fatal.
-/// So wasmtime cannot run the pinned toywasm binary at all.
+/// Wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with `EBADF`.
+/// `toywasm`'s WASI set-up treats the failure as fatal.
+/// So Wasmtime cannot run the cached `toywasm` binary at all.
 pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
     name: "toywasm_cowsay",
     wasm: "toywasm",
@@ -285,13 +287,13 @@ pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
 
 /// wasm3 interpreting the cached `cowsay.wasm` out of the app cache, preopened at `/apps`.
 /// wasm3 is a second WebAssembly interpreter written in C.
-/// This is the meta-WASI build of the pinned source.
+/// This is its WASI build, at a fixed version.
 /// Same shape as [`TOYWASM_COWSAY`], with two differences.
 /// First, wasm3's CLI takes the guest module directly, with no `--wasi` flag.
-/// The meta-WASI build always forwards the guest's WASI to the outer host.
-/// Second, the artifact runs under wasmtime.
+/// That build always forwards the guest's WASI to the outer host.
+/// Second, the artifact runs under Wasmtime.
 /// So the `fs_apps` freshness run covers this case against a live engine.
-/// toywasm's ground truth is indirect instead.
+/// `toywasm`'s ground truth is indirect instead.
 pub const WASM3_COWSAY: FsAppCase = FsAppCase {
     name: "wasm3_cowsay",
     wasm: "wasm3",
@@ -312,8 +314,8 @@ pub const WASM3_COWSAY: FsAppCase = FsAppCase {
 
 /// Apply each [`Stage`] step into `scratch`.
 /// Copy from `fixtures`, the shared [`apps_fixtures_dir`].
-/// Shared by the filesystem-app runner and the C-API runner, so fixture staging lives in one place.
-/// The exiftool case stages its image fixture the same way.
+/// The file system app and C-API runners share it, so fixture staging lives in one place.
+/// The ExifTool case stages its image fixture the same way.
 pub(crate) fn stage_into(fixtures: &Path, scratch: &Path, stage: &[Stage]) {
     for step in stage {
         match step {
@@ -347,10 +349,10 @@ fn copy_tree(src: &Path, dst: &Path) {
 
 /// Stage, preopen, convert, and run every [`FsRun`] of `case` under `lang`.
 /// Use its per-language `glue`.
-/// Return the fresh scratch dir and each run's [`Output`] (in `case.runs` order).
+/// Return the fresh scratch directory and each run's [`Output`] (in `case.runs` order).
 /// It is the shared core of [`run_fs_app_case`] and [`capture_fs_app_stdout`].
-/// The first then asserts stdout + host effects.
-/// The second extracts one run's stdout for the snapshot.
+/// The first then asserts `stdout` + host effects.
+/// The second extracts one run's `stdout` for the snapshot.
 /// Every run must exit zero (fail loud).
 /// The multi-run cases depend on earlier runs' host effects.
 /// For example, sqlite3 creates the DB file before the reopen.
@@ -377,7 +379,7 @@ fn drive_fs_app_case(
             };
             (*guest, host)
         })
-        // Cache-preopened stdlib trees are mounted straight from the app cache (read-only).
+        // Cache-preopened standard library trees mount straight from the app cache (read-only).
         // They are never copied into scratch: they are hundreds of MB.
         .chain(case.cache_preopens.iter().map(|(guest, rel)| {
             let host = cache.join(rel);
@@ -401,10 +403,10 @@ fn drive_fs_app_case(
         case.wasm
     );
     let bytes = std::fs::read(&wasm_path).expect("read wasm");
-    // Convert under `class`, not the cache stem: the two diverge for CRuby (see the field).
+    // Convert under `class`, not the cache stem: the two differ for CRuby (see the field).
     // `class` is already a valid module name for every backend.
-    // So it is passed verbatim rather than derived.
-    // wasmtime ignores the name (it runs the bytes directly).
+    // So it is passed unchanged rather than derived.
+    // Wasmtime ignores the name (it runs the bytes directly).
     let program = lang.convert_app(&bytes, Mode::Library, case.class);
     let filled_glue = fill(
         glue,
@@ -442,9 +444,9 @@ fn drive_fs_app_case(
 }
 
 /// Run one [`FsAppCase`] for `lang` with its per-language `glue` unconditionally.
-/// The perf opt-out lives at the macro/feature level (see the module docs).
-/// So this runner never needs its own opt-out.
-/// The wasmtime suite also calls it directly.
+/// The skip for speed lives at the macro/feature level (see the module documentation).
+/// So this runner never needs its own skip.
+/// The Wasmtime suite also calls it directly.
 /// It passes an empty `glue`, since its `run_app_fs` override ignores it.
 pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str) {
     let (scratch, outputs) = drive_fs_app_case(lang, case, glue);
@@ -468,15 +470,15 @@ pub fn run_fs_app_case(lang: &dyn BackendUnderTest, case: &FsAppCase, glue: &str
     );
 }
 
-/// Rerun a filesystem app `case` under `lang` (the wasmtime engine).
-/// Return the raw stdout of its snapshot-bearing run.
+/// Rerun a file system app `case` under `lang` (the Wasmtime engine).
+/// Return the raw `stdout` of its snapshot-bearing run.
 /// Those are the bytes to write into that case's `.stdout` snapshot.
 /// Only the cases with a checked-in snapshot file are captured this way.
 /// Those are `QJS_FILE_IO`, `SQLITE3_SHELL_DBFILE`, and `RG_SEARCH`.
 /// Each has exactly one run whose `expect_stdout` is `Some`.
-/// The others assert only host-side effects, or pin an inline string with no file.
+/// The others assert only host-side effects, or compare with an inline string and no file.
 /// All runs execute in sequence: the earlier ones set up host state the captured run reads.
-/// But only that one run's stdout is returned.
+/// But only that one run's `stdout` is returned.
 /// So it byte-matches the `include_str!` the case compares against.
 pub fn capture_fs_app_stdout(lang: &dyn BackendUnderTest, case: &FsAppCase) -> Vec<u8> {
     let (_scratch, outputs) = drive_fs_app_case(lang, case, "");

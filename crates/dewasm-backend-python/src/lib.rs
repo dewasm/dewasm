@@ -1,12 +1,12 @@
 //! Python backend: translates dewasm IR into a Python module.
-//! The module holds a class plus a bundled lightweight runtime.
+//! The module holds a class plus a bundled small runtime.
 //!
 //! Lowering conventions:
-//! - i32/i64 are unsigned (masked) Python ints.
+//! - i32/i64 are unsigned (masked) Python `int`s.
 //!   Signed views via `Rt.s32/s64` appear only where an instruction needs them.
 //! - f32/f64 are Python floats; f32 results are re-rounded with `Rt.f32`.
 //!   Float division goes through `Rt.fdiv` because Python raises on `x/0.0`.
-//! - Python has no goto.
+//! - Python has no `goto`.
 //!   It caps nested loops/`try` at ~20 ("too many statically nested blocks").
 //!   An `if` nests ~100 deep.
 //!   So only wasm loops become real `while True`.
@@ -20,7 +20,7 @@
 //!
 //! The runtime is composed from per-method units.
 //! It is referenced by a module-level class name.
-//! Python method scopes cannot see an enclosing class scope.
+//! Python method scopes cannot see an outer class scope.
 //! So the runtime lives at module top level, not nested in the generated class as for Ruby.
 //! Under `Embedded` linkage that name is per-artifact (`<Class>Rt`).
 //! So two generated artifacts in one namespace keep independent runtimes.
@@ -39,7 +39,7 @@ mod flat {
     /// The relay it replaces costs ~16+ region checks.
     /// Measured on converted apps (CPython 3.14) against the relay-only lowering:
     /// - the sqlite3 shell's query-heavy workload runs faster;
-    /// - the packed CRuby boot is at parity.
+    /// - the packed CRuby boot runs at the same speed.
     ///
     /// A *linear* dispatch at this threshold was also measured on the same boot.
     /// It was 1.22x *slower* than the relay.
@@ -72,7 +72,7 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
-/// The runtime unit bundler for Python (see crates/dewasm-backend-python/units/).
+/// The runtime unit bundler for Python (see `crates/dewasm-backend-python/units/`).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
     BUNDLER.get_or_init(|| {
@@ -189,7 +189,7 @@ fn generate_class_inner(
     check_module_support(&PythonBackend, module)?;
     // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated blob.
     // That blob is the data file.
-    // Only consulted when externalizing.
+    // Only read when the data goes in a separate file.
     let mut data_offsets = Vec::with_capacity(module.datas.len());
     let mut acc = 0usize;
     for data in &module.datas {
@@ -225,8 +225,8 @@ fn generate_class_inner(
             if !uses.is_empty() {
                 // Namespace the runtime under the generated class.
                 // The units reference the runtime only as the module global `Rt.<name>`.
-                // They never reference it inside a string literal (the units lint enforces that).
-                // So one textual replace moves every reference onto the per-artifact name.
+                // They never reference it inside a string literal (the units lint checks that).
+                // So one text replace moves every reference onto the per-artifact name.
                 out.push_str(&format!("class {rt_name}:\n"));
                 out.push_str(
                     &bundler()
@@ -265,7 +265,8 @@ impl Backend for PythonBackend {
             // f32 re-rounding and the NaN paths mirror Ruby's numeric conventions.
             Feature::Floats => SupportStatus::Supported,
             // Wasm-1.0 completion mirrors Ruby's model.
-            // It covers imported globals/memories/tables, multiple tables, and table bulk ops.
+            // It covers imported globals/memories/tables and multiple tables.
+            // It also covers table bulk operations.
             Feature::ImportedGlobals
             | Feature::ImportedMemories
             | Feature::ImportedTables
@@ -273,7 +274,7 @@ impl Backend for PythonBackend {
             | Feature::TableBulkOps => SupportStatus::Supported,
             // The same model as Ruby's:
             // - tags are identity objects (fresh instances, compared with `is`);
-            // - a thrown exception is a native Python exception that doubles as the exnref;
+            // - a thrown exception is a native Python exception that doubles as the `exnref`;
             // - traps stay uncatchable.
             Feature::ExceptionHandling => SupportStatus::Supported,
             // A flat trampoline with a body/entry split, the same shape as Ruby's.
@@ -285,7 +286,7 @@ impl Backend for PythonBackend {
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
         // Standalone output is a self-contained program: its class name is fixed, not derived.
-        // Library output uses the requested name verbatim, after validating it.
+        // Library output uses the requested name unchanged, after validating it.
         let class_name = if opts.mode == Mode::Standalone {
             STANDALONE_CLASS.to_string()
         } else {
@@ -324,9 +325,9 @@ impl Backend for PythonBackend {
             w.line("import threading");
         }
         w.line("import time");
-        // Externalized data blob: read once at import time from the data file next to this module.
+        // Separate data blob: read once at import time from the data file next to this module.
         // The generated `DATA_BLOB[o:o+len]` expressions then slice it.
-        // Only emitted when there is data to externalize.
+        // Only emitted when there is data to put in the separate file.
         // Otherwise the generated code never reads it.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -350,9 +351,9 @@ impl Backend for PythonBackend {
             if wasi_kwargs {
                 // Parse the standalone runtime interface.
                 // Leading `--dir HOST::GUEST` flags mount host directories at guest paths.
-                // This follows wasmtime's style.
+                // This follows Wasmtime's style.
                 // The run stops at `--` or the first non-flag token.
-                // The rest is the guest's argv[1..].
+                // The rest is the guest's `argv[1..]`.
                 w.line("_pre = {}");
                 w.line("_argv = sys.argv[1:]");
                 w.line("_i = 0");
@@ -397,10 +398,11 @@ impl Backend for PythonBackend {
             }
             // Run the guest on a big-stack thread with a raised recursion limit.
             // A standalone guest may recurse arbitrarily deep for real work.
-            // So the sizing is generous: 1e6 frames.
+            // So the sizing leaves a wide margin: 1e6 frames.
             // That is at the ~1 KiB of C stack CPython <= 3.10 spends per frame.
-            // The thread relays exceptions back, so proc_exit/traps still exit via the main thread.
-            // It is a daemon, so Ctrl-C during `join` still terminates.
+            // The thread relays exceptions back.
+            // So `proc_exit`/traps still exit via the main thread.
+            // It is a `daemon` thread, so Ctrl-C during `join` still stops the process.
             w.line("_err = []");
             w.line("");
             w.line("def _run():");
@@ -452,8 +454,8 @@ impl Backend for PythonBackend {
         }];
         // The data file: every segment's bytes concatenated in segment order.
         // The order matches the `data_offsets` prefix sums.
-        // Those sums are baked into the generated `DATA_BLOB[o:o+len]` slices.
-        // Only emitted when there is data to externalize.
+        // Those sums are written into the generated `DATA_BLOB[o:o+len]` slices.
+        // Only emitted when there is data to put in the separate file.
         // Otherwise the generated code never reads it.
         if let Some(cfg) = &opts.data_file {
             if !module.datas.is_empty() {
@@ -486,7 +488,7 @@ fn runtime_name(class_name: &str, linkage: &RuntimeLinkage) -> String {
 /// It is fixed, since nothing outside a self-contained program observes it.
 pub const STANDALONE_CLASS: &str = "Program";
 
-/// The library-mode module name must be a single Python identifier and is used verbatim.
+/// The library-mode module name must be a single Python identifier and is used unchanged.
 /// Everything the backend emits lives in one module, hence no separator.
 /// No package split is ever produced, so a dotted name would have nothing to mean.
 fn check_module_name(name: &str) -> Result<()> {
@@ -562,7 +564,7 @@ struct Gen<'a> {
     /// Defined functions (function index space) containing a tail call.
     /// These are the ones split into `_fN_body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
-    /// When `Some`, data segments are externalized into a binary data file of this filename.
+    /// When `Some`, data segments go into a separate binary data file of this filename.
     /// That file is loaded once into the module-level `DATA_BLOB`.
     /// Otherwise they are embedded as `bytes.fromhex` literals.
     /// `data_offsets[i]` locates segment `i` in the blob.
@@ -574,7 +576,7 @@ struct Gen<'a> {
 
 impl<'a> Gen<'a> {
     /// The Python expression yielding a data segment's bytes.
-    /// With `--data-file` on, it is a slice of the externalized `DATA_BLOB`.
+    /// With `--data-file` on, it is a slice of `DATA_BLOB`, read from the separate file.
     /// Otherwise it is an inline `bytes.fromhex` literal.
     /// Both yield a `bytes` object.
     fn data_expr(&self, seg: usize, data: &[u8]) -> String {
@@ -690,7 +692,7 @@ impl<'a> Gen<'a> {
         w.line(header);
         w.indent();
         // The parked-call slot has to exist before the first hop reads it.
-        // Python has no implicit nil for an unset attribute.
+        // Python has no implicit `None` for an unset attribute.
         if !self.tail_callers.is_empty() {
             w.line("self._tf = None");
             w.line("self._tn = 0");
@@ -752,7 +754,7 @@ impl<'a> Gen<'a> {
         for (i, import) in m.imported_funcs.iter().enumerate() {
             // Fallback order: explicit import -> bundled WASI unit -> ENOSYS stub.
             // The WASI unit is constructed lazily.
-            // Non-WASI imports stay mandatory (a missing one is a link error).
+            // Non-WASI imports stay required (a missing one is a link error).
             let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                 let unit = format!("wasi/{}", import.name);
                 if bundler().has_unit(&unit) {
@@ -873,7 +875,7 @@ impl<'a> Gen<'a> {
         }
         w.line(format!("self.exports = {{{}}}", export_entries.join(", ")));
 
-        // Let import providers bind to the fully-constructed instance.
+        // Let import providers bind to the instance once it is constructed.
         if !m.imported_funcs.is_empty() {
             w.line("for _p in imports.values():");
             w.indent();
@@ -1003,7 +1005,7 @@ impl<'a> Gen<'a> {
     /// Park a tail call for the entry's trampoline.
     /// Assign the arguments, then the arity, then the target, and return.
     /// The arguments are already free of calls.
-    /// The IR spills an effectful operand before the instruction.
+    /// The IR spills an operand with side effects before the instruction.
     /// So nothing between these assignments can reach another trampoline and overwrite a slot.
     fn park_tail(&self, w: &mut CodeWriter, target: &str, args: &[String]) {
         self.use_unit("rt/tail_call");
@@ -1020,7 +1022,7 @@ impl<'a> Gen<'a> {
         w.line("return None");
     }
 
-    /// A funcref value: the `[type_key, callable]` pair tables store.
+    /// A `funcref` value: the `[type_key, callable]` pair tables store.
     /// A tail-calling function carries its body method as a third element.
     /// `table/tail_ref` hands that method to the trampoline.
     /// So a chain through the table stays flat.
@@ -1107,7 +1109,7 @@ impl<'a> Gen<'a> {
             &flat::frames(&func.body, flat::BreakToBlockEnd::Unavailable).paths,
             flat::DEEP_CROSSING,
         );
-        // The branch register is declared only when the cascade can actually use it.
+        // The branch register is declared only when the chain can actually use it.
         // A branch to a frame that survives the plan still relays through `_br`.
         // One addressed by state never does.
         // A function with no label branch at all never reads it either.
@@ -1148,8 +1150,8 @@ impl<'a> Gen<'a> {
     /// So surviving frames keep their `_br` regions and landing markers.
     /// Returns the state control is in afterwards.
     ///
-    /// A run starts unguarded: every frame enclosing a sequence `flat_seq` walks is dissolved.
-    /// Dissolution is transitive up the spine.
+    /// A run starts unguarded: every frame around a sequence `flat_seq` walks is dissolved.
+    /// The outer frames of a dissolved frame are dissolved too.
     /// So every branch escaping the run is addressed by state and leaves `_br` alone.
     fn flat_seq(&self, st: &mut [CodeWriter], mut cur: usize, stmts: &[Stmt]) -> usize {
         let mut pending_start = 0;
@@ -1222,7 +1224,7 @@ impl<'a> Gen<'a> {
                     }
                     // Reachable only through the condition-false fallthrough.
                     // With an `else` present, both arms route themselves.
-                    // Each ends in a transition or a terminator.
+                    // Each ends in a transition, or it `terminates`.
                     // So nothing falls out of the `if`.
                     // A trailing transition would be dead text.
                     if els.is_empty() {
@@ -1255,17 +1257,17 @@ impl<'a> Gen<'a> {
     /// A construct entered inside a region starts its own body unguarded for the same reason.
     ///
     /// `tail` says nothing runs after this sequence before the function falls off.
-    /// That means no following statement in any enclosing sequence.
-    /// It also means no enclosing loop back-edge.
+    /// That means no following statement in any outer sequence.
+    /// It also means no outer loop back-edge.
     /// The flat dispatch passes `false` throughout.
     /// There a landing marker (`if _br == N: _br = 0`) writes a register nothing reads again.
-    /// So it is skipped; a stale nonzero `_br` at fall-off is unobservable.
+    /// So it is skipped; an out-of-date nonzero `_br` at fall-off is unobservable.
     ///
     /// Returns the sequence's *free* branch targets.
-    /// Those are the label ids it branches to that are not bound within it.
+    /// Those are the labels it branches to that are not bound within it.
     /// The caller unions that set upward (minus the label it binds itself).
     /// So the information is derived once bottom-up.
-    /// Re-deriving it top-down at every enclosing block made conversion quadratic in nesting depth.
+    /// Re-deriving it top-down at every outer block made conversion quadratic in nesting depth.
     fn emit_seq(
         &self,
         w: &mut CodeWriter,
@@ -1332,7 +1334,8 @@ impl<'a> Gen<'a> {
                         free.extend(inner);
                         escapes
                     } else {
-                        // No br targets this loop, so it never repeats: the body is spliced inline.
+                        // No `br` targets this loop, so it never repeats.
+                        // The body is spliced inline.
                         // It opens its own regions, so it starts unguarded like any construct body.
                         let mut inner_guarded = false;
                         let mut inner = self.emit_seq(w, body, &mut inner_guarded, stmt_tail);
@@ -1503,9 +1506,10 @@ impl<'a> Gen<'a> {
         Some(format!("{target} = {call}"))
     }
 
-    /// Emit the statements `stmt_emits` deems code-free.
+    /// Emit the statements `stmt_emits` treats as code-free.
     /// A comment renders.
-    /// An empty construct vanishes, but its all-comment body still renders, at the current level.
+    /// An empty construct emits nothing.
+    /// But its all-comment body still renders, at the current level.
     fn simple_stmt_or_skip(&self, w: &mut CodeWriter, stmt: &Stmt) {
         match stmt {
             Stmt::SourceLine(_) => self.simple_stmt(w, stmt),
@@ -1520,7 +1524,7 @@ impl<'a> Gen<'a> {
 
     /// Emit an `if`, returning the free branch targets of both arms.
     /// The caller removes the `if`'s own label.
-    /// `tail` propagates into both arms.
+    /// `tail` passes into both arms.
     /// Take an `if` that is the function's last code, with its own marker elided.
     /// An arm's trailing marker in it is equally unread.
     fn emit_if(
@@ -1669,7 +1673,7 @@ impl<'a> Gen<'a> {
             // Parked, never called: the callee must run once this frame is gone.
             // That includes the frame's `except` blocks, and returning is what unwinds them.
             // The target is the callee's *body* where it has one.
-            // So a mutual chain bounces in the one outermost trampoline.
+            // So a mutual chain runs in the one outermost trampoline.
             // It does not enter a fresh one per hop.
             Stmt::ReturnCall { func, args } => {
                 let target = if self.tail_callers.contains(func) {
@@ -1764,7 +1768,7 @@ impl<'a> Gen<'a> {
     /// `branch()` alone never leaves the `except` suite.
     /// It is shared with ordinary branches, which rely on later code testing `_br` instead.
     /// So this appends the `break` that exits the `try_table`'s wrapping `while True:` itself.
-    /// That `break` is dead, but harmless, right after a `return`.
+    /// That `break` is dead, but does no harm, right after a `return`.
     fn catch_clause(&self, w: &mut CodeWriter, clause: &CatchClause) {
         let bind_and_branch = |w: &mut CodeWriter| {
             for (i, t) in clause.value_temps.iter().enumerate() {
@@ -1819,7 +1823,7 @@ impl<'a> Gen<'a> {
                     w.line(format!("_state = {st}; continue"));
                     return;
                 }
-                // is_loop is irrelevant here.
+                // `is_loop` is irrelevant here.
                 // The loop trailer turns `_br == <loop id>` into a `continue`.
                 // A block/if exit is handled by the guards skipping to the label's reset marker.
                 w.line(format!("_br = {label}"));
@@ -1840,7 +1844,7 @@ impl<'a> Gen<'a> {
     /// That is, whether the function needs the branch register at all.
     /// A label branch the plan addresses by state never touches it, and neither does a `return`.
     /// Only a statement that names a branch target needs an arm below.
-    /// The traversal reaches the rest.
+    /// The walk reaches the rest.
     fn seq_has_relay_branch(&self, stmts: &[Stmt]) -> bool {
         let relays = |t: &BrTarget| match t {
             BrTarget::Return { .. } => false,
@@ -1858,10 +1862,10 @@ impl<'a> Gen<'a> {
         })
     }
 
-    /// Add the label ids a non-structured statement branches to into `free`.
+    /// Add the labels a non-structured statement branches to into `free`.
     /// Returns whether it has any.
     /// Non-empty means the statement may leave `_br` set on fall-through.
-    /// So following siblings must be guarded.
+    /// So the statements after it must be guarded.
     /// Structured statements get their free set from `emit_seq`.
     /// That function builds it bottom-up as it emits.
     fn collect_leaf_free_targets(&self, stmt: &Stmt, free: &mut BTreeSet<u32>) -> bool {
@@ -1951,7 +1955,7 @@ impl<'a> Gen<'a> {
 
     /// An expression a memory unit consumes.
     /// The unit reduces its address and stored-value arguments itself.
-    /// So a congruent value suffices and the site's own mask may go.
+    /// So a congruent value is enough and the site's own mask may go.
     fn modular(&self, expr: &Expr) -> String {
         self.expr(expr, MaskContext::Modular)
     }
@@ -2029,7 +2033,7 @@ impl<'a> Gen<'a> {
 
     /// A shift count, reduced modulo the width as wasm requires ([`shift_count_mode`]).
     /// - A constant folds at conversion time.
-    /// - A provably in-range count is emitted bare from its `Masked` rendering.
+    /// - A provably in-range count is emitted as its `Masked` rendering alone.
     /// - Anything else is emitted under `& (bits - 1)`.
     fn shift_count(&self, b: &Expr, bits: u32) -> String {
         match shift_count_mode(b, bits, ELISION_LIMIT) {
@@ -2045,7 +2049,7 @@ impl<'a> Gen<'a> {
     ///
     /// A wasm comparison yields the i32 0 or 1.
     /// Every conditional context then compares that against 0.
-    /// So the lowering built a conditional expression only to undo it one operation later.
+    /// So the lowering built a conditional expression only to reverse it one operation later.
     /// Emitting the comparison as a Python boolean drops both the conditional and the test.
     /// The operands are untouched, so a signed view still goes through `Rt.s32`/`Rt.s64`.
     /// Anything else keeps the `!= 0` test.
@@ -2069,7 +2073,7 @@ impl<'a> Gen<'a> {
     }
 
     /// `e != 0`: the fallback test for a value that is not already a Python boolean.
-    /// A mask site whose raw interval pins a unique preimage of 0 compares unmasked against it.
+    /// A mask site where exactly one raw value masks to 0 compares unmasked against that value.
     /// See [`eq_const_rewrite`].
     fn nonzero_test(&self, e: &Expr) -> String {
         match eq_const_rewrite(e, 0, ELISION_LIMIT) {
@@ -2079,7 +2083,8 @@ impl<'a> Gen<'a> {
     }
 
     /// The rendered operands of an integer equality whose one side is a constant.
-    /// They exist when the shared analysis pins the other side's mask to a unique raw preimage.
+    /// They exist when the shared analysis shows that one raw value of the other side matches.
+    /// That value is the one that masks to the constant.
     /// See [`eq_const_rewrite`].
     /// `None` renders both sides exact.
     fn eq_rewrite_operands(&self, op: BinOp, a: &Expr, b: &Expr) -> Option<(String, String)> {
@@ -2289,13 +2294,13 @@ fn assign_results(results: &[Temp], call: String) -> String {
 /// Emit the dispatch over `_state` as a balanced binary-search tree of `if _state < M:` splits.
 /// Leaves hold the state bodies, at O(log n) compares per transition.
 /// Ruby's `case/when` dispatch is a single hash probe.
-/// CPython compiles both an `elif` chain and `match/case` over int literals to sequential compares.
-/// The packed-CRuby conversion measured the linear chain against the relay cascade it replaced.
-/// The chain (largest machine 1,463 states) was 1.22x *slower*.
+/// CPython compiles both an `elif` chain and `match/case` over `int` literals to linear compares.
+/// The packed-CRuby conversion measured the linear chain against the `_br` relay chain it replaced.
+/// The linear chain (largest machine 1,463 states) was 1.22x *slower*.
 /// The tree is what makes the flat lowering pay for itself.
-/// `lo..=hi` is the id range this subtree serves.
+/// `lo..=hi` is the id range this node of the tree serves.
 /// Id `texts.len()` is the exit state, reachable only as a transition target; its leaf is `break`.
-/// A leaf emits no test: transitions only ever assign ids in range, so the path proves the value.
+/// A leaf emits no test: no transition assigns an id out of range, so the path proves the value.
 fn emit_dispatch_tree(w: &mut CodeWriter, texts: &[String], lo: usize, hi: usize) {
     if lo == hi {
         if lo == texts.len() {
@@ -2340,8 +2345,8 @@ fn stmt_emits(stmt: &Stmt) -> bool {
 }
 
 /// Codegen-shape checks for mask elision.
-/// The spec harness proves the generated code computes the right values.
-/// These pin the shapes it cannot distinguish:
+/// The specification harness proves the generated code computes the right values.
+/// These check the shapes it cannot distinguish:
 /// - a mask restored by a modular consumer is gone;
 /// - a mask a non-modular consumer or the bound guard requires is still there.
 #[cfg(test)]
@@ -2356,7 +2361,7 @@ mod masks {
         src
     }
 
-    /// One function of two i32 params whose body is `expr`.
+    /// One function of two i32 parameters whose body is `expr`.
     /// The body is stored into a local, so folding cannot drop it.
     fn i32_expr(expr: &str) -> String {
         body(&format!(
@@ -2428,7 +2433,7 @@ mod masks {
     #[test]
     fn bound_guard_keeps_the_mask_on_wide_intermediates() {
         // A full-range i32 product reaches 2^64, past the elision limit.
-        // So the mul stays masked under a modular consumer.
+        // So the `i32.mul` stays masked under a modular consumer.
         assert_line(
             &i32_expr("(i32.add (i32.mul (local.get 0) (local.get 1)) (local.get 1))"),
             "l0 = ((((l0 * l1) & 0xFFFFFFFF) + l1) & 0xFFFFFFFF)",
@@ -2543,7 +2548,7 @@ mod masks {
 
     #[test]
     fn a_pinned_constant_equality_drops_the_mask() {
-        // `((l0 - 5) & 0xFFFFFFFF) == 7` admits exactly one raw preimage.
+        // In `((l0 - 5) & 0xFFFFFFFF) == 7`, exactly one raw value masks to 7.
         // The constant migrates across the sub.
         assert_line(
             &i32_expr("(i32.eq (i32.sub (local.get 0) (i32.const 5)) (i32.const 7))"),
@@ -2825,7 +2830,7 @@ mod cascade {
 
     #[test]
     fn mixed_depths_stay_structured() {
-        // block $A { loop $B { block $C { br_table $C $B $A } ... } }
+        // `block $A { loop $B { block $C { br_table $C $B $A } ... } }`
         // A single `br_table` whose targets span all three nesting depths.
         // Every crossing is shallow.
         // So the whole function keeps the register lowering and its structured loop.
@@ -2851,9 +2856,9 @@ mod cascade {
 /// Lint for the runtime units.
 /// Every reference a unit body makes to another unit must be declared in its `# requires:` header.
 /// Mirrors the Ruby backend's units lint, adjusted for Python syntax:
-/// - `Rt.<name>` staticmethod/const references;
+/// - `Rt.<name>` `staticmethod`/constant references;
 /// - `self.memory.<name>` memory calls;
-/// - `self.<name>(...)` sibling calls within a scope's nested class.
+/// - `self.<name>(...)` calls to other methods within a scope's nested class.
 #[cfg(test)]
 mod units {
     use super::*;
@@ -2870,9 +2875,9 @@ mod units {
     /// It does so by replacing `Rt.` across the bundle text.
     /// That is sound only while every `Rt.` in a unit is code.
     /// A `Rt.` inside a string literal would be rewritten too.
-    /// That silently changes program-visible text (a trap message, an errno key).
+    /// That silently changes program-visible text (a trap message, an `errno` key).
     /// No unit has one today, and this keeps it that way.
-    /// Triple-quoted strings are rejected outright.
+    /// Strings quoted with `'''` or `"""` are rejected outright.
     /// The single-line scanner cannot see across them.
     #[test]
     fn no_rt_reference_inside_a_string_literal() {
@@ -2942,7 +2947,7 @@ mod units {
         let rt_call = Regex::new(r"Rt\.([a-z_][a-z0-9_]*)").unwrap();
         let rt_const = Regex::new(r"Rt\.([A-Z]\w*)").unwrap();
         let memory_call = Regex::new(r"self\.memory\.([a-z_]\w*)").unwrap();
-        // One precompiled sibling-call matcher per unit name (`self.<name>(`).
+        // One matcher per unit name for `sibling_calls` (`self.<name>(`), compiled once.
         let sibling_calls: Vec<(&str, Regex)> = unit_ids
             .iter()
             .map(|id| {

@@ -1,4 +1,4 @@
-//! Ruby side of the shared spec harness.
+//! Ruby side of the shared specification harness.
 //! It converts modules with the Ruby backend and phrases assertions as Ruby.
 //! The helpers are `check`/`check_trap`/`check_exhaust`.
 //! Float comparison is bit-exact via `Rt.f32_bits`/`Rt.f64_bits`.
@@ -20,12 +20,12 @@ use wast::{WastArg, WastRet};
 /// The file still runs, so regressions in the passing assertions are caught.
 ///
 /// - `import-limits`: `Rt.check_import_kind` validates that a resolved import is the right *kind*.
-///   The kinds are func/global/table/memory/tag.
+///   The kinds are `func`/`global`/`table`/`memory`/`tag`.
 ///   It does not validate the finer-grained wasm type:
-///   - a function's param/result types;
+///   - a function's parameter and result types;
 ///   - a global's mutability;
 ///   - a tag's parameter types;
-///   - a table/memory's min/max limits against the import site's declared bounds.
+///   - a table/memory's minimum/maximum limits against the import site's declared bounds.
 ///
 ///   Every `assert_unlinkable` case testing one of those stays a known gap.
 ///   A kind mismatch is not among them, since it is caught.
@@ -36,7 +36,7 @@ use wast::{WastArg, WastRet};
 ///   It is downstream of an *unrelated* declared-unsupported feature.
 ///   That feature is multi-memory, inside a module that also happens to use `register`.
 ///   That module never converts.
-///   So a later assertion against the module it would have written into observes stale state.
+///   So a later assertion against the module it would have written into observes out-of-date state.
 ///   Not a cross-module-linking gap itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
@@ -76,16 +76,16 @@ impl dewasm_test_helper::SpecBackend for RubySpec {
     fn seed_units(&self) -> &'static [&'static str] {
         &[
             "rt/trap",
-            // check_unlinkable's rescue clause references Rt::LinkError.
+            // The `rescue` clause of `check_unlinkable` references `Rt::LinkError`.
             // It does so even when the converted modules themselves don't.
             "rt/link_error",
-            // Same for check_exception and Rt::WasmException.
+            // Same for `check_exception` and `Rt::WasmException`.
             "rt/wasm_exception",
             "rt/f32_bits",
             "rt/f32_from_bits",
             "rt/f64_bits",
             "rt/f64_from_bits",
-            // Referenced by the $spectest fixture (PREAMBLE below).
+            // Referenced by the `$spectest` fixture (`PREAMBLE` below).
             // It is not necessarily referenced by the converted module itself.
             "global/_class",
             "table/_class",
@@ -275,7 +275,8 @@ fn arg_rb(arg: &WastArg<'_>) -> Result<String, String> {
                 Err(dewasm_test_helper::heap_type_tag(hty))
             }
         }
-        // An externref (or legacy hostref) with identity `n`: the host value is the Integer itself.
+        // An `externref` (or legacy `hostref`) with identity `n`.
+        // The host value is the Integer itself.
         WastArg::Core(WastArgCore::RefExtern(n)) => Ok(n.to_string()),
         WastArg::Core(WastArgCore::RefHost(n)) => Ok(n.to_string()),
         _ => Err("component-model".to_string()),
@@ -316,14 +317,14 @@ fn ret_cmp(value: &str, ret: &WastRet<'_>) -> Result<String, String> {
             Some(hty) => Err(dewasm_test_helper::heap_type_tag(hty)),
         },
         WastRet::Core(WastRetCore::RefExtern(Some(n))) => Ok(format!("{value} == {n}")),
-        // `(ref.extern)`: any non-null externref.
+        // `(ref.extern)`: any non-null `externref`.
         WastRet::Core(WastRetCore::RefExtern(None)) => Ok(format!("!{value}.nil?")),
         WastRet::Core(WastRetCore::RefHost(n)) => Ok(format!("{value} == {n}")),
-        // `(ref.func)`: any non-null funcref, the `[type_symbol, callable]` pair.
+        // `(ref.func)`: any non-null `funcref`, the `[type_symbol, callable]` pair.
         WastRet::Core(WastRetCore::RefFunc(None)) => Ok(format!(
             "({value}.is_a?(Array) && {value}[0].is_a?(Symbol))"
         )),
-        // A specific function's identity: not expressible without an export map.
+        // A specific function's identity: it cannot be expressed without an export map.
         // No top-level testsuite file uses it.
         WastRet::Core(WastRetCore::RefFunc(Some(_))) => Err("funcref-identity".to_string()),
         WastRet::Core(

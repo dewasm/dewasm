@@ -1,5 +1,5 @@
 //! The module-name policy for Perl:
-//! - library names are package names taken verbatim;
+//! - library names are package names taken unchanged;
 //! - a nested one namespaces the embedded runtime under itself;
 //! - an invalid one is a conversion-time error;
 //! - standalone output ignores the name for a fixed `Program`.
@@ -19,7 +19,7 @@ dewasm_test_helper::module_name_policy_suite!(
     standalone_markers: ["package Program"],
 );
 
-/// Run `source` under perl and return its stdout, failing loud on a nonzero exit.
+/// Run `source` under `perl` and return its `stdout`, failing loud on a nonzero exit.
 fn run(source: &str) -> String {
     let perl = find_perl().expect("perl >= 5.26 not found on PATH: see docs/testing.md");
     let out = dewasm_test_helper::run_script(&perl, source, "pl", &[], "");

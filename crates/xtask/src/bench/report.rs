@@ -2,12 +2,12 @@
 //! One is the machine-readable file `cargo xtask record-speed` writes under `records/`.
 //! The other is the `docs/benchmarks/results.md` `cargo xtask render-speed` generates from it.
 //!
-//! Timings are not reproducible byte-for-byte, so neither output is a compared snapshot.
+//! Timings are not reproducible, so neither output is a compared snapshot.
 //! No freshness test guards them.
 //! `docs/support.md` (`cargo xtask update-support-docs`) and the execution snapshots have one.
 //! The JSON is the record: host, the date, and every sample.
 //! It also holds every runtime's version string *as captured by executing it*.
-//! The markdown is a rendering of that same record.
+//! The Markdown is a rendering of that same record.
 //! It is required to state the losses as plainly as the wins.
 
 use std::fmt::Write as _;
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::bench::chart::Chart;
 
 /// The current speed-record schema.
-/// A bump means `cargo xtask migrate-records` learns the upgrade.
+/// A version increase means `cargo xtask migrate-records` learns the migration.
 /// Every reader supports only this version and names that command when it meets an older record.
 /// So cross-version handling lives in the migration alone.
 pub const SCHEMA: u32 = 2;
@@ -59,9 +59,9 @@ pub struct Runtime {
     pub runner: String,
     pub available: bool,
     /// Why not, when `available` is false.
-    /// Phrased as the setup step that would fix it.
+    /// Phrased as the set-up step that would fix it.
     pub unavailable_reason: Option<String>,
-    /// Captured by running the runtime, not hardcoded.
+    /// Captured by running the runtime, not written in the source.
     pub version: Option<String>,
 }
 
@@ -84,7 +84,7 @@ pub enum Outcome {
         reason: String,
     },
     /// Attempted and broke.
-    /// A stdout mismatch against wasmtime lands here too.
+    /// A `stdout` mismatch against `wasmtime` lands here too.
     /// A wrong answer is a hard failure, not a slow pass.
     Failed {
         reason: String,
@@ -100,7 +100,7 @@ pub enum SkipKind {
     Cost,
     /// The runner cannot execute the workload.
     Capability,
-    /// This host lacks the runner or the built module; the reason names the setup command.
+    /// This host lacks the runner or the built module; the reason names the set-up command.
     Setup,
 }
 
@@ -124,7 +124,7 @@ pub struct Measurement {
     pub runs_per_sample: Option<u64>,
     pub reps: usize,
     /// `t(0)`, microbenchmarks only: the `<iterations> = 0` run.
-    /// That is process startup plus module load, the cold-start metric subtracted from `t(N)`.
+    /// That is process start plus module load, the cold-start measure subtracted from `t(N)`.
     /// `null` for an app, which is timed as whole wall time.
     pub cold_start: Option<Samples>,
     /// `t(N)`: the full run.
@@ -136,8 +136,8 @@ pub struct Measurement {
     pub compute_s: Option<f64>,
     pub ns_per_op_min: Option<f64>,
     pub ns_per_op_median: Option<f64>,
-    /// Module load/instantiate time as the third-party driver reports it on stderr (`load_ms=`).
-    /// Only the pywasm/wardite runners produce this.
+    /// Module load/instantiate time as the third-party driver reports it on `stderr` (`load_ms=`).
+    /// Only the `pywasm` and `wardite` runners produce this.
     pub load_ms: Option<f64>,
     pub verification: Verification,
 }
@@ -152,15 +152,15 @@ pub struct Samples {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verification {
-    /// This runner *is* the reference (wasmtime).
+    /// This runner *is* the reference (`wasmtime`).
     Reference,
-    /// stdout was byte-identical to wasmtime's at the same iteration count.
+    /// `stdout` was byte-identical to `wasmtime`'s at the same iteration count.
     /// A mismatch never reaches here: it is an [`Outcome::Failed`].
     Match,
 }
 
 impl Report {
-    /// Pretty-printed JSON, newline-terminated.
+    /// Pretty-printed JSON, ending in a newline.
     pub fn to_json(&self) -> anyhow::Result<String> {
         let mut text = serde_json::to_string_pretty(self)?;
         text.push('\n');
@@ -192,13 +192,13 @@ pub fn load(path: &Path) -> anyhow::Result<Report> {
 }
 
 /// Render `docs/benchmarks/results.md` in the house style of `docs/related-work.md`.
-/// `docs/backends/*.md` use the same style: no front matter, plain `##` headings, markdown tables.
-/// The doc adds the generated-file marker `docs/support.md` carries.
+/// `docs/backends/*.md` use the same style: no front matter, plain `##` headings, Markdown tables.
+/// The document adds the generated-file marker `docs/support.md` carries.
 ///
 /// `charts` are the SVGs the caller has written under `docs/benchmarks/figs/`.
 /// Each one is embedded above the table for its own workload.
-/// Passing an empty slice renders the doc unchanged.
-/// That is what makes the charts additive rather than required.
+/// Passing an empty slice renders the document unchanged.
+/// That is what makes the charts an addition, not a requirement.
 pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
     let mut out = String::new();
     out.push_str("# Benchmarks\n\n");
@@ -217,7 +217,7 @@ pub fn render_doc(report: &Report, charts: &[Chart]) -> String {
 }
 
 /// The quantity the tables and the charts both compare on, taken on the minima.
-/// It is normalized throughput (ns/op) for a microbenchmark.
+/// It is the normalized time per iteration (`ns/op`) for a microbenchmark.
 /// It is whole wall time for an app, which has no iteration parameter.
 fn comparable(m: &Measurement, is_app: bool) -> Option<f64> {
     if is_app {
@@ -251,8 +251,8 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
     if !charts.is_empty() {
         out.push_str("Each workload has a chart with its full numbers folded underneath.\nA chart has a log axis in seconds, and its title states the unit.\nColor is the runner family.\n\n");
     }
-    // The two groups measure different quantities (per iteration vs per run).
-    // So they get separate subsections.
+    // The two groups measure different quantities (per iteration vs. per run).
+    // So each gets its own heading.
     // Grouping derives from the label prefix; an empty group emits no heading.
     let workloads = ordered_workloads(report);
     let mut group_open: Option<bool> = None;
@@ -290,10 +290,10 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                 _ => None,
             });
 
-        // The table is the reference, not the finding, so it goes behind a disclosure.
+        // The table is the reference, not the finding, so it goes behind a `<details>` element.
         // The chart is visible, and the numbers are one click away.
         // The blank line after </summary> is required.
-        // GitHub will not render a markdown table inside <details> without it.
+        // GitHub will not render a Markdown table inside <details> without it.
         let _ = writeln!(
             out,
             "<details>\n<summary>Full numbers for <code>{workload}</code></summary>\n"
@@ -329,7 +329,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
 }
 
 /// A chart, above the table it summarizes.
-/// `<picture>` rather than a bare `<img>`: dark mode is a *selected* variant with its own file.
+/// `<picture>` rather than a plain `<img>`: dark mode is a *selected* variant with its own file.
 /// GitHub honours the `prefers-color-scheme` source.
 /// A renderer that does not falls back to the light `<img>`.
 /// Paths are relative to `docs/benchmarks/results.md`.
@@ -431,7 +431,7 @@ pub fn ordered_workloads(report: &Report) -> Vec<String> {
         }
     }
     // Microbenchmarks before apps, each keeping the record's own order.
-    // The doc emits one heading per group as it walks this list.
+    // The document emits one heading per group as it walks this list.
     // A record could happen to interleave the two families.
     // Without this, it would produce a repeated heading rather than a reordered one.
     let (micro, apps): (Vec<String>, Vec<String>) = seen
@@ -448,7 +448,7 @@ fn fmt_seconds(seconds: f64) -> String {
     }
 }
 
-/// A slowdown factor against wasmtime.
+/// A time ratio against `wasmtime`.
 /// Sub-1.0 ratios (an interpreter winning on cold start) need a decimal to be readable at all.
 fn fmt_ratio(ratio: f64) -> String {
     if ratio < 10.0 {
@@ -481,7 +481,7 @@ fn fmt_count(n: u64) -> String {
     out
 }
 
-/// Escape the one character that would break a markdown table row.
+/// Escape the one character that would break a Markdown table row.
 fn md_cell(text: &str) -> String {
     text.replace('|', "\\|")
 }
@@ -492,7 +492,7 @@ fn code_cell(text: &str) -> String {
 }
 
 /// Escape text going into a double-quoted HTML attribute.
-/// That is the chart alt text, which is generated from runner labels and numbers.
+/// That is the chart `alt` text, which is generated from runner labels and numbers.
 fn html_attr(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

@@ -13,7 +13,7 @@ use crate::feature::{Feature, UnsupportedError};
 use crate::func::FuncBuilder;
 use crate::ir;
 
-/// Knobs for [`build_module_with_options`].
+/// Options for [`build_module_with_options`].
 /// Defaults reproduce [`build_module`] exactly, so every existing call site is byte-identical.
 #[derive(Debug, Default, Clone)]
 pub struct BuildOptions {
@@ -86,7 +86,7 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
 
 pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result<ir::Module> {
     if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
-        // Attribute the refusal to the proposals whose validator features make the module validate.
+        // Attribute the refusal to the proposals whose features make the module pass `Validator`.
         // An empty feature list means "newer than this toolchain knows".
         let needed = classify_validation_failure(bytes).unwrap_or_default();
         return Err(anyhow::Error::new(UnsupportedError {
@@ -372,7 +372,7 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
 }
 
 /// Find the minimal set of known proposals that makes `bytes` validate.
-/// Return `None` if even all of them do not suffice.
+/// Return `None` if even all of them together are not enough.
 /// Then the module is newer than this toolchain, or malformed.
 fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
     let candidates: Vec<Feature> = Feature::ALL
@@ -407,7 +407,7 @@ fn classify_validation_failure(bytes: &[u8]) -> Option<Vec<Feature>> {
 /// `exnref` is the one reference type legal here.
 /// `catch_ref` hands a caught exception to ordinary locals, temps, and block types.
 /// The reference-types hierarchies are not legal here.
-/// funcref stays representable only via `table_elem_type` for a table's element typing.
+/// `funcref` stays representable only via `table_elem_type` for a table's element typing.
 pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
     Ok(match ty {
         wasmparser::ValType::I32 => ir::ValType::I32,
@@ -432,8 +432,8 @@ pub(crate) fn val_type(ty: wasmparser::ValType) -> Result<ir::ValType> {
 }
 
 /// Map a table's element type to the IR.
-/// Only funcref tables are supported.
-/// externref (and every other reference type) is rejected with the proposal that introduced it.
+/// Only `funcref` tables are supported.
+/// `externref` (and every other reference type) is rejected with the proposal that introduced it.
 pub(crate) fn table_elem_type(r: &wasmparser::RefType) -> Result<ir::ValType> {
     if *r == wasmparser::RefType::FUNCREF {
         return Ok(ir::ValType::FuncRef);
@@ -468,10 +468,10 @@ pub(crate) fn heap_type_feature(hty: &wasmparser::HeapType) -> Feature {
 
 /// Evaluate a constant expression.
 /// It is a plain constant, or (MVP rule) a `global.get` of an imported immutable global.
-/// The validator already enforces that constraint, so the index is used as-is.
+/// The `Validator` already checks that constraint, so the index is used as-is.
 /// Reference constants only appear in element items (`elem_item_expr`).
-/// A global whose init is a reference constant is rejected earlier.
-/// There `val_type` refuses its ref-typed content type.
+/// A global whose initializer is a reference constant is rejected earlier.
+/// There `val_type` refuses its reference-typed content type.
 fn const_expr(expr: &ConstExpr<'_>) -> Result<ir::Expr> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {
@@ -498,9 +498,9 @@ fn const_expr_unsupported(op: &Operator<'_>) -> anyhow::Error {
 
 /// One item of an expression-encoded element segment.
 /// It is `ref.func $i`, `ref.null` (an intentionally-empty slot), or `global.get $i`.
-/// The `global.get $i` must be of a ref-typed immutable global.
+/// The `global.get $i` must be of a reference-typed immutable global.
 /// Anything else comes from extended constant expressions.
-/// Or it comes from a proposal the validator would have refused first.
+/// Or it comes from a proposal the `Validator` would have refused first.
 fn elem_item_expr(expr: &ConstExpr<'_>) -> Result<ir::ElemItem> {
     let mut reader = expr.get_operators_reader();
     let value = match reader.read()? {

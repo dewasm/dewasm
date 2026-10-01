@@ -1,13 +1,13 @@
-//! Ruby end-to-end suites: the shared case consts (`dewasm-test-helper`) for the Ruby backend.
+//! Ruby end-to-end suites: the shared case constants (`dewasm-test-helper`) set up for Ruby.
 //! This file holds ONLY:
-//! - the [`BackendUnderTest`] impl;
+//! - the [`BackendUnderTest`] implementation;
 //! - named glue string constants;
-//! - per-case macro invocations.
+//! - per-case macro calls.
 //!
-//! Every scenario's case content (fixtures, expectations, run logic) lives in a shared const.
+//! Every scenario's case content (fixtures, expectations, run logic) lives in a shared constant.
 //! Glue is a plain `&str` argument at the callsite.
-//! Which macros this file invokes is the capability declaration.
-//! A non-invocation carries a REASON comment.
+//! Which macros this file calls is the capability declaration.
+//! A macro left uncalled carries a REASON comment.
 
 use std::path::{Path, PathBuf};
 
@@ -34,7 +34,7 @@ impl BackendUnderTest for Ruby {
     /// Return the `require_relative` preamble that loads them.
     /// `shared_runtime` emits each module against a single top-level `::Rt` (Alias linkage).
     /// That `::Rt` is written to `rt.rb`, so an imported table crosses modules.
-    /// The spec harness's `register` path does the same.
+    /// The specification harness's `register` path does the same.
     /// Each module file requires `rt.rb` first, since its class body resolves `::Rt` at load time.
     /// Otherwise each file is a self-contained Embedded conversion carrying its own nested `Rt`.
     fn compose_modules(
@@ -104,7 +104,7 @@ print inst.invoke("fib", 10), "\n"
 
 /// The override/fallback glue.
 /// An explicit `fd_write` import wins, and `random_get` falls back to the bundled WASI.
-/// Intercepts fd_write and prints the actual bytes the module wrote.
+/// Intercepts `fd_write` and prints the actual bytes the module wrote.
 const RUBY_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
 fd_write = lambda do |_fd, iovs, _iovs_len, out_ptr|
@@ -123,7 +123,7 @@ print captured
 
 /// The `custom_wasi_provider` glue: a provider *object* replaces the whole bundled WASI.
 /// `import(name)` resolves functions, and `attach(instance)` binds the memory.
-/// So the bundled WASI is never constructed (`@wasi` stays nil).
+/// So the bundled WASI is never constructed (`@wasi` stays `nil`).
 const RUBY_CUSTOM_PROVIDER_GLUE: &str = r#"
 class MyWasi
   attr_reader :out
@@ -151,7 +151,7 @@ print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\
 "#;
 
 /// The `partial_override_falls_back_to_bundled_wasi` glue.
-/// It reuses the override glue (fd_write intercepted, random_get falls back).
+/// It reuses the override glue (`fd_write` intercepted, `random_get` falls back).
 /// It adds one line probing that the bundled WASI *was* lazily constructed (`@wasi ||= ...`).
 const RUBY_PARTIAL_OVERRIDE_GLUE: &str = r#"captured = +""
 holder = {}
@@ -171,8 +171,8 @@ print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\
 "#;
 
 /// The `wasi_stdio_capture` glue: redirect `$stdout` to a StringIO before instantiation.
-/// This is the standard Ruby capture idiom, so the module's output flows into it.
-/// Then print the captured string to the real stdout.
+/// This is the standard Ruby way to capture output, so the module's output flows into it.
+/// Then print the captured string to the real `stdout`.
 const RUBY_STDIO_CAPTURE_GLUE: &str = r#"
 require "stringio"
 captured = StringIO.new
@@ -188,8 +188,8 @@ end
 print captured.string
 "#;
 
-/// The shared filesystem template.
-/// Preopen the scratch dir (`{host}`) at guest `{guest}` (always `/`).
+/// The shared file system template.
+/// Preopen the scratch directory (`{host}`) at guest `{guest}` (always `/`).
 /// Then run `_start`, and surface a `proc_exit` code as a trailing decimal line.
 const RUBY_FS_GLUE: &str = r#"inst = Prog.new({}, preopens: { "{guest}" => "{host}" })
 begin
@@ -206,8 +206,8 @@ _path, err = wasi.send(:resolve_path, 3, "etc")
 print(err.nil? ? "contained" : "rejected", "\n")
 "#;
 
-// Filesystem app glue: class/argv/env/preopen-guest-paths are literals.
-// Only the host scratch/cache dirs come through {scratch}/{cache}.
+// File system app glue: the class, `argv`, environment, and preopen guest paths are literals.
+// Only the host scratch/cache directories come through `{scratch}`/`{cache}`.
 
 const RUBY_QJS_FILE_IO_GLUE: &str = r#"inst = Qjs.new({}, args: ["qjs", "/work/qjs_file_io.js"], env: {}, preopens: {"/work" => "{scratch}"})
 begin
@@ -253,8 +253,8 @@ rescue Toywasm::Rt::Exit
 end
 "#;
 
-/// Like the toywasm glue; wasm3's CLI takes the guest module directly.
-/// Its meta-WASI build always forwards the guest's WASI.
+/// Like the `toywasm` glue; wasm3's CLI takes the guest module directly.
+/// Its MetaWASI build always forwards the guest's WASI.
 /// Plain glue, unlike every other converted-interpreter case here.
 /// The official asset's dispatch is a tail call.
 /// So the trampoline runs the whole chain in one Ruby frame, and no stack is raised.
@@ -265,14 +265,14 @@ rescue Wasm3::Rt::Exit
 end
 "#;
 
-// C-API drive glue (sqlite3): malloc/pointer plumbing via Rt::Memory.
-// No wasmtime snapshot exists, since the results live in guest memory.
-// So each drive's output is pinned in the shared case const.
+// C-API drive glue (sqlite3): `malloc`/pointer plumbing via `Rt::Memory`.
+// No Wasmtime snapshot exists, since the results live in guest memory.
+// So each drive's expected output is written in the shared case constant.
 // Only the file-backed case uses {scratch}.
 
 /// The sqlite3 C API driven in memory.
 /// The steps are `_initialize` and `sqlite3_malloc` + `Rt::Memory` pointer plumbing.
-/// Then come open/exec/prepare/step/column/finalize/close.
+/// Then come `open`/`exec`/`prepare`/`step`/`column`/`finalize`/`close`.
 const RUBY_LIBSQLITE3_MEM: &str = r##"
 db_mod = Libsqlite3.new
 db_mod.invoke("_initialize")
@@ -321,7 +321,7 @@ puts "C-API-OK"
 "##;
 
 /// The sqlite3 C API against a file preopen: create+insert, close, reopen, select.
-/// The file lifecycle through the C API, on the same fs stack as the shell.
+/// The whole life of the file through the C API, on the same file system stack as the shell.
 const RUBY_LIBSQLITE3_FILE: &str = r##"
 DB_MOD = Libsqlite3.new({}, preopens: { "/db" => "{scratch}" })
 DB_MOD.invoke("_initialize")
@@ -426,8 +426,8 @@ ROWS.each { |r| puts "row: #{r.join('|')}" }
 puts "CALLBACK-OK"
 "##;
 
-/// libpcap BPF filter compilation.
-/// Drive `compile_filter` on "tcp port 80" (DLT_EN10MB, snaplen 65535).
+/// `libpcap` BPF filter compilation.
+/// Drive `compile_filter` on "tcp port 80" (`DLT_EN10MB`, `snaplen` 65535).
 /// Then walk the serialized program in guest memory.
 /// Its layout is `[u32 bf_len][bf_len × {u16 code; u8 jt; u8 jf; u32 k}]`.
 /// Each instruction is printed as `code jt jf k`.
@@ -459,7 +459,7 @@ puts "BPF-OK"
 
 /// tree-sitter JSON parse: drive `parse_source` on the fixed snippet `{"key": [1, true, null]}`.
 /// Then print the parse tree's S-expression from guest memory.
-/// The S-expression is a malloc'd NUL-terminated C string.
+/// The S-expression is a NUL-terminated C string from `malloc`.
 const RUBY_TREESITTER_PARSE: &str = r##"
 inst = Treesitter.new
 inst.invoke("_initialize")
@@ -481,13 +481,13 @@ inst.invoke("free", r)
 puts "TS-OK"
 "##;
 
-/// zeroperl Perl-5.42 eval (issue #67).
+/// `zeroperl` Perl-5.42 `eval` (issue #67).
 /// Instantiate the reactor with a zero-returning `env.call_host_function` import stub.
-/// The stub is only invoked when the guest registers host callbacks; this program registers none.
+/// The stub is only called when the guest registers host callbacks; this program registers none.
 /// The reactor also gets a `/dev/null` preopen (`zeroperl_init` returns 1 without it).
 /// Then run `_initialize` → `zeroperl_init` → `malloc` + copy a Perl program into guest memory.
 /// After that come `zeroperl_eval` → `zeroperl_flush`.
-/// The program is a regex capture + `printf`, so its stdout is deterministic.
+/// The program is a regular expression capture + `printf`, so its `stdout` is deterministic.
 const RUBY_ZEROPERL_EVAL: &str = r##"
 inst = Zeroperl.new(
   { "env" => { "call_host_function" => ->(_, _, _) { 0 } } },
@@ -511,7 +511,7 @@ inst.invoke("zeroperl_eval", ptr, 0, 0, 0)
 inst.invoke("zeroperl_flush")
 "##;
 
-/// ExifTool on zeroperl (issue #70): the flattened `exiftool` CLI driver.
+/// ExifTool on `zeroperl` (issue #70): the flattened `exiftool` CLI driver.
 /// The driver is `{cache}/exiftool-lib/exiftool`, preopened at `/work`.
 /// It runs on the same `cache/zeroperl.wasm` reactor.
 /// The reactor's SFS blob embeds the `Image::ExifTool` module tree.
@@ -522,9 +522,9 @@ inst.invoke("zeroperl_flush")
 /// The Perl driver snippet sets `@ARGV`/`$0` and `do`es the script.
 /// It first overrides `CORE::GLOBAL::exit` to a `die`.
 /// So ExifTool's terminal `exit` unwinds back into `eval_pv` instead of tripping `proc_exit`.
-/// Then `zeroperl_flush` pushes ExifTool's buffered stdout out through fd 1.
+/// Then `zeroperl_flush` pushes ExifTool's buffered `stdout` out through file descriptor 1.
 /// Only deterministic tags are requested (`-S -Make -Model -DateTimeOriginal`).
-/// They are pinned in the case const and cross-checked against host exiftool.
+/// Their expected output is written in the case constant and cross-checked against host `exiftool`.
 const RUBY_EXIFTOOL: &str = r##"
 inst = Zeroperl.new(
   { "env" => { "call_host_function" => ->(_, _, _) { 0 } } },
@@ -554,7 +554,7 @@ inst.invoke("zeroperl_flush")
 
 /// Driver for the shared-table case.
 /// Instantiate the exporter and the importer linked against it.
-/// Then print `call0` (call_indirect through the shared table -> 42).
+/// Then print `call0` (`call_indirect` through the shared table -> 42).
 const RUBY_SHARED_TABLE_GLUE: &str = r#"a = TableExp.new
 b = TableImp.new({ "a" => a })
 print b.invoke("call0"), "\n"
@@ -577,7 +577,7 @@ end
 "#;
 
 /// DOOM: deterministic drive (synthetic clock, no input).
-/// It dumps the framebuffer as a P6 PPM matching the wasmtime snapshot.
+/// It dumps the framebuffer as a P6 PPM matching the Wasmtime snapshot.
 /// `{ticks}`/`{clock_step}` filled by the runner.
 const RUBY_DOOM_FRAME_GLUE: &str = r#"frame = { off: nil, w: 0, h: 0 }
 ms = [0]
@@ -610,10 +610,11 @@ $stdout.write(rgb.pack("C*"))
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the pinned ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
-/// Compose the frame from agnes's palette-index screen buffer and its palette (issue #117).
+/// Load the ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
+/// The ROM is checked against a fixed checksum.
+/// Compose the frame from the palette-index screen buffer of `agnes` and its palette (issue #117).
 /// The `& 0x3f` mask in that step is required.
-/// Then dump the frame as a P6 PPM matching the wasmtime snapshot.
+/// Then dump the frame as a P6 PPM matching the Wasmtime snapshot.
 /// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
 const RUBY_NES_FRAME_GLUE: &str = r#"nes = Nes.new
 nes.invoke("_initialize")
@@ -648,13 +649,13 @@ dewasm_test_helper::wasi_suite!(Ruby, Fs, RUBY_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Ruby, RUBY_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Ruby);
 // 5000 guest frames fit the host stack Ruby's entrypoint already runs on.
-// No mitigation is needed (measured).
+// Nothing more is needed (measured).
 dewasm_test_helper::deep_recursion_e2e!(Ruby);
 dewasm_test_helper::folded_temp_reuse_e2e!(Ruby);
 
 dewasm_test_helper::cowsay_args_e2e!(Ruby);
 dewasm_test_helper::cowsay_stdin_e2e!(Ruby);
-// Fast: mruby converts and runs well under the cowsay-class budget.
+// Fast: mruby converts and runs well under the budget of the `cowsay` cases.
 dewasm_test_helper::mruby_eh_e2e!(Ruby);
 dewasm_test_helper::qjs_eval_e2e!(Ruby);
 dewasm_test_helper::sqlite3_shell_e2e!(Ruby);
@@ -670,10 +671,10 @@ dewasm_test_helper::rg_search_e2e!(Ruby, RUBY_RG_SEARCH_GLUE);
 dewasm_test_helper::cpython_hello_e2e!(Ruby, RUBY_CPYTHON_GLUE);
 dewasm_test_helper::cruby_hello_e2e!(Ruby, RUBY_CRUBY_GLUE);
 dewasm_test_helper::cruby_packed_hello_e2e!(Ruby);
-// Slow, like the other filesystem app cases.
-// It converts the interpreter, then interprets the cowsay guest.
+// Slow, like the other file system app cases.
+// It converts the interpreter, then interprets the `cowsay` guest.
 dewasm_test_helper::toywasm_cowsay_e2e!(Ruby, RUBY_TOYWASM_GLUE);
-// Slow for the same reason as the toywasm case above.
+// Slow for the same reason as the `toywasm` case above.
 dewasm_test_helper::wasm3_cowsay_e2e!(Ruby, RUBY_WASM3_GLUE);
 dewasm_test_helper::qjs_repl_pty_e2e!(Ruby);
 

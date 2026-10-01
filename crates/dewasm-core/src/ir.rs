@@ -1,6 +1,6 @@
 //! Intermediate representation of a wasm module.
 //!
-//! The IR keeps wasm's structured control flow (block/loop/if/br) as-is.
+//! The IR keeps wasm's structured control flow (`block`/`loop`/`if`/`br`) as-is.
 //! It flattens the value stack into "temps": one variable per (stack depth, type) pair.
 //! This follows the style of wasm2c.
 //! A value folds into its consumer where it can and takes a temp only where it must.
@@ -24,7 +24,7 @@ pub enum ValType {
 
 /// A flattened stack slot.
 /// `depth` is the value-stack depth the value lives at.
-/// The same (depth, ty) pair always maps to the same target variable.
+/// The same (`depth`, `ty`) pair always maps to the same target variable.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Temp {
     pub depth: u32,
@@ -42,21 +42,21 @@ pub struct Module {
     pub types: Vec<FuncType>,
     pub imported_funcs: Vec<ImportedFunc>,
     /// Defined functions.
-    /// Function index space = imported_funcs ++ funcs.
+    /// Function index space = `imported_funcs` ++ `funcs`.
     pub funcs: Vec<Func>,
     pub imported_tables: Vec<ImportedTable>,
     /// Defined tables.
-    /// Table index space = imported_tables ++ tables.
+    /// Table index space = `imported_tables` ++ `tables`.
     pub tables: Vec<Table>,
     pub imported_memory: Option<ImportedMemory>,
     pub memory: Option<MemoryDef>,
     pub imported_globals: Vec<ImportedGlobal>,
     /// Defined globals.
-    /// Global index space = imported_globals ++ globals.
+    /// Global index space = `imported_globals` ++ `globals`.
     pub globals: Vec<Global>,
     pub imported_tags: Vec<ImportedTag>,
     /// Defined tags.
-    /// Tag index space = imported_tags ++ tags.
+    /// Tag index space = `imported_tags` ++ `tags`.
     pub tags: Vec<Tag>,
     pub exports: Vec<Export>,
     pub elems: Vec<ElemSegment>,
@@ -198,11 +198,11 @@ pub struct Export {
 
 #[derive(Debug)]
 pub enum ElemKind {
-    /// Eagerly copied into `table_index` at instantiation.
+    /// Copied into `table_index` right at instantiation.
     Active { table_index: u32, offset: Expr },
     /// Retained for `table.init`; droppable.
     Passive,
-    /// Never copied into a table; droppable, otherwise inert.
+    /// Never copied into a table; droppable, otherwise without effect.
     /// It only makes `ref.func` targets valid under reference-types validation.
     Declared,
 }
@@ -214,7 +214,7 @@ pub enum ElemItem {
     Func(u32),
     /// `ref.null`: an intentionally-uninitialized slot.
     Null,
-    /// `global.get $i` of a ref-typed immutable global (global index space).
+    /// `global.get $i` of a reference-typed immutable global (global index space).
     Global(u32),
 }
 
@@ -232,14 +232,14 @@ pub struct DataSegment {
 }
 
 /// Clonable, so a backend-side rewriting pass can produce an adjusted function list.
-/// Loop-body extraction is such a pass; it then does not mutate the shared module.
+/// Loop-body extraction is such a pass; it then does not change the shared module.
 #[derive(Clone, Debug)]
 pub struct Func {
     pub type_idx: u32,
-    /// Declared locals (excluding params).
-    /// Local index space = params ++ locals.
+    /// Declared locals (excluding parameters).
+    /// Local index space = parameters ++ locals.
     pub locals: Vec<ValType>,
-    /// All temps used by the body, sorted and deduplicated.
+    /// All temps used by the body, sorted and without duplicates.
     pub temps: Vec<Temp>,
     pub body: Vec<Stmt>,
 }
@@ -259,7 +259,7 @@ pub enum BrTarget {
     Return { values: Vec<Expr> },
     /// Branch to a labelled frame.
     /// `assigns` moves the branch operands into the frame's result temps.
-    /// For loops, it moves them into the param temps.
+    /// For loops, it moves them into the parameter temps.
     /// Self-assignments are already filtered out.
     Label {
         label: u32,
@@ -273,7 +273,7 @@ pub enum BrTarget {
 /// Two fields encode the four catch kinds, so no backend needs the kind spelled a second way.
 ///
 /// - `tag` is `Some` for `catch`/`catch_ref`, `None` for the catch-all kinds.
-/// - `exn_temp` is `Some` for the `_ref` kinds, which capture the exception as an exnref.
+/// - `exn_temp` is `Some` for the `_ref` kinds, which capture the exception as an `exnref`.
 ///
 /// The exception's payload lands directly in the *target frame's* slots (`value_temps`).
 /// The last entry of `value_temps` is `exn_temp` for the `_ref` kinds.
@@ -303,9 +303,9 @@ pub struct SourcePos {
 /// The Go backend drops the statements Go would report as unreachable before emitting.
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    /// A source-position marker emitted just before the statement it annotates.
+    /// A source-position marker emitted just before the statement it marks.
     /// It is emitted only when DWARF line back-mapping is on.
-    /// Semantically inert: a backend renders it as a position directive/comment or drops it.
+    /// No semantic effect: a backend renders it as a position directive/comment or drops it.
     /// Its presence never changes the surrounding statements' meaning.
     SourceLine(SourcePos),
     Assign {
@@ -421,7 +421,7 @@ pub enum Stmt {
     },
     /// `try_table`: a block whose body's exceptions are dispatched to the catch clauses.
     /// The first match wins; an unmatched exception (and every trap) keeps unwinding.
-    /// A catchless `try_table` is a plain [`Stmt::Block`] and never reaches here.
+    /// A `try_table` without catch clauses is a plain [`Stmt::Block`] and never reaches here.
     TryTable {
         label: Label,
         catches: Vec<CatchClause>,
@@ -442,7 +442,7 @@ impl Stmt {
     /// A statement holding none yields nothing.
     /// Exhaustive on purpose: a new variant that carries statements must declare them here.
     /// Otherwise it fails to compile.
-    /// That keeps every traversal built on [`Stmt::any`] reaching the whole tree.
+    /// That keeps every walk built on [`Stmt::any`] reaching the whole tree.
     pub fn child_seqs(&self) -> impl Iterator<Item = &[Stmt]> {
         let seqs: [&[Stmt]; 2] = match self {
             Stmt::Block { body, .. } | Stmt::Loop { body, .. } | Stmt::TryTable { body, .. } => {

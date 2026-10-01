@@ -1,7 +1,7 @@
-//! Bash side of the shared spec harness: converts modules with the Bash backend.
-//! It phrases assertions as bash through the `ck`/`ckt`/`cke` helpers.
+//! Bash side of the shared specification harness: converts modules with the Bash backend.
+//! It phrases assertions as Bash through the `ck`/`ckt`/`cke` helpers.
 //! Those helpers read the R0..Rn result globals and follow the status-134 trap protocol.
-//! It runs the script with a discovered bash >= 5 (macOS system bash is 3.2).
+//! It runs the script with a discovered `bash` >= 5 (macOS system `bash` is 3.2).
 //!
 //! Bash executes wasm orders of magnitude slower than Ruby.
 //! So `cargo test` runs a curated file list.
@@ -28,12 +28,12 @@ use wast::{WastArg, WastRet};
 ///
 /// - `import-limits` (`imports`, `imports2`, 4 of `linking`'s 4).
 ///   `rt_resolve_import` validates that a resolved import is the right *kind*.
-///   The kinds are func, global, table, and memory.
+///   The kinds are `func`, `global`, `table`, and `memory`.
 ///   It does not validate the finer-grained wasm type:
-///   - a function's param/result signature;
+///   - a function's parameter/result signature;
 ///   - a global's mutability;
-///   - a table's min/max limits;
-///   - a memory's min/max limits.
+///   - a table's minimum/maximum limits;
+///   - a memory's minimum/maximum limits.
 ///
 ///   Every `assert_unlinkable` case testing one of those links instead of failing.
 ///   A kind mismatch is caught.
@@ -46,7 +46,7 @@ use wast::{WastArg, WastRet};
 ///   Both files exercise this via a module with two memories.
 ///   One memory is often an import of another module's exported memory.
 ///   That module fails to convert.
-///   So the data/assertions that depended on it running observe stale (zeroed) state.
+///   So the data/assertions that depended on it running observe out-of-date (zeroed) state.
 ///   That state is in a memory another, unrelated module still owns.
 ///   This is not a linking gap: every import in play resolves.
 ///   It is not fixable without the multi-memory proposal.
@@ -62,9 +62,9 @@ const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
 /// Files `cargo test` runs by default; every other file is an `#[ignore]`d trial.
 /// `slow_test` runs everything.
 /// The list is curated separately from the shared list.
-/// The heavy float files stay out because every float op runs on the softfloat.
+/// The heavy float files stay out because every float operation runs on the softfloat.
 /// The tail-call pair stays out for the same reason.
-/// Its million-deep chains are millions of bash function calls.
+/// Its million-deep chains are millions of Bash function calls.
 const CURATED_FILES: &[&str] = &[
     "address",
     "address0",
@@ -215,11 +215,11 @@ impl dewasm_test_helper::SpecBackend for BashSpec {
     ) -> String {
         script.push_str(&conv.source);
         // Rebuild PROVIDERS from the *current* registered set before every instantiation.
-        // A plain reassignment replaces the whole associative array on bash >= 5.
-        // So a module registered after a failed one never leaves a stale provider entry behind.
+        // A plain reassignment replaces the whole associative array on Bash >= 5.
+        // So a module registered after a failed one never leaves an out-of-date provider entry.
         let _ = writeln!(script, "{}", providers_line(registered));
-        // A trap while instantiating a plain module directive aborts the file.
-        // This mirrors an uncaught Ruby exception at toplevel.
+        // A trap while instantiating a plain module directive stops the file.
+        // This mirrors an uncaught Ruby exception at the top level.
         let _ = writeln!(
             script,
             "{}init || {{ echo \"toplevel init failed (status $?): $TRAP_MSG\" >&2; exit 1; }}",
@@ -350,7 +350,7 @@ fn ret_cond(i: usize, ret: &WastRet<'_>) -> Result<String, String> {
         WastRet::Core(WastRetCore::I32(v)) => Ok(format!("R{i} == {}", *v as u32)),
         WastRet::Core(WastRetCore::I64(v)) => Ok(format!("R{i} == {v}")),
         // Floats are compared as bit patterns, which already are the R registers' representation.
-        // The NaN masks mirror the ruby side's ret_cmp, as signed-64-safe integer constants.
+        // The NaN masks mirror the Ruby side's `ret_cmp`, as signed-64-safe integer constants.
         WastRet::Core(WastRetCore::F32(pattern)) => Ok(match pattern {
             NanPattern::CanonicalNan => {
                 format!("(R{i} & 0x7fffffff) == 0x7fc00000")

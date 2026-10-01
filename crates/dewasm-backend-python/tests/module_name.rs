@@ -1,5 +1,5 @@
 //! The module-name policy for Python:
-//! - A library name is one identifier taken verbatim.
+//! - A library name is one identifier taken unchanged.
 //!   It is carried into the `<Class>Rt` runtime name.
 //! - An invalid one is a conversion-time error.
 //! - Standalone output ignores the name for a fixed `Program`.

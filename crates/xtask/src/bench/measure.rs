@@ -1,9 +1,9 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
 //! * [`run_once`] times one whole process, spawn to exit, under a hard timeout.
-//!   The timer starts *before* `spawn`: startup is deliberately inside.
+//!   The timer starts *before* `spawn`: process start is deliberately inside.
 //!   The `<iterations> = 0` run subtracts it back out.
-//! * [`calibrate`] ramps the iteration count per runner until the compute time reaches the target.
+//! * [`calibrate`] raises the iteration count per runner until the compute time reaches the target.
 //!   A fixed count cannot serve runners thousands of times apart.
 //! * [`stats`] reports minimum *and* median, so noise is visible instead of hidden.
 
@@ -23,13 +23,13 @@ pub struct RunOutcome {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub code: Option<i32>,
-    /// The child outlived the timeout and was killed; `wall` and the output are meaningless.
+    /// The child ran past the timeout and was killed; `wall` and the output mean nothing.
     pub timed_out: bool,
 }
 
 impl RunOutcome {
     /// `Ok(())` when the child exited 0 in time.
-    /// Otherwise a one-line reason carrying the tail of stderr.
+    /// Otherwise a one-line reason carrying the tail of `stderr`.
     /// Every runner in this suite puts its diagnostics there.
     pub fn require_success(&self, what: &str) -> Result<()> {
         if self.timed_out {
@@ -47,7 +47,7 @@ impl RunOutcome {
         Err(anyhow::anyhow!("{what}: exit {:?}: {tail}", self.code))
     }
 
-    /// The `load_ms=<float>` line the third-party drivers print on stderr.
+    /// The `load_ms=<float>` line the third-party drivers print on `stderr`.
     /// It carries the module load/instantiate time.
     /// The last occurrence wins, so a driver that logs progress before it can be silent.
     pub fn load_ms(&self) -> Option<f64> {
@@ -60,9 +60,9 @@ impl RunOutcome {
 
 /// Run `launch` with `args` appended and `stdin` fed, timing the whole process.
 ///
-/// stdout and stderr are drained on their own threads.
-/// Otherwise a runner could deadlock by writing more than a pipe buffer while we write stdin.
-/// The timeout is enforced by a watchdog that `kill -9`s the child.
+/// `stdout` and `stderr` are drained on their own threads.
+/// Otherwise a runner could deadlock by writing more than a pipe buffer while we write `stdin`.
+/// A `watchdog` thread that `kill -9`s the child applies the timeout.
 /// So a runner that turns out 10000x rather than 1000x slower costs one timeout, not a hung suite.
 pub fn run_once(
     launch: &Launch,
@@ -111,7 +111,7 @@ pub fn run_once(
 
     let input = stdin.to_vec();
     // Dropping the handle at the end of the closure closes the pipe.
-    // That is the EOF every stdin-driven workload here waits for.
+    // Every workload here that reads `stdin` waits for that EOF.
     let writer = std::thread::spawn(move || {
         let _ = child_stdin.write_all(&input);
     });
@@ -146,7 +146,7 @@ pub fn run_once(
 }
 
 /// App sampling: one sample is the mean of `k` back-to-back executions.
-/// `k` is chosen from the warmup's wall time so a sample lasts roughly `target`.
+/// `k` is chosen from the warm-up run's wall time so a sample lasts roughly `target`.
 /// This is the iteration calibration applied at the process level.
 /// An app has no `<iterations>` to scale.
 /// A run slower than the target keeps `k = 1`.
@@ -180,7 +180,7 @@ pub fn repeat_app(
     Ok((k, samples, last))
 }
 
-/// One repetition series: a warmup run (discarded) followed by `reps` timed runs.
+/// One series of repeated runs: a warm-up run (not counted) followed by `reps` timed runs.
 /// Returns the samples in seconds together with the last run's output.
 /// The correctness cross-check compares that output.
 pub fn repeat(
@@ -205,13 +205,13 @@ pub fn repeat(
 }
 
 /// Pick the iteration count for one (workload, runner) pair.
-/// Ramp from 1 until `t(N) - t_zero` reaches `target`, never exceeding `cap`.
+/// Grow the count from 1 until `t(N) - t_zero` reaches `target`, never exceeding `cap`.
 ///
 /// `t_zero` is the already-measured `<iterations> = 0` time.
-/// So the ramp reasons about compute alone.
-/// A runner whose startup dwarfs its work then cannot fool it.
+/// So the calibration reasons about compute alone.
+/// A runner whose start costs far more than its work then cannot fool it.
 /// The growth factor is clamped to 256x per round.
-/// So one noisy sample cannot overshoot into a multi-minute run.
+/// So one noisy sample cannot jump to a multi-minute run.
 /// Eight rounds are enough to cross the ~30 million iterations the fastest runner needs.
 pub fn calibrate(
     mut run: impl FnMut(u64) -> Result<RunOutcome>,
@@ -256,7 +256,7 @@ pub fn stats(samples: &[f64]) -> (f64, f64) {
     (min, median)
 }
 
-/// A short description of how two stdout captures differ, for a cross-check failure message.
+/// A short description of how two `stdout` captures differ, for a cross-check failure message.
 /// Byte lengths plus the first differing line say enough to recognize a numeric-semantics bug.
 /// An example is a float printed with the wrong rounding.
 /// They do so without dumping megabytes into the report.

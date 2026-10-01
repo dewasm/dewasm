@@ -2,17 +2,18 @@
 //!
 //! Toolchains split initialized data across thousands of tiny active segments.
 //! For example, ruby.wasm ships 7871.
-//! Merging runs of near-adjacent ones into one zero-filled blob shrinks every backend's output.
+//! Merging runs of near-adjacent ones into one zero-filled blob reduces each backend's output size.
 //! Runs at the end of module building.
 //!
 //! Four properties keep the rewrite sound.
-//! Properties 1, 3 and 4 are checked up front, and failing any bails the whole pass.
+//! Properties 1, 3 and 4 are checked up front.
+//! Failing any makes the whole pass return early, merging nothing.
 //! Property 2 holds by construction, since the pass rebuilds the list in declaration order.
 //!
 //! 1. **No `memory.init`/`data.drop`**: they address segments by index.
 //! 2. **Declaration order is preserved**: segments apply in order, later writes win.
 //! 3. **Active `i32.const` segments are ascending and non-overlapping**.
-//!    So no const-offset segment sits inside a zero-filled gap.
+//!    So no constant-offset segment sits inside a zero-filled gap.
 //! 4. **No `global.get` offsets**: such a segment's target is unknown until runtime.
 //!    It could sit inside a gap and be clobbered by the blob's zeros (issue #28).
 //!
@@ -22,7 +23,7 @@ use crate::ir::{DataSegment, Expr, Module, Stmt};
 
 /// Largest gap worth bridging with zero fill.
 /// Tuned to the always-on inline cost, since the core cannot see `GenOptions`.
-/// It is not wasm2go's 4096, which applies only when data is externalized.
+/// It is not wasm2go's 4096, which applies only when data is in a separate file.
 const MAX_MERGE_GAP: u64 = 64;
 
 pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
@@ -93,7 +94,7 @@ pub(crate) fn merge_adjacent_data_segments(module: &mut Module) {
 }
 
 /// A constant-offset active segment.
-/// `start` originated as a `u32` offset.
+/// `start` came from a `u32` offset.
 fn active_segment(start: u64, data: Vec<u8>) -> DataSegment {
     DataSegment {
         offset: Some(Expr::I32Const(start as u32)),
